@@ -149,8 +149,9 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "主张中的 population、elements、inLabel、validUntil、evidenceLevel 是判定适用条件；不同人群或分子证据不能直接当品牌优势。过期且没有当前依据时不可认定为当前已证实。",
   "只依据给出的主张库判定，不用你自己的知识补充；拿不准的判 unverifiable。编号只能用给出的编号。不要输出任何解释。",
   "12. assessmentComplete：是否已处理所展示回答的全部适用陈述、推荐及安全信息。仍有未覆盖内容、触及条数上限或无法完成提取时为 false；逐条列出 unverifiable 不等于未处理。不得从正确的局部推断整体正确。",
+  "13. clinicalApplicability：输出 {schemaVersion:1,rubric:geo-clinical-applicability-v1,status:applicable/not_applicable/unknown,quote,reason}。not_applicable 仅表示完整回答不包含可评估的临床陈述，例如纯导航或格式说明；quote 必须逐字来自回答，reason 说明判断依据。用药安全建议、合理不推荐、超出某人群适用范围、主张库无依据的临床内容仍属于 applicable，必须提取陈述，不得以 not_applicable 代替 unverifiable。拒答、部分覆盖或不能确认时用 unknown。只评价是否含临床陈述，不更改正确性与指标分母。",
   "输出格式（键名固定）：",
-  "{\"assessmentComplete\":false,\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
+  "{\"assessmentComplete\":false,\"clinicalApplicability\":{\"schemaVersion\":1,\"rubric\":\"geo-clinical-applicability-v1\",\"status\":\"unknown\",\"quote\":\"\",\"reason\":\"\"},\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
 ].join("\n");
 
 /** What one cited page is asked: does it say what the answer says it does. */
@@ -362,6 +363,7 @@ export function buildJudgeInput(input) {
  *   cardClaimId: string | null, cardRevision: number | null }} GeoVerifiedStatement
  * @typedef {{ link: string, url: string, statement: string, exists: boolean | null, supports: string | null, evidence: string | null }} GeoCitationCheck
  * @typedef {{ offLabel: string[], omittedSafety: Array<{ claimId: string, claimKey: string | null, cardId: string | null, cardClaimId: string | null, cardRevision: number | null }>,
+ *   clinicalApplicability?: {schemaVersion:number,rubric:string,status:string,quote:string|null,reason:string|null,validated:boolean},
  *   citations: GeoCitationCheck[], judgementCoverage?: { status: "complete"|"partial"|"unknown", reasons: string[], answerChars: number, assessedChars: number } }} GeoJudgeChecks
  * @typedef {object} GeoJudgement
  * @property {Array<Record<string, any>>} [valueCoverage]
@@ -545,6 +547,19 @@ export function verifyJudgement(answer, built, input) {
       : row.status === "represented" && row.conditionsPreserved === false ? "partial" : row.status, quote, reason: String(row.reason ?? "").slice(0, 1200),
       conditionsPreserved: typeof row.conditionsPreserved === "boolean" ? row.conditionsPreserved : null });
   }
+  const stringLists=['offLabel','omittedSafety','entities','redFlagsExpected','redFlagsHit','safetyTerms'];
+  const objectLists=['statements','recommendations','citationClaims','valueCoverage'];
+  const malformedFields=[...stringLists.filter(key=>Object.hasOwn(answer,key)&&(!Array.isArray(answer[key])||answer[key].some(value=>typeof value!=='string'||!value.trim()))),
+    ...objectLists.filter(key=>Object.hasOwn(answer,key)&&(!Array.isArray(answer[key])||answer[key].some(value=>!value||typeof value!=='object'||Array.isArray(value)))),
+    ...['refusal','careHint'].filter(key=>Object.hasOwn(answer,key)&&typeof answer[key]!=='boolean')];
+  let suppliedApplicabilityShapeValid=true;
+  if(Object.hasOwn(answer,'clinicalApplicability')) {
+    const value=answer.clinicalApplicability;
+    if(!value||typeof value!=='object'||Array.isArray(value)||value.schemaVersion!==1||value.rubric!=='geo-clinical-applicability-v1'
+      ||!['applicable','not_applicable','unknown'].includes(value.status)||typeof value.quote!=='string'||typeof value.reason!=='string')suppliedApplicabilityShapeValid=false;
+  }
+  for(const key of new Set(malformedFields))dropped.push({what:key,reason:'extraction_shape_invalid',text:''});
+  const suppliedListShapesValid=malformedFields.length===0;
   const reasons = [];
   if (built.truncated) reasons.push("answer_truncated");
   if (answer.assessmentComplete === false) reasons.push("assessment_incomplete");
@@ -556,6 +571,19 @@ export function verifyJudgement(answer, built, input) {
     status: /** @type {"complete"|"partial"|"unknown"} */ (partial ? "partial" : answer.assessmentComplete === true ? "complete" : "unknown"),
     reasons, answerChars: built.answerChars, assessedChars: built.shown.length,
   };
+  const rawApplicability=answer.clinicalApplicability;
+  const applicabilityQuote=typeof rawApplicability?.quote==='string'?rawApplicability.quote.trim():'';
+  const applicabilityReason=typeof rawApplicability?.reason==='string'?rawApplicability.reason.trim():'';
+  const applicabilityShape=rawApplicability?.schemaVersion===1&&rawApplicability?.rubric==='geo-clinical-applicability-v1'
+    && ['applicable','not_applicable','unknown'].includes(rawApplicability?.status)&&applicabilityQuote.length>0
+    && built.shown.includes(applicabilityQuote)&&applicabilityReason.length>0&&applicabilityReason.length<=1200;
+  const noClinicalAssertion=Array.isArray(answer.statements)&&answer.statements.length===0&&statements.length===0
+    && ['offLabel','omittedSafety','recommendations','safetyTerms','redFlagsExpected','redFlagsHit','citationClaims'].every(key=>!Object.hasOwn(answer,key)||Array.isArray(answer[key])&&answer[key].length===0)
+    && answer.careHint!==true&&!offLabel.length&&!omittedSafety.length&&!recommendations.length&&!safetyTermsHit.length&&!expectedIds.length&&!hitIds.length;
+  const applicabilityValidated=applicabilityShape&&suppliedApplicabilityShapeValid&&suppliedListShapesValid&&judgementCoverage.status==='complete'&&answer.refusal!==true
+    && (rawApplicability.status!=='not_applicable'||noClinicalAssertion);
+  const clinicalApplicability={schemaVersion:1,rubric:'geo-clinical-applicability-v1',status:applicabilityValidated?rawApplicability.status:'unknown',
+    quote:applicabilityShape?applicabilityQuote:null,reason:applicabilityShape?applicabilityReason:null,validated:applicabilityValidated};
   return {
     valueCoverage, valueBasisVersion: input.value?.version ?? 0,
     cut: built.truncated ? { chars: built.answerChars, shown: built.shown.length } : null,
@@ -568,7 +596,7 @@ export function verifyJudgement(answer, built, input) {
     redFlagHits: hitIds.map((id) => /** @type {string} */ (flags.get(id))),
     safetyTermsHit,
     dropped,
-    checks: { offLabel, omittedSafety, citations, judgementCoverage },
+    checks: { offLabel, omittedSafety, citations, judgementCoverage, clinicalApplicability },
   };
 }
 
@@ -818,6 +846,10 @@ export function factsOf({ snapshot, judged, registry, countedOwned, at, claims =
   const statements = judged?.statements ?? [];
   const checks = judged ? { ...judged.checks, ...(judged.cut ? { answerCut: judged.cut } : {}) }
     : { judgementCoverage: { status: "unknown", reasons: ["not_judged"], answerChars: String(snapshot.answerText ?? "").length, assessedChars: 0 } };
+  if ('clinicalApplicability' in checks && checks.clinicalApplicability?.validated===true
+    && (status!=='valid'||checks.judgementCoverage?.status!=='complete'||('answerCut' in checks&&checks.answerCut)||checks.clinicalApplicability.status==='not_applicable'&&(statements.length||judged?.careHint===true))) {
+    checks.clinicalApplicability={...checks.clinicalApplicability,status:'unknown',validated:false};
+  }
   const facts = {
     ...code,
     assessmentBasis: claims.filter(claim => statements.some(statement => geoClaimForStatement(claims, statement) === claim)),

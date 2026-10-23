@@ -443,6 +443,7 @@ export function createGeoRoutes(dependencies) {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
+      if (tab === "analysis" && parts[3] === "members") return reply(await service.analysisMembers(user,id,geoScopeFromQuery(url.searchParams,GEO_ANALYSIS_FIELDS)));
       if (tab === "analysis") return reply(await service.analysis(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
       if (tab === "monitoring") return reply(await service.monitoring(user, id, geoScopeFromQuery(url.searchParams, [])));
       // 「AI 运行」: what the programme did in the project's own sessions, apart from the person's conversation — a read-only record, each

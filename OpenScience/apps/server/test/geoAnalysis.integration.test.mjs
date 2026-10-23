@@ -141,3 +141,48 @@ test('selected export route returns a format validation error without creating c
   await assert.rejects(routes(req,{writeHead(){},end(){}}),error=>error.status===400&&error.code==='document_export_format_invalid');
   assert.equal(inspected,0);
 });
+
+test('Batch B full aggregates, paginated typed members, five formats and shared native scope retain parity',options,async()=>{
+  await store.query("UPDATE evimed_geo.questions SET original_group=CASE WHEN id='q1' THEN 'A, B' ELSE NULL END, original_id=CASE WHEN id='q1' THEN '0007' ELSE '0008' END,original_row_index=4,client_tags=ARRAY['one','two'] WHERE geo_project_id=$1",[project.id]);
+  await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES('planned-only',$1,$2,'weekly','queued',1,'{kimi}','2026-10-02','{"mode":"web"}')`,[user.id,project.id]);
+  await store.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,status,error_code) VALUES('planned-job',$1,$2,'planned-only','q1','kimi','queued',NULL)`,[user.id,project.id]);
+  const {freezeSelectedGeoAnalysis,freezeGeoAnalysisDocument}=await import('../src/geoAnalysis.mjs');
+  for(const viewId of ['V06','V07','V11','V12','V14']) {
+    const view=await service.analysis(user,project.id,{viewId,from:'2026-10-02',to:'2026-10-02',limit:1});
+    assert.ok(view.page.total>=view.page.shown);
+    const full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest});
+    assert.equal(full.digest,view.digest);assert.equal(full.rows.length,view.page.total);
+    const native=await service.runtimeRead(project,'analysis',{selectionRef:view.selection.reference,...view.view,expectedDigest:view.digest});assert.equal(native.digest,view.digest);
+    for(const row of full.rows)for(const [columnKey,cell]of Object.entries(row.values))if(cell.members) {
+      const input={selectionRef:cell.members.selectionRef,...view.view,rowKey:row.key,columnKey,expectedDigest:view.digest,limit:1};
+      const member=await service.analysisMembers(user,project.id,input);
+      assert.equal(member.total,cell.members.total);assert.equal(member.unit,cell.members.unit);
+      assert.deepEqual(member,await service.runtimeRead(project,'analysis',input));
+      if(member.items[0]?.snapshotId){assert.ok(member.items[0].answer.answer_text);assert.equal(member.items[0].question.originalRow,4);}
+    }
+    const report=freezeGeoAnalysisDocument(full);assert.equal(report.typedTable.rows.length,full.rows.length);
+    const exports=[];await service.selectedExport(user,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,formats:['csv','xlsx','docx','pdf','html']},{requestFrozen:async(...args)=>{exports.push(args);return {id:'all-formats'};}});
+    assert.deepEqual(exports[0][2],['csv','xlsx','docx','pdf','html']);assert.equal(exports[0][1].cover.analysis.digest,view.digest);
+    if(viewId==='V11')assert.ok(full.rows.some(row=>row.dimensions.roundId==='planned-only'&&row.dimensions.basis==='scheduled_jobs'&&row.values.pending.value===1));
+    await assert.rejects(service.analysisMembers({id:'stranger'},project.id,{selectionRef:view.selection.reference,...view.view,rowKey:full.rows[0].key,columnKey:Object.keys(full.rows[0].values)[0],expectedDigest:view.digest}),error=>error.status===404);
+  }
+  const view=await service.analysis(user,project.id,{viewId:'V07',from:'2026-10-02',to:'2026-10-02'});
+  const member=view.rows.find(row=>row.values.pending.value>0).values.pending.members;
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='failed',error_code='timeout' WHERE id='planned-job'");
+  await assert.rejects(service.analysisMembers(user,project.id,{selectionRef:member.selectionRef,...member.view,rowKey:member.rowKey,columnKey:member.columnKey,expectedDigest:member.expectedDigest}),error=>error.status===409);
+});
+
+test('planned-only new question versions and engines remain context without enlarging observed denominators',options,async()=>{
+ await store.query(`INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('planned-v2-group',$1,$2,2,'P2','Version two')`,[user.id,project.id]);
+ await store.query(`INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,original_group) VALUES('planned-v2-q',$1,$2,'planned-v2-group',2,'P2','Version two question','Planned category')`,[user.id,project.id]);
+ for(const [id,version,engines]of [['observed-only',1,['deepseek']],['planned-v2',2,['kimi']]])await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES($1,$2,$3,'weekly','done',$4,$5::text[],'2026-10-03','{"mode":"web"}')`,[id,user.id,project.id,version,engines]);
+ await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text) VALUES('observed-v1',$1,$2,'observed-only','q1','deepseek','2026-10-03','valid','Observed only')`,[user.id,project.id]);
+ await store.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,status) VALUES('new-version-job',$1,$2,'planned-v2','planned-v2-q','kimi','queued')`,[user.id,project.id]);
+ const scope={from:'2026-10-03',to:'2026-10-03',limit:50};
+ const questionView=await service.analysis(user,project.id,{...scope,viewId:'V07'});
+ const row=questionView.rows.find(row=>row.dimensions.questionId==='planned-v2-q'&&row.dimensions.engine==='kimi');
+ assert.ok(row);assert.equal(row.dimensions.basis,'scheduled_only');assert.equal(row.values.pending.value,1);assert.equal(questionView.selection.counts.snapshots,1);assert.deepEqual(questionView.selection.engines,['deepseek']);
+ const coverage=await service.analysis(user,project.id,{...scope,viewId:'V11'});assert.ok(coverage.rows.some(row=>row.dimensions.roundId==='planned-v2'&&row.dimensions.engine==='kimi'&&row.values.pending.value===1));
+ assert.ok(coverage.rows.filter(row=>row.dimensions.basis==='observed').every(row=>row.dimensions.engine==='deepseek'));
+ const narrowed=await service.analysis(user,project.id,{...scope,viewId:'V07',questionVersion:1});assert.ok(narrowed.rows.every(row=>row.dimensions.questionId!=='planned-v2-q'));
+});

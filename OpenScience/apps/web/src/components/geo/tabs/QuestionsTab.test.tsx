@@ -215,7 +215,7 @@ describe("问题与回答: the band's toolbar", () => {
     // the page's own body filters nothing: every search box and every chip group is the toolbar's
     for (const search of document.querySelectorAll("input[type='search']")) expect(toolbar.contains(search)).toBe(true);
     for (const group of document.querySelectorAll("[role='group'][aria-label]")) {
-      if (group.getAttribute("aria-label") === "按数字排序") continue;
+      if (group.closest("[data-geo-analysis]") || group.getAttribute("aria-label") === "按数字排序") continue;
       expect(toolbar.contains(group), group.getAttribute("aria-label") ?? "").toBe(true);
     }
   });

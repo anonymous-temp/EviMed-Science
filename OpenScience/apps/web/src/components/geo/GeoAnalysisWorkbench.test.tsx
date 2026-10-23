@@ -3,8 +3,9 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
 const read=vi.hoisted(()=>vi.fn());
+const memberRead=vi.hoisted(()=>vi.fn());
 const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn()}));
-vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read}));
+vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read,getGeoAnalysisMembers:memberRead}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.open}));
 vi.mock('@/lib/apiClient',async original=>({...await original<typeof import('@/lib/apiClient')>(),createWebRuntimeSession:navigation.create}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage}));
@@ -62,4 +63,27 @@ it('retains the selected analysis with a recoverable error if first-session crea
   expect(navigation.stage).not.toHaveBeenCalled();expect(navigation.open).not.toHaveBeenCalled();
   expect(screen.getByTestId('export').textContent).toContain('gsel_retry');
   expect(screen.getByRole('button',{name:'在对话中解释'})).not.toBeDisabled();
+});
+
+it('keeps answer and statement count units separate and opens exact paginated members',async()=>{
+ const member={selectionRef:'gsel_clinical',view:{viewId:'V12',dimension:'project'},rowKey:'statements',columnKey:'correct',expectedDigest:'clinical-digest',unit:'statements',total:21,exact:true};
+ read.mockResolvedValue({view:member.view,selection:{reference:member.selectionRef},digest:member.expectedDigest,columns:[{key:'correct',label:'正确'},{key:'not_applicable',label:'无临床陈述'}],rows:[{key:'statements',label:'陈述级正确性',metricId:null,dimensions:{unit:'statements'},values:{correct:{value:21,state:'known',unit:'statements',metric:null,members:member},not_applicable:{value:null,state:'unknown',reason:'no_validated_applicability_assessment',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial',reasons:['statement_not_applicable_not_a_verdict']}});
+ memberRead.mockImplementation(async(_id,_member,offset)=>({unit:'statements',total:21,items:[{id:`s${offset}`,unit:'statements',snapshotId:'answer-exact',statement:{text:`Exact sentence ${offset}`,verdict:'wrong',evidence:'Source quote',claimVersion:2,applicability:{population:'Adults'}},answer:{answer_text:'Complete original answer',asked_at:null,surface:{mode:'web'},citations:[{url:'https://example.org/source'}]}}],nextOffset:offset===0?20:null}));
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V12"/></MemoryRouter>);
+ fireEvent.click(screen.getByText('所选数据分析'));fireEvent.click(await screen.findByRole('button',{name:'21 陈述'}));
+ expect(await screen.findByText('Exact sentence 0')).toBeTruthy();
+ expect(memberRead).toHaveBeenLastCalledWith('geo',member,0);
+ expect(screen.getByRole('link',{name:'查看原始回答与依据'}).getAttribute('href')).toContain('answer-exact');
+ fireEvent.click(screen.getByRole('button',{name:'下一批'}));
+ expect(await screen.findByText('Exact sentence 20')).toBeTruthy();expect(memberRead).toHaveBeenLastCalledWith('geo',member,20);
+ expect(screen.getByTestId('export').textContent).toContain('gsel_clinical');
+});
+
+it('missing-task members link to the existing recovery workbench while preserving scope and session',async()=>{
+ const member={selectionRef:'gsel_jobs',view:{viewId:'V07',dimension:'project'},rowKey:'q1',columnKey:'not_obtained',expectedDigest:'job-digest',unit:'asks',total:1,exact:true};
+ read.mockResolvedValue({view:member.view,selection:{reference:member.selectionRef},digest:member.expectedDigest,columns:[{key:'not_obtained',label:'未取得回答'}],rows:[{key:'q1',label:'Original',metricId:null,dimensions:{},values:{not_obtained:{value:1,state:'known',unit:'asks',metric:null,members:member}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ memberRead.mockResolvedValue({unit:'asks',total:1,items:[{id:'job',unit:'asks',roundId:'actual-round',status:'failed',reason:'timeout'}],nextOffset:null});
+ render(<MemoryRouter initialEntries={['/app/geo/geo/diagnosis?from=2026-10-01&to=2026-10-02&session=current-session']}><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V07"/></MemoryRouter>);
+ fireEvent.click(screen.getByText('所选数据分析'));fireEvent.click(await screen.findByRole('button',{name:'1 任务'}));
+ const href=(await screen.findByRole('link',{name:'查看采集进度与恢复选项'})).getAttribute('href');expect(href).toContain('diagnosisRound=actual-round');expect(href).toContain('session=current-session');expect(href).toContain('from=2026-10-01');
 });

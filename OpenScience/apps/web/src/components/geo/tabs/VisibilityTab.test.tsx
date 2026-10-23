@@ -114,7 +114,7 @@ describe("可见度: the order of what it shows", () => {
     for (let at = 1; at < blocks.length; at += 1) {
       expect(blocks[at - 1].compareDocumentPosition(blocks[at]) & Node.DOCUMENT_POSITION_FOLLOWING, `block ${at} follows block ${at - 1}`).toBeTruthy();
     }
-    expect(document.querySelector("details")?.textContent).toContain("更多指标");
+    expect(screen.getByText("更多指标").closest("details")).toBeTruthy();
   });
 
   it("holds the engine grid that 总览 no longer has: every engine, the rates it was measured on", async () => {

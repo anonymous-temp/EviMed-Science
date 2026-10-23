@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useMemo, useState } from "react";
 import {
   readGeoCell,
@@ -95,7 +96,7 @@ export function AccuracyTab({ geoId, project }: { geoId: string; project: GeoPro
   if (diagnosis.state.kind === "loading") return <TabSkeleton />;
   if (diagnosis.state.kind === "error") return <TabError message={diagnosis.state.message} onRetry={refresh} />;
   const diag = diagnosis.state.data;
-  return <Accuracy geoId={geoId} project={project} diagnosis={diag} refresh={refresh} />;
+  return <><Accuracy geoId={geoId} project={project} diagnosis={diag} refresh={refresh} /><GeoAnalysisWorkbench embedded geoId={geoId} project={project} initialView="V12"/></>;
 }
 
 function Accuracy({

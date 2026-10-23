@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { AskAi } from "../AskAi";
 import { GeoQuestionWorkbench } from "../GeoQuestionWorkbench";
 import { useGeoPath } from "../useGeoPath";
@@ -135,7 +136,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
         questions.reload();
         clusters.reload();
       }}
-    /></>
+    /><GeoAnalysisWorkbench embedded geoId={geoId} project={project} initialView="V06"/></>
   );
 }
 

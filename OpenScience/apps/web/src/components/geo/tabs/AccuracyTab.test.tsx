@@ -258,7 +258,7 @@ describe("准确与安全: the band's toolbar", () => {
     expect(within(toolbar).getByRole("searchbox", { name: "搜索说法" })).toBeInTheDocument();
     for (const search of document.querySelectorAll("input[type='search']")) expect(toolbar.contains(search)).toBe(true);
     for (const group of document.querySelectorAll("[role='group'][aria-label]")) {
-      if (group.closest("[data-stat-band], [data-stat-tile]") || group.getAttribute("aria-label") === "事实准确率" || group.getAttribute("aria-label") === "严重讲错") continue;
+      if (group.closest("[data-geo-analysis], [data-stat-band], [data-stat-tile]") || group.getAttribute("aria-label") === "事实准确率" || group.getAttribute("aria-label") === "严重讲错") continue;
       if (group.getAttribute("aria-label") === "准确与安全") continue;
       expect(toolbar.contains(group), group.getAttribute("aria-label") ?? "").toBe(true);
     }

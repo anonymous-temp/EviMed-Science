@@ -2337,6 +2337,10 @@ export class GeoService {
   async analysis(user, id, input = {}) {
     return this.analysisOf(await this.requireProject(user, id), input);
   }
+  async analysisMembers(user, id, input = {}) {
+    if(!input.rowKey||!input.columnKey)throw new HttpError(400,"geo_read_filter_invalid","Choose an exact aggregate member.");
+    return readGeoAnalysis(this.store,await this.requireProject(user,id),input);
+  }
   async analysisOf(project, input = {}) {
     if (input.planContextRef) {
       if (Object.keys(input).some(key => !["planContextRef", "limit", "offset"].includes(key))) throw new HttpError(400, "geo_read_filter_invalid", "Use the frozen context without replacing its selection.");

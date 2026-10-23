@@ -86,10 +86,10 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证 GEO project's pages and answers. Cells preserve counts and unknowns. "
+                "Read 循证 GEO pages/answers with counts and unknowns. "
                 "Filters share inclusive dates (Asia/Shanghai), engines, questionVersion, groups and pools. "
                 "Reuse selectionRef and members.metric for exact snapshots. Comparisons are observational. "
-                "analysis reads V01/V02 tables; bound planContextRef pages frozen input. "
+                "analysis reads tables or exact rowKey/columnKey members with units. planContextRef pages frozen input. "
                 "Actions give lean rows; filter.key or groupId reads one whole. version reads a prior value basis."
             ),
             "inputSchema": {
@@ -113,9 +113,12 @@ def tool_definitions():
                             "groupIds": {"type": "array", "items": ID, "maxItems": 100},
                             "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
                             "selectionRef": ID,
-                            "viewId": {"type": "string", "enum": ["V01", "V02"]},
+                            "viewId": {"type": "string", "enum": ["V01", "V02", "V06", "V07", "V11", "V12", "V14"]},
                             "metricId": {"type": "string", "pattern": "^M-[0-9]{2}[A-Z]?$"},
                             "dimension": {"type": "string", "enum": ["project", "engine", "group"]},
+                            "categoryMode": {"type": "string", "enum": ["original_group", "client_tags"]},
+                            "rowKey": {"type": "string", "maxLength": 160},
+                            "columnKey": {"type": "string", "maxLength": 160},
                             "expectedDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                             "planContextRef": {"type": "string", "pattern": "^gpc_[a-f0-9]{64}$"},
                             "strategyVersion": {"type": "integer", "minimum": 1},

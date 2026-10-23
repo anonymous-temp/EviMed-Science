@@ -30,7 +30,7 @@ before(async () => {
   await store.writeFacts({ id: 'review_snapshot', userId: project.userId, geoProjectId: project.id }, { parserVersion: 'geo-parse-test', judgedAt: '2026-10-24T01:00:00Z', statements: [wrong], assessmentBasis: [claim], checks: { citations: [{ url: 'https://example.com/label', statement: wrong.text, exists: true, supports: 'no', evidence: 'Adults only.' }] } });
   review = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async () => {
     calls += 1;
-    return { statements: omitStatements ? [] : [{ ...wrong, verdict: nextVerdict }], checks: { offLabel: [], omittedSafety: [], citations: omitCitations ? [] : [{ url: 'https://example.com/label', statement: wrong.text, exists: null, supports: null, evidence: null }], judgementCoverage: { status: 'complete' } }, recommendations: [], entities: [], dropped: [] };
+    return { statements: omitStatements ? [] : [{ ...wrong, verdict: nextVerdict }], checks: { clinicalApplicability:{schemaVersion:1,rubric:'geo-clinical-applicability-v1',status:'applicable',quote:wrong.text,reason:'Clinical assertion.',validated:true}, offLabel: [], omittedSafety: [], citations: omitCitations ? [] : [{ url: 'https://example.com/label', statement: wrong.text, exists: null, supports: null, evidence: null }], judgementCoverage: { status: 'complete' } }, recommendations: [], entities: [], dropped: [] };
   } } });
   service = new GeoService({ store: new GeoStore({ database }), config: { geoEnabled: true, geoAudience: 'all' } });
   service.diagnosisReview = review;
@@ -100,6 +100,8 @@ test('an incomplete recheck retains the defensible prior statement instead of si
   const saved = await review.read(project, 'review_snapshot');
   assert.equal(saved.current.statements[0].verdict, 'wrong');
   assert.equal(saved.current.checks.judgementCoverage.status, 'partial');
+  assert.equal(saved.current.checks.clinicalApplicability.status,'unknown');
+  assert.equal(saved.current.checks.clinicalApplicability.validated,false);
   assert.equal(saved.original.statements[0].verdict, 'wrong');
 });
 
@@ -160,7 +162,7 @@ test('same-id, same-word versions require an exact statement identity and unrevi
   await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,answer_text) VALUES('version_review','review_owner','review_geo','review_round','review_question','deepseek','valid',$1)`, [wrong.text]);
   await store.writeFacts({ id: 'version_review', userId: project.userId, geoProjectId: project.id }, { statements: [first, second], checks: { judgementCoverage: { status: 'complete' } }, judgedAt: '2026-10-24T01:00:00Z', assessmentBasis: [firstClaim, secondClaim] });
   const aliases = [];
-  const focused = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async input => { aliases.push(input.reviewFeedback.claim); return ({ statements: [{ ...first, verdict: 'correct' }], checks: { citations: [], offLabel: [], omittedSafety: [], judgementCoverage: { status: 'complete' } }, dropped: [], entities: [], recommendations: [] }); } } });
+  const focused = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async input => { aliases.push(input.reviewFeedback.claim); return ({ statements: [{ ...first, verdict: 'correct' }], checks: { clinicalApplicability:{schemaVersion:1,rubric:'geo-clinical-applicability-v1',status:'applicable',quote:first.text,reason:'Clinical assertion.',validated:true}, citations: [], offLabel: [], omittedSafety: [], judgementCoverage: { status: 'complete' } }, dropped: [], entities: [], recommendations: [] }); } } });
   const version = (await focused.read(project, 'version_review')).assessmentVersion;
   const request = { snapshotId: 'version_review', statement: first.text, claimId: first.claimId, assessmentVersion: version, note: 'Only the adult statement.', requestKey: 'ambiguous_legacy' };
   await assert.rejects(focused.submit(project, request), error => error.status === 409);
@@ -171,6 +173,8 @@ test('same-id, same-word versions require an exact statement identity and unrevi
     if ((await focused.read(project, 'version_review')).feedback[0]?.status === 'succeeded') break;
   }
   const saved = await focused.read(project, 'version_review');
+  assert.equal(saved.current.checks.clinicalApplicability.status,'unknown');
+  assert.equal(saved.current.checks.clinicalApplicability.validated,false);
   assert.equal(saved.feedback[0].status, 'succeeded');
   assert.ok(saved.current.statements.some(row => row.claimVersion === 2 && row.verdict === 'wrong'));
   assert.equal(saved.current.checks.judgementCoverage.status, 'partial');
@@ -178,4 +182,21 @@ test('same-id, same-word versions require an exact statement identity and unrevi
   await focused.submit(project, { ...request, assessmentVersion: saved.assessmentVersion, requestKey: 'precise_second_statement', statementIdentity: geoStatementAssessmentIdentity(second) });
   assert.deepEqual(await focused.tick(), { processed: 1 });
   assert.equal(aliases.at(-1), 'C2');
+});
+
+test('versioned clinical applicability survives the N08 assessment head/history and a partial replacement becomes unknown',options,async()=>{
+  const {buildJudgeInput,verifyJudgement,factsOf}=await import('../src/geoJudge.mjs');
+  const answer='Open the help menu.';
+  const source={owner:{userId:project.userId,projectId:project.projectId},product:{},competitors:[],claims:[],careFlags:[],question:{text:'Help',pool:'P2'},answer,links:[]};
+  const judged=verifyJudgement({assessmentComplete:true,statements:[],clinicalApplicability:{schemaVersion:1,rubric:'geo-clinical-applicability-v1',status:'not_applicable',quote:answer,reason:'Only a navigation instruction.'}},buildJudgeInput(source),source);
+  const snapshot={id:'applicability_review',status:'valid',answerText:answer,citations:[]};
+  await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,answer_text) VALUES($1,$2,$3,'review_round','review_question','deepseek','valid',$4)`,[snapshot.id,project.userId,project.id,answer]);
+  const original=factsOf({snapshot,judged,registry:[],countedOwned:{},at:new Date(),claims:[]}).facts;
+  await store.writeFacts({id:snapshot.id,userId:project.userId,geoProjectId:project.id},original);
+  const first=await review.read(project,snapshot.id);assert.equal(first.current.checks.clinicalApplicability.status,'not_applicable');
+  const replacement=factsOf({snapshot,judged:{...judged,checks:{...judged.checks,judgementCoverage:{...judged.checks.judgementCoverage,status:'partial'}}},registry:[],countedOwned:{},at:new Date(),claims:[]}).facts;
+  const {preserveGeoAssessment}=await import('../src/geoLearningSignals.mjs');
+  await database.transaction(client=>preserveGeoAssessment({database,client,snapshotId:snapshot.id,facts:replacement}));
+  const next=await review.read(project,snapshot.id);assert.equal(next.current.checks.clinicalApplicability.status,'unknown');
+  assert.equal(next.original.checks.clinicalApplicability.status,'not_applicable');assert.ok(next.history.some(row=>row.assessment.checks.clinicalApplicability.status==='not_applicable'));
 });
