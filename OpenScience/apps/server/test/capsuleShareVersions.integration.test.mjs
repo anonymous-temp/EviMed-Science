@@ -221,3 +221,30 @@ test("received and mine read every capsule an account holds, not the first hundr
   assert.equal((await capsules.received(reader)).length, 130, "every pack is on the shelf");
   assert.equal((await capsules.mine(reader)).capsules.length, 130, "every project's notes capsule is read");
 });
+
+test("what replaces a version the author took down is a pack of its own: an upgrade in place would keep the copy marked and the new version would never be in force", options, async () => {
+  const { capsule } = await authored("先画 PRISMA 流程图。");
+  const heldBefore = (await capsules.received(vera)).length;
+  const first = await sharing.deliver(sender, capsule.id, { recipients: [vera] });
+  const { imported } = await takeIn(vera, first.snapshot.id);
+  await capsules.enableReceived(vera, imported.id);
+  // The author takes the first version down: the copy is disabled and marked, and nothing more is imported from it.
+  const down = await sharing.takeDown({ authorId: sender, snapshotId: first.snapshot.id, by: "author", reason: "写错了" });
+  assert.equal(down.copies, 1);
+  assert.equal((await capsules.received(vera)).find((pack) => pack.id === imported.id).takenDown.by, "author");
+  await capsules.addEntry(sender, capsule.id, { factKind: "method_preference", layer: "methods", content: "筛选先标题后摘要。" });
+  const second = await sharing.deliver(sender, capsule.id, { recipients: [vera] });
+  assert.equal(second.snapshot.supersedes, null, "a taken-down version is not continued");
+  const next = await takeIn(vera, second.snapshot.id);
+  assert.equal(next.opened.preview.upgrades, null);
+  assert.notEqual(next.imported.id, imported.id, "a pack of its own");
+  await capsules.enableReceived(vera, next.imported.id);
+  const shelf = await capsules.received(vera);
+  assert.equal(shelf.length, heldBefore + 2);
+  assert.equal(shelf.find((pack) => pack.id === next.imported.id).enabled, true, "and it can be in force");
+  assert.ok(shelf.find((pack) => pack.id === imported.id).takenDown);
+  // The same when the file itself names the taken-down snapshot as the one it replaces: the copy is not upgraded.
+  const forced = await transfers.export(sender, capsule.id, { password, scopes: ["workstyle"], supersedes: first.snapshot.id });
+  const preview = await transfers.preview(vera, { archive: forced.archive, password });
+  assert.equal(preview.upgrades, null);
+});

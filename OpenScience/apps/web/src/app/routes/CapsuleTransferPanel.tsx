@@ -257,7 +257,7 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
         </div>
       </Disclosure>
       <div className="max-w-measure">
-        <Input label="发给平台里的账号（选填）" placeholder="账号名或账号 ID，完全一致；多个用逗号隔开" value={names} disabled={busy || !capsuleId}
+        <Input label="给平台里的某人（选填）" placeholder="账号名或账号 ID，完全一致；多个用逗号隔开" value={names} disabled={busy || !capsuleId}
           hint="写了名字，对方不用密码就能打开。" onChange={event => setNames(event.target.value)} maxLength={2000} />
       </div>
       {/* The password and the button that needs it, in one row. */}

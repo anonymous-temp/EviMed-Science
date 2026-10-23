@@ -158,13 +158,14 @@ test("two accounts, end to end: preview, send, receive, try once, enable, B's co
 
   // ---- A sends a newer version (and now says something about itself); B takes it in place. -------------------------------------
   await database.query(`INSERT INTO evimed_memory.records(id,user_id,scope,scope_id,kind,key,value,summary,status,origin,confidence,importance,version)
-    VALUES($1,$2,'user','','profile','role','临床流行病学家，做系统综述','','active','explicit',1,0.5,1)`, [`tr_${tag}_3`, A]);
-  const second = await sharing.deliver(A, own.id, { recipients: [B], scopes: ["workstyle", "+profile"] });
+    VALUES($1,$2,'user','','profile','role','临床流行病学家，做系统综述','','active','explicit',1,0.5,1),
+      ($3,$2,'project',$4,'decision','criteria','本项目只纳入近十年的随机对照试验','','active','explicit',1,0.5,1)`, [`tr_${tag}_3`, A, `tr_${tag}_4`, PROJECT]);
+  const second = await sharing.deliver(A, own.id, { recipients: [B], scopes: ["workstyle", "+profile", "+knowledge"] });
   assert.equal(second.snapshot.supersedes, sent.snapshot.id, "the next version of what B took in");
   const next = (await sharing.pending(B)).find((item) => item.snapshotId === second.snapshot.id);
   const nextOpened = await sharing.open(B, next.id);
   assert.equal(nextOpened.preview.upgrades.capsuleId, pack.id);
-  assert.equal(nextOpened.preview.card.changelog, "新增 1 条、保留 2 条");
+  assert.equal(nextOpened.preview.card.changelog, "新增 2 条、保留 2 条", "the profile line and the project's decision");
   const upgraded = await sharing.import(B, next.id, { expectedDigest: nextOpened.preview.archiveSha256 });
   assert.equal(upgraded.id, pack.id, "the same capsule, in place");
   assert.equal((await capsules.received(B)).length, 1);
@@ -176,5 +177,6 @@ test("two accounts, end to end: preview, send, receive, try once, enable, B's co
   const again = await mounted("upgraded");
   assert.equal(again.count, 2, "the profile line is context, not a mounted method");
   assert.match(await search("系统综述") ?? "", /临床流行病学家/, "the new profile line is found by a native conversation's search, labelled as a reference");
+  assert.match(await search("随机对照") ?? "", /\[decision · 参考胶囊《Ada 的工作方式》\] 本项目只纳入近十年的随机对照试验/, "and so is a project fact: not only the four kinds a runtime mounts as methods");
   assert.doesNotMatch((await opening()).text ?? "", /临床流行病学家/, "and is still not B's own identity");
 });

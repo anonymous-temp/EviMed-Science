@@ -349,7 +349,7 @@ it("seals a file for accounts of this platform by the names typed, without a pas
   render(<ExportPanel capsule={capsule}/>);
   const button=await screen.findByRole("button",{name:"加密导出"});
   expect(button).toBeDisabled();
-  await userEvent.type(screen.getByLabelText("发给平台里的账号（选填）"),"Alice Reader, 王医生");
+  await userEvent.type(screen.getByLabelText("给平台里的某人（选填）"),"Alice Reader, 王医生");
   expect(button).toBeEnabled();
   await userEvent.click(button);
   await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{scopes:["workstyle"],recipientNames:["Alice Reader","王医生"]}));
@@ -360,7 +360,7 @@ it("says plainly when none of the names reached anyone and the file is only open
   vi.mocked(api.previewCapsuleExport).mockResolvedValue(twoEntries() as never);
   vi.mocked(api.exportCapsule).mockResolvedValue({archive:"{}",filename:"x.evimedcap",reached:{requested:1,sealed:0}} as never);
   render(<ExportPanel capsule={capsule}/>);
-  await userEvent.type(await screen.findByLabelText("发给平台里的账号（选填）"),"nobody");
+  await userEvent.type(await screen.findByLabelText("给平台里的某人（选填）"),"nobody");
   await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
   await userEvent.click(screen.getByRole("button",{name:"加密导出"}));
   await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-passphrase",scopes:["workstyle"],recipientNames:["nobody"]}));

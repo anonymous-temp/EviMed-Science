@@ -139,18 +139,22 @@ export class CapsuleSharing {
    * The snapshot a new one of this capsule continues: the newest the people it goes to have taken in — those named (`recipients`),
    * or anybody, for a link, whose redeemers are not known beforehand — whether it reached them in a delivery or through a link.
    * Only a snapshot somebody holds can be upgraded in place; one nobody took in is just an earlier export, and chaining to it would
-   * leave the holder of an older version with a second capsule. Null when there is none, and the new snapshot starts a chain.
+   * leave the holder of an older version with a second capsule. Nor one that was taken down: its copies were disabled and marked, an
+   * upgrade in place would keep them so and the new version would never be in force, so what replaces a taken-down version is a
+   * pack of its own. Null when there is none, and the new snapshot starts a chain.
    * @param {string} userId @param {string} capsuleId @param {readonly string[] | null} recipients
    * @returns {Promise<string | null>}
    */
   async #previousSnapshot(userId, capsuleId, recipients) {
-    const row = (await this.database.query(`SELECT snapshot_id FROM (
+    const row = (await this.database.query(`SELECT taken.snapshot_id FROM (
         SELECT d.snapshot_id, d.created_at AS at FROM evimed_share.deliveries d
           WHERE d.owner_id=$1 AND d.capsule_id=$2 AND d.state='imported' AND ($3::text[] IS NULL OR d.recipient_id=ANY($3::text[]))
         UNION ALL
         SELECT l.snapshot_id, l.created_at AS at FROM evimed_share.links l JOIN evimed_share.link_uses u ON u.link_id=l.id
           WHERE l.owner_id=$1 AND l.capsule_id=$2 AND u.imported_at IS NOT NULL AND ($3::text[] IS NULL OR u.user_id=ANY($3::text[]))
-      ) taken ORDER BY at DESC LIMIT 1`, [userId, capsuleId, recipients ? [...recipients] : null])).rows[0];
+      ) taken JOIN evimed_product.documents s ON s.user_id=$1 AND s.kind='preferences' AND s.id=taken.snapshot_id
+        AND s.deleted_at IS NULL AND s.payload->'takenDown' IS NULL
+      ORDER BY taken.at DESC LIMIT 1`, [userId, capsuleId, recipients ? [...recipients] : null])).rows[0];
     if (!row) return null;
     try { await this.transfers.snapshot(userId, capsuleId, row.snapshot_id); return String(row.snapshot_id); }
     catch (error) { if (/** @type {any} */ (error)?.code === "capsule_snapshot_not_found") return null; throw error; }

@@ -1112,6 +1112,9 @@ export class CapsuleTransferService {
       filter: { imported: true, transfer: { manifestSha256: manifest.prevManifestSha256, issuerId: manifest.issuer.userId } } });
     const capsule = received.items.find((/** @type {any} */ item) => {
       const held = item.payload.transfer ?? {};
+      // A copy the author or the operator took down stays down: an upgrade in place would keep it marked and the new version would
+      // never be in force, so what replaces a taken-down version is a pack of its own.
+      if (item.payload.takenDown) return false;
       return held.signingKeyFingerprint ? held.signingKeyFingerprint === signingKeyFingerprint : !(held.issuerTrust === "verified" && trust !== "verified");
     });
     if (!capsule) return null;
