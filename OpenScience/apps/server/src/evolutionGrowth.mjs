@@ -24,7 +24,7 @@ export function evolutionRecordedFailures(payload,recordType=payload?.recordType
   const counts=payload.counts??{};
   return Number(counts.failed??counts.rejected??counts.unsupported??0)+Number(counts.numberFailures??0)+Number(counts.unitMismatches??0);
  }
- if(recordType==='evolution-signal-summary'&&evolutionOpportunitySource(payload.kind)==='repair')return Number(payload.occurrences??0);
+ if(recordType==='evolution-signal-summary'&&payload.state!=='inactive'&&evolutionOpportunitySource(payload.kind)==='repair')return Number(payload.occurrences??0);
  return 0;
 }
 /** @param {{service:any,opportunity:any,database:any,floors?:{user:number,operator:number},operatorIds?:()=>string[]}} deps */
@@ -32,7 +32,7 @@ export function createEvolutionGrowth({service,opportunity,database,floors=evolu
  async function resource(id,kinds,payload){const prior=await service.get(id);return service.save('resource-asset',id,{...prior?.payload,...payload,kinds:[...new Set([...(prior?.payload.kinds??[]),...kinds])],scope:'public',at:service.now().toISOString()},prior);}
  async function collect(){
   for(const row of await service.list('signal-summary')){
-   const p=row.payload,accountClass=evolutionAccountClass(p.accountClass);if(p.distinctAccounts<floors[accountClass])continue;
+   const p=row.payload,accountClass=evolutionAccountClass(p.accountClass);if(p.state==='inactive'||!Number.isFinite(p.distinctAccounts)||p.distinctAccounts<floors[accountClass])continue;
    const source=evolutionOpportunitySource(p.kind);
    await resource(`evolution-demand-resource-${evolutionKey(row.id)}`,['demand'],{sourceRoot:row.id,use:'opportunity-prioritisation',closedCodes:p.codes,occurrences:p.occurrences,distinctAccounts:p.distinctAccounts});
    await opportunity({moduleId:p.moduleId,sources:[source],taskFamily:p.codes,mechanismFamily:p.kind,evidenceRoots:[row.id],features:{distinctAccounts:p.distinctAccounts,...(accountClass==='operator'?{accountClass,demandFloor:floors.operator}:{}),coverageGap:source==='demand',runtimeFailures:source==='repair'?p.occurrences:0},cheapestNextStep:source==='data'?'test-public-shape-analogue':'reproduce-on-public-analogue',failureHypotheses:['private-shape-may-not-transfer']});
