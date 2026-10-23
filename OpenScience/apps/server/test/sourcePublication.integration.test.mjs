@@ -220,3 +220,38 @@ test("duplicate registration waits for a worker job lock before taking its sourc
     await registration;
   } finally { await registration?.catch(() => {}); await ctx.close(); }
 });
+
+test("native save-to-knowledge registration failure leaves no uncommitted logical alias", options, async () => {
+  const ctx = await signedIn();
+  try {
+    await post(ctx, "/api/commands/add_text_to_workspace", { filename: "report/native.txt", content: "native output" });
+    ctx.app.sourceService.jobs.enqueue = async () => { throw new Error("Injected native save failure"); };
+    const response = await fetch(`${ctx.base}/api/commands/save_to_knowledge_base`, { method: "POST", headers: ctx.headers,
+      body: JSON.stringify({ path: "report/native.txt" }) });
+    assert.equal(response.status, 500);
+    const digest = createHash("sha256").update("native output").digest("hex").slice(0, 8);
+    await assert.rejects(readFile(path.join(ctx.project.baseDir, `knowledge-base/chat/native-${digest}.txt`)), { code: "ENOENT" });
+    const live = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
+    assert.equal(live.items.length, 0);
+  } finally { await ctx.close(); }
+});
+
+test("native A-to-B uploads return version paths whose actual previews and downloads read B", options, async () => {
+  const ctx = await signedIn();
+  try {
+    const upload = data => post(ctx, "/api/commands/upload_file", { root: "base", filename: "knowledge-base/native-current.txt", data, encoding: "utf8" });
+    const first = await upload("A");
+    const next = await upload("B");
+    const preview = await fetch(`${ctx.base}/api/files/preview/${encodeURIComponent(next)}?root=base`, { headers: ctx.headers });
+    assert.equal(preview.status, 200);
+    assert.equal(await preview.text(), "B");
+    const download = await fetch(`${ctx.base}/api/files/download/${encodeURIComponent(next)}?root=base`, { headers: ctx.headers });
+    assert.equal(download.status, 200);
+    assert.equal(await download.text(), "B");
+    assert.match(download.headers.get("content-disposition"), /native-current\.txt/);
+    assert.notEqual(next, first);
+    assert.equal(await readFile(path.join(ctx.project.baseDir, first), "utf8"), "A");
+    const source = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
+    assert.ok(source.items.some(row => row.payload.paths.includes(next)));
+  } finally { await ctx.close(); }
+});
