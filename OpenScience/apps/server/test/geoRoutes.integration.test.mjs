@@ -367,7 +367,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(diagnosis.round.linklessEngines, [], "deepseek's citation carries its link");
   const deepseek = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "deepseek");
   assert.deepEqual(deepseek.mention, { value: 0.42, numerator: 20, denominator: 48, ciLow: null, ciHigh: null, status: "ok", dataType: "measured",
-    reason: null, methodVersion: null, snapshotIds: [`s1-${id}`] }, "a historical cell keeps its value and unknown method, with its answer preview");
+    reason: null, methodVersion: null, snapshotIds: [], members: { exact: false, total: null, shown: 0, more: false, basis: "historical_unknown", unit: null } }, "a historical cell keeps its value but never claims an exact denominator under the current method");
   assert.equal(deepseek.retrieval.status, "absent", "an unmeasured cell is absent, never zero");
   const doubao = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "doubao");
   assert.deepEqual([doubao.retrieval.status, doubao.retrieval.reason, doubao.retrieval.value], ["not_measurable", "no_retrieval", null]);
@@ -709,7 +709,7 @@ test("a rival's mention rate over full measurements is a series of its own; the 
   // The first full round has no answer to name a coverage from (null: not equal to anything); the second heard from 千问 on a risk question.
   assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [
     { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34,
-      coverage: `v1|P4|qianwen|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}` }] }]);
+      coverage: null }] }]);
 
   const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
   const deepseek = sources.expectations.find((/** @type {any} */ row) => row.engine === "deepseek");
@@ -833,7 +833,7 @@ test("a source's detail lists the answers its row counts: the three numbers are 
   assert.deepEqual([after.cited, after.wrongOurs, after.mentionsOurs], [row.cited, row.wrongOurs, row.mentionsOurs]);
 
   refused(await call("GET", `/api/geo/projects/${id}/sources/gsrc_missing`), 404, "geo_source_not_found");
-  refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}?engine=${encodeURIComponent("../x")}`), 400, "geo_engines_invalid");
+  refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}?engine=${encodeURIComponent("../x")}`), 400, "geo_read_filter_invalid");
   refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}`, { user: MALLORY }), 404, "geo_project_not_found");
   const other2 = await seededProject();
   refused(await call("GET", `/api/geo/projects/${other2.project.id}/sources/${row.id}`), 404, "geo_source_not_found");
@@ -861,7 +861,7 @@ async function weeklyRounds(id, plan) {
       await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
         VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, 'valid', '回答', $8::jsonb)`,
       [key, ALICE, roundId, id, plan.questionId, engine, `${day}T08:00:00Z`, JSON.stringify(plan.cites(index + 1, engine))]);
-      await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours) VALUES ($1, $2, $3, $4, true)`,
+      await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours, judged_at) VALUES ($1, $2, $3, $4, true, now())`,
         [key, ALICE, id, plan.wrong?.(index + 1, engine) ? "wrong_ours" : "none"]);
     }
   }
@@ -950,8 +950,8 @@ test("every point of a trend carries the coverage key of its round, and a change
   assert.equal(gvi.trend.length, 4);
   assert.equal(shape(keys(gvi.trend)), "0010", "the key moves once, where the engine set did");
   assert.ok(gvi.trend.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage.startsWith("v1|")));
-  assert.ok(gvi.trend[0].coverage.endsWith(`|deepseek,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}`));
-  assert.ok(gvi.trend[3].coverage.endsWith(`|deepseek,doubao,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}`));
+  assert.ok(gvi.trend[0].coverage.includes(`|deepseek,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
+  assert.ok(gvi.trend[3].coverage.includes(`|deepseek,doubao,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
 
   const watch = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "gvi").points)), "0010");
@@ -960,7 +960,7 @@ test("every point of a trend carries the coverage key of its round, and a change
   // An engine's own series is of that engine alone: the others joining the sample is not a change of what it covers.
   const kimi = watch.byEngine.find((/** @type {any} */ line) => line.engine === "kimi");
   assert.equal(shape(keys(kimi.points)), "0000");
-  assert.ok(kimi.points[0].coverage.endsWith(`|kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}`));
+  assert.ok(kimi.points[0].coverage.includes(`|kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
   await database.query("UPDATE evimed_geo.metrics SET method_version = $1 WHERE round_id = $2", ["another-measurement-method", rounds[3]]);
   const changed = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   const changedPoints = changed.series.find((/** @type {any} */ line) => line.key === "gvi").points;

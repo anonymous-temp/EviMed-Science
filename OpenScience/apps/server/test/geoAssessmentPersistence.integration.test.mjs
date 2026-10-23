@@ -44,10 +44,12 @@ after(async () => {
 
 /** @param {string} id @param {Record<string, any>} [extra] */
 async function writeAssessment(id, extra = {}) {
+  await database.query(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, text, pool, is_measured)
+    VALUES ($1, 'assessment_user', 'assessment_geo', 'assessment_group', 1, $1, 'P1', true)`, [`question_${id}`]);
   await database.query(`INSERT INTO evimed_geo.snapshots
     (id, user_id, geo_project_id, round_id, question_id, engine, status, asked_at, answer_text, surface)
-    VALUES ($1, 'assessment_user', 'assessment_geo', 'assessment_round', 'assessment_question', 'deepseek', 'valid', $2,
-      '生血宝合剂的使用需要结合适用范围。', '{"mode":"web"}'::jsonb)`, [id, at]);
+    VALUES ($1, 'assessment_user', 'assessment_geo', 'assessment_round', $3, 'deepseek', 'valid', $2,
+      '生血宝合剂的使用需要结合适用范围。', '{"mode":"web"}'::jsonb)`, [id, at, `question_${id}`]);
   const facts = {
     brands: [], mentionsOurs: false, statements: [{ text: "使用条件", verdict: "correct" }],
     checks: { answerCut: true, judgementCoverage: coverage },

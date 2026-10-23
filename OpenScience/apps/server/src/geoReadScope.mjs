@@ -1,0 +1,307 @@
+/** One authorized observation selection for GEO pages, the native read tool and exports. No metric formulas live here. */
+import { createHash } from "node:crypto";
+import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, geoMetricMembers, geoJudgementCoverage,
+  GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES, geoCoverageKey } from "@evimed/domain";
+import { computeRoundCells } from "./geoMetricsJob.mjs";
+import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { HttpError } from "./security.mjs";
+
+export const GEO_SCOPE_FIELDS = Object.freeze(["round", "from", "to", "compareFrom", "compareTo", "comparisonMode", "engines", "questionVersion",
+  "groupIds", "pools", "clientTags", "timeZone", "timezone", "engine", "version", "pool", "groupId", "selectionRef"]);
+export const GEO_ERROR_FILTER_FIELDS = Object.freeze(["errorStatuses", "errorSeverities", "errorTypes", "errorSearch", "errorLimit", "errorOffset"]);
+export const GEO_SELECTION_MAX_ROWS = 20_000;
+export const GEO_SELECTION_MAX_ROUNDS = 120;
+export const GEO_MEMBER_PREVIEW_LIMIT = 200;
+const ROUND_KINDS = ["baseline", "weekly", "single_step"];
+const hasControls = (/** @type {string} */ value) => [...value].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+const idShape = /^[A-Za-z0-9_-]{1,80}$/u;
+const digest = (/** @type {unknown} */ value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const invalid = (/** @type {string} */ message, status = 400) => new HttpError(status, "geo_read_filter_invalid", message);
+
+/** @param {unknown} raw @param {string} field @param {readonly string[] | null} [vocabulary] @param {boolean} [tags] */
+function values(raw, field, vocabulary = null, tags = false) {
+  if (raw == null) return [];
+  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? tags ? [raw] : raw.split(",") : null;
+  if (!list || list.length > 100 || list.some((value) => typeof value !== "string" || !value.trim() || value.length > (tags ? 120 : 80)
+    || hasControls(value) || (vocabulary ? !vocabulary.includes(value) : !tags && !idShape.test(value)))) {
+    throw invalid(`${field} must contain valid ${tags ? "text labels" : "distinct identifiers"}.`);
+  }
+  return [...new Set(list.map((value) => value.trim()))].sort();
+}
+
+/** Closed normalization shared by URL and native JSON reads. Same dimension OR, different dimensions AND.
+ * @param {unknown} [input] */
+export function normalizeGeoReadScope(input = {}) {
+  const raw = /** @type {Record<string, any>} */ (typeof input === "string" ? { round: input } : input ?? {});
+  if (typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !GEO_SCOPE_FIELDS.includes(key))) throw invalid("Unknown GEO selection field.");
+  const alias = (/** @type {string} */ name, /** @type {string} */ old) => {
+    if (raw[name] != null && raw[old] != null) throw invalid(`Use ${name} or ${old}, not both.`);
+    return raw[name] ?? raw[old] ?? null;
+  };
+  const timeZone = alias("timeZone", "timezone") ?? "Asia/Shanghai";
+  if (typeof timeZone !== "string" || timeZone.length > 80) throw invalid("timeZone must be an IANA time zone.");
+  try { new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date(0)); } catch { throw invalid("timeZone must be an IANA time zone."); }
+  const date = (/** @type {string} */ name) => {
+    const value = raw[name];
+    if (value == null || value === "") return null;
+    if (typeof value !== "string" || value.startsWith("0000-") || !/^\d{4}-\d{2}-\d{2}$/u.test(value) || !Number.isFinite(Date.parse(`${value}T00:00:00Z`))
+      || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) throw invalid(`${name} must be a real YYYY-MM-DD date.`);
+    return value;
+  };
+  const from = date("from"), to = date("to"), compareFrom = date("compareFrom"), compareTo = date("compareTo");
+  if (from && to && from > to || compareFrom && compareTo && compareFrom > compareTo) throw invalid("The start date must not follow the end date.");
+  if (Boolean(compareFrom) !== Boolean(compareTo)) throw invalid("A comparison needs compareFrom and compareTo.");
+  const questionVersion = alias("questionVersion", "version");
+  if (questionVersion != null && (!Number.isSafeInteger(questionVersion) || questionVersion < 1)) throw invalid("questionVersion must be a positive integer.");
+  for (const key of ["round", "selectionRef"]) if (raw[key] != null && (typeof raw[key] !== "string" || !idShape.test(raw[key]))) throw invalid(`${key} must be an identifier.`);
+  if (raw.comparisonMode != null && !["common", "separate"].includes(raw.comparisonMode)) throw invalid("comparisonMode must be common or separate.");
+  return { round: raw.round ?? null, from, to, compareFrom, compareTo, comparisonMode: raw.comparisonMode ?? "common", timeZone,
+    engines: values(alias("engines", "engine"), "engines", GEO_ENGINES), questionVersion,
+    groupIds: values(alias("groupIds", "groupId"), "groupIds"), pools: values(alias("pools", "pool"), "pools", GEO_POOLS),
+    clientTags: values(raw.clientTags, "clientTags", null, true), selectionRef: raw.selectionRef ?? null };
+}
+
+/** @param {URLSearchParams} query @param {readonly string[]} [extra] */
+export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
+  /** @type {Record<string, any>} */ const raw = {};
+  const lists = new Set(["engines", "pools", "groupIds", "clientTags", "errorStatuses", "errorSeverities", "errorTypes"]);
+  for (const key of new Set(query.keys())) {
+    if (![...GEO_SCOPE_FIELDS, ...extra].includes(key)) throw invalid(`Unknown GEO query field: ${key}.`);
+    const all = query.getAll(key);
+    if (!lists.has(key) && all.length !== 1) throw invalid(`${key} may only be given once.`);
+    raw[key] = lists.has(key) ? key === "clientTags" ? all : all.flatMap((value) => value.split(",")) : all[0];
+    if (["questionVersion", "version", "errorLimit", "errorOffset"].includes(key)) {
+      if (!/^\d+$/u.test(raw[key])) throw invalid(`${key} must be a whole number.`);
+      raw[key] = Number(raw[key]);
+    }
+  }
+  const scope = normalizeGeoReadScope(Object.fromEntries(Object.entries(raw).filter(([key]) => GEO_SCOPE_FIELDS.includes(key))));
+  return { ...scope, ...Object.fromEntries(Object.entries(raw).filter(([key]) => extra.includes(key))) };
+}
+
+/** @param {Record<string, any>} [input] */
+export function geoErrorFilters(input = {}) {
+  const integer = (/** @type {string} */ key, fallback = 0, max = 100_000) => {
+    const n = input[key] ?? fallback;
+    if (!Number.isSafeInteger(n) || n < (key === "errorLimit" ? 1 : 0) || n > max) throw invalid(`${key} is outside the supported page range.`);
+    return n;
+  };
+  const search = input.errorSearch ?? "";
+  if (typeof search !== "string" || search.length > 240 || hasControls(search)) throw invalid("errorSearch must be short text.");
+  return { statuses: values(input.errorStatuses, "errorStatuses", GEO_ERROR_STATUSES), severities: values(input.errorSeverities, "errorSeverities", GEO_SEVERITIES),
+    types: values(input.errorTypes, "errorTypes", GEO_ERROR_TYPES), search: search.trim(), limit: integer("errorLimit", 100, 500), offset: integer("errorOffset") };
+}
+
+/** Scope fields only, so list filters and pagination cannot alter the observation universe. @param {any} input */
+export function geoReadScopeInput(input) {
+  return typeof input === "string" ? { round: input } : Object.fromEntries(Object.entries(input ?? {}).filter(([key]) => GEO_SCOPE_FIELDS.includes(key)));
+}
+
+/** @param {any[]} rows @param {Parameters<typeof computeRoundCells>[1]} options */
+export function computeGeoSelection(rows, options) {
+  const result = computeRoundCells(rows, options);
+  const cells = result.cells.map((cell) => {
+    const input = cell.scope === "engine" || cell.scope === "pool_engine" || cell.metricId === "M-20" ? result.balance.deduped : result.balance.rows;
+    const members = geoMetricMembers(/** @type {any[]} */ (input), cell, options);
+    const ids = [...new Set(members.rows.map((row) => row.snapshotId))];
+    return { ...cell, snapshotIds: ids.slice(0, GEO_MEMBER_PREVIEW_LIMIT), members: { total: ids.length, shown: Math.min(ids.length, GEO_MEMBER_PREVIEW_LIMIT),
+      more: ids.length > GEO_MEMBER_PREVIEW_LIMIT, nextOffset: ids.length > GEO_MEMBER_PREVIEW_LIMIT ? GEO_MEMBER_PREVIEW_LIMIT : null,
+      unit: members.unit, basis: members.basis, exact: true, digest: digest(ids) } };
+  });
+  return { ...result, cells };
+}
+
+/** A subset key retains the existing four-part wire format; no snapshot or round id makes repeated questions incomparable.
+ * @param {any[]} rows @param {number | null} setVersion @param {string | null} [engine]
+ */
+export function geoSelectionCoverage(rows, setVersion, engine = null) {
+  const members = rows.filter((row) => (!engine || row.engine === engine) && (row.status === "refusal" || row.status === "valid" && row.facts));
+  const modes = [...new Set(members.map((row) => JSON.stringify(row.surface ?? null)))];
+  if (modes.length !== 1) return null;
+  const key = geoCoverageKey({ setVersion, pools: [...new Set(members.map((row) => row.pool).filter(Boolean))],
+    engines: [...new Set(members.map((row) => row.engine))], surface: JSON.parse(modes[0]), methodVersion: GEO_MEASUREMENT_METHOD_VERSION });
+  return key ? `${key};questions=${digest([...new Set(members.map((row) => row.questionId).filter(Boolean))].sort()).slice(0, 24)}` : null;
+}
+
+/** @param {any} scope */
+export const geoScopeIsFiltered = (scope) => Boolean(scope?.round || scope?.from || scope?.to || scope?.questionVersion || scope?.engines?.length
+  || scope?.groupIds?.length || scope?.pools?.length || scope?.clientTags?.length || scope?.selectionRef);
+
+/** Exact scoped error aggregation precedes the independently filtered, bounded list.
+ * @param {import('./geoStore.mjs').GeoStore} store @param {any} project
+ * @param {Awaited<ReturnType<typeof readGeoSelection>>} selected @param {any} [input]
+ */
+export async function readGeoSelectionErrors(store, project, selected, input = {}) {
+  const filter = geoErrorFilters(input);
+  const params = [project.id, project.userId, selected.rows.map((row) => row.snapshotId)];
+  const where = ["e.geo_project_id = $1", "e.user_id = $2", "(e.first_snapshot_id = ANY($3::text[]) OR e.last_snapshot_id = ANY($3::text[]) OR e.closed_snapshot_id = ANY($3::text[]))"];
+  const add = (/** @type {string} */ sql, /** @type {any} */ value) => { params.push(value); where.push(sql.replace("?", `$${params.length}`)); };
+  if (filter.statuses.length) add("e.status = ANY(?::text[])", filter.statuses);
+  if (filter.severities.length) add("e.severity = ANY(?::text[])", filter.severities);
+  if (filter.types.length) add("e.error_type = ANY(?::text[])", filter.types);
+  if (filter.search) add("strpos(lower(concat_ws(' ', e.statement, e.evidence_quote, e.cited_source ->> 'domain', e.cited_source ->> 'url')), lower(?)) > 0", filter.search);
+  const aggregate = (await store.query(`SELECT e.status, e.severity, e.error_type, e.engine, count(*)::integer AS n,
+      count(*) FILTER (WHERE e.status <> 'closed' AND e.cited_source IS NOT NULL)::integer AS sourced_open
+    FROM evimed_geo.errors e WHERE ${where.join(" AND ")} GROUP BY e.status, e.severity, e.error_type, e.engine`, params)).rows;
+  /** @type {Record<string, number>} */ const counts = { total: 0, open: 0, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 0 };
+  /** @type {Record<string, Record<string, number>>} */ const breakdown = { byType: {}, bySeverity: {}, byEngine: {}, byStatus: {} };
+  let sourcedOpen = 0;
+  for (const row of aggregate) {
+    const n = Number(row.n); counts.total += n; counts[row.status] = (counts[row.status] ?? 0) + n;
+    if (row.status !== "closed" && ["S3", "S4"].includes(row.severity)) counts.severe += n;
+    sourcedOpen += Number(row.sourced_open);
+    for (const [key, value] of [["byType", row.error_type], ["bySeverity", row.severity], ["byEngine", row.engine], ["byStatus", row.status]]) {
+      const name = String(value ?? "unknown"); breakdown[key][name] = (breakdown[key][name] ?? 0) + n;
+    }
+  }
+  const live = (await store.query(`SELECT e.id, e.status, e.severity, e.cited_source FROM evimed_geo.errors e
+    WHERE ${where.join(" AND ")} AND e.status <> 'closed'`, params)).rows;
+  params.push(filter.limit, filter.offset);
+  const rows = (await store.query(`SELECT e.* FROM evimed_geo.errors e WHERE ${where.join(" AND ")}
+    ORDER BY (e.status = 'closed'), e.severity DESC NULLS LAST, e.updated_at DESC, e.id
+    LIMIT $${params.length - 1} OFFSET $${params.length}`, params)).rows;
+  return { rows, live, counts, summary: { total: counts.total, ...breakdown, sourcedOpen },
+    page: { offset: filter.offset, limit: filter.limit, total: counts.total, shown: rows.length, more: filter.offset + rows.length < counts.total,
+      nextOffset: filter.offset + rows.length < counts.total ? filter.offset + rows.length : null }, filter };
+}
+
+/** Read under an already authorized project. The reference contains no authority and resolves only within that owner/project.
+ * @param {import('./geoStore.mjs').GeoStore} store @param {any} project @param {any} [input]
+ * @param {{ history?: boolean, frozenRoundIds?: string[], persist?: boolean }} [options]
+ * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any}>}
+ */
+export async function readGeoSelection(store, project, input = {}, options = {}) {
+  const measure = new GeoMeasureStore(store.database);
+  await measure.ready();
+  const selected = await store.database.transaction(async (client) => {
+    await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const scopedStore = Object.create(store);
+    const scopedMeasure = measure;
+    scopedStore.query = scopedMeasure.query = (/** @type {string} */ sql, /** @type {any[]} */ params = []) => client.query(sql, params);
+    return selectGeoRows(scopedStore, scopedMeasure, project, input, options);
+  });
+  if (options.persist !== false) await store.query(`INSERT INTO evimed_geo.read_selections (id, user_id, geo_project_id, scope, round_ids, data_revision)
+    VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6) ON CONFLICT (id) DO NOTHING`,
+  [selected.selection.reference, project.userId, project.id, JSON.stringify(selected.scope), JSON.stringify(selected.selection.roundIds), selected.selection.dataRevision]);
+  return selected;
+}
+
+/** @param {import('./geoStore.mjs').GeoStore} store @param {GeoMeasureStore} measure @param {any} project @param {any} input
+ * @param {{ history?: boolean, frozenRoundIds?: string[] }} options @returns {ReturnType<typeof readGeoSelection>}
+ */
+async function selectGeoRows(store, measure, project, input, { history = false, frozenRoundIds } = {}) {
+  let scope = normalizeGeoReadScope(geoReadScopeInput(input));
+  let expectedRevision = null;
+  if (scope.selectionRef) {
+    const saved = (await store.query(`SELECT scope, round_ids, data_revision FROM evimed_geo.read_selections
+      WHERE id = $1 AND geo_project_id = $2 AND user_id = $3`, [scope.selectionRef, project.id, project.userId])).rows[0];
+    if (!saved) throw invalid("This selection reference is unavailable in this project.", 404);
+    if (Object.entries(scope).some(([key, value]) => !["selectionRef", "timeZone", "comparisonMode"].includes(key) && (Array.isArray(value) ? value.length : value != null))) {
+      throw invalid("Use the saved selection reference without replacing its scope.");
+    }
+    scope = normalizeGeoReadScope(saved.scope);
+    frozenRoundIds = saved.round_ids;
+    expectedRevision = String(saved.data_revision);
+  }
+  const params = [project.id, project.userId, ROUND_KINDS, scope.timeZone];
+  const where = ["r.geo_project_id = $1", "r.user_id = $2", "r.kind = ANY($3::text[])"];
+  const add = (/** @type {string} */ clause, /** @type {any} */ value) => { params.push(value); where.push(clause.replace("?", `$${params.length}`)); };
+  if (frozenRoundIds) add("r.id = ANY(?::text[])", frozenRoundIds);
+  else if (scope.round) add("r.id = ?", scope.round);
+  if (scope.from) add("coalesce(r.sample_date, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date) >= ?::date", scope.from);
+  if (scope.to) add("coalesce(r.sample_date, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date) <= ?::date", scope.to);
+  if (scope.questionVersion) add("r.set_version = ?", scope.questionVersion);
+  const ranged = Boolean(history || frozenRoundIds || scope.round || scope.from || scope.to);
+  const rounds = (await store.query(`SELECT r.*, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date AS observation_date FROM evimed_geo.rounds r WHERE ${where.join(" AND ")}
+    ORDER BY (r.status IN ('done', 'partial')) DESC, CASE WHEN r.status IN ('done', 'partial') THEN r.finished_at END DESC NULLS LAST, r.created_at DESC, r.id DESC
+    LIMIT ${ranged ? GEO_SELECTION_MAX_ROUNDS + 1 : 1}`, params)).rows;
+  if (rounds.length > GEO_SELECTION_MAX_ROUNDS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROUNDS} rounds can be analyzed together.`, 422);
+  if (scope.round && !rounds.length) throw new HttpError(404, "geo_round_not_found", "The round is not a full measurement of this project.");
+  const roundIds = rounds.map((round) => String(round.id));
+  const rowsCount = Number((await store.query(`SELECT count(*)::integer AS n FROM evimed_geo.snapshots s
+    WHERE s.geo_project_id = $1 AND s.user_id = $2 AND s.round_id = ANY($3::text[])`, [project.id, project.userId, roundIds])).rows[0]?.n ?? 0);
+  if (rowsCount > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a shorter date range: this read has ${rowsCount} observations; the limit is ${GEO_SELECTION_MAX_ROWS}.`, 422);
+  const [batches, skipBatches, questions, context, contaminated] = await Promise.all([
+    Promise.all(roundIds.map((id) => measure.roundFactRows(id, project.id, project.userId))),
+    Promise.all(roundIds.map((id) => measure.roundSkippedEngines(id))),
+    store.query(`SELECT q.*, to_jsonb(q)->'client_tags' AS scope_client_tags FROM evimed_geo.questions q WHERE q.geo_project_id = $1 AND q.user_id = $2`, [project.id, project.userId]),
+    roundIds.length ? measure.projectContext(project.id) : null,
+    measure.contaminatedControlGroups(project.id),
+  ]);
+  const questionMap = new Map(questions.rows.map((question) => [String(question.id), question]));
+  const roundVersions = new Set(rounds.map((round) => Number(round.set_version)).filter((version) => version > 0));
+  const selectedQuestions = questions.rows.filter((question) => (!roundVersions.size || roundVersions.has(Number(question.set_version))) && (!scope.questionVersion || Number(question.set_version) === scope.questionVersion)
+    && (!scope.groupIds.length || scope.groupIds.includes(String(question.group_id))) && (!scope.pools.length || scope.pools.includes(String(question.pool)))
+    && (!scope.clientTags.length || Array.isArray(question.scope_client_tags) && question.scope_client_tags.some((/** @type {string} */ tag) => scope.clientTags.includes(tag))));
+  const questionIds = new Set(selectedQuestions.map((question) => String(question.id)));
+  const skipped = new Map(roundIds.map((id, index) => [id, new Set(skipBatches[index])]));
+  const filtered = batches.flat().filter((row) => (!scope.engines.length || scope.engines.includes(row.engine))
+    && (!scope.questionVersion || Number(questionMap.get(String(row.questionId))?.set_version) === scope.questionVersion)
+    && (!scope.groupIds.length && !scope.pools.length && !scope.clientTags.length || questionIds.has(String(row.questionId))));
+  const rows = filtered.filter((row) => !skipped.get(row.roundId)?.has(row.engine));
+  if (rows.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROWS} observations can be analyzed together.`, 422);
+  const engines = scope.engines.length ? scope.engines : rounds.length ? [...new Set(rounds.flatMap((round) => Array.isArray(round.engines) && round.engines.length ? round.engines : project.engines))] : project.engines;
+  const groups = [...new Map(rows.filter((row) => row.groupId).map((row) => [row.groupId, row.isControl])).entries()];
+  const metricOptions = { engines, competitors: project.competitors.map((/** @type {any} */ competitor) => String(competitor.brandName || competitor.genericName || "")).filter(Boolean),
+    owned: context?.owned ?? {}, arms: { pilot: groups.filter(([, control]) => !control).map(([id]) => String(id)),
+      control: groups.filter(([id, control]) => control && !contaminated.includes(String(id))).map(([id]) => String(id)) } };
+  const computed = computeGeoSelection(rows, metricOptions);
+  const jobs = (await store.query(`SELECT j.question_id, j.engine, j.round_id, j.status FROM evimed_geo.probe_jobs j
+    WHERE j.geo_project_id = $1 AND j.user_id = $2 AND j.round_id = ANY($3::text[])`, [project.id, project.userId, roundIds])).rows
+    .filter((job) => (!scope.engines.length || scope.engines.includes(job.engine)) && (!scope.questionVersion && !scope.groupIds.length && !scope.pools.length && !scope.clientTags.length || questionIds.has(String(job.question_id))));
+  const errorRevision = (await store.query(`SELECT md5(coalesce(string_agg(to_jsonb(e)::text, '' ORDER BY e.id), '')) AS digest
+    FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.user_id = $2
+    AND (e.first_snapshot_id = ANY($3::text[]) OR e.last_snapshot_id = ANY($3::text[]) OR e.closed_snapshot_id = ANY($3::text[]))`,
+  [project.id, project.userId, rows.map((row) => row.snapshotId)])).rows[0]?.digest ?? null;
+  const comparisonSelection = scope.compareFrom && scope.compareTo ? await selectGeoRows(store, measure, project,
+    { ...scope, round: null, from: scope.compareFrom, to: scope.compareTo, compareFrom: null, compareTo: null, selectionRef: null }, {}) : null;
+  const comparison = comparisonSelection ? compareGeoSelections({ rows, metricOptions }, comparisonSelection, scope.comparisonMode) : null;
+  const memberDigest = digest(/** @type {any[]} */ (computed.balance.deduped).map((row) => row.snapshotId));
+  const dataRevision = digest({ methodVersion: GEO_MEASUREMENT_METHOD_VERSION, rows, skipped: skipBatches, rounds: rounds.map((round) => [round.id, round.status, round.set_version, round.surface]),
+    errorRevision, metricOptions, questions: selectedQuestions.map((question) => [question.id, question.scope_client_tags]), comparisonRevision: comparisonSelection?.selection.dataRevision ?? null });
+  if (expectedRevision && expectedRevision !== dataRevision) throw invalid("The saved selection changed after measurement. Refresh the view and use its new selection reference.", 409);
+  const scopeSaved = { ...scope, selectionRef: null };
+  const reference = `gsel_${digest([project.userId, project.id, scopeSaved, roundIds, dataRevision]).slice(0, 40)}`;
+  const counts = { planned: jobs.length || (!scope.engines.length && !scope.groupIds.length && !scope.pools.length && !scope.clientTags.length ? rounds.reduce((sum, round) => sum + Number(round.planned ?? 0), 0) : null), snapshots: rows.length, returned: rows.filter((row) => row.status === "valid" || row.status === "refusal").length,
+    refused: rows.filter((row) => row.status === "refusal").length, failed: rows.filter((row) => row.status === "failed").length,
+    suspect: rows.filter((row) => row.status === "suspect").length, unjudged: rows.filter((row) => row.status === "valid" && !row.facts).length,
+    partial: rows.filter((row) => row.facts && geoJudgementCoverage(row.facts) === "partial").length,
+    balancedOut: computed.balance.deduped.length - computed.balance.rows.length, duplicateAnswers: rows.length - computed.balance.deduped.length,
+    skippedEngineAnswers: filtered.length - rows.length, questions: new Set(rows.map((row) => row.questionId).filter(Boolean)).size,
+    observations: computed.balance.observations, balancedObservations: computed.balance.kept };
+  const methods = [...new Set(rounds.map((round) => round.ref?.balance?.methodVersion ?? null))];
+  const modes = [...new Set(rows.map((row) => row.surface?.mode ?? null))];
+  const versions = [...new Set(rounds.map((round) => round.set_version == null ? null : Number(round.set_version)))];
+  const selection = { version: 1, reference, dataRevision, memberDigest, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, roundIds,
+    counts, engines, pools: [...new Set(rows.map((row) => row.pool).filter(Boolean))].sort(), questionIds: [...new Set(rows.map((row) => row.questionId).filter(Boolean))].sort(),
+    exclusions: { skippedEngines: roundIds.flatMap((id, index) => skipBatches[index].map((engine) => ({ roundId: id, engine }))), clientTagsUnknown: scope.clientTags.length > 0 && !questions.rows.some((question) => Array.isArray(question.scope_client_tags)) },
+    comparability: { kind: "observational", causal: false, methodVersions: methods, questionVersions: versions, modes, consumerModelVersion: "unknown" },
+    coverage: geoSelectionCoverage(/** @type {any[]} */ (computed.balance.rows), versions.length === 1 ? versions[0] : null) };
+  for (const cell of computed.cells) Object.assign(cell.members, { selectionRef: reference, metric: { metricId: cell.metricId, scope: cell.scope, engine: cell.engine,
+    pool: cell.pool, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival } });
+  return { scope: scopeSaved, selection, rounds, rows, computed, metricOptions, questions: selectedQuestions, comparison };
+}
+
+/** Observed comparisons use the same immutable question, engine and mode. Consumer model versions are disclosed, not invented.
+ * @param {{rows: any[], metricOptions: any}} current @param {{rows: any[], metricOptions: any, selection: any}} previous @param {string} mode
+ */
+function compareGeoSelections(current, previous, mode) {
+  const key = (/** @type {any} */ row) => JSON.stringify([row.questionId, row.engine, row.surface?.mode ?? null]);
+  const a = new Set(current.rows.map(key)), b = new Set(previous.rows.map(key));
+  const common = new Set([...a].filter((id) => b.has(id)));
+  const left = mode === "separate" ? current.rows : current.rows.filter((row) => common.has(key(row)));
+  const right = mode === "separate" ? previous.rows : previous.rows.filter((row) => common.has(key(row)));
+  const currentCells = computeGeoSelection(left, current.metricOptions).cells;
+  const previousCells = computeGeoSelection(right, previous.metricOptions).cells;
+  const cellKey = (/** @type {any} */ cell) => JSON.stringify([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
+  const before = new Map(previousCells.map((cell) => [cellKey(cell), cell]));
+  return { kind: "observational", causal: false, mode, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, consumerModelVersion: "unknown",
+    comparable: mode === "common" && common.size > 0, commonQuestionEngineModes: common.size,
+    excluded: { current: current.rows.length - left.length, previous: previous.rows.length - right.length },
+    previousSelection: previous.selection,
+    cells: currentCells.map((cell) => { const old = before.get(cellKey(cell)); return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool,
+      engine: cell.engine, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival,
+      current: cell, previous: old ?? null, delta: mode === "common" && common.size && cell.status === "ok" && old?.status === "ok"
+        && cell.value != null && old.value != null ? Math.round((cell.value - old.value) * 100) / 100 : null }; }) };
+}

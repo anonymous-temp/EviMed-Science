@@ -82,7 +82,7 @@ export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
-  "action_choices",
+  "action_choices", "read_selections",
 ]);
 
 /**
@@ -173,6 +173,17 @@ CREATE TABLE IF NOT EXISTS evimed_geo.question_sets (
   created_at     timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (geo_project_id, version)
 );
+
+CREATE TABLE IF NOT EXISTS evimed_geo.read_selections (
+  id text PRIMARY KEY,
+  user_id text NOT NULL,
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id) ON DELETE CASCADE,
+  scope jsonb NOT NULL,
+  round_ids jsonb NOT NULL,
+  data_revision text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_read_selections_project_idx ON evimed_geo.read_selections (geo_project_id, user_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.question_groups (
   id               text PRIMARY KEY,

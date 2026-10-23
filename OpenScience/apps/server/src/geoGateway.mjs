@@ -40,6 +40,7 @@ import {
   GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS, parseGeoActionKey,
 } from "@evimed/domain";
 import { geoRowIdShape, geoRuntimeWrite } from "./geoWrites.mjs";
+import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters } from "./geoReadScope.mjs";
 import { GEO_READ_MAX_ITEMS } from "./geoService.mjs";
 import { HttpError } from "./security.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "./socialCrawlClient.mjs";
@@ -51,9 +52,9 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze(["version", "audience", "round", "engine", "pool", "groupId", "questionId", "key", "limit", "offset"]);
+const readFilterFields = Object.freeze([...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, "audience", "questionId", "key", "limit", "offset", "member"]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
-const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid"]);
+const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid"]);
 
 class GeoGatewayError extends Error {
   /** @param {number} status @param {string} code @param {string} message */
@@ -119,7 +120,7 @@ function readRequest(body) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !readFilterFields.includes(key))) {
     throw gatewayError(400, "geo_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
   }
-  /** @type {{ version?: number, audience?: string, round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, key?: string, limit?: number, offset?: number }} */
+  /** @type {Record<string, any>} */
   const filter = {};
   for (const key of ["round", "groupId", "questionId"]) {
     if (raw[key] == null) continue;
@@ -155,6 +156,20 @@ function readRequest(body) {
       throw gatewayError(400, "geo_read_filter_invalid", "filter.offset must be a whole number from 0 to 10000.");
     }
     filter.offset = raw.offset;
+  }
+  normalizeGeoReadScope(geoReadScopeInput(raw));
+  geoErrorFilters(raw);
+  for (const name of [...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS]) if (raw[name] != null) filter[name] = raw[name];
+  if (raw.member != null) {
+    const member = raw.member;
+    const fields = ["metricId", "scope", "engine", "pool", "groupId", "arm", "variant", "rival"];
+    if (!member || typeof member !== "object" || Array.isArray(member) || Object.keys(member).some((name) => !fields.includes(name))
+      || typeof member.metricId !== "string" || !/^M-[0-9]{2}[A-Z]?$/u.test(member.metricId)
+      || !["project", "pool", "engine", "pool_engine", "group", "arm"].includes(member.scope)
+      || Object.values(member).some((value) => value !== null && (typeof value !== "string" || value.length > 120))) {
+      throw gatewayError(400, "geo_read_filter_invalid", "member must name a metric returned by this selection.");
+    }
+    filter.member = member;
   }
   return { what: body.what, filter };
 }
@@ -304,12 +319,13 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       // version the project does not have is the filter being wrong; nothing
       // else of theirs is a code the run's verdict knows.
       if (error instanceof HttpError) {
-        if (passThroughCodes.has(error.code)) {
+        if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
+        else if (passThroughCodes.has(error.code)) {
           // The run hears the refusal; which constraint of the database made it is the operator's.
           const underneath = /** @type {any} */ (error).cause?.code;
           if (typeof underneath === "string" && /^[A-Za-z0-9_]{1,64}$/.test(underneath)) report(underneath);
           error = gatewayError(error.status, error.code, error.message);
-        } else if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
+        }
       }
       const known = error instanceof GeoGatewayError;
       const status = known ? /** @type {any} */ (error).status : 503;

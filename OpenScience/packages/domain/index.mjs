@@ -1489,6 +1489,7 @@ export {
   computeGeoMetrics,
   computeGvi,
   geoCellRows,
+  geoMetricMembers,
   geoCitationHost,
   geoConstant,
   geoMetricDefinition,

@@ -84,11 +84,10 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证 GEO project in the shapes its pages show. Cards carry checked quotes and citation ids. "
-                "Value holds scoped findings, research and coverage; research lists specialist tasks. "
-                "snapshots: engine answers. clusters: groups, k of n. "
-                "actions: lean rows plus counts to quote, never add up; filter.key or groupId reads one whole. "
-                "filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero."
+                "Read this 循证 GEO project's pages and answers. Numeric cells retain counts and unknowns. "
+                "Analytical filters share inclusive dates (Asia/Shanghai), engines, questionVersion, groups and pools. "
+                "Reuse selectionRef; copy members.metric into member to page exact snapshots. Comparisons are observational. "
+                "Actions give lean rows and totals; filter.key or groupId reads one whole. version reads a prior value basis."
             ),
             "inputSchema": {
                 "type": "object",
@@ -98,6 +97,32 @@ def tool_definitions():
                         "type": "object",
                         "properties": {
                             "version": {"type": "integer", "minimum": 1},
+                            "questionVersion": {"type": "integer", "minimum": 1},
+                            "from": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "to": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "compareFrom": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "compareTo": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "comparisonMode": {"type": "string", "enum": ["common", "separate"]},
+                            "timeZone": {"type": "string", "maxLength": 80},
+                            "timezone": {"type": "string", "maxLength": 80},
+                            "engines": {"type": "array", "items": {"type": "string", "enum": list(ENGINES)}, "maxItems": 100},
+                            "pools": {"type": "array", "items": {"type": "string", "enum": list(POOLS)}, "maxItems": 100},
+                            "groupIds": {"type": "array", "items": ID, "maxItems": 100},
+                            "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
+                            "selectionRef": ID,
+                            "errorStatuses": {"type": "array", "items": {"type": "string", "enum": ["open", "acting", "awaiting_remeasure", "closed"]}},
+                            "errorSeverities": {"type": "array", "items": {"type": "string", "enum": ["S0", "S1", "S2", "S3", "S4"]}},
+                            "errorTypes": {"type": "array", "items": {"type": "string", "enum": ["label_conflict", "number", "dropped_condition", "unfounded", "attribute_swap"]}},
+                            "errorSearch": {"type": "string", "maxLength": 240},
+                            "errorLimit": {"type": "integer", "minimum": 1, "maximum": 500},
+                            "errorOffset": {"type": "integer", "minimum": 0, "maximum": 100000},
+                            "member": {
+                                "type": "object", "description": "Copy members.metric from a cell to page its exact contributing snapshots.",
+                                "properties": {"metricId": {"type": "string"}, "scope": {"type": "string", "enum": ["project", "pool", "engine", "pool_engine", "group", "arm"]},
+                                               **{key: {"type": ["string", "null"]} for key in ["engine", "pool", "groupId", "arm", "variant", "rival"]}},
+                                "required": ["metricId", "scope"], "additionalProperties": False,
+                            },
+
                             "audience": {"type": "string", "maxLength": 120},
                             "round": ID,
                             "engine": {"type": "string", "enum": list(ENGINES)},

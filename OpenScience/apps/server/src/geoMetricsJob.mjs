@@ -93,7 +93,7 @@ export async function tickMetrics(deps) {
 }
 
 /**
- * @typedef {{ questionId?: string | null, engine: string, repeatIndex?: number | null, status: string, askedAt?: string | null, facts?: object | null }} BalanceRow
+ * @typedef {{ roundId?: string | null, questionId?: string | null, engine: string, repeatIndex?: number | null, status: string, askedAt?: string | null, facts?: object | null }} BalanceRow
  */
 
 /**
@@ -111,7 +111,8 @@ export async function tickMetrics(deps) {
  */
 export function balanceRows(rows) {
   const answered = (/** @type {T} */ row) => (row.status === "valid" && Boolean(row.facts)) || row.status === "refusal";
-  const key = (/** @type {T} */ row) => `${row.questionId}\u0000${row.engine}\u0000${row.repeatIndex ?? 0}`;
+  const observation = (/** @type {T} */ row) => `${row.roundId ?? ""}\u0000${row.questionId}`;
+  const key = (/** @type {T} */ row) => `${observation(row)}\u0000${row.engine}\u0000${row.repeatIndex ?? 0}`;
   /** @type {Map<string, T>} */
   const latest = new Map();
   for (const row of rows) {
@@ -121,17 +122,32 @@ export function balanceRows(rows) {
   }
   const deduped = rows.filter((row) => !answered(row) || !row.questionId || latest.get(key(row)) === row);
   const engines = [...new Set([...latest.values()].map((row) => row.engine))].sort();
-  const repeats = [...new Set(rows.map((row) => row.repeatIndex ?? 0))];
   const questions = [...new Set(rows.map((row) => row.questionId).filter((id) => typeof id === "string"))];
-  const complete = new Set(questions.filter((questionId) => engines.every((engine) => repeats.every((repeat) =>
-    latest.has(`${questionId}\u0000${engine}\u0000${repeat}`)))));
+  const observations = new Map(rows.filter((row) => row.questionId).map((row) => [observation(row), row]));
+  /** @type {Map<string | null | undefined, { engines: Set<string>, repeats: Set<number> }>} */
+  const roundDimensions = new Map();
+  for (const row of rows) {
+    const dimensions = roundDimensions.get(row.roundId) ?? { engines: new Set(), repeats: new Set() };
+    dimensions.repeats.add(row.repeatIndex ?? 0);
+    if (answered(row) && row.questionId) dimensions.engines.add(row.engine);
+    roundDimensions.set(row.roundId, dimensions);
+  }
+  const complete = new Set([...observations].filter(([id, row]) => {
+    const dimensions = roundDimensions.get(row.roundId);
+    const activeEngines = [...(dimensions?.engines ?? [])];
+    const repeats = [...(dimensions?.repeats ?? [])];
+    return activeEngines.length > 0 && activeEngines.every((engine) => repeats.every((repeat) => latest.has(`${id}\u0000${engine}\u0000${repeat}`)));
+  }).map(([id]) => id));
+  const droppedObservations = [...observations].filter(([id]) => !complete.has(id));
   return {
     deduped,
-    rows: deduped.filter((row) => row.questionId && complete.has(row.questionId)),
+    rows: deduped.filter((row) => row.questionId && complete.has(observation(row))),
     engines,
     questions: questions.length,
+    observations: observations.size,
     kept: complete.size,
-    dropped: questions.filter((questionId) => !complete.has(/** @type {string} */ (questionId))),
+    dropped: [...new Set(droppedObservations.map(([, row]) => row.questionId))],
+    droppedObservations: droppedObservations.map(([id]) => id),
   };
 }
 

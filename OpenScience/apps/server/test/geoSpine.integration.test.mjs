@@ -216,6 +216,9 @@ async function seed() {
   [id("e1"), ALICE, geoId, id("g3q2"), id("s1"), id("claim1"), ago(8), id("e2"), id("e3"), id("g1q1")]);
   await q(`INSERT INTO evimed_geo.claims (id, user_id, geo_project_id, claim_key, version, statement, quote, source_ref, source_label, source_kind)
     VALUES ($1, $2, $3, 'C1', 1, '过敏者禁用', '对本品过敏者禁用', 'web-page:x', '说明书', 'label')`, [id("claim1"), ALICE, geoId]);
+  await q(`UPDATE evimed_geo.errors e SET last_snapshot_id = (SELECT s.id FROM evimed_geo.snapshots s
+    WHERE s.geo_project_id = e.geo_project_id AND s.question_id = e.question_id AND s.engine = e.engine AND s.round_id = $2 LIMIT 1)
+    WHERE e.geo_project_id = $1`, [geoId, id("r2")]);
   return { geoId, a2, a3 };
 }
 

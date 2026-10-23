@@ -1,3 +1,4 @@
+import { geoScopeFromQuery } from "./geoReadScope.mjs";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
@@ -305,7 +306,7 @@ export function createGeoRoutes(dependencies) {
     const id = parts[1];
     if (parts.length === 2) {
       if (method === "GET") {
-        const view = await service.projectView(user, id);
+        const view = await service.projectView(user, id, geoScopeFromQuery(url.searchParams, []));
         const sessionId = await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null) ?? null;
         return reply({ ...view, sessionId });
       }
@@ -376,15 +377,11 @@ export function createGeoRoutes(dependencies) {
         if (version != null && (!Number.isSafeInteger(version) || version < 1)) throw new HttpError(400, "geo_version_invalid", "version must be a positive whole number.");
         return reply(await service.questions(user, id, version));
       }
-      if (tab === "diagnosis") {
-        const round = url.searchParams.get("round");
-        if (round != null && round !== "" && !ID.test(round)) throw new HttpError(404, "geo_round_not_found", "Round not found.");
-        return reply(await service.diagnosis(user, id, round || null));
-      }
-      if (tab === "sources") return reply(await service.sources(user, id));
+      if (tab === "diagnosis") return reply(await service.diagnosis(user, id, geoScopeFromQuery(url.searchParams)));
+      if (tab === "sources") return reply(await service.sources(user, id, geoScopeFromQuery(url.searchParams, [])));
       // The question group as the spine (rectification 2026-10-14): the groups with what the engines say, the actions by group, and the
       // strategy page's one read.
-      if (tab === "clusters") return reply(await service.clusters(user, id));
+      if (tab === "clusters") return reply(await service.clusters(user, id, geoScopeFromQuery(url.searchParams, [])));
       if (tab === "actions") return reply(await service.actions(user, id));
       if (tab === "strategy") return reply(await service.strategy(user, id));
       if (tab === "articles") return reply(await service.articles(user, id));
@@ -392,7 +389,7 @@ export function createGeoRoutes(dependencies) {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
-      if (tab === "monitoring") return reply(await service.monitoring(user, id));
+      if (tab === "monitoring") return reply(await service.monitoring(user, id, geoScopeFromQuery(url.searchParams, [])));
       // 「AI 运行」: what the programme did in the project's own sessions, apart from the person's conversation — a read-only record, each
       // row named by what it was (the route reason's sentence, never the brief it was sent with) and none of them a place to go.
       if (tab === "runs") {
@@ -425,7 +422,7 @@ export function createGeoRoutes(dependencies) {
       return reply(result);
     }
     if (parts.length === 4 && method === "GET" && tab === "answers") return reply(await service.answer(user, id, parts[3]));
-    if (parts.length === 4 && method === "GET" && tab === "clusters") return reply(await service.cluster(user, id, parts[3]));
+    if (parts.length === 4 && method === "GET" && tab === "clusters") return reply(await service.cluster(user, id, parts[3], geoScopeFromQuery(url.searchParams, [])));
     if (parts.length === 4 && method === "GET" && tab === "actions") return reply(await service.action(user, id, parts[3]));
     // A person's two reversible words about an action: skip it, or send it to another source. Nothing else is written, and neither is
     // an approval — the platform goes on by itself.
@@ -462,9 +459,7 @@ export function createGeoRoutes(dependencies) {
     // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
     if (parts.length === 4 && method === "GET" && tab === "sources") {
       if (!ID.test(parts[3])) throw new HttpError(404, "geo_source_not_found", "Source not found.");
-      const engine = url.searchParams.get("engine");
-      if (engine != null && engine !== "" && !ID.test(engine)) throw new HttpError(400, "geo_engines_invalid", "engine must be one engine's id.");
-      return reply(await service.source(user, id, parts[3], { engine: engine || null }));
+      return reply(await service.source(user, id, parts[3], geoScopeFromQuery(url.searchParams, [])));
     }
     if (parts.length === 4 && method === "GET" && tab === "screenshots") {
       const file = await service.screenshotPath(user, id, parts[3]);

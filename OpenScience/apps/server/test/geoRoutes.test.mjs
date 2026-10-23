@@ -91,7 +91,7 @@ test("every code the routes and the service answer with is registered", async ()
   const unregistered = [...emitted].filter((code) => !ALL_ERROR_CODES.includes(code)).sort();
   assert.deepEqual(unregistered, [], `emitted but not registered: ${unregistered.join(", ")}`);
   // A page's refusal is a page's; the one tool code the service throws is the runtime read's own.
-  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code) && !GEO_MEDIA_MARKET_ERROR_CODES.includes(code)), ["geo_read_what_invalid"]);
+  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code) && !GEO_MEDIA_MARKET_ERROR_CODES.includes(code)), ["geo_read_filter_invalid", "geo_read_what_invalid"]);
 });
 
 test("readiness: off is green and says so; on it is red only for the module's own invariants", async () => {

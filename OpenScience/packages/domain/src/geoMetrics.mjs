@@ -563,7 +563,7 @@ function prepare(row, ctx) {
   const roundKind = row.roundKind ?? null
   return {
     row,
-    question: String(row.questionId ?? null),
+    question: `${row.roundId ?? ''}\u0000${row.questionId ?? null}`,
     engine: String(row.engine ?? ''),
     pool: row.pool || null,
     groupId: row.groupId || null,
@@ -602,6 +602,22 @@ function recommendationEligible(item) {
   return item.judgementCoverage === 'complete' || item.status === 'refusal'
 }
 
+/** The shared denominator sets, used by computation and contributor reads. @param {GeoItem[]} items @param {Context} ctx */
+function contributionSets(items, ctx) {
+  const baseline = items.filter((item) => !item.excluded)
+  const valid = baseline.filter((item) => item.inDenominator)
+  const mentioned = valid.filter((item) => item.selfMentions > 0)
+  const retrieval = valid.filter((item) => item.retrieval)
+  return { baseline, valid, mentioned, retrieval,
+    withAnyBrand: valid.filter((item) => item.withAnyBrand),
+    semantic: valid.filter(recommendationEligible),
+    adjudicated: valid.filter((item) => item.status !== 'refusal' && (item.accuracy === 'correct' || item.accuracy === 'wrong')),
+    positioned: mentioned.filter((item) => Boolean(item.selfPosition)),
+    traced: retrieval.filter((item) => item.traceable),
+    inline: retrieval.filter((item) => ctx.display(item.engine) === 'inline_marker' && item.traceable),
+  }
+}
+
 // ------------------------------------------------------------------ one scope
 
 /**
@@ -611,12 +627,8 @@ function recommendationEligible(item) {
  * @param {GeoItem[]} items @param {Context} ctx @returns {Record<string, CoreCell>}
  */
 function scopeMetrics(items, ctx) {
-  const baseline = items.filter((item) => !item.excluded)
-  const valid = baseline.filter((item) => item.inDenominator)
+  const { valid, mentioned, withAnyBrand, retrieval, semantic, traced, inline, positioned, adjudicated: decided } = contributionSets(items, ctx)
   const nValid = valid.length
-  const mentioned = valid.filter((item) => item.selfMentions > 0)
-  const withAnyBrand = valid.filter((item) => item.withAnyBrand)
-  const retrieval = valid.filter((item) => item.retrieval)
 
   const selfTotal = valid.reduce((sum, item) => sum + item.selfMentions, 0)
   const rivalTotal = valid.reduce((sum, item) => sum + Object.values(item.rivalCounts).reduce((a, b) => a + b, 0), 0)
@@ -625,14 +637,12 @@ function scopeMetrics(items, ctx) {
   const coverage = entityTotal ? brandTotal / entityTotal : null
 
   let right = 0
-  let wrong = 0
   const wrongTexts = new Set()
-  for (const item of valid) {
+  for (const item of decided) {
     for (const text of item.wrongTexts) wrongTexts.add(text)
-    if (item.accuracy === 'wrong') wrong += 1
-    else if (item.accuracy === 'correct') right += 1
+    if (item.accuracy === 'correct') right += 1
   }
-  const adjudicated = right + wrong
+  const adjudicated = decided.length
   const semanticAssessment = {
     methodVersion: GEO_MEASUREMENT_METHOD_VERSION,
     completeAnswers: valid.filter((item) => item.judgementCoverage === 'complete').length,
@@ -641,19 +651,16 @@ function scopeMetrics(items, ctx) {
   }
   // A verified error settles correctness without proving every part was read.
   const assessment = { ...semanticAssessment, decidableAnswers: adjudicated }
-  const semantic = valid.filter(recommendationEligible)
 
   /** @type {number[]} */
   const positions = []
-  for (const item of mentioned) if (item.selfPosition) positions.push(item.selfPosition)
+  for (const item of positioned) positions.push(/** @type {number} */ (item.selfPosition))
   const positionSum = positions.reduce((sum, position) => sum + position, 0)
   const expectedFlags = semantic.reduce((sum, item) => sum + item.redFlagExpected, 0)
   const hitFlags = semantic.reduce((sum, item) => sum + item.redFlagHits, 0)
   const safetyExtracted = semantic.some((item) => item.safetyHit !== null)
-  const inline = retrieval.filter((item) => ctx.display(item.engine) === 'inline_marker' && item.traceable)
   // The citation family counts only what can be traced; retrieval with no
   // link at all is 「引用不可测」, not 0 %.
-  const traced = retrieval.filter((item) => item.traceable)
   const untraceable = retrieval.length > 0 && traced.length === 0
   const suspects = items.filter((item) => item.status === 'suspect').length
 
@@ -1242,6 +1249,41 @@ export function geoCellRows(rows, cell, options = {}) {
     && (cell.groupId === null || row.groupId === cell.groupId)
     && (armGroups === null || (row.groupId != null && armGroups.has(row.groupId)))
     && (cell.scope === 'engine' || cell.scope === 'pool_engine' || row.surface?.mode !== PLATFORM.inclusion_surface_mode))
+}
+
+/**
+ * Exact contributing snapshots of a computed cell. Counts of mentions, flags,
+ * citations and derived inputs are deliberately not labelled answer counts.
+ * Input rows must already be balanced for cross-engine metrics, as in the job.
+ * @param {GeoFactRow[]} rows @param {GeoMetricCell} cell @param {GeoMetricsOptions} [options]
+ */
+export function geoMetricMembers(rows, cell, options = {}) {
+  const ctx = { owned: ownedSources(options.owned), display: (/** @type {string} */ engine) =>
+    options.citationDisplay?.[engine] ?? TABLE.engines[engine]?.citation_display ?? 'unknown' }
+  const items = geoCellRows(rows, cell, options).map((row) => prepare(row, ctx)).filter((item) => item !== null)
+  const sets = contributionSets(items, ctx)
+  let members = sets.valid
+  let unit = 'answers'
+  switch (cell.metricId) {
+    case 'M-02': members = sets.withAnyBrand; break
+    case 'M-03': case 'M-12': case 'M-15': members = sets.semantic; break
+    case 'M-04': case 'M-17': members = sets.valid.filter((item) => item.selfMentions + Object.values(item.rivalCounts).reduce((a, b) => a + b, 0) > 0); unit = 'brand_mentions'; break
+    case 'M-04C': members = sets.valid.filter((item) => item.entityMentions > 0); unit = 'entity_mentions'; break
+    case 'M-05': members = sets.positioned; break
+    case 'M-06': members = sets.adjudicated; break
+    case 'M-07': members = sets.adjudicated.filter((item) => item.wrongTexts.length > 0); unit = 'unique_statements'; break
+    case 'M-08': members = ctx.owned.registered ? sets.traced : []; break
+    case 'M-08B': members = ctx.owned.registered ? sets.inline : []; break
+    case 'M-08S': members = ctx.owned.registered ? sets.valid.filter((item) => !item.retrieval || item.traceable) : []; break
+    case 'M-09': members = ctx.owned.registered ? sets.valid.filter((item) => item.ownedDomains.size > 0) : []; unit = 'unique_domains'; break
+    case 'M-09S': members = ctx.owned.registered ? sets.valid.filter((item) => item.citations.some((citation) => citation.domain)) : []; unit = 'citations'; break
+    case 'M-11': members = sets.semantic.filter((item) => item.redFlagExpected > 0); unit = 'expected_flags'; break
+    case 'M-13': case 'M-19': unit = 'derived_inputs'; break
+    case 'M-20': members = cell.variant === 'refusal' ? sets.valid : sets.baseline.filter((item) => item.inDenominator || item.status === 'suspect'); unit = 'asks'; break
+    default: break
+  }
+  if (cell.reason === 'not_applicable' || cell.reason === 'inclusion_surface') members = []
+  return { rows: members.map((item) => item.row), unit, basis: unit === 'derived_inputs' ? 'inputs' : 'denominator' }
 }
 
 // ------------------------------------------------------------------ noise, trend, net effect

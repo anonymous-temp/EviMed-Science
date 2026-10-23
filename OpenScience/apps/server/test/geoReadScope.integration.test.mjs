@@ -98,3 +98,40 @@ test("source list and detail use the same selection and all engine metrics have 
   assert.ok(monitoring.byEngine[0].metrics.some((entry) => entry.metricId === "M-06" && entry.points.length === 2));
   await assert.rejects(service.projectView({ id: "other" }, project.id, scope), (error) => error.status === 404);
 });
+
+test("comparisons use common immutable questions and remain observational with unknown consumer versions", options, async () => {
+  const selected = await readGeoSelection(store, project, { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01", pools: ["P2"] });
+  assert.equal(selected.comparison.comparable, true);
+  assert.equal(selected.comparison.causal, false);
+  assert.equal(selected.comparison.consumerModelVersion, "unknown");
+  const mention = selected.comparison.cells.find((entry) => entry.scope === "project" && entry.metricId === "M-01S" && !entry.variant);
+  assert.deepEqual([mention.previous.denominator, mention.current.denominator], [2, 2]);
+  const separate = await readGeoSelection(store, project, { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01", comparisonMode: "separate" });
+  assert.equal(separate.comparison.comparable, false);
+  assert.ok(separate.comparison.cells.every((entry) => entry.delta === null));
+});
+
+test("an exact member continuation reads the cell denominator and stale references cannot silently change data", options, async () => {
+  const selected = await readGeoSelection(store, project, { round: "r2", pools: ["P2"] });
+  const accuracy = selected.computed.cells.find((entry) => entry.scope === "project" && entry.metricId === "M-06");
+  const first = await service.runtimeRead(project, "snapshots", { selectionRef: selected.selection.reference, member: accuracy.members.metric, limit: 1 });
+  assert.equal(first.total, accuracy.denominator);
+  assert.equal(first.items.length, 1);
+  assert.equal(first.more, true);
+  const next = await service.runtimeRead(project, "snapshots", { selectionRef: selected.selection.reference, member: accuracy.members.metric, offset: first.nextOffset, limit: 1 });
+  assert.notEqual(first.items[0].id, next.items[0].id);
+  assert.equal(next.more, false);
+  await store.query(`UPDATE evimed_geo.facts SET statements = '[{"text":"Changed","verdict":"wrong"}]' WHERE snapshot_id = 'r2-q1-deepseek'`);
+  await assert.rejects(readGeoSelection(store, project, { selectionRef: selected.selection.reference }), (error) => error.status === 409 && error.code === "geo_read_filter_invalid");
+});
+
+test("date-only bounds include the local final day and oversized computation asks for a smaller range", options, async () => {
+  const other = await store.createProject({ userId: user.id, projectId: "bounded-project", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,created_at,started_at,finished_at)
+    VALUES ('r-bounded',$1,$2,'baseline','done','2026-10-01T16:30:00Z','2026-10-01T16:30:00Z','2026-10-01T17:00:00Z')`, [user.id,other.id]);
+  assert.equal((await readGeoSelection(store, other, { from: "2026-10-02", to: "2026-10-02" })).rounds.length, 1);
+  assert.equal((await readGeoSelection(store, other, { from: "2026-10-01", to: "2026-10-01" })).rounds.length, 0);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status)
+    SELECT 'bounded-' || n, $1, $2, 'r-bounded', 'deepseek', 'failed' FROM generate_series(1,20001) n`, [user.id,other.id]);
+  await assert.rejects(readGeoSelection(store, other, { round: "r-bounded" }), (error) => error.status === 422 && /shorter date range/u.test(error.message));
+});

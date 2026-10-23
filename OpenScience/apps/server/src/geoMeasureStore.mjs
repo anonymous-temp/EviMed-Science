@@ -1062,21 +1062,22 @@ export class GeoMeasureStore {
    * One round's rows in the shape `computeGeoMetrics` reads (`GeoFactRow`).
    * A valid answer whose facts were never judged is passed without facts, so
    * the metrics leave it out as unparsed rather than read it as saying nothing.
-   * @param {string} roundId
+   * @param {string} roundId @param {string | null} [geoProjectId] @param {string | null} [userId]
    */
-  async roundFactRows(roundId) {
+  async roundFactRows(roundId, geoProjectId = null, userId = null) {
     const result = await this.query(`SELECT s.id, s.question_id, s.engine, s.round_id, s.asked_at, s.status, s.surface, s.citations,
         r.kind AS round_kind, coalesce(j.repeat_index, 0) AS repeat_index, coalesce(q.pool, g.pool) AS pool, q.group_id, g.is_control,
         f.snapshot_id IS NOT NULL AS has_facts, f.judged_at, f.brands, f.first_ours, f.position_ours, f.recommended_ours, f.retrieval_triggered,
         f.statements, f.red_flag_expected, f.red_flag_hits, f.safety_terms_hit, f.failure_mode, f.mentions_ours,
         f.checks, f.judge_extract, f.parser_version
       FROM evimed_geo.snapshots s
-        JOIN evimed_geo.rounds r ON r.id = s.round_id
-        LEFT JOIN evimed_geo.probe_jobs j ON j.id = s.probe_job_id
-        LEFT JOIN evimed_geo.questions q ON q.id = s.question_id
-        LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id
-        LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id
-      WHERE s.round_id = $1 ORDER BY s.asked_at, s.id`, [roundId]);
+        JOIN evimed_geo.rounds r ON r.id = s.round_id AND r.geo_project_id = s.geo_project_id AND r.user_id = s.user_id
+        LEFT JOIN evimed_geo.probe_jobs j ON j.id = s.probe_job_id AND j.round_id = s.round_id AND j.geo_project_id = s.geo_project_id AND j.user_id = s.user_id
+        LEFT JOIN evimed_geo.questions q ON q.id = s.question_id AND q.geo_project_id = s.geo_project_id AND q.user_id = s.user_id
+        LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id AND g.geo_project_id = s.geo_project_id AND g.user_id = s.user_id
+        LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id AND f.geo_project_id = s.geo_project_id AND f.user_id = s.user_id
+      WHERE s.round_id = $1 AND ($2::text IS NULL OR s.geo_project_id = $2) AND ($3::text IS NULL OR s.user_id = $3)
+        ORDER BY s.asked_at, s.id`, [roundId, geoProjectId, userId]);
     return result.rows.map((row) => {
       const inclusion = row.surface?.mode === "inclusion";
       const usable = row.has_facts && (row.judged_at != null || inclusion);
@@ -1088,13 +1089,14 @@ export class GeoMeasureStore {
         facts: usable ? {
           checks: row.checks && typeof row.checks === "object" ? row.checks : {},
           judgeExtract: row.judge_extract && typeof row.judge_extract === "object" ? row.judge_extract : null,
-          genericMentions: list(row.judge_extract?.genericMentions), parserVersion: row.parser_version ?? null, judged: row.judged_at != null,
+          judgedAt: iso(row.judged_at), genericMentions: list(row.judge_extract?.genericMentions), parserVersion: row.parser_version ?? null, judged: row.judged_at != null,
           brands: list(row.brands), firstOurs: row.first_ours ?? null, positionOurs: num(row.position_ours),
           recommendedOurs: row.recommended_ours ?? null, retrievalTriggered: row.retrieval_triggered ?? null, statements: list(row.statements),
           redFlagExpected: list(row.red_flag_expected), redFlagHits: list(row.red_flag_hits),
           // An inclusion answer has no text to read safety terms from: not extracted, never "none".
           ...(inclusion ? {} : { safetyTermsHit: list(row.safety_terms_hit) }),
         } : null,
+        observedBrands: list(row.brands), assessmentFacts: row.has_facts ? { statements: list(row.statements), checks: row.checks ?? {}, judgedAt: iso(row.judged_at) } : null,
         failureMode: row.failure_mode ?? null,
         mentionsOurs: row.mentions_ours ?? null,
       };
