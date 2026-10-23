@@ -2,10 +2,10 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { KnowledgeStatus } from "@/lib/sourceClient";
 import statusCompiled from "./knowledgeFixtures/status-compiled.json";
-import { roundKey, useKnowledgeStatus } from "./useKnowledge";
+import { roundKey, useKnowledgeStatus, useKnowledgeTree } from "./useKnowledge";
 
-const mocks = vi.hoisted(() => ({ status: vi.fn() }));
-vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getKnowledgeStatus: mocks.status }));
+const mocks = vi.hoisted(() => ({ status: vi.fn(), tree: vi.fn() }));
+vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getKnowledgeStatus: mocks.status, getKnowledgeTree: mocks.tree }));
 
 const compiled = statusCompiled as unknown as KnowledgeStatus;
 const compiling = { ...compiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } } as KnowledgeStatus;
@@ -44,5 +44,30 @@ describe("useKnowledgeStatus", () => {
   it("names what a round left, so the tree is read again when it changes", () => {
     expect(roundKey(null)).toBe("");
     expect(roundKey(compiled)).not.toBe(roundKey({ ...compiled, round: compiled.round + 1 }));
+  });
+});
+
+describe("knowledge scope isolation", () => {
+  it("clears the previous project tree while the new project is loading or fails", async () => {
+    mocks.tree.mockResolvedValueOnce({ pages: [{ title: "A" }] }).mockRejectedValueOnce(new Error("B unavailable"));
+    const { result, rerender } = renderHook(({ id }) => useKnowledgeTree(id, true, ""), { initialProps: { id: "A" } });
+    await act(async () => {});
+    expect(result.current.tree).not.toBeNull();
+    rerender({ id: "B" });
+    expect(result.current.tree).toBeNull();
+    await act(async () => {});
+    expect(result.current.tree).toBeNull();
+    expect(result.current.failed).toBe(true);
+  });
+  it("continues polling after one busy-status request fails", async () => {
+    vi.useFakeTimers();
+    mocks.status.mockReset().mockResolvedValueOnce(compiling).mockRejectedValueOnce(new Error("temporary")).mockResolvedValue(compiled);
+    const { result, unmount } = renderHook(() => useKnowledgeStatus("p1", true));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    expect(result.current.status?.state).toBe("compiled");
+    unmount();
+    vi.useRealTimers();
   });
 });

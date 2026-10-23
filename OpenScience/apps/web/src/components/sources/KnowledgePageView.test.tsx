@@ -166,7 +166,7 @@ describe("editing a page", () => {
     await waitFor(() => expect(screen.getByTestId("where").textContent).toBe(`/app/files/${saved.sourceId}?scope=p1&kind=wiki`));
   });
 
-  it("takes the newer version in when a compile rewrote the page, and says so in one sentence", async () => {
+  it("preserves the draft and offers the newer version separately after a conflict", async () => {
     const newer = { ...mine, sha256: "e".repeat(64), markdown: "---\ntype: analysis\ntitle: x\n---\n\n新的整理结果。" };
     mocks.save.mockRejectedValue(new WebApiError("changed", { status: 409, code: "knowledge_page_changed" }));
     mocks.pageAt.mockResolvedValue(newer);
@@ -175,8 +175,10 @@ describe("editing a page", () => {
     await user.click(await screen.findByRole("button", { name: "编辑" }));
     await user.type(await screen.findByLabelText("页面全文"), "x");
     await user.click(screen.getByRole("button", { name: "保存" }));
-    expect(await screen.findByText(/这一页刚被重新整理过，已换成最新的版本/)).toBeInTheDocument();
+    expect(await screen.findByText(/你的修改已保留/)).toBeInTheDocument();
     expect(mocks.pageAt).toHaveBeenCalledWith("p1", "wiki", mine.path);
-    expect(screen.getByLabelText("页面全文")).toHaveValue(newer.markdown);
+    expect(screen.getByLabelText("页面全文")).toHaveValue(expect.stringContaining("x"));
+    expect(screen.getByLabelText("最新版本")).toHaveValue(newer.markdown);
+    expect(screen.getByRole("button", { name: "复制我的修改" })).toBeInTheDocument();
   });
 });
