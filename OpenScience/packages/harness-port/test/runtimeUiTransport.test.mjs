@@ -362,6 +362,28 @@ test('a GEO context and artifact revision coexist only on the matching request, 
   assert.equal(JSON.parse(calls[1][1].body).payload.args.request.geoPlanContext,undefined);
   target.__EVIMED_GEO_PLAN__.stage({sessionId:'s',referenceId,draft:'Selected plan: '});
   await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'),{method:'POST',body:body.replace('Selected plan: revise this file','An unrelated draft')});
-  assert.equal(JSON.parse(calls[2][1].body).payload.args.request.geoPlanContext,undefined);
+  assert.deepEqual(JSON.parse(calls[2][1].body).payload.args.request.geoPlanContext,{referenceId},'editing the native draft retains the explicitly selected input');
+  hooks.dispose();
+});
+
+test('GEO selection survives normal draft edits but clears on cancellation, explicit removal and another session', async () => {
+  const { target, calls } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const referenceId = `gpc_${'c'.repeat(64)}`;
+  const stage = () => target.__EVIMED_GEO_PLAN__.stage({ sessionId: 's', referenceId, draft: 'Use the selected plan.' });
+  let requestIndex = 0;
+  const submit = async (/** @type {string} */ text, sessionId = 's') => {
+    await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { method: 'POST', body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request: { sessionId, requestId: `edited-${requestIndex++}`, content: [{ type: 'text', text }] } } } }) });
+    return JSON.parse(calls.at(-1)[1].body).payload.args.request;
+  };
+  for (const text of ['Please focus on adults. Use the selected plan.', 'Use the selected evidence to compare options.']) {
+    stage(); const sent = await submit(text);
+    assert.deepEqual(sent.geoPlanContext, { referenceId }); assert.equal(sent.content[0].text, text);
+    assert.equal((await submit(text)).geoPlanContext, undefined, 'the next request cannot reuse a consumed selection');
+  }
+  stage(); target.__EVIMED_GEO_PLAN__.clear(); assert.equal((await submit('Use the selected plan.')).geoPlanContext, undefined);
+  stage(); await hooks.fetch(new URL('https://app.example:8443/api/remote/session/cancel'), {});
+  assert.equal((await submit('Use the selected plan.')).geoPlanContext, undefined);
+  stage(); assert.equal((await submit('Use the selected plan.', 'other')).geoPlanContext, undefined);
+  assert.equal((await submit('Use the selected plan.')).geoPlanContext, undefined);
   hooks.dispose();
 });

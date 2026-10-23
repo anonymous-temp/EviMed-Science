@@ -136,7 +136,7 @@ export class GeoPlanContext {
     let row = await this.resolve(user, project, envelope.referenceId);
     const text = (request.content ?? []).filter(part => part?.type === "text").map(part => part.text).join("\n");
     const requestDigest = geoPlanDigest(text);
-    if (row.payload.sessionId !== request.sessionId || !request.requestId || !text.startsWith(row.payload.draft)) throw fail("geo_plan_context_mismatch", "Reopen the selected plan in this conversation.");
+    if (row.payload.sessionId !== request.sessionId || !request.requestId || !text.trim()) throw fail("geo_plan_context_mismatch", "Reopen the selected plan in this conversation.");
     if (row.payload.state === "bound") {
       if (row.payload.requestId !== request.requestId || row.payload.requestDigest !== requestDigest) throw fail("geo_plan_context_consumed", "This selection belongs to another submitted request.");
     } else {
@@ -161,7 +161,7 @@ export class GeoPlanContext {
       }
     }
     request.content.push({ type: "text", text: `\n<evimed_geo_plan_context>${JSON.stringify({ referenceId: row.id, requestId: request.requestId, ...row.payload,
-      instruction: "Use this frozen input. geo_read strategy/targets accepts planContextRef. For a strategy task write deliverables/<unique-deliverable-id>/strategy.json and geo-strategy.md using the existing geo-strategy format. Scoped geo_write is unavailable because a project token cannot attest the producing request; the completed run imports the file under its actual bound context. For content use the existing geo-content article files and articles.json registration. Preserve exact group/action IDs. Do not replace the frozen basis. No purchase or publication is authorized." }).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e")}</evimed_geo_plan_context>` });
+      instruction: "Use this frozen input as context for the actual user request. Answer ordinary questions normally; do not create files merely because this context exists. geo_read strategy/targets accepts planContextRef. If the user requests a strategy, write deliverables/<unique-deliverable-id>/strategy.json and geo-strategy.md using the existing geo-strategy format. Scoped geo_write is unavailable because a project token cannot attest the producing request; the completed run imports the file under its actual bound context. For requested content use the existing geo-content article files and articles.json registration. Preserve exact group/action IDs. Do not replace the frozen basis. No purchase or publication is authorized." }).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e")}</evimed_geo_plan_context>` });
     delete request.geoPlanContext;
     return row.payload;
   }

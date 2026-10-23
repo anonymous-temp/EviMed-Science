@@ -44,7 +44,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     },
     clear() { stagedRevision = null; sentRevision = null; },
   };
-  /** Attach only to the submitted native request for this session and draft.
+  /** Attach the selected input to the actual submitted words in this session.
    * The control plane strips this envelope before calling the kernel.
    * @param {string} method @param {any} payload */
   function revisionPayload(method, payload) {
@@ -96,7 +96,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     else if (stagedGeoPlan) {
       const staged = stagedGeoPlan;
       geoPlans.clear();
-      if (staged.sessionId === request.sessionId && text.startsWith(staged.draft)) {
+      if (staged.sessionId === request.sessionId && text.trim()) {
         referenceId = staged.referenceId;
         sentGeoPlan = { sessionId: request.sessionId, requestId: request.requestId, text, referenceId };
       }

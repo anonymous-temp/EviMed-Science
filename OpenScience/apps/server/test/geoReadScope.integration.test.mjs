@@ -771,3 +771,52 @@ test('source text cannot terminate the hidden native plan context block', option
     assert.equal(decoded.basis.groups.find(group => group.id === 'g1').name, name, 'JSON escaping preserves the actual source name');
   } finally { await store.query("UPDATE evimed_geo.question_groups SET name=$1 WHERE id='g1'", [prior]); }
 });
+
+test('native plan context binds edited user words and rejects a changed retry', options, async () => {
+  const { GeoPlanContext } = await import('../src/geoPlanContext.mjs');
+  const { ProductDocuments } = await import('../src/productStore.mjs');
+  const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
+  const selected = await readGeoSelection(store, project, { round: 'r2', groupIds: ['g1'] });
+  const control = { id: project.projectId, userId: project.userId };
+  for (const [index, text] of ['Focus on adults. Generate a plan from these selected questions.', 'Compare evidence gaps first, then outline the work.'].entries()) {
+    const staged = await adapter.stage(user, project.id, { requestKey: `edited-context-${index}`, sessionId: 'edited-session', mode: 'strategy', selectionRef: selected.selection.reference });
+    const request = () => ({ requestId: `edited-request-${index}`, sessionId: 'edited-session', content: [{ type: 'text', text }], geoPlanContext: { referenceId: staged.referenceId } });
+    const first = request(); await adapter.bind(user, control, first);
+    assert.equal(first.content[0].text, text);
+    const retry = request(); await adapter.bind(user, control, retry); assert.deepEqual(retry.content, first.content);
+    const changed = request(); changed.content[0].text += ' Additional instruction.';
+    await assert.rejects(adapter.bind(user, control, changed), error => error.code === 'geo_plan_context_consumed');
+  }
+});
+
+test('a plan context cannot mix another plan version or scope into its frozen input', options, async () => {
+  const { freezeGeoPlanBasis, geoPlanScopeKey, GeoPlanContext } = await import('../src/geoPlanContext.mjs');
+  const { ProductDocuments } = await import('../src/productStore.mjs');
+  await store.writeTargets(user.id, project.id, [{ tier: '2', metricId: 'M-01S', pool: 'all', target: 60, dataType: 'forecast' }]);
+  const a = await freezeGeoPlanBasis(store, project, { round: 'r1', groupIds: ['g1'], engines: ['kimi'] });
+  const versionA = await store.writeStrategy(user.id, project.id, { scopeKey: geoPlanScopeKey(a.basis.scope), basis: a.basis, summary: 'Plan A',
+    gaps: [{ gapId: 'selector-gap', groupId: 'g1', class: 'missing_evidence', text: 'A gap' }],
+    actions: [{ gapId: 'selector-gap', groupId: 'g1', gapClass: 'missing_evidence', kind: 'fill_gap', what: { title: 'Work A' }, work: { mode: 'new', outputs: ['a.md'] } }] });
+  const viewA = await service.strategy(user, project.id, { strategyVersion: versionA.version });
+  const prior = service.planContexts;
+  const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
+  service.planContexts = adapter;
+  try {
+    const content = await adapter.stage(user, project.id, { requestKey: 'selector-content', sessionId: 'selector-session', mode: 'content', strategyVersion: versionA.version, actionKeys: [viewA.implementation.actions[0].key] });
+    const strategy = await adapter.stage(user, project.id, { requestKey: 'selector-strategy', sessionId: 'selector-session', mode: 'strategy', selectionRef: a.basis.selection.reference });
+    await store.writeTargets(user.id, project.id, [{ tier: '2', metricId: 'M-01S', pool: 'all', target: 85, dataType: 'forecast' }]);
+    const b = await freezeGeoPlanBasis(store, project, { round: 'r2', groupIds: ['g2'], engines: ['deepseek'] });
+    const versionB = await store.writeStrategy(user.id, project.id, { scopeKey: geoPlanScopeKey(b.basis.scope), basis: b.basis, summary: 'Plan B' });
+    for (const context of [content, strategy]) {
+      for (const what of ['strategy', 'targets']) {
+        await assert.rejects(service.runtimeRead(project, what, { planContextRef: context.referenceId, strategyVersion: versionB.version }), error => error.code === 'geo_plan_context_mismatch');
+      }
+      await assert.rejects(service.strategy(user, project.id, { planContextRef: context.referenceId, strategyVersion: versionB.version }), error => error.code === 'geo_plan_context_mismatch');
+    }
+    const browser = await service.strategy(user, project.id, { planContextRef: content.referenceId, strategyVersion: versionA.version });
+    const native = await service.runtimeRead(project, 'strategy', { planContextRef: content.referenceId });
+    assert.equal(browser.version, versionA.version); assert.equal(browser.targets.rows[0].target, 60);
+    assert.deepEqual(native.view.basis, browser.basis); assert.equal(native.strategy.basis.groups[0].id, 'g1');
+    assert.equal((await service.strategy(user, project.id, { planContextRef: strategy.referenceId, strategyVersion: versionA.version })).version, versionA.version);
+  } finally { service.planContexts = prior; }
+});

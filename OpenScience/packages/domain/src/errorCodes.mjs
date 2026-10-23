@@ -1666,7 +1666,6 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_plan_basis_unavailable',
   'geo_plan_basis_too_large',
   'geo_plan_action_invalid',
-  'geo_plan_file_required',
   'geo_plan_output_unavailable',
   'geo_strategy_not_found',
   'geo_strategy_version_invalid',
@@ -2876,7 +2875,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // 「循证 GEO」's runtime tools, then its routes. The tool family comes first:
   // a run reading the platform's data has a different next step (go on with
   // what it has) from a person whose page action was refused (try again).
-  [/^(?:geo_(?:disabled$|no_project$|unconfigured$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
+  [/^(?:geo_(?:disabled$|no_project$|unconfigured$|plan_file_required$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
     '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
   [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
   // 「虚拟临床研究」, read the same way and for the same reason: a run whose study
