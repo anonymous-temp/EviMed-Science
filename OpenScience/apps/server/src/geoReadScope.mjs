@@ -383,13 +383,15 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const [batches, skipBatches, questions, context, contaminated] = await Promise.all([
     Promise.all(roundIds.map((id) => measure.roundFactRows(id, project.id, project.userId, admittedIds.get(id) ?? []))),
     Promise.all(roundIds.map((id) => measure.roundSkippedEngines(id))),
-    store.query(`SELECT q.*, to_jsonb(q)->'client_tags' AS scope_client_tags FROM evimed_geo.questions q WHERE q.geo_project_id = $1 AND q.user_id = $2`, [project.id, project.userId]),
+    store.query(`SELECT q.*, coalesce(q.pool, g.pool) AS scope_pool, to_jsonb(q)->'client_tags' AS scope_client_tags FROM evimed_geo.questions q
+      LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id AND g.geo_project_id = q.geo_project_id AND g.user_id = q.user_id
+      WHERE q.geo_project_id = $1 AND q.user_id = $2`, [project.id, project.userId]),
     roundIds.length ? measure.projectContext(project.id) : null,
     measure.contaminatedControlGroups(project.id),
   ]);
   const roundVersions = new Set(rounds.map((round) => Number(round.set_version)).filter((version) => version > 0));
   const selectedQuestions = questions.rows.filter((question) => (!roundVersions.size || roundVersions.has(Number(question.set_version))) && (!scope.questionVersion || Number(question.set_version) === scope.questionVersion)
-    && (!scope.groupIds.length || scope.groupIds.includes(String(question.group_id))) && (!scope.pools.length || scope.pools.includes(String(question.pool)))
+    && (!scope.groupIds.length || scope.groupIds.includes(String(question.group_id))) && (!scope.pools.length || scope.pools.includes(String(question.scope_pool)))
     && (!scope.clientTags.length || Array.isArray(question.scope_client_tags) && question.scope_client_tags.some((/** @type {string} */ tag) => scope.clientTags.includes(tag))));
   const questionIds = new Set(selectedQuestions.map((question) => String(question.id)));
   // Admission already applied every deterministic observation predicate before the bounded fact read.

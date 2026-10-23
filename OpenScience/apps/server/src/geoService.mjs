@@ -2104,9 +2104,10 @@ export class GeoService {
         const values = [project.id, members.map((row) => row.snapshotId)];
         const where = ["s.geo_project_id = $1", "s.id = ANY($2::text[])"];
         values.push(String(limit + 1), String(offset));
-        const rows = (await this.store.query(`SELECT s.*, q.text AS question_text, q.pool AS question_pool, f.brands, f.statements, f.failure_mode,
+        const rows = (await this.store.query(`SELECT s.*, q.text AS question_text, coalesce(q.pool, g.pool) AS question_pool, f.brands, f.statements, f.failure_mode,
             f.mentions_ours, f.retrieval_triggered, f.cites_ours
           FROM evimed_geo.snapshots s LEFT JOIN evimed_geo.questions q ON q.id = s.question_id AND q.geo_project_id = s.geo_project_id AND q.user_id = s.user_id
+            LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id AND g.geo_project_id = q.geo_project_id AND g.user_id = q.user_id
             LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id AND f.geo_project_id = s.geo_project_id AND f.user_id = s.user_id
           WHERE ${where.join(" AND ")} ORDER BY s.asked_at DESC NULLS LAST, s.id
           LIMIT $${values.length - 1}::integer OFFSET $${values.length}::integer`, values)).rows;
