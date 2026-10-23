@@ -100,3 +100,30 @@ test('an incomplete recheck retains the defensible prior statement instead of si
   assert.equal(saved.current.checks.judgementCoverage.status, 'partial');
   assert.equal(saved.original.statements[0].verdict, 'wrong');
 });
+
+test('feedback beyond the first page remains reachable and assessment history counts distinct judgments', options, async () => {
+  const { ProductDocuments } = await import('../src/productStore.mjs');
+  const documents = new ProductDocuments(database);
+  const before = await review.read(project, 'review_snapshot');
+  for (let index = 0; index < 4; index += 1) await review.submit(project, await input(`history_page_${index}`));
+  const headRow = (await database.query("SELECT id FROM evimed_product.documents WHERE payload->>'recordType'='geo-assessment' AND payload->>'snapshotId'='review_snapshot'")).rows[0];
+  let head = await documents.get(project.userId, 'knowledge', headRow.id);
+  for (let index = 0; index < 4; index += 1) head = await documents.put(project.userId, 'knowledge', head.id, { ...head.payload, state: index % 2 ? 'active' : 'suspended' }, { expectedRevision: head.revision, projectId: project.projectId });
+  const first = await review.read(project, 'review_snapshot', { feedbackLimit: 2, historyLimit: 2 });
+  assert.equal(first.feedback.length, 2);
+  assert.equal(first.feedbackPage.total, before.feedback.length + 4);
+  assert.equal(first.feedbackPage.more, true);
+  assert.equal(first.historyPage.total, new Set(before.history.map(row => row.version)).size);
+  assert.equal(first.history.length, 2);
+  const next = await review.read(project, 'review_snapshot', { feedbackLimit: 2, historyLimit: 2, feedbackBefore: first.feedbackPage.nextBefore, historyBefore: first.historyPage.nextBefore });
+  assert.ok(next.feedback.every(row => !first.feedback.some(prior => prior.id === row.id)));
+  assert.ok(next.history.every(row => !first.history.some(prior => prior.version === row.version)));
+  const allFeedback = new Set(first.feedback.map(row => row.id));
+  let cursor = first.feedbackPage.nextBefore;
+  while (cursor) {
+    const page = await review.read(project, 'review_snapshot', { feedbackLimit: 2, feedbackBefore: cursor });
+    for (const row of page.feedback) allFeedback.add(row.id);
+    cursor = page.feedbackPage.nextBefore;
+  }
+  assert.equal(allFeedback.size, first.feedbackPage.total);
+});
