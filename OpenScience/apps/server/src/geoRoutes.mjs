@@ -63,7 +63,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "snapshots", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "source-ownership", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -471,6 +471,19 @@ export function createGeoRoutes(dependencies) {
       if (!hooks.cards?.refresh) throw UNAVAILABLE();
       const result = await hooks.cards.refresh(asOwner(user, project), project);
       await audit("geo.cards.refresh", "completed", { userId: user.id, code: id, detail: `${result.cards?.length ?? 0}` });
+      return reply(result);
+    }
+    if (parts.length === 4 && method === "GET" && tab === "distribution" && ["orders", "ledger"].includes(parts[3])) {
+      const input = Object.fromEntries(url.searchParams);
+      return reply(parts[3] === "orders" ? await service.distributionOrders(user, id, input) : await service.distributionLedger(user, id, input));
+    }
+    if (parts.length === 4 && method === "GET" && tab === "orders") return reply(await service.distributionOrder(user, id, parts[3], Object.fromEntries(url.searchParams)));
+    if (parts.length === 4 && method === "POST" && tab === "source-ownership" && parts[3] === "read") {
+      return reply(await service.sourceOwnershipRead(user, id, await bodyOf(req, maxJsonBytes, ["target", "beforeRevision"])));
+    }
+    if (parts.length === 3 && method === "POST" && tab === "source-ownership") {
+      const result = await service.sourceOwnershipWrite(user, id, await bodyOf(req, maxJsonBytes, ["target", "relation", "active", "reason", "expectedRevision"]));
+      await audit("geo.source.relationship", "completed", { userId: user.id, code: id, detail: result.relation });
       return reply(result);
     }
     if (parts.length === 4 && method === "GET" && tab === "answers") return reply(await service.answer(user, id, parts[3]));

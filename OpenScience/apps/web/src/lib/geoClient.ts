@@ -678,6 +678,10 @@ export interface GeoOrder {
   publishedUrl: string | null;
   checks: GeoOrderCheck[];
   updatedAt: string;
+  publishedAt?: string | null;
+  articleResultVersionId?: string | null;
+  articleDigest?: string | null;
+  cancellable?: boolean;
 }
 /** A page the brand published itself (百家号, 公众号, 官网 …): checked after publication as an order is, with no money behind it. */
 export interface GeoOwnedLink {
@@ -694,9 +698,13 @@ export interface GeoOwnedLink {
   citedBy: Array<{ engine: GeoEngine; firstSeen: string | null }>;
 }
 export interface GeoDistribution {
+  firstPublishedAt?: string | null;
   budget: { totalCny: number; dailyCny: number } | null;
   spentCny: number;
   reservedCny: number;
+  settledCny?: number;
+  refundedCny?: number;
+  availableCny?: number | null;
   suggestedBudgetCny: number | null;
   market: { configured: boolean };
   orders: GeoOrder[];

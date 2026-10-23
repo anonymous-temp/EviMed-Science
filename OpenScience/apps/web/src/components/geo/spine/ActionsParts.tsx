@@ -22,16 +22,16 @@ import type { ArticleRef } from "./useArticleActions";
 const finite = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
 
 /**
- * The day the first page went out, from what the platform knows has been published: an order that is published (its last change
- * is the day it went live) or a page the brand registered with its own date. Null while nothing has.
+ * Publication uses the recorded publication event, including orders that later became lost or refunded.
  */
 export function firstPublishedDay(distribution: GeoDistribution | null | undefined): string | null {
+  if (distribution && 'firstPublishedAt' in distribution) return distribution.firstPublishedAt && Number.isFinite(Date.parse(distribution.firstPublishedAt)) ? agendaLocalDate(DISPLAY_TIME_ZONE, distribution.firstPublishedAt) : null;
   const days: string[] = [];
   for (const order of distribution?.orders ?? []) {
-    if (["published", "verified", "settled"].includes(order.state) && order.updatedAt) days.push(agendaLocalDate(DISPLAY_TIME_ZONE, order.updatedAt));
+    if (order.publishedAt && Number.isFinite(Date.parse(order.publishedAt))) days.push(agendaLocalDate(DISPLAY_TIME_ZONE, order.publishedAt));
   }
   for (const link of distribution?.ownedLinks ?? []) {
-    if (link.publishedAt && link.status !== "retired") days.push(agendaLocalDate(DISPLAY_TIME_ZONE, link.publishedAt));
+    if (link.publishedAt && Number.isFinite(Date.parse(link.publishedAt))) days.push(agendaLocalDate(DISPLAY_TIME_ZONE, link.publishedAt));
   }
   return days.sort()[0] ?? null;
 }
@@ -200,8 +200,8 @@ export function BudgetLine({
   const connected = distribution.market?.configured !== false;
   const budget = distribution.budget && typeof distribution.budget.totalCny === "number" ? distribution.budget : null;
   if (!connected && !budget) return null;
-  const spent = typeof distribution.spentCny === "number" ? distribution.spentCny : 0;
-  const reserved = typeof distribution.reservedCny === "number" ? distribution.reservedCny : 0;
+  const spent = typeof distribution.spentCny === "number" ? distribution.spentCny : null;
+  const reserved = typeof distribution.reservedCny === "number" ? distribution.reservedCny : null;
   return (
     <section id={geoSectionId("budget")} aria-label="投放预算" data-geo-budget={budget ? "set" : "unset"}>
       {budget ? (

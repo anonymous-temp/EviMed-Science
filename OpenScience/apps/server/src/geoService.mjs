@@ -62,6 +62,8 @@ import { HttpError } from "./security.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
+import { GeoDistributionView } from "./geoDistributionView.mjs";
+import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
 
 /** @typedef {{ value: number | null, numerator: number | null, denominator: number | null, ciLow: number | null, ciHigh: number | null,
  *   status: string, dataType: string, reason: string | null, methodVersion?: string | null,
@@ -352,14 +354,15 @@ export class GeoService {
   /** @type {any} */ planContexts = null;
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
-   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function, blockedBy?: Function } | null }} options
+   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function, blockedBy?: Function } | null,
+   *   documents?: import('./productStore.mjs').ProductDocuments | null }} options
    *   `metricName` names a metric id for 「更多指标」; the metrics package can
    *   hand in its catalogue's names, and without it the domain's labels answer
    *   for the ids the platform reads and every other id is its own name.
    *   `cards` (geoCards.mjs) says which articles cite a claim the cards have since
    *   corrected; without it no article is flagged.
    */
-  constructor({ store, config, social = null, now = () => new Date(), metricName = null, cards = null }) {
+  constructor({ store, config, social = null, now = () => new Date(), metricName = null, cards = null, documents = null }) {
     if (!store || !config) throw new TypeError("The GEO service needs its store and the config.");
     this.store = store;
     this.config = config;
@@ -370,6 +373,8 @@ export class GeoService {
     this.social = social;
     this.cards = cards;
     this.now = now;
+    this.distributionView = new GeoDistributionView({ store });
+    this.sourceOwnership = documents ? new GeoSourceOwnership({ documents, now }) : null;
     this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
     /** How many error rows 准确与安全 carries at most (`OPEN_SCIENCE_GEO_DIAGNOSIS_ERROR_LIMIT`); the counts beside them are never capped. */
     this.errorListLimit = Number.isSafeInteger(config.geoDiagnosisErrorLimit) && config.geoDiagnosisErrorLimit > 0 ? config.geoDiagnosisErrorLimit : 300;
@@ -1831,9 +1836,25 @@ export class GeoService {
   /** `GET …/:id/distribution`. @param {{ id: string }} user @param {string} id @param {{ marketConfigured?: boolean }} [options] */
   async distribution(user, id, options = {}) { return this.distributionOf(await this.requireProject(user, id), options); }
 
+  async distributionOrders(user, id, input = {}) { return this.distributionView.orders(await this.requireProject(user, id), input); }
+  async distributionOrder(user, id, orderId, input = {}) { return this.distributionView.order(await this.requireProject(user, id), orderId, input); }
+  async distributionLedger(user, id, input = {}) { return this.distributionView.ledger(await this.requireProject(user, id), input); }
+  async sourceOwnershipRead(user, id, input) {
+    const project = await this.requireProject(user, id);
+    if (!this.sourceOwnership) throw failure(503, "geo_unavailable", "Source annotations are unavailable.");
+    const [current, history] = await Promise.all([this.sourceOwnership.read(project, input.target), this.sourceOwnership.history(project, input.target, { beforeRevision: input.beforeRevision ?? null })]);
+    const effective = input.target?.kind === "page" ? (await this.sourceOwnership.resolve(project, [input.target.value]))[0] : null;
+    return { current, history, effective };
+  }
+  async sourceOwnershipWrite(user, id, input) {
+    const project = await this.requireProject(user, id, "edit");
+    if (!this.sourceOwnership) throw failure(503, "geo_unavailable", "Source annotations are unavailable.");
+    return this.sourceOwnership.set({ ...project, actorId: user.id }, input);
+  }
+
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {{ marketConfigured?: boolean }} [options] */
   async distributionOf(project, { marketConfigured = geoMarketConfigured(this.config) } = {}) {
-    const [orders, money, targets, ownedLinks] = await Promise.all([
+    const [orders, money, targets, ownedLinks, publication] = await Promise.all([
       // The orders as the market reads them (its own derived times: when the send began, when the state was entered), with the names.
       this.store.query(`SELECT o.*, a.title AS article_title, a.layer AS article_layer, m.name AS media_name, m.domain AS media_domain
         FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500) o
@@ -1849,6 +1870,11 @@ export class GeoService {
       // The links the brand published itself sit beside the placements: the
       // same post-publication checks, no order and no money (gap E6).
       this.store.ownedLinks(project.id),
+      this.store.query(`SELECT min(at) AS first_at FROM (
+        SELECT e.at FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id=e.order_id
+          WHERE o.geo_project_id=$1 AND e.to_state='published' AND e.from_state IS DISTINCT FROM 'published'
+        UNION ALL SELECT published_at AS at FROM evimed_geo.owned_links WHERE geo_project_id=$1
+      ) observations`, [project.id]),
     ]);
     const suggested = (targets?.rows ?? []).filter((row) => row.tier === project.tier && row.budgetCny != null)
       .reduce((/** @type {number | null} */ max, row) => Math.max(max ?? 0, Number(row.budgetCny)), null);
@@ -1860,7 +1886,11 @@ export class GeoService {
       budget,
       spentCny: ledger.spentCny,
       reservedCny: ledger.reservedCny,
+      settledCny: ledger.settledCny,
+      refundedCny: ledger.refundedCny,
+      availableCny: ledger.availableCny,
       suggestedBudgetCny: suggested,
+      firstPublishedAt: iso(publication.rows[0]?.first_at),
       market: { configured: Boolean(marketConfigured) },
       orders: orders.rows.map((/** @type {any} */ row) => {
         const order = mapOrder(row);
@@ -1870,6 +1900,7 @@ export class GeoService {
           // What the outlet finally charged, once it has; the plan's price, then the reserve, before.
           priceCny: order.settledCny ?? order.priceCny ?? order.reserveCny,
           publishedUrl: text(row.published_url), checks: Array.isArray(row.checks) ? row.checks : [], updatedAt: iso(row.updated_at),
+          articleResultVersionId: order.articleResultVersionId, articleDigest: order.articleDigest, publishedAt: order.publishedAt,
           // 撤单 is offered where the market takes it: not a send in flight, not an order the outlet has taken.
           cancellable: orderCancellable(order),
         };

@@ -346,6 +346,8 @@ export const GEO_SOURCE_KIND_LABELS_ZH = Object.freeze({
 })
 export const GEO_SOURCE_LAYERS = frozen(['anchor', 'coverage', 'owned'])
 export const GEO_SOURCE_LAYER_LABELS_ZH = Object.freeze({ anchor: '锚点层', coverage: '覆盖层', owned: '自有层' })
+export const GEO_SOURCE_RELATIONSHIPS = frozen(['own', 'partner', 'competitor', 'other', 'unknown'])
+export const GEO_SOURCE_RELATIONSHIP_LABELS_ZH = Object.freeze({ own: '自有', partner: '合作', competitor: '竞品', other: '其他', unknown: '未确认' })
 
 /** Articles (内容). */
 export const GEO_ARTICLE_LAYERS = frozen(['deep', 'card', 'popular', 'qa', 'correction'])

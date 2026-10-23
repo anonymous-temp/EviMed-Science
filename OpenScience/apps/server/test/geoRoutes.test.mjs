@@ -421,3 +421,26 @@ test("planning boundary errors belong to the closed registry and tell the person
   assert.ok(emitted.size>=15);
   for (const code of emitted) {assert.ok(ALL_ERROR_CODES.includes(code),code);assert.match(knownErrorCodeMessage(code) ?? "",/[\u4e00-\u9fff]/,code);}
 });
+
+test('distribution history and source annotations use project routes with bounded bodies and CSRF', async () => {
+  const calls = [];
+  const service = { allows: () => true,
+    distributionOrders: async (...args) => { calls.push(['orders', ...args]); return { items: [], total: 0 }; },
+    distributionLedger: async (...args) => { calls.push(['ledger', ...args]); return { items: [], total: 0 }; },
+    distributionOrder: async (...args) => { calls.push(['order', ...args]); return { order: { id: args[2] } }; },
+    sourceOwnershipRead: async (...args) => { calls.push(['ownership-read', ...args]); return { current: null, history: { items: [] } }; },
+    sourceOwnershipWrite: async (...args) => { calls.push(['ownership-write', ...args]); return { relation: 'own' }; },
+  };
+  const f = fixture({ service });
+  for (const suffix of ['distribution/orders?limit=1&cursor=next', 'distribution/ledger?limit=2', 'orders/order_1?limit=3']) {
+    assert.equal(await f.routes(request('GET', `/api/geo/projects/geo_1/${suffix}`), response()), true);
+  }
+  assert.deepEqual(calls.slice(0, 3), [['orders', { id: 'reader' }, 'geo_1', { limit: '1', cursor: 'next' }], ['ledger', { id: 'reader' }, 'geo_1', { limit: '2' }], ['order', { id: 'reader' }, 'geo_1', 'order_1', { limit: '3' }]]);
+  const target = { kind: 'page', value: 'https://example.com/article?id=one' };
+  await f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership/read', { target }), response());
+  await f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership', { target, relation: 'own', expectedRevision: 0 }), response());
+  assert.deepEqual(calls.at(-1), ['ownership-write', { id: 'reader' }, 'geo_1', { target, relation: 'own', expectedRevision: 0 }]);
+  assert.equal(f.calls.filter(row => row[0] === 'csrf').length, 5);
+  await assert.rejects(f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership', { target, relation: 'own', expectedRevision: 0, forged: true }), response()), { status: 400 });
+  await assert.rejects(f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership/read', { target: { kind: 'page', value: 'x'.repeat(70000) } }), response()), { status: 413 });
+});

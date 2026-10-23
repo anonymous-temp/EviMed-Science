@@ -24,6 +24,7 @@ import { answerPath, sourceDraft, sourceKindWord, yuan } from "./geoTabText";
 import { TabError, useGeoLoad } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
 import { sourceHistoryModel } from "./sourceHistory";
+import { SourceRelationship } from './SourceRelationship';
 
 /** Answers listed before 「显示更多」 in each of the drawer's two lists, and how many each press adds. */
 const ANSWERS_SHOWN = 10;
@@ -110,12 +111,13 @@ export function GeoSourceDrawer({
         <div className="flex flex-1 flex-col gap-6">
           {/* What an article here needs and costs, and the groups it serves, are the first screen: the answers behind the counts follow. */}
           <Conditions source={state.kind === "ready" ? state.data.source : source} candidate={served?.candidate ?? null} />
+          <SourceRelationship key={`${geoId}:${source.domain}`} geoId={geoId} target={{ kind: 'domain', value: source.domain }} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={() => frame?.data.invalidate()} />
           <Button onClick={() => showPlan()}>查看相关实施方案</Button>
           <Served groups={served?.groups ?? []} />
           {state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取引用它的回答</p>}
           {state.kind === "error" && (state.stale ? <ChangedSource onRefresh={refreshView} /> : <TabError message={state.message} onRetry={reload} />)}
           {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} onRefresh={refreshView} />}
-          {state.kind === "ready" && <Pages detail={state.data} onPlan={showPlan} />}
+          {state.kind === "ready" && <Pages geoId={geoId} project={project} detail={state.data} onPlan={showPlan} />}
           {state.kind === "ready" && <History detail={state.data} />}
         </div>
         <Footer project={project} source={source} detail={state.kind === "ready" ? state.data : null} />
@@ -221,9 +223,11 @@ function displayUrl(url: string): string {
  * 被引用的页面 (R14 N-11): the specific pages of this site that the latest round's answers cited — the page's title, its address
  * as an outside link, how many answers cited it and how many of those misstated us. The most cited eight, then all of them.
  */
-function Pages({ detail, onPlan }: { detail: GeoSourceDetail; onPlan:(url:string)=>void }) {
+function Pages({ geoId, project, detail, onPlan }: { geoId: string; project: GeoProject; detail: GeoSourceDetail; onPlan:(url:string)=>void }) {
+  const frame = useGeoFrame();
   const pages = Array.isArray(detail.pages) ? detail.pages : [];
   const [all, setAll] = useState(false);
+  const [relationship, setRelationship] = useState<string | null>(null);
   if (pages.length === 0) return null;
   const total = typeof detail.pagesTotal === "number" ? detail.pagesTotal : pages.length;
   const shown = all ? pages : pages.slice(0, PAGES_SHOWN);
@@ -234,7 +238,9 @@ function Pages({ detail, onPlan }: { detail: GeoSourceDetail; onPlan:(url:string
       </h3>
       <ListHeader label="页面的数字" columns={[{ key: "cited", label: "被引用" }, { key: "wrong", label: "讲错的回答" }]} className="mt-2 max-sm:hidden" />
       <List divided label="被引用的页面">
-        {shown.map((page) => <div key={page.url}><PageRow page={page} /><Button variant="text" size="sm" onClick={() => onPlan(page.url)}>将此页面用于方案</Button></div>)}
+        {shown.map((page) => <div key={page.url}><PageRow page={page} /><Button variant="text" size="sm" onClick={() => onPlan(page.url)}>将此页面用于方案</Button><Button variant="text" size="sm" onClick={() => setRelationship(value => value === page.url ? null : page.url)}>页面归属</Button>
+          {relationship === page.url && <SourceRelationship key={`${geoId}:${page.url}`} geoId={geoId} target={{ kind: 'page', value: page.url }} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={() => frame?.data.invalidate()} />}
+        </div>)}
       </List>
       {pages.length > PAGES_SHOWN && (
         <div className="mt-2 flex justify-center">

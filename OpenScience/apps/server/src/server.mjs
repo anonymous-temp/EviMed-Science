@@ -2320,7 +2320,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       (claim.artifactPath ? geoSourceReaderOf(controlProject)(claim.artifactPath) : null);
     geo = {
       store: geoStore,
-      service: new GeoService({ store: geoStore, config, social, cards: geoCards, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
+      service: new GeoService({ store: geoStore, config, social, cards: geoCards, documents: productDocuments, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
       social,
       worker: null,
       orchestrator: null,
