@@ -179,6 +179,30 @@ test('HTTP scoped response projection is buffered, bounded and refuses unproject
   assert.equal((await oversized.text()).includes('private'), false);
 });
 
+test('native cancel without end and failure without end release scoped active capacity', { timeout: 10000 }, async t => {
+  const ended = [];
+  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => ({ forward: true, value }), onStreamClosed: endpoint => ended.push(endpoint) });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  peer.on('message', raw => {
+    const request = JSON.parse(raw.toString());
+    if (request.type === 'open') peer.send(JSON.stringify(request.streamId.startsWith('failed')
+      ? { type: 'error', streamId: request.streamId, error: { code: 'fixture', message: 'Expected failure', details: {} } }
+      : { type: 'item', streamId: request.streamId, value: { id: request.streamId } }));
+    // The pinned gateway emits nothing for a cancellation. A frame already
+    // queued on the transport may still arrive and must not revive its scope.
+    if (request.type === 'cancel') peer.send(JSON.stringify({ type: 'item', streamId: request.streamId, value: { late: true } }));
+  });
+  for (let index = 0; index < 300; index++) {
+    c.send(open(`cancelled-${index}`, 'session/page')); assert.equal((await c.next()).value.id, `cancelled-${index}`);
+    c.send({ type: 'cancel', streamId: `cancelled-${index}` });
+    c.send(open(`failed-${index}`, 'session/page')); assert.equal((await c.next()).type, 'error');
+  }
+  c.send(open('still-available', 'session/page'));
+  assert.equal((await c.next()).value.id, 'still-available');
+  assert.equal(ended.length, 600);
+});
+
 test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
   const checked = [], charged = [], forwarded = [];
   const f = await fixture(t, {}, {}, {

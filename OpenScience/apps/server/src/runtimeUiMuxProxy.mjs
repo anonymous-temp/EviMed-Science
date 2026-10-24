@@ -71,9 +71,19 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   let browser;
   let closed = false;
   const streams = new Map();
+  const retiring = new Set();
+  // Native cancellation has no terminal response; failure has only an error.
+  // Keep small tombstones for in-flight late frames, never payloads or active
+  // stream capacity. Bound their lifetime by this carrier and their count.
+  const closedStreams = new Map();
+  const rememberClosed = (id, cancelled) => {
+    closedStreams.set(id, { cancelled, terminalError: !cancelled, finished: true });
+    if (closedStreams.size > 4096) closedStreams.delete(closedStreams.keys().next().value);
+  };
   const finishStream = operation => {
     if (!operation || operation.finished) return;
     operation.finished = true;
+    retiring.delete(operation);
     try { onStreamClosed?.(operation.endpoint); } catch { /* Closing must still release both peers. */ }
   };
   const acknowledgements = new Map();
@@ -90,7 +100,9 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     if (closed) return;
     closed = true;
     for (const operation of streams.values()) finishStream(operation);
+    for (const operation of retiring) finishStream(operation);
     streams.clear();
+    closedStreams.clear();
     for (const pending of acknowledgements.values()) pending.reject(new Error("Prompt acceptance is unknown."));
     acknowledgements.clear();
     clearInterval(validationTimer);
@@ -241,8 +253,8 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     if (frame.type === "cancel") {
       const operation = streams.get(frame.streamId);
       finishStream(operation);
-      if (projectItem && operation) operation.cancelled = true;
-      else streams.delete(frame.streamId);
+      if (projectItem && operation) { operation.cancelled = true; rememberClosed(frame.streamId, true); }
+      streams.delete(frame.streamId);
     }
   }
   client.on("message", (raw, binary) => {
@@ -267,12 +279,15 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     try {
       frame = JSON.parse(raw.toString());
       if (!nativeServerFrame(frame)) { shutdown(1008, "runtime_ui_frame_invalid"); return; }
-      operation = streams.get(frame.streamId);
+      operation = streams.get(frame.streamId) ?? (projectItem ? closedStreams.get(frame.streamId) : undefined);
       if (projectItem && !operation) { shutdown(1008, "runtime_ui_stream_unbound"); return; }
+      if (projectItem && operation.cancelled && frame.type !== 'end') return;
       if (projectItem && operation.terminalError && frame.type !== 'end') { shutdown(1008, 'runtime_ui_frame_invalid'); return; }
       if (frame.type === "end" || frame.type === "error") {
-        if (projectItem && frame.type === 'error') operation.terminalError = true;
-        else streams.delete(frame.streamId);
+        if (projectItem && frame.type === 'error') {
+          operation.terminalError = true; retiring.add(operation); rememberClosed(frame.streamId, false);
+        }
+        streams.delete(frame.streamId);
         // A valid terminal response proves acceptance or an explicit refusal;
         // either releases admission. Transport loss retains pending authority.
         acknowledgements.get(frame.streamId)?.resolve();
