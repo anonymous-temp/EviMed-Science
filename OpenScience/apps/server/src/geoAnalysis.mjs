@@ -1,7 +1,6 @@
 /** Deterministic selected readings. Domain metrics own all arithmetic and membership. */
 import { createHash } from "node:crypto";
 import {
-  GEO_METRIC_IDS,
   GEO_METRIC_LABELS_ZH,
   GEO_METRIC_UNITS,
   documentExportDigest,
@@ -18,6 +17,9 @@ import {
   GEO_COVERAGE_VIEWS,
   buildGeoCoverageAnalysis,
 } from "./geoAnalysisCoverage.mjs";
+import { GEO_ANALYSIS_DESCRIPTOR_FIELDS, GEO_ANALYSIS_REGISTRY, normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
+import { buildGeoMetricAnalysis } from "./geoAnalysisMetrics.mjs";
+export { normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
 import { HttpError } from "./security.mjs";
 
 const hash = (value) =>
@@ -25,58 +27,13 @@ const hash = (value) =>
 const invalid = (message) =>
   new HttpError(400, "geo_read_filter_invalid", message);
 export const GEO_ANALYSIS_FIELDS = Object.freeze([
-  "viewId",
-  "metricId",
-  "dimension",
-  "categoryMode",
+  ...GEO_ANALYSIS_DESCRIPTOR_FIELDS,
   "rowKey",
   "columnKey",
   "expectedDigest",
   "limit",
   "offset",
 ]);
-/** @param {any} input */
-export function normalizeGeoAnalysisView(input = {}) {
-  if (
-    !input ||
-    typeof input !== "object" ||
-    Array.isArray(input) ||
-    Object.keys(input).some(
-      (key) =>
-        !["viewId", "metricId", "dimension", "categoryMode"].includes(key),
-    )
-  )
-    throw invalid("Choose a registered analysis view.");
-  const viewId = input.viewId ?? "V01",
-    metricId = input.metricId ?? (viewId === "V02" ? "M-01" : null),
-    dimension = input.dimension ?? (viewId === "V02" ? "engine" : "project");
-  if (
-    !["V01", "V02", ...GEO_COVERAGE_VIEWS].includes(viewId) ||
-    (metricId !== null && !GEO_METRIC_IDS.includes(metricId)) ||
-    !["project", "engine", "group"].includes(dimension)
-  )
-    throw invalid("Choose a registered view and an existing metric/dimension.");
-  if (
-    input.categoryMode != null &&
-    (!["original_group", "client_tags"].includes(input.categoryMode) ||
-      viewId !== "V06")
-  )
-    throw invalid("Choose the original group or client tags for V06.");
-  if (
-    GEO_COVERAGE_VIEWS.includes(viewId) &&
-    viewId !== "V06" &&
-    metricId != null
-  )
-    throw invalid("This coverage view uses counts, not a metric.");
-  return {
-    viewId,
-    metricId,
-    dimension,
-    ...(viewId === "V06"
-      ? { categoryMode: input.categoryMode ?? "original_group" }
-      : {}),
-  };
-}
 const metricKey = (cell) =>
   documentExportDigest([
     cell.metricId,
@@ -122,8 +79,8 @@ const plain = (value, state = "known") => ({
  */
 export function presentGeoAnalysis(selected, request, context = {}) {
   const view = normalizeGeoAnalysisView(request);
-  if (GEO_COVERAGE_VIEWS.includes(view.viewId))
-    return presentCoverage(selected, view, context);
+  if (["coverage", "metrics"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family))
+    return presentAggregate(selected, view, context);
   const matches = (cell) =>
     cell.scope === view.dimension &&
     (!view.metricId || cell.metricId === view.metricId) &&
@@ -150,6 +107,11 @@ export function presentGeoAnalysis(selected, request, context = {}) {
     dimensions: {
       period: null,
       date: null,
+      roundId: null,
+      roundKind: null,
+      roundLabel: null,
+      roundOrdinal: null,
+      setVersion: null,
       scope: cell.scope,
       engine: cell.engine,
       groupId: cell.groupId,
@@ -197,13 +159,29 @@ export function presentGeoAnalysis(selected, request, context = {}) {
       );
     }
   } else {
-    for (const day of geoDailyReadings(selected))
+    const firstObserved = new Map();
+    for (const row of selected.rows) {
+      if (!firstObserved.has(row.roundId)) firstObserved.set(row.roundId, null);
+      if (row.askedAt && (!firstObserved.get(row.roundId) || row.askedAt < firstObserved.get(row.roundId))) firstObserved.set(row.roundId, row.askedAt);
+    }
+    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: selected.scope.timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+    const observations = view.timeGrain === "round"
+      ? selected.rounds.filter(round => firstObserved.has(round.id))
+        .sort((a,b) => (firstObserved.get(a.id) ?? "z").localeCompare(firstObserved.get(b.id) ?? "z") || a.id.localeCompare(b.id))
+        .map((round, index) => ({
+          roundLabel: `第 ${index + 1} 轮`, roundOrdinal: index + 1,
+          date: firstObserved.get(round.id) ? formatter.format(new Date(firstObserved.get(round.id))) : null,
+          roundId: round.id, roundKind: round.kind, setVersion: round.set_version,
+          result: geoRoundReadings(selected, round.id),
+        }))
+      : geoDailyReadings(selected);
+    for (const day of observations)
       for (const cell of day.result.cells.filter(matches))
         rows.push(
           rowOf(
             cell,
             { current: reading(cell) },
-            { period: "day", date: day.date },
+            { period: view.timeGrain === "round" ? "round" : "day", date: day.date, ...(view.timeGrain === "round" ? {roundId: day.roundId, roundKind: day.roundKind, roundLabel: day.roundLabel, roundOrdinal: day.roundOrdinal, setVersion: day.setVersion} : {}) },
           ),
         );
     for (const cell of selected.computed.cells.filter(matches))
@@ -253,17 +231,19 @@ export function presentGeoAnalysis(selected, request, context = {}) {
       "geo_read_filter_invalid",
       "Narrow the dates, metric or dimension to at most 20,000 analysis rows.",
     );
+  const plotRows = rows.filter(row => ["day", "round"].includes(row.dimensions.period));
+  if (view.timeGrain === "round") plotRows.sort((a,b) => a.dimensions.roundOrdinal - b.dimensions.roundOrdinal);
   const dates = [
     ...new Set(
-      rows
-        .filter((row) => row.dimensions.period === "day")
-        .map((row) => row.dimensions.date),
+      plotRows
+        .map((row) => view.timeGrain === "round" ? `${row.dimensions.date ?? "采样时间未知"} · ${row.dimensions.roundLabel}` : row.dimensions.date),
     ),
-  ].sort();
-  const dayRows = rows.filter((row) => row.dimensions.period === "day");
+  ];
+  if (view.timeGrain !== "round") dates.sort();
+  const dayRows = plotRows;
   const points = new Map(
     dayRows.map((row) => [
-      documentExportDigest([row.seriesKey, row.dimensions.date]),
+      documentExportDigest([row.seriesKey, view.timeGrain === "round" ? `${row.dimensions.date ?? "采样时间未知"} · ${row.dimensions.roundLabel}` : row.dimensions.date]),
       row.values.current,
     ]),
   );
@@ -379,8 +359,9 @@ export function presentGeoAnalysis(selected, request, context = {}) {
   };
 }
 /** @param {any} selected @param {any} view @param {any} context */
-function presentCoverage(selected, view, context) {
-  const built = buildGeoCoverageAnalysis(selected, view, context);
+function presentAggregate(selected, view, context) {
+  const built = GEO_ANALYSIS_REGISTRY[view.viewId].family === "metrics" ? buildGeoMetricAnalysis(selected, view, context) : buildGeoCoverageAnalysis(selected, view, context);
+  if (built.rows.length > 20_000) throw new HttpError(422, "geo_read_filter_invalid", "Narrow the scope to at most 20,000 analysis rows.");
   const basis = {
     schemaVersion: 1,
     view,
@@ -410,6 +391,11 @@ function presentCoverage(selected, view, context) {
           exact: true,
         };
     }
+  const builtRows = new Map();
+  for (const row of built.rows) builtRows.set(row.key, row);
+  for (const cell of built.chart?.cells ?? []) {
+    cell.members = builtRows.get(cell.rowKey)?.values[cell.columnKey]?.members ?? null;
+  }
   if (context.memberItems)
     for (const [key, items] of built.memberItems)
       context.memberItems.set(key, items);
@@ -453,7 +439,7 @@ export async function readGeoAnalysis(
     const view = normalizeGeoAnalysisView(
       input.view ??
         Object.fromEntries(
-          ["viewId", "metricId", "dimension", "categoryMode"]
+          GEO_ANALYSIS_DESCRIPTOR_FIELDS
             .filter((key) => input[key] != null)
             .map((key) => [key, input[key]]),
         ),
@@ -596,6 +582,7 @@ export async function readGeoAnalysis(
     const memberItems = new Map();
     const result = presentGeoAnalysis(selected, view, {
       targets,
+      product: project.product,
       tier: project.tier,
       groups,
       jobs,
@@ -618,7 +605,7 @@ export async function readGeoAnalysis(
       if (
         !input.selectionRef ||
         !input.expectedDigest ||
-        !GEO_COVERAGE_VIEWS.includes(view.viewId) ||
+        !["coverage", "metrics"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family) ||
         typeof input.rowKey !== "string" ||
         typeof input.columnKey !== "string"
       )
@@ -749,7 +736,7 @@ export function freezeGeoAnalysisDocument(view) {
       ["key", row.key],
       ["label", row.label],
       ["metricId", row.metricId],
-      ["metric_unit", GEO_METRIC_UNITS[row.metricId] ?? "index"],
+      ["metric_unit", GEO_METRIC_UNITS[row.metricId] ?? row.dimensions.unit ?? "count"],
       ["period", row.dimensions.period ?? "selected"],
       ["date", row.dimensions.date ?? null],
       ["dimensions", documentExportDigest(row.dimensions)],
@@ -774,7 +761,7 @@ export function freezeGeoAnalysisDocument(view) {
       ]),
     ]),
   );
-  if (GEO_COVERAGE_VIEWS.includes(view.viewId)) {
+  if (GEO_COVERAGE_VIEWS.includes(view.viewId) || columns.length > 40) {
     // Keep wide status tables within the existing 40-column offline renderer contract.
     columns = [
       ...metadataColumns,
@@ -822,6 +809,10 @@ export function freezeGeoAnalysisDocument(view) {
       ),
     }));
   }
+  if (columns.length > 40) {
+    columns = [...metadataColumns, {key:"row_key",label:"Row",type:"text"}, {key:"label",label:"对象",type:"text"}, {key:"dimensions",label:"精确分类与条件",type:"text"}, {key:"column_key",label:"统计项",type:"text"}, {key:"column_label",label:"统计项名称",type:"text"}, {key:"value",label:"数值",type:"number"}, {key:"state",label:"状态",type:"text"}, {key:"reason",label:"原因",type:"text"}, {key:"unit",label:"单位",type:"text"}, {key:"numerator",label:"分子",type:"number"}, {key:"denominator",label:"分母",type:"number"}];
+    rows = view.rows.flatMap(row => view.columns.map(column => {const value = row.values[column.key]; return {...metadataValues,row_key:row.key,label:row.label,dimensions:documentExportDigest(row.dimensions),column_key:column.key,column_label:column.label,value:value.value,state:value.state,reason:value.reason??value.metric?.reason??null,unit:value.members?.unit??value.unit??null,numerator:value.metric?.numerator??null,denominator:value.metric?.denominator??null};}));
+  }
   const clean = (value) =>
     String(value ?? "未测")
       .replaceAll("|", "\\|")
@@ -834,7 +825,7 @@ export function freezeGeoAnalysisDocument(view) {
   const reportReading = (row, column) => {
     const cell = row.values[column.key],
       metric = cell.metric,
-      unit = cell.unit ?? GEO_METRIC_UNITS[row.metricId] ?? "index";
+      unit = cell.unit ?? GEO_METRIC_UNITS[row.metricId] ?? row.dimensions.unit ?? "count";
     const value =
       cell.value == null
         ? "未测"
@@ -859,7 +850,7 @@ export function freezeGeoAnalysisDocument(view) {
   }));
   let canonicalMarkdown = `# 所选数据分析\n\n${view.definition.countingRule}\n\n${view.definition.denominatorRule}\n\n范围：${clean(documentExportDigest(view.scope))}。样本：${clean(documentExportDigest(view.selection.counts))}。\n\n方法：${view.definition.methodVersion}。分析摘要：${view.digest}。目标为读取时的当前目标，对照为另选区间的实际读数。每个读数保留指标尺度、状态、不可用原因、分子/分母和成员单位。\n\n| ${reportColumns.map((column) => clean(column.label)).join(" | ")} |\n| ${reportColumns.map(() => "---").join(" | ")} |\n${reportRows.map((row) => `| ${reportColumns.map((column) => clean(row[column.key])).join(" | ")} |`).join("\n")}\n`;
 
-  if (GEO_COVERAGE_VIEWS.includes(view.viewId))
+  if (GEO_COVERAGE_VIEWS.includes(view.viewId) || view.columns.length > 40)
     canonicalMarkdown =
       `# 所选数据分析
 

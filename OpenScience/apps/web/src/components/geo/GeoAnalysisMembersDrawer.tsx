@@ -147,6 +147,7 @@ function Member({
           ]}
         />
       )}
+      {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取版本",value:item.extraction.parserVersion ?? "未知"},{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名原始提取",value:JSON.stringify(item.extraction.genericMentions)}]} /></Disclosure>}
       {item.statement && (
         <FactList
           rows={[

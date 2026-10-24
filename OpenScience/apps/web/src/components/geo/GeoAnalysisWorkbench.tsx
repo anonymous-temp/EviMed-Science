@@ -20,7 +20,6 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { Section } from "@/components/ui/Section";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Toolbar } from "@/components/ui/Toolbar";
-import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Note } from "@/components/ui/Note";
@@ -33,7 +32,7 @@ import { GeoAnalysisMembersDrawer } from "./GeoAnalysisMembersDrawer";
 import { GeoMetricMembersDrawer } from "./GeoMetricMembersDrawer";
 import { formatGeoValue, geoCellWord } from "./GeoCellText";
 import { metricUnit } from "./tabs/geoTabText";
-import { GeoLineChart, chartScale } from "./tabs/GeoCharts";
+import { GeoAnalysisVisual } from "./GeoAnalysisVisual";
 import { engineName } from "./geoText";
 
 export function GeoAnalysisWorkbench({
@@ -87,7 +86,7 @@ function AnalysisBody({
   const scope = useGeoReadScope();
   const [view, setView] = useState<GeoAnalysisDescriptor>({
     viewId: initialView,
-    dimension: initialView === "V02" ? "engine" : "project",
+    dimension: initialView === "V05" ? "group" : ["V02", "V04"].includes(initialView) ? "engine" : "project",
   });
   const identity = JSON.stringify([geoId, geoReadScopeQuery(scope), view]);
   return (
@@ -185,18 +184,6 @@ function AnalysisPage({
       setBusy(false);
     }
   };
-  const dates = data?.chart?.labels ?? [];
-  const series = (data?.chart?.series ?? []).map((line) => ({
-    ...line,
-    label: line.engine
-      ? line.label.replace(line.engine, engineName(line.engine))
-      : line.label,
-    tone: "accent" as const,
-  }));
-  const chartRange = chartScale(series.flatMap((line) => line.values));
-  const labelCounts = new Map<string, number>();
-  for (const line of series)
-    labelCounts.set(line.label, (labelCounts.get(line.label) ?? 0) + 1);
   return (
     <div className="flex flex-col gap-4">
       <Toolbar
@@ -208,6 +195,8 @@ function AnalysisPage({
             options: [
               { value: "V01", label: "当前水平与目标" },
               { value: "V02", label: "指标趋势" },
+              { value: "V04", label: "平台指标比较" },
+              { value: "V05", label: "问题群与平台" },
               { value: "V06", label: "原始分类与平台" },
               { value: "V07", label: "逐题采集与判定" },
               { value: "V11", label: "采集与判定覆盖" },
@@ -217,7 +206,7 @@ function AnalysisPage({
             onChange: (value) =>
               setView({
                 viewId: value as GeoAnalysisId,
-                dimension: value === "V02" ? "engine" : "project",
+                dimension: value === "V05" ? "group" : ["V02", "V04"].includes(value ?? "") ? "engine" : "project",
               }),
           },
           ...(view.viewId === "V01" || view.viewId === "V02"
@@ -244,22 +233,24 @@ function AnalysisPage({
                 },
               ]
             : []),
-          ...(["V01", "V02", "V06"].includes(view.viewId)
+          ...(["V01", "V02", "V04", "V05", "V06"].includes(view.viewId) && view.entityKind !== "generic"
             ? [
                 {
                   kind: "select" as const,
                   label: "指标",
                   value:
-                    view.metricId ?? (view.viewId === "V02" ? "M-01" : null),
+                    view.metricId ?? (["V02", "V04", "V05"].includes(view.viewId) ? "M-01" : null),
                   allLabel: view.viewId === "V01" ? "全部指标" : undefined,
                   options: Object.entries(GEO_METRIC_LABELS_ZH)
-                    .filter(([id]) => id.startsWith("M-"))
+                    .filter(([id]) => id.startsWith("M-") && (!["V04", "V05"].includes(view.viewId) || !["M-16", "M-17", "M-18", "M-21"].includes(id)))
                     .map(([value, label]) => ({ value, label: String(label) })),
                   onChange: (value: string | null) =>
                     setView({ ...view, metricId: value }),
                 },
               ]
             : []),
+          ...(view.viewId === "V02" ? [{kind:"select" as const,label:"时间粒度",value:view.timeGrain ?? "day",options:[{value:"day",label:"按实测日期"},{value:"round",label:"按实际轮次"}],onChange:(value:string|null)=>setView({...view,timeGrain:value === "round"?"round":"day"})}] : []),
+          ...(["V04","V05"].includes(view.viewId) ? [{kind:"select" as const,label:"实体",value:view.entityKind ?? "brand",options:[{value:"brand",label:"品牌指标"},...(project.product?.genericName?[{value:"generic",label:`通用名：${project.product.genericName}`}]:[])],onChange:(value:string|null)=>setView({...view,entityKind:value === "generic"?"generic":"brand",entityKey:value === "generic"?(project.product?.genericName ?? undefined):undefined,metricId:value === "generic"?null:"M-01"})}] : []),
           ...(view.viewId === "V06"
             ? [
                 {
@@ -320,6 +311,8 @@ function AnalysisPage({
             .map(
               (reason) =>
                 ({
+                  generic_observation_identity_only: "通用名提及是独立观测；缺少匹配的历史实体提取时保留未知，不代表未提及，也不归因到品牌或剂型。",
+                  no_selected_readings: "这个范围尚无可用读数。",
                   original_categories_missing:
                     "所选问题尚未保留原始分类，可在问题导入中补充。",
                   unknown_sampling_time:
@@ -356,23 +349,12 @@ function AnalysisPage({
           {error}
         </Note>
       )}
-      {dates.length > 1 &&
-        series.map((line, index) => (
-          <ChartCard
-            key={line.key}
-            title={
-              (labelCounts.get(line.label) ?? 0) > 1
-                ? `${line.label}（同名组 ${index + 1}）`
-                : line.label
-            }
-          >
-            <GeoLineChart
-              series={[line]}
-              labels={dates}
-              domain={chartRange ? [chartRange.low, chartRange.high] : null}
-            />
-          </ChartCard>
-        ))}
+      {data && <GeoAnalysisVisual data={data} onSelect={cell => {
+        if (cell.members) { setMembers(cell.members); return; }
+        const row = data.rows.find(item => item.key === cell.rowKey);
+        if (row?.values[cell.columnKey]?.members) setMembers(row.values[cell.columnKey].members);
+        else setPage({offset: 0, reference: data.selection.reference, digest: data.digest});
+      }} />}
       <DataTable<GeoAnalysisRow>
         label="所选分析数据"
         rows={data?.rows ?? []}
@@ -400,7 +382,9 @@ function AnalysisPage({
                   row.dimensions.engine ?? "\u0000",
                   engineName(row.dimensions.engine ?? ""),
                 )}
-                {row.dimensions.date
+                {row.dimensions.period === "round"
+                  ? ` · ${row.dimensions.date ?? "采样时间未知"} · ${row.dimensions.roundLabel ?? (row.dimensions.roundKind === "baseline" ? "基线轮" : "复测轮")}`
+                  : row.dimensions.date
                   ? ` · ${row.dimensions.date}`
                   : row.dimensions.period === "comparison"
                     ? " · 对照区间"
@@ -419,10 +403,10 @@ function AnalysisPage({
               const word =
                 value.state === "known" && value.value !== null
                   ? value.metric
-                    ? formatGeoValue(value.value, metricUnit(row.metricId))
+                    ? formatGeoValue(value.value, metricUnit(row.metricId ?? undefined))
                     : value.unit
                       ? `${value.value} ${unitWord(value.unit)}`
-                      : formatGeoValue(value.value, metricUnit(row.metricId))
+                      : formatGeoValue(value.value, metricUnit(row.metricId ?? undefined))
                   : value.metric
                     ? geoCellWord(value.metric)
                     : "未测";

@@ -8,6 +8,8 @@ import type { GeoCell } from "./geoClient";
 export type GeoAnalysisId =
   | "V01"
   | "V02"
+  | "V04"
+  | "V05"
   | "V06"
   | "V07"
   | "V11"
@@ -17,6 +19,9 @@ export interface GeoAnalysisDescriptor {
   viewId: GeoAnalysisId;
   metricId?: string | null;
   dimension?: "project" | "engine" | "group";
+  timeGrain?: "day" | "round";
+  entityKind?: "brand" | "generic";
+  entityKey?: string;
   categoryMode?: "original_group" | "client_tags";
 }
 export interface GeoAnalysisMembers {
@@ -40,20 +45,34 @@ export interface GeoAnalysisValue {
 export interface GeoAnalysisRow {
   key: string;
   label: string;
-  metricId: string;
+  metricId: string | null;
   dimensions: {
     period?: string;
     date?: string | null;
     engine?: string | null;
     groupId?: string | null;
+    setVersion?: number | null;
+    roundId?: string | null;
+    roundLabel?: string | null;
+    roundKind?: string | null;
+    pool?: string | null;
+    entityKind?: "brand" | "generic";
+    entityKey?: string | null;
     unit?: string;
     basis?: string;
     conditions?: unknown;
   };
   values: Record<string, GeoAnalysisValue>;
 }
+export interface GeoAnalysisChartCell {
+  rowKey: string; columnKey: string; label: string;
+  groupId: string | null; setVersion: number | null; engine: string; pool?: string | null;
+  value: number | null; state: string; members?: GeoAnalysisMembers | null;
+}
 export interface GeoAnalysisView {
   chart?: {
+    kind?: "bars" | "matrix";
+    cells?: GeoAnalysisChartCell[];
     labels: string[];
     series: Array<{
       key: string;
@@ -93,6 +112,7 @@ export interface GeoAnalysisMemberItem {
   status?: string;
   reason?: string;
   askedAt?: string | null;
+  extraction?: {genericMentions: unknown; parserVersion: string | null; judgedAt: string | null} | null;
   statement?: {
     text: string;
     verdict: string;

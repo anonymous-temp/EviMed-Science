@@ -87,3 +87,16 @@ it('missing-task members link to the existing recovery workbench while preservin
  fireEvent.click(screen.getByText('所选数据分析'));fireEvent.click(await screen.findByRole('button',{name:'1 任务'}));
  const href=(await screen.findByRole('link',{name:'查看采集进度与恢复选项'})).getAttribute('href');expect(href).toContain('diagnosisRound=actual-round');expect(href).toContain('session=current-session');expect(href).toContain('from=2026-10-01');
 });
+
+it('reloads the actual platform metric, exact generic entity and round grain through the closed descriptor',async()=>{
+ read.mockReset().mockImplementation(async(_geo,_scope,view)=>({view,selection:{reference:'gsel_switch'},digest:'switch-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}}));
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={{...project,product:{genericName:'Generic'}} as never} initialView="V04"/></MemoryRouter>);
+ fireEvent.click(screen.getByText('所选数据分析'));
+ fireEvent.click(await screen.findByRole('button',{name:'指标：品牌提及率'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'事实准确率'}));
+ await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V04',metricId:'M-06'}),0,undefined));
+ fireEvent.click(screen.getByRole('button',{name:'实体：品牌指标'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'通用名：Generic'}));
+ await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V04',entityKind:'generic',entityKey:'Generic',metricId:null}),0,undefined));
+ fireEvent.click(screen.getByRole('button',{name:'分析：平台指标比较'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'指标趋势'}));
+ fireEvent.click(await screen.findByRole('button',{name:'时间粒度：按实测日期'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'按实际轮次'}));
+ await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V02',timeGrain:'round'}),0,undefined));
+});

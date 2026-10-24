@@ -195,3 +195,48 @@ test('V06 valid and empty metric reasons agree across authorized runtime and exp
  const exports=[];await service.selectedExport(user,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,formats:['csv']},{requestFrozen:async(...args)=>{exports.push(args);return {};}});
  const frozen=exports[0][1].cover.analysis;assert.equal(frozen.digest,view.digest);assert.ok(exports[0][1].typedTable.rows.some(row=>JSON.parse(row.cells_metadata).metric.reason===null));
 });
+
+test('C1 exact matrix cells and same-day actual round members retain native/export/authorization parity',options,async()=>{
+ const {freezeSelectedGeoAnalysis,freezeGeoAnalysisDocument}=await import('../src/geoAnalysis.mjs');
+ await store.query(`INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('c1-g1',$1,$2,9,'P2','Same'),('c1-g2',$1,$2,9,'P2','Same')`,[user.id,project.id]);
+ const qs=['c1-g1','c1-g2'].flatMap(group=>Array.from({length:50},(_,n)=>({id:`${group}-q${n}`,group_id:group,text:`Question ${n}`,original_id:n===0?'=公式,Unicode药':'0007',original_row_index:n+1})));
+ await store.query(`INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,original_id,original_row_index,original_group,client_tags) SELECT x.id,$1,$2,x.group_id,9,'P2',x.text,x.original_id,x.original_row_index,'Client, 分类',ARRAY['中文','tag'] FROM jsonb_to_recordset($3::jsonb) AS x(id text,group_id text,text text,original_id text,original_row_index integer)`,[user.id,project.id,JSON.stringify(qs)]);
+ for(const round of ['c1-r1','c1-r2']){
+ await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES($1,$2,$3,'baseline','done',9,'{deepseek,kimi}','2026-10-04','{"mode":"web"}')`,[round,user.id,project.id]);
+ const snapshots=qs.flatMap(q=>['deepseek','kimi'].map(engine=>({id:`${round}-${q.id}-${engine}`,question_id:q.id,engine,mentioned:(q.group_id==='c1-g1')!==(engine==='deepseek')})));
+ await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) SELECT x.id,$1,$2,$3,x.question_id,x.engine,'2026-10-04T03:00:00Z','valid','Exact original answer','{"mode":"web"}' FROM jsonb_to_recordset($4::jsonb) AS x(id text,question_id text,engine text)`,[user.id,project.id,round,JSON.stringify(snapshots)]);
+ await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,statements,checks) SELECT x.id,$1,$2,'2026-10-04',CASE WHEN x.mentioned THEN '[{"name":"Ours","ours":true,"count":1}]'::jsonb ELSE '[]'::jsonb END,x.mentioned,'[]','{"judgementCoverage":{"status":"complete"}}' FROM jsonb_to_recordset($3::jsonb) AS x(id text,mentioned boolean)`,[user.id,project.id,JSON.stringify(snapshots)]);
+ }
+ const matrix=await service.analysis(user,project.id,{viewId:'V05',metricId:'M-01',round:'c1-r1',engines:['deepseek','kimi'],limit:1});
+ const full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:matrix.selection.reference,view:matrix.view,expectedDigest:matrix.digest});
+ assert.equal(full.rows.length,4);assert.deepEqual(full.rows.map(row=>row.values.current.value).sort((a,b)=>a-b),[0,0,100,100]);
+ for(const row of full.rows){
+  const member=row.values.current.members;assert.equal(member.total,50);assert.equal(row.values.current.metric.denominator,50);assert.equal(row.dimensions.setVersion,9);
+  const input={selectionRef:member.selectionRef,...member.view,rowKey:member.rowKey,columnKey:member.columnKey,expectedDigest:member.expectedDigest,limit:20};
+  const pages=await Promise.all([0,20,40].map(offset=>service.analysisMembers(user,project.id,{...input,offset})));const items=pages.flatMap(page=>page.items);
+  assert.deepEqual(items.map(item=>item.id).sort(),qs.filter(q=>q.group_id===row.dimensions.groupId).map(q=>`c1-r1-${q.id}-${row.dimensions.engine}`).sort());
+  assert.ok(items.every(item=>item.question.originalGroup==='Client, 分类'&&item.question.clientTags.includes('中文')));assert.equal(items.find(item=>item.question.originalRow===1).question.originalId,'=公式,Unicode药');
+  assert.deepEqual(pages[0],await service.runtimeRead(project,'analysis',input));
+  await assert.rejects(service.analysisMembers(user,project.id,{...input,rowKey:'outside'}),error=>error.status===404);
+  await assert.rejects(service.analysisMembers(user,project.id,{...input,expectedDigest:'f'.repeat(64)}),error=>error.status===409);
+  await assert.rejects(service.analysisMembers({id:'stranger'},project.id,input),error=>error.status===404);
+ }
+ await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'c1-foreign-project','Foreign fixture',1048576)",[user.id]);
+ const other=await store.createProject({userId:user.id,projectId:'c1-foreign-project',engines:['deepseek'],coverageDays:90,product:{brandName:'Other'}});
+ await assert.rejects(service.analysis(user,other.id,{selectionRef:full.selection.reference,...full.view}),error=>error.status===404);
+ const viewer={id:'analysis-viewer'};const viewerView=await service.analysis(viewer,project.id,{selectionRef:full.selection.reference,...full.view});assert.equal(viewerView.digest,full.digest);
+ await assert.rejects(service.selectedExport(viewer,project,{selectionRef:full.selection.reference,view:full.view,expectedDigest:full.digest},{requestFrozen:async()=>assert.fail('Viewer cannot create an export')}),error=>error.status===403);
+ const roundView=await service.analysis(user,project.id,{viewId:'V02',metricId:'M-01',dimension:'engine',timeGrain:'round',questionVersion:9,engines:['deepseek','kimi'],from:'2026-10-04',to:'2026-10-04'});
+ const pointRows=roundView.rows.filter(row=>row.dimensions.period==='round');assert.equal(pointRows.length,4);assert.equal(roundView.chart.labels.length,2);
+ for(const row of pointRows){const member=row.values.current.members;const page=await service.runtimeRead(project,'snapshots',{selectionRef:member.selectionRef,member:member.metric,limit:50});assert.equal(page.total,100);assert.ok(page.items.every(item=>item.roundId===row.dimensions.roundId));}
+ for(const view of [full,roundView]){
+  const restored=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest});assert.equal(restored.digest,view.digest);
+  const report=freezeGeoAnalysisDocument(restored);assert.equal(report.cover.analysis.digest,view.digest);
+  const calls=[];await service.selectedExport(user,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,formats:['csv','xlsx','docx','pdf','html']},{requestFrozen:async(...args)=>{calls.push(args);return{id:'c1-export'};}});assert.equal(calls[0][1].revision,view.digest);
+ }
+ const {GeoPlanContext}=await import('../src/geoPlanContext.mjs');const {ProductDocuments}=await import('../src/productStore.mjs');
+ const adapter=new GeoPlanContext({documents:new ProductDocuments(database),store,service,authorizeSession:async()=>{},runs:async()=>[]});service.planContexts=adapter;
+ const staged=await adapter.stage(user,project.id,{requestKey:'c1-stage',sessionId:'c1-session',mode:'analysis',selectionRef:full.selection.reference,view:full.view,expectedDigest:full.digest,intent:'explain'});
+ const request={requestId:'c1-unsent',sessionId:'c1-session',content:[{type:'text',text:'Explain selected matrix.'}],geoPlanContext:{referenceId:staged.referenceId}};
+ await adapter.bind(user,{id:project.projectId,userId:project.userId},request);const frozen=await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId});assert.equal(frozen.digest,full.digest);assert.deepEqual(frozen.rows,full.rows);
+});
