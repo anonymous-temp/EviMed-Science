@@ -274,3 +274,13 @@ describe("信源: a site's drawer", () => {
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 });
+
+it('opens an exact registered source detail action beyond the bounded catalogue list',async()=>{
+ const base=sourcesFilled.sources[0],detail=sourceDetailOf(base);
+ client.getGeoSources.mockResolvedValue({...sourcesFilled,selection:{reference:'gsel_tail'}});
+ client.getGeoSource.mockResolvedValue({...detail,source:{...detail.source,id:'source-2001',domain:'d2001.example',name:'Registered source 2001'},selection:{reference:'gsel_tail'}});
+ renderTab(geoProject(),'/app/geo/geo_1/sources?source=source-2001&selectionRef=gsel_tail&session=s1');
+ expect(await screen.findByRole('dialog',{name:'Registered source 2001'})).toBeInTheDocument();
+ expect(client.getGeoSource).toHaveBeenCalledWith('geo_1','source-2001',{selectionRef:'gsel_tail'});
+ expect(screen.getByRole('button',{name:'查看相关实施方案'})).toBeInTheDocument();
+});
