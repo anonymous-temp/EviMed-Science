@@ -137,23 +137,24 @@ test('legacy and signal producers share the first text-change notice, preserve r
   inbox.attachChannels({ registry: { enabledIds: () => ['fixture'] }, onChange: item => sent.push(item.id) });
   const notifier = createGeoNotifier({ notifications: inbox, store });
   const discovery = new GeoSignalDiscovery({ store, signals });
-  for (const firstProducer of ['legacy', 'signal']) {
+  for (const firstProducer of ['legacy', 'signal', 'pre-repair']) {
     const id = `order-${firstProducer}`;
     await store.query("INSERT INTO evimed_geo.orders(id,user_id,geo_project_id,state) VALUES($1,'owner',$2,'problem')", [id, project.id]);
     await store.query("INSERT INTO evimed_geo.order_events(id,order_id,at,from_state,to_state,detail) VALUES($1,$2,'2026-10-24T01:00:00Z','published','problem','{\"reason\":\"text_changed\"}')", [id, id]);
+    if (firstProducer === 'pre-repair') await signals.record(project, { kind: 'order_anomaly', objectKey: id, eventVersion: `text:${id}`, title: 'Prior immutable event', basis: { orderId: id, eventId: id, changedText: true, toState: 'problem' } });
     await discovery.orders(project, (await store.query('SELECT * FROM evimed_geo.order_events WHERE order_id=$1', [id])).rows);
     const row = (await signals.all(project, 'geo-signal', { recordType: 'geo-signal', objectKey: id }))[0];
-    assert.equal(row.payload.basis.notificationKey, `geo:order:${id}:text_changed`);
+    assert.equal(row.payload.basis.notificationKey, firstProducer === 'pre-repair' ? undefined : `geo:order:${id}:text_changed`);
     const legacy = () => notifier.textChanged({ userId: user.id, geoProjectId: project.id, orderId: id, changed: ['Protected text'] });
-    if (firstProducer === 'legacy') {
+    if (firstProducer !== 'signal') {
       const item = await legacy(); await inbox.markRead(user.id, item.id, item.revision);
     } else await notifier.signal(project, row);
     await notifier.signal(project, row); await legacy(); await notifier.signal(project, row);
     const notices = (await database.query("SELECT * FROM evimed_inbox.notifications WHERE source->>'id'=$1", [`${project.id}/signals/${row.id}`])).rows;
     assert.deepEqual(notices.map(item => item.user_id).sort(), ['owner', 'reviewer']);
     assert.ok(notices.every(item => item.event_count === 1));
-    if (firstProducer === 'legacy') assert.ok(notices.find(item => item.user_id === user.id).read_at);
+    if (firstProducer !== 'signal') assert.ok(notices.find(item => item.user_id === user.id).read_at);
   }
-  assert.equal((await database.query('SELECT count(*)::integer AS n FROM evimed_inbox.notifications')).rows[0].n, 4);
-  assert.equal(sent.length, 4);
+  assert.equal((await database.query('SELECT count(*)::integer AS n FROM evimed_inbox.notifications')).rows[0].n, 6);
+  assert.equal(sent.length, 6);
 });

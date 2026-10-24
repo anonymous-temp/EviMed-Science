@@ -248,19 +248,28 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
     counts,
 
     /** A persisted versioned finding. Ordinary page sightings stay in history; the existing first-cited milestone remains singular. */
-    signal(project, row) {
+    async signal(project, row) {
       const signal = row.payload;
       if (signal.kind === "citation_observed" || signal.kind === "group_changed") return Promise.resolve(null);
       const safety = signal.kind === "error_observed" || signal.kind === "source_changed" || signal.basis.changedText;
       const folded = signal.kind === "error_observed" && !GEO_URGENT_SEVERITIES.includes(String(signal.basis.severity));
+      let notificationKey = signal.basis.notificationKey;
+      // Older immutable signal rows predate the compatible notification key.
+      // Derive it from the same authoritative first episode without rewriting history.
+      if (!notificationKey && signal.kind === "order_anomaly" && signal.basis.changedText && signal.basis.eventId) {
+        const first = (await store.query(`SELECT e.id FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id=e.order_id
+          WHERE o.geo_project_id=$1 AND o.id=$2 AND e.detail->>'reason'='text_changed' ORDER BY e.at,e.id LIMIT 1`,
+        [project.id, signal.basis.orderId])).rows[0];
+        if (first?.id === signal.basis.eventId) notificationKey = `geo:order:${signal.basis.orderId}:text_changed`;
+      }
       return send(project, "signal_discovered", {
         title: signal.kind === "error_observed" ? wrongOursTitle(project, signal.basis) : clip(signal.title, 100), body: signal.kind === "source_changed" ? "查看本次变化关联的结论和稿件版本，选择要处理的范围。" : "查看原始记录、当前状态和可执行的下一步。",
         severity: safety ? "safety" : "attention", source: source(project.id, "signals", row.id),
-        idempotencyKey: signal.basis.notificationKey ?? `geo:${project.id}:signal:${row.id}`,
+        idempotencyKey: notificationKey ?? `geo:${project.id}:signal:${row.id}`,
         ...(folded ? { groupKey: `geo-wrong:${project.id}:${dayIn(new Date(signal.detectedAt), timeZone)}` } : {}),
       }, signal.kind === "order_anomaly" && signal.basis.changedText ? HEARD_BY.publishedText : safety ? HEARD_BY.correction : HEARD_BY.progress,
       signal.kind === "error_observed" && signal.basis.snapshotId ? source(project.id, "answers", signal.basis.snapshotId)
-        : signal.kind === "order_anomaly" && signal.basis.changedText && signal.basis.notificationKey ? source(project.id, "distribution") : null);
+        : signal.kind === "order_anomaly" && signal.basis.changedText && notificationKey ? source(project.id, "distribution") : null);
     },
 
     /** 1. 诊断完成. @param {any} project @param {{ roundId: string, engines: number, answers: number, wrongOurs: number }} facts */
