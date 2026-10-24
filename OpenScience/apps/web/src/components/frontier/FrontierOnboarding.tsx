@@ -56,9 +56,9 @@ export function FrontierOnboarding({ initial = null, mode = "first", onClose }: 
     if (saving) return;
     setSaving(true);
     try {
-      // Skipping keeps what was already chosen: a role told is a role known.
+      // Skipping keeps what was already chosen: a role told is a role known, a tag picked is a tag of interest.
       await saveFrontierPrefs(finish ? { role, specialties, interests, done: true }
-        : { ...(role ? { role } : {}), ...(specialties.length ? { specialties } : {}), skipped: true });
+        : { ...(role ? { role } : {}), ...(specialties.length ? { specialties } : {}), ...(interests.length ? { interests } : {}), skipped: true });
       // Changing an answer later is not onboarding: only the first card counts.
       if (mode === "first") trackFrontierOnboarding(finish ? "onboarding-done" : "onboarding-skipped", finish ? undefined : step);
       onClose(true);
@@ -94,17 +94,20 @@ export function FrontierOnboarding({ initial = null, mode = "first", onClose }: 
         {step === "specialties" && (
           <div className="space-y-2">
             {FRONTIER_SPECIALTY_GROUPS.map((group) => (
-              <div key={group.key} role="group" aria-label={group.label} className="flex flex-wrap items-center gap-1">
-                <span className="w-16 shrink-0 text-caption text-text-3">{group.label}</span>
-                {group.specialties.map((key) => {
-                  const chosen = specialties.includes(key);
-                  return (
-                    <FilterChip key={key} pressed={chosen} disabled={!chosen && specialties.length >= FRONTIER_ONBOARDING_LIMITS.specialtiesMax}
-                      onClick={() => setSpecialties(toggle(specialties, key, FRONTIER_ONBOARDING_LIMITS.specialtiesMax))}>
-                      {FRONTIER_SPECIALTY_LABELS_ZH[key] ?? key}
-                    </FilterChip>
-                  );
-                })}
+              <div key={group.key} role="group" aria-label={group.label} className="flex items-start gap-1">
+                {/* The group's name is a column of its own, so its chips wrap under each other and not under it. */}
+                <span className="flex h-sm w-16 shrink-0 items-center text-caption text-text-3">{group.label}</span>
+                <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                  {group.specialties.map((key) => {
+                    const chosen = specialties.includes(key);
+                    return (
+                      <FilterChip key={key} pressed={chosen} disabled={!chosen && specialties.length >= FRONTIER_ONBOARDING_LIMITS.specialtiesMax}
+                        onClick={() => setSpecialties(toggle(specialties, key, FRONTIER_ONBOARDING_LIMITS.specialtiesMax))}>
+                        {FRONTIER_SPECIALTY_LABELS_ZH[key] ?? key}
+                      </FilterChip>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
