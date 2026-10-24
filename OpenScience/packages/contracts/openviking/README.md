@@ -170,3 +170,22 @@ when the complete mandatory and requested exclusion set exceeds the native
 200-URI limit. Caller exclusions never displace derived or sensitive prefixes.
 Structured list filtering uses the complete local set rather than this upstream
 context limit. A real PostgreSQL overlay test covers the 201st sensitive file.
+
+The memory boundary does not expose the caller's knowledge-resource tree.
+Model search requests native list level 2 and still admits only files accepted
+by `nativeMemoryFile`, so ancestor L0/L1 sidecars cannot disclose sensitive
+child summaries. Read and listing routes stay inside native memories; user-root
+discovery reveals only the memories directory. MCP listing uses the same
+structured native HTTP listing and whitelists visible entry metadata, without
+directory size/timestamps or aggregate prose. A truncated native listing leaves
+continuation unknown (`pagination: "unknown"` and no `has_more`) rather than
+inventing false completion or exposing whether hidden rows continue. A native
+`has_more: false` remains known exhaustion. This thin boundary does not create
+a new cursor or page through hidden results.
+
+Context mode ignores `level` in the pinned engine. Instead, before native
+context gathering, exclusions include the own resource subtree and exact
+`.abstract.md`/`.overview.md` sidecars for ancestors of protected prefixes up to
+the user root. Native context assembly remains upstream; the gateway does not
+parse or redact a rendered context string. Its 200-exclusion bound still fails
+closed, including these mandatory ancestor exclusions.
