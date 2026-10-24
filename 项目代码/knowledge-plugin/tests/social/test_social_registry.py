@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -15,10 +16,15 @@ from knowledge_plugin.model import SOCIAL_ACCESSES
 from knowledge_plugin.registry import RegistryError, parse_registry
 from knowledge_plugin.social.crawl import load_watch_list
 from knowledge_plugin.social.registry import load_social_registry, social_registry_path
+from knowledge_plugin.social.wechat import ask_name, temporary_link
 
 ROOT = Path(__file__).resolve().parents[2]
 SOCIAL = ROOT / "registry" / "social-sources.json"
 NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
+
+
+def row_dict(row) -> dict:
+    return {"name": row.source.name, "config": row.source.config}
 
 
 def test_the_committed_file_is_what_the_research_files_build():
@@ -38,9 +44,17 @@ def test_every_row_is_a_valid_social_row_and_the_lists_are_within_their_bounds()
         assert row.source.lane == "mixed" and row.source.config["user_id"].isdigit()
         assert row.source.config["mode"] in ("editorial", "signal") and row.source.id == "x-" + row.source.config["handle"].lower()
     for row in by_access["dajiala"]:
-        assert row.source.config["verified_url"].startswith("https://mp.weixin.qq.com/")
-        assert row.source.config["expected_names"] and row.source.config["priority"] in (1, 2, 3, 4)
-        assert "gh_" not in json.dumps(row.source.config), "a saved original id is never trusted"
+        config = row.source.config
+        if "verified_url" in config:
+            assert config["verified_url"].startswith("https://mp.weixin.qq.com/s")
+            assert not temporary_link(config["verified_url"]), "a Sogou temporary link names no account (ct-src)"
+        else:
+            assert ask_name(row_dict(row)) == config["expected_names"][0], "without a link the account is asked by name"
+        assert config["expected_names"] and config["priority"] in (1, 2, 3, 4)
+        assert config["polls_per_day"] == (2 if config["priority"] == 1 else 1)
+        assert re.fullmatch(r"M[A-Za-z0-9+/]{6,30}={0,2}", config.get("biz", "MzA5MjE3MzUxNA==")), "a biz is base64"
+        assert "gh_" not in json.dumps(config), "a saved original id is never trusted"
+    assert len({row.source.config["expected_names"][0] for row in by_access["dajiala"]}) == len(by_access["dajiala"])
     assert len(load_watch_list(str(SOCIAL))) >= 35
 
 
