@@ -1357,6 +1357,32 @@ export {
   frontierGenreFallback,
   isFrontierGenre,
 } from './src/frontierGenres.mjs'
+// frontierMix — 21 exports: the mix of 精选 by genre group (the owner's share ranges of 2026-10-24, the Chinese target of
+// 30 %), the merge rules (a roundup never; a news rewrite or an X post of a paper never over it; a Chinese 解读 beside
+// it), the pure selection of a day's 精选 from its scored candidates, and the replay of an exported week through it.
+export {
+  FRONTIER_MIX_CONGRESS_UPLIFT,
+  FRONTIER_MIX_COUNTED_RULES,
+  FRONTIER_MIX_DAY,
+  FRONTIER_MIX_EXCLUSIONS,
+  FRONTIER_MIX_FLOOR_SCORE,
+  FRONTIER_MIX_GROUP_ORDER,
+  FRONTIER_MIX_GROUPS,
+  FRONTIER_MIX_NEVER,
+  FRONTIER_MIX_PREPRINT_MIN_SCORE,
+  FRONTIER_MIX_PREPRINT_PLACES,
+  FRONTIER_MIX_RULES,
+  FRONTIER_MIX_SOURCE_CAP,
+  FRONTIER_MIX_TOP_JOURNAL_CAP,
+  FRONTIER_MIX_ZH_MARGIN,
+  FRONTIER_MIX_ZH_TARGET,
+  frontierMixGenre,
+  frontierMixGroup,
+  frontierMixMergeVerdict,
+  frontierMixReplay,
+  frontierMixSelect,
+  frontierMixSourceCap,
+} from './src/frontierMix.mjs'
 // projectCard — the slots a project's memory is read in: six general ones for any kind of
 // work, the clinical elements as an extension written only when a study was described,
 // `project.ext.<name>` for the extras of other kinds of work, and the one check on a
