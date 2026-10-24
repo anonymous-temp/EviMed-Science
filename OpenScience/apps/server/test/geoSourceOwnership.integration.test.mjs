@@ -49,7 +49,7 @@ test('a relationship correction uses CAS, preserves history, and retirement rest
 
 test('ownership reads are project-bound; unsafe addresses and unsupported assertions are rejected', options, async () => {
   assert.equal(await ownership.read({ ...project, id: 'other_geo' }, target('domain', 'example.com')), null);
-  for (const value of ['javascript:alert(1)', 'https://user:password@example.com/page']) {
+  for (const value of ['javascript:alert(1)', 'https://user:test-only-password@example.com/page']) {
     await assert.rejects(ownership.set(project, { target: target('page', value), relation: 'own', expectedRevision: 0 }), { code: 'geo_payload_invalid' });
   }
   await assert.rejects(ownership.set(project, { target: target('domain', 'example.com/path'), relation: 'own', expectedRevision: 0 }), { code: 'geo_payload_invalid' });

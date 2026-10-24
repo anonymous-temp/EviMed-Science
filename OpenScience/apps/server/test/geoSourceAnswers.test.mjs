@@ -63,5 +63,5 @@ test('source tally and page identity follow the preserved URL, never absent or c
  assert.equal(citedDomain(items[2].citations[0]),'','a domain annotation without a usable URL remains unobservable');
  assert.equal(countsOf(items,'news.example').cited,2);assert.equal(countsOf(items,'another.example').cited,0);
  assert.equal(pagesCited(items,'news.example').total,2);
- for(const url of ['https://www.','javascript:alert(1)','https://user:pass@news.example/a','not-a-url'])assert.equal(citedDomain({url,domain:'news.example'}),'');
+ for(const url of ['https://www.','javascript:alert(1)','https://user:test-only-password@news.example/a','not-a-url'])assert.equal(citedDomain({url,domain:'news.example'}),'');
 });

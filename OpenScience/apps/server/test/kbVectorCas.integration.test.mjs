@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { KnowledgeBaseIndex } from "../src/kbIndex.mjs";
+import { KbEmbedder } from "../src/kbEmbedding.mjs";
 import { KB_INDEX_METHOD, tsvectorLiteral } from "../src/kbChunker.mjs";
 import { DIMENSION, databaseUrl, fixture, ingestCorpus, signedIn } from "./helpers/knowledgeBaseApp.mjs";
 
@@ -97,5 +98,43 @@ test("partial vector batches reset every old-model chunk and count only current-
     assert.equal(newer.counters.embeddedChunks,101);
     const result=await newer.search({ userId:user.id,projectId:project.id,query:"verifiedbody" });
     assert.equal(result.mode,"hybrid"); assert.ok(result.legs.vector>0); assert.equal(queries,1);
+  } finally { await context.close(); }
+});
+
+test("incomplete successful embedding responses preserve keyword search and pending work through rebuild", { skip }, async t => {
+  const context = await signedIn({ kbEmbedder: { configured: false, modelKey: modelA, counters: {} } });
+  try {
+    const { app, user, project } = context;
+    if (!(await app.kbIndex.ready()).vector) { t.skip("pgvector required for incomplete vector responses"); return; }
+    await ingestCorpus(context, { names: ["房颤抗凝指南.pdf"] });
+    let complete = false;
+    const embedder = new KbEmbedder({ apiKey: "fixture-key", model: "shape-model", dimension: DIMENSION, apiBase: "https://embedding.invalid" }, {
+      fetchImpl: async (_url, init) => {
+        const { input: { texts } } = JSON.parse(init.body);
+        const embeddings = texts.map((_, index) => ({ text_index: index, embedding: vector() }));
+        return Response.json({ output: { embeddings: complete ? embeddings : embeddings.slice(1) } });
+      },
+    });
+    const index = new KnowledgeBaseIndex({ database: app.store.database, sources: app.sourceService, dimension: DIMENSION, smallLibraryTokens: 0, embedder });
+    const result = await index.sync({ userId: user.id });
+    assert.equal(result.embedded, 0);
+    assert.ok(result.pendingEmbedding > 0);
+    assert.equal(index.lastError, "kb_embedding_response_invalid");
+    const rebuilt = await index.rebuild({ userIds: [user.id] });
+    assert.equal(rebuilt.embedded, 0);
+    assert.equal(rebuilt.pendingEmbedding, result.pendingEmbedding);
+    assert.equal(index.lastError, "kb_embedding_response_invalid");
+    const count = (await app.store.database.query("SELECT count(*)::integer AS n FROM evimed_kb.chunks WHERE user_id=$1 AND embedding IS NOT NULL", [user.id])).rows[0].n;
+    assert.equal(count, 0);
+    const fallback = await index.search({ userId: user.id, projectId: project.id, query: "抗凝", includeLibrary: false });
+    assert.ok(fallback.hits.length > 0);
+    assert.ok(fallback.legs.keyword > 0);
+    assert.equal(fallback.mode, "keyword");
+    assert.equal(fallback.legs.vector ?? 0, 0);
+    complete = true;
+    const recovered = await index.sync({ userId: user.id });
+    assert.equal(recovered.embedded, result.pendingEmbedding);
+    assert.equal(recovered.pendingEmbedding, 0);
+    assert.equal(index.lastError, null);
   } finally { await context.close(); }
 });
