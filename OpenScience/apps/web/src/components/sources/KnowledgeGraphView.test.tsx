@@ -119,6 +119,10 @@ describe("KnowledgeGraphView", () => {
     await userEvent.keyboard("{Enter}");
     const evidence = await screen.findByRole("region", { name: "连线的依据" });
     expect(evidence).toHaveTextContent("Trial paper");
+    // The row opens in place: the evidence sits right under the row that was pressed, not after the whole list
+    // (the 2026-10-24 release walk saw nothing change on screen when it rendered below the list).
+    expect(relationship).toHaveAttribute("aria-expanded", "true");
+    expect(relationship.closest("li")?.nextElementSibling).toContainElement(evidence);
     await userEvent.click(within(evidence).getByRole("button", { name: "在对话中使用这条关系" }));
     const draft = await screen.findByTestId("draft");
     expect(draft).toHaveTextContent("Trial paper · 第 4 版");

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { Crosshair, MessageSquare } from "lucide-react";
 import type { EChartsType } from "echarts/core";
@@ -95,7 +95,7 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
   const [fullView, setFullView] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [line, setLine] = useState<{ from: string; to: string } | null>(null);
+  const [line, setLine] = useState<{ from: string; to: string; row?: number } | null>(null);
   useEffect(() => { setLoaded({ phase: "loading" }); }, [projectId, kind]);
   useEffect(() => {
     let active = true;
@@ -106,6 +106,8 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
     return () => { active = false; };
   }, [projectId, kind, version, attempt]);
   useEffect(() => { setExpanded(new Set()); setLine(null); setZoom(1); setFullView(false); }, [kind, projectId]);
+  // A row of the relation list is addressed by its index, which a new search or focus gives to another relation.
+  useEffect(() => { setLine((held) => (held?.row === undefined ? held : null)); }, [listState.q, listState.focus]);
 
   const graph = loaded.phase === "ready" ? loaded.graph : null;
   const model = useMemo(() => (graph ? modelOf(graph) : null), [graph]);
@@ -190,6 +192,40 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
       <Button size="sm" variant="text" onClick={() => { onChange({ focus: null, depth: null }); setLine(null); }}>取消聚焦</Button>
     </span>
   );
+  // What a selected line rests on: under the relation row that opened it (an opened row, where the reader is looking —
+  // the release walk found a click on a row of 「可选择的关系」 showing nothing on screen when this rendered after the whole
+  // list, 2026-10-24), or below the list for a line picked on the chart.
+  const lineEvidence = line && pair.length > 0 ? (
+<section aria-label="连线的依据" data-knowledge-line="" className="space-y-2 rounded-card border border-border px-3 py-2 text-ui">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 text-text">
+                    {lineMarks[0]?.title} <span className="text-text-3">与</span> {lineMarks[1]?.title}
+                  </p>
+                  <Button size="sm" variant="text" onClick={() => setLine(null)}>关闭</Button>
+                </div>
+                <ul className="space-y-1 text-text-2">
+                  {pair.map((entry, index) => (
+                    <li key={index}>
+                      {kind === "kg"
+                        ? `${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`
+                        : `“${marksById.get(entry.from)?.title ?? entry.from}” 链接到 “${marksById.get(entry.to)?.title ?? entry.to}”`}
+                    </li>
+                  ))}
+                </ul>
+                <Button size="sm" variant="secondary" onClick={() => openConversation(
+                  `请结合以下关系及其来源继续分析：${pair.map((entry) => `${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`).join("；")}\n\n依据的资料：\n${pair.flatMap((entry) => entry.evidence).map(evidenceContext).join("\n") || "未提供来源资料、原文位置或引文"}`,
+                  documents.filter((entry) => entry.available !== false && /^src_[a-f0-9]{32}$/.test(entry.sourceId)).map((entry) => ({ id: entry.sourceId, title: entry.title ?? "资料" })),
+                )}>在对话中使用这条关系</Button>
+                {documents.length > 0 && (
+                  <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
+                    依据的资料：
+                    {documents.map((entry) => (
+                      <span key={entry.sourceId}>{entry.available === false ? <span>{entry.title ?? "资料"}（当前不可读取）</span> : <Link to={readerPath(entry.sourceId, listState)} className="text-link underline underline-offset-2">{entry.title ?? "资料"}</Link>}{entry.sourceVersion != null && ` · 第 ${entry.sourceVersion} 版`}</span>
+                    ))}
+                  </p>
+                )}
+              </section>
+  ) : null;
   return (
     <div className="space-y-4" data-knowledge-graph={kind}>
       {!thin && (
@@ -226,45 +262,20 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
       )}
       {relationships.visible.length > 0 && <div className="space-y-2">
         <List label="可选择的关系">
-          {relationships.visible.map((entry, index) => <ListRow key={`${entry.from}:${entry.to}:${index}`} title={
-            <Button variant="text" size="sm" onClick={() => setLine({ from: entry.from, to: entry.to })}>
-              {`${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`}
-            </Button>
-          } />)}
+          {relationships.visible.map((entry, index) => {
+            const open = line?.row === index;
+            return (
+              <Fragment key={`${entry.from}:${entry.to}:${index}`}>
+                <ListRow expanded={open} onOpen={() => setLine(open ? null : { from: entry.from, to: entry.to, row: index })}
+                  title={`${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`} />
+                {open && lineEvidence && <li className="px-2 pb-3">{lineEvidence}</li>}
+              </Fragment>
+            );
+          })}
         </List>
         <ShowMore remaining={relationships.remaining} unit="条关系" onMore={relationships.more} />
       </div>}
-            {line && pair.length > 0 && (
-              <section aria-label="连线的依据" data-knowledge-line="" className="space-y-2 rounded-card border border-border px-3 py-2 text-ui">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 text-text">
-                    {lineMarks[0]?.title} <span className="text-text-3">与</span> {lineMarks[1]?.title}
-                  </p>
-                  <Button size="sm" variant="text" onClick={() => setLine(null)}>关闭</Button>
-                </div>
-                <ul className="space-y-1 text-text-2">
-                  {pair.map((entry, index) => (
-                    <li key={index}>
-                      {kind === "kg"
-                        ? `${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`
-                        : `“${marksById.get(entry.from)?.title ?? entry.from}” 链接到 “${marksById.get(entry.to)?.title ?? entry.to}”`}
-                    </li>
-                  ))}
-                </ul>
-                <Button size="sm" variant="secondary" onClick={() => openConversation(
-                  `请结合以下关系及其来源继续分析：${pair.map((entry) => `${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`).join("；")}\n\n依据的资料：\n${pair.flatMap((entry) => entry.evidence).map(evidenceContext).join("\n") || "未提供来源资料、原文位置或引文"}`,
-                  documents.filter((entry) => entry.available !== false && /^src_[a-f0-9]{32}$/.test(entry.sourceId)).map((entry) => ({ id: entry.sourceId, title: entry.title ?? "资料" })),
-                )}>在对话中使用这条关系</Button>
-                {documents.length > 0 && (
-                  <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
-                    依据的资料：
-                    {documents.map((entry) => (
-                      <span key={entry.sourceId}>{entry.available === false ? <span>{entry.title ?? "资料"}（当前不可读取）</span> : <Link to={readerPath(entry.sourceId, listState)} className="text-link underline underline-offset-2">{entry.title ?? "资料"}</Link>}{entry.sourceVersion != null && ` · 第 ${entry.sourceVersion} 版`}</span>
-                    ))}
-                  </p>
-                )}
-              </section>
-            )}
+      {line && line.row === undefined && lineEvidence}
       <div>
         {listState.q.trim() && rows.length === 0 && <p role="status" className="text-ui text-text-3">没有找到相关标记</p>}
         <List label={listState.q.trim() ? "搜索命中的标记" : kind === "kg" ? "实体" : "页面"}>
