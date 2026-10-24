@@ -148,6 +148,10 @@ test('C3 F2 complete numeric and ordinal boundaries are checked in the original 
   ['Alpha rank is 12th.','Alpha rank is 12','Alpha rank is 12','12',12],
   ['Alpha rank is 12.5.','Alpha rank is 12','Alpha rank is 12','12',12],
   ['Alpha rank is -1.','Alpha rank is -1.','Alpha rank is -1.','1',1],
+  ['Alpha rank is 1٢.','Alpha rank is 1','Alpha rank is 1','1',1],
+  ['Alpha rank is 1𑁦.','Alpha rank is 1','Alpha rank is 1','1',1],
+  ['Alpha rank is 1**2**.','Alpha rank is 1','Alpha rank is 1','1',1],
+  ['Alpha顺位为第十\u200b二。','Alpha顺位为第十','Alpha顺位为第十','第十',10],
  ];
  for(const [text,quote,positionQuote,token,rank] of cases){
   const out=judge(text,[ordered(quote,rank,token,positionQuote)]);
@@ -158,23 +162,46 @@ test('C3 F2 complete numeric and ordinal boundaries are checked in the original 
  }
 });
 test('C3 F2 complete original ASCII fullwidth and Chinese ordinal controls remain usable',()=>{
- for(const [text,token,rank] of [['Alpha rank is 12.','12',12],['Alpha rank is １２.','１２',12],['第十二顺位推荐 Alpha。','第十二',12],['第12位推荐 Alpha。','第12位',12],['The 12th recommendation is Alpha.','12th',12],['First choice: Alpha.','First',1],['1. Alpha is recommended.','1',1]]){
+ for(const [text,token,rank] of [['Alpha rank is 12.','12',12],['Alpha rank is １２.','１２',12],['第十二顺位推荐 Alpha。','第十二',12],['第12位推荐 Alpha。','第12位',12],['The 12th recommendation is Alpha.','12th',12],['First choice: Alpha.','First',1],['1. Alpha is recommended.','1',1],['1.Alpha is recommended.','1',1],['第十二Alpha可选。','第十二',12]]){
   const out=judge(text,[ordered(text,rank,token)]);
   assert.equal(out.recommendationExpressions.items[0].explicitPosition,rank,text);
   assert.equal(out.recommendationExpressions.coverage,'complete');
  }
 });
 test('C3 F2 an intact rank in one quote occurrence cannot certify the same quote when another occurrence truncates a larger numeral',()=>{
- const quote='Alpha recommendation rank is 1';
- for(const text of [`${quote}. ${quote}2.`,`${quote}2. ${quote}.`]){
-  const out=judge(text,[ordered(quote,1,'1')]);
-  assert.equal(out.recommendationExpressions.items.length,1);
+ for(const [quote,token,rank,continuation] of [['Alpha recommendation rank is 1','1',1,'2'],['Alpha recommendation rank is １','１',1,'２'],['Alpha推荐顺位为第十','第十',10,'二']]){
+  for(const text of [`${quote}. ${quote}${continuation}.`,`${quote}${continuation}. ${quote}.`]){
+   const out=judge(text,[ordered(quote,rank,token)]);
+   assert.equal(out.recommendationExpressions.items.length,1);
+   assert.equal(out.recommendationExpressions.items[0].answerOffsets.length,2);
+   assert.equal(out.recommendationExpressions.items[0].explicitPosition,null,text);
+   assert.equal(out.recommendationExpressions.coverage,'partial');
+  }
+  const out=judge(`${quote}. ${quote}.`,[ordered(quote,rank,token)]);
   assert.equal(out.recommendationExpressions.items[0].answerOffsets.length,2);
-  assert.equal(out.recommendationExpressions.items[0].explicitPosition,null,text);
-  assert.equal(out.recommendationExpressions.coverage,'partial');
+  assert.equal(out.recommendationExpressions.items[0].explicitPosition,rank);
+  assert.equal(out.recommendationExpressions.coverage,'complete');
  }
- const out=judge(`${quote}. ${quote}.`,[ordered(quote,1,'1')]);
- assert.equal(out.recommendationExpressions.items[0].answerOffsets.length,2);
- assert.equal(out.recommendationExpressions.items[0].explicitPosition,1);
- assert.equal(out.recommendationExpressions.coverage,'complete');
+});
+
+test('C3 F2 all supported Arabic rank values reject source prefixes and suffixes while keeping complete controls',()=>{
+ for(let rank=1;rank<=100;rank++){
+  const quote=`Alpha recommendation rank is ${rank}`;
+  assert.equal(judge(`${quote}.`,[ordered(quote,rank,String(rank))]).recommendationExpressions.items[0].explicitPosition,rank);
+  assert.equal(judge(`${quote}2.`,[ordered(quote,rank,String(rank))]).recommendationExpressions.items[0].explicitPosition,null);
+  const shortened=`${rank}. Alpha is recommended.`;
+  assert.equal(judge(`2${shortened}`,[ordered(shortened,rank,String(rank))]).recommendationExpressions.items[0].explicitPosition,null);
+ }
+});
+test('C3 F2 mixed source occurrences retain exact expression identities and display no uncertified position',async()=>{
+ const {presentGeoAnalysis,freezeGeoAnalysisDocument}=await import('../src/geoAnalysis.mjs');
+ const quote='Alpha recommendation rank is 1',text=`${quote}. ${quote}2.`,judged=judge(text,[ordered(quote,1,'1')]);
+ const registry=brandRegistry(product,competitors),{facts}=factsOf({snapshot:{status:'valid',answerText:text,citations:[]},judged,registry,countedOwned:{},at:new Date('2026-10-01')});
+ const input={rows:[{snapshotId:'mixed-ranks',questionId:'q',roundId:'r',engine:'deepseek',status:'valid',facts,assessmentFacts:{assessmentVersion:'a'.repeat(64),registryKey:facts.registryKey,questionVersion:1}}],questions:[{id:'q',set_version:1}],rounds:[{id:'r',set_version:1}],computed:{cells:[]},scope:{timeZone:'Asia/Shanghai'},selection:{reference:'gsel_mixed',methodVersion:'m',engines:['deepseek'],counts:{}}};
+ const view=presentGeoAnalysis(input,{viewId:'V09'},{allRows:true}),rows=view.rows.filter(row=>row.dimensions.kind==='expression');
+ assert.equal(rows.length,2);assert.notEqual(rows[0].key,rows[1].key);
+ assert.deepEqual(rows.map(row=>row.dimensions.quoteOccurrence),facts.judgeExtract.recommendationExpressions.items[0].answerOffsets);
+ assert.ok(rows.every(row=>row.dimensions.explicitPosition===null&&row.dimensions.positionQuote===null&&row.dimensions.positionToken===null));
+ assert.equal(freezeGeoAnalysisDocument(view).typedTable.rows.length,11);
+ assert.equal(facts.checks.judgementCoverage.status,'complete');
 });
