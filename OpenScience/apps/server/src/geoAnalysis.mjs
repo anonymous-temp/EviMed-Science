@@ -470,7 +470,7 @@ export async function readGeoAnalysis(
       ),
     ];
     const groups =
-      view.dimension === "group"
+      (view.dimension === "group" || view.viewId === "V19" && view.sourceFacet === "group")
         ? (
             await store.query(
               "SELECT id,name,set_version FROM evimed_geo.question_groups WHERE geo_project_id=$1 AND user_id=$2 AND id=ANY($3::text[]) ORDER BY id",
@@ -707,7 +707,7 @@ export function freezeGeoAnalysisDocument(view) {
     { key: "date", label: "日期", type: "text" },
     { key: "dimensions", label: "精确分类与条件", type: "text" },
     ...view.columns.flatMap((column) => [
-      { key: column.key, label: column.label, type: "number" },
+      { key: column.key, label: column.label, type: column.type ?? "number" },
       {
         key: `${column.key}_state`,
         label: `${column.label}状态`,
@@ -775,7 +775,7 @@ export function freezeGeoAnalysisDocument(view) {
       { key: "dimensions", label: "精确分类与条件", type: "text" },
       { key: "cells_metadata", label: "单位、原因和计数依据", type: "text" },
       ...view.columns.flatMap((column) => [
-        { key: column.key, label: column.label, type: "number" },
+        { key: column.key, label: column.label, type: column.type ?? "number" },
         {
           key: `${column.key}_state`,
           label: `${column.label}状态`,
@@ -880,7 +880,7 @@ ${view.columns.map((column) => `| ${clean(column.label)} | ${clean(reportReading
 `,
         )
         .join("\n");
-  if (["V17", "V18"].includes(view.viewId)) {
+  if (["V17", "V18", "V19", "V22"].includes(view.viewId)) {
       // Pandoc's existing pipe-table column widths keep source addresses readable.
       // The typed table and cover above retain every exact dimension and cell state.
       const table = (headers, widths, items) => `| ${headers.join(" | ")} |\n| ${widths.map(width => "-".repeat(width)).join(" | ")} |\n${items.map(cells => `| ${cells.map(clean).join(" | ")} |`).join("\n")}\n`;
@@ -888,7 +888,14 @@ ${view.columns.map((column) => `| ${clean(column.label)} | ${clean(reportReading
       const date = value => value ? new Intl.DateTimeFormat("en-CA", { timeZone: view.scope.timeZone ?? "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)) : "未知";
       const dateRange = row => { const first = date(row.dimensions.firstObserved), last = date(row.dimensions.lastObserved); return first === last ? first : `${first} 至 ${last}`; };
       const overview = `# 来源分析\n\n所选范围：${view.scope.from ?? "不限开始日期"} 至 ${view.scope.to ?? "不限结束日期"}；${view.scope.timeZone ?? "Asia/Shanghai"}。共 ${view.rows.length} 个来源${view.viewId === "V17" ? "类型" : "条目"}。\n\n有可用引用的回答中，采样时间已知 ${view.definition.knownTimeAnswers} 个、未知 ${view.definition.unknownTimeAnswers} 个。部分判定回答的可用引用仍保留，不代表回答已完成医学准确性判定。\n\n类型覆盖按不同回答去重，可重叠；回答与页面配对按回答及页面地址去重。共同出现错误或品牌提及不代表来源导致错误。日期仅表示已知的实际观察日期，未知时间不推定为零。\n\n分析版本：${view.digest}。方法：${clean(view.definition.methodVersion)}。完整范围、原始地址别名、逐轮历史、状态与精确来源标识保留在配套数据表及导出记录。\n\n`;
-      if (view.viewId === "V17") {
+      if (view.viewId === "V22") {
+          const words={present:"已观察引用",absent:"可观测未引用",first_observed_in_scope:"所选范围内首次",new_appearance:"新出现",no_longer_observed:"同一可比范围内未再观察到"};
+          canonicalMarkdown = overview + "所选范围内首次表示当前选择中的首次观察，不代表项目开始。可观测未引用依赖采集端记录的引用列表完整性，不代表全网或模型信息已穷尽。未保留明确完整引用列表、拒答、失败、无链接或未采样均为未知。只有相同问题、版本、平台和采样方式才比较变化；未知区间留空，不拟合引用寿命。\n\n" + table(["序号与页面", "轮次与问题", "平台与版本", "观察状态", "可比变化"],[42,24,20,18,22],view.rows.map((row,index)=>[`${index+1}. ${row.dimensions.sourceKey}`,`${row.dimensions.roundLabel} · ${row.dimensions.questionId??'问题未知'}`,`${row.dimensions.engine} · v${row.dimensions.setVersion??'未知'} · ${row.dimensions.mode??'未知'}`,words[row.values.observation.value]??'未知',words[row.values.transition.value]??'未知']));
+      }
+      else if (view.viewId === "V19") {
+          canonicalMarkdown = overview + "## 来源与平台或版本化问题群\n\n同名问题群按精确版本与群标识分别统计。每行的引用回答、回答与页面配对和页面均在该交叉范围内去重；未知或未映射群单列。\n\n" + table(["序号与来源","平台或问题群","回答","配对","页面"],[42,30,8,8,8],view.rows.map((row,index)=>[`${index+1}. ${row.dimensions.sourceKey??row.dimensions.domain}`,view.view.sourceFacet==='engine'?row.dimensions.engine:`${row.dimensions.groupName} · v${row.dimensions.setVersion??'未知'} · ${row.dimensions.groupId??'未知'}`,...['answers','pairs','pages'].map(key=>count(row,key))])) + "\n## 共同出现与采样时间\n\n" + table(["序号","轮次","同错回答","同提回答","时间已知","时间未知"],[10,10,18,18,18,18],view.rows.map((row,index)=>[index+1,...['rounds','wrong','mentions','knownTime','unknownTime'].map(key=>count(row,key))]));
+      }
+      else if (view.viewId === "V17") {
           canonicalMarkdown = overview + "## 来源类型覆盖\n\n" + table(["来源类型", "回答", "覆盖率（%）", "配对", "页面"], [40, 10, 12, 10, 10], view.rows.map(row => [row.label, ...["answers", "coverage", "pairs", "pages"].map(key => count(row, key))]));
       }
       else {

@@ -2,6 +2,8 @@
 import { createHash } from 'node:crypto';
 import { documentExportDigest, GEO_SOURCE_KIND_LABELS_ZH } from '@evimed/domain';
 import { sourceCitation } from './geoSourceAnswers.mjs';
+import { buildGeoSourceHistory } from './geoAnalysisSourceHistory.mjs';
+import { geoSourceGroup } from './geoAnalysisSourceCohort.mjs';
 import { HttpError } from './security.mjs';
 const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
 const groupBy = (items, key) => {
@@ -31,6 +33,10 @@ export function selectedSourceObservations(selected) {
 }
 /** @param {any} selected @param {any} view @param {any} [context] */
 export function buildGeoSourceAnalysis(selected, view, context = {}) {
+    if (view.viewId==='V22') return buildGeoSourceHistory(selected,view,buildGeoSourceAnalysis(selected,{...view,viewId:'V18',sourceLevel:'page'},context));
+    const questions=new Map((selected.questions??[]).map(question=>[question.id,question])), groups=new Map((context.groups??[]).map(group=>[group.id,group])), roundsById=new Map(view.viewId==='V19'?(selected.rounds??[]).map(round=>[round.id,round]):[]);
+    const facet = row => view.sourceFacet==='group'?geoSourceGroup(row,questions,groups,roundsById):{engine:row.engine};
+    const categoryOf = pair => {const sourceKey=view.sourceLevel==='page'?pair.sourceKey:pair.domain;return view.viewId==='V17'?pair.sourceType:view.viewId==='V19'?JSON.stringify([sourceKey,view.sourceFacet,...(view.sourceFacet==='group'?[facet(pair.row).setVersion,facet(pair.row).groupId]:[pair.row.engine])]):sourceKey;};
     const observations = selectedSourceObservations(selected), catalog = new Map((context.sources ?? []).map(source => [String(source.domain).toLowerCase().replace(/^www\./u, ''), source]));
     const bySnapshot = new Map(), byDomain = new Map(), byPage = new Map(), pairs = [], rowBySnapshot = new Map(observations.map(row => [row.snapshotId, row])), sourceTypes = new Set(), categories = new Map();
     for (const row of observations) {
@@ -41,8 +47,9 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
             const {domain,key}=reference, source=catalog.get(domain), sourceType=source?.kind||'unknown';
             sourceTypes.add(sourceType);
             const existing = seen.get(key) ?? {
-                id: hash([row.snapshotId, key]), row, snapshotId: row.snapshotId, sourceKey: key, domain, sourceType, name: source?.name ?? null, sourceId: source?.id ?? null, originalUrls: [], titles: []
+                id: hash([row.snapshotId, key]), row, snapshotId: row.snapshotId, sourceKey: key, domain, sourceType, name: source?.name ?? null, sourceId: source?.id ?? null, originalUrls: [], titles: [], preservedCitations: []
             };
+            existing.preservedCitations.push(citation);
             existing.originalUrls.push(String(citation.url));
             if (citation.title)
                 existing.titles.push(String(citation.title));
@@ -59,7 +66,7 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
                 continue;
             if (view.sourceSearch && !`${pair.domain} ${pair.name ?? ''} ${pair.originalUrls.join(' ')} ${pair.titles.join(' ')}`.toLowerCase().includes(view.sourceSearch.toLowerCase()))
                 continue;
-            const category=view.viewId==='V17'?pair.sourceType:view.sourceLevel==='page'?pair.sourceKey:pair.domain;
+            const category=categoryOf(pair);
             if (!categories.has(category)) {
                 if (categories.size>=20000) throw new HttpError(422,'geo_read_filter_invalid','Narrow the scope to at most 20,000 analysis rows.');
                 categories.set(category,[]);
@@ -76,11 +83,12 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
     const roundMetadata=new Map(selected.rounds.map(round=>[round.id,round.kind??null]));
     const zeroHistory=[...new Set(observations.map(row=>row.roundId))].sort().map(roundId=>Object.freeze({roundId,kind:roundMetadata.get(roundId)??null,citedAnswers:0}));
     const pageContext = batch => [...groupBy(batch, pair => pair.sourceKey)].sort(([a], [b]) => a.localeCompare(b)).map(([key, matching]) => ({
-        sourceKey: key, domain: matching[0].domain, sourceType: matching[0].sourceType, originalUrls: [...new Set(matching.flatMap(pair => pair.originalUrls))].sort(), titles: [...new Set(matching.flatMap(pair => pair.titles))].sort(), snapshotIds: [...new Set(matching.map(pair => pair.snapshotId))].sort()
+        sourceKey: key, domain: matching[0].domain, sourceType: matching[0].sourceType, originalUrls: [...new Set(matching.flatMap(pair => pair.originalUrls))].sort(), titles: [...new Set(matching.flatMap(pair => pair.titles))].sort(), snapshotIds: [...new Set(matching.map(pair => pair.snapshotId))].sort(), preservedCitations: matching.flatMap(pair=>pair.preservedCitations)
     }));
-    const answerMembers = batch => [...groupBy(batch, pair => pair.snapshotId)].sort(([a], [b]) => a.localeCompare(b)).map(([, matching]) => ({ ...answerItem(matching[0].row), source: { pages: pageContext(matching), cooccurrenceOnly: true } }));
+    const withQuestion = row => {const q=questions.get(row.questionId);return {...answerItem(row),question:q?{text:q.text,originalId:q.original_id??null,originalRow:q.original_row_index??null,originalGroup:q.original_group??null,clientTags:q.client_tags??[]}:null};};
+    const answerMembers = batch => [...groupBy(batch, pair => pair.snapshotId)].sort(([a], [b]) => a.localeCompare(b)).map(([, matching]) => ({ ...withQuestion(matching[0].row), source: { pages: pageContext(matching), cooccurrenceOnly: true } }));
     const pairMembers = batch => batch.map(pair => ({
-        ...answerItem(pair.row), id: pair.id, unit: 'source_pairs', source: {
+        ...withQuestion(pair.row), id: pair.id, unit: 'source_pairs', source: {
             sourceKey: pair.sourceKey, domain: pair.domain, pages: pageContext([pair]), cooccurrenceOnly: true
         }
     }));
@@ -119,24 +127,24 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
     }
     for (const [key,batch] of categories) {
         if (view.viewId==='V17') append(key,GEO_SOURCE_KIND_LABELS_ZH[key]??(key==='unknown'?'类型未知':key),batch,{kind:'source_type',sourceType:key});
-        else append(key,view.sourceLevel==='page'?batch[0].originalUrls[0]:key,batch,{kind:view.sourceLevel==='page'?'source_page':'source_domain',domain:batch[0].domain,sourceKey:view.sourceLevel==='page'?key:null,sourceId:batch[0].sourceId,sourceType:batch[0].sourceType});
+        else append(key,[view.sourceLevel==='page'?batch[0].originalUrls[0]:batch[0].domain,...(view.viewId==='V19'?[view.sourceFacet==='engine'?batch[0].row.engine:`${facet(batch[0].row).groupName} · 问题版本 ${facet(batch[0].row).setVersion??'未知'}`]:[])].join(' · '),batch,{kind:view.sourceLevel==='page'?'source_page':'source_domain',domain:batch[0].domain,sourceKey:view.sourceLevel==='page'?batch[0].sourceKey:null,sourceId:batch[0].sourceId,sourceType:batch[0].sourceType,...(view.viewId==='V19'?{sourceLevel:view.sourceLevel,sourceFacet:view.sourceFacet,sourceCategoryKey:key,...facet(batch[0].row)}:{})});
     }
     rows.sort((a, b) => b.values.answers.value - a.values.answers.value || b.values.pairs.value - a.values.pairs.value || a.key.localeCompare(b.key));
-    const chartRows = rows.slice(0, view.topN ?? 15), chartColumn = view.viewId === 'V17' ? 'coverage' : 'pairs', cells = chartRows.map(row => ({
-        rowKey: row.key, columnKey: chartColumn, label: row.label, value: row.values[chartColumn].value, state: row.values[chartColumn].state, unit: row.values[chartColumn].unit, engine: null, groupId: null, setVersion: null
+    const chartRows = rows.slice(0, view.topN ?? 15), chartColumn = view.viewId === 'V17' ? 'coverage' : view.viewId==='V19'?'answers':'pairs', cells = chartRows.map(row => ({
+        rowKey: row.key, columnKey: chartColumn, label: row.label, value: row.values[chartColumn].value, state: row.values[chartColumn].state, unit: row.values[chartColumn].unit, engine: row.dimensions.engine??null, groupId: row.dimensions.groupId??null, groupName: row.dimensions.groupName??null, setVersion: row.dimensions.setVersion??null, sourceKey:row.dimensions.sourceKey??row.dimensions.domain, sourceLabel:row.dimensions.sourceKey??row.dimensions.domain, facetKey:view.sourceFacet==='group'?JSON.stringify([row.dimensions.setVersion,row.dimensions.groupId]):row.dimensions.engine??null
     }));
     if (rows.length > chartRows.length) {
-        const rest = rows.slice(chartRows.length), restKeys = new Set(rest.map(row => view.viewId === 'V17' ? row.dimensions.sourceType : view.sourceLevel === 'page' ? row.dimensions.sourceKey : row.dimensions.domain)), key = hash([view.viewId, 'chart-remainder', view.topN]), restPairs = pairs.filter(pair => restKeys.has(view.viewId === 'V17' ? pair.sourceType : view.sourceLevel === 'page' ? pair.sourceKey : pair.domain));
-        const items = view.viewId === 'V17' ? answerMembers(restPairs) : pairMembers(restPairs);
+        const rest = rows.slice(chartRows.length), restKeys = new Set(rest.map(row => view.viewId==='V19'?row.dimensions.sourceCategoryKey:view.viewId === 'V17' ? row.dimensions.sourceType : view.sourceLevel === 'page' ? row.dimensions.sourceKey : row.dimensions.domain)), key = hash([view.viewId, 'chart-remainder', view.topN]), restPairs = pairs.filter(pair => restKeys.has(categoryOf(pair)));
+        const items = ['V17','V19'].includes(view.viewId) ? answerMembers(restPairs) : pairMembers(restPairs);
         memberItems.set(`${key}:${chartColumn}`, items);
         cells.push({
-            rowKey: key, columnKey: chartColumn, label: '其余来源', value: view.viewId === 'V17' ? (denominator ? items.length / denominator * 100 : null) : items.length, state: 'known', unit: chartColumn === 'coverage' ? 'percent' : 'source_pairs', engine: null, groupId: null, setVersion: null
+            rowKey: key, columnKey: chartColumn, label: '其余来源', value: view.viewId === 'V17' ? (denominator ? items.length / denominator * 100 : null) : items.length, state: 'known', unit: chartColumn === 'coverage' ? 'percent' : view.viewId==='V19'?'answers':'source_pairs', engine: null, groupId: null, groupName:null,setVersion: null,sourceKey:null,sourceLabel:'其余来源',facetKey:'remainder'
         });
     }
     const citedAnswers = unique(pairs.map(pair => answerItem(pair.row)));
     return {
         rows, columns, memberItems, chart: {
-            kind: 'sources', mode: view.viewId === 'V17' ? 'type_coverage' : 'source_concentration', labels: [], series: [], cells, denominator: view.viewId === 'V17' ? denominator : pairs.length, topN: view.topN ?? 15, totalCategories: rows.length
+            kind: view.viewId==='V19'?'source_facets':'sources', mode: view.viewId === 'V17' ? 'type_coverage' : 'source_concentration', labels: [], series: [], cells, denominator: ['V17','V19'].includes(view.viewId) ? denominator : pairs.length, topN: view.topN ?? 15, totalCategories: rows.length
         }, contextualBasis: context.sources?.length ? [{
                 kind: 'source_catalogue', id: 'sources', version: null, digest: hash(context.sources), temporalBasis: 'current_context'
             }] : [], dependencies: { sources: context.sources ?? [] }, availability: { status: rows.length ? 'ready' : 'empty', reasons: ['preserved_citations_partial_judgement', 'source_relationship_cooccurrence_only', 'unlinked_citations_unobservable'], remedy: null }, definition: {

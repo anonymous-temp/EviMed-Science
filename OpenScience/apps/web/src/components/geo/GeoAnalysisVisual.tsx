@@ -61,6 +61,23 @@ export function GeoAnalysisVisual({ data, onSelect }: {
   const statusId = useId();
   const chart = data.chart;
   if (!chart) return null;
+  if (chart.kind === "source_facets" || chart.kind === "source_history") {
+    const history=chart.kind === "source_history", cells=chart.cells??[];
+    const columnKey=(cell:GeoAnalysisChartCell)=>history?cell.roundId??"unknown":cell.facetKey??"remainder";
+    const rowKey=(cell:GeoAnalysisChartCell)=>history?JSON.stringify([cell.sourceKey,cell.facetKey]):cell.sourceKey??"remainder";
+    const columnLabel=(cell:GeoAnalysisChartCell)=>history?cell.roundLabel??"轮次未知":cell.engine?engineName(cell.engine):cell.groupName?`${cell.groupName} · 问题版本 ${cell.setVersion??"未知"}`:"其余交叉项";
+    const columns=[...new Map(cells.map(cell=>[columnKey(cell),{key:columnKey(cell),header:columnLabel(cell)}])).values()];
+    const grouped=new Map<string,GeoAnalysisChartCell[]>();
+    for(const cell of cells){const key=rowKey(cell);if(!grouped.has(key))grouped.set(key,[]);grouped.get(key)!.push(cell);}
+    const observationWord=(cell:GeoAnalysisChartCell)=>cell.observation==="present"?"已观察引用":cell.observation==="absent"?"可观测未引用":"未知";
+    const transitionWord=(value:string|null|undefined)=>({first_observed_in_scope:"所选范围内首次",new_appearance:"新出现",no_longer_observed:"同一可比范围内未再观察到"} as Record<string,string>)[value??""]??"";
+    const title=history?"页面引用观察历史":"来源与平台或版本化问题群";
+    return <ChartCard title={title} state={cells.length?"content":"empty"} emptyText="这个范围没有可核对的来源观察。"
+      footnote={history?"未引用依赖采集端记录的引用列表完整性，只适用于同一问题、版本、平台和采样方式；不代表已穷尽全网或模型信息。未知区间留空。":"每项保留精确平台或问题群版本；图示范围之外的交叉项合计保留，完整数值见下表。"}>
+      <HeatGrid label={title} columns={columns} rows={[...grouped].map(([key,items])=>({key,header:history?`${items[0].sourceKey} · ${engineName(items[0].engine??"")} · v${items[0].setVersion??"未知"} · 问题 ${items[0].questionId??"未知"}`:items[0].sourceLabel??items[0].label,cells:columns.map(column=>{const cell=items.find(cell=>columnKey(cell)===column.key);return {value:cell?.value??null,text:cell?(history?observationWord(cell):String(cell.value??"未知")):"无引用观测",hint:cell?`${cell.label} · ${history?transitionWord(cell.transition):cell.value??"未知"}`:"该交叉项未保留引用观测"};})}))}/>
+      <ul aria-label={history?"逐轮引用与变化明细":"来源交叉明细"}>{cells.map(cell=><li key={cell.rowKey} className="min-w-0"><Button size="sm" variant="text" className="h-auto max-w-full whitespace-normal break-all text-left" onClick={()=>onSelect(cell)}>{cell.label} · {history?`${observationWord(cell)} ${transitionWord(cell.transition)}`:`${cell.value??"未知"} 回答`}</Button></li>)}</ul>
+    </ChartCard>;
+  }
   if (chart.kind === "sources") {
     const cells=chart.cells??[], coverage=chart.mode==="type_coverage";
     return <ChartCard title={coverage?"来源类型回答覆盖率":"来源引用集中度"} state={cells.length?"content":"empty"} emptyText="这个范围没有可核对链接；无法观测的引用能力保留未知。"

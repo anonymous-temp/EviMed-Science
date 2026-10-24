@@ -212,6 +212,8 @@ function AnalysisPage({
               { value: "V14", label: "临床主题与条件" },
               { value: "V17", label: "来源类型覆盖" },
               { value: "V18", label: "域名与页面排名" },
+              { value: "V19", label: "来源与平台或问题群" },
+              { value: "V22", label: "页面引用观察历史" },
             ],
             onChange: (value) =>
               setView({
@@ -219,10 +221,11 @@ function AnalysisPage({
                 dimension: value === "V05" ? "group" : ["V02", "V03", "V04"].includes(value ?? "") ? "engine" : "project",
               }),
           },
-          ...(["V17","V18"].includes(view.viewId)?[
+          ...(["V17","V18","V19","V22"].includes(view.viewId)?[
             {kind:"select" as const,label:"来源类型",value:view.sourceType??null,allLabel:"全部类型",options:[...Object.entries({...GEO_SOURCE_KIND_LABELS_ZH,...Object.fromEntries((data?.definition?.sourceTypes??[]).filter(type=>type!=="unknown"&&!(type in GEO_SOURCE_KIND_LABELS_ZH)).map(type=>[type,type]))}).map(([value,label])=>({value,label:String(label)})),{value:"unknown",label:"类型未知"}],onChange:(value:string|null)=>setView({...view,sourceType:value??undefined})},
             {kind:"select" as const,label:"共同出现",value:view.sourceRelationship??"all",options:[{value:"all",label:"全部引用回答"},{value:"wrong",label:"共同出现我方错误"},{value:"mentions",label:"共同出现品牌提及"}],onChange:(value:string|null)=>setView({...view,sourceRelationship:value==="wrong"?"wrong":value==="mentions"?"mentions":"all"})},
-            ...(view.viewId==="V18"?[{kind:"select" as const,label:"排名对象",value:view.sourceLevel??"domain",options:[{value:"domain",label:"域名"},{value:"page",label:"页面"}],onChange:(value:string|null)=>setView({...view,sourceLevel:value==="page"?"page":"domain"})}]:[]),
+            ...(["V18","V19"].includes(view.viewId)?[{kind:"select" as const,label:"排名对象",value:view.sourceLevel??"domain",options:[{value:"domain",label:"域名"},{value:"page",label:"页面"}],onChange:(value:string|null)=>setView({...view,sourceLevel:value==="page"?"page":"domain"})}]:[]),
+            ...(view.viewId==="V19"?[{kind:"select" as const,label:"来源交叉维度",value:view.sourceFacet??"engine",options:[{value:"engine",label:"平台"},{value:"group",label:"版本化问题群"}],onChange:(value:string|null)=>setView({...view,sourceFacet:value==="group"?"group":"engine"})}]:[]),
             {kind:"select" as const,label:"图表显示",value:String(view.topN??15),options:[5,15,30,50].map(value=>({value:String(value),label:`前 ${value} 项及其余`})),onChange:(value:string|null)=>setView({...view,topN:Number(value??15)})},
           ]:[]),
           ...(["V01", "V02", "V03"].includes(view.viewId)
@@ -289,7 +292,7 @@ function AnalysisPage({
               ]
             : []),
         ]}
-        search={["V17","V18"].includes(view.viewId)?{label:"搜索引用来源",value:view.sourceSearch??"",maxLength:300,onChange:value=>{setPage(null);setView({...view,sourceSearch:value||undefined});},onClear:()=>{setPage(null);setView({...view,sourceSearch:undefined});}}:undefined}
+        search={["V17","V18","V19","V22"].includes(view.viewId)?{label:"搜索引用来源",value:view.sourceSearch??"",maxLength:300,onChange:value=>{setPage(null);setView({...view,sourceSearch:value||undefined});},onClear:()=>{setPage(null);setView({...view,sourceSearch:undefined});}}:undefined}
         actions={
           data ? (
             <Button
@@ -328,6 +331,8 @@ function AnalysisPage({
             .map(
               (reason) =>
                 ({
+                  citation_history_selected_scope: "首次仅指所选范围内首次观察；变化只在同一可比问题及采集范围内解释。",
+                  citation_completeness_required: "可观测未引用依赖采集端记录的引用列表完整性；缺少声明、无链接、失败、拒答或未采样均为未知，不代表已穷尽全网或模型信息。",
                   preserved_citations_partial_judgement: "来源分析保留部分判定回答的可用引用，不能据此声称回答已完成医学准确性判定。",
                   source_relationship_cooccurrence_only: "错误和品牌提及为共同出现，不能据此归因到引用来源。",
                   unlinked_citations_unobservable: "未保留可用链接的引用与检索能力不可观测，未计为零。",
@@ -404,7 +409,10 @@ function AnalysisPage({
                   row.dimensions.engine ?? "\u0000",
                   engineName(row.dimensions.engine ?? ""),
                 )}
-                {row.dimensions.sourceType && <p className="text-caption text-text-2">{GEO_SOURCE_KIND_LABELS_ZH[row.dimensions.sourceType as keyof typeof GEO_SOURCE_KIND_LABELS_ZH] ?? (row.dimensions.sourceType === "unknown" ? "类型未知" : row.dimensions.sourceType)} · 首次 {row.dimensions.firstObserved??"采样时间未知"} · 最近 {row.dimensions.lastObserved??"采样时间未知"}</p>}
+                {row.dimensions.groupState && <p className="text-caption text-text-2">{row.dimensions.groupName} · 问题版本 {row.dimensions.setVersion??"未知"} · {row.dimensions.groupState==="known"?"已映射":row.dimensions.groupState==="unmapped"?"未映射":"未知"}</p>}
+                {row.dimensions.groupState === "known" && row.dimensions.groupId && <Link className="text-accent" to={sourceActionPath({group:row.dimensions.groupId})}>查看问题群与行动</Link>}
+                {row.dimensions.kind === "source_history" && <p className="text-caption text-text-2">{row.dimensions.roundLabel} · 问题版本 {row.dimensions.setVersion??"未知"} · {row.dimensions.mode??"采样方式未知"} · {row.dimensions.questionId??"问题未知"}</p>}
+                {row.dimensions.sourceType && <p className="text-caption text-text-2">{GEO_SOURCE_KIND_LABELS_ZH[row.dimensions.sourceType as keyof typeof GEO_SOURCE_KIND_LABELS_ZH] ?? (row.dimensions.sourceType === "unknown" ? "类型未知" : row.dimensions.sourceType)} · 所选范围内首次 {row.dimensions.firstObserved??"采样时间未知"} · 最近 {row.dimensions.lastObserved??"采样时间未知"}</p>}
                 {row.dimensions.originalUrls && <Disclosure summary="原始引用地址与所选轮次"><ul>{row.dimensions.originalUrls.map(url=><li key={url}>{url}</li>)}</ul>{row.dimensions.history?.map(round=><p key={round.roundId}>{round.roundId} · {round.citedAnswers} 个引用回答</p>)}{row.dimensions.sourceId&&<Link className="text-accent" to={sourceActionPath({source:row.dimensions.sourceId})}>查看来源与行动</Link>}{row.dimensions.sourceKey&&row.dimensions.originalUrls[0]&&<Link className="block text-accent" to={sourceActionPath({planUrl:row.dimensions.originalUrls[0]})}>将此页面用于方案</Link>}</Disclosure>}
                 {row.dimensions.kind === "expression" && <p className="text-caption text-text-2">条件：{row.dimensions.conditionQuote ?? "未陈述"} · 推荐顺位：{row.dimensions.explicitPosition ?? "未明确"}</p>}
                 {row.dimensions.period === "round"
@@ -427,7 +435,7 @@ function AnalysisPage({
               const value = row.values[column.key];
               const word =
                 value.state === "known" && value.value !== null
-                  ? value.metric
+                  ? typeof value.value === "string" ? sourceObservationWord(value.value) : value.metric
                     ? formatGeoValue(value.value, metricUnit(row.metricId ?? undefined))
                     : value.unit
                       ? `${value.value} ${unitWord(value.unit)}`
@@ -460,7 +468,7 @@ function AnalysisPage({
             },
           })),
         ]}
-        footnote={["V17","V18"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
+        footnote={["V17","V18","V19","V22"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
       />
       {data && (
         <>
@@ -549,6 +557,10 @@ function unitWord(unit: string) {
   );
 }
 
+function sourceObservationWord(value:string):string {
+ return ({present:"已观察引用",absent:"可观测未引用",first_observed_in_scope:"所选范围内首次",new_appearance:"新出现",no_longer_observed:"同一可比范围内未再观察到"} as Record<string,string>)[value]??value;
+}
+
 function analysisReason(reason: string): string {
- return ({comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",own_brand_not_registered:"该范围未登记本品品牌，通用名独立观测",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";
+ return ({citation_completeness_unknown:"采集端未记录完整引用列表",citations_without_links:"引用缺少可核对链接",answer_not_returned:"失败或拒答，无法观察未引用",no_sampling:"未采样，保持未知",comparison_cohort_unknown:"可比问题或采集范围未知",sampling_time_unknown:"采样时间未知",sampling_order_unknown:"采样顺序未知",comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",own_brand_not_registered:"该范围未登记本品品牌，通用名独立观测",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";
 }

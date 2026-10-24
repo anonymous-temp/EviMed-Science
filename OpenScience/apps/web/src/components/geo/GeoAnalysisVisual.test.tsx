@@ -152,3 +152,18 @@ it('source coverage and concentration show the explicit denominator and exact re
  fireEvent.click(screen.getByRole('button',{name:/其余来源/}));expect(select).toHaveBeenCalledWith(cells[1]);
  expect(screen.getByText(/共同出现.*不代表/)).toBeTruthy();
 });
+
+it('V19 shows source by exact versioned facet and opens exact source cells',()=>{
+ const selected=vi.fn(), cells=[{rowKey:'v1',columnKey:'pairs',label:'news · Same v1',sourceKey:'news.example',sourceLabel:'news.example',facetKey:'[1,"g1"]',groupId:'g1',groupName:'Same',setVersion:1,engine:null,value:2,state:'known'},{rowKey:'v2',columnKey:'pairs',label:'news · Same v2',sourceKey:'news.example',sourceLabel:'news.example',facetKey:'[2,"g2"]',groupId:'g2',groupName:'Same',setVersion:2,engine:null,value:1,state:'known'}];
+ render(<GeoAnalysisVisual data={{view:{viewId:'V19',sourceFacet:'group'},chart:{kind:'source_facets',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={selected}/>);
+ expect(screen.getByRole('table',{name:'来源与平台或版本化问题群'})).toBeTruthy();
+ expect(screen.getByText(/Same.*问题版本 1/)).toBeTruthy();expect(screen.getByText(/Same.*问题版本 2/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:/news · Same v2/}));expect(selected).toHaveBeenLastCalledWith(cells[1]);
+});
+it('V22 history shows unknown intervals and selected-scope first observations without fabricating absence',()=>{
+ const selected=vi.fn(),cells=[{rowKey:'present',columnKey:'observation',label:'page r1',sourceKey:'news.example/page',facetKey:'cohort',roundId:'r1',roundLabel:'第 1 轮',groupId:null,setVersion:1,engine:'deepseek',value:1,state:'known',observation:'present',transition:'first_observed_in_scope'},{rowKey:'unknown',columnKey:'observation',label:'page r2',sourceKey:'news.example/page',facetKey:'cohort',roundId:'r2',roundLabel:'第 2 轮',groupId:null,setVersion:1,engine:'deepseek',value:null,state:'unknown',reason:'citation_completeness_unknown'},{rowKey:'absent',columnKey:'observation',label:'page r3',sourceKey:'news.example/page',facetKey:'cohort',roundId:'r3',roundLabel:'第 3 轮',groupId:null,setVersion:1,engine:'deepseek',value:0,state:'known',observation:'absent',transition:'no_longer_observed'}];
+ render(<GeoAnalysisVisual data={{view:{viewId:'V22'},chart:{kind:'source_history',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={selected}/>);
+ expect(screen.getByRole('table',{name:'页面引用观察历史'})).toBeTruthy();expect(screen.getAllByText(/所选范围内首次/).length).toBeGreaterThan(0);
+ expect(screen.getByText('未知')).toBeTruthy();expect(screen.getByText('可观测未引用')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:/page r2/}));expect(selected).toHaveBeenLastCalledWith(cells[1]);
+});

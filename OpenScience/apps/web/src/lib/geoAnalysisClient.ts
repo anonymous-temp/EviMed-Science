@@ -19,7 +19,9 @@ export type GeoAnalysisId =
   | "V12"
   | "V14"
   | "V17"
-  | "V18";
+  | "V18"
+  | "V19"
+  | "V22";
 export interface GeoAnalysisDescriptor {
   viewId: GeoAnalysisId;
   metricId?: string | null;
@@ -31,6 +33,7 @@ export interface GeoAnalysisDescriptor {
   sourceSearch?: string;
   sourceRelationship?: "all" | "wrong" | "mentions";
   sourceLevel?: "domain" | "page";
+  sourceFacet?: "engine" | "group";
   topN?: number;
   categoryMode?: "original_group" | "client_tags";
 }
@@ -45,7 +48,7 @@ export interface GeoAnalysisMembers {
   exact: true;
 }
 export interface GeoAnalysisValue {
-  value: number | null;
+  value: number | string | null;
   numerator?: number;
   denominator?: number;
   state: string;
@@ -59,6 +62,15 @@ export interface GeoAnalysisRow {
   label: string;
   metricId: string | null;
   dimensions: {
+    sourceFacet?: "engine" | "group";
+    groupState?: "known" | "unmapped" | "unknown";
+    questionId?: string | null;
+    mode?: string | null;
+    comparisonCohortKey?: string;
+    firstObservedBasis?: "selected_scope";
+    previousRoundId?: string | null;
+    observation?: string | null;
+    transition?: string | null;
     sourceType?: string;
     domain?: string;
     sourceKey?: string | null;
@@ -97,6 +109,8 @@ export interface GeoAnalysisRow {
   values: Record<string, GeoAnalysisValue>;
 }
 export interface GeoAnalysisChartCell {
+  sourceKey?: string | null; sourceLabel?: string; facetKey?: string | null;
+  roundId?: string; roundLabel?: string; comparisonCohortKey?: string; questionId?: string | null; observation?: string | null; transition?: string | null;
   rowKey: string; columnKey: string; label: string;
   groupId: string | null; setVersion: number | null; engine: string | null; pool?: string | null;
   groupName?: string | null;
@@ -106,7 +120,7 @@ export interface GeoAnalysisChartCell {
 export interface GeoAnalysisView {
   definition?: {sourceTypes?: string[]};
   chart?: {
-    kind?: "bars" | "matrix" | "comparison" | "rivals" | "recommendations" | "sources";
+    kind?: "bars" | "matrix" | "comparison" | "rivals" | "recommendations" | "sources" | "source_facets" | "source_history";
     mode?: "type_coverage" | "source_concentration";
     denominator?: number;
     topN?: number;
@@ -156,7 +170,8 @@ export interface GeoAnalysisMemberItem {
   reason?: string;
   askedAt?: string | null;
   judgment?: unknown;
-  source?: {sourceKey?: string;domain?: string;originalUrls?: string[];pages:Array<{sourceKey:string;domain:string;sourceType:string;originalUrls:string[];titles:string[];snapshotIds:string[]}>;cooccurrenceOnly:true};
+  comparisonCohortKey?: string;
+  source?: {sourceKey?: string;domain?: string;originalUrls?: string[];pages:Array<{sourceKey:string;domain:string;sourceType:string;originalUrls:string[];titles:string[];snapshotIds:string[];preservedCitations?: Array<{url?:string;marker?:unknown;position?:unknown;inBody?:boolean|null;[key:string]:unknown}>}>;cooccurrenceOnly:true};
   citingAnswers?: GeoAnalysisMemberItem[];
   extraction?: {genericMentions: unknown; parserVersion: string | null; registryKey?: string | null; judgedAt: string | null} | null;
   assessmentVersion?: string | null;

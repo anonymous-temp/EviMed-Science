@@ -1,4 +1,4 @@
-import {render,screen} from '@testing-library/react';
+import {render,screen,fireEvent} from '@testing-library/react';
 import {MemoryRouter} from 'react-router';
 import {expect,it,vi} from 'vitest';
 import {GeoAnalysisMembersDrawer} from './GeoAnalysisMembersDrawer';
@@ -36,4 +36,11 @@ it('opens every preserved source page, original alias and partial judgment witho
  expect(screen.getByRole('link',{name:'http://www.news.example/s?id=251#original'})).toBeVisible();
  expect(new Set(screen.getAllByRole('link').filter(link=>link.textContent?.startsWith('http')).map(link=>link.getAttribute('href'))).size).toBe(252);
  expect(screen.getByText(/不能据此推断来源导致错误/)).toBeVisible();
+});
+it('source history exact old/new actions keep original questions and preserved marker and position',async()=>{
+ const member:GeoAnalysisMembers={selectionRef:'gsel_history',view:{viewId:'V22'},rowKey:'gone',columnKey:'transition',expectedDigest:'history',unit:'observations',total:2,exact:true};
+ read.mockResolvedValue({unit:'observations',total:2,nextOffset:null,digest:'history',items:[{id:'old',unit:'answers',snapshotId:'old',question:{text:'Original unjudged?'},source:{pages:[{sourceKey:'news.example/page',originalUrls:['https://news.example/page'],preservedCitations:[{marker:'[7]',position:42}]}],cooccurrenceOnly:true}},{id:'new',unit:'answers',snapshotId:'new',question:{text:'Original unjudged?'}}]});
+ render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member} onClose={()=>{}}/></MemoryRouter>);
+ expect(await screen.findAllByText('Original unjudged?')).toHaveLength(2);fireEvent.click(screen.getByText('完整来源页面与原始地址'));
+ expect(screen.getByText(/引用标记：\[7\].*保留位置：42/)).toBeVisible();expect(screen.getAllByRole('link',{name:'查看原始回答与依据'}).map(link=>link.getAttribute('href'))).toEqual(expect.arrayContaining([expect.stringContaining('/old?selectionRef=gsel_history'),expect.stringContaining('/new?selectionRef=gsel_history')]));
 });
