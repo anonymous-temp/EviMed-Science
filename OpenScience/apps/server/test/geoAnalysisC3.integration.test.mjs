@@ -101,3 +101,27 @@ test('C3 SPEC repairs retain same-entity clinical support and explicit ordinal p
  const report=freezeGeoAnalysisDocument(full);assert.ok(report.typedTable.rows.some(row=>row.dimensions.includes('supports_nonrecommendation')));assert.ok(report.canonicalMarkdown.includes('positionToken'));
  if(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR}/document.json`,JSON.stringify({...report,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
 });
+
+test('C3 quality conflicts keep the exact expression with null order across assessment, members, native and export',opts,async()=>{
+ const text='First choice: Alpha. Second choice: Alpha.',base={quote:text,entity:'Alpha',state:'recommended',conditionQuote:null,rationale:null,claimRefs:[],positionKind:'explicit_recommendation_order'};
+ const one={...base,explicitPosition:1,positionQuote:'First choice: Alpha.',positionToken:'First'},two={...base,explicitPosition:2,positionQuote:'Second choice: Alpha.',positionToken:'Second'};
+ const input={owner:{userId:user.id,projectId:project.projectId},product,competitors:[],claims:[],careFlags:[],question:{text:'Options?',pool:'P2'},answer:text};
+ const make=items=>factsOf({snapshot:{status:'valid',answerText:text,citations:[]},judged:verifyJudgement({assessmentComplete:true,statements:[],recommendationExpressions:{schemaVersion:1,rubric:'geo-recommendation-expression-v1',coverage:'complete',items}},buildJudgeInput(input),input),registry,countedOwned:{},at:new Date('2026-10-05')}).facts;
+ const first=make([one,two]),reversed=make([two,one]);assert.deepEqual(first,reversed);assert.equal(first.checks.judgementCoverage.status,'complete');
+ await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES('c3-conflict',$1,$2,'c3-r','c3-q','deepseek','2026-10-01','valid',$3,'{\"mode\":\"web\"}')",[user.id,project.id,text]);
+ await measure.writeFacts({id:'c3-conflict',userId:user.id,geoProjectId:project.id},first);
+ const original=(await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND id=$2",[user.id,geoAssessmentId('c3-conflict')])).rows[0].payload;
+ await database.transaction(client=>preserveGeoAssessment({database,client,snapshotId:'c3-conflict',facts:reversed}));
+ const after=(await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND id=$2",[user.id,geoAssessmentId('c3-conflict')])).rows[0].payload;
+ assert.equal(after.assessmentVersion,original.assessmentVersion);assert.equal(after.generation,original.generation);
+ const view=await service.analysis(user,project.id,{round:'c3-r',viewId:'V09'}),full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest});
+ const expression=full.rows.find(row=>row.dimensions.snapshotId==='c3-conflict');assert.equal(expression.dimensions.category,'recommended');
+ for(const field of ['explicitPosition','positionQuote','positionToken','positionKind'])assert.equal(expression.dimensions[field],null,field);
+ const ref=expression.values.expressions.members,members=await service.analysisMembers(user,project.id,{selectionRef:ref.selectionRef,...ref.view,rowKey:ref.rowKey,columnKey:ref.columnKey,expectedDigest:ref.expectedDigest});
+ assert.equal(members.items.length,1);assert.equal(members.items[0].assessmentVersion,original.assessmentVersion);assert.equal(members.items[0].expression.explicitPosition,null);assert.equal(members.items[0].expression.quote,text);
+ const staged=await service.planContexts.stage(user,project.id,{requestKey:'c3-commutative-order',sessionId:'c3-session',mode:'analysis',selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,intent:'explain'});
+ await service.planContexts.bind(user,{id:project.projectId,userId:user.id},{requestId:'c3-commutative-order',sessionId:'c3-session',content:[{type:'text',text:'Explain uncertain recommendation order.'}],geoPlanContext:{referenceId:staged.referenceId}});
+ const native=[];for(let offset=0;offset<full.page.total;offset+=20)native.push(...(await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,offset,limit:20})).rows);assert.deepEqual(native,full.rows);
+ const report=freezeGeoAnalysisDocument(full),frozen=report.typedTable.rows.find(row=>row.key===expression.key);assert.equal(JSON.parse(frozen.dimensions).explicitPosition,null);
+ if(process.env.GEO_C3_QUALITY_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_QUALITY_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_QUALITY_RECEIPTS_DIR}/document.json`,JSON.stringify({...report,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
+});

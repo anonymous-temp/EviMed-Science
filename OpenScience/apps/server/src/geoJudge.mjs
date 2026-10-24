@@ -151,7 +151,7 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "12. assessmentComplete：是否已处理所展示回答的全部适用陈述、推荐及安全信息。仍有未覆盖内容、触及条数上限或无法完成提取时为 false；逐条列出 unverifiable 不等于未处理。不得从正确的局部推断整体正确。",
   "13. clinicalApplicability：输出 {schemaVersion:1,rubric:geo-clinical-applicability-v1,status:applicable/not_applicable/unknown,quote,reason}。not_applicable 仅表示完整回答不包含可评估的临床陈述，例如纯导航或格式说明；quote 必须逐字来自回答，reason 说明判断依据。用药安全建议、合理不推荐、超出某人群适用范围、主张库无依据的临床内容仍属于 applicable，必须提取陈述，不得以 not_applicable 代替 unverifiable。拒答、部分覆盖或不能确认时用 unknown。只评价是否含临床陈述，不更改正确性与指标分母。",
   "14. recommendationExpressions：同一次阅读中提取全部药品表达，最多 60 条，输出 {schemaVersion:1,rubric:geo-recommendation-expression-v1,coverage:complete/partial/unknown,items:[{quote,entity,state,conditionQuote,rationale,claimRefs,explicitPosition,positionQuote}]}。quote 逐字来自所展示回答，entity 是片段内药名原写法且来自登记名称或 entities。state 为 recommended（推荐选用）、conditional（条件推荐，conditionQuote 逐字保留条件）、reasonable_nonrecommendation（主张库有依据的合理不推荐，必须也提取对应正确 statements 并给真实 claimId/claimVersion）、mention_only（列表、单纯提及、比较）、unknown（无依据的不推荐或无法判断）。claimRefs 为 [{claimId,claimVersion}]，只用给定真实主张和版本，没有给空数组。无药名的转介和拒答不是推荐。多药同句逐药判断推荐与否定；同药不同条件分别保留。rationale 可为 null，缺少依据绝不判合理。explicitPosition 只在原文明说推荐顺位时为正整数，positionQuote 逐字来自 quote 且含药名；列表或提及顺序不能推出顺位，无明确顺位两项为 null。conditionQuote 无条件时为 null。未覆盖全文、触及上限或提取不全为 partial，不可据局部宣布无提及；不知道为 unknown。不得改变 recommendations、临床正确性或 clinicalApplicability 来填分类。",
-  "15. 表达关联核对：recommendationExpressions.items 另有 nonrecommendationBasis、positionToken、positionKind。合理不推荐必须给 nonrecommendationBasis={relation:supports_nonrecommendation,entity,statementQuote,conditionQuote,claimId,claimVersion,evidenceQuote,evidenceConditionQuote}：statementQuote 必须与该表达 quote 及一条已判 correct 的 statements.text 完全相同，entity 必须是该陈述不推荐的同一药品；不能用包含另一药品或另一事实的宽引文借用依据。同一药品的储存、价格等无关事实不能证明临床不推荐合理。claimId/version 必须等于 claimRefs 中的准确版本，evidenceQuote 等于该正确陈述的 evidence 且逐字来自所给主张；conditionQuote 必须与表达条件相同，evidenceConditionQuote 是证据中支持该条件的逐字片段，无条件时为 null。必须由你判断证据确实支持该药品在该条件下不推荐，而非只核对药名出现；不确定、条件不符或资料不足一律 unknown、nonrecommendationBasis:null。quote 不能精确拆到同一准确陈述时也保留 unknown。其他类别 nonrecommendationBasis:null。positionKind 由你区分 explicit_recommendation_order（明确推荐顺序）、mention_order（提及或列表顺序）、unknown；只有明确推荐顺序才可给顺位。推荐顺位另给 positionToken，逐字摘录 positionQuote 内对应数字或序数（如 First、99th、第十二、第12位）；它必须表达同一药品的明确推荐顺位并与 explicitPosition 一致。必须摘录完整数字或序数，不能从第十二截第十、从12截1，也不能通过截短quote或positionQuote隐藏原文的数字前后文；相同引文出现多次而无法确认每一处顺位一致时，顺位保留null。positionQuote 只摘该顺位和该药品的片段，不混入另一药品的顺位。单纯编号或提及顺序、没有可核对数字/序数时 explicitPosition、positionQuote、positionToken 均为 null。不要为满足结构而重新判定临床正确性。",
+  "15. 表达关联核对：recommendationExpressions.items 另有 nonrecommendationBasis、positionToken、positionKind。合理不推荐必须给 nonrecommendationBasis={relation:supports_nonrecommendation,entity,statementQuote,conditionQuote,claimId,claimVersion,evidenceQuote,evidenceConditionQuote}：statementQuote 必须与该表达 quote 及一条已判 correct 的 statements.text 完全相同，entity 必须是该陈述不推荐的同一药品；不能用包含另一药品或另一事实的宽引文借用依据。同一药品的储存、价格等无关事实不能证明临床不推荐合理。claimId/version 必须等于 claimRefs 中的准确版本，evidenceQuote 等于该正确陈述的 evidence 且逐字来自所给主张；conditionQuote 必须与表达条件相同，evidenceConditionQuote 是证据中支持该条件的逐字片段，无条件时为 null。必须由你判断证据确实支持该药品在该条件下不推荐，而非只核对药名出现；不确定、条件不符或资料不足一律 unknown、nonrecommendationBasis:null。quote 不能精确拆到同一准确陈述时也保留 unknown。其他类别 nonrecommendationBasis:null。positionKind 由你区分 explicit_recommendation_order（明确推荐顺序）、mention_order（提及或列表顺序）、unknown；只有明确推荐顺序才可给顺位。推荐顺位另给 positionToken，逐字摘录 positionQuote 内对应数字或序数（如 First、99th、第十二、第12位）；它必须表达同一药品的明确推荐顺位并与 explicitPosition 一致。必须摘录完整数字或序数，不能从第十二截第十、从12截1，也不能通过截短quote或positionQuote隐藏原文的数字前后文；相同引文出现多次而无法确认每一处顺位一致时，顺位保留null。同一quote/entity/condition重复给出不同的已核对顺位时，不选择第一条，顺位各字段均为null。positionQuote 只摘该顺位和该药品的片段，不混入另一药品的顺位。单纯编号或提及顺序、没有可核对数字/序数时 explicitPosition、positionQuote、positionToken 均为 null。不要为满足结构而重新判定临床正确性。",
   "输出格式（键名固定）：",
   "{\"assessmentComplete\":false,\"clinicalApplicability\":{\"schemaVersion\":1,\"rubric\":\"geo-clinical-applicability-v1\",\"status\":\"unknown\",\"quote\":\"\",\"reason\":\"\"},\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"recommendationExpressions\":{\"schemaVersion\":1,\"rubric\":\"geo-recommendation-expression-v1\",\"coverage\":\"unknown\",\"items\":[]},\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
 ].join("\n");
@@ -667,7 +667,8 @@ function verifyRecommendationExpressions(raw, built, knownEntities, registry, st
   if (refusal) reasons.push("refused_answer");
   if (incomplete) reasons.push("assessment_incomplete");
   if (raw.items.length >= 60) reasons.push("expression_limit_reached");
-  const items = [], seen = new Set();
+  const items = [], seen = new Set(), conflictingPositions = new Set();
+  const clearPosition = item => { item.explicitPosition = null; item.positionQuote = null; item.positionToken = null; item.positionKind = null; };
   const owned = expressionEntitySpans(built.shown, knownEntities);
   const sameEntity = (alias, entity) => alias === foldText(entity) || registry.some(entry => {
     const aliases = [...entry.aliases, ...(entry.genericAliases ?? [])];
@@ -736,7 +737,17 @@ function verifyRecommendationExpressions(raw, built, knownEntities, registry, st
     if (!seen.has(key)) { seen.add(key); items.push(clean); }
     else {
       const previous = items.find(prior => JSON.stringify([prior.quote, prior.entity, prior.conditionQuote]) === key);
-      if (previous && previous.state !== clean.state) { previous.state = "unknown"; previous.explicitPosition = null; previous.positionQuote = null; previous.positionToken = null; previous.positionKind = null; previous.nonrecommendationBasis = null; reasons.push("expression_classification_conflict"); }
+      if (previous && previous.state !== clean.state) { previous.state = "unknown"; clearPosition(previous); previous.nonrecommendationBasis = null; reasons.push("expression_classification_conflict"); }
+      if (previous && previous.state === clean.state && !conflictingPositions.has(key)) {
+        if (previous.explicitPosition !== null && clean.explicitPosition !== null && previous.explicitPosition !== clean.explicitPosition) {
+          clearPosition(previous); conflictingPositions.add(key); reasons.push("expression_position_conflict");
+        } else if (clean.explicitPosition !== null && (previous.explicitPosition === null
+          || JSON.stringify([clean.positionQuote, clean.positionToken]) < JSON.stringify([previous.positionQuote, previous.positionToken]))) {
+          // Identical ranks keep one deterministic verified witness, regardless of model array order.
+          previous.explicitPosition = clean.explicitPosition; previous.positionQuote = clean.positionQuote;
+          previous.positionToken = clean.positionToken; previous.positionKind = clean.positionKind;
+        }
+      }
     }
   }
   const mentioned = matchedMentions(foldText(built.shown), [...knownEntities]);
