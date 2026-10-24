@@ -28,29 +28,17 @@
 
 import { createHash } from "node:crypto";
 
-import { isResearcherOwnedWork, mountedMethodDigest } from "@evimed/domain";
-
-/** The trigger the evidence events are filed under in the feedback ledger. */
-export const LEARNING_EVIDENCE_TRIGGER = "learning-evidence";
+import { LEARNING_EVIDENCE_TRIGGER, isLearningCorrection, isResearcherOwnedWork, mountedMethodDigest } from "@evimed/domain";
 
 /** How far back the events are read, and how much of the ledger one settlement may read: bounds, not opinions. */
 const DEFAULT_WINDOW_MS = 72 * 3_600_000;
 const PAGE = 200;
 const MAX_PAGES = 5;
 
-const CORRECTION_VERDICTS = Object.freeze(["correction", "preference", "rejection"]);
 const MOVED_ON_VERDICTS = Object.freeze(["accept", "none"]);
 
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
-
-/**
- * Whether an evidence event is the researcher correcting the work.
- * @param {any} detail @returns {boolean}
- */
-function isCorrection(detail) {
-  return ["steer", "result-corrected"].includes(String(detail?.evidence ?? "")) || CORRECTION_VERDICTS.includes(String(detail?.verdict ?? ""));
-}
 
 /**
  * Whether an evidence event says the conversation moved on from the run: nothing was said (`silent`), or what was said accepted
@@ -58,7 +46,7 @@ function isCorrection(detail) {
  * @param {any} detail @returns {boolean}
  */
 function isMovedOn(detail) {
-  if (isCorrection(detail)) return false;
+  if (isLearningCorrection(detail)) return false;
   return detail?.evidence === "silent" || MOVED_ON_VERDICTS.includes(String(detail?.verdict ?? ""));
 }
 
@@ -140,7 +128,7 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
         const opened = (Array.isArray(run.methodsInvoked) ? run.methodsInvoked : []).filter((/** @type {any} */ entry) => entry?.name && entry?.digest && entry.trial !== true);
         if (!opened.length) continue;
         result.runs += 1;
-        const corrections = events.filter((event) => isCorrection(event.detail));
+        const corrections = events.filter((event) => isLearningCorrection(event.detail));
         const movedOn = events.some((event) => isMovedOn(event.detail));
         const latest = (/** @type {any[]} */ list) => String(list.map((event) => String(event.detail?.at ?? event.occurredAt ?? "")).sort().at(-1) ?? "");
         for (const entry of opened) {
