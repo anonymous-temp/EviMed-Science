@@ -146,7 +146,7 @@ test("a long run of the key alphabet is a secret by its shape and not by its len
   for (const secret of [
     "dGhpcyBpcyBhIHNlY3JldCB0b2tlbiB2YWx1ZSBmb3IgdGVzdGluZw0123456789",
     "Xk9mP2vLq8wZr4NtYb7CdEfGhJkQs3UaVxWy5Z1o6",
-    "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "sk-proj-FakeAbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
     ["sk", "live", "51HxAbCdEfGhIjKlMnOpQrStUv"].join("_"),
     "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
     "AKIAIOSFODNN7EXAMPLE",
