@@ -229,3 +229,12 @@ test('the replay reads an export day by day: safety alerts in on both sides, rou
   assert.deepEqual(today.excluded, { 'paper-rewrite': 1, roundup: 1 })
   assert.equal(today.rules['safety-bypass'], 1)
 })
+
+test('a preprint under the line comes in only by the preprint lane, never by a floor, the Chinese share or a rewrite\'s place', () => {
+  const preprints = Array.from({ length: 5 }, (_, index) => item({ genre: 'preprint', score: 75 - index, zh: index === 0 }))
+  const story = item({ genre: 'news', score: 95, eventId: 'p' })
+  const events = { p: [{ id: preprints[1].id, genre: 'preprint' }, { id: story.id, genre: 'news' }] }
+  const result = frontierMixSelect({ candidates: [...preprints, story], threshold: 82, events })
+  assert.deepEqual(result.picks.map((pick) => pick.rule), ['preprint-lane', 'preprint-lane'])
+  assert.equal(result.plan.groups.research.floor, 7, 'the research floor stayed short rather than fill with preprints')
+})

@@ -47,10 +47,14 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
  * - **Every reader-visible change moves `meta.content_version` in the same
  *   transaction** (review #14), and leaves an `item_changes` row for
  *   downstream copies.
- * - **Selection is serialized** by one advisory lock, so two concurrent
- *   batches cannot both take a source's third slot, both fill a lane's floor or
- *   both take the preprint lane's last place. Selection is sticky: a later
- *   re-score never unselects.
+ * - **Selection is the day's mix** (ct-mix 2026-10-24, `@evimed/domain`
+ *   `frontierMix.mjs`): publishing selects only a safety alert; every other
+ *   selection is made at the end of the round by `#mix`, over each day the
+ *   round touched, within the genre groups' floors and ceilings, the Chinese
+ *   share, the per-source cap and the merge rules. It is serialized by one
+ *   advisory lock, so two concurrent batches cannot both take a source's third
+ *   slot or a group's last place. Selection is sticky: a later re-score never
+ *   unselects.
  * - **The number check reads what the model was shown.** The edit stores the
  *   exact item text it sent (`item_texts.model_input` + SHA-256); until the
  *   first edit that column holds the text the edit will use.
@@ -64,13 +68,15 @@ import {
   FRONTIER_LANES,
   FRONTIER_MODEL_FLAGS,
   FRONTIER_NOTICE_KINDS,
-  FRONTIER_PREPRINT_LANE_SOURCE_TYPES,
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   doiOf,
   frontierAuthorityScore,
   FRONTIER_MENTION_REGISTRY_IDS,
   FRONTIER_MENTION_SOURCE_TYPES,
   frontierEvidenceFromPublicationTypes,
+  frontierMixGenre,
+  frontierMixSelect,
+  frontierMixSourceCap,
   frontierSourceDisplayName,
   frontierUpdateKind,
   isFrontierMastheadTitle,
@@ -151,7 +157,11 @@ export function frontierProviderUnavailable(error) {
 }
 /** The 72-hour rule of `timeline_at` (plan §6.1). */
 export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
-/** A lane with an item at or above this score today gets at least one selected. */
+/**
+ * The lowest score a place under the selection line is given from (the genre mix's floors, the preprint lane, a Chinese
+ * item under the line, a paper in its rewrite's place: `@evimed/domain` `FRONTIER_MIX_FLOOR_SCORE`). It was the lane
+ * floor's until the genre mix replaced the lane floor (ct-mix 2026-10-24).
+ */
 export const FRONTIER_LANE_FLOOR_SCORE = 60;
 /**
  * The selection line when `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` is unset
@@ -229,6 +239,8 @@ const TITLE_DUPLICATE_WINDOW_MS = 7 * DAY;
 const TITLE_DUPLICATE_SIMILARITY = 0.85;
 const TITLE_DUPLICATE_MIN_CHARS = 24;
 const SELECT_LOCK = "evimed-frontier-select";
+/** Days one round's mix decides at most: today and the most recent days the round published or re-scored an item on. */
+const FRONTIER_MIX_DAYS_PER_ROUND = 8;
 
 /**
  * Crossref `update-to` types → the link kind and the flag it puts on the work
@@ -727,7 +739,8 @@ function orderedFlags(flags) {
 /**
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
- *             preprintLane: number, translated: number, tidied: number, tidyDropped: number, leads: number, insights: number, retagged: number }} FrontierBatchSummary
+ *             preprintLane: number, genreFloor: number, zhTarget: number, eventPrimary: number, translated: number, tidied: number,
+ *             tidyDropped: number, leads: number, insights: number, retagged: number }} FrontierBatchSummary
  */
 
 export class FrontierPipeline {
@@ -789,6 +802,8 @@ export class FrontierPipeline {
       // The tag tree (`#retag`, `#score`): items tagged again, answers left without a usable row, calls that failed, candidates made.
       retagged: 0, retagSkipped: 0, retagFailures: 0, tagCandidatesCreated: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
+      // The day's mix (`#mix`): items it selected, by rule.
+      mix: /** @type {Record<string, number>} */ ({}),
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
       providerRefusedWaits: 0,
@@ -805,6 +820,8 @@ export class FrontierPipeline {
     this.lastBudget = null;
     /** @type {(FrontierBatchSummary & { at: string }) | null} */
     this.lastBatch = null;
+    /** Today's mix as the last round left it: the day's size, each group's floor, ceiling and count, the Chinese share. @type {any} */
+    this.lastMix = null;
   }
 
   /** The owner model spend is charged to (the editor's), or null. */
@@ -865,7 +882,8 @@ export class FrontierPipeline {
     this.policyRevisionId = policy.revisionId;
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
-      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0 };
+      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
+      translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
       const now = this.now();
@@ -878,8 +896,11 @@ export class FrontierPipeline {
       await this.#processItems(context);
       await this.#processOwedEdits(context);
       if (summary.published || summary.rescored) {
-        await this.#laneFloor(context);
-        summary.preprintLane += await this.#preprintLane(context);
+        const picked = await this.#mix(context);
+        summary.preprintLane += picked["preprint-lane"] ?? 0;
+        summary.genreFloor += picked["genre-floor"] ?? 0;
+        summary.zhTarget += picked["zh-target"] ?? 0;
+        summary.eventPrimary += picked["event-primary"] ?? 0;
       }
       await this.#fullText(context);
       await this.#tidy(context);
@@ -904,7 +925,7 @@ export class FrontierPipeline {
   status() {
     return {
       workerId: this.workerId, lastError: this.lastError, lastEmbedError: this.lastEmbedError,
-      lastBatch: this.lastBatch, budget: this.lastBudget, counters: structuredClone(this.counters),
+      lastBatch: this.lastBatch, budget: this.lastBudget, counters: structuredClone(this.counters), mix: this.lastMix,
       // The model is not asked until then: the provider refused for its balance.
       providerPausedUntil: this.providerPausedUntil !== null && this.providerPausedUntil > this.now().getTime()
         ? new Date(this.providerPausedUntil).toISOString() : null,
@@ -2044,19 +2065,6 @@ export class FrontierPipeline {
   }
 
   /**
-   * How many items of a source are selected on the item's day (safety alerts
-   * and operator pins do not count against the cap).
-   * @param {any} client @param {string} sourceId @param {Date} timelineAt
-   */
-  async #selectedToday(client, sourceId, timelineAt) {
-    const { start, end } = frontierDayWindow(timelineAt, this.timeZone);
-    const result = await client.query(`SELECT count(*)::integer AS selected FROM evimed_frontier.items
-      WHERE primary_source_id = $1 AND state = 'published' AND selected AND selected_rule IN ('threshold', 'lane-floor', 'preprint-lane')
-        AND timeline_at >= $2 AND timeline_at < $3`, [sourceId, start, end]);
-    return Number(result.rows[0]?.selected ?? 0);
-  }
-
-  /**
    * Publish a scored item (plan §10.3.1 step 10): visible now, its timeline
    * instant fixed for good, selected or not, searchable, and announced — the
    * change row and the content version in the same transaction.
@@ -2072,18 +2080,20 @@ export class FrontierPipeline {
       const linkFlags = await this.#linkFlags(client, item);
       const flags = orderedFlags([...new Set([...item.flags, ...linkFlags])]);
       const timelineAt = frontierTimelineAt(now, item.published_at);
+      // Only a safety alert is selected as it is published; every other selection is the day's mix, at the end of the round.
       const decision = frontierSelectionDecision({
         safetyAlert: item.safety_alert, verification: item.verification, scoreTotal: item.score_total,
         demoted: frontierEvidenceFromPublicationTypes(texts?.publication_types, { modelType: item.evidence_type }).demote, flags, source,
-        selectedToday: await this.#selectedToday(client, item.primary_source_id, timelineAt), threshold: this.threshold,
+        selectedToday: 0, threshold: this.threshold,
       });
-      if (decision.capped) this.counters.capped += 1;
-      if (decision.selected) this.counters.selected += 1;
+      const bypass = decision.rule === "safety-bypass";
+      if (bypass) this.counters.selected += 1;
+      this.#mixDay(context, timelineAt);
       await client.query(`UPDATE evimed_frontier.items SET state = 'published', visible_at = $2::timestamptz, timeline_at = $3::timestamptz,
           flags = $4, selected = $5::boolean, selected_rule = $6,
           selected_at = CASE WHEN $5::boolean THEN $2::timestamptz ELSE NULL END, lexemes = $7::tsvector,
           lease_owner = NULL, lease_until = NULL, attempts = 0, updated_at = clock_timestamp()
-        WHERE id = $1`, [itemId, now, timelineAt, flags, decision.selected, decision.rule, tsvectorLiteral(this.#lexemeText(item))]);
+        WHERE id = $1`, [itemId, now, timelineAt, flags, bypass, bypass ? decision.rule : null, tsvectorLiteral(this.#lexemeText(item))]);
       await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'published')", [itemId]);
       await bumpFrontierVersion(client);
       return true;
@@ -2091,8 +2101,8 @@ export class FrontierPipeline {
   }
 
   /**
-   * After a re-edit: a published item that now clears the bar is selected
-   * (never the reverse — selection is sticky).
+   * After a re-edit: a published item that is now a safety alert is selected (never the reverse — selection is sticky);
+   * any other item's day is handed to the round's mix, which decides it with the rest of its day.
    * @param {number} itemId @param {any} context
    */
   async #reselect(itemId, context) {
@@ -2100,15 +2110,17 @@ export class FrontierPipeline {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
       const item = (await client.query(`SELECT i.*, ${frontierBesideSelectedSql("i")} AS beside_selected FROM evimed_frontier.items i
         WHERE i.id = $1 FOR UPDATE OF i`, [itemId])).rows[0];
-      if (!item || item.state !== "published" || item.selected || item.beside_selected) return;
+      if (!item || item.state !== "published" || item.selected) return;
+      this.#mixDay(context, new Date(item.timeline_at));
+      if (item.beside_selected) return;
       const source = (await client.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id])).rows[0];
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
       const decision = frontierSelectionDecision({
         safetyAlert: item.safety_alert, verification: item.verification, scoreTotal: item.score_total,
         demoted: frontierEvidenceFromPublicationTypes(texts?.publication_types, { modelType: item.evidence_type }).demote, flags: item.flags, source,
-        selectedToday: await this.#selectedToday(client, item.primary_source_id, new Date(item.timeline_at)), threshold: this.threshold,
+        selectedToday: 0, threshold: this.threshold,
       });
-      if (!decision.selected) return;
+      if (decision.rule !== "safety-bypass") return;
       this.counters.selected += 1;
       await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = $2, selected_at = $3,
         updated_at = clock_timestamp() WHERE id = $1`, [itemId, decision.rule, context.now]);
@@ -2118,86 +2130,97 @@ export class FrontierPipeline {
   }
 
   /**
-   * The lane floor (plan §6.3): at the end of a round, every lane with a
-   * verified item at or above 60 today and nothing selected gets its best one.
-   * @param {any} context
+   * Hand an item's day to the round's mix (`#mix`): the days published or re-scored items fall on, each with an instant in it.
+   * @param {any} context @param {Date} timelineAt
    */
-  async #laneFloor(context) {
-    const { now } = context;
-    const { start, end } = frontierDayWindow(now, this.timeZone);
-    await this.database.transaction(async (/** @type {any} */ client) => {
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
-      const candidates = await client.query(`SELECT ranked.id, ranked.lane, ranked.evidence_type, t.publication_types FROM (
-          SELECT i.id, i.lane, i.evidence_type, row_number() OVER (PARTITION BY i.lane ORDER BY i.score_total DESC, i.id) AS rank
-          FROM evimed_frontier.items i
-          WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2 AND i.score_total >= $3
-            AND i.verification IN ('passed', 'repaired') AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
-            AND NOT (i.source_type = 'journal' AND 'no-abstract' = ANY(i.flags)) AND NOT ${frontierBesideSelectedSql("i")}
-            AND NOT EXISTS (SELECT 1 FROM evimed_frontier.items s WHERE s.state = 'published' AND s.selected AND s.lane = i.lane
-              AND s.timeline_at >= $1 AND s.timeline_at < $2)) AS ranked
-        LEFT JOIN evimed_frontier.item_texts t ON t.item_id = ranked.id
-        WHERE ranked.rank <= 5 ORDER BY ranked.lane, ranked.rank`, [start, end, FRONTIER_LANE_FLOOR_SCORE]);
-      const chosen = new Map();
-      for (const row of candidates.rows) {
-        if (chosen.has(row.lane) || frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote) continue;
-        chosen.set(row.lane, Number(row.id));
-      }
-      for (const id of chosen.values()) {
-        await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = 'lane-floor', selected_at = $2,
-          updated_at = clock_timestamp() WHERE id = $1`, [id, now]);
-        await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'selected')", [id]);
-      }
-      if (chosen.size) {
-        this.counters.laneFloor += chosen.size;
-        await bumpFrontierVersion(client);
-      }
-    });
+  #mixDay(context, timelineAt) {
+    if (!context || !(timelineAt instanceof Date) || !Number.isFinite(timelineAt.getTime())) return;
+    if (!(context.mixDays instanceof Map)) context.mixDays = new Map();
+    const { day } = frontierDayWindow(timelineAt, this.timeZone);
+    if (!context.mixDays.has(day)) context.mixDays.set(day, timelineAt);
   }
 
   /**
-   * The preprint lane (owner ruling 2026-10-10, review B D-08; the numbers and the reasoning are
-   * `FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT`'s). At the end of a round, a day (the lane floor's) that has selected fewer than
-   * `preprintLanePerDay` items of the classes that cannot reach the line by arithmetic - preprint servers and company newsrooms
-   * (`FRONTIER_PREPRINT_LANE_SOURCE_TYPES`) - takes the best of the rest: verified, not retracted, not a letter or a comment, with a
-   * Chinese summary (the daily and the weekly carry no item without one), the highest total first, at or above the floor.
-   * Everything the day already selected of those classes counts against the places, by whatever rule, so the lane tops a day up to
-   * the number and never past it; an operator's pin does not count. Sticky like every selection: a better item that comes later
-   * finds the places taken. The item keeps its source class (`preprint` / `company`, and the flag that says it is unreviewed or a
-   * press release); only `selected_rule` says why it is here.
-   * @param {any} context @returns {Promise<number>} how many items it selected
+   * The day's mix (ct-mix 2026-10-24; the rules and their reasons are `@evimed/domain` `frontierMix.mjs`): at the end of a
+   * round, for today and every day the round published or re-scored an item on (the most recent `FRONTIER_MIX_DAYS_PER_ROUND`),
+   * the day's published items and the other reports of their events are read, `frontierMixSelect` picks what the day still
+   * selects, and the picks are written with their rule — `threshold`, `genre-floor`, `zh-target`, `preprint-lane` or
+   * `event-primary`. It replaced the lane floor and the preprint lane (whose places are now inside the research group).
+   * Sticky like every selection: what a day already selected counts against its groups and sources and is never taken back.
+   * @param {any} context @returns {Promise<Record<string, number>>} the picks by rule
    */
-  async #preprintLane(context) {
-    if (this.preprintLanePerDay < 1) return 0;
+  async #mix(context) {
     const { now } = context;
-    const { start, end } = frontierDayWindow(now, this.timeZone);
-    return this.database.transaction(async (/** @type {any} */ client) => {
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
-      const taken = Number((await client.query(`SELECT count(*)::integer AS taken FROM evimed_frontier.items
-        WHERE state = 'published' AND selected AND selected_rule IN ('threshold', 'lane-floor', 'preprint-lane')
-          AND source_type = ANY($1) AND timeline_at >= $2 AND timeline_at < $3`,
-      [FRONTIER_PREPRINT_LANE_SOURCE_TYPES, start, end])).rows[0]?.taken ?? 0);
-      const room = this.preprintLanePerDay - taken;
-      if (room < 1) return 0;
-      // A few more than the room: a letter or a comment is dropped below, as the lane floor drops them.
-      const candidates = await client.query(`SELECT i.id, i.evidence_type, t.publication_types FROM evimed_frontier.items i
-        JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
-        LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
-        WHERE i.state = 'published' AND i.source_type = ANY($1) AND i.timeline_at >= $2 AND i.timeline_at < $3
-          AND i.score_total >= $4 AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
-          AND i.verification IN ('passed', 'repaired') AND length(btrim(coalesce(i.summary_zh, ''))) > 0 AND NOT ${frontierBesideSelectedSql("i")}
-        ORDER BY i.score_total DESC, i.id LIMIT $5`,
-      [FRONTIER_PREPRINT_LANE_SOURCE_TYPES, start, end, this.preprintLaneMinScore, room + 5]);
-      const chosen = candidates.rows
-        .filter((/** @type {any} */ row) => !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote)
-        .slice(0, room);
-      for (const row of chosen) {
-        await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = 'preprint-lane', selected_at = $2,
-          updated_at = clock_timestamp() WHERE id = $1`, [row.id, now]);
-        await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'selected')", [row.id]);
-      }
-      if (chosen.length) await bumpFrontierVersion(client);
-      return chosen.length;
-    });
+    const days = new Map(context.mixDays instanceof Map ? context.mixDays : []);
+    const today = frontierDayWindow(now, this.timeZone);
+    if (!days.has(today.day)) days.set(today.day, now);
+    /** @type {Record<string, number>} */
+    const picked = {};
+    for (const [day, at] of [...days.entries()].sort(([a], [b]) => b.localeCompare(a)).slice(0, FRONTIER_MIX_DAYS_PER_ROUND)) {
+      const { start, end } = frontierDayWindow(at, this.timeZone);
+      await this.database.transaction(async (/** @type {any} */ client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
+        const rows = (await client.query(`SELECT i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags,
+            i.safety_alert, i.lane, i.lang, i.title_raw, i.score_total, i.verification, i.selected, i.selected_rule,
+            i.primary_source_id, i.event_id, length(btrim(coalesce(i.summary_zh, ''))) > 0 AS summarized,
+            s.authority AS source_authority, s.source_type AS source_source_type, t.publication_types,
+            ${frontierBesideSelectedSql("i")} AS beside_selected
+          FROM evimed_frontier.items i
+          JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+          LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+          WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2`, [start, end])).rows;
+        if (!rows.length) return;
+        const eventIds = [...new Set(rows.map((/** @type {any} */ row) => row.event_id).filter((id) => id != null).map(String))];
+        /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null }>>} */
+        const events = {};
+        if (eventIds.length) {
+          const members = (await client.query(`SELECT ei.event_id, i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type,
+              i.flags, i.safety_alert, i.lane
+            FROM evimed_frontier.event_items ei
+            JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+            JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+            WHERE ei.event_id = ANY($1::bigint[])`, [eventIds])).rows;
+          for (const member of members) {
+            const key = String(member.event_id);
+            const list = events[key] ?? [];
+            list.push({ id: String(member.id), genre: frontierMixGenre(member), evidenceType: member.evidence_type ?? null });
+            events[key] = list;
+          }
+        }
+        const candidates = rows.map((/** @type {any} */ row) => {
+          const flags = Array.isArray(row.flags) ? row.flags : [];
+          const source = { source_type: row.source_source_type, authority: row.source_authority };
+          return {
+            id: String(row.id), genre: frontierMixGenre(row),
+            zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw),
+            score: row.score_total == null ? null : Number(row.score_total),
+            selected: row.selected === true, rule: row.selected_rule ?? null, safety: row.safety_alert === true,
+            sourceId: String(row.primary_source_id), sourceCap: frontierMixSourceCap(source),
+            eligible: ["passed", "repaired"].includes(row.verification) && !flags.includes("retracted")
+              && !frontierJournalWithoutAbstract({ source, flags })
+              && !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote,
+            summarized: row.summarized === true, besideSelected: row.beside_selected === true,
+            eventId: row.event_id == null ? null : String(row.event_id),
+          };
+        });
+        const result = frontierMixSelect({ candidates, threshold: this.threshold, events,
+          preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore });
+        for (const pick of result.picks) {
+          const updated = await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = $2, selected_at = $3,
+              updated_at = clock_timestamp() WHERE id = $1 AND state = 'published' AND NOT selected`, [pick.id, pick.rule, now]);
+          if (!updated.rowCount) continue;
+          await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'selected')", [pick.id]);
+          picked[pick.rule] = (picked[pick.rule] ?? 0) + 1;
+        }
+        if (result.picks.length) await bumpFrontierVersion(client);
+        if (day === today.day) this.lastMix = { day, at: now.toISOString(), ...result.plan, excluded: result.excluded.length };
+      });
+    }
+    for (const [rule, count] of Object.entries(picked)) {
+      this.counters.mix[rule] = (this.counters.mix[rule] ?? 0) + count;
+      this.counters.selected += count;
+    }
+    return picked;
   }
 
   /**

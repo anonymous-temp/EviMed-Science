@@ -14,7 +14,7 @@
  *   place, each from the medium band up (`FRONTIER_MIX_FLOOR_SCORE`, the lane floor's 60 since launch) and only with a
  *   Chinese summary: a group short of its floor (`genre-floor`), a Chinese item within `FRONTIER_MIX_ZH_MARGIN` of the
  *   line while the day is under its Chinese share (`zh-target`), and the preprint lane's two places, folded into the
- *   research group (`preprint-lane`).
+ *   research group (`preprint-lane`) — a preprint under the line comes in by those places only.
  * - **A soft quota.** A group short of candidates is not padded with another group's items or with anything under the
  *   band: its places stay empty. News has no range of its own: it fills what the others leave of the day's size.
  * - **The day's size** (`FRONTIER_MIX_DAY`) is the number of non-safety items above the line the source caps allow,
@@ -319,7 +319,8 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
       if (groupCount[group] >= floors[group] || total >= size) break
       if (!taken.has(c.id) && sourceRoom(c)) take(c, 'threshold', group)
     }
-    for (const c of ranked(mine.filter((x) => !aboveLine(x) && inBand(x, floorScore)), spec.chineseFirst)) {
+    // A preprint under the line comes in only by the preprint lane's places (owner, 2026-10-10: up to two a day).
+    for (const c of ranked(mine.filter((x) => !aboveLine(x) && x.genre !== 'preprint' && inBand(x, floorScore)), spec.chineseFirst)) {
       if (groupCount[group] >= floors[group] || total >= size) break
       if (!taken.has(c.id) && sourceRoom(c)) take(c, 'genre-floor', group)
     }
@@ -344,7 +345,9 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
   }
   const boostOn = zhBelowTarget()
   const keyOf = (/** @type {FrontierMixCandidate} */ c) => Math.max(/** @type {number} */ (scoreOf(c) ?? 0), signal.get(c.id) ?? 0) + (boostOn && c.zh ? zhMargin : 0)
-  const rest = open.filter((c) => aboveLine(c) || (c.zh && inBand(c, Math.max(floorScore, threshold - zhMargin))) || (signal.has(c.id) && inBand(c, floorScore)))
+  const underLine = (/** @type {FrontierMixCandidate} */ c) => c.genre !== 'preprint'
+    && ((c.zh && inBand(c, Math.max(floorScore, threshold - zhMargin))) || (signal.has(c.id) && inBand(c, floorScore)))
+  const rest = open.filter((c) => aboveLine(c) || underLine(c))
     .sort((a, b) => keyOf(b) - keyOf(a) || String(a.id).localeCompare(String(b.id)))
   for (const c of rest) {
     if (total >= size) break
@@ -377,7 +380,7 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
       if (!english) continue
       const outScore = /** @type {number} */ (scoreOf(english.c))
       for (const c of ranked(open.filter((x) => x.zh && !taken.has(x.id) && frontierMixGroup(x.genre) === group
-        && inBand(x, Math.max(floorScore, threshold - zhMargin))), false)) {
+        && (aboveLine(x) || (x.genre !== 'preprint' && inBand(x, Math.max(floorScore, threshold - zhMargin))))), false)) {
         const freed = c.sourceId === english.c.sourceId ? 1 : 0
         if ((sourceCount.get(c.sourceId) ?? 0) - freed >= capOf(c)) continue
         const loss = outScore - /** @type {number} */ (scoreOf(c))
