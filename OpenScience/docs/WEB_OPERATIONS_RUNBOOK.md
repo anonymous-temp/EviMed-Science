@@ -1161,10 +1161,11 @@ whose commits all extracted nothing (report only). Counters: `open_science_nativ
 `…_rejection_judge_total{outcome}` (`over_budget` above 0 means `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS`, 40 per account
 per UTC day, is too low) and `…_consolidation_total{outcome}`. A removed line's normalised words (at most 400 characters) are kept on its
 rejection row so that a reworded repeat is caught; they are never shown and go with the rejection (the person's restatement, a reset,
-the account). The native 重读旧记忆 is off until it has been probed on an account with at least four memory files:
-`OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=true` for one deployment, watch `…_consolidation_total` go `submitted` then `completed`,
-read the revisions (`reason='consolidation'`, actor `engine`) in `evimed_memory.native_revisions`, undo one from the page, and record
-the task's real `result` as a fixture under `packages/contracts/openviking/fixtures/memory/`. No retention period is promised for a native
+the account). The native 重读旧记忆 is on by default since the lab probe of 2026-10-24 (the request accepted, the task done in 8 s, its result recorded
+as `packages/contracts/openviking/fixtures/memory/consolidation-task.json`): at most once per account every
+`OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS` (7) days and only after its files changed. Watch `…_consolidation_total` go
+`submitted` then `completed`, read the revisions (`reason='consolidation'`, actor `engine`) in `evimed_memory.native_revisions`, and undo
+one from the page; `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=false` turns it off. No retention period is promised for a native
 memory; none is configured.
 
 The capsule. The first start of a release that carries `capsuleOneCapsule.mjs` writes one stderr line per account with something to fold
