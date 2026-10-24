@@ -156,6 +156,10 @@ function Member({
         {label:"分类说明",value:item.expression.rationale ?? "未记录"},
         {label:"明确推荐顺位",value:item.expression.explicitPosition ?? "未明确"},
         {label:"顺位原文",value:item.expression.positionQuote ?? "未陈述"},
+        ...(item.expression.nonrecommendationBasis ? [
+          {label:"不推荐的依据原文",value:item.expression.nonrecommendationBasis.evidenceQuote},
+          {label:"条件的依据原文",value:item.expression.nonrecommendationBasis.evidenceConditionQuote ?? "未陈述"},
+        ] : []),
         {label:"主张版本",value:item.expression.claimRefs.map(ref=>`${ref.claimId} · ${ref.claimVersion}`).join("；") || "未提供"},
       ]} />}
       {item.statement && (

@@ -73,3 +73,31 @@ test('C3 registry recount preserves immutable extraction identity; a new assessm
  assert.deepEqual(history.history.find(row=>row.version===originalVersion).assessment.judgeExtract.recommendationExpressions.items[0].state,'conditional');
  assert.equal(history.current.judgeExtract.recommendationExpressions.items[0].state,'unknown');
 });
+
+test('C3 SPEC repairs retain same-entity clinical support and explicit ordinal proof through real members, native freeze and export',opts,async()=>{
+ const claim={id:'c3-clinical',version:3,quote:'Alpha is contraindicated during pregnancy.',statement:'Alpha is contraindicated during pregnancy.',sourceKind:'label'};
+ const support={relation:'supports_nonrecommendation',entity:'Alpha',statementQuote:claim.quote,conditionQuote:'during pregnancy',claimId:claim.id,claimVersion:3,evidenceQuote:claim.quote,evidenceConditionQuote:'during pregnancy'};
+ const cases=[{id:'c3-supported',text:claim.quote,claims:[claim],statements:[{text:claim.quote,verdict:'correct',claim:'C1',evidence:claim.quote}],entities:[],item:{quote:claim.quote,entity:'Alpha',state:'reasonable_nonrecommendation',conditionQuote:'during pregnancy',claimRefs:[{claimId:claim.id,claimVersion:3}],nonrecommendationBasis:support}},
+ {id:'c3-order',text:'First choice: Alpha.',claims:[],statements:[],entities:[],item:{quote:'First choice: Alpha.',entity:'Alpha',state:'recommended',conditionQuote:null,claimRefs:[],explicitPosition:1,positionQuote:'First choice: Alpha.',positionToken:'First',positionKind:'explicit_recommendation_order'}},
+ {id:'c3-contained',text:'AlphaBeta is recommended.',claims:[],statements:[],entities:['AlphaBeta'],item:{quote:'AlphaBeta is recommended.',entity:'Alpha',state:'recommended',conditionQuote:null,claimRefs:[]}}];
+ for(const specimen of cases){
+  const input={owner:{userId:user.id,projectId:project.projectId},product,competitors:[],claims:specimen.claims,careFlags:[],question:{text:'Options?',pool:'P2'},answer:specimen.text};
+  const items=[{rationale:null,explicitPosition:null,positionQuote:null,...specimen.item},...(specimen.id==='c3-contained'?[{quote:specimen.text,entity:'AlphaBeta',state:'recommended',rationale:null,conditionQuote:null,claimRefs:[],explicitPosition:null,positionQuote:null}]:[])];
+  const judged=verifyJudgement({assessmentComplete:true,statements:specimen.statements,entities:specimen.entities,recommendationExpressions:{schemaVersion:1,rubric:'geo-recommendation-expression-v1',coverage:'complete',items}},buildJudgeInput(input),input);
+  const {facts}=factsOf({snapshot:{status:'valid',answerText:specimen.text,citations:[]},judged,registry,countedOwned:{},at:new Date('2026-10-04'),claims:specimen.claims});
+  await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES($1,$2,$3,'c3-r','c3-q','deepseek','2026-10-01','valid',$4,'{\"mode\":\"web\"}')",[specimen.id,user.id,project.id,specimen.text]);
+  await measure.writeFacts({id:specimen.id,userId:user.id,geoProjectId:project.id},facts);
+ }
+ const view=await service.analysis(user,project.id,{round:'c3-r',viewId:'V09'}),full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest});
+ const supported=full.rows.find(row=>row.dimensions.snapshotId==='c3-supported');assert.deepEqual(supported.dimensions.nonrecommendationBasis,support);
+ const member=supported.values.expressions.members,page=await service.analysisMembers(user,project.id,{selectionRef:member.selectionRef,...member.view,rowKey:member.rowKey,columnKey:member.columnKey,expectedDigest:member.expectedDigest});
+ assert.deepEqual(page.items[0].expression.nonrecommendationBasis,support);
+ assert.equal(page.items[0].expression.state,'reasonable_nonrecommendation');
+ const order=full.rows.find(row=>row.dimensions.snapshotId==='c3-order');assert.equal(order.dimensions.explicitPosition,1);assert.equal(order.dimensions.positionToken,'First');
+ assert.deepEqual(full.rows.filter(row=>row.dimensions.snapshotId==='c3-contained').map(row=>row.dimensions.entity),['AlphaBeta']);
+ const staged=await service.planContexts.stage(user,project.id,{requestKey:'c3-integrity-proof',sessionId:'c3-session',mode:'analysis',selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,intent:'explain'});
+ await service.planContexts.bind(user,{id:project.projectId,userId:user.id},{requestId:'c3-integrity-proof',sessionId:'c3-session',content:[{type:'text',text:'Explain these specific supported expressions.'}],geoPlanContext:{referenceId:staged.referenceId}});
+ const native=[];for(let offset=0;offset<full.page.total;offset+=20)native.push(...(await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,offset,limit:20})).rows);assert.deepEqual(native,full.rows);
+ const report=freezeGeoAnalysisDocument(full);assert.ok(report.typedTable.rows.some(row=>row.dimensions.includes('supports_nonrecommendation')));assert.ok(report.canonicalMarkdown.includes('positionToken'));
+ if(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR}/document.json`,JSON.stringify({...report,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
+});

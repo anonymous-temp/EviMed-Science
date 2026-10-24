@@ -14,3 +14,13 @@ it('links exact preserved expressions and assessment history while retaining the
  expect(screen.getByRole('link',{name:'查看这条表达的判定历史'})).toHaveAttribute('href',`/app/geo/g/answers/answer1?round=r1&engines=kimi&assessmentVersion=${version}#geo-judgment-history`);
  expect(screen.getByRole('link',{name:'查看原始回答与依据'})).toHaveAttribute('href','/app/geo/g/answers/answer1?round=r1&engines=kimi');
 });
+
+it('shows the preserved clinical condition basis for reasonable nonrecommendation',async()=>{
+ const member:GeoAnalysisMembers={selectionRef:'gsel_support',view:{viewId:'V09'},rowKey:'support',columnKey:'expressions',expectedDigest:'support',unit:'expressions',total:1,exact:true};
+ read.mockResolvedValue({unit:'expressions',total:1,nextOffset:null,digest:'support',items:[{id:'supported',unit:'expressions',snapshotId:'answer-support',expression:{quote:'Alpha is contraindicated during pregnancy.',entity:'Alpha',state:'reasonable_nonrecommendation',conditionQuote:'during pregnancy',claimRefs:[{claimId:'c1',claimVersion:3}],explicitPosition:null,positionQuote:null,nonrecommendationBasis:{relation:'supports_nonrecommendation',entity:'Alpha',statementQuote:'Alpha is contraindicated during pregnancy.',conditionQuote:'during pregnancy',claimId:'c1',claimVersion:3,evidenceQuote:'Source confirms Alpha is contraindicated during pregnancy.',evidenceConditionQuote:'during pregnancy'}}}]});
+ render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member} onClose={()=>{}}/></MemoryRouter>);
+ expect(await screen.findByText('合理不推荐')).toBeVisible();
+ expect(screen.getByText('不推荐的依据原文')).toBeVisible();
+ expect(screen.getByText('Source confirms Alpha is contraindicated during pregnancy.')).toBeVisible();
+ expect(screen.getByText('条件的依据原文')).toBeVisible();
+});

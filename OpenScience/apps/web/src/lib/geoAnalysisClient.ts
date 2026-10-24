@@ -137,7 +137,11 @@ export interface GeoAnalysisMemberItem {
   assessmentVersion?: string | null;
   questionVersion?: number;
   registryKey?: string | null;
-  expression?: { rationale?: string | null; quote: string; entity: string | null; state: string; conditionQuote: string | null; explicitPosition: number | null; positionQuote: string | null; claimRefs: Array<{claimId: string; claimVersion: number}> };
+  expression?: { rationale?: string | null; quote: string; entity: string | null; state: string; conditionQuote: string | null; explicitPosition: number | null; positionQuote: string | null;
+    positionToken?: string | null;
+    positionKind?: "explicit_recommendation_order" | null;
+    nonrecommendationBasis?: {statementQuote:string;entity:string;conditionQuote:string|null;claimId:string;claimVersion:number;evidenceQuote:string;evidenceConditionQuote:string|null;relation:"supports_nonrecommendation"} | null;
+    claimRefs: Array<{claimId: string; claimVersion: number}> };
   statement?: {
     text: string;
     verdict: string;

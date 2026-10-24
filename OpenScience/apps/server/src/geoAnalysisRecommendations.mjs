@@ -70,7 +70,8 @@ export function buildGeoRecommendationAnalysis(selected, _view, _context = {}) {
   for (const item of expressions) add({ kind: 'expression', category: item.expression.state, snapshotId: item.snapshotId, assessmentVersion: item.assessmentVersion, assessmentPayloadDigest: item.assessmentPayloadDigest,
     questionVersion: item.questionVersion, registryKey: item.registryKey, quoteOccurrence: item.expression.answerOffset, entity: item.expression.entity,
     quote: item.expression.quote, conditionQuote: item.expression.conditionQuote ?? null, rationale: item.expression.rationale ?? null, rubric: item.rubric, explicitPosition: item.expression.explicitPosition ?? null,
-    positionQuote: item.expression.positionQuote ?? null, claimRefs: item.expression.claimRefs ?? [], legacy: item.legacy, coverage: item.coverage },
+    positionQuote: item.expression.positionQuote ?? null, positionToken: item.expression.positionToken ?? null, positionKind: item.expression.positionKind ?? null, nonrecommendationBasis: item.expression.nonrecommendationBasis ?? null,
+    claimRefs: item.expression.claimRefs ?? [], legacy: item.legacy, coverage: item.coverage },
   `${labels[item.expression.state]} · ${item.expression.entity ?? '对象未保留'} · ${item.expression.quote}`, { expressions: cell([item], 'expressions'), answers: cell(answers.filter(answer => answer.id === item.snapshotId), 'answers') });
   if (rows.length > 20000) throw new HttpError(422, 'geo_read_filter_invalid', 'Narrow the recommendation scope to at most 20,000 rows.');
   const chartCells = rows.filter(row => row.dimensions.kind === 'distribution' && states.includes(row.dimensions.category)).map(row => ({ rowKey: row.key, columnKey: 'expressions', label: row.label, ...row.values.expressions, engine: null, groupId: null, setVersion: null }));

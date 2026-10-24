@@ -151,6 +151,7 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "12. assessmentComplete：是否已处理所展示回答的全部适用陈述、推荐及安全信息。仍有未覆盖内容、触及条数上限或无法完成提取时为 false；逐条列出 unverifiable 不等于未处理。不得从正确的局部推断整体正确。",
   "13. clinicalApplicability：输出 {schemaVersion:1,rubric:geo-clinical-applicability-v1,status:applicable/not_applicable/unknown,quote,reason}。not_applicable 仅表示完整回答不包含可评估的临床陈述，例如纯导航或格式说明；quote 必须逐字来自回答，reason 说明判断依据。用药安全建议、合理不推荐、超出某人群适用范围、主张库无依据的临床内容仍属于 applicable，必须提取陈述，不得以 not_applicable 代替 unverifiable。拒答、部分覆盖或不能确认时用 unknown。只评价是否含临床陈述，不更改正确性与指标分母。",
   "14. recommendationExpressions：同一次阅读中提取全部药品表达，最多 60 条，输出 {schemaVersion:1,rubric:geo-recommendation-expression-v1,coverage:complete/partial/unknown,items:[{quote,entity,state,conditionQuote,rationale,claimRefs,explicitPosition,positionQuote}]}。quote 逐字来自所展示回答，entity 是片段内药名原写法且来自登记名称或 entities。state 为 recommended（推荐选用）、conditional（条件推荐，conditionQuote 逐字保留条件）、reasonable_nonrecommendation（主张库有依据的合理不推荐，必须也提取对应正确 statements 并给真实 claimId/claimVersion）、mention_only（列表、单纯提及、比较）、unknown（无依据的不推荐或无法判断）。claimRefs 为 [{claimId,claimVersion}]，只用给定真实主张和版本，没有给空数组。无药名的转介和拒答不是推荐。多药同句逐药判断推荐与否定；同药不同条件分别保留。rationale 可为 null，缺少依据绝不判合理。explicitPosition 只在原文明说推荐顺位时为正整数，positionQuote 逐字来自 quote 且含药名；列表或提及顺序不能推出顺位，无明确顺位两项为 null。conditionQuote 无条件时为 null。未覆盖全文、触及上限或提取不全为 partial，不可据局部宣布无提及；不知道为 unknown。不得改变 recommendations、临床正确性或 clinicalApplicability 来填分类。",
+  "15. 表达关联核对：recommendationExpressions.items 另有 nonrecommendationBasis、positionToken、positionKind。合理不推荐必须给 nonrecommendationBasis={relation:supports_nonrecommendation,entity,statementQuote,conditionQuote,claimId,claimVersion,evidenceQuote,evidenceConditionQuote}：statementQuote 必须与该表达 quote 及一条已判 correct 的 statements.text 完全相同，entity 必须是该陈述不推荐的同一药品；不能用包含另一药品或另一事实的宽引文借用依据。同一药品的储存、价格等无关事实不能证明临床不推荐合理。claimId/version 必须等于 claimRefs 中的准确版本，evidenceQuote 等于该正确陈述的 evidence 且逐字来自所给主张；conditionQuote 必须与表达条件相同，evidenceConditionQuote 是证据中支持该条件的逐字片段，无条件时为 null。必须由你判断证据确实支持该药品在该条件下不推荐，而非只核对药名出现；不确定、条件不符或资料不足一律 unknown、nonrecommendationBasis:null。quote 不能精确拆到同一准确陈述时也保留 unknown。其他类别 nonrecommendationBasis:null。positionKind 由你区分 explicit_recommendation_order（明确推荐顺序）、mention_order（提及或列表顺序）、unknown；只有明确推荐顺序才可给顺位。推荐顺位另给 positionToken，逐字摘录 positionQuote 内对应数字或序数（如 First、99th、第十二、第12位）；它必须表达同一药品的明确推荐顺位并与 explicitPosition 一致。positionQuote 只摘该顺位和该药品的片段，不混入另一药品的顺位。单纯编号或提及顺序、没有可核对数字/序数时 explicitPosition、positionQuote、positionToken 均为 null。不要为满足结构而重新判定临床正确性。",
   "输出格式（键名固定）：",
   "{\"assessmentComplete\":false,\"clinicalApplicability\":{\"schemaVersion\":1,\"rubric\":\"geo-clinical-applicability-v1\",\"status\":\"unknown\",\"quote\":\"\",\"reason\":\"\"},\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"recommendationExpressions\":{\"schemaVersion\":1,\"rubric\":\"geo-recommendation-expression-v1\",\"coverage\":\"unknown\",\"items\":[]},\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
 ].join("\n");
@@ -514,7 +515,8 @@ export function verifyJudgement(answer, built, input) {
     if (present(name)) entities.push(name);
     else dropped.push({ what: "entity", reason: absent(name), text: name.slice(0, 100) });
   }
-  const knownEntities = new Set([...brandRegistry(input.product, input.competitors)
+  const registeredEntities = brandRegistry(input.product, input.competitors);
+  const knownEntities = new Set([...registeredEntities
     .flatMap((entry) => [...entry.aliases, ...(entry.genericAliases ?? [])]), ...entities.map(foldText)]);
   const recommendations = [];
   for (const raw of (Array.isArray(answer.recommendations) ? answer.recommendations : []).slice(0, LIMITS.recommendations)) {
@@ -593,7 +595,7 @@ export function verifyJudgement(answer, built, input) {
     statements,
     entities,
     recommendations,
-    ...(Object.hasOwn(answer, "recommendationExpressions") ? { recommendationExpressions: verifyRecommendationExpressions(answer.recommendationExpressions, built, knownEntities, statements, answer.refusal === true, judgementCoverage.status !== "complete") } : {}),
+    ...(Object.hasOwn(answer, "recommendationExpressions") ? { recommendationExpressions: verifyRecommendationExpressions(answer.recommendationExpressions, built, knownEntities, registeredEntities, statements, answer.refusal === true, judgementCoverage.status !== "complete") } : {}),
     careHint: answer.careHint === true,
     redFlagExpected: expectedIds.map((id) => /** @type {string} */ (flags.get(id))),
     redFlagHits: hitIds.map((id) => /** @type {string} */ (flags.get(id))),
@@ -603,11 +605,38 @@ export function verifyJudgement(answer, built, input) {
   };
 }
 
+/** Literal entity ownership uses the parser's longest-alias rule, plus Latin token boundaries.
+ * @param {string} text @param {Set<string>} knownEntities
+ */
+function expressionEntitySpans(text, knownEntities) {
+  const folded = foldText(text), word = /[\p{Script=Latin}\p{N}_]/u;
+  return matchedMentions(folded, [...knownEntities]).filter(span =>
+    !(word.test(span.alias[0]) && word.test(folded[span.start - 1] ?? ""))
+    && !(word.test(span.alias.at(-1) ?? "") && word.test(folded[span.end] ?? "")));
+}
+
+/** Closed numeric/ordinal notation only; whether it is recommendation order is the model's judgment.
+ * @param {unknown} value
+ */
+function recommendationOrdinal(value) {
+  if (typeof value !== "string" || !value || value.length > 30) return null;
+  const token = foldText(value);
+  const english = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"];
+  if (english.includes(token)) return english.indexOf(token) + 1;
+  const digits = /^(\d{1,3})(st|nd|rd|th)?$/u.exec(token);
+  if (digits) {
+    const n = Number(digits[1]), suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th");
+    return !digits[2] || digits[2] === suffix ? n : null;
+  }
+  const chinese = /^第([零〇一二两三四五六七八九十百\d]{1,4})(?:名|位)?$/u.exec(token);
+  return chinese ? /^\d+$/u.test(chinese[1]) ? Number(chinese[1]) : chineseNumber(chinese[1]) : null;
+}
+
 /** Verify the optional extraction independently of clinical completeness. Semantics remain the model's.
  * @param {any} raw @param {ReturnType<typeof buildJudgeInput>} built
- * @param {Set<string>} knownEntities @param {GeoVerifiedStatement[]} statements @param {boolean} refusal @param {boolean} incomplete
+ * @param {Set<string>} knownEntities @param {ReturnType<typeof brandRegistry>} registry @param {GeoVerifiedStatement[]} statements @param {boolean} refusal @param {boolean} incomplete
  */
-function verifyRecommendationExpressions(raw, built, knownEntities, statements, refusal, incomplete) {
+function verifyRecommendationExpressions(raw, built, knownEntities, registry, statements, refusal, incomplete) {
   const base = { schemaVersion: 1, rubric: "geo-recommendation-expression-v1" };
   const states = ["recommended", "conditional", "reasonable_nonrecommendation", "mention_only", "unknown"];
   const reasons = [];
@@ -618,9 +647,24 @@ function verifyRecommendationExpressions(raw, built, knownEntities, statements, 
   if (incomplete) reasons.push("assessment_incomplete");
   if (raw.items.length >= 60) reasons.push("expression_limit_reached");
   const items = [], seen = new Set();
+  const owned = expressionEntitySpans(built.shown, knownEntities);
+  const sameEntity = (alias, entity) => alias === foldText(entity) || registry.some(entry => {
+    const aliases = [...entry.aliases, ...(entry.genericAliases ?? [])];
+    return aliases.includes(alias) && aliases.includes(foldText(entity));
+  });
+  // A quote carved out of a longer name cannot create an independent occurrence of the short name.
+  const entityOffsets = (quote, entity) => {
+    const local = expressionEntitySpans(quote, knownEntities).filter(span => span.alias === foldText(entity));
+    const offsets = [];
+    for (let offset = built.shown.indexOf(quote); offset !== -1; offset = built.shown.indexOf(quote, offset + quote.length)) {
+      const start = foldText(built.shown.slice(0, offset)).length;
+      if (local.some(span => owned.some(global => global.alias === span.alias && global.start === start + span.start && global.end === start + span.end))) offsets.push(offset);
+    }
+    return offsets;
+  };
   for (const item of raw.items.slice(0, 60)) {
     if (!item || typeof item.quote !== "string" || !item.quote.trim() || item.quote.length > 8000 || !built.shown.includes(item.quote)
-      || typeof item.entity !== "string" || !item.entity || !item.quote.includes(item.entity) || !knownEntities.has(foldText(item.entity))
+      || typeof item.entity !== "string" || !item.entity || !item.quote.includes(item.entity) || !knownEntities.has(foldText(item.entity)) || !entityOffsets(item.quote, item.entity).length
       || !states.includes(item.state) || !Array.isArray(item.claimRefs) || item.claimRefs.length > 30
       || !(item.rationale === null || typeof item.rationale === "string" && item.rationale.length <= 1200)
       || !(item.conditionQuote === null || typeof item.conditionQuote === "string" && item.conditionQuote.length > 0 && item.quote.includes(item.conditionQuote))
@@ -630,24 +674,39 @@ function verifyRecommendationExpressions(raw, built, knownEntities, statements, 
     const refs = item.claimRefs.filter(ref => ref && typeof ref.claimId === "string" && Number.isInteger(ref.claimVersion) && ref.claimVersion > 0
       && built.claims.some(claim => claim.id === ref.claimId && claim.version === ref.claimVersion && String(claim.quote ?? "").trim()));
     if (refs.length !== item.claimRefs.length) reasons.push("expression_claim_unknown");
-    const supported = refs.some(ref => statements.some(statement => statement.verdict === "correct" && statement.claimId === ref.claimId
-      && statement.claimVersion === ref.claimVersion && item.quote.includes(statement.text) && statement.evidence));
+    const basis = item.nonrecommendationBasis;
+    const supported = item.state === "reasonable_nonrecommendation" && basis?.relation === "supports_nonrecommendation" && basis.entity === item.entity && basis.statementQuote === item.quote
+      && basis.conditionQuote === item.conditionQuote && refs.some(ref => ref.claimId === basis.claimId && ref.claimVersion === basis.claimVersion
+        && statements.some(statement => statement.verdict === "correct" && statement.claimId === ref.claimId && statement.claimVersion === ref.claimVersion
+          && statement.text === basis.statementQuote && statement.evidence === basis.evidenceQuote
+          && built.claims.some(claim => claim.id === ref.claimId && claim.version === ref.claimVersion
+            && typeof basis.evidenceQuote === "string" && basis.evidenceQuote.length >= EVIDENCE_MIN_CHARS && String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS).includes(basis.evidenceQuote)
+            && (item.conditionQuote === null ? basis.evidenceConditionQuote == null : typeof basis.evidenceConditionQuote === "string" && basis.evidenceConditionQuote.length > 0 && basis.evidenceQuote.includes(basis.evidenceConditionQuote))
+            && expressionEntitySpans(basis.evidenceQuote, knownEntities).every(span => sameEntity(span.alias, item.entity)))));
     const state = item.state === "reasonable_nonrecommendation" && !supported ? "unknown" : item.state;
     if (state !== item.state) reasons.push("nonrecommendation_basis_unverified");
-    const positionValid = ["recommended", "conditional"].includes(state) && Number.isInteger(item.explicitPosition) && item.explicitPosition > 0 && item.explicitPosition <= 100
-      && typeof item.positionQuote === "string" && item.positionQuote.length > 0 && item.quote.includes(item.positionQuote) && item.positionQuote.includes(item.entity);
+    const positionSpans = typeof item.positionQuote === "string" ? expressionEntitySpans(item.positionQuote, knownEntities) : [];
+    const positionTokens = typeof item.positionQuote === "string" && typeof item.positionToken === "string"
+      ? expressionEntitySpans(item.positionQuote, new Set([foldText(item.positionToken)])) : [];
+    const positionValid = item.positionKind === "explicit_recommendation_order" && ["recommended", "conditional"].includes(state) && Number.isInteger(item.explicitPosition) && item.explicitPosition > 0 && item.explicitPosition <= 100
+      && typeof item.positionQuote === "string" && item.positionQuote.length > 0 && item.quote.includes(item.positionQuote) && item.positionQuote.includes(item.entity)
+      && recommendationOrdinal(item.positionToken) === item.explicitPosition && typeof item.positionToken === "string" && item.positionQuote.includes(item.positionToken)
+      && entityOffsets(item.positionQuote, item.entity).length > 0
+      && positionTokens.some(token => positionSpans.every(entity => token.end <= entity.start || token.start >= entity.end))
+      && positionSpans.length > 0 && positionSpans.every(span => sameEntity(span.alias, item.entity));
     if ((item.explicitPosition != null || item.positionQuote != null) && !positionValid) reasons.push("expression_position_unverified");
-    const answerOffsets = [];
-    for (let offset = built.shown.indexOf(item.quote); offset !== -1; offset = built.shown.indexOf(item.quote, offset + item.quote.length)) answerOffsets.push(offset);
+    const answerOffsets = entityOffsets(item.quote, item.entity);
     const clean = { quote: item.quote, entity: item.entity, state, conditionQuote: item.conditionQuote, rationale: item.rationale,
       claimRefs: refs.map(ref => ({ claimId: ref.claimId, claimVersion: ref.claimVersion })),
-      explicitPosition: positionValid ? item.explicitPosition : null, positionQuote: positionValid ? item.positionQuote : null,
-      answerOffset: built.shown.indexOf(item.quote), answerOffsets };
+      nonrecommendationBasis: supported ? { relation: basis.relation, entity: basis.entity, statementQuote: basis.statementQuote, conditionQuote: basis.conditionQuote,
+        claimId: basis.claimId, claimVersion: basis.claimVersion, evidenceQuote: basis.evidenceQuote, evidenceConditionQuote: basis.evidenceConditionQuote ?? null } : null,
+      explicitPosition: positionValid ? item.explicitPosition : null, positionQuote: positionValid ? item.positionQuote : null, positionToken: positionValid ? item.positionToken : null, positionKind: positionValid ? item.positionKind : null,
+      answerOffset: answerOffsets[0], answerOffsets };
     const key = JSON.stringify([clean.quote, clean.entity, clean.conditionQuote]);
     if (!seen.has(key)) { seen.add(key); items.push(clean); }
     else {
       const previous = items.find(prior => JSON.stringify([prior.quote, prior.entity, prior.conditionQuote]) === key);
-      if (previous && previous.state !== clean.state) { previous.state = "unknown"; previous.explicitPosition = null; previous.positionQuote = null; reasons.push("expression_classification_conflict"); }
+      if (previous && previous.state !== clean.state) { previous.state = "unknown"; previous.explicitPosition = null; previous.positionQuote = null; previous.positionToken = null; previous.positionKind = null; previous.nonrecommendationBasis = null; reasons.push("expression_classification_conflict"); }
     }
   }
   const mentioned = matchedMentions(foldText(built.shown), [...knownEntities]);
