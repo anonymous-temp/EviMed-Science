@@ -211,7 +211,12 @@ RUN set -eu; \
 
 # The preset's system-trusted skill roots, and the copy of the preset under the
 # kernel's own root. Both are rebuilt from the skill trees the base already has,
-# and from the GEO method pack just copied.
+# and from the GEO method pack just copied. The tree is then detached as
+# install-runtime.sh's profile_seed does: a base built before 2026-10-24 has
+# these files hardlinked into its pnpm profile store, `cp -a` over an existing
+# file keeps its inode, and the skill catalogue exports only single-link files
+# (the build smoke's `evimedSkills/list` answered complete: false on the first
+# delta after that guard, 2026-10-24).
 RUN set -eux; \
   install -d -m 0755 /opt/evimed/socket/presets/evimed-universal/skills; \
   cp -a /opt/evimed/skills/core /opt/evimed/socket/presets/evimed-universal/skills/core; \
@@ -220,6 +225,12 @@ RUN set -eux; \
   cp -a /usr/local/share/evimed/skills/office /opt/evimed/socket/presets/evimed-universal/skills/office; \
   cp -a /opt/evimed/skills/community /opt/evimed/socket/presets/evimed-universal/skills/community; \
   cp -a /opt/evimed/skills/geo-private /opt/evimed/socket/presets/evimed-universal/skills/geo-private; \
+  skill_source=/opt/evimed/socket/presets/evimed-universal/skills; \
+  detached_skills="$(mktemp -d /opt/evimed/socket/presets/evimed-universal/.skills-detached.XXXXXX)"; \
+  cp -a --no-preserve=links "${skill_source}/." "${detached_skills}/"; \
+  chmod -R a+rX "${detached_skills}"; \
+  rm -rf "${skill_source}"; \
+  mv "${detached_skills}" "${skill_source}"; \
   chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
 
 # The preset is a row of the socket's own bundle patch since DSH 0.1.7 (see the
