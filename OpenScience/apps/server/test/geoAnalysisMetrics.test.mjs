@@ -131,3 +131,20 @@ test('round charts order same-day rounds by observed time rather than newest-fir
  assert.deepEqual(exported.typedTable.rows.filter(row=>row.period==='round').map(row=>JSON.parse(row.dimensions).roundId),points.map(row=>row.dimensions.roundId));
 
 });
+
+test('chart display metadata preserves exact row state, reason, group/version/pool and member identity',()=>{
+ for(const metricId of ['M-01','M-06','M-15']){
+  const input=fixture();input.rows=input.rows.filter(row=>row.groupId==='g1'&&row.engine==='deepseek');if(metricId==='M-01')input.rows=input.rows.slice(0,10);if(metricId==='M-15')for(const row of input.rows)row.pool='P4';input.computed=computeGeoSelection(input.rows,input.metricOptions);
+  const ctx=context();ctx.groups[0].name='Risk group · 原始分类';const view=presentGeoAnalysis(input,{viewId:metricId==='M-15'?'V05':'V04',metricId},ctx);
+  for(const cell of view.chart.cells){
+   const row=view.rows.find(row=>row.key===cell.rowKey),value=row.values[cell.columnKey];
+   assert.equal(cell.value,value.value);assert.equal(cell.state,value.state);assert.equal(cell.reason,value.reason??null);assert.equal(cell.unit,value.unit);assert.equal(cell.groupName,row.dimensions.groupName);
+   assert.deepEqual(cell.members,value.members);assert.equal(cell.members.expectedDigest,view.digest);
+   if(metricId==='M-15'){assert.equal(cell.groupName,'Risk group · 原始分类');assert.equal(cell.setVersion,1);assert.equal(cell.pool,'P4');}
+  }
+  const report=freezeGeoAnalysisDocument(view);assert.equal(report.cover.analysis.digest,view.digest);assert.deepEqual(report.cover.analysis.chart,view.chart);
+  const source=view.rows.find(row=>row.dimensions.engine==='deepseek').values.current;
+  if(metricId==='M-01'){assert.equal(source.value,0);assert.equal(source.state,'insufficient');assert.equal(source.members.total,10);}
+  if(metricId==='M-06'){assert.equal(source.state,'unjudged');assert.equal(source.reason,'not_adjudicated');}
+ }
+});

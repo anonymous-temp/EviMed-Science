@@ -304,3 +304,51 @@ test('same-day round chronology is canonical across authorized pages, exact memb
   const nativePage = await service.runtimeRead(project, 'analysis', { planContextRef: staged.referenceId, limit: 5, offset: 5 });
   assert.deepEqual(nativePage.rows.map(row => row.key), full.rows.slice(5, 10).map(row => row.key));
 });
+
+test('quality display metadata shares exact absent/floor cohorts and pool-qualified members with runtime and export', options, async () => {
+  const { freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } = await import('../src/geoAnalysis.mjs');
+  await store.query(`INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name)
+    VALUES('quality-g',$1,$2,11,'P4','Risk group · 原始分类')`, [user.id, project.id]);
+  const questions = Array.from({ length: 50 }, (_, index) => ({ id: `quality-q${index}`, text: `Risk question ${index}` }));
+  await store.query(`INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text)
+    SELECT q.id,$1,$2,'quality-g',11,'P4',q.text FROM jsonb_to_recordset($3::jsonb) AS q(id text,text text)`, [user.id, project.id, JSON.stringify(questions)]);
+  await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface)
+    VALUES('quality-r',$1,$2,'baseline','done',11,'{deepseek,kimi}','2026-10-06','{"mode":"web"}')`, [user.id, project.id]);
+  const addAnswers = async (batch) => {
+    await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+      SELECT 'answer-'||q.id,$1,$2,'quality-r',q.id,'deepseek','2026-10-06','valid','Preserved risk answer','{"mode":"web"}'
+      FROM jsonb_to_recordset($3::jsonb) AS q(id text)`, [user.id, project.id, JSON.stringify(batch)]);
+    await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,recommended_ours,statements,checks)
+      SELECT 'answer-'||q.id,$1,$2,'2026-10-06','[]',false,false,'[]','{"judgementCoverage":{"status":"complete"}}'
+      FROM jsonb_to_recordset($3::jsonb) AS q(id text)`, [user.id, project.id, JSON.stringify(batch)]);
+  };
+  await addAnswers(questions.slice(0, 10));
+  const thin = await service.analysis(user, project.id, { viewId: 'V04', metricId: 'M-01', round: 'quality-r', engines: ['deepseek', 'kimi'] });
+  assert.deepEqual(thin.chart.cells.map(cell => [cell.engine, cell.state, cell.value]), [['deepseek', 'insufficient', 0], ['kimi', 'no_data', null]]);
+  for (const row of thin.rows) {
+    const value = row.values.current;
+    const page = await service.analysisMembers(user, project.id, { ...value.members.view, selectionRef: value.members.selectionRef, rowKey: value.members.rowKey, columnKey: value.members.columnKey, expectedDigest: thin.digest, limit: 50 });
+    assert.equal(page.total, row.dimensions.engine === 'deepseek' ? 10 : 0);
+    const cell = thin.chart.cells.find(cell => cell.rowKey === row.key);
+    assert.equal(cell.reason, value.reason); assert.deepEqual(cell.members, value.members);
+  }
+  await addAnswers(questions.slice(10));
+  await assert.rejects(service.analysis(user, project.id, { ...thin.view, selectionRef: thin.selection.reference, expectedDigest: thin.digest }), error => error.status === 409);
+  const view = await service.analysis(user, project.id, { viewId: 'V05', metricId: 'M-15', round: 'quality-r', engines: ['deepseek', 'kimi'] });
+  const full = await freezeSelectedGeoAnalysis(store, project, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest });
+  const native = await service.runtimeRead(project, 'analysis', { ...view.view, selectionRef: view.selection.reference, expectedDigest: view.digest });
+  assert.deepEqual(native.rows, full.rows); assert.deepEqual(native.chart, full.chart);
+  for (const cell of full.chart.cells) {
+    assert.equal(cell.groupName, 'Risk group · 原始分类'); assert.equal(cell.setVersion, 11); assert.equal(cell.pool, 'P4');
+    const row = full.rows.find(row => row.key === cell.rowKey), value = row.values[cell.columnKey];
+    assert.equal(cell.reason, value.reason); assert.equal(cell.unit, value.unit); assert.equal(cell.value, value.value); assert.deepEqual(cell.members, value.members);
+    const members = await service.analysisMembers(user, project.id, { ...cell.members.view, selectionRef: cell.members.selectionRef, rowKey: cell.rowKey, columnKey: cell.columnKey, expectedDigest: full.digest, limit: 50 });
+    assert.deepEqual(members.items.map(item => item.id).sort(), cell.engine === 'deepseek' ? questions.map(question => `answer-${question.id}`).sort() : []);
+  }
+  const document = freezeGeoAnalysisDocument(full);
+  assert.deepEqual(document.cover.analysis.chart, full.chart);
+  assert.ok(document.typedTable.rows.every(row => JSON.parse(row.dimensions).groupName === 'Risk group · 原始分类' && JSON.parse(row.dimensions).pool === 'P4'));
+  const requests = [];
+  await service.selectedExport(user, project, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest, formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, { requestFrozen: async (...args) => { requests.push(args); return { id: 'quality-export' }; } });
+  assert.deepEqual(requests[0][1].typedTable, document.typedTable); assert.equal(requests[0][1].revision, view.digest);
+});

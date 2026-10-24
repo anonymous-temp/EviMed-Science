@@ -83,7 +83,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
     if (generic) {
       const row = {
         key: hash(dims), label: `当前配置通用名：${entityKey} · 提及回答 · ${prefix}`, metricId: null, dimensions: {
-          ...dims, unit: 'answers'
+          ...dims, groupName: groups.get(dims.groupId)?.name ?? null, unit: 'answers'
         }, values: {}, links: []
       };
       const observed = inputs.filter(item => item.status === 'valid'), eligible = observed.filter(item => item.facts?.judgeExtract?.genericMentions?.some(mention => mention.ours === true && (mention.name === entityKey || mention.matchedNames?.includes(foldText(entityKey)))));
@@ -113,7 +113,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
         dims, cell.metricId, cell.pool
       ]), row = {
         key, label: `${GEO_METRIC_LABELS_ZH[cell.metricId] ?? cell.metricId} · ${prefix}${cell.pool ? ` · ${cell.pool}` : ''}`, metricId: cell.metricId, dimensions: {
-          ...dims, pool: cell.pool, variant: cell.variant
+          ...dims, groupName: groups.get(dims.groupId)?.name ?? null, pool: cell.pool, variant: cell.variant
         }, values: {}, links: []
       };
       const input = cell.scope === 'engine' || cell.scope === 'pool_engine' || cell.metricId === 'M-20' ? computed.balance.deduped : computed.balance.rows;
@@ -159,7 +159,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
       }
     ], columns, rows, chart: {
       kind: view.viewId === 'V05' ? 'matrix' : 'bars', labels: rows.map(row => row.label), series: [], cells: rows.map(row => ({
-        rowKey: row.key, columnKey: generic ? 'mentioned' : 'current', label: row.label, groupId: row.dimensions.groupId, setVersion: row.dimensions.setVersion, engine: row.dimensions.engine, pool: row.dimensions.pool ?? null, value: row.values[generic ? 'mentioned' : 'current'].value, state: row.values[generic ? 'mentioned' : 'current'].state
+        rowKey: row.key, columnKey: generic ? 'mentioned' : 'current', label: row.label, groupId: row.dimensions.groupId, groupName: row.dimensions.groupName, setVersion: row.dimensions.setVersion, engine: row.dimensions.engine, pool: row.dimensions.pool ?? null, value: row.values[generic ? 'mentioned' : 'current'].value, state: row.values[generic ? 'mentioned' : 'current'].state, reason: row.values[generic ? 'mentioned' : 'current'].reason ?? null, unit: row.values[generic ? 'mentioned' : 'current'].unit
       }))
     }, memberItems, dependencies: [
       ...memberItems

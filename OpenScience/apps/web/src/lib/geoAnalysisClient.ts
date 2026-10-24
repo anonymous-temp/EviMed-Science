@@ -51,6 +51,7 @@ export interface GeoAnalysisRow {
     date?: string | null;
     engine?: string | null;
     groupId?: string | null;
+    groupName?: string | null;
     setVersion?: number | null;
     roundId?: string | null;
     roundLabel?: string | null;
@@ -67,7 +68,8 @@ export interface GeoAnalysisRow {
 export interface GeoAnalysisChartCell {
   rowKey: string; columnKey: string; label: string;
   groupId: string | null; setVersion: number | null; engine: string; pool?: string | null;
-  value: number | null; state: string; members?: GeoAnalysisMembers | null;
+  groupName?: string | null;
+  value: number | null; state: string; reason?: string | null; unit?: string; members?: GeoAnalysisMembers | null;
 }
 export interface GeoAnalysisView {
   chart?: {
