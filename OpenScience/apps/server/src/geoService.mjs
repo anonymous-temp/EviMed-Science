@@ -893,7 +893,7 @@ export class GeoService {
         typeAnswers.set(domain.kind, set);
       }
       view.summary = { domains, types: [...typeAnswers].map(([sourceKind, ids]) => ({ kind: sourceKind, citedAnswers: ids.size })),
-        urls: domains.flatMap(({ domain }) => pagesCited(answersCiting(answers, domain), domain).pages.map((page) => ({ domain, ...page }))), unit: "answers" };
+        urls: domains.flatMap(({ domain }) => pagesCited(answersCiting(answers, domain), domain, { limit: Infinity }).pages.map((page) => ({ domain, ...page }))), unit: "answers" };
     }
     if (kind === "clusters") {
       const versions = new Set(selected.rounds.map((entry) => Number(entry.set_version)).filter(Boolean));
@@ -1601,7 +1601,7 @@ export class GeoService {
       const questions = createHash("sha256").update(JSON.stringify([...new Set(observations.map((member) => member.questionId))].sort())).digest("hex").slice(0, 24);
       return coverage ? `${coverage};questions=${questions}` : null;
     };
-    const cited = pagesCited(citing, domain);
+    const cited = pagesCited(citing, domain, { limit: Infinity });
     const detail = new Map((citing.length === 0 ? [] : (await this.store.query(`SELECT s.id, q.text AS question_text,
         CASE WHEN f.failure_mode = 'wrong_ours' THEN s.answer_text END AS answer_text,
         CASE WHEN f.failure_mode = 'wrong_ours' THEN f.statements END AS statements

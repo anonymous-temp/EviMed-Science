@@ -52,3 +52,13 @@ describe("source detail refresh and navigation", () => {
     expect(screen.queryByRole("link", { name: /原修订的回答/ })).not.toBeInTheDocument();
   });
 });
+
+it('keeps page 251 reachable with the existing exact selected-source actions',async()=>{
+ const source=sourcesFilled.sources[0],detail=sourceDetailOf(source);
+ const pages=Array.from({length:251},(_,n)=>({url:`https://${source.domain}/s?id=${n+1}`,title:`Preserved page ${n+1}`,cited:1,wrongOurs:0}));
+ client.getGeoSource.mockResolvedValue({...detail,pages,pagesTotal:251,selection:{reference:'source-exact'}});
+ render(<MemoryRouter><GeoSourceDrawer geoId="g" project={geoProject()} source={source} engine="all" selectionRef="source-exact" focus={null} onClose={()=>{}}/></MemoryRouter>);
+ await userEvent.click(await screen.findByRole('button',{name:'显示全部 251 个'}));
+ expect(screen.getByRole('link',{name:/Preserved page 251/})).toHaveAttribute('href',pages[250].url);
+ expect(client.getGeoSource).toHaveBeenCalledWith('g',source.id,{selectionRef:'source-exact'});
+});

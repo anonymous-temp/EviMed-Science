@@ -48,3 +48,11 @@ test("the counts of the answers that cite a site are the row's tally over them",
   assert.equal(tallySources(answers).get("news.example.org")?.byEngine.kimi.cited, 1);
   assert.equal(citedDomain({ domain: "WWW.News.Example.org" }), "news.example.org");
 });
+
+test('a source exposes page 251 in the default complete universe and paginates only after ranking',()=>{
+ const citations=Array.from({length:251},(_,n)=>({url:`https://news.example/s?id=${n+1}`,domain:'news.example'}));
+ const input=[answer('one',citations),answer('two',[citations[250]])];
+ assert.equal(pagesCited(input,'news.example').pages.length,251);
+ assert.equal(pagesCited(input,'news.example',{limit:1,offset:250}).pages.length,1);
+ assert.equal(pagesCited(input,'news.example',{limit:1}).pages[0].url,citations[250].url);
+});

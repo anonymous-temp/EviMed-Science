@@ -132,3 +132,29 @@ it('V09 retains quoted conditions and independent units while staging the same s
  expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_c3'}}),'Explain preserved expressions');
  expect(screen.getByTestId('export')).toHaveTextContent('gsel_c3');
 });
+
+it('keeps source type, actual URL search and cooccurrence filters in the exact server descriptor',async()=>{
+ read.mockReset().mockResolvedValue({view:{viewId:'V18',sourceLevel:'page'},selection:{reference:'gsel_sources'},digest:'sources-digest',definition:{sourceTypes:['news','forum','unknown']},columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V18"/></MemoryRouter>);
+ fireEvent.click(screen.getByText('所选数据分析'));
+ fireEvent.click(await screen.findByRole('button',{name:'来源类型'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'forum'}));
+ await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V18',sourceType:'forum'}),0,undefined));
+ fireEvent.click(screen.getByRole('button',{name:'共同出现：全部引用回答'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'共同出现我方错误'}));
+ fireEvent.click(screen.getByRole('button',{name:'排名对象：域名'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'页面'}));
+ const search=screen.getByRole('searchbox',{name:'搜索引用来源'});
+ fireEvent.change(search,{target:{value:'s?id=251'}});
+ await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({sourceType:'forum',sourceRelationship:'wrong',sourceLevel:'page',sourceSearch:'s?id=251'}),0,undefined));
+ expect(screen.getByRole('searchbox',{name:'搜索引用来源'})).toBe(search);
+ expect(screen.getByTestId('export').textContent).toContain('sources-digest');
+});
+
+it('opens preserved page actions with the exact selection and keeps the existing conversation context',async()=>{
+ read.mockResolvedValue({view:{viewId:'V18',sourceLevel:'page'},selection:{reference:'gsel_page_action'},digest:'page-action',columns:[],rows:[{key:'page',label:'Actual page',metricId:null,dimensions:{sourceType:'news',sourceKey:'news.example/s?id=251',domain:'news.example',sourceId:'source-news',originalUrls:['https://news.example/s?id=251'],history:[]},values:{}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter initialEntries={['/app/geo/geo/visibility?round=old&session=s1']}><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V18"/></MemoryRouter>);
+ fireEvent.click(screen.getByText('所选数据分析'));fireEvent.click(await screen.findByText('原始引用地址与所选轮次'));
+ for(const name of ['查看来源与行动','将此页面用于方案']){
+  const href=screen.getByRole('link',{name}).getAttribute('href')!;const query=new URL(href,'https://geo.invalid').searchParams;
+  expect(query.get('selectionRef')).toBe('gsel_page_action');expect(query.get('session')).toBe('s1');expect(query.has('round')).toBe(false);
+ }
+ expect(new URL(screen.getByRole('link',{name:'将此页面用于方案'}).getAttribute('href')!,'https://geo.invalid').searchParams.get('planUrl')).toBe('https://news.example/s?id=251');
+});

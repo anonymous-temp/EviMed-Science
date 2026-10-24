@@ -142,3 +142,13 @@ it('V09 bars use exclusive expression counts and leave an incomplete category un
  fireEvent.click(screen.getByRole('button',{name:/推荐.*2/}));
  expect(choose).toHaveBeenCalledWith(cells[0]);
 });
+
+it('source coverage and concentration show the explicit denominator and exact remainder action',()=>{
+ const member={selectionRef:'gsel_sources',view:{viewId:'V18'},rowKey:'rest',columnKey:'pairs',expectedDigest:'digest',unit:'source_pairs',total:251,exact:true};
+ const cells=[{rowKey:'one',columnKey:'pairs',label:'news.example',value:2,state:'known',unit:'source_pairs',engine:null,groupId:null,setVersion:null},{rowKey:'rest',columnKey:'pairs',label:'其余来源',value:251,state:'known',unit:'source_pairs',engine:null,groupId:null,setVersion:null,members:member}];
+ const data={view:{viewId:'V18'},rows:[],chart:{kind:'sources',mode:'source_concentration',labels:[],series:[],cells,denominator:253}} as unknown as GeoAnalysisView,select=vi.fn();
+ render(<GeoAnalysisVisual data={data} onSelect={select}/>);
+ expect(screen.getByText(/253.*回答与页面配对/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:/其余来源/}));expect(select).toHaveBeenCalledWith(cells[1]);
+ expect(screen.getByText(/共同出现.*不代表/)).toBeTruthy();
+});

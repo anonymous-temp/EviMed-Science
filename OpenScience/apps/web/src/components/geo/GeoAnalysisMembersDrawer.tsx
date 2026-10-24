@@ -5,6 +5,7 @@ import {
   type GeoAnalysisMembers,
   type GeoAnalysisMemberItem,
 } from "@/lib/geoAnalysisClient";
+import { geoSearchWithScope } from "@/lib/geoReadScope";
 import { FactList } from "@/components/ui/FactList";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Drawer } from "@/components/ui/Drawer";
@@ -25,6 +26,9 @@ const units: Record<string, string> = {
   statements: "陈述",
   expressions: "表达",
   records: "记录",
+  source_pairs: "回答与页面配对",
+  source_pages: "页面",
+  rounds: "轮次",
 };
 export function GeoAnalysisMembersDrawer({
   geoId,
@@ -79,7 +83,7 @@ export function GeoAnalysisMembersDrawer({
           />
           {state.data.items.length ? (
             state.data.items.map((item) => (
-              <Member key={item.id} geoId={geoId} item={item} />
+              <Member key={item.id} geoId={geoId} item={item} selectionRef={item.source||item.citingAnswers?members.selectionRef:undefined} />
             ))
           ) : (
             <EmptyState title="这个分类没有记录" />
@@ -111,9 +115,11 @@ export function GeoAnalysisMembersDrawer({
 function Member({
   geoId,
   item,
+  selectionRef,
 }: {
   geoId: string;
   item: GeoAnalysisMemberItem;
+  selectionRef?: string;
 }) {
   const contextPath = useGeoPath();
   const location = useLocation(),
@@ -148,6 +154,9 @@ function Member({
           ]}
         />
       )}
+      {item.source && <Disclosure summary="完整来源页面与原始地址"><Note action={null}>错误与品牌提及仅表示共同出现，不能据此推断来源导致错误。部分判定保留原判定状态。</Note>{item.source.pages.map(page=><article key={page.sourceKey}><p className="text-caption text-text-2">{page.sourceKey}</p>{page.originalUrls.map(url=><a key={url} className="block text-accent" href={safeCitationUrl(url)?url:undefined} target="_blank" rel="noreferrer">{url}</a>)}</article>)}</Disclosure>}
+      {!!item.judgment && <Disclosure summary="原始判定"><pre className="whitespace-pre-wrap text-caption">{JSON.stringify(item.judgment,null,2)}</pre></Disclosure>}
+      {item.citingAnswers?.map(answer=><Member key={answer.id} geoId={geoId} item={answer} selectionRef={selectionRef}/>)}
       {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取版本",value:item.extraction.parserVersion ?? "未知"},{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名原始提取",value:JSON.stringify(item.extraction.genericMentions)}]} /></Disclosure>}
       {item.expression && <FactList rows={[
         {label:"表达对象",value:item.expression.entity ?? "对象未保留"},
@@ -198,7 +207,7 @@ function Member({
       {item.snapshotId && (
         <Link
           className="text-accent"
-          to={`${answerPath(geoId, item.snapshotId)}${location.search}`}
+          to={`${answerPath(geoId, item.snapshotId)}${selectionRef?`?${geoSearchWithScope(location.search,{selectionRef})}`:location.search}`}
         >
           查看原始回答与依据
         </Link>

@@ -3,11 +3,8 @@ import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { getGeoCluster, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
-import { BarList } from "@/components/charts/BarList";
-import { concentrationFacts, concentrationTitle, SourceConcentration } from "@/components/charts/SourceConcentration";
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { Button } from "@/components/ui/Button";
-import { ChartCard } from "@/components/ui/ChartCard";
-import { ChartGrid } from "@/components/ui/ChartGrid";
 import { Disclosure } from "@/components/ui/Disclosure";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { List, ListHeader, ListRow, type ListColumn } from "@/components/ui/ListRow";
@@ -31,7 +28,6 @@ import {
   isPlaceable,
   kindCounts,
   kindOf,
-  OTHER_KIND,
   type Candidate,
 } from "../spine/sourceModel";
 import { useGeoActions, useGeoClusters, useGeoQuestionCatalog } from "../spine/spineData";
@@ -101,7 +97,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const sources = (Array.isArray(data?.sources) ? data.sources : []).filter((source) => source && source.domain);
-  if (sources.length === 0) return <><StepPending geoId={geoId} project={project} step="sources" /><PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} /></>;
+  if (sources.length === 0) return <><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded /><StepPending geoId={geoId} project={project} step="sources" /><PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl")??undefined} /></>;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
   const groups = [...new Map([
@@ -235,7 +231,6 @@ function SourceList({
     return kindCounts(forEngine.map((entry) => entry.source), (source) => citedBy.get(source) ?? 0);
   }, [forEngine]);
   const kind = kindParam && kinds.some((entry) => entry.key === kindParam || entry.label === kindParam) ? kindParam : null;
-  const concentration = useMemo(() => concentrationFacts(forEngine.map((entry) => entry.counts.cited)), [forEngine]);
 
   const rows = useMemo(() => forEngine
     .filter(({ source, counts }) => matchesOnly(source, counts, only))
@@ -307,7 +302,7 @@ function SourceList({
     <section aria-label="信源" className="flex flex-col gap-6">
       {view === "cited" && (
         <>
-          <SourcePictures kinds={kinds} selected={kind} onSelect={setKindParam} facts={concentration} />
+          <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded />
           {rows.length === 0 ? (
             <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={() => change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, sourceSearch: null })}>清除筛选</Button> : undefined}>
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}
@@ -377,49 +372,6 @@ function SourceList({
         />
       )}
     </section>
-  );
-}
-
-/** The two pictures above the list: the kinds of site (a bar is the list's filter) and the citations' concentration. */
-function SourcePictures({
-  kinds,
-  selected,
-  onSelect,
-  facts,
-}: {
-  kinds: ReturnType<typeof kindCounts>;
-  selected: string | null;
-  onSelect: (kind: string | null) => void;
-  facts: ReturnType<typeof concentrationFacts>;
-}) {
-  if (facts.sites === 0) return null;
-  // The title is about the kinds the platform could name: 「其他」 is the sites it has no kind for, and "other is cited most" says
-  // nothing. A page where no site has a kind draws no kinds card, and the concentration has the row.
-  const named = kinds.filter((entry) => entry.key !== OTHER_KIND && entry.label !== "其他");
-  const rows = kinds.slice(0, 8).map((entry) => ({ key: entry.key, label: entry.label, value: entry.citations, unit: "次", note: `${entry.sites.toLocaleString("zh-CN")} 个站` }));
-  const concentration = {
-    key: "concentration",
-    span: (named.length === 0 ? 2 : 1) as 1 | 2,
-    node: (
-      <ChartCard title={concentrationTitle(facts)}>
-        <SourceConcentration facts={facts} />
-      </ChartCard>
-    ),
-  };
-  return (
-    <ChartGrid
-      rows={[named.length === 0 ? [concentration] : [
-        {
-          key: "kinds",
-          node: (
-            <ChartCard title={zh`${named[0].label}是被引用最多的一类，${named[0].citations.toLocaleString("zh-CN")} 次`}>
-              <BarList label="各类站点被引用的次数" rows={rows} selected={selected} onSelect={onSelect} tone="rival" />
-            </ChartCard>
-          ),
-        },
-        concentration,
-      ]]}
-    />
   );
 }
 

@@ -1,7 +1,7 @@
 import { ensureGeoConversationSession } from "./geoConversationSession";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
-import { GEO_METRIC_LABELS_ZH } from "@evimed/domain";
+import { GEO_METRIC_LABELS_ZH, GEO_SOURCE_KIND_LABELS_ZH } from "@evimed/domain";
 import {
   getGeoAnalysis,
   type GeoAnalysisDescriptor,
@@ -14,7 +14,7 @@ import {
   stageGeoPlanContext,
   type GeoProject,
 } from "@/lib/geoClient";
-import { geoReadScopeQuery, type GeoMetricMembers } from "@/lib/geoReadScope";
+import { geoReadScopeQuery, geoSearchWithScope, type GeoMetricMembers } from "@/lib/geoReadScope";
 import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { webErrorMessage } from "@/lib/apiClient";
 import { Section } from "@/components/ui/Section";
@@ -88,7 +88,7 @@ function AnalysisBody({
     viewId: initialView,
     dimension: initialView === "V05" ? "group" : ["V02", "V03", "V04"].includes(initialView) ? "engine" : "project",
   });
-  const identity = JSON.stringify([geoId, geoReadScopeQuery(scope), view]);
+  const identity = JSON.stringify([geoId, geoReadScopeQuery(scope), {...view,sourceSearch:undefined}]);
   return (
     <AnalysisPage
       key={identity}
@@ -142,6 +142,11 @@ function AnalysisPage({
     if (state.kind === "error" && state.stale && frame?.refreshScope)
       frame.refreshScope();
     else reload();
+  };
+  const sourceActionPath=(changes:Record<string,string>)=>{
+    const query=new URLSearchParams(geoSearchWithScope(location.search,{selectionRef:data!.selection.reference}));
+    for(const [key,value] of Object.entries(changes))query.set(key,value);
+    return `/app/geo/${encodeURIComponent(geoId)}/sources?${query}`;
   };
   const explain = async () => {
     if (!data) return;
@@ -205,6 +210,8 @@ function AnalysisPage({
               { value: "V11", label: "采集与判定覆盖" },
               { value: "V12", label: "回答与陈述正确性" },
               { value: "V14", label: "临床主题与条件" },
+              { value: "V17", label: "来源类型覆盖" },
+              { value: "V18", label: "域名与页面排名" },
             ],
             onChange: (value) =>
               setView({
@@ -212,6 +219,12 @@ function AnalysisPage({
                 dimension: value === "V05" ? "group" : ["V02", "V03", "V04"].includes(value ?? "") ? "engine" : "project",
               }),
           },
+          ...(["V17","V18"].includes(view.viewId)?[
+            {kind:"select" as const,label:"来源类型",value:view.sourceType??null,allLabel:"全部类型",options:[...Object.entries({...GEO_SOURCE_KIND_LABELS_ZH,...Object.fromEntries((data?.definition?.sourceTypes??[]).filter(type=>type!=="unknown"&&!(type in GEO_SOURCE_KIND_LABELS_ZH)).map(type=>[type,type]))}).map(([value,label])=>({value,label:String(label)})),{value:"unknown",label:"类型未知"}],onChange:(value:string|null)=>setView({...view,sourceType:value??undefined})},
+            {kind:"select" as const,label:"共同出现",value:view.sourceRelationship??"all",options:[{value:"all",label:"全部引用回答"},{value:"wrong",label:"共同出现我方错误"},{value:"mentions",label:"共同出现品牌提及"}],onChange:(value:string|null)=>setView({...view,sourceRelationship:value==="wrong"?"wrong":value==="mentions"?"mentions":"all"})},
+            ...(view.viewId==="V18"?[{kind:"select" as const,label:"排名对象",value:view.sourceLevel??"domain",options:[{value:"domain",label:"域名"},{value:"page",label:"页面"}],onChange:(value:string|null)=>setView({...view,sourceLevel:value==="page"?"page":"domain"})}]:[]),
+            {kind:"select" as const,label:"图表显示",value:String(view.topN??15),options:[5,15,30,50].map(value=>({value:String(value),label:`前 ${value} 项及其余`})),onChange:(value:string|null)=>setView({...view,topN:Number(value??15)})},
+          ]:[]),
           ...(["V01", "V02", "V03"].includes(view.viewId)
             ? [
                 {
@@ -276,6 +289,7 @@ function AnalysisPage({
               ]
             : []),
         ]}
+        search={["V17","V18"].includes(view.viewId)?{label:"搜索引用来源",value:view.sourceSearch??"",maxLength:300,onChange:value=>{setPage(null);setView({...view,sourceSearch:value||undefined});},onClear:()=>{setPage(null);setView({...view,sourceSearch:undefined});}}:undefined}
         actions={
           data ? (
             <Button
@@ -314,6 +328,9 @@ function AnalysisPage({
             .map(
               (reason) =>
                 ({
+                  preserved_citations_partial_judgement: "来源分析保留部分判定回答的可用引用，不能据此声称回答已完成医学准确性判定。",
+                  source_relationship_cooccurrence_only: "错误和品牌提及为共同出现，不能据此归因到引用来源。",
+                  unlinked_citations_unobservable: "未保留可用链接的引用与检索能力不可观测，未计为零。",
                   comparison_not_selected: "选择对照区间后，可按相同问题、平台和采样方式比较变化。",
                   rival_history_unknown: "部分历史回答缺少登记实体依据，保持未知；阳性提及和合资格分母分别列出。",
                   generic_observation_identity_only: "通用名来自当前配置，不代表所选历史轮次的登记名称。通用名提及是独立观测；缺少匹配的历史实体提取时保留未知，不代表未提及，也不归因到品牌或剂型。",
@@ -387,6 +404,8 @@ function AnalysisPage({
                   row.dimensions.engine ?? "\u0000",
                   engineName(row.dimensions.engine ?? ""),
                 )}
+                {row.dimensions.sourceType && <p className="text-caption text-text-2">{GEO_SOURCE_KIND_LABELS_ZH[row.dimensions.sourceType as keyof typeof GEO_SOURCE_KIND_LABELS_ZH] ?? (row.dimensions.sourceType === "unknown" ? "类型未知" : row.dimensions.sourceType)} · 首次 {row.dimensions.firstObserved??"采样时间未知"} · 最近 {row.dimensions.lastObserved??"采样时间未知"}</p>}
+                {row.dimensions.originalUrls && <Disclosure summary="原始引用地址与所选轮次"><ul>{row.dimensions.originalUrls.map(url=><li key={url}>{url}</li>)}</ul>{row.dimensions.history?.map(round=><p key={round.roundId}>{round.roundId} · {round.citedAnswers} 个引用回答</p>)}{row.dimensions.sourceId&&<Link className="text-accent" to={sourceActionPath({source:row.dimensions.sourceId})}>查看来源与行动</Link>}{row.dimensions.sourceKey&&row.dimensions.originalUrls[0]&&<Link className="block text-accent" to={sourceActionPath({planUrl:row.dimensions.originalUrls[0]})}>将此页面用于方案</Link>}</Disclosure>}
                 {row.dimensions.kind === "expression" && <p className="text-caption text-text-2">条件：{row.dimensions.conditionQuote ?? "未陈述"} · 推荐顺位：{row.dimensions.explicitPosition ?? "未明确"}</p>}
                 {row.dimensions.period === "round"
                   ? ` · ${row.dimensions.date ?? "采样时间未知"} · ${row.dimensions.roundLabel ?? (row.dimensions.roundKind === "baseline" ? "基线轮" : "复测轮")}`
@@ -430,10 +449,10 @@ function AnalysisPage({
                     word
                   )}
                   {value.reason && value.state !== "known" && <span className="text-caption text-text-3">{analysisReason(value.reason)}</span>}
-                  {value.metric?.denominator != null && (
+                  {(value.denominator ?? value.metric?.denominator) != null && (
                     <span className="text-caption text-text-3">
-                      {value.metric.numerator ?? "—"} /{" "}
-                      {value.metric.denominator}
+                      {value.numerator ?? value.metric?.numerator ?? "—"} /{" "}
+                      {value.denominator ?? value.metric?.denominator}
                     </span>
                   )}
                 </span>
@@ -441,7 +460,7 @@ function AnalysisPage({
             },
           })),
         ]}
-        footnote="实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"
+        footnote={["V17","V18"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
       />
       {data && (
         <>
@@ -522,6 +541,9 @@ function unitWord(unit: string) {
         statements: "陈述",
   expressions: "表达",
         records: "记录",
+        source_pairs: "配对",
+        source_pages: "页面",
+        rounds: "轮次",
       } as Record<string, string>
     )[unit] ?? unit
   );

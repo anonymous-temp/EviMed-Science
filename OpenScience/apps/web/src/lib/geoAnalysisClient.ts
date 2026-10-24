@@ -17,7 +17,9 @@ export type GeoAnalysisId =
   | "V07"
   | "V11"
   | "V12"
-  | "V14";
+  | "V14"
+  | "V17"
+  | "V18";
 export interface GeoAnalysisDescriptor {
   viewId: GeoAnalysisId;
   metricId?: string | null;
@@ -25,6 +27,11 @@ export interface GeoAnalysisDescriptor {
   timeGrain?: "day" | "round";
   entityKind?: "brand" | "generic";
   entityKey?: string;
+  sourceType?: string;
+  sourceSearch?: string;
+  sourceRelationship?: "all" | "wrong" | "mentions";
+  sourceLevel?: "domain" | "page";
+  topN?: number;
   categoryMode?: "original_group" | "client_tags";
 }
 export interface GeoAnalysisMembers {
@@ -39,6 +46,8 @@ export interface GeoAnalysisMembers {
 }
 export interface GeoAnalysisValue {
   value: number | null;
+  numerator?: number;
+  denominator?: number;
   state: string;
   reason?: string | null;
   unit?: string;
@@ -50,6 +59,14 @@ export interface GeoAnalysisRow {
   label: string;
   metricId: string | null;
   dimensions: {
+    sourceType?: string;
+    domain?: string;
+    sourceKey?: string | null;
+    sourceId?: string | null;
+    originalUrls?: string[];
+    firstObserved?: string | null;
+    lastObserved?: string | null;
+    history?: Array<{roundId:string;kind:string|null;citedAnswers:number}>;
     period?: string;
     date?: string | null;
     engine?: string | null;
@@ -87,8 +104,13 @@ export interface GeoAnalysisChartCell {
   value: number | null; state: string; reason?: string | null; unit?: string; members?: GeoAnalysisMembers | null;
 }
 export interface GeoAnalysisView {
+  definition?: {sourceTypes?: string[]};
   chart?: {
-    kind?: "bars" | "matrix" | "comparison" | "rivals" | "recommendations";
+    kind?: "bars" | "matrix" | "comparison" | "rivals" | "recommendations" | "sources";
+    mode?: "type_coverage" | "source_concentration";
+    denominator?: number;
+    topN?: number;
+    totalCategories?: number;
     cells?: GeoAnalysisChartCell[];
     labels: string[];
     series: Array<{
@@ -133,6 +155,9 @@ export interface GeoAnalysisMemberItem {
   status?: string;
   reason?: string;
   askedAt?: string | null;
+  judgment?: unknown;
+  source?: {sourceKey?: string;domain?: string;originalUrls?: string[];pages:Array<{sourceKey:string;domain:string;sourceType:string;originalUrls:string[];titles:string[];snapshotIds:string[]}>;cooccurrenceOnly:true};
+  citingAnswers?: GeoAnalysisMemberItem[];
   extraction?: {genericMentions: unknown; parserVersion: string | null; registryKey?: string | null; judgedAt: string | null} | null;
   assessmentVersion?: string | null;
   questionVersion?: number;

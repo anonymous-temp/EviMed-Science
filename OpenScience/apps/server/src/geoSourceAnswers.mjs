@@ -135,7 +135,7 @@ export function countsOf(citing, domain) {
   };
 }
 
-/** The most pages of one site a detail lists; the count of all of them is told beside. */
+/** Default page size available to callers that explicitly request bounded display pages. */
 export const SOURCE_PAGES_LIMIT = 200;
 
 /**
@@ -156,10 +156,10 @@ export function pageKey(url) {
  * citation of it had one (the most often written), how many answers cited it — once each however many of its links an answer
  * carries — and how many of those answers misstated us (a co-occurrence, like the row's).
  * @param {ReadonlyArray<RoundAnswer>} citing answers that already cite `domain` @param {string} domain
- * @param {{ limit?: number }} [options]
+ * @param {{ limit?: number, offset?: number }} [options]
  * @returns {{ pages: Array<{ url: string, title: string | null, cited: number, wrongOurs: number }>, total: number }}
  */
-export function pagesCited(citing, domain, { limit = SOURCE_PAGES_LIMIT } = {}) {
+export function pagesCited(citing, domain, { limit = Infinity, offset = 0 } = {}) {
   const wanted = String(domain).toLowerCase().replace(/^www\./u, "");
   /** @type {Map<string, { url: string, titles: Map<string, number>, cited: number, wrongOurs: number }>} */
   const byPage = new Map();
@@ -190,5 +190,5 @@ export function pagesCited(citing, domain, { limit = SOURCE_PAGES_LIMIT } = {}) 
       wrongOurs: page.wrongOurs,
     }))
     .sort((left, right) => right.cited - left.cited || right.wrongOurs - left.wrongOurs || left.url.localeCompare(right.url));
-  return { pages: pages.slice(0, limit), total: pages.length };
+  return { pages: pages.slice(offset, offset + limit), total: pages.length };
 }

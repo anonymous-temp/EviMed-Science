@@ -21,6 +21,7 @@ import { GEO_ANALYSIS_DESCRIPTOR_FIELDS, GEO_ANALYSIS_REGISTRY, normalizeGeoAnal
 import { buildGeoRecommendationAnalysis } from "./geoAnalysisRecommendations.mjs";
 import { buildGeoMetricAnalysis, buildGeoComparisonAnalysis, buildGeoRivalAnalysis } from "./geoAnalysisMetrics.mjs";
 export { normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
+import { buildGeoSourceAnalysis } from "./geoAnalysisSources.mjs";
 import { HttpError } from "./security.mjs";
 
 const hash = (value) =>
@@ -80,7 +81,7 @@ const plain = (value, state = "known") => ({
  */
 export function presentGeoAnalysis(selected, request, context = {}) {
   const view = normalizeGeoAnalysisView(request);
-  if (["coverage", "metrics", "comparison", "rivals", "recommendations"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family))
+  if (["coverage", "metrics", "comparison", "rivals", "recommendations", "sources"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family))
     return presentAggregate(selected, view, context);
   const matches = (cell) =>
     cell.scope === view.dimension &&
@@ -372,7 +373,7 @@ export function presentGeoAnalysis(selected, request, context = {}) {
 /** @param {any} selected @param {any} view @param {any} context */
 function presentAggregate(selected, view, context) {
   const family = GEO_ANALYSIS_REGISTRY[view.viewId].family;
-  const built = family === "recommendations" ? buildGeoRecommendationAnalysis(selected, view, context) : family === "metrics" ? buildGeoMetricAnalysis(selected, view, context) : family === "comparison" ? buildGeoComparisonAnalysis(selected, view, context) : family === "rivals" ? buildGeoRivalAnalysis(selected, view, context) : buildGeoCoverageAnalysis(selected, view, context);
+  const built = family === "sources" ? buildGeoSourceAnalysis(selected, view, context) : family === "recommendations" ? buildGeoRecommendationAnalysis(selected, view, context) : family === "metrics" ? buildGeoMetricAnalysis(selected, view, context) : family === "comparison" ? buildGeoComparisonAnalysis(selected, view, context) : family === "rivals" ? buildGeoRivalAnalysis(selected, view, context) : buildGeoCoverageAnalysis(selected, view, context);
   if (built.rows.length > 20_000) throw new HttpError(422, "geo_read_filter_invalid", "Narrow the scope to at most 20,000 analysis rows.");
   const basis = {
     schemaVersion: 1,
@@ -406,7 +407,7 @@ function presentAggregate(selected, view, context) {
   const builtRows = new Map();
   for (const row of built.rows) builtRows.set(row.key, row);
   for (const cell of built.chart?.cells ?? []) {
-    cell.members = builtRows.get(cell.rowKey)?.values[cell.columnKey]?.members ?? null;
+    cell.members = builtRows.get(cell.rowKey)?.values[cell.columnKey]?.members ?? (built.memberItems.has(`${cell.rowKey}:${cell.columnKey}`) ? {selectionRef:selected.selection.reference,view,rowKey:cell.rowKey,columnKey:cell.columnKey,expectedDigest:digest,unit:cell.unit==='percent'?'answers':cell.unit,total:built.memberItems.get(`${cell.rowKey}:${cell.columnKey}`).length,exact:true} : null);
   }
   if (context.memberItems)
     for (const [key, items] of built.memberItems)
@@ -591,9 +592,11 @@ export async function readGeoAnalysis(
         )
       ).rows;
     }
+    const sources = GEO_ANALYSIS_REGISTRY[view.viewId].family === "sources" ? (await store.listSources(project.id)).map(source=>({id:source.id,domain:source.domain,name:source.name,kind:source.kind})) : [];
     const memberItems = new Map();
     const result = presentGeoAnalysis(selected, view, {
       targets,
+      sources,
       product: project.product,
       competitors: project.competitors,
       tier: project.tier,
@@ -618,7 +621,7 @@ export async function readGeoAnalysis(
       if (
         !input.selectionRef ||
         !input.expectedDigest ||
-        !["coverage", "metrics", "comparison", "rivals", "recommendations"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family) ||
+        !["coverage", "metrics", "comparison", "rivals", "recommendations", "sources"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family) ||
         typeof input.rowKey !== "string" ||
         typeof input.columnKey !== "string"
       )
@@ -634,7 +637,7 @@ export async function readGeoAnalysis(
         page = items.slice(offset, offset + limit),
         ids = [
           ...new Set(
-            page.flatMap((item) => (item.snapshotId ? [item.snapshotId] : [])),
+            page.flatMap((item) => [item.snapshotId,...(item.citingAnswers??[]).map(answer=>answer.snapshotId)].filter(Boolean)),
           ),
         ];
       const originals = (
@@ -652,24 +655,13 @@ export async function readGeoAnalysis(
           page[0]?.unit ??
           "records",
         total: items.length,
-        items: page.map((item) => {
-          const question = contextQuestions.find(
-            (candidate) => candidate.id === item.questionId,
-          );
+        items: page.map(function hydrate(item) {
+          const question = contextQuestions.find(candidate => candidate.id === item.questionId);
           return {
             ...item,
-            question: question
-              ? {
-                  text: question.text,
-                  originalId: question.original_id,
-                  originalRow: question.original_row_index,
-                  originalGroup: question.original_group,
-                  clientTags: question.client_tags,
-                }
-              : null,
-            ...(item.snapshotId
-              ? { answer: originalsById.get(item.snapshotId) ?? null }
-              : {}),
+            ...(item.citingAnswers ? {citingAnswers:item.citingAnswers.map(hydrate)} : {}),
+            question: question ? {text:question.text,originalId:question.original_id,originalRow:question.original_row_index,originalGroup:question.original_group,clientTags:question.client_tags} : null,
+            ...(item.snapshotId ? {answer:originalsById.get(item.snapshotId)??null} : {}),
           };
         }),
         nextOffset: offset + limit < items.length ? offset + limit : null,
@@ -758,11 +750,11 @@ export function freezeGeoAnalysisDocument(view) {
         [`${column.key}_state`, row.values[column.key].state],
         [
           `${column.key}_numerator`,
-          row.values[column.key].metric?.numerator ?? null,
+          row.values[column.key].numerator ?? row.values[column.key].metric?.numerator ?? null,
         ],
         [
           `${column.key}_denominator`,
-          row.values[column.key].metric?.denominator ?? null,
+          row.values[column.key].denominator ?? row.values[column.key].metric?.denominator ?? null,
         ],
         [
           `${column.key}_reason`,
@@ -806,8 +798,8 @@ export function freezeGeoAnalysisDocument(view) {
                 unit: value.unit,
                 reason: value.reason ?? value.metric?.reason ?? null,
                 memberUnit: value.members?.unit ?? null,
-                numerator: value.metric?.numerator ?? null,
-                denominator: value.metric?.denominator ?? null,
+                numerator: value.numerator ?? value.metric?.numerator ?? null,
+                denominator: value.denominator ?? value.metric?.denominator ?? null,
                 metricId: value.metric?.metricId ?? null,
               },
             ];
@@ -851,7 +843,7 @@ export function freezeGeoAnalysisDocument(view) {
           : metric?.status === "absent"
             ? "未测"
             : value;
-    return `${word}${word !== value && cell.value != null ? `；保留值 ${value}` : ""} (状态 ${cell.state}; 尺度 ${unit}; 原因 ${cell.reason ?? metric?.reason ?? "—"}; 分子/分母 ${metric?.numerator ?? "—"}/${metric?.denominator ?? "—"}; 成员单位 ${cell.members?.unit ?? "—"})`;
+    return `${word}${word !== value && cell.value != null ? `；保留值 ${value}` : ""} (状态 ${cell.state}; 尺度 ${unit}; 原因 ${cell.reason ?? metric?.reason ?? "—"}; 分子/分母 ${cell.numerator ?? metric?.numerator ?? "—"}/${cell.denominator ?? metric?.denominator ?? "—"}; 成员单位 ${cell.members?.unit ?? "—"})`;
   };
   const reportRows = view.rows.map((row) => ({
     label: [row.label, documentExportDigest(row.dimensions)]

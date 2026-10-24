@@ -61,6 +61,15 @@ export function GeoAnalysisVisual({ data, onSelect }: {
   const statusId = useId();
   const chart = data.chart;
   if (!chart) return null;
+  if (chart.kind === "sources") {
+    const cells=chart.cells??[], coverage=chart.mode==="type_coverage";
+    return <ChartCard title={coverage?"来源类型回答覆盖率":"来源引用集中度"} state={cells.length?"content":"empty"} emptyText="这个范围没有可核对链接；无法观测的引用能力保留未知。"
+      footnote={coverage?"同一回答可计入多个类型，覆盖率之和可以超过 100%。部分判定回答的可用引用仍保留。":"错误和品牌提及仅表示共同出现，不代表错误由该来源引起。"}
+      legend={<p>{coverage?`分母：${chart.denominator??0} 个有可用引用的回答；类型覆盖可重叠。`:`分母：${chart.denominator??0} 个回答与页面配对；前 ${chart.topN??15} 项及完整余项。`}</p>}>
+      <BarList label={coverage?"各类来源覆盖回答":"来源回答与页面配对"} rows={cells.filter(cell=>cell.value!==null).map(cell=>({key:cell.rowKey,label:cell.label,value:cell.value!,unit:coverage?"%":"配对"}))}
+        onSelect={key=>{const cell=cells.find(cell=>cell.rowKey===key);if(cell)onSelect(cell);}}/>
+    </ChartCard>;
+  }
   if (chart.kind === "recommendations") {
     const cells = chart.cells ?? [], known = cells.filter(cell => cell.state === "known" && cell.value !== null);
     return <ChartCard title="推荐表达分布" state={known.length ? "content" : "empty"} emptyText="尚无完整分类；已保留的表达与未知覆盖见下表。"

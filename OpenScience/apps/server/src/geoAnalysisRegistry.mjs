@@ -14,6 +14,10 @@ export const GEO_ANALYSIS_REGISTRY = Object.freeze(Object.fromEntries([
   ], [
     'V09', 'recommendations'
   ], [
+    'V17', 'sources'
+  ], [
+    'V18', 'sources'
+  ], [
     'V04', 'metrics'
   ], [
     'V05', 'metrics'
@@ -27,7 +31,7 @@ export const GEO_ANALYSIS_REGISTRY = Object.freeze(Object.fromEntries([
   }
 ])));
 export const GEO_ANALYSIS_DESCRIPTOR_FIELDS = Object.freeze([
-  'viewId', 'metricId', 'dimension', 'categoryMode', 'timeGrain', 'entityKind', 'entityKey'
+  'viewId', 'metricId', 'dimension', 'categoryMode', 'timeGrain', 'entityKind', 'entityKey', 'sourceType', 'sourceSearch', 'sourceRelationship', 'sourceLevel', 'topN'
 ]);
 const invalid = () => new HttpError(400, 'geo_read_filter_invalid', 'Choose a registered analysis view and its supported options.');
 /** @param {any} [input] */
@@ -68,7 +72,17 @@ export function normalizeGeoAnalysisView(input = {}) {
   if (viewId === 'V09' && dimension !== 'project') throw invalid();
   if (viewId === 'V04' && dimension !== 'engine' || viewId === 'V05' && dimension !== 'group')
     throw invalid();
+  const sourceFields=['sourceType','sourceSearch','sourceRelationship','sourceLevel','topN'];
+  if (family !== 'sources' && sourceFields.some(key=>input[key]!=null)) throw invalid();
+  if (family === 'sources') {
+    if (metricId!==null || dimension!=='project') throw invalid();
+    for (const [key,max] of [['sourceType',100],['sourceSearch',300]]) if(input[key]!=null&&(typeof input[key]!=='string'||!input[key].trim()||input[key].length>Number(max))) throw invalid();
+    if(input.sourceRelationship!=null&&!['all','wrong','mentions'].includes(input.sourceRelationship)) throw invalid();
+    if(input.sourceLevel!=null&&(viewId!=='V18'||!['domain','page'].includes(input.sourceLevel))) throw invalid();
+    if(input.topN!=null&&(!Number.isSafeInteger(input.topN)||input.topN<1||input.topN>50)) throw invalid();
+  }
   return {
+    ...(family==='sources'?{...(input.sourceType?{sourceType:input.sourceType.trim()}:{}),...(input.sourceSearch?{sourceSearch:input.sourceSearch.trim()}:{}),sourceRelationship:input.sourceRelationship??'all',...(viewId==='V18'?{sourceLevel:input.sourceLevel??'domain'}:{}),topN:input.topN??15}:{}),
     viewId, metricId: input.entityKind === 'generic' ? null : metricId, dimension,
     ...(viewId === 'V06' ? {
       categoryMode: input.categoryMode ?? 'original_group'
