@@ -8,13 +8,21 @@
 
 **Tech Stack:** React/TypeScript, existing design primitives and native DSH workspace, Node ESM, PostgreSQL/pgvector, product document/job ledger, pinned OpenViking service/plugin/skills.
 
-**Status:** Approved by the owner on 2026-10-23; implementation in progress.
+**Status:** Code handoff after local verification; deployment and remaining live acceptance stopped by the owner on 2026-10-24.
 **Research date:** 2026-10-23, Asia/Shanghai.
 **Code baseline:** 01e965e99a1118439557210b7ab28b9b7e7338a9.
 **Research record:** _knowledge_base/research-kb-openviking-agent-products-20261023.md.
-**Execution boundary:** Finish the approved iteration and its acceptance. No subsequent iteration starts automatically.
+**Execution boundary:** The latest owner instruction is to finish the code, test locally, commit and push, without further online deployment or testing. No subsequent iteration starts automatically.
 
 ---
+
+## Current handoff boundary — 2026-10-24
+
+The owner superseded the earlier deployment instruction: **finish local checks and submit the code; do not deploy online**. Artifact transfer was stopped. No production switch of this knowledge iteration occurred. Historical deployment instructions and observations below are retained as history, not authorization to resume release work.
+
+Product revision `2e161a5fff67312d431f59e593b46dd10d102fe8` passed the complete PUSH workflow [40089690348](https://github.com/anonymous-temp/EviMed-Science/actions/runs/40089690348), including its image build and isolated CI stack checks. The subsequent merge from main `7e6bfad7b` contains only a progress-log line. Final handoff changes are documentation only; application and test bytes remain those of the tested product revision.
+
+The implementation, verification evidence and outstanding live checks are separated in [the code handoff](2026-10-24-knowledge-memory-code-handoff.md). The work-package checkboxes below remain acceptance requirements: an unchecked real-engine or production journey is not a statement that its supporting code is absent, and it is not marked complete merely because CI passed. No answer-quality gain is claimed. A later owner decision is required to resume the remaining live evaluations, compatible restore/load acceptance or release.
 
 ## Integration reconciliation — 2026-10-24
 
@@ -609,7 +617,7 @@ node --test test/sourceService.test.mjs test/knowledgeBaseEntries.test.mjs test/
 node --test test/kbSearchGateway.test.mjs test/kbBrowseGateway.test.mjs test/openVikingSourceSync.test.mjs test/knowledgePages.integration.test.mjs test/knowledgePageCatchUp.integration.test.mjs test/knowledgePageThreshold.integration.test.mjs
 node --test test/library.integration.test.mjs test/derivedMemory.integration.test.mjs test/knowledgeChange.integration.test.mjs test/nativeMemory.integration.test.mjs test/agentMemoryApi.test.mjs test/agentMemoryNative.integration.test.mjs
 node --test test/capsuleNativeExport.test.mjs test/capsuleTransferService.integration.test.mjs test/capsuleRecipientKeys.integration.test.mjs test/capsuleShare.integration.test.mjs test/capsuleAccountLifecycle.integration.test.mjs
-node --test test/openVikingClient.test.mjs test/openVikingLayout.test.mjs test/openVikingDeploy.test.mjs test/openVikingEngine.test.mjs test/openVikingShim.test.mjs test/openVikingBackup.test.mjs
+node --test test/openVikingClient.test.mjs test/openVikingLayout.test.mjs test/openVikingDeploy.test.mjs test/openVikingEngine.test.mjs test/openVikingBackup.test.mjs
 ~~~
 
 Working directory OpenScience/apps/web/:
