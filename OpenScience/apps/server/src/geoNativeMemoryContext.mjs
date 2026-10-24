@@ -30,9 +30,9 @@ function canonicalUri(uri) {
  * independently proved every time; a saved binding is history, not permission.
  */
 export class GeoNativeMemoryContext {
-  constructor({ database, documents, policies, sessions, proveCapture = null }) {
+  constructor({ database, documents, policies, sessions, proveCapture = null, settingsForOwner = null }) {
     this.database = database; this.documents = documents; this.policies = policies;
-    this.sessions = sessions; this.proveCapture = proveCapture;
+    this.sessions = sessions; this.proveCapture = proveCapture; this.settingsForOwner = settingsForOwner;
   }
 
   view(ownerId, ownerCreatedAt, policy = null, projectId = null) {
@@ -78,15 +78,21 @@ export class GeoNativeMemoryContext {
   /** Policy initialization and explicit pause/resume share one namespace lock.
    * Restating types must not race a pause and accidentally enable extraction.
    * Lifecycle callers may use a retained historical namespace here as well.
+   * When composed, persisted account/project switches are authoritative even
+   * if a delayed caller carries an older pause/resume argument.
    */
   async configure(context, { learning = null } = {}) {
     if (context.kind !== 'geo-project' || learning !== null && typeof learning !== 'boolean') throw refused();
     return this.withOwner(context.ownerId, async (_created, client) => {
       await this.assertKnown(context);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`native-memory-policy:${context.namespaceId}`]);
+      const settings = this.settingsForOwner ? await this.settingsForOwner(context.ownerId) : null;
+      if (this.settingsForOwner && (typeof settings?.learningPaused !== 'boolean' || !Array.isArray(settings?.pausedProjects)
+        || !settings.pausedProjects.every(value => typeof value === 'string'))) throw refused();
       await context.sessions.register(context.ownerId);
       const current = await context.sessions.settings(context.ownerId);
-      const enabled = learning ?? (current?.learning !== false);
+      const enabled = settings ? !settings.learningPaused && !settings.pausedProjects.includes(context.projectId)
+        : learning ?? (current?.learning !== false);
       const expected = [...context.sessions.memoryTypes].sort();
       const matches = value => value?.learning === enabled && canonicalJson(value?.memoryTypes?.slice().sort()) === canonicalJson(expected);
       if (matches(current)) return current;
