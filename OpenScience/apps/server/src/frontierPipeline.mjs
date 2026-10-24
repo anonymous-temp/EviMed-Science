@@ -74,6 +74,7 @@ import {
   FRONTIER_MENTION_REGISTRY_IDS,
   FRONTIER_MENTION_SOURCE_TYPES,
   frontierEvidenceFromPublicationTypes,
+  frontierActiveCongresses,
   frontierMixGenre,
   frontierMixSelect,
   frontierMixSourceCap,
@@ -654,11 +655,13 @@ export function frontierClassIRecall({ source, facts = null }) {
 }
 
 /**
- * Whether a published item is selected, and by which rule (plan §6.3). A
+ * Whether a published item clears the line, and by which rule (plan §6.3). A
  * safety alert is selected whatever its score; otherwise a verified,
  * scored item at or above the threshold, while its source has room today —
  * never a journal's item still without its abstract (2026-10-22: it is in
- * 全部 only, until its abstract re-edits it).
+ * 全部 only, until its abstract re-edits it). Since the genre mix (ct-mix
+ * 2026-10-24) only the safety bypass selects as an item is published; every
+ * other selection is the day's mix (`#mix`, `@evimed/domain` `frontierMixSelect`).
  * @param {{ safetyAlert: boolean, verification: string, scoreTotal: number | null, demoted: boolean, flags: string[],
  *           source: any, selectedToday: number, threshold: number }} input
  * @returns {{ selected: boolean, rule: "safety-bypass" | "threshold" | null, capped?: boolean }}
@@ -2205,7 +2208,8 @@ export class FrontierPipeline {
             eventId: row.event_id == null ? null : String(row.event_id),
           };
         });
-        const result = frontierMixSelect({ candidates, threshold: this.threshold, events,
+        // A congress in its window (the domain's calendar) lets the research group rise for conference reports.
+        const result = frontierMixSelect({ candidates, threshold: this.threshold, events, congressActive: frontierActiveCongresses(day).length > 0,
           preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore });
         for (const pick of result.picks) {
           const updated = await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = $2, selected_at = $3,
