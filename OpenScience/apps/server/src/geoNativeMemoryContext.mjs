@@ -130,6 +130,9 @@ export class GeoNativeMemoryContext {
       if (Object.keys(source).some(key => !['kind', 'sourceArchiveUri'].includes(key))) throw refused();
       const uri = canonicalUri(source.sourceArchiveUri), archive = parseArchiveUri(uri);
       if (!archive || archive.userRoot !== context.userRoot || archive.rest || archive.archiveUri !== uri) throw refused();
+    } else if (source.kind === 'tool') {
+      if (Object.keys(source).some(key => !['kind', 'operationRef', 'taskId'].includes(key))
+        || !/^gnmo_[a-f0-9-]{36}$/.test(source.operationRef ?? '') || !/^[A-Za-z0-9-]{8,64}$/.test(source.taskId ?? '')) throw refused();
     } else throw refused();
   }
 
@@ -138,9 +141,20 @@ export class GeoNativeMemoryContext {
     this.validateSource(context, sessionId, source);
     if (runtimeGeneration != null && !textValid(runtimeGeneration)) throw refused();
     return this.withOwner(context.ownerId, async (_created, client) => {
-      // Replay belongs to the accepted archive, including a retained historical
-      // project incarnation. A new page or captured input still needs live scope.
-      await this.assertKnown(context, { live: source.kind !== 'replay' });
+      // Accepted operations and replay retain their original namespace. New
+      // pages and captured inputs still require the current project incarnation.
+      await this.assertKnown(context, { live: !['replay', 'tool'].includes(source.kind) });
+      if (source.kind === 'tool') {
+        // Only the journal's verified exchange, committed in this transaction,
+        // can supply a tool binding. A guessed session prefix grants nothing.
+        await client.query('SELECT id FROM evimed_product.documents WHERE user_id=$1 AND kind=$2 AND id=$3 FOR SHARE', [context.ownerId, KIND, source.operationRef]);
+        const operation = await this.documents.get(context.ownerId, KIND, source.operationRef, { includeDeleted: true });
+        const payload = operation?.payload;
+        if (!operation || operation.deletedAt != null || operation.projectId !== context.projectId
+          || payload.recordType !== 'geo-native-memory-operation' || payload.action !== 'remember' || payload.state !== 'accepted'
+          || payload.policyRef !== context.policyRef || payload.namespaceId !== context.namespaceId
+          || payload.sessionId !== sessionId || payload.taskId !== source.taskId || payload.runtimeGeneration !== runtimeGeneration) throw refused();
+      }
       const id = keyOf(context, sessionId);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [id]);
       const existing = this.readSession(await this.documents.get(context.ownerId, KIND, id, { includeDeleted: true }), context, sessionId);
