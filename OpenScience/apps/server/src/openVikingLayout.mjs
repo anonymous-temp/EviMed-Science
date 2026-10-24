@@ -35,6 +35,8 @@ export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
 export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   "profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts",
 ]);
+/** Shared project extraction never writes a person's profile or preferences. */
+export const OPENVIKING_PROJECT_MEMORY_TYPES = Object.freeze(OPENVIKING_MEMORY_TYPES.filter(type => !['profile', 'preferences'].includes(type)));
 
 /** The identity shim the entrypoint starts beside the server, and the loopback port `compile_api.base_url` names. */
 export const OPENVIKING_SHIM_PATH = "/opt/evimed-shim/identity_shim.py";
@@ -72,6 +74,17 @@ export function openVikingPeerId(projectId) {
 /** A capsule's segment (`capsuleSegment` in the client validates its inputs). */
 export function openVikingScopedId(prefix, value, purpose) {
   return scopedId(prefix, value, purpose);
+}
+
+/** Trusted control-plane identities, including exact database incarnations.
+ * Membership, runtime generation and conversation do not change project memory.
+ * @param {{ownerId:string,ownerCreatedAt:string,projectId:string,projectCreatedAt:string}} input */
+export function projectNativeMemoryNamespace(input) {
+  const keys = ['ownerId', 'ownerCreatedAt', 'projectId', 'projectCreatedAt'];
+  if (!input || keys.some(key => typeof input[key] !== 'string' || !input[key] || input[key].length > 200 || /[\r\n\0]/.test(input[key]))) throw new Error('Invalid project memory identity');
+  const identity = Object.fromEntries(keys.map(key => [key, input[key]]));
+  const id = openVikingScopedId('gp', JSON.stringify(keys.map(key => identity[key])), 'project-native-memory');
+  return Object.freeze({ kind: 'project', ...identity, id, engineUser: id });
 }
 
 /** Everything one account holds in the engine. */
