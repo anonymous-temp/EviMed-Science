@@ -120,7 +120,7 @@ class Settings:
     socialdata_key_file: str | None = None           # X through SocialData (Authorization: Bearer)
     dajiala_key_file: str | None = None              # WeChat through Dajiala (极致了)
     socialdata_daily_usd: float = 5.0                # the day's cap (Asia/Shanghai day), objects × US$0.0002
-    dajiala_daily_cny: float = 30.0                  # the day's cap, Dajiala's own cost_money
+    dajiala_daily_cny: float = 90.0                  # the day's cap, Dajiala's own cost_money (owner, 2026-10-24)
     social_crawl_url: str | None = None              # GEO's six-platform crawler (OPEN_SCIENCE_GEO_SOCIAL_URL); unset = off
     social_crawl_daily: int = 120                    # requests a day, spread over the day
     social_crawl_timeout_s: float = 150.0
@@ -184,7 +184,7 @@ class Settings:
             socialdata_key_file=_path(env, "KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE"),
             dajiala_key_file=_path(env, "KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE"),
             socialdata_daily_usd=_float(env, "KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD", 5.0, 0.0, 1000.0),
-            dajiala_daily_cny=_float(env, "KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY", 30.0, 0.0, 10000.0),
+            dajiala_daily_cny=_float(env, "KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY", 90.0, 0.0, 10000.0),
             social_crawl_url=_crawl_url(env),
             social_crawl_daily=_int(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY", 120, 0, 5000),
             social_crawl_timeout_s=_float(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S", 150.0, 10.0, 600.0),

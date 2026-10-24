@@ -53,7 +53,7 @@
 #   as a file (root:10002 0440 under /srv/evimed-science/shared/secrets/,
 #   socialdata.api-key and dajiala.api-key; /dev/null when absent, and that
 #   adapter does nothing), each behind a daily cap the plugin counts in its own
-#   database (US$5 and ¥30 by default, Asia/Shanghai day). The six Chinese
+#   database (US$5 and ¥90 by default, Asia/Shanghai day). The six Chinese
 #   platforms are searched through the GEO module's crawler at the address the
 #   platform already has (OPEN_SCIENCE_GEO_SOCIAL_URL; empty = off), 120 requests
 #   a day spread over the day, GEO first. Images posts carry are re-encoded and
@@ -107,7 +107,7 @@ services:
       KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE: /run/secrets/socialdata-api-key
       KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE: /run/secrets/dajiala-api-key
       KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD: ${KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD:-5}
-      KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY: ${KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY:-30}
+      KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY: ${KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY:-90}
       KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL-${OPEN_SCIENCE_GEO_SOCIAL_URL:-}}
       KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY:-120}
       KNOWLEDGE_PLUGIN_MEDIA_DIR: /var/lib/knowledge-plugin/media

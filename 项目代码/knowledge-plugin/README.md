@@ -79,7 +79,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE` | unset | X through SocialData (`Authorization: Bearer`, added by the transport); unset or empty = no X |
 | `KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD` | `5` | the day's cap (Asia/Shanghai day) at `objects × US$0.0002`; reached = X waits until the next day |
 | `KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE` | unset | WeChat official accounts through Dajiala (its `key` query parameter, added by the transport); unset = no WeChat |
-| `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `30` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
+| `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `90` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL` | unset | the GEO module's six-platform crawler (production: the platform's `OPEN_SCIENCE_GEO_SOCIAL_URL`); unset = no monitoring |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S` | `120` / `150` | crawler requests a day, spread evenly; one request's deadline |
 | `KNOWLEDGE_PLUGIN_MEDIA_DIR` / `KNOWLEDGE_PLUGIN_MEDIA_CAP_MB` | unset / `3072` | the media store's writable volume and its cap (least recently served evicted first); unset = no images stored |
