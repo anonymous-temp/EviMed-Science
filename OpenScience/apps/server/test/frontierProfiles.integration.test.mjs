@@ -429,6 +429,10 @@ test("a reader the model knows nothing of is ranked from what they stated: onboa
   assert.ok(answer.items.every((entry) => typeof entry.score === "number"));
   const prefs = await reader.prefs(users.fresh);
   assert.deepEqual([prefs.role, prefs.specialties, prefs.interests, prefs.interestTags], ["pharmacist", ["cardiology"], [slug], [{ slug, name: "SGLT2 抑制剂" }]]);
+  // Changed an hour later from 管理关注: the answer moves, its first time stays (a changed answer is not a second onboarding).
+  const later = new FrontierProfiles({ database, researchMemory: memory, config: CONFIG, now: () => new Date(NOW.getTime() + 3_600_000), tags: reader.tags });
+  const changed = await later.savePrefs(users.fresh, { specialties: ["cardiology", "oncology"], done: true });
+  assert.deepEqual([changed.specialties, changed.onboardedAt], [["cardiology", "oncology"], prefs.onboardedAt]);
   // Skipping is an answer too, for a reader who has not given one.
   await reader.savePrefs(users.empty, { skipped: true });
   assert.equal((await reader.forYou({ id: users.empty }, hydrate)).onboarding, false);
