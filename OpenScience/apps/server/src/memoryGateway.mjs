@@ -123,7 +123,7 @@ const PROJECT_MEMORY_TOOLS = Object.freeze({ ...MEMORY_GATEWAY_TOOLS,
   search: { ...MEMORY_GATEWAY_TOOLS.search, description: 'Search this project\'s shared long-term facts, decisions and corrections. Read a returned URI for the full file.' },
   list: { ...MEMORY_GATEWAY_TOOLS.list, description: 'List this project\'s shared memories. When hasMore is true, continue with nextOffset and the same URI.',
     inputSchema: { ...MEMORY_GATEWAY_TOOLS.list.inputSchema, properties: { ...MEMORY_GATEWAY_TOOLS.list.inputSchema.properties,
-      offset: { type: 'integer', minimum: 0, maximum: 20000, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200, default: 100 } } } },
+      offset: { type: 'integer', minimum: 0, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200, default: 100 } } } },
 });
 /** The tools that read memory, as opposed to the two that change it. */
 const READ_TOOLS = new Set(["search", "read", "list"]);
@@ -604,7 +604,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             if (isHidden(uri)) { local.push(toolText(message.id, "（空）")); continue; }
             if (ctx.shared) {
               const offset = args.offset ?? 0, limit = args.limit ?? 100;
-              if (!Number.isSafeInteger(offset) || offset < 0 || offset > 20000 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+              if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
                 local.push(rpcError(message.id, -32602, 'Invalid project memory list page.')); continue;
               }
               const listed = await handlers.list({ ...ctx, query: new URLSearchParams({ uri, recursive: String(args.recursive === true), offset: String(offset), limit: String(limit) }) });
