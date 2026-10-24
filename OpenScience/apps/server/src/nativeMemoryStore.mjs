@@ -790,7 +790,7 @@ export class NativeMemoryStore {
     const memoryType = last.memoryType;
     if (last.change === "deleted") {
       if (last.before === null) throw new HttpError(409, "memory_conflict", "A deleted memory keeps no text to restore.");
-      await this.#restoreText(userId, { uri, text: String(last.before), memoryType, projectId: last.projectId, revisionId: last.id, reason: "undo", live: Boolean(live) });
+      await this.#restoreText(userId, { uri, text: String(last.before), memoryType, projectId: last.projectId, revisionId: last.id, reason: "undo" });
       return { undone: "restored", record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [] };
     }
     if (!live) throw new HttpError(404, "memory_not_found", "Memory not found.");
@@ -812,26 +812,17 @@ export class NativeMemoryStore {
   }
 
   /**
-   * Put a forgotten file's text back as a file, and take the forget off the list of what can be undone. `replace` first, in both
-   * cases. A file the engine has written again at this address since the person forgot it is overwritten by the restore: `create`
-   * only refused that on v0.5.0 (409) and is a plain alias of `replace` from v0.5.1, so the guard cannot be relied on, and the
-   * person asked for this text back (the race is accepted, not prevented). A forgotten file is gone, and v0.5.0's answer to `replace`
-   * on a missing file is not recorded for these paths: a 404 is answered with `create`, which v0.5.0 does take. That fallback is dead
-   * from v0.5.1.1 and goes with the pin. What a restore can give back is the text: the engine's own fields (its type) are not restored
-   * with it, and its later extraction writes beside the file rather than into it.
+   * Put a forgotten file's text back as a file, and take the forget off the list of what can be undone, with one `replace`. A
+   * file the engine has written again at this address since the person forgot it is overwritten by the restore: `create` is a
+   * plain alias of `replace` from v0.5.1, so there is no guard to rely on, and the person asked for this text back (the race is
+   * accepted, not prevented). `replace` on a missing file creates it, parents included (measured on v0.5.1.1, under `memories/`).
+   * What a restore can give back is the text: the engine's own fields (its type) are not restored with it, and its later
+   * extraction writes beside the file rather than into it.
    * @param {string} userId
-   * @param {{ uri: string, text: string, memoryType: string, projectId?: string | null, revisionId: string, reason: string, live?: boolean }} restore
+   * @param {{ uri: string, text: string, memoryType: string, projectId?: string | null, revisionId: string, reason: string }} restore
    */
-  async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason, live = false }) {
-    if (live) await this.#engine(() => this.sessions.replace(userId, uri, text));
-    else await this.#engine(async () => {
-      const write = (/** @type {"replace" | "create"} */ mode) => this.sessions.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: 20_000,
-        body: { uri, content: text, mode, wait: true } });
-      try { await write("replace"); } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
-        await write("create");
-      }
-    });
+  async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason }) {
+    await this.#engine(() => this.sessions.replace(userId, uri, text));
     await this.overlay.unreject(userId, memoryType, statements(text));
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => this.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});

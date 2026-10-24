@@ -804,7 +804,9 @@ export class KnowledgePageService {
       // Ended, or a record the engine no longer holds. Either way what is in the target is mirrored: nothing is lost with a task.
       const mirrored = await this.#mirror(user, project, tree, { reapply: true, round: state.round });
       const cost = task ? await this.#recordUsage(userId, { taskId: task.taskId, tree, usage: task.usage }) : 0;
-      const outcome = { status: task?.status ?? "expired", error: task?.error ?? null, seconds: task?.processingSeconds ?? null, tokens: task?.usage?.totalTokens ?? null, cost, ...mirrored };
+      // A task that says `completed` can still be partial (a job of the pipeline failed): what it reported rides with the round.
+      const outcome = { status: task?.status ?? "expired", error: task?.error ?? null, seconds: task?.processingSeconds ?? null, tokens: task?.usage?.totalTokens ?? null, cost,
+        warnings: (task?.result?.warnings ?? []).slice(0, 5).map((/** @type {string} */ line) => line.slice(0, 300)), ...mirrored };
       const failed = outcome.status !== "completed";
       if (failed) this.counters.failed += 1;
       await this.#updateState(userId, projectId, (value) => {

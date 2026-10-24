@@ -1,7 +1,7 @@
-// The Resources and Compile half of the OpenViking client, held to what a running v0.5.0 server answered.
+// The Resources and Compile half of the OpenViking client, held to what a running v0.5.1.1 server answered.
 //
 // Every response here is a recorded one (`packages/contracts/openviking/fixtures/knowledge/`, off the lab instance of
-// 2026-10-12, `provenance.json` beside them): served over real HTTP, so a parse that only works on a hand-shaped
+// 2026-10-23, `provenance.json` beside them): served over real HTTP, so a parse that only works on a hand-shaped
 // object fails, and what the client asked is asserted against what the recording was asked.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -96,21 +96,21 @@ test("a document is pushed as <srcId>.md with vectors only and its tags, in one 
   });
 });
 
-test("an engine that has no file to replace is answered with a create, and any other refusal is a counted failure", async () => {
-  // v0.5.0's answer to `replace` on a missing resource file is not recorded; a 404 falls back to `create`, which it takes.
-  const created = await fixture("content-write-create");
-  const exists = await fixture("content-write-create-exists");
-  let calls = 0;
-  await withEngine(() => (++calls === 1 ? { status: 404, body: { status: "error", result: null, error: { code: "NOT_FOUND", message: "File not found" } } } : { body: created }), async ({ resources, seen }) => {
+test("a document that is not in the engine yet is created by the same one replacing write, and any refusal is a counted failure", async () => {
+  // Recorded on v0.5.1.1: `replace` on a file that is not there creates it, parents included — so the create fallback the
+  // v0.5.0 pin kept is gone, and a refusal is never retried as something else.
+  const created = await fixture("content-write-replace-missing");
+  assert.equal(created.result.mode, "replace");
+  assert.equal(created.result.content_updated, true);
+  await withEngine(() => ({ body: created }), async ({ resources, seen }) => {
     const pushed = await resources.pushSource(USER, resources.sourceUri(USER, PROJECT, "src_00000000000000000000000000000001"), "v1", { sourceId: "src_00000000000000000000000000000001", sha: "a".repeat(64) });
-    assert.deepEqual(seen.map((request) => request.body.mode), ["replace", "create"]);
-    assert.deepEqual(seen[1].body.tags, seen[0].body.tags);
+    assert.deepEqual(seen.map((request) => request.body.mode), ["replace"]);
     assert.ok(pushed.bytes > 0);
     assert.equal(resources.status().pushes, 1);
   });
-  await withEngine(() => ({ status: 409, body: exists }), async ({ resources, seen }) => {
-    await assert.rejects(() => resources.pushSource(USER, resources.sourceUri(USER, PROJECT, "src_00000000000000000000000000000001"), "v3", { sourceId: "src_00000000000000000000000000000001", sha: "c".repeat(64) }), { code: "memory_index_conflict" });
-    assert.equal(seen.length, 1, "a refusal that is not a missing file is not retried as something else");
+  await withEngine(() => ({ status: 404, body: { status: "error", result: null, error: { code: "NOT_FOUND", message: "File not found" } } }), async ({ resources, seen }) => {
+    await assert.rejects(() => resources.pushSource(USER, resources.sourceUri(USER, PROJECT, "src_00000000000000000000000000000001"), "v3", { sourceId: "src_00000000000000000000000000000001", sha: "c".repeat(64) }), { code: "memory_index_not_found" });
+    assert.equal(seen.length, 1, "a refusal is not retried as a create");
     assert.equal(resources.status().failures, 1);
   });
 });
@@ -269,12 +269,42 @@ test("a compile is submitted with an idempotency key and no args, polled, and ca
     assert.deepEqual([first?.status, first?.stage, first?.terminal, first?.usage], ["running", "compile: collecting_context", false, null]);
     const done = await resources.task(USER, task.taskId);
     assert.equal(done?.terminal, true);
-    assert.deepEqual(done?.usage, { inputTokens: 60864, outputTokens: 5108, totalTokens: 65972 });
-    assert.ok((done?.result?.pageCount ?? 0) > 0);
+    // v0.5.1 reports a compile's tokens under `meta.pipeline.tokens` (`input`, `output`, `cached`); v0.5.0 had `meta.token_usage`.
+    const tokens = completed.result.meta.pipeline.tokens;
+    assert.deepEqual(done?.usage, { inputTokens: tokens.input, outputTokens: tokens.output, cachedTokens: tokens.cached, totalTokens: tokens.input + tokens.output });
+    assert.ok((done?.usage?.totalTokens ?? 0) > 0, "a compile's tokens were not read: the account's knowledge caps would never move");
+    assert.deepEqual(done?.result?.warnings, []);
     assert.equal((await resources.cancelTask(USER, task.taskId))?.status, "cancelling");
     // An expired task and one that never existed answer the same; neither is an error.
     assert.equal(await resources.task(USER, `cmp_${"0".repeat(64)}`), null);
     await assert.rejects(resources.submitCompile(USER, { from: [roots.sources], to: roots.wiki, skill: "daily-report", idempotencyKey: key }), { code: "knowledge_skill_unknown" });
+  });
+});
+
+test("a compile that completed with a failed job is read as partial, and a root outside the acting user's own resources is never submitted", async () => {
+  const completed = readdress(await fixture("tasks-get-completed"));
+  const partial = structuredClone(completed);
+  partial.result.meta.pipeline.errors = ["1 pipeline jobs failed: ['Required agent transform ended without validated output: No emit result was submitted']"];
+  partial.result.result.warnings = ["Partial output; unfinished jobs: 1 pipeline jobs failed: ['Required agent transform ended without validated output: No emit result was submitted']"];
+  await withEngine(() => ({ body: partial }), async ({ resources }) => {
+    const task = await resources.task(USER, "cmp_1");
+    assert.equal(task?.status, "completed");
+    assert.equal(task?.result?.warnings.length, 2, "the partial output was not reported");
+    assert.match(String(task?.result?.warnings[0]), /Partial output/);
+  });
+  // The engine refuses another user's root (403 at submission) but takes the account-shared `viking://resources/…` and
+  // `viking://agent/…` roots, which the identity shim of the v0.5.0 pin used to refuse by rule: so the control plane does.
+  await withEngine(() => ({ status: 202, body: null }), async ({ resources, seen }) => {
+    const roots = resources.roots(USER, PROJECT);
+    const key = compileIdempotencyKey({ projectId: PROJECT, tree: "wiki", round: 1 });
+    const other = `viking://user/${openVikingUserId("someone-else")}/resources/p/${openVikingPeerId(PROJECT)}`;
+    for (const [from, to] of [
+      [[roots.sources], "viking://resources/shared"], [[roots.sources], "viking://agent/skills/llm-wiki"], [[roots.sources], `${other}/wiki`],
+      [[`${other}/sources`], roots.wiki], [["viking://resources"], roots.wiki], [[`${roots.project}/../p-other/sources`], roots.wiki], [[roots.sources], `${roots.project}/../x`],
+    ]) {
+      await assert.rejects(resources.submitCompile(USER, { from, to, skill: "llm-wiki", idempotencyKey: key }), { code: "knowledge_compile_invalid" }, `${from} -> ${to} left the control plane`);
+    }
+    assert.equal(seen.length, 0);
   });
 });
 

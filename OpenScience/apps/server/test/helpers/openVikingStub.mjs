@@ -1,11 +1,11 @@
 // An OpenViking that lives in a test: the routes the native memory path calls, answering in the envelopes recorded from
-// v0.5.0 (`packages/contracts/openviking/fixtures/memory/`). It keeps files, sessions and tasks in memory, runs an
+// v0.5.1.1 (`packages/contracts/openviking/fixtures/memory/`). It keeps files, sessions and tasks in memory, runs an
 // "extraction" the test supplies at commit, and records every request it was sent — headers included — so a test can
 // assert what reached the engine and what did not.
 //
 // What it copies from the real server, because the code under test depends on it: a commit answers at once with a task and
 // an archive URI; the task ends `completed` with a `memory_diff_uri` or `failed` with a `.failed.json` beside the archive's
-// `messages.jsonl`; a failed archive is never retried; a file made by `content/write mode=create` has no memory type; a
+// `messages.jsonl`; a failed archive is never retried; a file made by `content/write` has no memory type (`create` is an alias of `replace`, and `replace` creates a missing file); a
 // settings PATCH without `memory_types` opens the user to every built-in type; an unregistered user's admin routes are 404;
 // a user being deleted answers 412; `fs/tree` pages with `has_more`.
 import { once } from "node:events";
@@ -108,7 +108,7 @@ export class OpenVikingStub {
       res.writeHead(status, { "content-type": contentType });
       res.end(typeof json === "string" ? json : JSON.stringify(json));
     };
-    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: "v0.5.0", auth_mode: "trusted", user_id: user || null });
+    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: "v0.5.1.1", auth_mode: "trusted", user_id: user || null });
     if (req.headers["x-api-key"] !== this.apiKey) return send(401, fail("UNAUTHENTICATED", "Invalid API key"));
     if (this.failWith) return send(this.failWith, fail("UNAVAILABLE", "stub: down"));
     const admin = /^\/api\/v1\/admin\/accounts\/([^/]+)\/users(?:\/([^/]+)(\/settings)?)?$/.exec(url.pathname);
@@ -233,8 +233,7 @@ export class OpenVikingStub {
     if (path === "/api/v1/content/write" && req.method === "POST") {
       const uri = String(body?.uri ?? "");
       if (!within(uri)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
-      if (body?.mode === "create" && this.files.has(uri)) return send(409, fail("ALREADY_EXISTS", `File exists: ${uri}`));
-      if (body?.mode === "replace" && !this.files.has(uri) && !uri.includes("/memories/evimed/")) return send(404, fail("NOT_FOUND", `File not found: ${uri}`));
+      // v0.5.1.1: `create` is an alias of `replace` (no 409 on an existing file), and `replace` creates a file that is not there.
       this.files.set(uri, String(body?.content ?? ""));
       if (!this.tags.has(uri)) this.tags.set(uri, []);
       return send(200, ok({ uri, mode: body?.mode, written_bytes: Buffer.byteLength(String(body?.content ?? "")), content_updated: true, vector_status: "complete" }));
