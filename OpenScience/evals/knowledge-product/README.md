@@ -1,8 +1,10 @@
 # Product knowledge evaluation
 
-The 90 frozen independent question groups are 30 general, 30 medical and 30 lifecycle/access. The medical input retains 24 genuine PubMed abstracts and 27 quote-anchored questions from knowledge-pages, plus three absent-information controls. General inputs are authored fixtures, including valid DOCX and deterministic PDF, CSV tables, JavaScript source, an original-only ZIP, Chinese/English questions and an explicitly malicious source instruction. No responses are generated as benchmark truth.
+The 90 independent question groups (revision 2, before the first main quality freeze) are 30 general, 30 medical-research and 30 lifecycle/access. The 24 genuine PubMed abstracts remain unchanged. Medical-research questions now include 18 source-grounded questions, nine authored personal working-method questions and three absent-information controls; the separate original knowledge-pages C27 remains unchanged. General documents include DOCX, PDF, CSV, code and original-only ZIP material, alongside authored personal reporting conventions. No model responses are benchmark truth.
 
-General/medical questions are assigned to small (24 documents), medium (64) or large (256) projects and knowledge-only, memory-only or combined substrates. The nine contexts are assigned across the original questions, never counted as additional independent questions. Context setup uploads actual source formats; memory contexts seed the actual source text through native remember, never the expected answer. Memory-only originals and unsupported original-only archives stay in workspace files rather than being replaced with pretend parsed text. Archive bytes must be read/extracted by actual runtime tools to qualify. PDF uses the normal keyed parser boundary; the ZIP never receives a fake parsed result. Memory/combined seed commits must all leave the native pending queue before learning is paused with recall enabled. Frozen memory/settings hashes are checked before and after each question so repeated runs cannot learn their answers. No legacy-memory or offline-retriever substitute is admitted. Extra documents are identified authored distractors. Original-source-only controls first require a successful tool result containing the exact malicious original bytes tied to its bound source ID or original-file path. Missing exposure is inconclusive; only exposed controls can assess whether the malicious canary appears in an answer.
+Each substrate covers small (24 documents), medium (64) and large (256) projects. Knowledge-only tasks use external source evidence. Memory-only tasks use only genuinely authored standing user facts; their project files are irrelevant distractors, with no relevant document copies or knowledge-source routes. Combined tasks require both external facts and a previously saved personal reporting convention. Only necessary user-authored statements are seeded through native remember; documents, abstracts and warehouse distractors never are. This is project-document-size coverage, not a native-memory-volume scale test.
+
+Native seed completion requires every required personal value represented in actual native-URI-backed memory before learning is paused and recall stays enabled. Frozen inventory/settings hashes are checked before and after questions. Real native tool results or exactly identified OpenViking producer context must expose the required values. Memory-only answers use the existing semantic key-point judge, including multilingual paraphrases; combined answers have separate semantic knowledge and personal-criterion judgements through the same judge and aggregate budget. Their score is the minimum. Original-only and malicious-source controls apply to the knowledge inputs and still require actual byte exposure. Missing exposure or provenance stays inconclusive. No legacy-memory or offline-retriever substitution is admitted.
 
 The fixed primary rule is unchanged: paired bootstrap over question means, 10,000 seeded draws, general and medical independently require the lower 95% bound above minus 0.02. Repetitions are averaged within question. There are 26 general and 27 medical answerable questions; four general and three medical unanswerables have separate abstention denominators. Substrate, size, language and format coverage is reported separately. All lifecycle questions require complete native evidence with zero violations. Missing data stays inconclusive.
 
@@ -80,3 +82,35 @@ model request; it neither reserves budget nor grants access to `/v1/messages` or
 other model paths. Invalid configuration fails before the boundary probe. Keep
 this list in the protected per-process wiring; the coordinator ledger and its
 identity do not change.
+
+### Main benchmark preparation revision 2 (before its first quality freeze)
+
+Version 1's unexecuted preparation was invalid: it sent source documents, medical abstracts and
+warehouse distractors through native `remember`, although the product's memory templates explicitly
+exclude document text and conclusions. It also asked memory-only trial-fact questions and allowed
+combined questions to be answered without personal context. Its exact bytes and both file/semantic
+benchmark hashes are retained under `superseded/`; it produced no main quality result.
+
+Version 2 retains 90 unique questions, 30 general / 30 medical-research / 30 lifecycle,
+three repetitions and the same aggregate CNY50 coordinator. Original knowledge-pages C27 inputs,
+prompts, judge and thresholds are unchanged. The 17 memory-only questions now ask authored standing
+work/reporting preferences, including medical-research working methods rather than trial outcomes.
+The 21 combined questions retain their external source contract and additionally require the saved
+heading for a named report series. Their knowledge and memory components use separate calls to the same semantic key-point judge and are reported separately;
+the combined score is their minimum, so either missing component prevents a complete answer.
+
+Only the 38 necessary authored user statements per arm are seeded. Documents and distractors are
+never native memory seeds. Each of the nine projects still contains 24, 64 or 256 documents;
+memory-only projects contain **only irrelevant workspace documents**, with no relevant original or
+knowledge source. This is project-document-size coverage, not a claim about 256 native memory records.
+Current planned preparation per arm is 1,032 uploads, 687 knowledge sources and 38 native seed commits
+(2,064 / 1,374 / 76 across both arms), plus the existing lifecycle work and answer turns. Main factual judgement now requires 243 calls per arm (180 base judgements plus 63 separate combined-memory judgements), 486 across both arms, plus the existing judge sanity checks, all under the same CNY50 coordinator.
+The zero-spend preflight records these counts; it does not predict model-call fan-out or certify cost.
+
+Freeze now requires every necessary authored seed's grounded values in actual native-URI-backed
+memory, allowing merged files and declared equivalent phrasing. The receipt preserves the original
+user statement, matched native URI and required values. An unrelated record cannot qualify a seed.
+Collection retains real native search/read output or producer-owned OpenViking profile context;
+the required values must be exposed there and linked to the frozen inventory. Assistant text is not
+native context. Memory-only scoring requires this native evidence and does not manufacture document
+citations. No paid run should start until this revised manifest and all runtime identities are frozen.

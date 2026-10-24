@@ -9,12 +9,14 @@ import { collectRetrieval } from './evidence.mjs';
 import { verifyLiveBudgetWiring,armSharedBudget,verifyBoundCollector } from './shared_budget.mjs';
 import { readTranscript } from './native_probe.mjs';
 import { memoryHash,collectIndependentCells,fatalCollectionError,cancelAndConfirmTerminal } from './protocol.mjs';
+import {validatePersonalContexts,preparationCounts,collectNativeMemoryContext} from './personal_context.mjs';
 import { contextId } from './coverage.mjs';
 import {selectedArms,experimentIdentity,openExecution,beginArm,sealArm,saveExecution,assertActiveRuntime} from './arm_execution.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
 export async function verifyCorpus(b) {
   validateBenchmark(b);
+  validatePersonalContexts(b);
   for (const source of b.sources) if (sha(await fs.readFile(path.join(root, source.path))) !== source.sha256) throw new Error(`Frozen corpus changed: ${source.id}`);
 }
 export async function preflight(bindings,{activeArms=['baseline','candidate']}={}) {
@@ -82,7 +84,7 @@ async function execute(c, binding, repetition, arm, out) {
   const retrieval = collectRetrieval(transcriptLines);
   partial.run=run;
   const filename = `${arm}-${c.id}-${repetition}.json`;
-  const evidence = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, arm, repetition, run, digest, retrieval, actions, sourceMap,collectorBinding:binding.listenerProof,memoryInventoryBefore,actualUserId:scope.userId??binding.accounts[c.actor].userId, originalFiles:scope.originalFiles??{},originalTexts:scope.originalTexts??{},memoryFreeze:scope.memoryFreeze??null,evaluation:c.evaluation,documentCount:scope.documentCount,runtime: binding.runtimeEvidence, transcriptSha256: sha(transcript) };
+  const evidence = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, arm, repetition, run, digest, retrieval, actions, sourceMap,collectorBinding:binding.listenerProof,memoryInventoryBefore,actualUserId:scope.userId??binding.accounts[c.actor].userId, originalFiles:scope.originalFiles??{},originalTexts:scope.originalTexts??{},memoryFreeze:scope.memoryFreeze??null,evaluation:c.evaluation,memorySeeds:c.memorySeeds??[],nativeMemoryContext:collectNativeMemoryContext(transcriptLines),documentCount:scope.documentCount,runtime: binding.runtimeEvidence, transcriptSha256: sha(transcript) };
   if(scope.memoryFreeze){const after=await call(api,'GET','/api/memory/profile');evidence.memoryAfterHash=memoryHash(after);evidence.memoryVerified=!after.pending?.length&&evidence.memoryAfterHash===scope.memoryFreeze.hash;}
   await fs.writeFile(path.join(out, filename), JSON.stringify(evidence, null, 2));
   await fs.writeFile(path.join(out, `${filename}.transcript.jsonl`), transcript);
@@ -101,7 +103,7 @@ export async function main() {
   const bindings = process.env.KNOWLEDGE_EVAL_BINDINGS ? JSON.parse(await fs.readFile(process.env.KNOWLEDGE_EVAL_BINDINGS, 'utf8')) : {};
   const arms=selectedArms(process.argv);
   const missing = await preflight(bindings,{activeArms:arms});
-  const protocol = { benchmarkSha256: sha(JSON.stringify(b)), budgetCny: 50, expectedCells: 540, lifecycleDenominator: 30, independentUnit: 'question', ci: 'paired percentile bootstrap, 10000 draws, 95%', noninferiority: 'general and medical independently: lower CI > -0.02; otherwise inconclusive', missing, status: missing.length ? 'blocked' : 'ready',activeArms:arms,inactiveArms:['baseline','candidate'].filter(a=>!arms.includes(a)),spendCny:0 };
+  const protocol = { benchmarkSha256: sha(JSON.stringify(b)), budgetCny: 50, preparation:preparationCounts(b), expectedCells: 540, lifecycleDenominator: 30, independentUnit: 'question', ci: 'paired percentile bootstrap, 10000 draws, 95%', noninferiority: 'general and medical independently: lower CI > -0.02; otherwise inconclusive', missing, status: missing.length ? 'blocked' : 'ready',activeArms:arms,inactiveArms:['baseline','candidate'].filter(a=>!arms.includes(a)),spendCny:0 };
   // Preflight never overwrites a prior arm's durable execution or measured evidence.
   await fs.writeFile(path.join(out, 'preflight.json'), JSON.stringify(protocol, null, 2));
   if (missing.length) { console.log(JSON.stringify(protocol)); return; }

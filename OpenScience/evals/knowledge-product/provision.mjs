@@ -7,6 +7,7 @@ import { Api } from '../general-tasks/runner/cell.mjs';
 import { verifyCorpus } from './run.mjs';
 import { nativeScenarios,runNativeLifecycle,nativePrerequisites,lifecycleEligibility,assertRestoredIdentity } from './native_lifecycle.mjs';
 import { freezeSeededMemory,fatalCollectionError } from './protocol.mjs';
+import {contextMaterials,seedAuthoredMemory} from './personal_context.mjs';
 import { SIZES,contextId } from './coverage.mjs';
 import { verifyLiveBudgetWiring,verifyBoundCollector } from './shared_budget.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -87,9 +88,7 @@ async function seedContexts({context,benchmark,dataDir,sharedBudget}) {
     context.accounts[`context-${key}`]=owner;const owned={id:owner.userId,type:'account',runId:context.runId};context.created.push(owned);context.receipt.created.push(owned);
     const id=`${context.runId}_${key}`;await checked(owner.api,'POST','/api/projects',{id,name:id});owner.api.project=id;
     if(evaluation.substrate==='knowledge')await checked(owner.api,'PUT','/api/memory/settings',{learningPaused:true,recallPaused:true});
-    const sourceIds=new Set(cases.flatMap(c=>c.sources));
-    if(cases.some(c=>c.evaluation.maliciousControl))sourceIds.add('general-malicious-instruction');
-    const originals=benchmark.sources.filter(s=>sourceIds.has(s.id));
+    const {originals,seeds}=contextMaterials(benchmark,cases);
     const scope={id,userId:owner.userId,credentialsFile,workspace:path.join(dataDir,'users',owner.userId,'projects',id,'workspace'),sourceMap:{},originalFiles:{},originalTexts:{},evaluation,seededMemoryChunks:0,seededArchiveIds:[]};
     primary.contexts[key]=scope;owner.projects['project-alpha']=scope;
     if(evaluation.substrate!=='knowledge'){
@@ -107,16 +106,12 @@ async function seedContexts({context,benchmark,dataDir,sharedBudget}) {
       if(!source.distractor)scope.originalTexts[source.id]=await fs.readFile(path.join(root,source.extractedTextPath??source.path),'utf8');
       scope.originalFiles[source.id]=knowledge?`knowledge-base/${relative}`:`originals/${relative}`;
       if(knowledge){if(!uploaded.source?.id)throw new Error('Source intake failed');scope.sourceMap[source.id]=uploaded.source.id;}
-      if(evaluation.substrate!=='knowledge'){
-        const text=source.distractor?source.text:await fs.readFile(path.join(root,source.extractedTextPath??source.path),'utf8');
-        for(let offset=0;offset<text.length;offset+=1800){
-          await verifyLiveBudgetWiring(sharedBudget);
-          const commit=await checked(owner.api,'POST','/api/memory/remember',{projectId:id,text:`Original source ${source.id}; part ${Math.floor(offset/1800)+1}.\n${text.slice(offset,offset+1800)}`});
-          if(!commit?.pending?.id)throw new Error('Native seeding completion receipt missing');scope.seededArchiveIds.push(commit.pending.id);scope.seededMemoryChunks++;
-        }
-      }
     }
-    if(evaluation.substrate!=='knowledge')scope.memoryFreeze=await freezeSeededMemory((...args)=>checked(owner.api,...args),{seedIds:scope.seededArchiveIds});
+    if(evaluation.substrate!=='knowledge'){
+      const receipts=await seedAuthoredMemory((...args)=>checked(owner.api,...args),{projectId:id,seeds,beforeEach:()=>verifyLiveBudgetWiring(sharedBudget)});
+      scope.seededArchiveIds.push(...receipts.map(receipt=>receipt.id));scope.seededMemoryChunks=receipts.length;
+      scope.memoryFreeze=await freezeSeededMemory((...args)=>checked(owner.api,...args),{seedIds:scope.seededArchiveIds,requiredSeeds:seeds});
+    }
     scope.documentCount=material.length;
     // Completion of intake/recall is checked again from genuine tool output by the report; seeding alone is never readiness proof.
   }

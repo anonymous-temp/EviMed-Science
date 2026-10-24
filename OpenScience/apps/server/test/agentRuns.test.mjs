@@ -872,8 +872,9 @@ test("canceling waits for the observer even when the terminal ledger write fails
 
 test("a specialist turn cannot succeed without every declared required output", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-required-output-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -890,7 +891,7 @@ test("a specialist turn cannot succeed without every declared required output", 
       runtimeAgent: "evimed-meta-analysis",
     };
     let reads = 0;
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       agentRegistry: {
         get: () => ({
           id: "meta-analysis",
@@ -909,6 +910,8 @@ test("a specialist turn cannot succeed without every declared required output", 
       readSessionHistory: async () => {
         reads += 1;
         if (reads === 1) return [];
+        // Exceed the former 100 ms polling window without changing the terminal outcome.
+        if (reads === 2) await new Promise((resolve) => setTimeout(resolve, 150));
         return [{
           info: { id: "msg_meta_early", role: "assistant", time: { completed: Date.now() } },
           parts: [{ type: "text", text: "The managed job is still running." }],
@@ -917,15 +920,15 @@ test("a specialist turn cannot succeed without every declared required output", 
     });
 
     await store.start(project, { sessionId: binding.sessionId });
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await store.list(project))[0]?.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     const run = (await store.list(project))[0];
     assert.equal(run.status, "failed");
     assert.equal(run.errorCode, "specialist_required_output_missing");
     assert.deepEqual(run.artifacts, []);
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -2584,8 +2587,9 @@ test("refuses a symlinked run ledger", async () => {
 
 test("server monitor owns terminal state and records only existing structured artifacts", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-monitor-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -2603,7 +2607,7 @@ test("server monitor owns terminal state and records only existing structured ar
       runtimeAgent: "evimed-adr-analysis",
     };
     let reads = 0;
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       agentRegistry: {
         get: () => ({
           id: "adr-analysis",
@@ -2634,11 +2638,9 @@ test("server monitor owns terminal state and records only existing structured ar
     const started = await store.start(project, { sessionId: binding.sessionId });
     await relabelReceipt(project, started.id);
     assert.equal(started.status, "running");
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const run = (await store.list(project))[0];
-      if (run.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     const finished = (await store.list(project))[0];
     assert.equal(finished.status, "succeeded");
     assert.deepEqual(finished.artifacts, ["reports/real.md"]);
@@ -2649,6 +2651,7 @@ test("server monitor owns terminal state and records only existing structured ar
     await store.closeProject(project, "canceled");
     assert.equal((await store.list(project))[0].status, "canceled");
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -2983,8 +2986,9 @@ test("no research tool failure fails a run that ended on its own, and each one t
 
 test("one running run per session is enforced and workspace files cannot forge meta ledger", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-single-"));
+  let project, recovered;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -3007,7 +3011,7 @@ test("one running run per session is enforced and workspace files cannot forge m
       (error) => error?.code === "agent_run_active",
     );
     assert.equal((await store.list(project)).length, 1);
-    const recovered = new AgentRunStore({ get: async () => binding }, {
+    recovered = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
       monitorIntervalMs: 1,
       monitorMaxPolls: 20,
@@ -3017,23 +3021,24 @@ test("one running run per session is enforced and workspace files cannot forge m
       }],
     });
     await recovered.recover(project);
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await recovered.list(project))[0].status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await recovered.list(project))[0];
+    const monitor = recovered.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     assert.equal((await recovered.list(project))[0].status, "succeeded");
     await recovered.start(project, { sessionId: binding.sessionId });
     assert.equal((await recovered.list(project)).length, 2);
     await recovered.closeProject(project, "canceled");
   } finally {
+    if (recovered && project) await recovered.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test("maps runtime-visible absolute artifacts to the host workspace and rejects unsafe files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-runtime-path-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -3054,7 +3059,7 @@ test("maps runtime-visible absolute artifacts to the host workspace and rejects 
       runtimeAgent: null,
     };
     let reads = 0;
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
       monitorIntervalMs: 1,
       monitorMaxPolls: 20,
@@ -3075,22 +3080,23 @@ test("maps runtime-visible absolute artifacts to the host workspace and rejects 
     });
 
     await store.start(project, { sessionId: binding.sessionId });
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await store.list(project))[0]?.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     const run = (await store.list(project))[0];
     assert.equal(run.status, "succeeded");
     assert.deepEqual(run.artifacts, ["reports/real.md"]);
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test("fails baseline history closed and uses a persisted message cursor instead of old assistant history", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-cursor-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -3112,7 +3118,7 @@ test("fails baseline history closed and uses a persisted message cursor instead 
     };
     let baselineFails = true;
     let history = [oldAssistant];
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
       monitorIntervalMs: 1,
       monitorMaxPolls: 100,
@@ -3146,13 +3152,13 @@ test("fails baseline history closed and uses a persisted message cursor instead 
         parts: [{ type: "text", text: "new answer" }],
       },
     ];
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await store.list(project))[0]?.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     assert.equal((await store.list(project))[0].status, "succeeded");
     assert.equal((await store.list(project))[0].id, started.id);
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });

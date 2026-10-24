@@ -1,5 +1,6 @@
 // Frozen knowledge-pages key-point judge, routed exclusively through the same live aggregate coordinator.
 import fs from 'node:fs/promises';
+import {personalRetrievalProof} from './personal_context.mjs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,12 +12,24 @@ export function referenceFor(c){
  if(c.expected?.keyPoints)return c.expected;
  return {keyPoints:[{id:'kp1',text:String(c.expected),support:[]}]};
 }
+export function memoryReferenceFor(c){
+ return {keyPoints:(c.memorySeeds??[]).flatMap(seed=>(seed.answerValues??seed.requiredValues).map((value,index)=>({id:`${seed.id}-${index}`,text:`Apply the user's saved working preference: ${value}.`,support:[]})))};
+}
 export async function judgedObservation(c,e,{judge,filename=`${e.arm}-${c.id}-${e.repetition}.json`}){
  const result=await judge({question:c.prompt,reference:referenceFor(c),answer:e.digest?.reply??'',caseId:c.id});
  if(!result.ok||result.malformed||!Number.isFinite(result.score))throw new Error('Frozen key-point judge produced no valid judgement');
  const answer=e.digest?.reply??'';
+ const memoryProvenance=c.memorySeeds?.length?personalRetrievalProof(c,e):[];
+ const substrate=c.evaluation?.substrate;
+ const knowledgeScore=substrate==='memory'?null:result.score;
+ let memoryResult=substrate==='memory'?result:null;
+ if(substrate==='combined'){
+  memoryResult=await judge({question:c.prompt,reference:memoryReferenceFor(c),answer,caseId:c.id,component:'personal-memory'});
+  if(!memoryResult.ok||memoryResult.malformed||!Number.isFinite(memoryResult.score))throw Error('Personal memory semantic judge produced no valid judgement');
+ }
+ const score=memoryResult?(knowledgeScore===null?memoryResult.score:Math.min(knowledgeScore,memoryResult.score)):result.score;
  const citedSources=c.sources.filter(id=>answer.includes(id)||(e.sourceMap?.[id]&&answer.includes(e.sourceMap[id]))||(e.originalFiles?.[id]&&answer.includes(path.basename(e.originalFiles[id]))));
- return {caseId:c.id,arm:e.arm,repetition:e.repetition,prompt:c.prompt,actor:c.actor,project:c.project,score:result.score,citedSources,staleSources:[],abstained:c.unanswerable?result.score===1:false,violations:[],evidence:{runId:e.run.id,transcript:filename,provider:e.runtime.model},judge:{method:'unchanged knowledge-pages key-point judge',points:result.points,tokens:result.tokens??null,cost:result.cost??null},citationReview:{method:'literal original ID/file-name attribution only',resolved:citedSources.length,unresolved:!c.unanswerable&&citedSources.length===0}};
+ return {caseId:c.id,arm:e.arm,repetition:e.repetition,prompt:c.prompt,actor:c.actor,project:c.project,score,components:{knowledge:knowledgeScore,memory:memoryResult?.score??null},memoryProvenance,citedSources,staleSources:[],abstained:c.unanswerable?result.score===1:false,violations:[],evidence:{runId:e.run.id,transcript:filename,provider:e.runtime.model},judge:{method:'unchanged knowledge-pages key-point judge',points:result.points,tokens:result.tokens??null,cost:result.cost??null},memoryJudge:memoryResult?{method:'same key-point semantic judge on authored personal criterion',points:memoryResult.points,tokens:memoryResult.tokens??null,cost:memoryResult.cost??null}:null,citationReview:{method:c.evaluation?.substrate==='memory'?'native user-context provenance; source-document citations not applicable':'literal original ID/file-name attribution only',resolved:citedSources.length,unresolved:c.evaluation?.substrate!=='memory'&&!c.unanswerable&&citedSources.length===0}};
 }
 export function coordinatorJudgeClient(sharedBudget,{model='deepseek-flash',provider='deepseek'}={}){
  return {async chat(input){

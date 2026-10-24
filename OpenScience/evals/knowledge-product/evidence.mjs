@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {personalRetrievalProof} from './personal_context.mjs';
 import { SIZES } from './coverage.mjs';
 import { normalizeTool } from '../general-tasks/runner/cell.mjs';
 export function toolOutput(value) {
@@ -14,6 +15,7 @@ function successful(t){return ['completed','success','succeeded'].includes(t.sta
 const hasText=v=>typeof v==='string'&&v.trim().length>0;
 export function retrievalProof(c,e) {
   const tools=e.retrieval??[];
+  const personal=c.memorySeeds?.length?personalRetrievalProof(c,e):[];
   if(c.evaluation?.originalOnly&&!c.evaluation?.maliciousControl){
     const normalized=s=>String(s??'').replace(/\s+/g,' ').trim();
     const exposed=(c.sources??[]).every(id=>{
@@ -29,7 +31,7 @@ export function retrievalProof(c,e) {
     const contents=v=>hasText(v?.text)||hasText(v?.content)||hasText(v?.abstract)||(v?.memories??v?.results??[]).some?.(contents);
     const usefulMemory=memory.some(t=>contents(t.output?.result??t.output));
     const readyEmpty=c.unanswerable&&memory.length&&e.memoryInventory?.ready===true&&e.memoryInventory.records>0;
-    if(!usefulMemory&&!readyEmpty)throw new Error('No successful useful native memory retrieval evidence');
+    if(!usefulMemory&&!readyEmpty&&!personal.length)throw new Error('No successful useful native memory retrieval evidence');
     if(substrate==='memory')return true;
   }
   const kb=tools.filter(t=>['kb_search','kb_browse'].includes(t.name)&&successful(t));
