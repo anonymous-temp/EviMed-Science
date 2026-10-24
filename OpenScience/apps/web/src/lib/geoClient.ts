@@ -1062,6 +1062,7 @@ export interface GeoStrategyView {
     placements: number | null;
     budgetCny: number | null;
     targetCount: number;
+    targetNotes?: Array<{ metricId: string; name: string; pool: string | null; note: string }>;
   }>;
   battlefield: {
     id: string | null;

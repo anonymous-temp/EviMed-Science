@@ -384,7 +384,7 @@ it("shows three narrative-only tiers and their metric qualifications to a reader
     const notes = within(card).getByRole("list", { name: "指标说明" });
     expect(notes).toHaveTextContent("事实准确率"); expect(notes).toHaveTextContent("P2"); expect(notes).toHaveTextContent(note);
     expect(within(card).queryByRole("button")).not.toBeInTheDocument();
-    expect(card).not.toHaveTextContent(/已达到|月.*日前|预算|0 个投放位|0 篇稿件/);
+    expect(card).not.toHaveTextContent(/已达到|月.*日前|预算 [0-9]|0 个投放位|0 篇稿件/);
   });
   expect(view.container.querySelectorAll("[data-geo-target], [data-bullet-target], [role=progressbar]")).toHaveLength(0);
 });

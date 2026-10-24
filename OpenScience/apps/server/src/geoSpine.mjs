@@ -603,8 +603,12 @@ export class GeoSpine {
         placements: rows.reduce((/** @type {number | null} */ max, row) => (row.placements == null ? max : Math.max(max ?? 0, row.placements)), null),
         budgetCny: rows.reduce((/** @type {number | null} */ max, row) => (row.budgetCny == null ? max : Math.max(max ?? 0, row.budgetCny)), null),
         targetCount: rows.length,
+        targetNotes: (Array.isArray(written?.targets) ? written.targets : []).flatMap((/** @type {any} */ target) => {
+          const metricId = text(target?.metricId), note = text(target?.note);
+          return metricId && note ? [{ metricId, name: geoMetricName(metricId), pool: text(target.pool), note }] : [];
+        }),
       };
-    }).filter((entry) => entry.targetCount > 0 || entry.name || entry.buys);
+    }).filter((entry) => entry.targetCount > 0 || entry.name || entry.buys || entry.summary || entry.targetNotes.length > 0);
     const gaps = Array.isArray(strategy?.gaps) ? strategy.gaps : [];
     return {
       version: strategy?.version ?? null, createdAt: strategy?.createdAt ?? null, runId: strategy?.runId ?? null, summary: strategy?.summary ?? null,

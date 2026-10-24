@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
+import { createGeoDeliveryImport, fillStrategy } from "../src/geoDeliveryImport.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { GEO_TABLES, migrateGeo } from "../src/geoPersistence.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -657,10 +657,15 @@ test("tier narrative aliases share canonical normalization, limits and diagnosti
   const draft = tiers => geoStrategyDraft({ tiers }).strategy.tiers;
   assert.deepEqual(draft([{ tier: 1, basis: "  First\nSecond\u0000  ", targets: [{ metricId: "M-06", basis: " one\n two\u0000 " }] }]),
     [{ tier: "1", summary: "First\nSecond", targets: [{ metricId: "M-06", note: "one two" }] }]);
-  for (const [summary, basis, expected] of [["Canonical", "Canonical", "Canonical"], ["First\n\nSecond", "Second", "First\n\nSecond"],
+  for (const [summary, basis, expected] of [["Canonical", "Canonical", "Canonical"], ["First\n\nSecond", "Second", "First\n\nSecond"], ["First\n\nOne two", "One\n two", "First\n\nOne two"],
     ["Canonical", "Extra", "Canonical\n\nExtra"], ["", "Alias", "Alias"], [null, "Alias", "Alias"]]) {
     assert.equal(draft([{ tier: 1, summary, basis }])[0].summary, expected);
   }
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", note: "First\n\nOne two", basis: "One\n two" }] }])[0].targets[0].note, "First One two");
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", note: "First", basis: "Second" }] }])[0].targets[0].note, "First Second");
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", basis: "Hard line in words", hardLine: true }] }])[0].targets[0].hardLine, true);
+  assert.equal(draft([{ tier: 1, summary: "x".repeat(597), basis: "y" }])[0].summary.length, 600);
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", note: "x".repeat(498), basis: "y" }] }])[0].targets[0].note.length, 500);
   const unicode = "😀".repeat(600), note = "😀".repeat(500);
   assert.equal(draft([{ tier: 1, basis: unicode, targets: [{ metricId: "M-09", basis: note }] }])[0].summary, unicode);
   assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-09", note: "One two", basis: "One\n two" }] }])[0].targets[0].note, "One two");
@@ -685,13 +690,17 @@ test("the exact six N09 narratives agree through direct writes, draft and file i
   const preservedPath = process.env.GEO_N09_PRESERVED_STRATEGY_PATH;
   const bytes = preservedPath ? readFileSync(preservedPath) : null;
   if (bytes) { assert.equal(bytes.length, 11941); assert.equal(createHash("sha256").update(bytes).digest("hex"), "a74e561549c426755bec5e4925151d5274d2fdf4c3af53a48738f5268d6b12d0"); }
-  const original = bytes ? JSON.parse(bytes.toString("utf8")) : { tiers: n09Tiers() };
+  const original = bytes ? JSON.parse(bytes.toString("utf8")) : { tiers: n09Tiers(), sources: [{ domain: "n09.example.invalid", url: "https://n09.example.invalid/g1", sourceId: "n09c5-source1", availability: "unknown" }] };
   const input = structuredClone(original), unchanged = JSON.stringify(input);
   const draft = geoStrategyDraft(geoStrategyWriteOfFile(input));
   assert.deepEqual(draft.strategy.tiers.map(tier => tier.summary), N09_SUMMARIES);
   assert.deepEqual(draft.strategy.tiers.map(tier => tier.targets[0].note), [N09_NOTE, N09_NOTE, N09_NOTE]);
   assert.equal(draft.issues.some(issue => issue.code === "ignored_fields" && issue.field?.includes("basis")), false);
-  assert.equal(geoStrategyFileCoverage(input).dropped.some(path => /^tiers.*basis$/.test(path)), false);
+  const coverage = geoStrategyFileCoverage(input);
+  assert.equal(coverage.dropped.some(path => /^tiers.*basis$/.test(path)), false);
+  for (const key of ["url", "sourceId", "availability"]) assert.ok(coverage.dropped.includes(`sources.table[0].${key}`));
+  for (const source of draft.sources) for (const key of ["url", "sourceId", "availability", "checkEvidence"]) assert.ok(!source[key], `${key} has no source-page mapping`);
+  assert.deepEqual(draft.sources[0].valueContext, {});
   assert.equal(draft.strategy.tiers.some(tier => "basis" in tier || tier.targets.some(target => "basis" in target || "target" in target || "hardLine" in target)), false);
   assert.ok(draft.issues.filter(issue => issue.code === "declined_fields" && issue.field?.includes("baseline,target,dataType")).length === 3);
   const direct = await projectWithBaseline(), imported = await projectWithBaseline();
@@ -701,6 +710,9 @@ test("the exact six N09 narratives agree through direct writes, draft and file i
   assert.deepEqual((await store.latestStrategy(direct.geo.id)).tiers, draft.strategy.tiers);
   assert.deepEqual((await store.latestStrategy(imported.geo.id)).tiers, draft.strategy.tiers);
   assert.deepEqual((await store.latestTargets(imported.geo.id))?.rows ?? [], []);
+  const sources = await store.listSources(imported.geo.id);
+  assert.equal(sources[0].domain, "n09.example.invalid"); assert.notEqual(sources[0].id, "n09c5-source1");
+  assert.equal((await database.query("SELECT * FROM evimed_geo.owned_links WHERE geo_project_id=$1", [imported.geo.id])).rows.length, 0);
   assert.equal(JSON.stringify(input), unchanged);
   if (bytes) assert.deepEqual(readFileSync(preservedPath), bytes);
 });
@@ -726,11 +738,35 @@ test("same-run tier note enrichment uses metric plus pool, preserves canonical f
     assert.equal(tier.targets.find(target => target.pool === "P3").note, "Other pool");
   }
   await make()(control, produced); assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, next.version);
-  assert.deepEqual((await store.latestStrategy(geo.id, { version: before.version, scopeKey: context.scopeKey }))?.tiers ?? before.tiers, held);
+  assert.deepEqual((await store.latestStrategy(geo.id, { strategyVersion: before.version, scopeKey: context.scopeKey }))?.tiers ?? before.tiers, held);
   assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []); assert.equal(JSON.stringify(input), original);
   const conflict = { tiers: [{ tier: 1, targets: [{ metricId: "M-06", pool: "P2", note: "Extra qualification" }] }] };
   const importer = importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => JSON.stringify(conflict) });
   await importer.importDelivery(control, produced);
   assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, next.version);
   assert.ok(importer.reports.some(message => message.includes("qualification") && message.includes("P2")), "held canonical conflicts are explicit");
+});
+
+
+test("tier note enrichment is narrow, immutable and preserves generic array identity rules", () => {
+  const held = { tiers: [{ tier: "1", summary: "Held words", targets: [{ metricId: "M-06", pool: "P2", level: "Held" }] }],
+    actions: [{ metricId: "M-06", pool: "P2", reason: "Held action" }] };
+  const given = { tiers: [{ tier: "1", summary: "File words", targets: [{ metricId: "M-06", pool: "P2", note: "Missing note", level: "File" }, { metricId: "M-06", pool: "P3", note: "Distinct pool" }] }],
+    actions: [{ metricId: "M-06", pool: "P2", note: "Must not merge" }] };
+  const before = JSON.stringify({ held, given }), filled = fillStrategy(held, given);
+  assert.equal(filled.tiers[0].summary, "Held words"); assert.equal(filled.tiers[0].targets[0].level, "Held");
+  assert.equal(filled.tiers[0].targets[0].note, "Missing note"); assert.equal(filled.tiers[0].targets[1].pool, "P3");
+  assert.equal(filled.actions, undefined); assert.equal(JSON.stringify({ held, given }), before);
+});
+
+
+test("an invalid optional tier alias still writes canonical text and valid siblings through the shared writer", options, async () => {
+  const { geo } = await projectWithBaseline();
+  const data = { tiers: [{ tier: 1, summary: "Canonical", basis: {}, buys: "Useful", targets: [{ metricId: "M-06", note: "Held", basis: "😀".repeat(501) }] }, { tier: 2, basis: "Sibling" }] };
+  const original = JSON.stringify(data), draft = geoStrategyDraft(data);
+  const written = await geoRuntimeWrite({ store, project: geo, what: "strategy", body: { data } });
+  assert.equal(written.ok, true); assert.equal(written.ids.length, 1);
+  assert.ok(written.issues.some(issue => issue.code === "alias_invalid")); assert.ok(written.issues.some(issue => issue.code === "alias_too_long"));
+  assert.deepEqual((await store.latestStrategy(geo.id)).tiers, draft.strategy.tiers);
+  assert.equal((await store.latestStrategy(geo.id)).tiers[0].targets[0].note, "Held"); assert.equal(JSON.stringify(data), original);
 });

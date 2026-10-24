@@ -139,12 +139,25 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
                     </Button>
                   ) : null}
                 </header>
-                {tier.summary && <p className="mt-2 text-ui text-text-2">{tier.summary}</p>}
+                {tier.summary && <p className="mt-2 whitespace-pre-wrap text-ui text-text-2">{tier.summary}</p>}
                 <ul className="mt-4 flex flex-col gap-4">
                   {head.map((row) => (
                     <TargetBarRow key={`${row.metricId}|${row.pool}`} row={row} tier={tier.tier} currentLabel={currentLabel} baselineDay={baselineDay} latestDay={plan.targets.latestRound?.sampleDate ?? null} />
                   ))}
                 </ul>
+                {Boolean(tier.targetNotes?.length) && (
+                  <div className="mt-4">
+                    <p className="text-caption font-semibold text-text">指标说明</p>
+                    <ul aria-label="指标说明" className="mt-1.5 flex flex-col gap-3 text-ui text-text-2">
+                      {tier.targetNotes?.map((entry, index) => (
+                        <li key={`${entry.metricId}|${entry.pool ?? ""}|${index}`}>
+                          <span className="block text-caption font-semibold text-text">{entry.name}{entry.pool ? `（${entry.pool}）` : ""}</span>
+                          <span className="block whitespace-pre-wrap break-words">{entry.note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <p className="mt-4 text-caption tabular-nums text-text-3">
                   {[
                     tier.contentUnits != null ? `${tier.contentUnits} 篇稿件` : null,

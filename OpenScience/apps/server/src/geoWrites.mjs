@@ -1170,13 +1170,40 @@ function validatedAction(raw, index, issues) {
 }
 
 /**
+ * A narrative alias is optional: invalid or oversized text must not refuse its canonical value or siblings.
+ * Only a fully consumed alias belongs to the coverage vocabulary. The original remains in the run's file.
+ * @param {Record<string, any>} raw @param {string} canonical @param {number} max @param {boolean} multiline
+ * @param {GeoIssue[]} issues @param {{index?:number,path?:string}} where
+ */
+function tierNarrative(raw, canonical, max, multiline, issues, where) {
+  const value = fields(raw, issues, where).text(canonical, max, { multiline });
+  if (value === undefined || !Object.hasOwn(raw, "basis") || raw.basis == null) return { value, consumed: false };
+  const diagnostic = (/** @type {string} */ code, /** @type {string} */ reason) => {
+    issues.push({ ...(where.index == null ? {} : { index: where.index }), field: `${where.path ? `${where.path}.` : ""}basis`, code: `alias_${code}`,
+      message: `basis was kept only in the original file: ${reason}; valid ${canonical} and sibling fields were preserved.` });
+    return { value, consumed: false };
+  };
+  if (typeof raw.basis !== "string") return diagnostic("invalid", "it must be text");
+  const alias = multiline ? stripControls(raw.basis).trim() : stripControls(raw.basis).replace(/\s+/g, " ").trim();
+  if (!alias) return diagnostic("empty", "it has no narrative text");
+  if ([...alias].length > max) return diagnostic("too_long", `it exceeds ${max} characters`);
+  const normalized = (/** @type {string} */ text) => text.replace(/\s+/g, " ").trim();
+  const duplicate = value && (normalized(value) === normalized(alias)
+    || String(raw[canonical]).split(/\n\s*\n/).some(paragraph => normalized(stripControls(paragraph)) === normalized(alias)));
+  const merged = value && !duplicate ? `${value}${multiline ? "\n\n" : " "}${alias}` : value || alias;
+  if ([...merged].length > max) return diagnostic("too_long", `appending it would exceed ${max} characters`);
+  return { value: merged, consumed: true };
+}
+
+/**
  * One tier of a strategy write in words — what it buys, what it does not promise, how many content units — beside the numbers
  * `geo_write targets` holds. The numbers a tier restates are declined.
  * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
  */
 function validatedTier(raw, index, issues) {
   const item = fields(raw, issues, { index, path: "tiers" });
-  item.unknown(GEO_STORED_FIELDS.tier, Object.keys(GEO_NOT_STORED["tiers[]"]));
+  const summary = tierNarrative(raw, "summary", 600, true, issues, { index, path: "tiers" });
+  item.unknown([...GEO_STORED_FIELDS.tier, ...(summary.consumed ? ["basis"] : [])], Object.keys(GEO_NOT_STORED["tiers[]"]));
   const tier = String(raw.tier ?? "");
   if (!GEO_TIERS.includes(tier)) {
     issues.push({ index, field: "tiers.tier", code: "notice", message: `tier is one of: ${GEO_TIERS.join(", ")}; this entry was left out.` });
@@ -1184,14 +1211,15 @@ function validatedTier(raw, index, issues) {
   }
   const targets = objectList(raw, "targets", 40, issues, (entry, position) => {
     const reader = fields(entry, issues, { index, path: `tiers.targets[${position}]` });
-    reader.unknown(GEO_STORED_FIELDS.tierTarget, Object.keys(GEO_NOT_STORED["tiers[].targets[]"]));
-    const value = { metricId: reader.text("metricId", 24), pool: reader.text("pool", 40), note: reader.text("note", 500),
+    const note = tierNarrative(entry, "note", 500, false, issues, { index, path: `tiers.targets[${position}]` });
+    reader.unknown([...GEO_STORED_FIELDS.tierTarget, ...(note.consumed ? ["basis"] : [])], Object.keys(GEO_NOT_STORED["tiers[].targets[]"]));
+    const value = { metricId: reader.text("metricId", 24), pool: reader.text("pool", 40), note: note.value,
       level: reader.text("level", 30), hardLine: reader.flag("hardLine"), engineScope: reader.texts("engineScope", 10, 20) };
-    return reader.refused || !value.metricId ? null : Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null && !(Array.isArray(entryValue) && !entryValue.length)));
+    return reader.refused || note.value === undefined || !value.metricId ? null : Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null && !(Array.isArray(entryValue) && !entryValue.length)));
   });
-  const value = { tier, name: item.text("name", 120), summary: item.text("summary", 600, { multiline: true }), buys: item.text("buys", 800, { multiline: true }),
+  const value = { tier, name: item.text("name", 120), summary: summary.value, buys: item.text("buys", 800, { multiline: true }),
     notPromised: textList(raw.notPromised, 12).map((line) => line.slice(0, 300)), contentUnits: item.number("contentUnits", 0, 1000), targets };
-  if (item.refused) return null;
+  if (item.refused || summary.value === undefined) return null;
   return Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "tier" || (entryValue != null && !(Array.isArray(entryValue) && entryValue.length === 0))));
 }
 
@@ -1393,9 +1421,13 @@ export function geoStrategyFileCoverage(file) {
     each(`gaps[${index}].expectedPoints`, gap?.expectedPoints, GEO_STORED_FIELDS.expectedPoint, {});
   });
   each("expectations", source.expectations, GEO_STORED_FIELDS.expectation, GEO_NOT_STORED["expectations[]"]);
-  each("tiers", source.tiers, GEO_STORED_FIELDS.tier, GEO_NOT_STORED["tiers[]"]);
   (Array.isArray(source.tiers) ? source.tiers : []).forEach((/** @type {any} */ tier, /** @type {number} */ index) => {
-    each(`tiers[${index}].targets`, tier?.targets, GEO_STORED_FIELDS.tierTarget, GEO_NOT_STORED["tiers[].targets[]"]);
+    const summary = isObject(tier) ? tierNarrative(tier, "summary", 600, true, [], {}) : null;
+    walk(`tiers[${index}]`, tier, [...GEO_STORED_FIELDS.tier, ...(summary?.consumed ? ["basis"] : [])], GEO_NOT_STORED["tiers[]"]);
+    (Array.isArray(tier?.targets) ? tier.targets : []).forEach((/** @type {any} */ target, /** @type {number} */ position) => {
+      const note = isObject(target) ? tierNarrative(target, "note", 500, false, [], {}) : null;
+      walk(`tiers[${index}].targets[${position}]`, target, [...GEO_STORED_FIELDS.tierTarget, ...(note?.consumed ? ["basis"] : [])], GEO_NOT_STORED["tiers[].targets[]"]);
+    });
   });
   each("assumptions", source.assumptions, GEO_STORED_FIELDS.assumption, {});
   each("noGo", source.noGo ?? source.no_go, GEO_STORED_FIELDS.noGo, {});

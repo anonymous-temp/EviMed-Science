@@ -57,11 +57,39 @@ export function fillValue(held, given) {
 }
 
 /**
+ * Only strategy-tier targets use a compound identity. A file fills their missing notes, never their richer held fields.
+ * @param {any[]} held @param {any[]} given @param {(message:string)=>void} notice
+ */
+function fillTierNotes(held, given, notice) {
+  const key = (/** @type {any} */ entry) => JSON.stringify([entry?.metricId, entry?.pool ?? null]);
+  const out = held.map(tier => {
+    const other = given.find(candidate => String(candidate?.tier) === String(tier?.tier));
+    if (!other) return tier;
+    const { targets: incoming, ...words } = other;
+    const merged = /** @type {any} */ (fillValue(tier, words));
+    if (!Array.isArray(tier.targets) || !tier.targets.length) return { ...merged, ...(incoming ? { targets: incoming } : {}) };
+    if (!Array.isArray(incoming)) return merged;
+    const targets = tier.targets.map(target => {
+      const added = incoming.find(candidate => key(candidate) === key(target));
+      if (!added?.note) return target;
+      if (isEmptyValue(target.note)) return { ...target, note: added.note };
+      if (target.note !== added.note) notice(`geo_strategy_qualification_not_stored:tier=${tier.tier},metricId=${target.metricId},pool=${target.pool ?? "unknown"}: held note preserved; extra qualification remains in the original file.`);
+      return target;
+    });
+    for (const target of incoming) if (!tier.targets.some(candidate => key(candidate) === key(target))) targets.push(target);
+    return { ...merged, targets };
+  });
+  for (const tier of given) if (!held.some(candidate => String(candidate?.tier) === String(tier?.tier))) out.push(tier);
+  return out;
+}
+
+/**
  * The parts of a strategy file worth writing over what the run wrote itself: only those where the file adds something.
  * @param {Record<string, any> | null} stored the latest stored strategy @param {Record<string, any>} data the file, in write form
+ * @param {(message:string)=>void} [notice]
  * @returns {Record<string, any>}
  */
-export function fillStrategy(stored, data) {
+export function fillStrategy(stored, data, notice = () => {}) {
   /** @type {Record<string, any>} */
   const out = {};
   /** @type {Record<string, any>} */
@@ -72,7 +100,8 @@ export function fillStrategy(stored, data) {
   for (const part of STRATEGY_PARTS) {
     if (given[part] === undefined) continue;
     const held = stored?.[part] ?? null;
-    const merged = fillValue(held, given[part]);
+    const merged = part === "tiers" && Array.isArray(held) && Array.isArray(given[part])
+      ? fillTierNotes(held, given[part], notice) : fillValue(held, given[part]);
     if (canonicalJson(merged) !== canonicalJson(held)) out[part] = merged;
   }
   return out;
@@ -560,12 +589,14 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       // platform does not hold yet. A run that did not (the stored strategy is older than the run) is the file's to say.
       const originatingContext = trustedContext;
       const relative = `${deliverableDir(id)}/strategy.json`;
-      if (originatingContext) refusals(geoStrategyDraft(fileData).issues, relative);
+      const draft = geoStrategyDraft(fileData);
+      if (originatingContext) refusals(draft.issues, relative);
       if (originatingContext && !Object.keys(fileData).length) { unavailable(`${deliverableDir(id)}/strategy.json`); continue; }
       const stored = await store.latestStrategy(geoProject.id, { scopeKey: originatingContext?.scopeKey ?? null });
       const startedAt = Date.parse(String(run.startedAt ?? run.createdAt ?? ""));
       const wroteItself = originatingContext ? stored?.runId === run.id : Boolean(stored) && Number.isFinite(startedAt) && Date.parse(String(stored.createdAt)) >= startedAt;
-      const data = wroteItself ? fillStrategy(stored, fileData) : fileData;
+      const fillData = { ...fileData, ...(draft.strategy.tiers ? { tiers: draft.strategy.tiers } : {}) };
+      const data = wroteItself ? fillStrategy(stored, fillData, report) : fileData;
       const coverage = geoStrategyFileCoverage(file);
       out.declined += Object.keys(coverage.declined).length;
       counters.declinedFields += Object.keys(coverage.declined).length;
