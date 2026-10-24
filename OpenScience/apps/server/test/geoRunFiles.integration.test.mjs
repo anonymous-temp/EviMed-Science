@@ -405,3 +405,61 @@ test('delayed scoped strategy import uses the actual producing run basis and pla
   const retry = importerOf(files,{readRunFile,planningContext:async()=>context}); await retry.importDelivery(control,produced);
   assert.equal((await store.latestStrategy(geo.id,{scopeKey:context.scopeKey})).version,plan.version);
 });
+
+for (const field of ['presentedFiles', 'artifacts', 'unverifiedArtifacts', 'outputFiles']) test(`native scoped strategy discovers ${field} without declared deliverables and preserves the original scope`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/native-specialist/strategy.json';
+  const basis = { schemaVersion: 1, selection: { groupIds: ['original-group'], sourceId: 'original-source', questionVersion: 1 } };
+  const context = { mode: 'strategy', scopeKey: `native-${field}`, basis, runId: `native-${field}` };
+  const produced = { id: context.runId, status: 'succeeded', sessionId: 'native-session', kernelRequestIds: ['request'], progress: { deliverables: [] }, [field]: [relative] };
+  const original = JSON.stringify({ summary: 'Original immutable strategy', scopeKey: 'forged', basis: { replaced: true }, runId: 'forged' });
+  const make = () => importerOf(new Map([[relative, '{"summary":"New workspace bytes"}']]), {
+    planningContext: async () => context, readRunFile: async (_project, actual, file) => { assert.equal(actual.id, context.runId); assert.equal(file, relative); return original; },
+    listInsightFolders: async () => { throw new Error('Bound import must not scan workspace'); },
+    listDeliverableFolders: async () => { throw new Error('Bound import must not scan workspace'); },
+  }).importDelivery;
+  await store.writeStrategy(USER, geo.id, { summary: 'Global control' });
+  const importer = make();
+  const first = await importer(control, produced);
+  assert.equal(first?.files?.strategies, 1);
+  await Promise.all([importer(control, produced), importer(control, produced)]);
+  await make()(control, produced);
+  const stored = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.equal(stored?.summary, 'Original immutable strategy'); assert.equal(stored?.runId, produced.id);
+  assert.deepEqual(stored?.basis, basis);
+  assert.equal((await database.query('SELECT count(*)::int AS n FROM evimed_geo.strategy WHERE geo_project_id=$1 AND scope_key=$2', [geo.id, context.scopeKey])).rows[0].n, 1);
+  assert.equal((await store.latestStrategy(geo.id))?.summary, 'Global control');
+});
+
+test('bound structured import reports unavailable for missing, invalid or empty files and explicit recovery bypasses exhausted attempts without recapture', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/recover/strategy.json';
+  const produced = { id: 'recover-native', status: 'succeeded', sessionId: 'native-session', artifacts: [relative] };
+  const context = { mode: 'strategy', scopeKey: 'retry-original', basis: { original: true }, runId: produced.id };
+  let bytes = null, captures = 0;
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context,
+    beforeImport: async () => { captures++; }, readRunFile: async () => { if (bytes === null) throw Object.assign(new Error('missing'), { code: 'geo_plan_output_unavailable' }); return bytes; } });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = await importDelivery(control, produced);
+    assert.ok(result?.failed?.includes('geo_plan_output_unavailable'));
+  }
+  assert.equal(importDelivery.counters.imported, 0);
+  bytes = '{';
+  const invalid = await importDelivery(control, produced, { recovery: true, readRunFile: async () => bytes });
+  assert.ok(invalid?.failed?.includes('geo_plan_output_invalid'));
+  bytes = '{}';
+  const empty = await importDelivery(control, produced, { recovery: true, readRunFile: async () => bytes });
+  assert.ok(empty?.failed?.includes('geo_plan_output_unavailable'));
+  bytes = '{"summary":"Recovered original"}';
+  const recovered = await importDelivery(control, produced, { recovery: true, readRunFile: async () => bytes });
+  assert.equal(recovered?.files?.strategies, 1); assert.equal(captures, 2, 'Recovery never calls beforeImport capture');
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey }))?.runId, produced.id);
+});
+
+test('selected ordinary analysis remains a no-op even when it presents a report', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'analysis', runId: 'analysis' }),
+    readRunFile: async () => { throw new Error('No structured output'); }, listInsightFolders: async () => [], listDeliverableFolders: async () => [] });
+  const result = await importDelivery(control, { id: 'analysis', status: 'succeeded', presentedFiles: ['deliverables/analysis/report.md'] });
+  assert.equal(result?.failed, undefined); assert.equal(await store.latestStrategy(geo.id), null);
+});
