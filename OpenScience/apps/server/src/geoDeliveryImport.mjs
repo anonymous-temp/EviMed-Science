@@ -62,28 +62,39 @@ export function fillValue(held, given) {
  */
 function fillTierNotes(held, given, notice) {
   const key = (/** @type {any} */ entry) => JSON.stringify([entry?.metricId, entry?.pool ?? null]);
-  const out = held.map(tier => {
-    const other = given.find(candidate => String(candidate?.tier) === String(tier?.tier));
-    if (!other) return tier;
-    const { targets: incoming, ...words } = other;
-    const merged = /** @type {any} */ (fillValue(tier, words));
-    if (!Array.isArray(incoming)) return merged;
-    const targets = (Array.isArray(tier.targets) ? tier.targets : []).map(target => ({ ...target }));
-    const omitted = new Set();
-    for (const [position, added] of incoming.entries()) {
-      const matches = targets.filter(target => key(target) === key(added));
-      if (!matches.length) { targets.push({ ...added }); continue; }
+  const out = held.map(tier => ({ ...tier, ...(Array.isArray(tier.targets) ? { targets: tier.targets.map(target => ({ ...target })) } : {}) }));
+  /** @type {Map<string, any[]>} */
+  const byTier = new Map();
+  for (const tier of out) {
+    const id = String(tier.tier);
+    const group = byTier.get(id) ?? [];
+    group.push(tier); byTier.set(id, group);
+  }
+  const omitted = new Set();
+  for (const entry of given) {
+    const id = String(entry.tier);
+    let group = byTier.get(id);
+    if (!group) {
+      const tier = { tier: entry.tier };
+      out.push(tier); group = [tier]; byTier.set(id, group);
+    }
+    const primary = group[0], { targets: incoming, ...words } = entry;
+    Object.assign(primary, /** @type {any} */ (fillValue(primary, words)));
+    if (!Array.isArray(incoming)) continue;
+    for (const added of incoming) {
+      const matches = group.flatMap(tier => Array.isArray(tier.targets) ? tier.targets : []).filter(target => key(target) === key(added));
+      if (!matches.length) { (primary.targets ??= []).push({ ...added }); continue; }
       if (isEmptyValue(added.note) || matches.some(target => target.note === added.note)) continue;
       const missing = matches.find(target => isEmptyValue(target.note));
       if (missing) { missing.note = added.note; continue; }
-      const identity = JSON.stringify([key(added), added.note]);
+      const identity = JSON.stringify([id, key(added), added.note]);
       if (omitted.has(identity)) continue;
       omitted.add(identity);
-      notice(`geo_strategy_qualification_not_stored:tier=${tier.tier},metricId=${added.metricId},pool=${added.pool ?? "unknown"},targets[${position}]: held note preserved; extra qualification remains in the original file.`);
+      // Normalization may have filtered earlier entries. Identify the qualification without claiming a raw array position.
+      const digest = createHash("sha256").update(String(added.note)).digest("hex");
+      notice(`geo_strategy_qualification_not_stored:tier=${id},metricId=${added.metricId},pool=${added.pool ?? "unknown"},qualificationSha256=${digest}: held note preserved; extra qualification remains in the original file.`);
     }
-    return { ...merged, targets };
-  });
-  for (const tier of given) if (!held.some(candidate => String(candidate?.tier) === String(tier?.tier))) out.push(tier);
+  }
   return out;
 }
 

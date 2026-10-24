@@ -856,7 +856,7 @@ for (const scenario of [
   assert.equal(next.tiers[0].targets[1].note, "Other pool"); assert.equal(next.version, before.version + (scenario.held ? 0 : 1));
   const omitted = reports.filter(report => report.includes("qualification_not_stored"));
   assert.equal(omitted.length, scenario.extra.length + 1, "each distinct extra qualification has one original-only diagnostic");
-  for (const index of scenario.extra) assert.ok(omitted.some(report => report.includes("pool=P2") && report.includes(`targets[${index}]`)));
+  for (const index of scenario.extra) assert.ok(omitted.some(report => report.includes("pool=P2") && report.includes(`qualificationSha256=${createHash("sha256").update(scenario.incoming[index]).digest("hex")}`)));
   assert.equal(omitted.filter(report => report.includes("pool=P3")).length, 1);
   for (const report of omitted) assert.match(report, /original file/);
   const replay = make(); await replay.importDelivery(control, produced, { recovery: true });
@@ -872,7 +872,7 @@ test("compound qualification accounting is immutable for missing target lists an
   const held = { tiers: [{ tier: "1" }] }, original = JSON.stringify({ held, input }), notices = [];
   const filled = fillStrategy(held, input, notice => notices.push(notice));
   assert.equal(filled.tiers[0].targets.length, 1); assert.equal(filled.tiers[0].targets[0].note, "First");
-  assert.equal(notices.length, 1); assert.match(notices[0], /targets\[3\]/);
+  assert.equal(notices.length, 1); assert.ok(notices[0].includes(`qualificationSha256=${createHash("sha256").update("Second").digest("hex")}`));
   assert.equal(Object.prototype.polluted, undefined); assert.equal(JSON.stringify({ held, input }), original);
 });
 
@@ -914,4 +914,83 @@ test("unchanged unbound files still expose unrelated dropped fields", options, a
   const { importDelivery } = importerOf(new Map([[relative, JSON.stringify({ tiers: [{ ...tiers[0], unexpectedField: "Original-only" }] })]]), { listDeliverableFolders: async () => [] });
   const result = await importDelivery(control, { id: `drop-only-${geo.id}`, status: "succeeded", startedAt: "2000-01-01T00:00:00Z", deliverables: [{ id: "drop-only", capability: "geo-strategy" }] });
   assert.deepEqual(result.files?.dropped, ["drop-only:tiers[0].unexpectedField"]); assert.equal(result.files?.strategies, 0);
+});
+
+
+for (const bound of [false, true]) for (const missing of [false, true]) for (const leading of ["none", "tier", "target"]) {
+  test(`duplicate incoming tier identities account for every qualification (${bound ? "bound" : "unbound"}, ${missing ? "missing" : "held"} note, leading ${leading})`, options, async () => {
+    const { geo, control } = await projectWithBaseline();
+    const runId = `repeated-tier-${geo.id}`, relative = "deliverables/repeated-tier/strategy.json";
+    const context = { mode: "strategy", runId, scopeKey: "repeated-tier", basis: { targets: { version: null, rows: [] } } };
+    const held = { tiers: [{ tier: "1", summary: "Canonical summary", buys: "Held purchase scope", targets: [
+      { metricId: "M-06", pool: "P2", level: "Held", ...(missing ? {} : { note: "First qualification" }) },
+      { metricId: "M-06", pool: "P3", note: "Other pool" },
+    ] }], runId, ...(bound ? { scopeKey: context.scopeKey, basis: context.basis } : {}) };
+    await store.writeStrategy(USER, geo.id, held);
+    const before = await store.latestStrategy(geo.id, bound ? { scopeKey: context.scopeKey } : {});
+    const input = { tiers: [
+      ...(leading === "tier" ? [{ tier: "invalid-tier", basis: {} }] : []),
+      { tier: 1, summary: "File summary", targets: [
+        ...(leading === "target" ? [{ metricId: { invalid: true }, basis: "Refused identity" }] : []),
+        { metricId: "M-06", pool: "P2", ...(missing ? {} : { basis: "First qualification" }) },
+      ] },
+      { tier: 1, buys: "Different purchase scope", targets: [
+        ...(missing ? [{ metricId: "M-06", pool: "P2", basis: "First qualification" }] : []),
+        { metricId: "M-06", pool: "P2", basis: "Second distinct qualification" },
+        { metricId: "M-06", pool: "P2", basis: "Second distinct qualification" },
+        { metricId: "M-06", pool: "P3", basis: "Other pool" },
+        { metricId: "M-06", pool: "P3", basis: "Other pool extra qualification" },
+      ] },
+    ] };
+    const original = JSON.stringify(input);
+    const make = () => importerOf(new Map([[relative, original]]), { listDeliverableFolders: async () => [],
+      ...(bound ? { planningContext: async () => context, readRunFile: async () => original } : {}) });
+    const produced = { id: runId, status: "succeeded", startedAt: "2000-01-01T00:00:00Z",
+      ...(bound ? { artifacts: [relative] } : { deliverables: [{ id: "repeated-tier", capability: "geo-strategy" }] }) };
+    const imported = make(), result = await imported.importDelivery(control, produced);
+    const conflicts = imported.reports.filter(report => report.includes("qualification_not_stored"));
+    assert.equal(conflicts.length, 2, "later duplicate tiers and equal target descriptions cannot hide or duplicate distinct omissions");
+    for (const [pool, note] of [["P2", "Second distinct qualification"], ["P3", "Other pool extra qualification"]]) {
+      const digest = createHash("sha256").update(note).digest("hex");
+      assert.ok(conflicts.some(report => report.includes("tier=1,") && report.includes("metricId=M-06,") && report.includes(`pool=${pool},`) && report.includes(`qualificationSha256=${digest}`)));
+    }
+    for (const conflict of conflicts) {
+      assert.match(conflict, /original file/); assert.doesNotMatch(conflict, /(?:tiers|targets)\[\d+\]/, "filtered positions are never presented as raw source locations");
+    }
+    if (bound && leading === "target") {
+      assert.ok(result.failed?.includes("geo_plan_output_unavailable"));
+      assert.ok(result.files.unavailable.some(path => path.includes("tiers.targets[0].metricId")));
+    } else assert.equal(result.failed, undefined, "unknown tier words stay advisory and legacy unbound failure policy stays unchanged");
+    if (leading === "tier") assert.ok(result.files.notices.some(notice => notice.path === `${relative}#[0]tiers.basis` && notice.code === "alias_invalid"));
+    const next = await store.latestStrategy(geo.id, bound ? { scopeKey: context.scopeKey } : {});
+    assert.equal(next.version, before.version + (missing ? 1 : 0));
+    assert.equal(next.tiers[0].targets[0].note, "First qualification"); assert.equal(next.tiers[0].targets[1].note, "Other pool");
+    assert.equal(next.tiers[0].targets[0].level, "Held"); assert.equal(next.tiers[0].summary, "Canonical summary");
+    assert.equal(next.tiers[0].buys, "Held purchase scope"); assert.equal(next.tiers[0].targets.length, 2);
+    if (bound) assert.deepEqual(next.basis, context.basis);
+    const replay = make(), repeated = await replay.importDelivery(control, produced, { recovery: true });
+    assert.deepEqual(replay.reports.filter(report => report.includes("qualification_not_stored")), conflicts);
+    if (leading === "tier") assert.deepEqual(repeated.files.notices, result.files.notices);
+    assert.equal((await store.latestStrategy(geo.id, bound ? { scopeKey: context.scopeKey } : {})).version, next.version);
+    assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []); assert.equal(JSON.stringify(input), original);
+  });
+}
+
+test("duplicate held tiers preserve every canonical qualification while extra notes are diagnosed only once", () => {
+  const held = { tiers: [{ tier: "1", summary: "Primary", targets: [{ metricId: "M-06", pool: "P2", note: "First" }] },
+    { tier: "1", summary: "Other held tier", targets: [{ metricId: "M-06", pool: "P2", note: "Second" }] }] };
+  const data = { tiers: [{ tier: "1", targets: [{ metricId: "M-06", pool: "P2", note: "Second" }, { metricId: "M-06", pool: "P2", note: "Third" }] },
+    { tier: "1", targets: [{ metricId: "M-06", pool: "P2", note: "Third" }] }] };
+  const original = JSON.stringify({ held, data }), notices = [], filled = fillStrategy(held, data, notice => notices.push(notice));
+  assert.deepEqual(filled, {}); assert.equal(notices.length, 1);
+  assert.ok(notices[0].includes(`qualificationSha256=${createHash("sha256").update("Third").digest("hex")}`));
+  assert.equal(JSON.stringify({ held, data }), original);
+});
+
+test("duplicate new tiers inside same-run enrichment retain the first note and account for all later distinct notes", () => {
+  const held = { tiers: [] }, data = { tiers: [{ tier: "2", targets: [{ metricId: "M-06", pool: "P2", note: "First" }] },
+    { tier: "2", targets: [{ metricId: "M-06", pool: "P2", note: "First" }, { metricId: "M-06", pool: "P2", note: "Second" }] }] };
+  const original = JSON.stringify({ held, data }), notices = [], filled = fillStrategy(held, data, notice => notices.push(notice));
+  assert.equal(filled.tiers.length, 1); assert.equal(filled.tiers[0].targets.length, 1); assert.equal(filled.tiers[0].targets[0].note, "First");
+  assert.equal(notices.length, 1); assert.equal(JSON.stringify({ held, data }), original);
 });
