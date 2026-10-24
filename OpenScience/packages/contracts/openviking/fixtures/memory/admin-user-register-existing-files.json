@@ -1,17 +1,17 @@
 {
   "note": "Explicit registration of a trusted user who already has files but is not in the register yet.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/admin/accounts/evimed/users",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
-      "X-OpenViking-User": "fx-user-a",
+      "X-OpenViking-User": "fx-user-e",
       "Content-Type": "application/json"
     },
     "body": {
-      "user_id": "fx-user-a",
+      "user_id": "fx-user-e",
       "role": "user"
     }
   },
@@ -21,7 +21,7 @@
     "status": "ok",
     "result": {
       "account_id": "evimed",
-      "user_id": "fx-user-a"
+      "user_id": "fx-user-e"
     },
     "error": null,
     "telemetry": null,

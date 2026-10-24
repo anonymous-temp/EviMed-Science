@@ -5,7 +5,7 @@
     "code": "NOT_FOUND",
     "message": "Task not found or expired",
     "details": {
-      "resource": "cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+      "resource": "cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
       "type": "task"
     }
   },

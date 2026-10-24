@@ -1,6 +1,6 @@
 {
-  "note": "mode create on an existing URI.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "note": "mode create on an existing URI (an alias of replace from v0.5.1: no 409).",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/content/write",
@@ -17,20 +17,34 @@
       "wait": true
     }
   },
-  "status": 409,
+  "status": 200,
   "contentType": "application/json",
   "response": {
-    "status": "error",
-    "result": null,
-    "error": {
-      "code": "ALREADY_EXISTS",
-      "message": "File already exists: viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
-      "details": {
-        "resource": "viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
-        "type": "file"
-      }
-    },
-    "telemetry": null,
-    "profile": null
+    "status": "ok",
+    "result": {
+      "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
+      "root_uri": "viking://user/fx-user-a/memories/evimed/user/preference",
+      "context_type": "memory",
+      "mode": "create",
+      "written_bytes": 62,
+      "content_updated": true,
+      "semantic_status": "skipped",
+      "vector_status": "complete",
+      "queue_status": {
+        "Semantic": {
+          "processed": 0,
+          "requeue_count": 0,
+          "error_count": 0,
+          "errors": []
+        },
+        "Embedding": {
+          "processed": 1,
+          "requeue_count": 0,
+          "error_count": 0,
+          "errors": []
+        }
+      },
+      "overview_status": "skipped"
+    }
   }
 }

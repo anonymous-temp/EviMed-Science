@@ -6,6 +6,7 @@
     "uri": "viking://agent/skills/llm-wiki",
     "name": "llm-wiki",
     "auxiliary_files": 0,
+    "task_id": "77f9e5ad-a7a6-4084-b0ac-1ddbc0459e43",
     "queue_status": {
       "Semantic": {
         "processed": 1,

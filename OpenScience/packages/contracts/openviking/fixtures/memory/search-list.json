@@ -1,6 +1,6 @@
 {
   "note": "search/search in list mode, scoped to the user's memories.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/search/search",
@@ -26,7 +26,7 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/projects/.overview.md",
           "level": 1,
-          "score": 0.6797197461128235,
+          "score": 0.6794916987419128,
           "abstract": "# Projects Overview\n\n- [三跨预应力混凝土连续梁桥施工图设计](./三跨预应力混凝土连续梁桥施工图设计.md)",
           "tags": []
         },
@@ -34,7 +34,7 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/preferences/self/回答结构.md",
           "level": 2,
-          "score": 0.6625717282295227,
+          "score": 0.6626365184783936,
           "abstract": "- 回答先给结论，再给依据，最后列出风险。",
           "tags": [
             "memory_type=preferences"
@@ -44,7 +44,7 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/preferences/self/.overview.md",
           "level": 1,
-          "score": 0.6410132646560669,
+          "score": 0.6408118009567261,
           "abstract": "# Preferences Overview\n\n- [回答结构](./回答结构.md)",
           "tags": []
         },
@@ -52,7 +52,7 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/.overview.md",
           "level": 1,
-          "score": 0.6404988765716553,
+          "score": 0.6405094265937805,
           "abstract": "User's long-term memory storage. Contains memory types like preferences, entities, events, managed hierarchically by type.",
           "tags": []
         },
@@ -60,8 +60,8 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/projects/三跨预应力混凝土连续梁桥施工图设计.md",
           "level": 2,
-          "score": 0.6305961012840271,
-          "abstract": "# 三跨预应力混凝土连续梁桥施工图设计\n领域：桥梁结构设计\n一座三跨预应力混凝土连续梁桥的施工图设计。\n\n## 已定事项\n- 主梁采用 C55 混凝土。",
+          "score": 0.6335412263870239,
+          "abstract": "# 三跨预应力混凝土连续梁桥施工图设计\n领域：桥梁结构设计\n一座三跨预应力混凝土连续梁桥的施工图设计工作。\n\n## 已定事项\n- 主梁采用 C55 混凝土。",
           "tags": [
             "memory_type=project_context",
             "project=proj_fixture_1"

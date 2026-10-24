@@ -11,8 +11,8 @@
     "vector_status": "complete",
     "queue_status": {
       "Semantic": {
-        "processed": 0,
-        "requeue_count": 0,
+        "processed": 1,
+        "requeue_count": 2,
         "error_count": 0,
         "errors": []
       },

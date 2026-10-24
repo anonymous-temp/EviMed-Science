@@ -1,6 +1,6 @@
 {
   "note": "content/write, mode create, wait true: a new file, embedded before the answer returns.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/content/write",
@@ -26,7 +26,7 @@
       "root_uri": "viking://user/fx-user-a/memories/evimed/user/preference",
       "context_type": "memory",
       "mode": "create",
-      "written_bytes": 86,
+      "written_bytes": 129,
       "content_updated": true,
       "semantic_status": "skipped",
       "vector_status": "complete",

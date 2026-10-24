@@ -1,9 +1,9 @@
 {
   "note": "The task right after the commit.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
-    "path": "/api/v1/tasks/ad580014-9ba0-4c8b-993e-e6a232f57ab6",
+    "path": "/api/v1/tasks/bbc322c7-85ae-48c7-b7b5-a4c1dd0a3ae9",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
@@ -15,19 +15,19 @@
   "response": {
     "status": "ok",
     "result": {
-      "task_id": "ad580014-9ba0-4c8b-993e-e6a232f57ab6",
+      "task_id": "bbc322c7-85ae-48c7-b7b5-a4c1dd0a3ae9",
       "task_type": "session_commit",
       "status": "pending",
-      "created_at": 1791850662.2359781,
-      "updated_at": 1791850662.2359796,
+      "created_at": 1792733878.3238223,
+      "updated_at": 1792733878.3238225,
       "processing_seconds": null,
       "resource_id": "dsh-session_fixture0000000000000000000000000001",
       "meta": {},
       "stage": null,
       "result": null,
       "error": null,
-      "created_at_iso": "2026-10-13T00:17:42.235978+00:00",
-      "updated_at_iso": "2026-10-13T00:17:42.235980+00:00"
+      "created_at_iso": "2026-10-23T05:37:58.323822+00:00",
+      "updated_at_iso": "2026-10-23T05:37:58.323822+00:00"
     },
     "error": null,
     "telemetry": null,

@@ -1,9 +1,9 @@
 {
   "note": "A commit whose extraction wrote nothing.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
-    "path": "/api/v1/tasks/fe7d1152-e505-4f04-876f-7fc30dbdd3ee",
+    "path": "/api/v1/tasks/b1e66bc4-48de-480d-896d-3b2ce00700e9",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
@@ -15,12 +15,12 @@
   "response": {
     "status": "ok",
     "result": {
-      "task_id": "fe7d1152-e505-4f04-876f-7fc30dbdd3ee",
+      "task_id": "b1e66bc4-48de-480d-896d-3b2ce00700e9",
       "task_type": "session_commit",
       "status": "completed",
-      "created_at": 1791850676.3740203,
-      "updated_at": 1791850678.005664,
-      "processing_seconds": 1.4169143800390884,
+      "created_at": 1792733893.1603491,
+      "updated_at": 1792733895.0172038,
+      "processing_seconds": 1.5575366020202637,
       "resource_id": "dsh-session_fixture0000000000000000000000000001",
       "meta": {},
       "stage": "completed",
@@ -49,26 +49,26 @@
         "agent_memory_skip_reason": "agent_evolution_disabled",
         "token_usage": {
           "llm": {
-            "prompt_tokens": 21788,
-            "completion_tokens": 161,
-            "total_tokens": 21949,
-            "cached_tokens": 20736,
+            "prompt_tokens": 40646,
+            "completion_tokens": 151,
+            "total_tokens": 40797,
+            "cached_tokens": 39808,
             "reasoning_tokens": 0
           },
           "embedding": {
-            "total_tokens": 370
+            "total_tokens": 108
           },
           "total": {
-            "total_tokens": 22319,
-            "cached_tokens": 20736,
+            "total_tokens": 40905,
+            "cached_tokens": 39808,
             "reasoning_tokens": 0
           }
         },
         "memory_diff_uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_002/memory_diff.json"
       },
       "error": null,
-      "created_at_iso": "2026-10-13T00:17:56.374020+00:00",
-      "updated_at_iso": "2026-10-13T00:17:58.005664+00:00"
+      "created_at_iso": "2026-10-23T05:38:13.160349+00:00",
+      "updated_at_iso": "2026-10-23T05:38:15.017204+00:00"
     },
     "error": null,
     "telemetry": null,

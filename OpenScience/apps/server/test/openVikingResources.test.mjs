@@ -149,7 +149,7 @@ test("a page is written back as one checked operation: the hash it was read at, 
   }
   assert.equal(busy.error.details.conflict_type, "path_busy");
   await withEngine(() => ({ status: 409, body: busy }), async ({ resources }) => {
-    await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), { code: "memory_index_conflict", upstreamDetails: { retryable: true } });
+    await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), (error) => error.code === "memory_index_conflict" && error.upstreamDetails?.retryable === true && error.upstreamDetails?.conflict_type === "path_busy");
   });
   // No write goes out without the hash it is checked against.
   await withEngine(() => ({ body: written }), async ({ resources, seen }) => {
@@ -287,7 +287,7 @@ test("a compile that completed with a failed job is read as partial, and a root 
   partial.result.meta.pipeline.errors = ["1 pipeline jobs failed: ['Required agent transform ended without validated output: No emit result was submitted']"];
   partial.result.result.warnings = ["Partial output; unfinished jobs: 1 pipeline jobs failed: ['Required agent transform ended without validated output: No emit result was submitted']"];
   await withEngine(() => ({ body: partial }), async ({ resources }) => {
-    const task = await resources.task(USER, "cmp_1");
+    const task = await resources.task(USER, completed.result.task_id);
     assert.equal(task?.status, "completed");
     assert.equal(task?.result?.warnings.length, 2, "the partial output was not reported");
     assert.match(String(task?.result?.warnings[0]), /Partial output/);

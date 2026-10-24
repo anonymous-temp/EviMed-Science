@@ -6,7 +6,7 @@
     "source_path": "upload-sample.md",
     "meta": {},
     "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
-    "temp_uri": "viking://temp/u-0f1e2d3c4b5a69788796a5b4/10122356_558eaf/upload-sample",
+    "temp_uri": "viking://temp/u-0f1e2d3c4b5a69788796a5b4/10230546_e4714f/upload-sample",
     "queue_status": {
       "Semantic": {
         "processed": 0,
@@ -23,11 +23,11 @@
     },
     "context_count": 1,
     "telemetry": {
-      "id": "tm_418c05f2ddff45ac8788e767992cc1a0",
+      "id": "tm_801e2151fc0e40a1bfa8a6867d478f13",
       "summary": {
         "operation": "add_resource_job",
         "status": "ok",
-        "duration_ms": 1008.282,
+        "duration_ms": 461.339,
         "tokens": {
           "total": 87,
           "embedding": {
@@ -45,53 +45,53 @@
           "embedding": {
             "processed": 1,
             "queue_wait": {
-              "duration_ms": 189.909
+              "duration_ms": 178.415
             },
             "execute": {
-              "duration_ms": 205.846
+              "duration_ms": 174.65
             }
           }
         },
         "resource": {
           "total": {
-            "duration_ms": 1007.746
+            "duration_ms": 460.988
           },
           "source_execute": {
-            "duration_ms": 554.468
+            "duration_ms": 89.917
           },
           "source_prepare": {
-            "duration_ms": 6.878
+            "duration_ms": 8.812
           },
           "parse_artifact": {
-            "duration_ms": 75.054
+            "duration_ms": 32.413
           },
           "target_resolve": {
-            "duration_ms": 12.479
+            "duration_ms": 2.285
           },
           "update_plan": {
-            "duration_ms": 105.005,
+            "duration_ms": 4.434,
             "artifact_inventory": {
-              "duration_ms": 12.145
+              "duration_ms": 1.998
             },
             "rnfv_snapshot": {
-              "duration_ms": 6.558
+              "duration_ms": 1.306
             },
             "diff_and_compile": {
-              "duration_ms": 16.589
+              "duration_ms": 0.963
             }
           },
           "content_commit": {
-            "duration_ms": 3.743
+            "duration_ms": 3.198
           },
           "derived_enqueue": {
-            "duration_ms": 5.458
+            "duration_ms": 3.14
           },
           "embedding": {
             "queue_wait": {
-              "duration_ms": 189.909
+              "duration_ms": 178.415
             },
             "execute": {
-              "duration_ms": 205.846
+              "duration_ms": 174.65
             }
           },
           "flags": {

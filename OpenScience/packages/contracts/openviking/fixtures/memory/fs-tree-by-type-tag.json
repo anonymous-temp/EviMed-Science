@@ -1,6 +1,6 @@
 {
   "note": "The same listing filtered by the system tag.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/fs/tree?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories&level_limit=8&include_tags=true&tags=memory_type%3Dpreferences",
@@ -17,9 +17,9 @@
     "result": [
       {
         "uri": "viking://user/fx-user-a/memories/preferences/self/回答结构.md",
-        "size": 221,
+        "size": 227,
         "isDir": false,
-        "modTime": "2026-10-13T00:17:54.000Z",
+        "modTime": "2026-10-23T05:38:11.000Z",
         "rel_path": "preferences/self/回答结构.md",
         "tags": [
           "memory_type=preferences"

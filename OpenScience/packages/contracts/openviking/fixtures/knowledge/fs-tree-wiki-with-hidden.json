@@ -5,119 +5,111 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept",
       "size": 0,
       "isDir": true,
-      "modTime": "2026-10-12T23:57:14.000Z",
+      "modTime": "2026-10-23T05:48:02.000Z",
       "rel_path": "concept",
-      "abstract": "本目录主要收录 Lumen 生态中与设备间时间同步相关的概念型参考条目。从样本来看，内容围绕 Alpha 协议这一轻量时间同步协议展开，涵盖其定义与范围、参考实现、生态位置以及相关概念，并进一步解释设备间时间同步的含义、机制与可观测指标。核心关键词包括 Alpha 协议、时间同步、UDP 4123、alphad、Lumen 工作组、Beta 网关、Gamma 仪表盘、同步周期与时间偏差。适合需要了解该生态时间同步技术核心与入门概念的读者。"
+      "abstract": "本目录是一份概念型参考资料的集合，主要用于说明特定技术协议的定义、机制、应用场景与已知边界。从样本内容看，目录聚焦于设备间时间同步领域，核心条目介绍 Lumen 工作组于 2021 年发布的轻量级 Alpha 协议，涵盖其 UDP 4123 端口、64 秒默认同步周期、Rust 参考实现 alphad，以及 Beta 网关与 Gamma 仪表盘等相关实体的角色。文档同时明确标注了来源未覆盖的报文格式、主从选举、时钟校正算法、安全机制与精度指标等未知项，强调不对内部机制作推断。"
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/.abstract.md",
-      "size": 837,
+      "size": 882,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:14.000Z",
+      "modTime": "2026-10-23T05:47:59.000Z",
       "rel_path": "concept/.abstract.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/.overview.md",
-      "size": 3826,
+      "size": 3181,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:14.000Z",
+      "modTime": "2026-10-23T05:47:59.000Z",
       "rel_path": "concept/.overview.md",
       "abstract": ""
     },
     {
-      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha协议.md",
-      "size": 1681,
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
+      "size": 2379,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:08.000Z",
-      "rel_path": "concept/Alpha协议.md",
-      "abstract": ""
-    },
-    {
-      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/设备间时间同步.md",
-      "size": 2088,
-      "isDir": false,
-      "modTime": "2026-10-12T23:57:08.000Z",
-      "rel_path": "concept/设备间时间同步.md",
+      "modTime": "2026-10-23T05:47:52.000Z",
+      "rel_path": "concept/Alpha 协议.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity",
       "size": 0,
       "isDir": true,
-      "modTime": "2026-10-12T23:57:17.000Z",
+      "modTime": "2026-10-23T05:48:02.000Z",
       "rel_path": "entity",
-      "abstract": "本目录是围绕设备间时间同步生态的实体参考文档集合，主要覆盖 Lumen 工作组及其相关协议、产品与组件。根据样本可见，内容涉及 Alpha 协议的发布与参考实现、Beta 网关边缘网关产品、以及其自带的 Gamma 仪表盘管理界面，并记录各实体的身份角色、版本容量、接口边界与相互关系。文档以参考页形式组织，注重信息边界的严谨标注，适合需要了解该时间同步生态中组织实体、协议归属与产品能力的技术人员与 Wiki 使用者查阅。"
+      "abstract": "本目录是围绕 Lumen 工作组时间同步技术栈的实体参考文档集合，主要覆盖边缘网关产品 Beta 网关、其内置的 Alpha 协议 Rust 参考实现 alphad、随产品提供的 Gamma 仪表盘 Web 管理界面，以及作为组织实体的 Lumen 工作组本身。文档以“身份与属性、关系、未知、来源”的统一结构记录各实体的版本、能力、接口边界与关联关系，并明确标注尚未确认的信息。适合需要了解 Beta 网关产品定义、Alpha 协议实现细节、时间同步机制或追溯协议与产品归属的运维人员、技术读者与文档读者查阅。"
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/.abstract.md",
-      "size": 849,
+      "size": 917,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:17.000Z",
+      "modTime": "2026-10-23T05:48:01.000Z",
       "rel_path": "entity/.abstract.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/.overview.md",
-      "size": 5678,
+      "size": 4816,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:17.000Z",
+      "modTime": "2026-10-23T05:48:01.000Z",
       "rel_path": "entity/.overview.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
-      "size": 1616,
+      "size": 1954,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:08.000Z",
+      "modTime": "2026-10-23T05:47:52.000Z",
       "rel_path": "entity/alphad.md",
       "abstract": ""
     },
     {
-      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Beta网关.md",
-      "size": 2007,
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Beta 网关.md",
+      "size": 2756,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:08.000Z",
-      "rel_path": "entity/Beta网关.md",
+      "modTime": "2026-10-23T05:47:52.000Z",
+      "rel_path": "entity/Beta 网关.md",
       "abstract": ""
     },
     {
-      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Gamma仪表盘.md",
-      "size": 1651,
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Gamma 仪表盘.md",
+      "size": 1642,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:08.000Z",
-      "rel_path": "entity/Gamma仪表盘.md",
+      "modTime": "2026-10-23T05:47:52.000Z",
+      "rel_path": "entity/Gamma 仪表盘.md",
       "abstract": ""
     },
     {
-      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen工作组.md",
-      "size": 1701,
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen 工作组.md",
+      "size": 2090,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:08.000Z",
-      "rel_path": "entity/Lumen工作组.md",
+      "modTime": "2026-10-23T05:47:52.000Z",
+      "rel_path": "entity/Lumen 工作组.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/.abstract.md",
-      "size": 852,
+      "size": 745,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:23.000Z",
+      "modTime": "2026-10-23T05:48:09.000Z",
       "rel_path": ".abstract.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/.overview.md",
-      "size": 4419,
+      "size": 4636,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:23.000Z",
+      "modTime": "2026-10-23T05:48:09.000Z",
       "rel_path": ".overview.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/index.md",
-      "size": 1980,
+      "size": 1466,
       "isDir": false,
-      "modTime": "2026-10-12T23:57:08.000Z",
+      "modTime": "2026-10-23T05:47:52.000Z",
       "rel_path": "index.md",
       "abstract": ""
     }

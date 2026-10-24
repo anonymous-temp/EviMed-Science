@@ -1,6 +1,6 @@
 {
   "note": "A task id this user does not own or that has expired.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/tasks/00000000-0000-0000-0000-000000000000",

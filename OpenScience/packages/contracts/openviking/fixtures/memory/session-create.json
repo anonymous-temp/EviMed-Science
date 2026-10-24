@@ -1,6 +1,6 @@
 {
   "note": "Create with the id the DSH plugin derives (dsh-<kernel session id>). The deployment default auto_commit_policy is echoed.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/sessions",

@@ -1,9 +1,9 @@
 {
   "note": "Deleting the one-off session a remember call left behind.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "DELETE",
-    "path": "/api/v1/sessions/mcp-store-4f184a402313",
+    "path": "/api/v1/sessions/mcp-store-3856c71e20d1",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
@@ -15,7 +15,7 @@
   "response": {
     "status": "ok",
     "result": {
-      "session_id": "mcp-store-4f184a402313"
+      "session_id": "mcp-store-3856c71e20d1"
     },
     "error": null,
     "telemetry": null,
