@@ -5,7 +5,7 @@
  * every edge in all of them is `via: "schema"` — a type an upstream tool
  * *could* produce filling a parameter a downstream tool requires. Not one edge
  * is `via: "executed"`, and `executed` is the only source a task may be built
- * on, so `generate-briefs.mjs` correctly and honestly produced zero briefs and
+ * on, so `generate-briefs.mjs` (deleted 2026-10-23) correctly and honestly produced zero briefs and
  * the whole paired-evaluation corpus was empty. The missing piece was never the
  * sampler or the generator. It was that nothing wrote a receipt.
  *
@@ -269,7 +269,7 @@ export async function persistExecutedToolEdges({ project, run, sessions }) {
  * The call sequence a finished run actually performed, per capability.
  *
  * Hidden knowledge: the plan has the corpus built "execute first, write the
- * task second", and `generate-briefs.mjs` says in its own header that it cannot
+ * task second", and `generate-briefs.mjs` (deleted 2026-10-23) said in its own header that it cannot
  * execute — it needs a fixture environment and a live kernel. That was read as
  * "the golden trace has to wait for an execution harness". It does not. The
  * runs that established the executed edges *already performed the chain*, and

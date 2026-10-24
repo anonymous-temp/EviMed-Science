@@ -17,7 +17,7 @@
 > layer, not a medical-only workbench: the default conversation is a general work assistant, the
 > evidence method is a skill the model loads, an ordinary file is a deliverable
 > (`file-deliverable`), and the kernel's own `ask-user`, `todo`, sub-agent, `present` and `/compact`
-> rows are mounted. OpenViking v0.5.0 is an engine rather than only a derived index: an account on
+> rows are mounted. OpenViking (v0.5.1.1 since 2026-10-23) is an engine rather than only a derived index: an account on
 > the native memory engine has its memory extracted, merged and recalled by it (through the
 > official DSH plugin, a loopback bridge and the control plane's memory gateway), and a project's
 > documents are Resources compiled into a wiki and a graph; both are mirrored into the product

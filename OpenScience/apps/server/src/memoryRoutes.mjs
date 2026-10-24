@@ -121,12 +121,6 @@ export function createMemoryRoutes({
       throw new HttpError(503, "memory_disabled", "Research memory is disabled in this deployment.");
     }
 
-    if (pathname === "/api/memory/status" && req.method === "GET") {
-      await store.ensureUser(req, res);
-      sendJson(res, 200, { data: await researchMemory.status() });
-      return true;
-    }
-
     // The researcher's own switches (2026-09-16 review, M4④). Pausing deletes
     // nothing: learning paused means no run writes a memory, recall paused
     // means no run is handed one, and a paused project is both, for that

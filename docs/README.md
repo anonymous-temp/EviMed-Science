@@ -57,6 +57,9 @@ OpenCode kernel) read it in the past tense.
     [integration contract](superpowers/specs/2026-09-29-vcr-integration-contract.md) and
     [status and gaps](superpowers/specs/2026-09-30-vcr-status-and-gaps.md) (all zh).
   - [Frontier feed plan](superpowers/specs/2026-09-21-frontier-feed-medical-aihot-plan.md) (zh).
+  - Memory capsule: the [build spec of 2026-09-21](superpowers/specs/2026-09-21-memory-capsule-self-iteration-build-spec.md) (zh;
+    kept as history — its header names the parts later rulings replaced) and the
+    [rectification plan of 2026-10-23](superpowers/plans/2026-10-23-memory-capsule-rectification.md) (zh), which is current.
   - [Review and research-topic quality](superpowers/specs/2026-09-05-review-topic-quality-design.md)
     and the [dataset-research-scoping skill](superpowers/specs/dataset-research-scoping-skill.md)
     (zh).
