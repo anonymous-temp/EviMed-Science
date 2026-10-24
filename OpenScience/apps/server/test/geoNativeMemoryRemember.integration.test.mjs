@@ -142,3 +142,28 @@ test('an accepted operation and its session binding commit together; an ambiguou
   await f.journal.reconcile(f.context, operation.id);
   assert.equal(f.sent.filter(row => row.path === '/mcp').length, 1, 'unknown cannot trigger another remember');
 });
+
+test('out-of-order task observations never erase a verified archive or its pending ledger recovery', options, async t => {
+  const f = await fixture(t); f.mode('pending');
+  const result = await f.execute(); f.ledgerFails(true);
+  let entered, release, calls = 0;
+  const ready = new Promise(resolve => { entered = resolve; }), barrier = new Promise(resolve => { release = resolve; });
+  const task = f.context.sessions.task.bind(f.context.sessions);
+  f.context.sessions.task = async (...args) => {
+    const answer = await task(...args);
+    if (++calls === 1) { entered(); await barrier; }
+    return answer;
+  };
+  const stale = f.journal.reconcile(f.context, result.operationId);
+  await ready; f.mode('completed');
+  const current = await f.journal.reconcile(f.context, result.operationId);
+  assert.equal(current.payload.ledgerState, 'pending'); assert.match(current.payload.archiveUri, /archive_7$/);
+  release(); const after = await stale;
+  assert.equal(after.payload.archiveUri, current.payload.archiveUri);
+  assert.equal(after.payload.ledgerState, 'pending');
+  const persisted = (await f.operations()).items[0]; assert.equal(persisted.payload.archiveUri, current.payload.archiveUri);
+  await assert.rejects(f.journal.accept(f.context, result.operationId, { sessionId: persisted.payload.sessionId,
+    taskId: persisted.payload.taskId, archiveUri: current.payload.archiveUri.replace('archive_7', 'archive_8') }), error => error.code === 'memory_gateway_upstream_invalid');
+  f.ledgerFails(false); assert.equal((await f.journal.reconcile(f.context, result.operationId)).payload.ledgerState, 'recorded');
+  assert.equal(f.sent.filter(row => row.path === '/mcp').length, 1);
+});

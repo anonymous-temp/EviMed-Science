@@ -45,9 +45,10 @@ export class GeoNativeMemoryRemember {
       await this.contexts.assertKnown(context);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [id]);
       const before = await this.saved(context, id);
+      const next = typeof changes === 'function' ? changes(before.payload) : changes;
       // A delayed failure notification never overwrites verified acceptance.
-      if (before.payload.state === 'accepted' && changes.state && changes.state !== 'accepted') return before;
-      const row = await this.documents.put(context.ownerId, KIND, id, { ...before.payload, ...changes },
+      if (before.payload.state === 'accepted' && next.state && next.state !== 'accepted') return before;
+      const row = await this.documents.put(context.ownerId, KIND, id, { ...before.payload, ...next },
         { projectId: context.projectId, expectedRevision: before.revision, transactionClient: client });
       if (after) await after(row);
       return row;
@@ -97,7 +98,15 @@ export class GeoNativeMemoryRemember {
   }
 
   async accept(context, operationId, verified) {
-    const row = await this.update(context, operationId, { state: 'accepted', ...verified, ledgerState: verified.archiveUri ? 'pending' : 'not_due' }, async operation => {
+    const row = await this.update(context, operationId, current => {
+      if (current.state === 'accepted' && (current.sessionId !== verified.sessionId || current.taskId !== verified.taskId
+        || current.archiveUri && verified.archiveUri && current.archiveUri !== verified.archiveUri)) throw invalid();
+      // An older pending task response may arrive after the completed response.
+      // Keep verified archive and ledger progress under the operation's lock.
+      const archiveUri = current.archiveUri ?? verified.archiveUri;
+      return { state: 'accepted', sessionId: verified.sessionId, taskId: verified.taskId, archiveUri,
+        ledgerState: archiveUri ? current.ledgerState === 'recorded' ? 'recorded' : 'pending' : 'not_due' };
+    }, async operation => {
       await this.contexts.saveSession(context, verified.sessionId,
         { kind: 'tool', operationRef: operationId, taskId: verified.taskId }, operation.payload.runtimeGeneration);
     });
