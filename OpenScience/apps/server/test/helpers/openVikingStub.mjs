@@ -203,6 +203,8 @@ export class OpenVikingStub {
       return send(200, ok({ uri, mode: body?.mode, written_bytes: Buffer.byteLength(String(body?.content ?? "")), content_updated: true, vector_status: "complete" }));
     }
     if (path === "/api/v1/search/search" || path === "/api/v1/search/find") {
+      const context = body?.mode === "context";
+      if ((!context && (Object.hasOwn(body ?? {}, "exclude_uris") || Object.hasOwn(body ?? {}, "query_expansion"))) || (context && Object.hasOwn(body ?? {}, "target_uri"))) return send(400, fail("INVALID_ARGUMENT", "Context-only fields require context mode; context mode forbids target_uri"));
       const exclude = Array.isArray(body?.exclude_uris) ? body.exclude_uris : [];
       const target = String(body?.target_uri ?? `${own}/memories`);
       if (!within(target)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
@@ -312,6 +314,10 @@ export class OpenVikingStub {
         const name = message.params?.name;
         const args = message.params?.arguments ?? {};
         let text = "ok";
+        if (name === "search" && ((args.mode !== "context" && (Object.hasOwn(args, "exclude_uris") || Object.hasOwn(args, "query_expansion"))) || (args.mode === "context" && Object.hasOwn(args, "target_uri")))) {
+          out.push({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "Error: INVALID_ARGUMENT: context-only search fields" }], isError: true } });
+          continue;
+        }
         if (name === "read") text = (args.uris ?? []).map((uri) => this.files.get(uri) ?? "").join("\n");
         if (name === "list") text = [...this.files.keys()].filter((uri) => uri.startsWith(`${args.uri}/`)).map((uri) => `[file] ${uri.slice(String(args.uri).length + 1)}`).join("\n");
         if (name === "search") text = `Found: ${[...this.files.keys()].filter((uri) => uri.startsWith(`${args.target_uri}/`) && !(args.exclude_uris ?? []).some((prefix) => uri.startsWith(prefix))).join(", ")}`;

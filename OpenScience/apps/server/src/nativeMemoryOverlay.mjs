@@ -469,10 +469,12 @@ export class NativeMemoryOverlay {
     await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
   }
 
-  /** The files recall leaves out, newest first, at most what the engine's `exclude_uris` takes. @param {string} userId */
-  async sensitiveUris(userId, limit = 200) {
-    const result = await this.#query("SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND sensitive ORDER BY updated_at DESC LIMIT $2",
-      [owner(userId), Math.max(1, Math.min(200, limit))]);
+  /** Complete bounded sensitive-file set. Overflow refuses recall rather than silently dropping exclusions. @param {string} userId */
+  async sensitiveUris(userId, limit = 10000) {
+    const bound = Math.max(1, Math.min(10000, Math.trunc(Number(limit)) || 10000));
+    const result = await this.#query("SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND sensitive ORDER BY uri LIMIT $2",
+      [owner(userId), bound + 1]);
+    if (result.rows.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete sensitive-file set exceeds its safe recall bound.");
     return result.rows.map((/** @type {any} */ row) => String(row.uri));
   }
 

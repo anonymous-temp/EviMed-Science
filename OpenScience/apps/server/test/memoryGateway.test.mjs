@@ -318,8 +318,8 @@ test("tool arguments are held to the caller's own memories: pinned targets, no r
   await call("list", {});
   assert.deepEqual(stub.sent("POST", "/mcp").at(-1).body.params.arguments, { uri: `${ROOT}/memories`, recursive: false });
   await call("search", { query: "回答", purpose: "coding", quotas: { x: 1 }, mode: "context" });
-  assert.deepEqual(stub.sent("POST", "/mcp").at(-1).body.params.arguments, {
-    query: "回答", limit: 5, target_uri: `${ROOT}/memories`, query_expansion: "off", exclude_uris: ["viking://resources", "viking://agent", `${ROOT}/memories/evimed`],
+  assert.deepEqual(stub.sent("POST", "/api/v1/search/search").at(-1).body, {
+    query: "回答", limit: 5, target_uri: `${ROOT}/memories`,
   });
   const foreign = await call("read", { uris: ["viking://user/u-other/memories/profile.md"] });
   assert.equal(foreign.messages[0].error.code, -32602);
@@ -531,4 +531,76 @@ test("admission: who is learned from and who is read for, by reason", async () =
   // The engine's templates are the never-keep rules: while they cannot be confirmed nothing is sent, and reading goes on.
   const unready = await admit({ researchMemory: memoryDouble(), engineReady: () => ({ ok: false, code: "openviking_memory_templates_missing" }) });
   assert.deepEqual([unready.learn, unready.recall, unready.learnReason], [false, true, "engine_unavailable"]);
+});
+
+test("native list search uses the pinned REST contract and MCP returns actual allowed native hits", async t => {
+  const { stub, mcp, call, sessions } = await fixture(t);
+  await assert.rejects(sessions.search(USER, { query: "x", target_uri: `${ROOT}/memories`, exclude_uris: [] }), /Context-only/);
+  await assert.rejects(sessions.search(USER, { query: "x", mode: "context", target_uri: `${ROOT}/memories` }), /Context-only/);
+  await assert.rejects(sessions.search(USER, { query: "x", query_expansion: "off" }), /Context-only/);
+  stub.seedMemory(OV_USER, "preferences/self/native.md", "native-contract allowed preference");
+  const result = await mcp({ jsonrpc: "2.0", id: 80, method: "tools/call", params: { name: "search", arguments: { query: "native-contract", limit: 3 } } });
+  const payload = JSON.parse(result.messages[0].result.content[0].text);
+  assert.equal(payload.total, 1);
+  assert.match(payload.memories[0].abstract, /allowed preference/);
+  assert.deepEqual(stub.sent("POST", "/api/v1/search/search").at(-1).body, { query: "native-contract", limit: 3, target_uri: `${ROOT}/memories` });
+  assert.equal(stub.sent("POST", "/mcp").filter(row => row.body?.params?.name === "search").length, 0);
+  const rest = await call("POST", "/api/v1/search/search", { query: "native-contract", mode: "list" });
+  assert.equal(rest.json.result.total, 1);
+
+});
+
+test("REST and batched MCP list search filter hidden, derived, foreign and out-of-target rows before counts or metadata", async t => {
+  const hidden = `${ROOT}/memories/preferences/hidden.md`, target = `${ROOT}/memories/preferences`;
+  const { sessions, mcp, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [hidden] } });
+  let upstreamCalls = 0;
+  sessions.search = async (_user, body) => {
+    upstreamCalls++;
+    assert.equal("exclude_uris" in body, false);assert.equal("query_expansion" in body, false);
+    return { result: { memories: [
+      { uri: target + "/allowed.md", abstract: "VISIBLE", provenance: "SECRET-PROVENANCE" },
+      { uri: hidden, abstract: "SENSITIVE" },
+      { uri: `${ROOT}/memories/evimed/index.md`, abstract: "DERIVED" },
+      { uri: "viking://user/foreign/memories/preferences/x.md", abstract: "FOREIGN" },
+      { uri: `${ROOT}/memories/other/x.md`, abstract: "OTHER-TARGET" },
+    ], resources: [], skills: [], total: 777, private_stats: "SECRET-STATS" } };
+  };
+  const result = await mcp([1, 2].map(id => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "search", arguments: { query: "x", target_uri: target } } })));
+  assert.equal(result.messages.length, 2);
+  for (const message of result.messages) { const value=JSON.parse(message.result.content[0].text);assert.equal(value.total,1);assert.equal(value.memories[0].abstract,"VISIBLE"); }
+  assert.doesNotMatch(JSON.stringify(result.messages), /SENSITIVE|DERIVED|FOREIGN|OTHER-TARGET|SECRET|777/);
+  const rest = await call("POST", "/api/v1/search/search", { query: "x", target_uri: target });
+  assert.equal(rest.json.result.total, 1);
+  const before = upstreamCalls;
+  const empty = await call("POST", "/api/v1/search/search", { query: "x", target_uri: hidden });
+  assert.equal(empty.json.result.total,0);assert.equal(upstreamCalls,before);
+});
+
+test("sensitive-metadata failures never become unfiltered list search", async t => {
+  const { call, stub } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => { throw Error("overlay unavailable"); } } });
+  const result=await call("POST","/api/v1/search/search",{query:"x"});assert.equal(result.status,502);assert.equal(stub.sent("POST","/api/v1/search/search").length,0);
+});
+
+test("empty native hits remain empty and all sensitive URIs are filtered beyond the upstream exclusion bound", async t => {
+  const sensitive=Array.from({length:250},(_,i)=>`${ROOT}/memories/preferences/sensitive-${i}.md`);
+  const { sessions,call,mcp }=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>sensitive}});
+  sessions.search=async()=>({result:{memories:[{uri:sensitive.at(-1),abstract:"HIDDEN-250"}],resources:[],skills:[],total:1}});
+  const result=await mcp({jsonrpc:"2.0",id:99,method:"tools/call",params:{name:"search",arguments:{query:"x"}}});
+  assert.deepEqual(JSON.parse(result.messages[0].result.content[0].text),{memories:[],resources:[],skills:[],total:0});
+  assert.equal((await call("GET","/api/v1/content/read?uri="+encodeURIComponent(sensitive.at(-1)))).status,404);
+  const hiddenRead=await mcp({jsonrpc:"2.0",id:100,method:"tools/call",params:{name:"read",arguments:{uris:[sensitive.at(-1)]}}});
+  assert.doesNotMatch(JSON.stringify(hiddenRead.messages),/HIDDEN-250/);
+  assert.equal((await call("POST","/api/v1/search/search",{query:"x",mode:"context",target_uri:`${ROOT}/memories`})).status,400);
+});
+
+test("context search refuses exclusion overflow before native dispatch and never lets caller extras displace mandatory prefixes", async t => {
+  const sensitive=Array.from({length:201},(_,i)=>`${ROOT}/memories/preferences/private-${i}.md`);
+  const { call,stub }=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>sensitive}});
+  const refused=await call("POST","/api/v1/search/search",{query:"x",mode:"context"});
+  assert.equal(refused.status,503);assert.equal(refused.json.error.code,"memory_gateway_exclusions_unavailable");
+  assert.equal(stub.sent("POST","/api/v1/search/search").length,0);
+  const other=await fixture(t);
+  const extras=Array.from({length:200},(_,i)=>`${ROOT}/memories/extras/${i}`);
+  assert.equal((await other.call("POST","/api/v1/search/search",{query:"x",mode:"context",exclude_uris:extras})).status,503);
+  assert.equal(other.stub.sent("POST","/api/v1/search/search").length,0);
 });

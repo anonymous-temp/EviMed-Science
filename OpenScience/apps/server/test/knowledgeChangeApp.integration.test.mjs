@@ -76,13 +76,17 @@ test("through the server: new bytes for a held file label what read the old docu
       if (interrupt) { interrupt = false; throw Object.assign(new Error("Interrupted after reconciliation"), { code: "product_state_unavailable" }); }
     };
     await worker.tick();
-    const pending = await documents.database.query("SELECT id,status FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'action'='source-replace'", [user.id]);
+    const pending = await documents.database.query("SELECT id,status,error FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'action'='source-replace'", [user.id]);
     assert.equal(pending.rows[0].status, "queued", "partial callback success must remain durable for retry");
-    await documents.database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE id=$1", [pending.rows[0].id]);
+    assert.equal(pending.rows[0].error.code, "product_state_unavailable", "the first callback reached the deliberate post-reconciliation interruption");
+    // This fixture requires an already-due retry; timestamptz(3) may round the current clock into the future.
+    await documents.database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE id=$1", [pending.rows[0].id]);
     const restartedWorker = new SourceIngestionWorker({ jobs: app.sourceService.jobs, sources: app.sourceService,
       parser: {}, resolveSource: async () => { throw Error("Replacement must not parse"); }, materialize: async () => { throw Error("Replacement must not materialize"); } });
     await restartedWorker.tick();
-    assert.equal((await app.sourceService.jobs.get(user.id, pending.rows[0].id)).status, "succeeded");
+    const retryState = await app.sourceService.jobs.get(user.id, pending.rows[0].id);
+    const retryDiagnostic = retryState.status === "succeeded" ? null : (await documents.database.query("SELECT id,status,attempts,error,run_after,clock_timestamp() AS database_now,statement_timestamp() AS statement_now FROM evimed_product.jobs WHERE id=$1", [pending.rows[0].id])).rows[0];
+    assert.equal(retryState.status, "succeeded", JSON.stringify({ job: retryDiagnostic, workerLastError: restartedWorker.lastError }));
     const found = await impacts();
     assert.equal(found.length, 1, "the one result that read the old bytes");
     assert.equal(found[0].payload.versionId, versionId);
@@ -110,9 +114,11 @@ test("through the server: new bytes for a held file label what read the old docu
     const retry = await documents.database.query("SELECT id,status FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'action'='source-replace' AND status='queued'", [user.id]);
     assert.equal(retry.rowCount, 1, "page failures cannot falsely finish the durable replacement");
     app.knowledgePages.noteSourcesChanged = notePages;
-    await documents.database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE id=$1", [retry.rows[0].id]);
+    await documents.database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE id=$1", [retry.rows[0].id]);
     await restartedWorker.tick();
-    assert.equal((await app.sourceService.jobs.get(user.id, retry.rows[0].id)).status, "succeeded");
+    const pageRetryState = await app.sourceService.jobs.get(user.id, retry.rows[0].id);
+    const pageRetryDiagnostic = pageRetryState.status === "succeeded" ? null : (await documents.database.query("SELECT id,status,attempts,error,run_after,clock_timestamp() AS database_now,statement_timestamp() AS statement_now FROM evimed_product.jobs WHERE id=$1", [retry.rows[0].id])).rows[0];
+    assert.equal(pageRetryState.status, "succeeded", JSON.stringify({ job: pageRetryDiagnostic, workerLastError: restartedWorker.lastError }));
     const counts = { impacts: (await impacts()).length, notices: (await app.notificationService.list(user.id, { projectId: project.id })).items.length };
     await restartedWorker.tick();
     assert.deepEqual({ impacts: (await impacts()).length, notices: (await app.notificationService.list(user.id, { projectId: project.id })).items.length }, counts);

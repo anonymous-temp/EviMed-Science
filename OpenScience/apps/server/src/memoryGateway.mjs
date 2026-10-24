@@ -143,6 +143,35 @@ const NOT_KEPT = Object.freeze({
 const ok = (/** @type {unknown} */ result) => ({ status: "ok", result, error: null });
 const refusal = (/** @type {string} */ code, /** @type {string} */ message) => ({ status: "error", result: null, error: { code, message } });
 
+/** Native list search has no context-only exclusion fields; filter structured rows before returning any bytes.
+ * @param {any} sessions @param {any} ctx @param {any} given */
+async function scopedListSearch(sessions, ctx, given) {
+  const target = absolute(typeof given.target_uri === "string" && given.target_uri ? given.target_uri : `${ctx.userRoot}/memories`, ctx.userRoot);
+  if (!insideOwnSpace(target, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
+  const excluded = [...await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : []), ...await ctx.hiddenSet()].map(uri => absolute(uri, ctx.userRoot));
+  const hidden = uri => excluded.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`));
+  const empty = { memories: [], resources: [], skills: [], total: 0 };
+  if (hidden(target)) return ok(empty);
+  const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
+  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit, target_uri: target });
+  if (!answer || answer.error || !answer.result || typeof answer.result !== "object") throw new HttpError(502, "memory_gateway_upstream_invalid", "Native memory search is unavailable.");
+  const result = { ...empty };
+  let remaining = limit;
+  for (const kind of ["memories", "resources", "skills"]) {
+    result[kind] = (Array.isArray(answer.result[kind]) ? answer.result[kind] : []).filter(hit => {
+      const uri = typeof hit?.uri === "string" ? hit.uri : "";
+      return uri === absolute(uri, ctx.userRoot) && insideOwnSpace(uri, ctx.userRoot) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
+    }).slice(0, remaining).map(hit => ({ uri: hit.uri,
+      ...(typeof hit.context_type === "string" ? { context_type: hit.context_type } : {}),
+      ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
+      ...(typeof hit.abstract === "string" ? { abstract: hit.abstract } : {}),
+      ...(Array.isArray(hit.tags) ? { tags: hit.tags.filter(tag => typeof tag === "string") } : {}) }));
+    remaining -= result[kind].length;
+  }
+  result.total = result.memories.length + result.resources.length + result.skills.length;
+  return ok(result);
+}
+
 /** Whether a viking:// URI is inside one account's own space (`viking://~` is the engine's alias for it). */
 function insideOwnSpace(uri, userRoot) {
   const text = String(uri ?? "");
@@ -446,10 +475,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideOwnSpace(given.target_uri, ctx.userRoot))) {
         throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
       }
+      if (!context) return { status: 200, json: await scopedListSearch(sessions, ctx, given), outcome: "forwarded" };
+      if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
       const { purpose: _purpose, quotas: _quotas, peer_scope: _peerScope, ...rest } = given;
-      const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : []) };
-      // List mode searches a target; with none it would search every scope the account can see.
-      if (!context && !body.target_uri) body.target_uri = `${ctx.userRoot}/memories`;
+      const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : [], true) };
       return { status: 200, json: await /** @type {any} */ (sessions).search(ctx.user.id, body), outcome: "forwarded" };
     },
     async read(ctx) {
@@ -548,11 +577,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             if (isHidden(uri)) { local.push(toolText(message.id, "（空）")); continue; }
             forward.push({ ...message, params: { ...message.params, arguments: { uri, recursive: args.recursive === true } } });
           } else {
-            const limit = Math.max(1, Math.min(20, Math.trunc(Number(args.limit)) || 5));
-            const target = typeof args.target_uri === "string" && args.target_uri && !isHidden(args.target_uri) ? args.target_uri : `${ctx.userRoot}/memories`;
-            forward.push({ ...message, params: { ...message.params, arguments: {
-              query: String(args.query ?? "").slice(0, 2_000), limit, target_uri: target, query_expansion: "off", exclude_uris: await ctx.excluded([]),
-            } } });
+            const result = await scopedListSearch(sessions, ctx, args);
+            local.push(toolText(message.id, JSON.stringify(result.result)));
           }
           continue;
         }
@@ -689,14 +715,17 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.
         hiddenSet: () => {
-          hiddenList ??= (async () => [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(overlay?.configured ? await overlay.sensitiveUris(user.id).catch(() => []) : [])])();
+          hiddenList ??= (async () => [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(overlay?.configured ? await overlay.sensitiveUris(user.id) : [])])();
           return hiddenList;
         },
         hidden: async (/** @type {string} */ uri) => (await ctx.hiddenSet()).some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`)),
         // `exclude_uris` of a search: the account-shared areas hold nothing of this user's and their scaffolding ranks as hits.
-        excluded: async (/** @type {unknown[]} */ given) => [...new Set([
-          ...given.filter((uri) => typeof uri === "string" && uri.length <= 600), "viking://resources", "viking://agent", ...(await ctx.hiddenSet()),
-        ])].slice(0, 200),
+        excluded: async (/** @type {unknown[]} */ given, context = false) => {
+          const exclusions = [...new Set(["viking://resources", "viking://agent", ...(await ctx.hiddenSet()),
+            ...given.filter((uri) => typeof uri === "string" && uri.length <= 600)])];
+          if (context && exclusions.length > 200) throw new HttpError(503, "memory_gateway_exclusions_unavailable", "Complete context exclusions exceed the native search limit.");
+          return exclusions;
+        },
       };
       const answer = await handlers[route](ctx);
       recordGatewayRequest(route, answer.outcome);

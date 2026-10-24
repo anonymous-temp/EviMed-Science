@@ -149,3 +149,24 @@ documentation about. Nothing was authored: a hand-written fixture once certified
 A find score is `(cosine + 1) / 2` since v0.4.22 and unchanged at v0.5.0 (the production volume rehearsed under v0.5.0
 on 2026-10-12: same entries, same hits, every score `(old + 1) / 2`), so `OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE` stays
 0.75.
+
+### Search mode boundary (native v0.5.0)
+
+`exclude_uris` and `query_expansion` are context-mode arguments; context mode
+forbids `target_uri`. Sending a default list search with context-only arguments
+is rejected by the pinned native engine. The memory gateway therefore keeps
+native automatic recall on the context contract, while model search and REST
+list search use native structured REST list results with an explicit own-space
+target. They never parse the MCP tool's human-readable response. The gateway
+filters each hit against the caller, requested target, derived index and
+sensitive-file exclusions before serializing a whitelisted result and its
+visible count. Hidden targets are empty, and exclusion lookup failure fails
+closed. The protocol stub rejects the incompatible mode/argument combinations;
+this stub check is separate from the recorded-response fixtures above.
+
+Sensitive URI enumeration is complete up to a bounded 10,000-file set; an
+additional row makes the lookup fail closed. Context search refuses dispatch
+when the complete mandatory and requested exclusion set exceeds the native
+200-URI limit. Caller exclusions never displace derived or sensitive prefixes.
+Structured list filtering uses the complete local set rather than this upstream
+context limit. A real PostgreSQL overlay test covers the 201st sensitive file.
