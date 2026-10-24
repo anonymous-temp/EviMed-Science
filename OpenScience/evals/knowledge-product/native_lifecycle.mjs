@@ -41,8 +41,8 @@ async function controlReady(api,projectId,minimum){
 }
 async function seedMemory(api,scope,marker){
  await checked(api,'PUT','/api/memory/settings',{learningPaused:false,recallPaused:false});
- const commit=await checked(api,'POST','/api/memory/remember',{projectId:scope.id,text:`My benchmark-only working preference is ${marker}.`});
- const freeze=await freezeSeededMemory((...args)=>checked(api,...args),{seedIds:[commit.pending?.id].filter(Boolean),requiredSeeds:[{id:marker,kind:'user-authored',statement:`My benchmark-only working preference is ${marker}.`,requiredValues:[marker]}]});
+ const commit=await checked(api,'POST','/api/memory/remember',{projectId:scope.id,text:`For my personal notes, always use the exact heading "${marker}". Please remember this working preference.`});
+ const freeze=await freezeSeededMemory((...args)=>checked(api,...args),{seedIds:[commit.pending?.id].filter(Boolean),requiredSeeds:[{id:marker,kind:'user-authored',statement:`For my personal notes, always use the exact heading "${marker}". Please remember this working preference.`,requiredValues:[marker]}],judge:await (await import('./automatic_judge.mjs')).createSemanticJudge(api.evalBudget.config)});
  const profile=await checked(api,'GET','/api/memory/profile');const records=profile.records.filter(r=>String(r.value??r.summary??'').includes(marker));
  if(!records.length)throw new NativeUnavailable('Actual native extraction completed without retaining the required canary');
  return {freeze,records};

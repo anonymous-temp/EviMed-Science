@@ -43,6 +43,10 @@ export function coordinatorJudgeClient(sharedBudget,{model='deepseek-flash',prov
   return {message:result.choices?.[0]?.message??{},usage:{promptTokens:u.prompt_tokens,completionTokens:u.completion_tokens},cost:Number(response.headers.get('x-evimed-eval-accounted-cny'))};
  }};
 }
+export async function createSemanticJudge(sharedBudget,{model='deepseek-flash'}={}){
+ const {judgeAnswer}=await import('../knowledge-pages/lib/judge.mjs');const llm=coordinatorJudgeClient(sharedBudget,{model});
+ return ({question,reference,answer,caseId,component})=>judgeAnswer({llm,model,question:{question,reference},answer,label:'judge',meta:{caseId,component}});
+}
 export async function reviewDirectory(out,{benchmark,sharedBudget,model='deepseek-flash'}){
  const {judgeAnswer}=await import('../knowledge-pages/lib/judge.mjs');
  const {JUDGE_SYSTEM}=await import('../knowledge-pages/lib/prompts.mjs');

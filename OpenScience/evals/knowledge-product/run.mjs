@@ -142,7 +142,9 @@ export async function main() {
    }catch(error){
       if(execution.arms[arm].status==='collecting'){
        execution.arms[arm]={...execution.arms[arm],status:fatalCollectionError(error)?'stopped-safety':'inconclusive',error:error.message};
-       execution.status=fatalCollectionError(error)?'stopped-safety':'inconclusive';execution.error=error.message;await saveExecution(out,execution);
+       execution.status=fatalCollectionError(error)?'stopped-safety':'inconclusive';execution.error=error.message;
+       if(error.semanticSeedEvidence)execution.semanticSeedEvidence=error.semanticSeedEvidence;
+       await saveExecution(out,execution);
       }
       throw error;
    }finally{

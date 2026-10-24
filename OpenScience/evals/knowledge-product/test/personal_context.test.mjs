@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import benchmark from '../cases.json' with {type:'json'};
 import superseded from '../superseded/cases-v1-invalid-document-memory.json' with {type:'json'};
 import {judgedObservation} from '../automatic_judge.mjs';
-import {validatePersonalContexts,contextMaterials,seedMemoryProof,preparationCounts,seedAuthoredMemory,personalRetrievalProof,collectNativeMemoryContext} from '../personal_context.mjs';
+import {approvedBodyHash,validatePersonalContexts,contextMaterials,seedMemoryProof,preparationCounts,seedAuthoredMemory,personalRetrievalProof,collectNativeMemoryContext} from '../personal_context.mjs';
+const approved=(seedId,uri,approvedValue)=>({seedId,uri,approvedValue,bodySha256:approvedBodyHash(approvedValue)});
 test('main benchmark separates authored personal memory from documents and requires both combined components',()=>{
  assert.equal(validatePersonalContexts(benchmark),true);
  assert.throws(()=>validatePersonalContexts(superseded),/authored/);
@@ -16,11 +17,12 @@ test('main benchmark separates authored personal memory from documents and requi
  assert.ok(combined.memoryDependency.criterion.includes('neither component alone'));
  const bad=structuredClone(benchmark);const c=bad.cases.find(c=>c.memorySeeds?.length);c.memorySeeds[0].kind='document';assert.throws(()=>validatePersonalContexts(bad),/authored/);
 });
-test('freeze provenance requires every authored value in actual native memory, permits merged files and paraphrases',()=>{
+test('freeze provenance requires every authored value in actual native memory, permits merged files and paraphrases',async()=>{
  const seeds=[{id:'one',kind:'user-authored',statement:'My standing heading is Decision brief.',requiredValues:['Decision brief']},{id:'two',kind:'user-authored',statement:'Use EUR for my forecasts.',requiredValues:['EUR'],valueVariants:[['euros']]}];
- assert.throws(()=>seedMemoryProof(seeds,{records:[{id:'unrelated',value:'something else'}]}),/represented/);
- assert.throws(()=>seedMemoryProof(seeds,{records:[{id:'fake',value:'Decision brief; EUR'}]}),/native/);
- const proof=seedMemoryProof(seeds,{records:[{id:'viking://user/owned/memories/preferences/report.md',value:'Forecast currency: euros. Preferred report title: Decision brief.'}]});
+ const judge=async()=>({ok:true,score:1,points:[{verdict:'covered',contradicted:false}]});
+ await assert.rejects(seedMemoryProof(seeds,{engine:'native',records:[{id:'unrelated',value:'something else'}]},{judge}),/native/);
+ await assert.rejects(seedMemoryProof(seeds,{engine:'native',records:[{id:'fake',value:'Decision brief; EUR'}]},{judge}),/native/);
+ const proof=await seedMemoryProof(seeds,{engine:'native',records:[{id:'viking://user/owned/memories/preferences/report.md',value:'Forecast currency: euros. Preferred report title: Decision brief.'}]},{judge});
  assert.equal(proof.length,2);assert.equal(proof[0].uri,proof[1].uri);
 });
 
@@ -33,31 +35,31 @@ test('the actual seeding adapter sends only authored statements, never material 
  await assert.rejects(seedAuthoredMemory(async()=>{throw Error('must not send');},{projectId:'owned',seeds:[{kind:'document',statement:'Trial result'}]}),/authored/);
 });
 test('memory evidence must expose the expected native URI and values, not an unrelated successful recall',()=>{
- const c={memorySeeds:[{id:'currency',requiredValues:['EUR']}]},e={memoryFreeze:{provenance:[{seedId:'currency',uri:'viking://user/owned/memories/preferences/currency.md'}]},retrieval:[{name:'mcp__openviking__search',status:'completed',output:{text:'EUR',uri:'viking://user/other/memories/preferences/currency.md'}}]};
+ const c={memorySeeds:[{id:'currency',requiredValues:['EUR']}]},e={memoryFreeze:{provenance:[approved('currency','viking://user/owned/memories/preferences/currency.md','EUR')]},retrieval:[{name:'mcp__openviking__search',status:'completed',output:{text:'EUR',uri:'viking://user/other/memories/preferences/currency.md'}}]};
  assert.throws(()=>personalRetrievalProof(c,e),/provenance/);
  e.retrieval[0].output.uri=e.memoryFreeze.provenance[0].uri;assert.equal(personalRetrievalProof(c,e).length,1);
 });
 
 test('producer-owned native profile context qualifies; assistant-authored lookalike does not',()=>{
- const c={memorySeeds:[{id:'s',requiredValues:['EUR']}]},e={memoryFreeze:{provenance:[{seedId:'s',uri:'viking://user/owned/memories/preferences/currency.md'}]},retrieval:[]};
+ const c={memorySeeds:[{id:'s',requiredValues:['EUR']}]},e={memoryFreeze:{provenance:[approved('s','viking://user/owned/memories/preferences/currency.md','EUR')]},retrieval:[]};
  e.nativeMemoryContext=collectNativeMemoryContext([{role:'assistant',source:{kind:'plugin:openviking-memory'},parts:[{type:'text',text:'EUR'}]}]);assert.throws(()=>personalRetrievalProof(c,e),/provenance/);
  e.nativeMemoryContext=collectNativeMemoryContext([{role:'user',source:{kind:'plugin:openviking-memory',form:'instructions'},parts:[{type:'text',text:'Currency EUR'}]}]);assert.equal(personalRetrievalProof(c,e)[0].via,'native-profile-context');
 });
 
 test('combined scoring cannot pass on knowledge alone and memory-only has no fabricated source citation',async()=>{
  const c=benchmark.cases.find(c=>c.evaluation?.substrate==='combined'&&!c.unanswerable),seed=c.memorySeeds[0],uri='viking://user/owned/memories/preferences/heading.md';
- const evidence={arm:'candidate',repetition:1,run:{id:'real-fixture-run'},digest:{reply:'External knowledge answer only'},runtime:{model:'fixture'},memoryFreeze:{provenance:[{seedId:seed.id,uri}]},retrieval:[{name:'mcp__openviking__read',status:'completed',input:{uri},output:{text:seed.statement}}]};
+ const evidence={arm:'candidate',repetition:1,run:{id:'real-fixture-run'},digest:{reply:'External knowledge answer only'},runtime:{model:'fixture'},memoryFreeze:{provenance:[approved(seed.id,uri,seed.statement)]},retrieval:[{name:'mcp__openviking__read',status:'completed',input:{uri},output:{text:seed.statement}}]};
  const judge=async input=>({ok:true,malformed:false,score:input.component==='personal-memory'&&!input.answer.includes(seed.answerValues[0])?0:1,points:[]});
  const without=await judgedObservation(c,evidence,{judge});assert.equal(without.components.knowledge,1);assert.equal(without.components.memory,0);assert.equal(without.score,0);
  evidence.digest.reply+=' '+seed.answerValues[0];assert.equal((await judgedObservation(c,evidence,{judge})).score,1);
- const m=benchmark.cases.find(c=>c.evaluation?.substrate==='memory'),s=m.memorySeeds[0];evidence.digest.reply=s.answerValues[0];evidence.memoryFreeze.provenance=[{seedId:s.id,uri}];evidence.retrieval[0].output.text=s.statement;
+ const m=benchmark.cases.find(c=>c.evaluation?.substrate==='memory'),s=m.memorySeeds[0];evidence.digest.reply=s.answerValues[0];evidence.memoryFreeze.provenance=[approved(s.id,uri,s.statement)];evidence.retrieval[0].output.text=s.statement;
  const row=await judgedObservation(m,evidence,{judge});assert.deepEqual(row.citedSources,[]);assert.equal(row.citationReview.unresolved,false);assert.equal(row.memoryProvenance[0].uri,uri);
  evidence.retrieval[0].output.code='memory_index_unavailable';await assert.rejects(judgedObservation(m,evidence,{judge}),/provenance/);
 });
 
 test('memory-only uses the existing semantic judge for Chinese paraphrases and rejects unrelated answers',async()=>{
  const c=benchmark.cases.find(c=>c.id==='general-handoff'),seed=c.memorySeeds[0],uri='viking://user/owned/memories/preferences/handoff.md';
- const e={arm:'candidate',repetition:1,run:{id:'semantic-fixture'},digest:{reply:'把负责人放在截止日期前面'},runtime:{model:'fixture'},memoryFreeze:{provenance:[{seedId:seed.id,uri}]},retrieval:[{name:'mcp__openviking__read',status:'completed',input:{uri},output:{text:seed.statement}}]};
+ const e={arm:'candidate',repetition:1,run:{id:'semantic-fixture'},digest:{reply:'把负责人放在截止日期前面'},runtime:{model:'fixture'},memoryFreeze:{provenance:[approved(seed.id,uri,seed.statement)]},retrieval:[{name:'mcp__openviking__read',status:'completed',input:{uri},output:{text:seed.statement}}]};
  const judge=async input=>({ok:true,malformed:false,score:input.answer==='把负责人放在截止日期前面'?1:0,points:[]});
  assert.equal((await judgedObservation(c,e,{judge})).score,1);
  e.digest.reply='The weather is pleasant.';assert.equal((await judgedObservation(c,e,{judge})).score,0);
@@ -69,6 +71,6 @@ test('real runtime normalizer retains the exact native plugin producer as a stri
  assert.equal(transcript.messages[0].source,'plugin:openviking-memory');
  const context=collectNativeMemoryContext(transcript.messages);assert.equal(context.length,1);
  const c={memorySeeds:[{id:'currency',requiredValues:['EUR']}]};
- assert.equal(personalRetrievalProof(c,{memoryFreeze:{provenance:[{seedId:'currency',uri:'viking://user/owned/memories/preferences/currency.md'}]},nativeMemoryContext:context})[0].via,'native-profile-context');
+ assert.equal(personalRetrievalProof(c,{memoryFreeze:{provenance:[approved('currency','viking://user/owned/memories/preferences/currency.md','EUR')]},nativeMemoryContext:context})[0].via,'native-profile-context');
  for(const source of ['user','runtime-context','plugin:evimed-capsule'])assert.deepEqual(collectNativeMemoryContext([{...transcript.messages[0],source}]),[]);
 });

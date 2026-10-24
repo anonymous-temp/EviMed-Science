@@ -4,7 +4,7 @@ import { freezeSeededMemory, collectIndependentCells, fatalCollectionError } fro
 test('native seeding settles completely before learning freezes and recall stays enabled',async()=>{
  const calls=[];let polls=0;
  const call=async(method,url,body)=>{calls.push({method,url,body});if(url==='/api/memory/profile')return ++polls===1?{engine:'native',pending:[{id:'seed-1'}],records:[]}:{engine:'native',pending:[],records:[{id:'viking://user/owned/memories/preferences/format.md',value:'Use EUR for forecasts'}]};return {engine:'native',learningPaused:true,recallPaused:false};};
- const frozen=await freezeSeededMemory(call,{seedIds:['seed-1'],requiredSeeds:[{id:'currency',kind:'user-authored',statement:'Use EUR for forecasts',requiredValues:['EUR']}],sleep:async()=>{},timeoutMs:1000});
+ const frozen=await freezeSeededMemory(call,{judge:async()=>({ok:true,score:1,points:[{verdict:'covered',contradicted:false}]}),seedIds:['seed-1'],requiredSeeds:[{id:'currency',kind:'user-authored',statement:'Use EUR for forecasts',requiredValues:['EUR']}],sleep:async()=>{},timeoutMs:1000});
  assert.equal(frozen.settings.learningPaused,true);assert.equal(frozen.settings.recallPaused,false);
  assert.equal(calls.findIndex(c=>c.method==='PUT'),2);
 });

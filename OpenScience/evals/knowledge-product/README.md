@@ -107,9 +107,11 @@ Current planned preparation per arm is 1,032 uploads, 687 knowledge sources and 
 (2,064 / 1,374 / 76 across both arms), plus the existing lifecycle work and answer turns. Main factual judgement now requires 243 calls per arm (180 base judgements plus 63 separate combined-memory judgements), 486 across both arms, plus the existing judge sanity checks, all under the same CNY50 coordinator.
 The zero-spend preflight records these counts; it does not predict model-call fan-out or certify cost.
 
-Freeze now requires every necessary authored seed's grounded values in actual native-URI-backed
-memory, allowing merged files and declared equivalent phrasing. The receipt preserves the original
-user statement, matched native URI and required values. An unrelated record cannot qualify a seed.
+Freeze now semantically checks each submitted USER statement against an actual authenticated native-profile record using the same canonical key-point judge and shared coordinator. Full coverage (score 1, all points covered, no contradiction or malformed result) is required. Literal matches only order candidate selection; even a literal match is judged, so negation and reversed ordering cannot pass by word overlap. Each seed examines at most four candidates from at most 64 native records, each bounded to 32 KiB. Merged files and paraphrases can pass the semantic check. The receipt preserves the exact approved record value, its SHA256, native URI, user statement, judge points and accounted cost. An absent/malformed/error result is an inconclusive precondition, never a fabricated quality zero or pass.
+
+This adds 38–152 bounded seed-representation judgements per arm (76–304 across both arms), in addition to 486 factual/component judgements and existing sanity/lifecycle work. These are real priced calls under the same CNY50 cap, not free assertions; the preflight reports the bounds. No paid seeding validation runs in this repository's unit tests.
+
+Retrieval proof associates each result's own URI with that same approved value, with whitespace normalization only. It cannot combine a correct URI on one result with text from a different/foreign result. A single-URI native read may supply the URI through its authenticated input when the returned body has no URI; a multi-URI return must identify each body independently. An unrelated record cannot qualify a seed.
 Collection retains real native search/read output or producer-owned OpenViking profile context;
 the required values must be exposed there and linked to the frozen inventory. Assistant text is not
 native context. Memory-only scoring requires this native evidence and does not manufacture document

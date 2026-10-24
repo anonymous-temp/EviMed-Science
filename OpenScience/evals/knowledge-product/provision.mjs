@@ -110,7 +110,7 @@ async function seedContexts({context,benchmark,dataDir,sharedBudget}) {
     if(evaluation.substrate!=='knowledge'){
       const receipts=await seedAuthoredMemory((...args)=>checked(owner.api,...args),{projectId:id,seeds,beforeEach:()=>verifyLiveBudgetWiring(sharedBudget)});
       scope.seededArchiveIds.push(...receipts.map(receipt=>receipt.id));scope.seededMemoryChunks=receipts.length;
-      scope.memoryFreeze=await freezeSeededMemory((...args)=>checked(owner.api,...args),{seedIds:scope.seededArchiveIds,requiredSeeds:seeds});
+      scope.memoryFreeze=await freezeSeededMemory((...args)=>checked(owner.api,...args),{seedIds:scope.seededArchiveIds,requiredSeeds:seeds,judge:await (await import('./automatic_judge.mjs')).createSemanticJudge(sharedBudget)});
     }
     scope.documentCount=material.length;
     // Completion of intake/recall is checked again from genuine tool output by the report; seeding alone is never readiness proof.
