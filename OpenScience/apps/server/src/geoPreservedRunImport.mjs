@@ -59,7 +59,10 @@ export async function pinGeoRunOutputs({ results, project, run, context, transcr
     pinned.set(relative, digests.size === 1 ? { version: eligible.sort((a, b) => a.versionId.localeCompare(b.versionId))[0] }
       : { code: digests.size > 1 ? "geo_plan_output_ambiguous" : "geo_plan_output_unavailable" });
   }
+  const identity = sha(JSON.stringify([project.userId, project.id, run.id, run.sessionId, [...pinned].map(([relative, selected]) =>
+    [relative, selected.version?.versionId ?? null, selected.version?.digest ?? null, selected.code ?? null]).sort((a, b) => a[0].localeCompare(b[0]))]));
   return {
+    identity,
     /** Internal closure: neither an API caller nor refreshed inventory can replace this pinned selection.
      * @param {any} owner @param {any} actual @param {string} relative */
     async readFile(owner, actual, relative) {
@@ -86,7 +89,7 @@ export function createGeoArtifactRefresh({ runs, results, geo, contexts, readTra
     const pinned = context ? await pinGeoRunOutputs({ results, project, run: original, context, transcript }) : null;
     const refreshed = await runs.refreshArtifacts(project, runId, options);
     if (!context || !pinned) return refreshed;
-    const geoImport = await geo.importDelivery(project, original, { recovery: true, readRunFile: pinned.readFile });
+    const geoImport = await geo.importDelivery(project, original, { recovery: true, readRunFile: pinned.readFile, candidateIdentity: pinned.identity });
     return { ...refreshed, geoImport };
   };
 }

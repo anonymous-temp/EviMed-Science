@@ -278,6 +278,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
   const done = new Set();
   /** The imports under way, by run: a caller that meets one waits for it instead of repeating it or reading ahead of it. */
   const running = new Map();
+  const runningIdentity = new Map();
   /** How often a run's import has been tried in this process. */
   const tries = new Map();
   /** What the imports did since this process started: runs imported whole, and attempts that lost a write or threw. */
@@ -584,14 +585,17 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
    * one's memory too, and the fold asks again), and then no more; the loss is counted and audited each time.
    * @param {{ id: string, userId: string, workspaceDir: string }} project the control-plane project
    * @param {Record<string, any>} run
-   * @param {{ recovery?: boolean, readRunFile?: any }} [options] Internal recovery consumes only pre-pinned immutable versions.
+   * @param {{ recovery?: boolean, readRunFile?: any, candidateIdentity?: string }} [options] Internal recovery consumes only pre-pinned immutable versions.
    * @returns {Promise<{ imported: number, issues: number, located: number, gated: number, carded?: number, failed?: string[] } | null>}
    */
   async function importDelivery(project, run, options = {}) {
     if (!run?.id || !TERMINAL.has(String(run.status ?? ""))) return null;
     const id = String(run.id);
     if (!options.recovery) await beforeImport?.(project, run);
-    while (running.has(id)) await running.get(id)?.catch(() => {});
+    while (running.has(id)) {
+      if (options.recovery && options.candidateIdentity && runningIdentity.get(id) === options.candidateIdentity) return running.get(id);
+      await running.get(id)?.catch(() => {});
+    }
     if (!options.recovery && done.has(id)) { await afterImport?.(project, run); return null; }
     const attempt = (async () => {
       /** @type {string[]} */
@@ -619,8 +623,9 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
         if ((tries.get(id) ?? 0) >= MAX_TRIES) done.add(id);
         throw error;
       }
-    })().finally(() => { running.delete(id); });
+    })().finally(() => { running.delete(id); runningIdentity.delete(id); });
     running.set(id, attempt);
+    runningIdentity.set(id, options.candidateIdentity ?? null);
     const result = await attempt;
     await afterImport?.(project, run);
     return result;
