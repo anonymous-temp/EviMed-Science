@@ -1346,6 +1346,17 @@ export {
   FRONTIER_NOTICE_KINDS,
   frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
+// frontierGenres — 8 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
+// the genres code is sure of, and code's fallback and decision over the editor model's genre.
+export {
+  FRONTIER_CODE_GENRES,
+  FRONTIER_GENRE_BASES,
+  FRONTIER_GENRE_LABELS_ZH,
+  FRONTIER_GENRES,
+  frontierGenreDecision,
+  frontierGenreFallback,
+  isFrontierGenre,
+} from './src/frontierGenres.mjs'
 // projectCard — the slots a project's memory is read in: six general ones for any kind of
 // work, the clinical elements as an extension written only when a study was described,
 // `project.ext.<name>` for the extras of other kinds of work, and the one check on a
