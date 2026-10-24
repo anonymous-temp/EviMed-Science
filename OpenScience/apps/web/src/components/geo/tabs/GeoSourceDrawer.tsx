@@ -63,7 +63,7 @@ export function GeoSourceDrawer({
 }: {
   geoId: string;
   project: GeoProject;
-  source: GeoSourceRow;
+  source: GeoSourceRow | Pick<GeoSourceRow, "id">;
   /** The engine the list was narrowed to, or `all`: the drawer lists the same answers the row counted. */
   engine: string;
   /** The exact observation set whose source count was pressed. */
@@ -90,29 +90,34 @@ export function GeoSourceDrawer({
     if (url) params.set("planUrl", url); else params.delete("planUrl");
     onClose(); navigate(`${location.pathname}?${params}#implementation-plan`);
   };
-  const kind = sourceKindWord(source.kind);
+  // An exact source action may address a record outside the bounded catalogue list.
+  // Show its normal loading/error state until the authorized detail supplies the record.
+  const displayedSource = state.kind === "ready" ? state.data.source : "domain" in source ? source : null;
+  const kind = sourceKindWord(displayedSource?.kind);
   return (
     <Drawer
-      title={source.name || source.domain}
-      description={(
+      title={displayedSource?.name || displayedSource?.domain || "信源"}
+      description={displayedSource ? (
         <>
-          <a href={`https://${source.domain}`} target="_blank" rel="noopener noreferrer" data-geo-source-link="" className="text-accent hover:underline">
-            {source.domain}
+          <a href={`https://${displayedSource.domain}`} target="_blank" rel="noopener noreferrer" data-geo-source-link="" className="text-accent hover:underline">
+            {displayedSource.domain}
             <ArrowUpRight size={16} aria-hidden="true" className="inline align-text-bottom" />
             <span className="sr-only">（在新标签页打开）</span>
           </a>
           {kind && ` · ${kind}`}
           {narrowed && ` · 只看${engineName(narrowed)}`}
         </>
-      )}
+      ) : undefined}
       onClose={onClose}
     >
-      <div data-geo-source-drawer={source.domain} className="flex min-h-full flex-col">
+      <div data-geo-source-drawer={displayedSource?.domain} className="flex min-h-full flex-col">
         <div className="flex flex-1 flex-col gap-6">
           {/* What an article here needs and costs, and the groups it serves, are the first screen: the answers behind the counts follow. */}
-          <Conditions source={state.kind === "ready" ? state.data.source : source} candidate={served?.candidate ?? null} />
-          <SourceRelationship key={`${geoId}:${source.domain}`} geoId={geoId} target={{ kind: 'domain', value: source.domain }} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={() => frame?.data.invalidate()} />
-          <Button onClick={() => showPlan()}>查看相关实施方案</Button>
+          {displayedSource && <>
+            <Conditions source={displayedSource} candidate={served?.candidate ?? null} />
+            <SourceRelationship key={`${geoId}:${displayedSource.domain}`} geoId={geoId} target={{ kind: 'domain', value: displayedSource.domain }} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={() => frame?.data.invalidate()} />
+            <Button onClick={() => showPlan()}>查看相关实施方案</Button>
+          </>}
           <Served groups={served?.groups ?? []} />
           {state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取引用它的回答</p>}
           {state.kind === "error" && (state.stale ? <ChangedSource onRefresh={refreshView} /> : <TabError message={state.message} onRetry={reload} />)}
@@ -120,7 +125,7 @@ export function GeoSourceDrawer({
           {state.kind === "ready" && <Pages geoId={geoId} project={project} detail={state.data} onPlan={showPlan} />}
           {state.kind === "ready" && <History detail={state.data} />}
         </div>
-        <Footer project={project} source={source} detail={state.kind === "ready" ? state.data : null} />
+        {displayedSource && <Footer project={project} source={displayedSource} detail={state.kind === "ready" ? state.data : null} />}
       </div>
     </Drawer>
   );
@@ -396,7 +401,7 @@ function Served({ groups }: { groups: ReadonlyArray<{ id: string; name: string }
 }
 
 /** One primary button, pinned under the content: the draft goes to the project's conversation and waits there to be sent. */
-function Footer({ project, source, detail }: { project: GeoProject; source: GeoSourceRow; detail: GeoSourceDetail | null }) {
+function Footer({ project, source, detail }: { project: GeoProject; source: Pick<GeoSourceRow,"name"|"domain">; detail: GeoSourceDetail | null }) {
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
   const product = project.product?.brandName || project.product?.genericName || project.name;

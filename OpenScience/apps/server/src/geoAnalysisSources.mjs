@@ -18,6 +18,21 @@ const domainOf = url => url.hostname.toLowerCase().replace(/^www\./u, '');
 const answerItem = row => ({
     id: row.snapshotId, unit: 'answers', snapshotId: row.snapshotId, questionId: row.questionId, roundId: row.roundId, engine: row.engine, repeatIndex: row.repeatIndex, askedAt: row.askedAt ?? null, status: row.status, judgment: row.assessmentFacts ?? row.facts ?? null, citations: row.citations ?? []
 });
+/** Preserve the existing source identity: exact lower-case host, with leading www folded; no parent-domain inference. */
+function sourceCitation(citation) {
+    try {
+        const url = new URL(citation?.url);
+        if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return null;
+        return {domain:domainOf(url), key:pageKey(citation.url)};
+    } catch { return null; }
+}
+/** Complete relevant catalogue keys, before type/name filters are applied. @param {any} selected */
+export function selectedSourceDomains(selected) {
+    return [...new Set(selectedSourceObservations(selected).flatMap(row => (row.citations??[]).flatMap(citation => {
+        const reference=sourceCitation(citation);
+        return reference?[reference.domain]:[];
+    })))].sort();
+}
 /** The source branch admits valid/refusal deduped observations, including partial or missing judgement. */
 export function selectedSourceObservations(selected) {
     return (selected.computed.balance.deduped ?? []).filter(row => ['valid', 'refusal'].includes(row.status));
@@ -29,16 +44,9 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
     for (const row of observations) {
         const seen = new Map();
         for (const citation of row.citations ?? []) {
-            let url;
-            try {
-                url = new URL(citation.url);
-                if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
-                    continue;
-            }
-            catch {
-                continue;
-            }
-            const domain = domainOf(url), source = catalog.get(domain), sourceType = source?.kind || 'unknown', key = pageKey(citation.url);
+            const reference=sourceCitation(citation);
+            if (!reference) continue;
+            const {domain,key}=reference, source=catalog.get(domain), sourceType=source?.kind||'unknown';
             sourceTypes.add(sourceType);
             const existing = seen.get(key) ?? {
                 id: hash([row.snapshotId, key]), row, snapshotId: row.snapshotId, sourceKey: key, domain, sourceType, name: source?.name ?? null, sourceId: source?.id ?? null, originalUrls: [], titles: []

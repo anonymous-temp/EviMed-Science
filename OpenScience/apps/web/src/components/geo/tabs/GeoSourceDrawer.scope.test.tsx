@@ -62,3 +62,16 @@ it('keeps page 251 reachable with the existing exact selected-source actions',as
  expect(screen.getByRole('link',{name:/Preserved page 251/})).toHaveAttribute('href',pages[250].url);
  expect(client.getGeoSource).toHaveBeenCalledWith('g',source.id,{selectionRef:'source-exact'});
 });
+
+it('loads an exact source id without inventing a source row and preserves 404 retry scope',async()=>{
+ const source=sourcesFilled.sources[0],detail=sourceDetailOf(source);
+ client.getGeoSource.mockRejectedValueOnce(new WebApiError('Source unavailable',{status:404})).mockResolvedValueOnce({...detail,source:{...detail.source,id:'source-2001',name:'Registered source 2001'}});
+ render(<MemoryRouter><GeoSourceDrawer geoId="g" project={geoProject()} source={{id:'source-2001'}} engine="all" selectionRef="tail-exact" focus={null} onClose={()=>{}}/></MemoryRouter>);
+ expect(screen.getByRole('status')).toHaveTextContent('正在读取引用它的回答');
+ expect(screen.queryByRole('button',{name:'在对话中处理'})).toBeNull();
+ expect(await screen.findByRole('alert')).toBeVisible();expect(screen.getByRole('dialog',{name:'信源'})).toBeVisible();
+ await userEvent.click(screen.getByRole('button',{name:'重试'}));
+ expect(await screen.findByRole('dialog',{name:'Registered source 2001'})).toBeVisible();
+ expect(client.getGeoSource).toHaveBeenNthCalledWith(1,'g','source-2001',{selectionRef:'tail-exact'});
+ expect(client.getGeoSource).toHaveBeenNthCalledWith(2,'g','source-2001',{selectionRef:'tail-exact'});
+});

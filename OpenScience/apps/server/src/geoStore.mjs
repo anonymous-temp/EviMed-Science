@@ -1116,6 +1116,24 @@ export class GeoStore {
     return result.rows.map(geoSourceFromRow);
   }
 
+  /** Resolve every cited domain within an already authorized owner/project pair.
+   * This is a bounded selected-key lookup, independent of the catalogue list's display limit.
+   * Exact host matching folds only case and leading www, as the source presenter does.
+   * @param {{id:string,userId:string}} project @param {string[]} domains
+   */
+  async sourcesForDomains(project, domains) {
+    if (!project?.id || !project?.userId || !Array.isArray(domains) || domains.some(domain=>typeof domain!=='string'))
+      throw new HttpError(400, 'geo_read_filter_invalid', 'Choose an authorized source selection.');
+    const keys=[...new Set(domains.map(domain=>domain.toLowerCase().replace(/^www\./u,'')))].sort();
+    if (keys.length>20000) throw new HttpError(422, 'geo_read_filter_invalid', 'Narrow the selection to at most 20,000 cited domains.');
+    if (!keys.length) return [];
+    const result=await this.query(`SELECT s.* FROM evimed_geo.sources s
+      JOIN evimed_geo.projects p ON p.id=s.geo_project_id AND p.user_id=s.user_id
+      WHERE s.geo_project_id=$1 AND s.user_id=$2 AND regexp_replace(lower(s.domain),'^www[.]','')=ANY($3::text[])
+      ORDER BY s.domain,s.id`,[project.id,project.userId,keys]);
+    return result.rows.map(geoSourceFromRow);
+  }
+
   /**
    * Upsert the run-judged fields of sources by domain. The counts (`cited`,
    * mentions, wrong) are measured, and the market cell is the market's.

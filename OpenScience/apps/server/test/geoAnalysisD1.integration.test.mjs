@@ -77,6 +77,8 @@ test('D1 actual selected sources, exact paginated members, current catalogue con
     if (process.env.GEO_D1_RECEIPTS_DIR) {
         await mkdir(process.env.GEO_D1_RECEIPTS_DIR, { recursive: true });
         await writeFile(`${process.env.GEO_D1_RECEIPTS_DIR}/document.json`, JSON.stringify({ ...freezeGeoAnalysisDocument(full), version: 1, rendererVersion: 'pandoc-chromium-v1', sourceDigest: view.digest, sourceType: 'typed-table', formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, null, 2));
+        const types=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:{viewId:'V17'}});
+        await writeFile(`${process.env.GEO_D1_RECEIPTS_DIR}/document-v17.json`,JSON.stringify({...freezeGeoAnalysisDocument(types),version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:types.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));
     }
 });
 test('D1 frozen native rows retain exact member identity, immutable values and selected source filters', opts, async () => {
@@ -115,6 +117,9 @@ test('D1 catalogue source 2001 keeps exact type, identity, detail action and rev
  const exact={selectionRef:view.selection.reference,viewId:'V18',sourceLevel:'page'};
  const filtered=await service.analysis(user,catalogueProject.id,{...exact,sourceType:'news'});assert.equal(filtered.rows.length,1);assert.equal(filtered.rows[0].dimensions.sourceId,'d1-cat-2001');
  assert.equal((await service.source(user,catalogueProject.id,tail.dimensions.sourceId,{selectionRef:view.selection.reference})).pages[0].url,'https://www.d2001.example/page');
+ assert.equal((await store.sourcesForDomains(catalogueProject,['WWW.D2001.EXAMPLE','d2001.example','child.d2001.example'])).length,1);
+ assert.equal((await store.sourcesForDomains({...catalogueProject,userId:'d1-viewer'},['d2001.example'])).length,0);
+ await assert.rejects(store.sourcesForDomains(catalogueProject,Array.from({length:20001},(_,n)=>`over${n}.example`)),error=>error.status===422);
  assert.equal((await store.listSources(catalogueProject.id)).length,2000,'existing catalogue list callers keep their bounded behaviour');
  await store.query("UPDATE evimed_geo.sources SET kind='academic',name='Updated source' WHERE id='d1-cat-2001'");
  await assert.rejects(service.analysis(user,catalogueProject.id,{...exact,expectedDigest:view.digest}),error=>error.status===409);

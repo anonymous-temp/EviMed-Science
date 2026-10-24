@@ -21,7 +21,7 @@ import { GEO_ANALYSIS_DESCRIPTOR_FIELDS, GEO_ANALYSIS_REGISTRY, normalizeGeoAnal
 import { buildGeoRecommendationAnalysis } from "./geoAnalysisRecommendations.mjs";
 import { buildGeoMetricAnalysis, buildGeoComparisonAnalysis, buildGeoRivalAnalysis } from "./geoAnalysisMetrics.mjs";
 export { normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
-import { buildGeoSourceAnalysis } from "./geoAnalysisSources.mjs";
+import { buildGeoSourceAnalysis, selectedSourceDomains } from "./geoAnalysisSources.mjs";
 import { HttpError } from "./security.mjs";
 
 const hash = (value) =>
@@ -592,7 +592,7 @@ export async function readGeoAnalysis(
         )
       ).rows;
     }
-    const sources = GEO_ANALYSIS_REGISTRY[view.viewId].family === "sources" ? (await store.listSources(project.id)).map(source=>({id:source.id,domain:source.domain,name:source.name,kind:source.kind})) : [];
+    const sources = GEO_ANALYSIS_REGISTRY[view.viewId].family === "sources" ? (await store.sourcesForDomains(project, selectedSourceDomains(selected))).map(source=>({id:source.id,domain:source.domain,name:source.name,kind:source.kind})) : [];
     const memberItems = new Map();
     const result = presentGeoAnalysis(selected, view, {
       targets,
@@ -880,6 +880,22 @@ ${view.columns.map((column) => `| ${clean(column.label)} | ${clean(reportReading
 `,
         )
         .join("\n");
+  if (["V17", "V18"].includes(view.viewId)) {
+      // Pandoc's existing pipe-table column widths keep source addresses readable.
+      // The typed table and cover above retain every exact dimension and cell state.
+      const table = (headers, widths, items) => `| ${headers.join(" | ")} |\n| ${widths.map(width => "-".repeat(width)).join(" | ")} |\n${items.map(cells => `| ${cells.map(clean).join(" | ")} |`).join("\n")}\n`;
+      const count = (row, key) => { const cell = row.values[key]; return cell.state === "known" && cell.value !== null ? String(cell.value) : cell.value == null ? "未知" : `${cell.value}（${cell.reason ?? cell.state}）`; };
+      const date = value => value ? new Intl.DateTimeFormat("en-CA", { timeZone: view.scope.timeZone ?? "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)) : "未知";
+      const dateRange = row => { const first = date(row.dimensions.firstObserved), last = date(row.dimensions.lastObserved); return first === last ? first : `${first} 至 ${last}`; };
+      const overview = `# 来源分析\n\n所选范围：${view.scope.from ?? "不限开始日期"} 至 ${view.scope.to ?? "不限结束日期"}；${view.scope.timeZone ?? "Asia/Shanghai"}。共 ${view.rows.length} 个来源${view.viewId === "V17" ? "类型" : "条目"}。\n\n有可用引用的回答中，采样时间已知 ${view.definition.knownTimeAnswers} 个、未知 ${view.definition.unknownTimeAnswers} 个。部分判定回答的可用引用仍保留，不代表回答已完成医学准确性判定。\n\n类型覆盖按不同回答去重，可重叠；回答与页面配对按回答及页面地址去重。共同出现错误或品牌提及不代表来源导致错误。日期仅表示已知的实际观察日期，未知时间不推定为零。\n\n分析版本：${view.digest}。方法：${clean(view.definition.methodVersion)}。完整范围、原始地址别名、逐轮历史、状态与精确来源标识保留在配套数据表及导出记录。\n\n`;
+      if (view.viewId === "V17") {
+          canonicalMarkdown = overview + "## 来源类型覆盖\n\n" + table(["来源类型", "回答", "覆盖率（%）", "配对", "页面"], [40, 10, 12, 10, 10], view.rows.map(row => [row.label, ...["answers", "coverage", "pairs", "pages"].map(key => count(row, key))]));
+      }
+      else {
+          canonicalMarkdown = overview + "## 引用与页面\n\n观察日期为首次至最近一次已知采样日期。\n\n" + table(["来源", "回答", "配对", "页面", "观察日期"], [48, 7, 7, 7, 24], view.rows.map((row, index) => [`${index + 1}. ${row.dimensions.sourceKey ?? row.dimensions.domain ?? row.label}`, ...["answers", "pairs", "pages"].map(key => count(row, key)), dateRange(row)])) +
+              "\n## 共同出现与采样时间\n\n序号与上表来源一致。同错回答指共同出现我方错误的回答，同提回答指共同出现品牌提及的回答，均为共同出现计数。时间覆盖以回答为单位，轮次仅计实际出现的轮次。\n\n" + table(["序号", "轮次", "同错回答", "同提回答", "时间已知", "时间未知"], [10, 10, 18, 18, 18, 18], view.rows.map((row, index) => [index + 1, ...["rounds", "wrong", "mentions", "knownTime", "unknownTime"].map(key => count(row, key))]));
+      }
+  }
   return {
     canonicalMarkdown,
     title: "所选数据分析",

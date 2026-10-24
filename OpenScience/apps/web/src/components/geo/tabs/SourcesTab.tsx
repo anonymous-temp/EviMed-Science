@@ -359,11 +359,11 @@ function SourceList({
           onActions={() => navigate(geoDestinationPath(geoId, { tab: "actions" }))}
         />
       )}
-      {drawerRow && (
+      {activeKey && (
         <GeoSourceDrawer
           geoId={geoId}
           project={project}
-          source={drawerRow}
+          source={drawerRow ?? { id: activeKey }}
           engine={currentOpened?.engine ?? "all"}
           selectionRef={selectionRef}
           focus={currentOpened?.focus ?? null}
