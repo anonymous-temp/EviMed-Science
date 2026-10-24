@@ -3,7 +3,6 @@ import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
 import { FRONTIER_MEDIA_ID, fetchFrontierMedia, frontierMediaList } from "./frontierMedia.mjs";
-import { issueFrontierExposure } from "./frontierEvolution.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
 import { frontierMonthlyMarkdown } from "./frontierMonthly.mjs";
@@ -496,21 +495,34 @@ const ITEM_FROM = `evimed_frontier.items i
 /** What a search leg ranks over: the filters need the item and its source, nothing else. */
 const LEG_FROM = `evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id`;
 
+/**
+ * The policy a list of the items route was cut by, as its serve records it (`list_serves.policy`): the surface with the view
+ * and the axis, a search with its order. A list the ranking orders (与我相关) records the ranking's own version instead.
+ * @param {string} surface @param {{ view?: string, by?: string, sort?: string }} query
+ */
+export function frontierListPolicy(surface, query) {
+  if (surface === "search") return `search:${query.sort ?? "relevance"}`;
+  if (surface === "safety") return "safety:time";
+  return `${surface}:${query.view ?? "selected"}:${query.by ?? "timeline"}`;
+}
+
 export class FrontierService {
   /**
    * @param {{ database: any, config: Record<string, any>, vocabulary: FrontierVocabulary, policies?: any, ingest?: any, embedder?: any,
    *   budget?: (() => Promise<{ spentCny: number, budgetCny: number, state: string }>) | null, now?: () => Date,
    *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, monthly?: any, profiles?: any, actions?: any,
-   *   tags?: import("./frontierTags.mjs").FrontierTagStore | null, tagUpkeep?: import("./frontierTagUpkeep.mjs").FrontierTagUpkeep | null }} options
+   *   tags?: import("./frontierTags.mjs").FrontierTagStore | null, tagUpkeep?: import("./frontierTagUpkeep.mjs").FrontierTagUpkeep | null,
+   *   interactions?: import("./frontierInteractions.mjs").FrontierInteractions | null }} options
    *   The second wave's readers, each optional (a route without its module
    *   answers 404 `not_found`, which the page reads as 「还在准备」):
    *   `events` a `FrontierEvents` (hot list, event pages), `daily` a
    *   `FrontierDaily` (issues), `profiles` a `FrontierProfiles` (与你相关),
-   *   `actions` a `FrontierActions` (存入知识库, 中文摘要).
+   *   `actions` a `FrontierActions` (存入知识库, 中文摘要), `interactions` a `FrontierInteractions` (what each list served,
+   *   under a `listId`, and the reader's events); without it lists carry no `listId` and the events route answers 404.
    */
   constructor({ database, config, vocabulary, policies = createModuleEvolutionPolicies(), ingest = null, embedder = null, budget = null, now = () => new Date(),
     dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, monthly = null, profiles = null, actions = null,
-    tags = null, tagUpkeep = null }) {
+    tags = null, tagUpkeep = null, interactions = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
     this.policies = policies;
     this.database = database;
@@ -532,6 +544,7 @@ export class FrontierService {
     /** The tag tree (frontierTags.mjs) a filter, a follow and the 专科 panel read; and its upkeep, for the operators' view. */
     this.tags = tags ?? new FrontierTagStore({ database, now });
     this.tagUpkeep = tagUpkeep;
+    this.interactions = interactions;
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
@@ -555,6 +568,27 @@ export class FrontierService {
 
   /** Whether this account may use the operator routes. @param {{ id?: string }} user */
   isOperator(user) { return (this.config.operatorUsers ?? []).includes(String(user?.id ?? "")); }
+
+  /** The editorial selection a list was cut under: the module's evolved policy, or the editor's version and threshold. */
+  async #editorialRevision() {
+    try {
+      const policy = await this.policies.resolve("frontier", {});
+      return policy.revisionId.startsWith("default:") ? `${FRONTIER_EDITOR_VERSION}:threshold:${frontierSelectThreshold(this.config)}` : policy.revisionId;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Record what a list served (`frontierInteractions.mjs`) and return its `listId`, or null where the record is not kept here —
+   * the list is answered either way.
+   * @param {{ id: string }} user @param {string} surface @param {string} policy
+   * @param {Array<{ item?: string, event?: string, slot?: string | null, score?: number | null, propensity?: number | null }>} entries
+   */
+  async #serve(user, surface, policy, entries) {
+    if (!this.interactions) return null;
+    return this.interactions.serve(user.id, { surface, policy, editorial: await this.#editorialRevision(), entries });
+  }
 
   /**
    * Run `operation` in a transaction with the module's own statement timeout.
@@ -941,9 +975,14 @@ export class FrontierService {
     const items = page.items
       .map((entry) => ({ ...entry.item, state: marks.get(entry.rowId) ?? { starred: false, hidden: false, read: false } }))
       .filter((item) => query.starred || !item.state.hidden);
-    const policy = await this.policies.resolve("frontier", {});
-    const exposure = await issueFrontierExposure(this.database, user.id, { surface: "feed", policyRevisionId: policy.revisionId.startsWith("default:") ? `${FRONTIER_EDITOR_VERSION}:threshold:${frontierSelectThreshold(this.config)}` : policy.revisionId, candidateIds: items.map((item) => String(item.id)) });
-    return { status: 200, etag, body: { items, nextCursor: page.next, version: String(versions.content), mode: page.mode, related: page.related, exposure } };
+    // What was served, under a list id an impression or an open names back (contract C): 精选 is the editor's pick, a safety rail
+    // the must-see, a chronological list, a search and the follows have no slot.
+    const surface = search ? "search" : query.follow ? "follows" : query.safety ? "safety" : "feed";
+    const slot = query.safety ? "must-see" : surface === "feed" && query.view === "selected" ? "editorial" : null;
+    const served = items.map((item) => ({ ...item, slot }));
+    const listId = await this.#serve(user, surface, frontierListPolicy(surface, query),
+      served.map((item) => ({ item: item.id, slot, score: item.score })));
+    return { status: 200, etag, body: { items: served, nextCursor: page.next, version: String(versions.content), mode: page.mode, related: page.related, listId } };
   }
 
   /**
@@ -1552,10 +1591,23 @@ export class FrontierService {
   async forYou(user) {
     if (!this.profiles) return { state: "off", basis: null, items: [] };
     const result = await this.profiles.forYou(user, (/** @type {{ id: string }} */ reader, /** @type {string[]} */ publicIds) => this.hydrate(reader, { publicIds }));
-    if (result.state === "off") return result;
-    const policy = await this.policies.resolve("frontier", {});
-    const exposure = await issueFrontierExposure(this.database, user.id, {surface: "for-you", policyRevisionId: policy.revisionId.startsWith("default:") ? `${FRONTIER_EDITOR_VERSION}:threshold:${frontierSelectThreshold(this.config)}` : policy.revisionId, candidateIds: result.items.map((entry) => String(entry.item.id))});
-    return {...result, exposure};
+    if (result.state === "off" || !result.items.length) return result;
+    // The ranking's own policy version, each entry's slot and score, and the exploration entry's propensity (frontierProfiles.mjs).
+    const listId = await this.#serve(user, "for-you", result.policy ?? "for-you", result.items.map((/** @type {any} */ entry) => ({ item: entry.item.id,
+      slot: entry.slot ?? null, score: entry.score ?? null, propensity: entry.propensity ?? null })));
+    return { ...result, listId };
+  }
+
+  /** 与我相关's onboarding answer (frontierProfiles.mjs `prefs`). @param {{ id: string }} user */
+  async prefs(user) {
+    if (!this.profiles) throw failure(404, "not_found", "Frontier route not found.");
+    return this.profiles.prefs(user.id);
+  }
+
+  /** Save it: `{ role?, specialties?, interests?, done?, skipped? }`. @param {{ id: string }} user @param {Record<string, unknown>} body */
+  async savePrefs(user, body) {
+    if (!this.profiles) throw failure(404, "not_found", "Frontier route not found.");
+    return this.profiles.savePrefs(user.id, body);
   }
 
   /**
@@ -1566,9 +1618,10 @@ export class FrontierService {
    * that window's ranking, computed now (`takenAt`) from `since`. Shared by
    * every reader, and kept a minute at most — never past a new list or new
    * content, since the versions are in the key.
-   * @param {URLSearchParams} [params]
+   * The answer carries the reader's `listId` (what was served, by event, in order) when `user` is given; the shared copy never does.
+   * @param {URLSearchParams} [params] @param {{ id: string } | null} [user]
    */
-  async hot(params = new URLSearchParams()) {
+  async hot(params = new URLSearchParams(), user = null) {
     if (!this.events) throw failure(404, "not_found", "Frontier route not found.");
     const window = params.get("window") || "current";
     if (!FRONTIER_HOT_WINDOWS.includes(window)) throw failure(400, "frontier_query_invalid", "The window parameter is invalid.");
@@ -1578,7 +1631,7 @@ export class FrontierService {
     const content = meta[FRONTIER_META_KEYS.contentVersion] ?? 0;
     const key = JSON.stringify(["hot", window, meta[FRONTIER_META_KEYS.hotVersion] ?? 0]);
     const cached = this.#cached(key, content);
-    if (cached) return cached;
+    if (cached) return this.#hotServed(user, window, cached);
     let value;
     if (window === "current") {
       const { takenAt, events } = await this.events.hotList();
@@ -1588,7 +1641,15 @@ export class FrontierService {
       value = { window, takenAt: period.at, since: period.since, events: period.events };
     }
     this.#remember(key, content, value);
-    return value;
+    return this.#hotServed(user, window, value);
+  }
+
+  /** A hot ranking as one reader was served it: a copy with its `listId`, the shared value untouched. @param {{ id: string } | null} user @param {string} window @param {any} value */
+  async #hotServed(user, window, value) {
+    if (!user || !this.interactions || !Array.isArray(value?.events) || !value.events.length) return value;
+    const listId = await this.#serve(user, "hot", `hot:${window}`, value.events.map((/** @type {any} */ event) => ({ event: String(event.id), slot: null,
+      score: Number.isFinite(Number(event.heat)) ? Number(event.heat) : null })));
+    return { ...value, listId };
   }
 
   /**
@@ -1727,10 +1788,15 @@ export class FrontierService {
       intro: section.intro, rows: section.items.map((/** @type {any} */ item) => ({ title_zh: item.titleZh, title_raw: item.titleRaw, summary_zh: item.summary,
         source_name: item.source.name, canonical_url: item.url })) })) });
     const all = shown.flatMap((section) => section.items);
+    const leadServed = leadItem ? { ...leadItem, slot: "editorial" } : null;
+    const sectionsServed = shown.map((section) => ({ ...section, items: section.items.map((/** @type {any} */ item) => ({ ...item, slot: "editorial" })) }));
+    const listId = await this.#serve(user, "monthly", "monthly", [leadServed, ...sectionsServed.flatMap((section) => section.items)].filter(Boolean)
+      .map((/** @type {any} */ item) => ({ item: item.id, slot: "editorial", score: item.score })));
     return {
       monthly: {
+        listId,
         month: issue.month, label: issue.label, windowStart: issue.windowStart, windowEnd: issue.windowEnd, generatedAt: issue.generatedAt,
-        overview: issue.overview, lead: leadItem ? { item: leadItem } : null, sections: shown, markdown,
+        overview: issue.overview, lead: leadServed ? { item: leadServed } : null, sections: sectionsServed, markdown,
         itemCount: new Set(all.map((item) => item.id)).size,
         readingMinutes: frontierReadingMinutes([issue.overview, ...shown.map((section) => section.intro), ...all.flatMap((item) => [item.title, item.summary])]),
         previousMonth: issue.previousMonth, nextMonth: issue.nextMonth,
@@ -1766,16 +1832,23 @@ export class FrontierService {
       sections: shownSections.map((section) => ({ lane: section.lane, rows: section.items.map(line) })), aiMinute: issue.aiMinute,
     };
     const markdown = weekly ? frontierWeeklyMarkdown({ ...markdownInput, weekStart: issue.weekStart }) : frontierDailyMarkdown(markdownInput);
+    // As served, in the order the issue shows them: the lead, the safety alerts (must-see), then the sections (the editor's).
+    const leadServed = leadItem ? { ...leadItem, slot: "editorial" } : null;
+    const safetyServed = safety.map((/** @type {any} */ item) => ({ ...item, slot: "must-see" }));
+    const sectionsServed = shownSections.map((section) => ({ ...section, items: section.items.map((/** @type {any} */ item) => ({ ...item, slot: "editorial" })) }));
+    const listId = await this.#serve(user, weekly ? "weekly" : "daily", weekly ? "weekly" : "daily",
+      [leadServed, ...safetyServed, ...sectionsServed.flatMap((section) => section.items)].filter(Boolean)
+        .map((/** @type {any} */ item) => ({ item: item.id, slot: item.slot, score: item.score })));
     return {
       [weekly ? "weekly" : "daily"]: {
         ...(weekly ? { weekStart: issue.weekStart, weekEnd: issue.weekEnd, previousWeek: issue.previousDay, nextWeek: issue.nextDay } : {}),
-        day: issue.day, windowStart: issue.windowStart, windowEnd: issue.windowEnd, generatedAt: issue.generatedAt,
-        lead: leadItem ? {
-          item: leadItem, text: leadText,
+        day: issue.day, windowStart: issue.windowStart, windowEnd: issue.windowEnd, generatedAt: issue.generatedAt, listId,
+        lead: leadServed ? {
+          item: leadServed, text: leadText,
           event: issue.lead.eventId ? { id: String(issue.lead.eventId), title: String(issue.lead.eventTitle ?? leadItem.title) } : null,
         } : null,
-        sections: shownSections,
-        safety,
+        sections: sectionsServed,
+        safety: safetyServed,
         // The one part of an issue that is the reader's own (flywheel F10): the cards of the zones they follow that
         // were published or changed in this issue's window. Read now, never part of the issue's text or Markdown.
         followedZones: typeof producer.followedZones === "function" ? await producer.followedZones(user.id, issue).catch(() => []) : [],

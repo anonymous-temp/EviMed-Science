@@ -1347,6 +1347,33 @@ export {
   frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
 /** @typedef {import('./src/frontierGenres.mjs').FrontierGenre} FrontierGenre */
+// frontierInteractions — what a 前沿动态 reader did, as the browser sends it and the control plane keeps it: closed event types,
+// surfaces, slots, hide reasons, roles, the seen/dwell/session definitions and the one validator both sides use (ct-track 2026-10-24).
+export {
+  FRONTIER_DEVICE_CLASSES,
+  FRONTIER_DWELL,
+  FRONTIER_FILTER_CONTROLS,
+  FRONTIER_HIDE_REASON_LABELS_ZH,
+  FRONTIER_HIDE_REASONS,
+  FRONTIER_IMPRESSION,
+  FRONTIER_INTERACTION_BATCH,
+  FRONTIER_INTERACTION_CLOCK,
+  FRONTIER_INTERACTION_DROP_REASONS,
+  FRONTIER_INTERACTION_RULES,
+  FRONTIER_INTERACTION_TYPES,
+  FRONTIER_LIST_SURFACES,
+  FRONTIER_ONBOARDING_LIMITS,
+  FRONTIER_ONBOARDING_STEPS,
+  FRONTIER_READ_DEPTHS,
+  FRONTIER_READER_ROLE_LABELS_ZH,
+  FRONTIER_READER_ROLES,
+  FRONTIER_SESSION_IDLE_MS,
+  FRONTIER_SLOTS,
+  FRONTIER_SURFACES,
+  frontierInteraction,
+  isFrontierInteractionType,
+} from './src/frontierInteractions.mjs'
+/** @typedef {import('./src/frontierInteractions.mjs').FrontierInteraction} FrontierInteraction */
 // frontierGenres — 8 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
 // the genres code is sure of, and code's fallback and decision over the editor model's genre.
 export {

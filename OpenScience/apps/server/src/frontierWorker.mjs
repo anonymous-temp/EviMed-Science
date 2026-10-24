@@ -1,3 +1,4 @@
+import { FRONTIER_INTERACTION_RETENTION_DAYS } from "./frontierInteractions.mjs";
 import { FRONTIER_PROJECT_ID, FRONTIER_PROJECT_NAME } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -144,7 +145,7 @@ export class FrontierWorker {
     this.lastStarted = { mirror: 0, pull: 0, cleanup: 0, tags: 0, leads: 0 };
     /** What the pipeline's batches have done since start (plan §10.3.1's outcomes). */
     this.pipelineTotals = Object.fromEntries([["batches", 0], ...PIPELINE_OUTCOMES.map((key) => [key, 0])]);
-    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0 };
+    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0, interactions: 0, listServes: 0 };
   }
 
   /** The code of a loop whose last run failed, or null when every loop's last run succeeded. */
@@ -295,8 +296,13 @@ export class FrontierWorker {
     // once it has this record), so it is kept as long as the logs beside it and no longer (review 2026-10-10, D-09).
     const exposures = await this.database.query(`DELETE FROM evimed_frontier.exposures WHERE id IN (
       SELECT id FROM evimed_frontier.exposures WHERE exposed_at < $1::timestamptz ORDER BY exposed_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
+    // What readers were served and did (frontierInteractions.mjs, ct-track 2026-10-24): two seasons of reading, then gone.
+    const interactions = await this.database.query(`DELETE FROM evimed_frontier.interactions WHERE id IN (
+      SELECT id FROM evimed_frontier.interactions WHERE client_at < $1::timestamptz ORDER BY client_at LIMIT ${RETENTION_BATCH})`, [before(FRONTIER_INTERACTION_RETENTION_DAYS)]);
+    const listServes = await this.database.query(`DELETE FROM evimed_frontier.list_serves WHERE list_id IN (
+      SELECT list_id FROM evimed_frontier.list_serves WHERE served_at < $1::timestamptz ORDER BY served_at LIMIT ${RETENTION_BATCH})`, [before(FRONTIER_INTERACTION_RETENTION_DAYS)]);
     const removed = { entries: entries.rowCount ?? 0, itemChanges: Number(itemChanges.rows?.[0]?.removed ?? 0), hotSnapshots: hotSnapshots.rowCount ?? 0,
-      exposures: exposures.rowCount ?? 0 };
+      exposures: exposures.rowCount ?? 0, interactions: interactions.rowCount ?? 0, listServes: listServes.rowCount ?? 0 };
     for (const [key, value] of Object.entries(removed)) this.retentionTotals[key] += value;
     return removed;
   }

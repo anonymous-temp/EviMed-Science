@@ -460,6 +460,9 @@ function frontierSettings(overrides) {
     // `frontier` and held to the module's daily budget; 0 makes none.
     frontierLeadsEnabled: overrides.frontierLeadsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_LEADS_ENABLED", true),
     frontierLeadsDailyQueries: integer("frontierLeadsDailyQueries", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES", 120, 0, 1000),
+    // Events one reader's page may report a minute (frontierInteractions.mjs FRONTIER_EVENTS_PER_MINUTE_DEFAULT, with the reasoning):
+    // a resource limit on the events route, past which the page keeps its queue and tries again.
+    frontierEventsPerMinute: integer("frontierEventsPerMinute", "OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE", 300, 10, 10_000),
     knowledgePluginUrl: pluginUrl,
     knowledgePluginTokenFile: tokenFile,
     knowledgePluginPollMs: integer("knowledgePluginPollMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS", 60_000, 5_000, 3_600_000),

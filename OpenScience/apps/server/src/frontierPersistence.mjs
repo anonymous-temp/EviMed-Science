@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { EVIDENCE_ZONE_SQL } from "./evidenceZonePersistence.mjs";
 import { FRONTIER_EVENT_READING_SQL } from "./frontierEventReading.mjs";
+import { FRONTIER_INTERACTIONS_SQL } from "./frontierInteractions.mjs";
 import { frontierTagSeedRows, tagKey } from "./frontierTags.mjs";
 
 /**
@@ -597,6 +598,14 @@ ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS inputs_versio
 ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS computed_inputs_version bigint NOT NULL DEFAULT 0;
 ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS memory_mark text;
 ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS for_you_seen_at timestamptz(3);
+-- ct-track 2026-10-24: the onboarding answer of 与我相关 — the reader's role, one to three specialties, up to ten interests (tag
+-- slugs or entity keys) — and when it was given or skipped (frontierProfiles.mjs prefs). Roles, specialties and interests are
+-- checked in code against @evimed/domain, as the schema's other closed words are.
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS role text;
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS specialties text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS interests text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS onboarded_at timestamptz(3);
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS onboarding_skipped_at timestamptz(3);
 
 -- 2026-10-23: a reader may follow a tag. The kind list was an inline CHECK, which ADD/CREATE ... IF NOT EXISTS never changes on
 -- a deployed database: it is replaced where it does not name the new kind yet.
@@ -674,6 +683,8 @@ DELETE FROM evimed_frontier.user_follows f WHERE f.kind = 'specialty' AND f.key 
   AND EXISTS (SELECT 1 FROM evimed_frontier.user_follows g WHERE g.user_id = f.user_id AND g.kind = 'specialty' AND g.key = 'general-surgery');
 UPDATE evimed_frontier.user_follows SET key = 'general-surgery', label = '普通外科' WHERE kind = 'specialty' AND key = 'surgery-anesthesia';
 DELETE FROM evimed_frontier.user_follows WHERE kind = 'specialty' AND key IN ('geriatrics', 'public-health');
+
+${FRONTIER_INTERACTIONS_SQL}
 `;
 }
 

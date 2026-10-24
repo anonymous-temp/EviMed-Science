@@ -65,6 +65,16 @@ describe("the items list", () => {
     expect(page.items).toHaveLength(1);
   });
 
+  it("reads the list id and each item's slot the server served (contract C); an older server's page has neither", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { items: [{ ...rawItem({ id: "a1" }), slot: "editorial" }, { ...rawItem({ id: "a2" }), slot: null }],
+      nextCursor: null, version: 3, mode: "list", listId: "0f8fad5b-d9cb-469f-a165-70867728950e" } }));
+    const page = await listFrontierItems({ view: "selected" });
+    expect(page.listId).toBe("0f8fad5b-d9cb-469f-a165-70867728950e");
+    expect(page.slots).toEqual({ a1: "editorial", a2: null });
+    fetchMock.mockResolvedValue(reply(200, { data: { items: [rawItem()], nextCursor: null, version: 3, mode: "list" } }));
+    expect((await listFrontierItems({ view: "selected" })).listId).toBeNull();
+  });
+
   it("starts over from page one when the cursor has gone stale, and says it did", async () => {
     fetchMock
       .mockResolvedValueOnce(reply(400, { error: "The cursor no longer matches.", code: "invalid_cursor" }))
@@ -370,7 +380,17 @@ describe("the routes of the second wave", () => {
     expect(forYou?.items).toHaveLength(8);
     expect(forYou?.items[0].reason).toEqual({ text: "因为你问过：替尔泊肽与心衰", topic: "替尔泊肽与心衰", memoryId: null });
     fetchMock.mockResolvedValue(reply(200, { data: { state: "off", basis: null, paused: true, items: [] } }));
-    expect(await fetchFrontierForYou()).toEqual({ state: "off", basis: null, paused: true, items: [] });
+    expect(await fetchFrontierForYou()).toEqual({ state: "off", basis: null, paused: true, items: [], listId: null, onboarding: false });
+  });
+
+  it("reads what was served: the list id, each entry's slot, the onboarding flag; a slot it does not know is none", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { state: "available", basis: null, onboarding: true, listId: "0f8fad5b-d9cb-469f-a165-70867728950e", items: [
+      { item: rawItem({ id: "fy1" }), reason: { text: "安全警示", topic: "安全警示" }, slot: "must-see", propensity: 1 },
+      { item: rawItem({ id: "fy2" }), reason: { text: "精选", topic: "精选" }, slot: "sponsored" },
+    ] } }));
+    const forYou = await fetchFrontierForYou();
+    expect([forYou?.listId, forYou?.onboarding]).toEqual(["0f8fad5b-d9cb-469f-a165-70867728950e", true]);
+    expect(forYou?.items.map((entry) => entry.slot)).toEqual(["must-see", null]);
   });
 });
 

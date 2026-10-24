@@ -1,17 +1,22 @@
 // 「与你相关」 without a database (build spec D.4; signals widened 2026-09-24):
 // which memories and questions may feed a profile, how a reason reads, how
-// phrase vectors are stored, how per-phrase scores become at most eight items
-// with no phrase picking more than two, and what marks a profile due.
+// phrase vectors are stored, how the ranking's parts become at most eight
+// entries in display order (no reason picking more than its cap, must-see
+// first, one exploration entry with its propensity), how genre affinity is
+// smoothed, and what marks a profile due.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isResearcherRun } from "../src/agentRuns.mjs";
 import {
   FRONTIER_FOR_YOU_PER_PHRASE,
   FRONTIER_FOR_YOU_SIZE,
+  FRONTIER_RANKING,
   FrontierProfiles,
   decodeVector,
   encodeVector,
-  frontierForYouRanking,
+  frontierEditorialShare,
+  frontierForYouBlock,
+  frontierGenreAffinity,
   frontierPhraseSource,
   frontierProfileMemories,
   frontierProfileQuestions,
@@ -110,51 +115,130 @@ test("a phrase vector is stored as float32 base64 and read back only at its own 
   }
 });
 
-test("the ranking: each item once, by its best phrase; ties by weight; below the floor nothing", () => {
-  const ranked = frontierForYouRanking([
-    { itemId: "a", phrase: 0, score: 0.6, weight: 70 },
-    { itemId: "a", phrase: 1, score: 0.8, weight: 70 },
-    { itemId: "b", phrase: 0, score: 0.8, weight: 90 },
-    { itemId: "c", phrase: 2, score: 0.3, weight: 99 },
-  ], { minScore: 0.4 });
-  assert.deepEqual(ranked, [{ itemId: "b", phrase: 0, score: 0.8 }, { itemId: "a", phrase: 1, score: 0.8 }],
-    "equal scores: the item with more weight first; each with the phrase that matched it best");
-  assert.equal(ranked.some((entry) => entry.itemId === "c"), false, "an item near nothing the reader showed interest in is not 与你相关");
+/** A candidate of the block: an id, a score out of 100, and whatever else the case needs. */
+const candidate = (id, overrides = {}) => ({ id, publicId: `pub${id}`, weight: 50, selected: false, safetyAlert: false, genre: "paper", specialties: [],
+  visibleAt: NOW_MS - 3_600_000, ...overrides });
+const reason = (topic, cap = FRONTIER_FOR_YOU_PER_PHRASE) => ({ topic, kind: "project_fact", cap });
+const NOW_MS = Date.parse("2026-10-24T08:00:00Z");
+const NO_EXPLORE = { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } };
+/** The block with what a test does not name left plain: no editorial share, no genre term, nothing to explore. */
+const block = (input) => frontierForYouBlock({ readerSpecialties: [], editorialShare: 0, terms: {}, now: NOW_MS, selectThreshold: 82, ranking: NO_EXPLORE,
+  random: () => 0, ...input });
+
+test("the block: each item once, under its best reason; ties by weight", () => {
+  const entries = block({
+    candidates: [candidate("a", { weight: 70 }), candidate("b", { weight: 90 })],
+    reasons: [reason("A"), reason("B")],
+    pairs: [{ itemId: "a", reason: 0, score: 0.6 }, { itemId: "a", reason: 1, score: 0.8 }, { itemId: "b", reason: 0, score: 0.8 }],
+  });
+  assert.deepEqual(entries.map((entry) => [entry.itemId, entry.topic, entry.slot]), [["b", "A", "personal"], ["a", "B", "personal"]],
+    "equal scores: the item with more weight first; each under the reason that matched it best");
 });
 
-test("the ranking: a phrase picks at most two items, an item whose phrase is full comes in under its next, at most eight", () => {
-  const matches = [
+test("the block: a reason picks at most its cap, an item whose reason is full comes in under its next, at most eight", () => {
+  const candidates = [...Array.from({ length: 6 }, (_, index) => candidate(`sglt2-${index}`)), ...Array.from({ length: 4 }, (_, index) => candidate(`other-${index}`)),
+    ...Array.from({ length: 3 }, (_, index) => candidate(`weak-${index}`))];
+  const pairs = [
     // Six items all nearest one phrase — the 2026-09-23 block where four of five came from one memory.
-    ...Array.from({ length: 6 }, (_, index) => ({ itemId: `sglt2-${index}`, phrase: 0, score: 0.9 - index * 0.01, weight: 50 })),
+    ...Array.from({ length: 6 }, (_, index) => ({ itemId: `sglt2-${index}`, reason: 0, score: 0.9 - index * 0.01 })),
     // The third of them is also near a second phrase, above the floor.
-    { itemId: "sglt2-2", phrase: 1, score: 0.5, weight: 50 },
-    // Two phrases with two items each, and a third with three weak ones.
-    ...Array.from({ length: 4 }, (_, index) => ({ itemId: `other-${index}`, phrase: 2 + Math.floor(index / 2), score: 0.7 - index * 0.01, weight: 50 })),
-    ...Array.from({ length: 3 }, (_, index) => ({ itemId: `weak-${index}`, phrase: 4, score: 0.45 - index * 0.01, weight: 50 })),
+    { itemId: "sglt2-2", reason: 1, score: 0.5 },
+    ...Array.from({ length: 4 }, (_, index) => ({ itemId: `other-${index}`, reason: 2 + Math.floor(index / 2), score: 0.7 - index * 0.01 })),
+    ...Array.from({ length: 3 }, (_, index) => ({ itemId: `weak-${index}`, reason: 4, score: 0.45 - index * 0.01 })),
   ];
-  const ranked = frontierForYouRanking(matches, { minScore: 0.4 });
-  assert.equal(ranked.length, FRONTIER_FOR_YOU_SIZE);
-  const perPhrase = new Map();
-  for (const entry of ranked) perPhrase.set(entry.phrase, (perPhrase.get(entry.phrase) ?? 0) + 1);
-  assert.ok([...perPhrase.values()].every((count) => count <= FRONTIER_FOR_YOU_PER_PHRASE), JSON.stringify([...perPhrase]));
-  assert.deepEqual(ranked.filter((entry) => entry.phrase === 0).map((entry) => entry.itemId), ["sglt2-0", "sglt2-1"]);
-  assert.deepEqual(ranked.find((entry) => entry.itemId === "sglt2-2"), { itemId: "sglt2-2", phrase: 1, score: 0.5 },
-    "its best phrase full, the item comes in under the next phrase that still holds");
-  assert.deepEqual(ranked.filter((entry) => entry.phrase === 4).map((entry) => entry.itemId), ["weak-0"], "the eighth place, and no ninth");
-  assert.equal(new Set(ranked.map((entry) => entry.itemId)).size, ranked.length, "an item once");
+  const entries = block({ candidates, reasons: ["P0", "P1", "P2", "P3", "P4"].map((topic) => reason(topic)), pairs });
+  assert.equal(entries.length, FRONTIER_FOR_YOU_SIZE);
+  const perReason = new Map();
+  for (const entry of entries) perReason.set(entry.topic, (perReason.get(entry.topic) ?? 0) + 1);
+  assert.ok([...perReason.values()].every((count) => count <= FRONTIER_FOR_YOU_PER_PHRASE), JSON.stringify([...perReason]));
+  assert.deepEqual(entries.filter((entry) => entry.topic === "P0").map((entry) => entry.itemId), ["sglt2-0", "sglt2-1"]);
+  assert.equal(entries.find((entry) => entry.itemId === "sglt2-2")?.topic, "P1", "its best reason full, the item comes in under the next that holds");
+  assert.deepEqual(entries.filter((entry) => entry.topic === "P4").map((entry) => entry.itemId), ["weak-0"], "the eighth place, and no ninth");
+  assert.equal(new Set(entries.map((entry) => entry.itemId)).size, entries.length, "an item once");
+  // Served in display order: each topic's run is contiguous, so the index is the position the block shows it at.
+  const runs = entries.map((entry) => entry.topic).filter((topic, index, all) => index === 0 || all[index - 1] !== topic);
+  assert.equal(new Set(runs).size, runs.length, runs.join());
 });
 
-test("the ranking: the editorial score orders near-equals and never lifts an item past the floor", () => {
-  const ranked = frontierForYouRanking([
-    { itemId: "strong-match", phrase: 0, score: 0.62, weight: 40 },
-    { itemId: "better-edited", phrase: 1, score: 0.6, weight: 95 },
-    { itemId: "below-floor", phrase: 2, score: 0.39, weight: 100 },
-  ], { minScore: 0.4, editorial: 0.1 });
-  assert.deepEqual(ranked.map((entry) => entry.itemId), ["better-edited", "strong-match"]);
-  assert.deepEqual(frontierForYouRanking([
-    { itemId: "strong-match", phrase: 0, score: 0.8, weight: 0 },
-    { itemId: "better-edited", phrase: 1, score: 0.6, weight: 100 },
-  ], { minScore: 0.4, editorial: 0.1 }).map((entry) => entry.itemId), ["strong-match", "better-edited"], "a light blend, not a re-sort by score");
+test("the block: the editorial share orders near-equals, shrinking as the reader comes back; the genre term leans by what they read", () => {
+  const candidates = [candidate("strong-match", { weight: 40 }), candidate("better-edited", { weight: 95 })];
+  const reasons = [reason("A"), reason("B")];
+  const pairs = [{ itemId: "strong-match", reason: 0, score: 0.62 }, { itemId: "better-edited", reason: 1, score: 0.6 }];
+  assert.deepEqual(block({ candidates, reasons, pairs, editorialShare: frontierEditorialShare(0) }).map((entry) => entry.itemId), ["better-edited", "strong-match"]);
+  assert.deepEqual(block({ candidates, reasons, pairs: [{ itemId: "strong-match", reason: 0, score: 0.9 }, pairs[1]], editorialShare: frontierEditorialShare(50) })
+    .map((entry) => entry.itemId), ["strong-match", "better-edited"], "a light blend, not a re-sort by score");
+  assert.equal(frontierEditorialShare(0), FRONTIER_RANKING.editorial.ceiling);
+  assert.equal(frontierEditorialShare(FRONTIER_RANKING.editorial.visitsHalf), (FRONTIER_RANKING.editorial.ceiling + FRONTIER_RANKING.editorial.floor) / 2);
+  assert.ok(frontierEditorialShare(1_000) < FRONTIER_RANKING.editorial.floor + 0.01);
+  const leaning = block({ candidates: [candidate("paper", { genre: "paper" }), candidate("alert", { genre: "approval" })], reasons: [reason("A"), reason("B")],
+    pairs: [{ itemId: "paper", reason: 0, score: 0.6 }, { itemId: "alert", reason: 1, score: 0.6 }], terms: frontierGenreAffinity([], "pharmacist") });
+  assert.deepEqual(leaning.map((entry) => entry.itemId), ["alert", "paper"], "a pharmacist's prior leans to approvals");
+});
+
+test("genre affinity: Beta-smoothed toward the role's prior; an open counts half, a satisfied read one, a hide one more failure", () => {
+  const empty = frontierGenreAffinity([], null);
+  assert.equal(empty.paper.mean, FRONTIER_RANKING.genre.base);
+  assert.equal(empty.paper.term, 0, "no evidence and no role: no lean");
+  const pharmacist = frontierGenreAffinity([], "pharmacist");
+  assert.equal(pharmacist.safety.mean, FRONTIER_RANKING.genre.lean);
+  assert.ok(pharmacist.safety.term > 0 && pharmacist.paper.term === 0);
+  const read = frontierGenreAffinity([
+    ...Array.from({ length: 6 }, () => ({ genre: "guideline", seen: true, opened: true, satisfied: true })),
+    { genre: "guideline", seen: true, opened: true, satisfied: false },
+    ...Array.from({ length: 10 }, () => ({ genre: "news", seen: true })),
+    { genre: "news", seen: true, hidden: true },
+  ], null);
+  assert.deepEqual([read.guideline.trials, read.guideline.successes], [7, 6.5]);
+  assert.deepEqual([read.news.trials, read.news.successes], [12, 0], "a hide is the impression's failure and one more");
+  assert.ok(read.guideline.term > 0 && read.news.term < 0);
+  assert.ok(read.guideline.term <= FRONTIER_RANKING.genre.share && read.news.term >= -FRONTIER_RANKING.genre.share, "clipped to the share");
+  assert.equal(frontierGenreAffinity([{ genre: "not-a-genre", seen: true }], null).paper.trials, 0, "an unknown genre counts nowhere");
+});
+
+test("must-see first: a recent safety alert in the reader's specialties or none, then a selected guideline or approval of theirs; at most two", () => {
+  const entries = block({
+    readerSpecialties: ["cardiology"],
+    candidates: [
+      candidate("alert-other", { safetyAlert: true, genre: "safety", specialties: ["dermatology"] }),
+      candidate("alert-broad", { safetyAlert: true, genre: "safety", specialties: [], visibleAt: NOW_MS - 2 * 3_600_000 }),
+      candidate("alert-old", { safetyAlert: true, genre: "safety", visibleAt: NOW_MS - 80 * 3_600_000 }),
+      candidate("guideline", { selected: true, genre: "guideline", specialties: ["cardiology"], weight: 90 }),
+      candidate("approval", { selected: true, genre: "approval", specialties: ["cardiology"], weight: 85 }),
+      candidate("mine", { weight: 60 }),
+    ],
+    reasons: [reason("A")], pairs: [{ itemId: "mine", reason: 0, score: 0.7 }],
+  });
+  assert.deepEqual(entries.map((entry) => [entry.itemId, entry.slot, entry.topic]).slice(0, 3), [
+    ["alert-broad", "must-see", "安全警示"], ["guideline", "must-see", "指南共识"], ["mine", "personal", "A"]],
+    "another specialty's alert, and one older than 72 hours, are not must-see; the approval waits for room");
+  assert.deepEqual(entries.find((entry) => entry.itemId === "approval")?.slot, "editorial", "then the editor's pick fills the room left");
+});
+
+test("the exploration entry: drawn uniformly from the best unmatched items, its probability recorded, at the first boundary from the fourth place", () => {
+  const ranking = FRONTIER_RANKING;
+  const candidates = [
+    ...["a", "b", "c", "d", "e"].map((id) => candidate(id, { weight: 60 })),
+    candidate("good-1", { weight: 95 }), candidate("good-2", { weight: 90 }), candidate("good-3", { weight: 83 }), candidate("weak", { weight: 70 }),
+  ];
+  const pairs = [{ itemId: "a", reason: 0, score: 0.8 }, { itemId: "b", reason: 0, score: 0.79 }, { itemId: "c", reason: 1, score: 0.7 },
+    { itemId: "d", reason: 1, score: 0.69 }, { itemId: "e", reason: 2, score: 0.6 }];
+  const draws = [];
+  for (const draw of [0, 0.5, 0.99]) {
+    const entries = block({ candidates, reasons: [reason("X"), reason("Y"), reason("Z")], pairs, ranking, random: () => draw });
+    const explore = entries.filter((entry) => entry.slot === "explore");
+    assert.equal(explore.length, 1);
+    assert.equal(explore[0].propensity, Math.round(1_000_000 / 3) / 1_000_000, "three items of 精选 quality outside the profile; weak is not one");
+    assert.equal(explore[0].topic, "其他领域精选");
+    assert.equal(entries.indexOf(explore[0]), 4, "not inside Y's run at the fourth place: after it");
+    draws.push(explore[0].itemId);
+  }
+  assert.deepEqual(draws, ["good-1", "good-2", "good-3"], "the draw decides which, uniformly over the pool (best first, so a draw of 0 is the best)");
+  // With no reason of the reader's at all: 精选 by score, and the drawn entry joins their run.
+  const cold = block({ candidates: [candidate("s1", { selected: true, weight: 99 }), candidate("s2", { selected: true, weight: 90 }),
+    candidate("s3", { selected: true, weight: 85 }), candidate("x", { weight: 88 })], reasons: [], pairs: [], ranking, random: () => 0 });
+  assert.deepEqual(cold.map((entry) => [entry.itemId, entry.slot, entry.topic]), [["s1", "editorial", "精选"], ["s2", "editorial", "精选"],
+    ["s3", "editorial", "精选"], ["x", "explore", "精选"]]);
+  assert.equal(cold[3].propensity, 1);
 });
 
 test("personalization is off without a memory store or a model, and unavailable while the memory store is failing", () => {

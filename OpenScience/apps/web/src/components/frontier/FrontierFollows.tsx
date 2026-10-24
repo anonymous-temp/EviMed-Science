@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { DataTable } from "@/components/ui/DataTable";
 import { Tag } from "@/components/ui/Tag";
+import { FrontierPrefsRow } from "./FrontierOnboarding";
 
 type EditableKind = "topic" | "drug" | "specialty";
 
@@ -69,6 +70,7 @@ export function FrontierFollows({ selected, onSelect, onChanged }: {
     void act(() => addFrontierFollow({ kind, key, label }), undefined, kind === "specialty" ? undefined : text);
   };
   return <div className="space-y-4">
+    <FrontierPrefsRow />
     <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); submit(); }}>
       <Select label="关注类型" value={kind} onChange={(event) => { setKind(event.target.value as EditableKind); setDuplicate(null); }}>
         <option value="topic">主题</option><option value="drug">药物</option><option value="specialty">专科</option>
