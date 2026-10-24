@@ -63,6 +63,12 @@ test('exact registered roots resolve historical memory without accepting a URI a
   assert.equal((await f.contexts.forUri(f.owner.id, `${a.userRoot}/memories/projects/old.md`)).namespaceId, a.namespaceId);
   await assert.rejects(f.contexts.assertLive(a), refused);
   await assert.rejects(f.contexts.noteCapture(a, 'dsh-root'), refused);
+  await assert.rejects(f.contexts.noteInternal(a, 'evimed-page-new', { kind: 'page', operationRef: 'new-page' }), refused);
+  const archive = `${a.userRoot}/sessions/dsh-root/history/archive_2`;
+  const historical = await f.contexts.forUri(f.owner.id, archive);
+  const replay = await f.contexts.noteInternal(historical, 'evimed-replay-old', { kind: 'replay', sourceArchiveUri: archive });
+  assert.equal(replay.payload.namespaceId, a.namespaceId);
+  assert.equal(replay.payload.source.sourceArchiveUri, archive);
   assert.equal((await f.contexts.all(f.owner.id)).length, 4);
 });
 

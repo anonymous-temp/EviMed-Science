@@ -138,12 +138,16 @@ export class GeoNativeMemoryContext {
     this.validateSource(context, sessionId, source);
     if (runtimeGeneration != null && !textValid(runtimeGeneration)) throw refused();
     return this.withOwner(context.ownerId, async (_created, client) => {
-      await this.assertLive(context);
+      // Replay belongs to the accepted archive, including a retained historical
+      // project incarnation. A new page or captured input still needs live scope.
+      await this.assertKnown(context, { live: source.kind !== 'replay' });
       const id = keyOf(context, sessionId);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [id]);
       const existing = this.readSession(await this.documents.get(context.ownerId, KIND, id, { includeDeleted: true }), context, sessionId);
       if (existing) {
         if (canonicalJson(existing.payload.source) !== canonicalJson(source)) throw refused();
+        // Keep the first association's generation as historical evidence. This
+        // row never substitutes for noteCapture's fresh runtime proof.
         return existing;
       }
       return this.documents.put(context.ownerId, KIND, id, { recordType: TYPE, policyRef: context.policyRef,
