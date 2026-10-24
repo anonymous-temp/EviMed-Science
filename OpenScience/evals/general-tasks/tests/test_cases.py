@@ -13,13 +13,13 @@ import checks  # noqa: E402
 DOC = json.loads((SUITE / "cases.json").read_text(encoding="utf-8"))
 CASES = DOC["cases"]
 RUBRICS = json.loads((SUITE / "judges" / "rubrics.json").read_text(encoding="utf-8"))
-IDS = [f"G{i:02d}" for i in range(1, 23)] + [f"M{i:02d}" for i in range(1, 7)]
+IDS = [f"G{i:02d}" for i in range(1, 24)] + [f"M{i:02d}" for i in range(1, 7)]
 
 
 class CaseFile(unittest.TestCase):
-    def test_the_28_cases_are_there_in_order(self):
+    def test_the_29_cases_are_there_in_order(self):
         self.assertEqual([c["id"] for c in CASES], IDS)
-        self.assertEqual(sum(c["kind"] == "general" for c in CASES), 22)
+        self.assertEqual(sum(c["kind"] == "general" for c in CASES), 23)
         self.assertEqual(sum(c["kind"] == "medical" for c in CASES), 6)
 
     def test_every_case_is_complete(self):
@@ -84,7 +84,7 @@ class Registration(unittest.TestCase):
         self.assertEqual(row["evalHarness"], "evals/general-tasks")
         self.assertTrue((SUITE.parents[1] / row["evalHarness"]).is_dir())
         self.assertEqual(row["caseCount"], len(CASES))
-        self.assertEqual(row["kinds"], {"general": 22, "medical": 6})
+        self.assertEqual(row["kinds"], {"general": 23, "medical": 6})
         families = {}
         for c in CASES:
             families[c["family"]] = families.get(c["family"], 0) + 1

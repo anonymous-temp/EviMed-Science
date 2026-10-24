@@ -103,7 +103,12 @@ depend on a number, how to lay out a report. It may never fix a clinical
 conclusion, a dose, an effect estimate or a drug fact as a rule, and no more a
 figure, a price, a date or a name that belongs to one task. Those are answers,
 computed or looked up per question; a method that hard-codes one is wrong the
-first time the world moves.
+first time the world moves. A method that lays out a text says where each part
+goes, never what the person's work came to: where its layout has a place for a
+basis, a reason, a status, a figure or a date, it says that the place is filled
+from what the person gave and left out when they gave none (「每条先写结论，用户
+给了依据才写依据」, not 「每条先写结论，再写依据」, which a later run obeys by
+writing a basis nobody gave it).
 
 ## 1. Induce from the trigger, in the trigger's own shape
 

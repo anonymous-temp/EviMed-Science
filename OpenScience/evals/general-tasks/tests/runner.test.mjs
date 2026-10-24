@@ -13,9 +13,9 @@ const SUITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OS = path.resolve(SUITE, '../..');
 const cases = JSON.parse(fs.readFileSync(path.join(SUITE, 'cases.json'), 'utf8')).cases;
 
-test('the plan: 28 cases are 27 cells, plus the three fault variants', () => {
+test('the plan: 29 cases are 28 cells, plus the three fault variants', () => {
   const plan = buildPlan(cases, { set: 'all', arm: 'B' });
-  assert.equal(plan.length, 30);
+  assert.equal(plan.length, 31);
   const ids = plan.map((u) => `${u.id}/${u.variant.id}`);
   assert.ok(ids.includes('G06+G07/normal'));
   assert.ok(!ids.some((id) => id.startsWith('G07/')));
@@ -26,7 +26,7 @@ test('the plan: 28 cases are 27 cells, plus the three fault variants', () => {
 test('arm A runs the general cases only', () => {
   const plan = buildPlan(cases, { set: 'all', arm: 'A' });
   assert.ok(plan.every((u) => u.cases.every((c) => c.kind === 'general')));
-  assert.equal(new Set(plan.flatMap((u) => u.cases.map((c) => c.id))).size, 22);
+  assert.equal(new Set(plan.flatMap((u) => u.cases.map((c) => c.id))).size, 23);
 });
 
 test('asking for G07 alone brings G06 along, since G07 continues its conversation', () => {

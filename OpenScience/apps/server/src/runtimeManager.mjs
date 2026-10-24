@@ -822,7 +822,23 @@ function waitForProcessWithOutput(child, timeoutMs = 10_000, maxOutputBytes = 40
   return waitForProcess(child, timeoutMs).then((result) => ({ ...result, stdout, stderr }));
 }
 
+/**
+ * Whether the project's directory is still there. Both writers below create the directories they write into, so a runtime that
+ * stops after its project — or its whole account — was deleted would recreate the deleted directory just to say it stopped
+ * (2026-10-24: a start a closing page asked for landed after the account's own stop, the container exited after the account was
+ * gone, and `/data/users/<id>/projects/default/.openscience/` came back). A record for a project nobody has is not kept.
+ * @param {{ rootDir: string }} project
+ */
+async function projectDirectoryExists(project) {
+  try {
+    return (await fs.lstat(project.rootDir)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 async function appendRuntimeEvent(project, event, fields = {}, config = null) {
+  if (!await projectDirectoryExists(project)) return;
   const file = path.join(project.metaDir, "runtime.jsonl");
   await appendJsonLineNoFollow(project.rootDir, file, {
     createdAt: new Date().toISOString(),
@@ -945,6 +961,7 @@ async function readRuntimeState(project) {
 }
 
 async function writeRuntimeState(project, event, fields = {}) {
+  if (!await projectDirectoryExists(project)) return null;
   const file = runtimeStateFile(project);
   await ensureDir(path.dirname(file));
   const state = {
