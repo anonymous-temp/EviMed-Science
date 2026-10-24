@@ -110,4 +110,8 @@ test('QUALITY-Q1: historical Docker witnesses reuse only their exact original ca
   const other = await pinGeoRunOutputs({ results: f.results, project: host, run, context, transcript: wrongPath });
   await assert.rejects(other.readFile(host, run, relative), { code: 'geo_plan_output_unavailable' });
   await assert.rejects(pinned.readFile(host, run, 'deliverables/foreign/strategy.json'), { code: 'geo_plan_output_unavailable' });
+  const later = structuredClone(frozen);
+  later.messages.push({ ...later.messages[1], seq: 7, parts: [{ ...later.messages[1].parts[0], tool: 'edit', callId: 'later-without-snapshot', completedSeq: 8 }] });
+  const missingFinal = await pinGeoRunOutputs({ results: f.results, project: host, run, context, transcript: later });
+  await assert.rejects(missingFinal.readFile(host, run, relative), { code: 'geo_plan_output_unavailable' }, 'An older original mapping cannot hide the final genuine event without a snapshot');
 });
