@@ -110,14 +110,14 @@ export class GeoNativeAuthority {
     if (target.kind === 'primary' && Object.keys(target).length === 1) {
       sessionId = await this.primary(identity);
       if (!sessionId) {
-        sessionId = await this.store.transaction(async client => {
+        sessionId = await this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
           await client.query("SELECT pg_advisory_xact_lock(hashtext('geo-native-primary:' || $1))", [geoId]);
           identity = await this.identity(user, geoId, { client });
           const existing = await this.primary(identity);
           if (existing) return existing;
           const created = await this.createSession(identity.project);
           return this.registerPrimary(identity.geo, created.id);
-        });
+        }));
       }
     } else if (target.kind === 'session' && Object.keys(target).length === 2) sessionId = await this.proveSession(identity, target.sessionId);
     else if (target.kind === 'context' && Object.keys(target).length === 2 && /^gpc_[a-f0-9]{64}$/.test(target.referenceId ?? '')) {
@@ -131,9 +131,9 @@ export class GeoNativeAuthority {
   }
 
   async withFrame(user, claims, operation) {
-    return this.store.transaction(async client => {
+    return this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
       const resolved = await this.resolve(user, { kind: 'geo', geoProjectId: claims.geoProjectId, sessionId: claims.rootSessionId }, { claims, client });
       return operation(resolved);
-    });
+    }));
   }
 }

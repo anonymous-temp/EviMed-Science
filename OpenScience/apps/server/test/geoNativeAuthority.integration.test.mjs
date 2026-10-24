@@ -12,10 +12,10 @@ import { GeoNativeAuthority } from '../src/geoNativeAuthority.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
 
-async function setup(t) {
+async function setup(t, poolMax = 4) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geonativeauth');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-native-authority-'));
-  const config = loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', devAuth: true, geoEnabled: true, geoAudience: 'all' });
+  const config = loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', devAuth: true, geoEnabled: true, geoAudience: 'all', databasePoolMax: poolMax, databaseConnectionTimeoutMs: 500 });
   const accounts = new PostgresStore(config);
   t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
   for (const id of ['owner', 'editor', 'viewer', 'reviewer']) await accounts.createUser(id, 'local-fixture-password', id);
@@ -95,4 +95,14 @@ test('an admitted frame holds current membership through its existing transactio
   });
   assert.equal(await f.store.removeMember({ geoId: f.geo.id, userId: f.users.editor.id, role: 'editor' }), true);
   await assert.rejects(f.authority.withFrame(f.users.editor, principal, () => { throw new Error('Must not enter'); }), error => [403, 404].includes(error.status));
+});
+
+test('primary initialization and nested document reads reuse one actual database connection', options, async t => {
+  const f = await setup(t, 1);
+  const descriptor = await f.authority.descriptor(f.users.editor, f.geo.id, { kind: 'primary' });
+  const identity = await f.authority.resolve(f.users.editor, descriptor.scope);
+  await f.authority.withFrame(f.users.editor, identity.principal, async () => {
+    assert.equal(await f.authority.primary(identity), descriptor.sessionId);
+    assert.equal(f.accounts.database.pool.totalCount, 1);
+  });
 });
