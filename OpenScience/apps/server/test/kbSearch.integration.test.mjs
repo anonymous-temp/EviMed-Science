@@ -128,3 +128,45 @@ test("an embedding outage leaves the keyword index standing", {
     if (app.kbIndex.capabilities.vector) assert.equal(result.vectorSkipped, "kb_embedding_unavailable");
   } finally { await context.close(); }
 });
+
+test('project source policy precedes shortcuts counts library deduplication and indexed passage hydration', {
+  skip: !databaseUrl && 'Disposable PostgreSQL required',
+}, async () => {
+  const context = await signedIn({ kbSmallLibraryTokens: 150_000, kbEmbedder: { configured: false, counters: {} } });
+  try {
+    const { app, user, project } = context, sources = await ingestCorpus(context);
+    let libraryCalls = 0;
+    app.kbIndex.library = { searchScope: async () => { libraryCalls += 1; return [{ sourceId: 'private-library-copy',
+      sha256: sources[0].payload.fingerprint.sha256, title: 'Private library title', path: 'library/private/index.md', searchable: true, tokens: 1 }]; } };
+    const seen = [];
+    const acceptSource = async row => {
+      seen.push(row);
+      assert.equal(row.userId, user.id); assert.equal(row.projectId, project.id); assert.equal(row.kind, 'source');
+      assert.ok(Number.isInteger(row.revision) && row.revision > 0);
+      return row.id === sources[0].id;
+    };
+    const request = { userId: user.id, projectId: project.id, query: '达比加群', includeLibrary: false, acceptSource };
+    const small = await app.kbIndex.search(request);
+    assert.equal(small.mode, 'small-library'); assert.equal(small.library.documents, 1);
+    assert.deepEqual(small.files.map(row => row.sourceId), [sources[0].id]);
+    assert.equal(libraryCalls, 0); assert.ok(seen.length >= sources.length);
+    const empty = await app.kbIndex.search({ ...request, sourceIds: [] });
+    assert.equal(empty.mode, 'empty'); assert.equal(empty.library.documents, 0);
+    app.kbIndex.smallLibraryTokens = 0;
+    const indexed = await app.kbIndex.search(request);
+    assert.ok(indexed.hits.length > 0, 'the admitted current-project passage remains searchable');
+    assert.ok(indexed.hits.every(row => row.sourceId === sources[0].id));
+    assert.doesNotMatch(JSON.stringify(indexed), /Private library title|library\/private/);
+    const passages = await app.kbIndex.passages({ userId: user.id, projectId: project.id, shared: false, q: '利伐沙班', acceptSource: async () => false });
+    assert.equal(passages, null, 'a forbidden source cannot expose indexed snippets through the product search');
+    await app.store.database.query("UPDATE evimed_product.documents SET payload=jsonb_set(payload,'{status}','\"parsing\"') WHERE user_id=$1 AND kind='source' AND id=$2", [user.id, sources[0].id]);
+    const waiting = await app.kbIndex.search(request);
+    assert.equal(waiting.mode, 'empty'); assert.equal(waiting.waiting.length, 1);
+    assert.equal(waiting.waiting[0].sourceId, sources[0].id);
+    assert.equal(libraryCalls, 0, 'a ready same-sha library copy must not replace an unavailable project source');
+    const ordinary = await app.kbIndex.search({ ...request, includeLibrary: true, acceptSource: null });
+    assert.equal(libraryCalls, 1, 'ordinary owner searches keep their existing library behavior');
+    assert.match(JSON.stringify(ordinary), /Private library title/);
+    await assert.rejects(app.kbIndex.search({ ...request, acceptSource: async () => { throw new Error('Proof unavailable'); } }), /Proof unavailable/);
+  } finally { await context.close(); }
+});

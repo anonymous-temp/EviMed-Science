@@ -101,9 +101,10 @@ export function kbSearchGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ index: any, evaluationIsolation?: any, sourceScope?: (identity: any, sessionId: string) => Promise<readonly string[] | null> }} dependencies
+ * @param {{ index: any, evaluationIsolation?: any, sourceScope?: (identity: any, sessionId: string) => Promise<readonly string[] | null>,
+ * contextFor?: ((identity:any)=>Promise<any>) | null }} dependencies
  */
-export function createKbSearchGatewayHandler(config, runtimeManager, { index, evaluationIsolation = null, sourceScope }) {
+export function createKbSearchGatewayHandler(config, runtimeManager, { index, evaluationIsolation = null, sourceScope, contextFor = null }) {
   const windows = new Map();
   return async function kbSearchGatewayHandler(req, res, onFailure) {
     try {
@@ -127,17 +128,23 @@ export function createKbSearchGatewayHandler(config, runtimeManager, { index, ev
       windows.set(key, window);
       if (++window.count > windowLimit) throw gatewayError(429, "kb_search_rate_limited", "Too many knowledge-base searches in a minute.");
       const { sessionId, ...request } = validatedRequest(await readJsonBody(req, 16 * 1024));
+      const policy = contextFor ? await contextFor(identity) : null;
+      if (contextFor && (!policy || !['owned', 'geo-project'].includes(policy.kind))) throw new Error('Knowledge context unavailable');
+      const shared = policy?.kind === 'geo-project';
+      if (shared && (typeof policy.acceptSource !== 'function' || typeof policy.sourceScope !== 'function')) throw new Error('Knowledge context incomplete');
+      const selectedScope = shared ? (_identity, id) => policy.sourceScope(id) : sourceScope;
       // Intersect before the index chooses its small-library shortcut too. An empty intersection is empty,
       // never an invitation to read all documents. Failure to read a saved scope must not broaden it.
-      if (sessionId && sourceScope) {
-        const selected = await sourceScope(identity, sessionId);
+      if (sessionId && selectedScope) {
+        const selected = await selectedScope(identity, sessionId);
         if (selected) request.sourceIds = request.sourceIds
           ? request.sourceIds.filter(id => selected.includes(id)) : [...selected];
       }
       const timeoutMs = Math.max(1_000, Number(config.kbSearchTimeoutMs) || 20_000);
       let timer;
       const result = await Promise.race([
-        index.search({ userId: identity.userId, projectId: identity.projectId, ...request }),
+        index.search({ userId: identity.userId, projectId: identity.projectId, ...request,
+          ...(shared ? { includeLibrary: false, acceptSource: policy.acceptSource } : {}) }),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(gatewayError(504, "kb_search_timeout", "Knowledge-base search timed out.")), timeoutMs);
           timer.unref?.();

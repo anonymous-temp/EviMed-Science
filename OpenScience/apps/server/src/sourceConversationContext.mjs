@@ -1,7 +1,7 @@
 import { workspaceLayout } from "@evimed/domain";
 
 /** Resolve only the selected documents, including shared ones, under the current account and project. */
-export async function sourceConversationContext(sourceService, project, session, includeUnrestricted = false) {
+export async function sourceConversationContext(sourceService, project, session, includeUnrestricted = false, { includeLibrary = true, acceptSource = null } = {}) {
   if (!session?.sourceScope) return includeUnrestricted
     ? "The researcher currently applies no document selection to this conversation. The knowledge base of this project is available under the usual access rules. This current scope replaces any document selection stated in earlier turns."
     : null;
@@ -11,7 +11,8 @@ export async function sourceConversationContext(sourceService, project, session,
       if (error?.status === 404) return null;
       throw error;
     });
-    if (!source || (source.projectId !== project.id && !(await sourceService.isShared(project.userId, source)))) continue;
+    if (!source || (source.projectId !== project.id && (!includeLibrary || !(await sourceService.isShared(project.userId, source))))) continue;
+    if (acceptSource && await acceptSource(source) !== true) continue;
     const artifact = source.payload?.outputs?.artifactPath;
     const path = source.projectId === project.id
       ? typeof artifact === "string" && artifact.startsWith("knowledge-base/")

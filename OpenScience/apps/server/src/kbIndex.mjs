@@ -373,12 +373,16 @@ export class KnowledgeBaseIndex {
    * library, each with the path a run reads it at. The library answers for its
    * own entries — a copy it holds is searchable even once no project does.
    * @param {string} userId @param {string} projectId @param {string[] | null} sourceIds
+   * @param {{ includeLibrary?: boolean, acceptSource?: ((source:any)=>Promise<boolean>) | null }} options
    */
-  async #scope(userId, projectId, sourceIds) {
-    const rows = (await this.database.query(`SELECT id, project_id, payload FROM evimed_product.documents
+  async #scope(userId, projectId, sourceIds, { includeLibrary = true, acceptSource = null } = {}) {
+    const rows = (await this.database.query(`SELECT id, project_id, payload, revision FROM evimed_product.documents
       WHERE user_id=$1 AND project_id=$2 AND kind='source' AND deleted_at IS NULL
       ORDER BY created_at, id`, [userId, projectId])).rows;
-    const project = rows.map((row) => {
+    const admitted = [];
+    for (const row of rows) if (!acceptSource || await acceptSource({ id: row.id, kind: 'source', userId, projectId: row.project_id,
+      revision: row.revision, payload: row.payload, deletedAt: null }) === true) admitted.push(row);
+    const project = admitted.map((row) => {
       const payload = row.payload;
       const artifact = typeof payload.outputs?.artifactPath === "string" ? payload.outputs.artifactPath : "";
       const readPath = artifact.startsWith("knowledge-base/") ? `${workspaceLayout.knowledgeDir}/${artifact.slice("knowledge-base/".length)}` : null;
@@ -396,7 +400,7 @@ export class KnowledgeBaseIndex {
       };
     });
     /** @type {any[]} */
-    const library = this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
+    const library = includeLibrary && this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
     const wanted = sourceIds === null ? null : new Set(sourceIds);
     /** @param {{ sourceId: string }} entry */
     const named = (entry) => !wanted || wanted.has(entry.sourceId);
@@ -426,10 +430,10 @@ export class KnowledgeBaseIndex {
    * What it returns is by document content (`sha256`): the list says which rows hold those bytes, and a document the index
    * has not indexed yet is simply not there — the list's own search still finds it by its name and summary.
    *
-   * @param {{ userId: string, projectId: string | null, shared: boolean, q: string }} request
+   * @param {{ userId: string, projectId: string | null, shared: boolean, q: string, acceptSource?: ((source:any)=>Promise<boolean>) | null }} request
    * @returns {Promise<{ shas: string[], bySha: Record<string, { page: number | null, snippet: string, start: number, end: number }[]> } | null>}
    */
-  async passages({ userId, projectId, shared, q }) {
+  async passages({ userId, projectId, shared, q, acceptSource = null }) {
     const query = passageQuery(q);
     if (!query || !userId) return null;
     await this.ready();
@@ -439,9 +443,12 @@ export class KnowledgeBaseIndex {
       documents = (this.library ? await this.library.searchScope(userId) : [])
         .filter((/** @type {any} */ entry) => entry.searchable && entry.sha256 && entry.parserRevision && entry.textSha256);
     } else if (projectId) {
-      const rows = (await this.database.query(`SELECT payload FROM evimed_product.documents
+      const rows = (await this.database.query(`SELECT id, payload, revision FROM evimed_product.documents
         WHERE user_id=$1 AND project_id=$2 AND kind='source' AND deleted_at IS NULL`, [userId, projectId])).rows;
-      documents = rows.map((/** @type {{ payload: any }} */ row) => ({ sha256: row.payload.fingerprint?.sha256, parserRevision: sourceParserRevision(row.payload.analysis),
+      const admitted = [];
+      for (const row of rows) if (!acceptSource || await acceptSource({ id: row.id, kind: 'source', userId, projectId,
+        revision: row.revision, payload: row.payload, deletedAt: null }) === true) admitted.push(row);
+      documents = admitted.map((/** @type {{ payload: any }} */ row) => ({ sha256: row.payload.fingerprint?.sha256, parserRevision: sourceParserRevision(row.payload.analysis),
         textSha256: row.payload.analysis?.textSha256, readable: sourceReadable(row.payload) }))
         .filter((/** @type {any} */ entry) => entry.readable && entry.sha256 && entry.parserRevision && entry.textSha256);
     }
@@ -488,22 +495,24 @@ export class KnowledgeBaseIndex {
 
   /**
    * Answer one `kb_search`.
-   * @param {{ userId: string, projectId: string, query: string, limit?: number, sourceIds?: string[] | null }} request
+   * @param {{ userId: string, projectId: string, query: string, limit?: number, sourceIds?: string[] | null,
+   * includeLibrary?: boolean, acceptSource?: ((source:any)=>Promise<boolean>) | null }} request
    */
-  async search({ userId, projectId, query, limit = 8, sourceIds = null }) {
+  async search({ userId, projectId, query, limit = 8, sourceIds = null, includeLibrary = true, acceptSource = null }) {
     this.counters.searches += 1;
     try {
-      return await this.#search({ userId, projectId, query, limit, sourceIds });
+      return await this.#search({ userId, projectId, query, limit, sourceIds, includeLibrary, acceptSource });
     } catch (error) {
       this.counters.searchFailures += 1;
       throw error;
     }
   }
 
-  /** @param {{ userId: string, projectId: string, query: string, limit: number, sourceIds: string[] | null }} request */
-  async #search({ userId, projectId, query, limit, sourceIds }) {
+  /** @param {{ userId: string, projectId: string, query: string, limit: number, sourceIds: string[] | null,
+   * includeLibrary: boolean, acceptSource: ((source:any)=>Promise<boolean>) | null }} request */
+  async #search({ userId, projectId, query, limit, sourceIds, includeLibrary, acceptSource }) {
     const capabilities = await this.ready();
-    const scope = await this.#scope(userId, projectId, sourceIds);
+    const scope = await this.#scope(userId, projectId, sourceIds, { includeLibrary, acceptSource });
     const searchable = scope.filter((entry) => entry.searchable);
     const waiting = scope.filter((entry) => !entry.searchable).map((entry) => ({ sourceId: entry.sourceId, title: entry.title, status: entry.status }));
     const tokens = searchable.reduce((sum, entry) => sum + entry.tokens, 0);
