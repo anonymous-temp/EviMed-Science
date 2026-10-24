@@ -257,7 +257,7 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
                 const generic = !entity.brandName, kind = generic ? 'generic' : 'brand';
                 const dims = { entityKey, entityKind: kind, entityName: entity.brandName ?? entity.genericName, own: entity.own, pool, period: bucket.period, date: bucket.date, roundId: bucket.period === 'round' ? bucket.key : null, roundOrdinal: bucket.roundOrdinal, roundLabel: bucket.period === 'round' ? `第 ${bucket.roundOrdinal} 轮` : null, engine: null };
                 const row = { key: hash(dims), label: `${dims.entityName} · ${generic ? '通用名观测' : entity.own ? '本品' : '已登记竞品'} · ${pool}`, metricId: generic ? null : view.metricId, dimensions: dims, values: {}, links: [] };
-                const balanced = /** @type {any[]} */ (computeGeoSelection(bucket.rows, selected.metricOptions).balance.rows).filter(item => item.pool === pool), observed = balanced.filter(item => item.status === 'valid' && item.facts);
+                const balanced = /** @type {any[]} */ (computeGeoSelection(bucket.rows, selected.metricOptions).balance.rows).filter(item => item.pool === pool), observed = balanced.filter(item => item.status === 'valid' || item.status === 'refusal');
                 const exactEntity = (item) => { const basis = basisFor(item); const saved = basis.snapshot ? (entity.own ? basis.snapshot.product : (basis.snapshot.competitors ?? []).find(candidate => geoRivalEntityKey(candidate) === entityKey)) : entity; return { basis, saved }; };
                 const eligible = observed.filter(item => { const { basis, saved } = exactEntity(item); if (!saved)
                     return false; if (generic)
@@ -291,11 +291,14 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
                 row.values = { current: bind('current', member.rows, generic ? positive.length : metric?.value ?? null, member.unit, metric), mentioned: bind('mentioned', positive), eligible: bind('eligible', eligible), unknown: bind('unknown', unknown) };
                 const ownMetric = generic ? null : computed.cells.find(cell => cell.metricId === (view.metricId === 'M-17' ? 'M-04' : 'M-01') && cell.scope === 'pool' && cell.pool === pool && !cell.rival && !cell.variant && !cell.arm) ?? null;
                 const ownMembers = ownMetric ? geoMetricMembers(/** @type {any[]} */ (computed.balance.rows), ownMetric, options) : { rows: [], unit: 'answers' };
-                row.values.pairedOwn = bind('pairedOwn', ownMembers.rows, reason || generic ? null : ownMetric?.value ?? null, ownMembers.unit, ownMetric);
+                const ownBasisKnown = Boolean(product.brandName) && input.every(item => Boolean(basisFor(item).snapshot?.product?.brandName));
+                const ownReason = reason ?? (!generic && !ownBasisKnown ? 'own_brand_not_registered' : null);
+                const ownReading = ownMetric && ownReason ? { ...ownMetric, status: 'not_measurable', reason: ownReason, value: null, numerator: null, denominator: null } : ownMetric;
+                row.values.pairedOwn = bind('pairedOwn', ownMembers.rows, ownReason || generic ? null : ownMetric?.value ?? null, ownMembers.unit, ownReading);
                 row.values.pairedOwn.memberUnit = ownMembers.unit;
                 row.values.pairedOwn.unit = 'percent';
-                row.values.pairedOwn.state = reason || generic ? 'unknown' : ownMetric ? state(ownMetric) : 'no_data';
-                row.values.pairedOwn.reason = reason ?? ownMetric?.reason ?? null;
+                row.values.pairedOwn.state = ownReason || generic ? 'unknown' : ownMetric ? state(ownMetric) : 'no_data';
+                row.values.pairedOwn.reason = ownReason ?? ownMetric?.reason ?? null;
                 row.values.current.memberUnit = member.unit;
                 row.values.current.unit = generic ? 'answers' : 'percent';
                 if (!generic) {
@@ -315,9 +318,42 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
                 row.dimensions.temporalBasis = balanced.every(item => basisFor(item).snapshot) ? 'recorded' : 'current_context_history_unknown';
                 rows.push(row);
             }
-    const points = rows.filter(row => row.dimensions.period !== 'selected'), labels = buckets.slice(1).map(bucket => bucket.label), seriesEntries = entries.filter(entity => !view.entityKey || geoRivalEntityKey(entity) === view.entityKey);
-    const series = pools.flatMap(pool => seriesEntries.map(entity => { const matching = points.filter(row => row.dimensions.entityKey === geoRivalEntityKey(entity) && row.dimensions.pool === pool); return { key: hash([geoRivalEntityKey(entity), pool]), label: `${entity.brandName ?? entity.genericName} · ${pool}`, own: entity.own, values: matching.map(row => row.values.current.state === 'known' ? row.values.current.value : null) }; }));
-    return { definition: { metricId: view.metricId, unit: 'percent', methodVersion: selected.selection.methodVersion, dataType: 'registered_competitor_metrics', countingRule: view.metricId === 'M-17' ? '所选回答与已登记品牌集合的相对提及声量份额；仅用于明确选择该指标并记录实体集合的测量，不代表市场份额。' : '各问句池分别计算已登记竞品的阳性提及回答 / 合资格回答，本品使用相同合资格回答；通用名独立观测，不汇总为整体竞品指标。', denominatorRule: '按原有领域指标的去重、平衡、适用性和样本要求计算。未保存登记依据的历史缺席保持未知；每个池、日期和实际轮次独立计算。' }, contextualBasis: [{ kind: 'registered_entities', id: 'project', version: null, digest: hash({ product, competitors, rounds: selected.rounds.map(round => [round.id, round.ref?.evaluationBasis, round.surface?.measurementContract]) }), temporalBasis: 'recorded_when_available_current_context_otherwise' }], columns: [{ key: 'current', label: view.metricId === 'M-17' ? '相对提及份额 / 通用名观测（回答）' : '提及率 / 通用名观测', type: 'number' }, { key: 'pairedOwn', label: '同一合资格回答中的本品', type: 'number' }, { key: 'mentioned', label: '阳性提及回答', type: 'number' }, { key: 'eligible', label: '登记依据完整的回答', type: 'number' }, { key: 'unknown', label: '历史依据未知的回答', type: 'number' }], rows, chart: { kind: 'rivals', labels, series, cells: rows.filter(row => row.dimensions.period === 'selected').map(row => ({ rowKey: row.key, columnKey: 'current', label: row.label, entityName: row.dimensions.entityLabel, own: row.dimensions.own, engine: null, pool: row.dimensions.pool, value: row.values.current.value, state: row.values.current.state, reason: row.values.current.reason, unit: row.values.current.unit })) }, memberItems, dependencies: [selected.rows, selected.metricOptions, selected.rounds], availability: { status: rows.length ? 'ready' : 'empty', reasons: rows.some(row => row.values.unknown.value > 0) ? ['rival_history_unknown'] : [], remedy: null } };
+    const points = rows.filter(row => row.dimensions.period !== 'selected');
+    const labels = buckets.slice(1).map(bucket => bucket.label);
+    const selectedRows = rows.filter(row => row.dimensions.period === 'selected');
+    const hasBrandRival = selectedRows.some(row => !row.dimensions.own && row.dimensions.entityKind === 'brand');
+    const ownName = product.brandName ?? product.genericName ?? '本品';
+    const comparisonKey = row => hash([row.dimensions.entityKey, row.dimensions.pool]);
+    const cellOf = (row, columnKey, own, entityName, paired = false) => {
+        const value = row.values[columnKey];
+        return { rowKey: row.key, columnKey, label: row.label, entityName, own, engine: null, pool: row.dimensions.pool,
+            comparisonKey: paired ? comparisonKey(row) : null,
+            comparisonLabel: paired ? `${row.dimensions.entityLabel} · ${row.dimensions.pool}` : null,
+            value: value.value, state: value.state, reason: value.reason, unit: value.unit };
+    };
+    const chartCells = selectedRows.flatMap(row => {
+        if (row.dimensions.own && row.dimensions.entityKind === 'brand' && hasBrandRival) return [];
+        if (!row.dimensions.own && row.dimensions.entityKind === 'brand') return [
+            cellOf(row, 'pairedOwn', true, `${ownName}（对照 ${row.dimensions.entityLabel}）`, true),
+            cellOf(row, 'current', false, row.dimensions.entityLabel, true),
+        ];
+        return [cellOf(row, 'current', row.dimensions.own, row.dimensions.entityLabel)];
+    });
+    const series = selectedRows.flatMap(row => {
+        if (row.dimensions.own && row.dimensions.entityKind === 'brand' && hasBrandRival) return [];
+        const matching = points.filter(point => point.dimensions.entityKey === row.dimensions.entityKey && point.dimensions.pool === row.dimensions.pool);
+        const paired = !row.dimensions.own && row.dimensions.entityKind === 'brand';
+        return (paired ? ['pairedOwn', 'current'] : ['current']).map(columnKey => ({
+            key: hash([row.dimensions.entityKey, row.dimensions.pool, columnKey]),
+            label: `${columnKey === 'pairedOwn' ? `${ownName}（同一合资格回答）` : row.dimensions.entityLabel} · ${row.dimensions.pool}`,
+            own: columnKey === 'pairedOwn' || row.dimensions.own,
+            comparisonKey: paired ? comparisonKey(row) : null,
+            comparisonLabel: paired ? `${row.dimensions.entityLabel} · ${row.dimensions.pool}` : null,
+            unit: row.values[columnKey].unit,
+            values: matching.map(point => point.values[columnKey].state === 'known' ? point.values[columnKey].value : null),
+        }));
+    });
+    return { definition: { metricId: view.metricId, unit: 'percent', methodVersion: selected.selection.methodVersion, dataType: 'registered_competitor_metrics', countingRule: view.metricId === 'M-17' ? '所选回答与已登记品牌集合的相对提及声量份额；仅用于明确选择该指标并记录实体集合的测量，不代表市场份额。' : '各问句池分别计算已登记竞品的阳性提及回答 / 合资格回答，本品使用相同合资格回答；通用名独立观测，不汇总为整体竞品指标。', denominatorRule: '按原有领域指标的去重、平衡、适用性和样本要求计算。未保存登记依据的历史缺席保持未知；每个池、日期和实际轮次独立计算。' }, contextualBasis: [{ kind: 'registered_entities', id: 'project', version: null, digest: hash({ product, competitors, rounds: selected.rounds.map(round => [round.id, round.ref?.evaluationBasis, round.surface?.measurementContract]) }), temporalBasis: 'recorded_when_available_current_context_otherwise' }], columns: [{ key: 'current', label: view.metricId === 'M-17' ? '相对提及份额 / 通用名观测（回答）' : '提及率 / 通用名观测', type: 'number' }, { key: 'pairedOwn', label: '同一合资格回答中的本品', type: 'number' }, { key: 'mentioned', label: '阳性提及回答', type: 'number' }, { key: 'eligible', label: '登记依据完整的回答', type: 'number' }, { key: 'unknown', label: '历史依据未知的回答', type: 'number' }], rows, chart: { kind: 'rivals', labels, series, cells: chartCells }, memberItems, dependencies: [selected.rows, selected.metricOptions, selected.rounds], availability: { status: rows.length ? 'ready' : 'empty', reasons: rows.some(row => row.values.unknown.value > 0) ? ['rival_history_unknown'] : [], remedy: null } };
 }
 /** Compatibility projection has no arithmetic: each own point is the rival's exact eligible-cohort domain reading. */
 export function geoRivalMonitoringRows(analysis) {

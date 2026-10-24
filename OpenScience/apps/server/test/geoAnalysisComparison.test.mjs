@@ -131,3 +131,62 @@ test('V03 unchanged zero stays a ranked zero difference and M19 rejects changed 
  const current=cohort('now',10),previous=cohort('old',10);for(const input of [current,previous]){for(const row of input.rows)row.facts.statements=[{text:'Retained statement',verdict:'correct'}];input.computed=computeGeoSelection(input.rows,input.metricOptions);}previous.rows[0].facts.statements[0].verdict='unknown';previous.computed=computeGeoSelection(previous.rows,previous.metricOptions);
  const gvi=presentGeoAnalysis(compared(current,previous),{viewId:'V03',metricId:'M-19',dimension:'project'},context()).rows[0];assert.equal(gvi.values.delta.value,null);assert.equal(gvi.values.rank.value,null);assert.equal(gvi.values.delta.reason,'comparison_basis_changed');
 });
+
+test('V08 M16 retains registry-qualified refusals in the exact domain denominator', () => {
+    const input = cohort('now', 10);
+    input.rows.forEach((row, index) => { row.facts.brands[1].count = index < 20 ? 1 : 0; });
+    input.rows.push(...Array.from({ length: 50 }, (_, index) => ({ ...input.rows[index], snapshotId: `refusal-${index}`, questionId: `refusal-q${index}`, status: 'refusal', facts: null })));
+    input.computed = computeGeoSelection(input.rows, input.metricOptions);
+    const domain = input.computed.cells.find(cell => cell.metricId === 'M-16' && cell.scope === 'pool' && cell.pool === 'P2' && cell.rival === 'Rival');
+    const ctx = context(), view = presentGeoAnalysis(input, { viewId: 'V08' }, ctx), rival = view.rows.find(row => row.dimensions.entityKey === 'saved-rival' && row.dimensions.period === 'selected');
+    assert.equal(domain.denominator, 100);
+    assert.equal(domain.value, 20);
+    assert.equal(rival.values.current.metric.denominator, domain.denominator);
+    assert.equal(rival.values.current.metric.numerator, domain.numerator);
+    assert.equal(rival.values.current.value, domain.value);
+    assert.equal(rival.values.current.members.total, 100);
+    assert.equal(rival.values.eligible.value, 100);
+    assert.equal(rival.values.unknown.value, 0);
+    assert.equal(ctx.memberItems.get(`${rival.key}:current`).filter(item => item.status === 'refusal').length, 50);
+    const legacy = structuredClone(input);
+    delete legacy.rounds[0].ref;
+    const unknown = presentGeoAnalysis(legacy, { viewId: 'V08' }, context()).rows.find(row => row.dimensions.entityKey === 'saved-rival' && row.dimensions.period === 'selected');
+    assert.equal(unknown.values.current.value, null);
+    assert.equal(unknown.values.unknown.value, 100);
+});
+
+test('V08 comparison bars and trend series use each rival paired own reading after registry expansion', () => {
+    const input = cohort('now', 10), old = cohort('old', 50);
+    input.rows.forEach((row, index) => { row.facts.brands[1].count = index < 20 ? 1 : 0; });
+    old.rounds[0].ref.evaluationBasis = { product, competitors: [], owned: {} };
+    old.rows.forEach(row => { row.facts.registryKey = registryKey(brandRegistry(product, []), {}); row.facts.brands = row.facts.brands.filter(brand => brand.ours); });
+    input.rows.push(...old.rows);
+    input.rounds.push(...old.rounds);
+    input.computed = computeGeoSelection(input.rows, input.metricOptions);
+    const view = presentGeoAnalysis(input, { viewId: 'V08' }, context()), rival = view.rows.find(row => row.dimensions.entityKey === 'saved-rival' && row.dimensions.period === 'selected');
+    assert.equal(view.rows.find(row => row.dimensions.own && row.dimensions.period === 'selected').values.current.value, 60);
+    assert.equal(rival.values.current.value, 40);
+    assert.equal(rival.values.pairedOwn.value, 20);
+    const pair = view.chart.cells.filter(cell => cell.rowKey === rival.key);
+    assert.deepEqual(pair.map(cell => [cell.columnKey, cell.value]), [['pairedOwn', 20], ['current', 40]]);
+    assert.ok(pair.every(cell => cell.members.total === 50 && cell.members.rowKey === rival.key));
+    assert.ok(view.chart.cells.filter(cell => cell.unit === 'percent').every(cell => cell.rowKey === rival.key));
+    const ownSeries = view.chart.series.find(line => line.own && line.comparisonKey), rivalSeries = view.chart.series.find(line => !line.own && line.comparisonKey);
+    assert.equal(ownSeries.comparisonKey, rivalSeries.comparisonKey);
+    assert.deepEqual(ownSeries.values, [null, 20]);
+    assert.deepEqual(rivalSeries.values, [null, 40]);
+});
+
+test('V08 paired charts keep a generic-only own observation independent of brand rival comparisons', () => {
+    const input = cohort('now', 10), ctx = context();
+    ctx.product = { genericName: 'Own generic' };
+    input.rounds[0].ref.evaluationBasis.product = ctx.product;
+    const key = registryKey(brandRegistry(ctx.product, competitors), {});
+    input.rows.forEach((row, index) => { row.facts.registryKey = key; row.facts.brands = row.facts.brands.filter(brand => !brand.ours); row.facts.judgeExtract = { genericMentions: [{ name: 'Own generic', ours: true, count: index < 10 ? 1 : 0 }] }; });
+    input.computed = computeGeoSelection(input.rows, input.metricOptions);
+    const view = presentGeoAnalysis(input, { viewId: 'V08' }, ctx), own = view.rows.find(row => row.dimensions.own && row.dimensions.period === 'selected'), rival = view.rows.find(row => row.dimensions.entityKey === 'saved-rival' && row.dimensions.period === 'selected');
+    assert.equal(own.values.current.value, 10);
+    assert.ok(view.chart.cells.some(cell => cell.rowKey === own.key && cell.unit === 'answers' && cell.value === 10));
+    assert.equal(rival.values.pairedOwn.value, null);
+    assert.equal(rival.values.pairedOwn.reason, 'own_brand_not_registered');
+});

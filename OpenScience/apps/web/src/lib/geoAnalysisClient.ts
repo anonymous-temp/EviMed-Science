@@ -73,7 +73,7 @@ export interface GeoAnalysisChartCell {
   rowKey: string; columnKey: string; label: string;
   groupId: string | null; setVersion: number | null; engine: string | null; pool?: string | null;
   groupName?: string | null;
-  entityName?: string; own?: boolean;
+  entityName?: string; own?: boolean; comparisonKey?: string | null; comparisonLabel?: string | null;
   value: number | null; state: string; reason?: string | null; unit?: string; members?: GeoAnalysisMembers | null;
 }
 export interface GeoAnalysisView {
@@ -86,6 +86,9 @@ export interface GeoAnalysisView {
       label: string;
       engine?: string | null;
       own?: boolean;
+      comparisonKey?: string | null;
+      comparisonLabel?: string | null;
+      unit?: string;
       values: Array<number | null>;
     }>;
   };

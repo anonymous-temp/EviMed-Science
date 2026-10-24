@@ -95,3 +95,41 @@ it('rival charts preserve insufficient and unknown rows with fixed names rather 
  render(<GeoAnalysisVisual data={{chart:{kind:'rivals',cells,labels:[],series:[]}} as unknown as GeoAnalysisView} onSelect={()=>{}}/>);
  expect(screen.getByRole('button',{name:/Fixed Rival.*样本不足/})).toBeTruthy();expect(screen.getByRole('button',{name:/Legacy Rival/})).toBeTruthy();
 });
+
+import { brandRegistry, registryKey } from '../../../../server/src/geoParse.mjs';
+function registeredRivalView(refusals = false): GeoAnalysisView {
+  const product = { brandName: 'Ours' }, competitors = [{ id: 'fixed-rival', brandName: 'Rival', aliases: ['Alias'] }];
+  const owned = {}, metricOptions = { engines: ['deepseek'], samplingMode: 'web', competitors: ['Rival'], owned, arms: { pilot: ['g'], control: [] } };
+  const rows = ['old', 'now'].flatMap(round => Array.from({ length: 50 }, (_, index) => ({
+    snapshotId: `${round}-${index}`, questionId: `q${index}`, engine: 'deepseek', roundId: round, roundKind: 'baseline', repeatIndex: 0,
+    status: 'valid', pool: 'P2', groupId: 'g', askedAt: round === 'old' ? '2026-10-01T00:00:00Z' : '2026-10-02T00:00:00Z', surface: { mode: 'web' },
+    facts: { registryKey: registryKey(brandRegistry(product, round === 'old' ? [] : competitors), owned), brands: [{ name: 'Ours', ours: true, count: round === 'old' || index < 10 ? 1 : 0 }, ...(round === 'now' ? [{ name: 'Rival', competitor: true, count: index < 20 ? 1 : 0 }] : [])], checks: { judgementCoverage: { status: 'complete' } } },
+  })));
+  if (refusals) {
+    rows.splice(0, 50);
+    rows.push(...Array.from({ length: 50 }, (_, index) => ({ ...rows[index], snapshotId: `refusal-${index}`, questionId: `refusal-q${index}`, status: 'refusal', facts: null as never })));
+  }
+  const selected = { scope: { timeZone: 'Asia/Shanghai' }, selection: { reference: 'gsel_review_visual', dataRevision: 'review-visual', methodVersion: 'review-visual', counts: {}, engines: ['deepseek'] }, rows, questions: [], rounds: ['old', 'now'].map(id => ({ id, ref: { evaluationBasis: { product, competitors: id === 'old' ? [] : competitors, owned } } })), metricOptions, computed: computeGeoSelection(rows, metricOptions) };
+  return presentGeoAnalysis(selected, { viewId: 'V08' }, { product, competitors, allRows: true }) as GeoAnalysisView;
+}
+it('uses the exact rival-paired own value in bars and both lines of the same comparison chart', () => {
+  const view = registeredRivalView(), chosen = vi.fn();
+  const { container } = render(<GeoAnalysisVisual data={view} onSelect={chosen} />);
+  expect(screen.queryByText('60%')).toBeNull();
+  const own = screen.getByRole('button', { name: /Ours.*20%.*查看回答/ });
+  fireEvent.click(own);
+  expect(chosen).toHaveBeenLastCalledWith(expect.objectContaining({ columnKey: 'pairedOwn', value: 20, members: expect.objectContaining({ columnKey: 'pairedOwn', total: 50 }) }));
+  fireEvent.click(screen.getByRole('button', { name: /Rival.*40%.*查看回答/ }));
+  expect(chosen).toHaveBeenLastCalledWith(expect.objectContaining({ columnKey: 'current', value: 40, members: expect.objectContaining({ columnKey: 'current', total: 50 }) }));
+  const heading = screen.getByRole('heading', { name: 'Rival · P2 · 同口径比较' });
+  expect(heading.closest('section')?.querySelectorAll('[data-geo-chart-series]')).toHaveLength(2);
+  expect(container.querySelectorAll('g rect')[0]).toHaveAttribute('width', '60');
+});
+it('displays the domain M16 rate with registry-qualified refusal members instead of inflating the rate', () => {
+  const view = registeredRivalView(true), chosen = vi.fn();
+  render(<GeoAnalysisVisual data={view} onSelect={chosen} />);
+  const rival = screen.getByRole('button', { name: /Rival.*20%.*查看回答/ });
+  fireEvent.click(rival);
+  expect(chosen).toHaveBeenLastCalledWith(expect.objectContaining({ value: 20, members: expect.objectContaining({ total: 100 }) }));
+  expect(screen.queryByText('40%')).toBeNull();
+});

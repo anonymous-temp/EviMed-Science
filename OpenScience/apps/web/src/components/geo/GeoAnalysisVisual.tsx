@@ -13,6 +13,7 @@ const reasonWords: Readonly<Record<string, string>> = {
   metric_members_changed: "合资格成员发生变化，不参与排序。",
   comparison_basis_changed: "组成指标或有效权重已变化，不参与排序。",
   comparison_not_selected: "请选择对照区间。",
+  own_brand_not_registered: "这个范围没有登记可用于比较的本品品牌；通用名独立观测。",
   rival_history_unknown: "历史登记依据未知，不能将缺席记为零。",
   share_agreement_missing: "该轮未约定此声量指标或登记集合。",
   engine_absent: "这个范围没有该平台的回答。",
@@ -71,14 +72,57 @@ export function GeoAnalysisVisual({ data, onSelect }: {
     </ChartCard>;
   }
   if (chart.kind === "rivals") {
-    const cells=chart.cells ?? [],known=cells.filter(cell=>cell.state==="known"&&cell.value!==null),unavailable=cells.filter(cell=>cell.state!=="known"||cell.value===null);
-    const lines=chart.series.map(line=>({...line,tone:line.own?"accent" as const:"muted" as const}));
-    const range=chartScale(lines.flatMap(line=>line.values));
-    return <><ChartCard title={data.view?.metricId === "M-17" ? "所选回答与登记品牌集合的相对提及声量份额" : "已登记实体的问句池比较"} footnote={data.view?.metricId === "M-17" ? "相对提及份额仅反映所选回答与登记品牌集合，不代表市场份额。" : undefined} state={known.length?"content":"empty"} emptyText="尚无可绘制的竞品读数；历史未知与样本不足均保留。" legend={<ul aria-label="竞品测量状态">{unavailable.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.entityName} · {cell.pool} · {unavailableWord(cell)}</Button><span className="text-caption text-text-3">{unavailableReason(cell)}</span></li>)}</ul>}>
-      <svg role="img" aria-label={data.view?.metricId === "M-17" ? "已登记品牌相对提及声量份额" : "已登记品牌提及率"} viewBox={`0 0 600 ${Math.max(48,known.filter(cell=>cell.unit!=="answers").length*32)}`} className="w-full">{known.filter(cell=>cell.unit!=="answers").map((cell,index)=><g key={cell.rowKey}><text x="0" y={index*32+22} className="fill-current text-text-2">{cell.entityName} · {cell.pool}</text><rect x="220" y={index*32+4} width={cell.value!*3} height="24" className={cell.own?"fill-current text-accent":"fill-current text-text-3"}/><text x="530" y={index*32+22} className="fill-current text-text">{cell.value}%</text></g>)}</svg>
-      {known.filter(cell=>cell.unit==="answers").length>0&&<BarList label="通用名独立观测" rows={known.filter(cell=>cell.unit==="answers").map(cell=>({key:cell.rowKey,label:`${cell.entityName} · ${cell.pool}`,value:cell.value!,unit:"回答"}))} onSelect={key=>{const cell=cells.find(cell=>cell.rowKey===key);if(cell)onSelect(cell);}}/>}
-      <ul aria-label="所选实体回答">{known.filter(cell=>cell.unit!=="answers").map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.entityName} · {cell.pool} · {cell.value}% · 查看回答</Button></li>)}</ul>
-    </ChartCard>{chart.labels.length>0&&lines.map(line=><ChartCard key={line.key} title={line.label}><GeoLineChart series={[line]} labels={chart.labels} domain={range?[range.low,range.high]:null}/></ChartCard>)}</>;
+    const cells = chart.cells ?? [];
+    const cellKey = (cell: GeoAnalysisChartCell) => `${cell.rowKey}:${cell.columnKey}`;
+    const known = cells.filter(cell => cell.state === "known" && cell.value !== null);
+    const unavailable = cells.filter(cell => cell.state !== "known" || cell.value === null);
+    const brandCells = known.filter(cell => cell.unit !== "answers");
+    const genericCells = known.filter(cell => cell.unit === "answers");
+    const lines = chart.series.map(line => ({ ...line, tone: line.own ? "accent" as const : "muted" as const }));
+    const groups = new Map<string, typeof lines>();
+    for (const line of lines) {
+      const key = line.comparisonKey ?? line.key;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(line);
+    }
+    return <>
+      <ChartCard
+        title={data.view?.metricId === "M-17" ? "所选回答与登记品牌集合的相对提及声量份额" : "已登记实体的问句池比较"}
+        footnote={data.view?.metricId === "M-17"
+          ? "每个本品与竞品比较均使用该竞品的同一合资格回答。相对提及份额不代表市场份额。"
+          : "每个本品与竞品比较均使用该竞品的同一合资格回答。"}
+        state={known.length ? "content" : "empty"}
+        emptyText="尚无可绘制的竞品读数；历史未知与样本不足均保留。"
+        legend={<ul aria-label="竞品测量状态">{unavailable.map(cell => <li key={cellKey(cell)}>
+          <Button size="sm" variant="text" onClick={() => onSelect(cell)}>{cell.entityName} · {cell.pool} · {unavailableWord(cell)}</Button>
+          <span className="text-caption text-text-3">{unavailableReason(cell)}</span>
+        </li>)}</ul>}
+      >
+        <svg role="img" aria-label={data.view?.metricId === "M-17" ? "已登记品牌相对提及声量份额" : "已登记品牌提及率"}
+          viewBox={`0 0 600 ${Math.max(48, brandCells.length * 32)}`} className="w-full">
+          {brandCells.map((cell, index) => <g key={cellKey(cell)}>
+            <text x="0" y={index * 32 + 22} className="fill-current text-text-2">{cell.entityName} · {cell.pool}</text>
+            <rect x="220" y={index * 32 + 4} width={cell.value! * 3} height="24" className={cell.own ? "fill-current text-accent" : "fill-current text-text-3"}/>
+            <text x="530" y={index * 32 + 22} className="fill-current text-text">{cell.value}%</text>
+          </g>)}
+        </svg>
+        {genericCells.length > 0 && <BarList label="通用名独立观测"
+          rows={genericCells.map(cell => ({ key: cellKey(cell), label: `${cell.entityName} · ${cell.pool}`, value: cell.value!, unit: "回答" }))}
+          onSelect={key => { const cell = cells.find(cell => cellKey(cell) === key); if (cell) onSelect(cell); }}/>}
+        <ul aria-label="所选实体回答">{brandCells.map(cell => <li key={cellKey(cell)}>
+          <Button size="sm" variant="text" onClick={() => onSelect(cell)}>{cell.entityName} · {cell.pool} · {cell.value}% · 查看回答</Button>
+        </li>)}</ul>
+      </ChartCard>
+      {chart.labels.length > 0 && [...groups].map(([key, group]) => {
+        const range = chartScale(group.flatMap(line => line.values));
+        const paired = Boolean(group[0].comparisonKey);
+        return <ChartCard key={key} title={paired ? `${group[0].comparisonLabel} · 同口径比较` : group[0].label}
+          state={range ? "content" : "empty"} emptyText="这组比较尚无可绘制读数；缺失读数保留未知。"
+          legend={<ul aria-label="趋势比较系列">{group.map(line => <li key={line.key}>{line.label}</li>)}</ul>}>
+          <GeoLineChart series={group} labels={chart.labels} domain={range ? [range.low, range.high] : null} pointLabels/>
+        </ChartCard>;
+      })}
+    </>;
   }
   if (chart.kind === "bars") {
     const cells = chart.cells ?? [];

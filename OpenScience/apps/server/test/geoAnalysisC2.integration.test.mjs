@@ -78,3 +78,71 @@ test('C2 exact two-period members, frozen native context, read/export roles and 
         }
     }
 });
+
+async function addReviewRound({ id, date, evaluationBasis = basis, refusals = 0, ownPositive = 10, rivalPositive = 20 }) {
+    await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface,ref) VALUES($1,$2,$3,'baseline','done',1,'{deepseek}',$4::date,$5::jsonb,$6::jsonb)", [id, user.id, project.id, date, JSON.stringify({ mode: 'web', measurementContract: { samplingMode: 'legacy_recurring', repeats: 1, metricIds: ['M-01', 'M-16', 'M-17'], sourceBasis: 'answers' } }), JSON.stringify({ evaluationBasis })]);
+    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) SELECT $1||'-'||n,$2,$3,$1,'q'||n,'deepseek',$4::date,CASE WHEN n>50 THEN 'refusal' ELSE 'valid' END,CASE WHEN n>50 THEN 'Refused' ELSE 'Retained answer '||n END,'{\"mode\":\"web\"}' FROM generate_series(1,$5::integer)n", [id, user.id, project.id, date, 50 + refusals]);
+    await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,registry_key,parser_version) SELECT $1||'-'||n,$2,$3,$4::date,jsonb_build_array(jsonb_build_object('name','Ours','ours',true,'count',CASE WHEN n<=$5 THEN 1 ELSE 0 END)) || CASE WHEN $6::boolean THEN jsonb_build_array(jsonb_build_object('name','Rival','competitor',true,'count',CASE WHEN n<=$7 THEN 1 ELSE 0 END)) ELSE '[]'::jsonb END,n<=$5,'{\"judgementCoverage\":{\"status\":\"complete\"}}',$8,'geo-parse-2' FROM generate_series(1,50)n", [id, user.id, project.id, date, ownPositive, evaluationBasis.competitors.length > 0, rivalPositive, registryKey(brandRegistry(evaluationBasis.product, evaluationBasis.competitors), evaluationBasis.owned)]);
+}
+async function freezeReviewSelection(full, receiptName) {
+    const { GeoPlanContext } = await import('../src/geoPlanContext.mjs'), { ProductDocuments } = await import('../src/productStore.mjs');
+    const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
+    service.planContexts = adapter;
+    const staged = await adapter.stage(user, project.id, { requestKey: receiptName, sessionId: 'review-session', mode: 'analysis', selectionRef: full.selection.reference, view: full.view, expectedDigest: full.digest, intent: 'compare' });
+    await adapter.bind(user, { id: project.projectId, userId: project.userId }, { requestId: receiptName, sessionId: 'review-session', content: [{ type: 'text', text: 'Explain the exact registered competitor comparison.' }], geoPlanContext: { referenceId: staged.referenceId } });
+    const native = await service.runtimeRead(project, 'analysis', { planContextRef: staged.referenceId });
+    assert.deepEqual(native.rows, full.rows);
+    assert.deepEqual(native.chart, full.chart);
+    const report = freezeGeoAnalysisDocument(full);
+    assert.deepEqual(report.cover.analysis.rows, full.rows);
+    assert.deepEqual(report.cover.analysis.chart, full.chart);
+    if (process.env.GEO_C2_REVIEW_RECEIPTS_DIR) {
+        const directory = `${process.env.GEO_C2_REVIEW_RECEIPTS_DIR}/${receiptName}`;
+        await mkdir(directory, { recursive: true });
+        await writeFile(`${directory}/document.json`, JSON.stringify({ ...report, version: 1, rendererVersion: 'pandoc-chromium-v1', sourceDigest: full.digest, sourceType: 'typed-table', formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, null, 2));
+    }
+}
+
+test('C2 review F1 includes frozen-registry refusals in actual M16 members, export and native input', opts, async () => {
+    await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) SELECT 'q'||n,$1,$2,'g',1,'P2','Question '||n,true FROM generate_series(51,100)n", [user.id, project.id]);
+    await addReviewRound({ id: 'refusal', date: '2026-10-03', refusals: 50 });
+    const { readGeoSelection } = await import('../src/geoReadScope.mjs');
+    const input = { round: 'refusal', viewId: 'V08', metricId: 'M-16', timeGrain: 'round' }, selected = await readGeoSelection(store, project, { round: 'refusal' });
+    const domain = selected.computed.cells.find(cell => cell.metricId === 'M-16' && cell.scope === 'pool' && cell.pool === 'P2' && cell.rival === 'Rival');
+    assert.equal(domain.numerator, 20);
+    assert.equal(domain.denominator, 100);
+    const full = await freezeSelectedGeoAnalysis(store, project, input), rival = full.rows.find(row => row.dimensions.entityKey === 'fixed-rival' && row.dimensions.period === 'selected');
+    assert.equal(rival.values.current.value, domain.value);
+    assert.equal(rival.values.current.metric.denominator, 100);
+    assert.equal(rival.values.eligible.value, 100);
+    assert.equal(rival.values.unknown.value, 0);
+    for (const columnKey of ['current', 'pairedOwn']) {
+        const member = rival.values[columnKey].members;
+        const pages = await Promise.all([0, 20, 40, 60, 80].map(offset => service.analysisMembers(user, project.id, { selectionRef: member.selectionRef, ...member.view, rowKey: member.rowKey, columnKey, expectedDigest: member.expectedDigest, limit: 20, offset })));
+        const items = pages.flatMap(page => page.items);
+        assert.deepEqual(items.map(item => item.snapshotId).sort(), Array.from({ length: 100 }, (_, index) => `refusal-${index + 1}`).sort());
+        assert.equal(items.filter(item => item.status === 'refusal').length, 50);
+    }
+    await freezeReviewSelection(full, 'V08-refusal');
+});
+
+test('C2 review F2 actual registry expansion charts and members use the exact paired own cohort', opts, async () => {
+    await addReviewRound({ id: 'own-only', date: '2026-10-04', evaluationBasis: { product, competitors: [], owned: basis.owned }, ownPositive: 50 });
+    await addReviewRound({ id: 'expanded', date: '2026-10-05' });
+    const full = await freezeSelectedGeoAnalysis(store, project, { from: '2026-10-04', to: '2026-10-05', viewId: 'V08', metricId: 'M-16', timeGrain: 'day' });
+    const rival = full.rows.find(row => row.dimensions.entityKey === 'fixed-rival' && row.dimensions.period === 'selected');
+    assert.equal(full.rows.find(row => row.dimensions.own && row.dimensions.period === 'selected').values.current.value, 60);
+    assert.equal(rival.values.current.value, 40);
+    assert.equal(rival.values.pairedOwn.value, 20);
+    assert.deepEqual(full.chart.cells.map(cell => [cell.rowKey, cell.columnKey, cell.value]), [[rival.key, 'pairedOwn', 20], [rival.key, 'current', 40]]);
+    const ownSeries = full.chart.series.find(series => series.own), rivalSeries = full.chart.series.find(series => !series.own);
+    assert.equal(ownSeries.comparisonKey, rivalSeries.comparisonKey);
+    assert.deepEqual(ownSeries.values, [null, 20]);
+    assert.deepEqual(rivalSeries.values, [null, 40]);
+    for (const cell of full.chart.cells) {
+        const member = cell.members;
+        const page = await service.analysisMembers(user, project.id, { selectionRef: member.selectionRef, ...member.view, rowKey: member.rowKey, columnKey: member.columnKey, expectedDigest: member.expectedDigest, limit: 50 });
+        assert.deepEqual(page.items.map(item => item.snapshotId).sort(), Array.from({ length: 50 }, (_, index) => `expanded-${index + 1}`).sort());
+    }
+    await freezeReviewSelection(full, 'V08-registry-expansion');
+});
