@@ -64,3 +64,42 @@ test('C3 repeated quote occurrences remain distinct and conflicting classificati
  const absent=verifyJudgement({assessmentComplete:true,statements:[]},buildJudgeInput(input('No product named.')),input('No product named.'));
  assert.equal(Object.hasOwn(absent,'recommendationExpressions'),false);
 });
+
+const support=(quote,entity,conditionQuote,claimId,claimVersion,evidenceQuote)=>({statementQuote:quote,entity,conditionQuote,claimId,claimVersion,evidenceQuote,relation:'supports_nonrecommendation'});
+test('C3 F1 rejects cross-entity or unrelated-statement evidence borrowed through a broad quote',()=>{
+ const beta={...claim,id:'beta-contra',quote:'Beta is contraindicated during pregnancy.',statement:'Beta is contraindicated during pregnancy.'};
+ const storage={...claim,id:'alpha-storage',quote:'Alpha should be stored at room temperature.',statement:'Alpha should be stored at room temperature.'};
+ for(const [text,basis,condition] of [['Do not choose Alpha. '+beta.quote,beta,null],['Do not choose Alpha during pregnancy. '+storage.quote,storage,'during pregnancy']]){
+  const args={...input(text),claims:[basis]};
+  for(const supplied of [undefined,support(basis.quote,'Alpha',condition,basis.id,3,basis.quote),support(text,'Alpha',condition,basis.id,3,basis.quote)]){
+   const expression=item(text,'Alpha','reasonable_nonrecommendation',{conditionQuote:condition,claimRefs:[{claimId:basis.id,claimVersion:3}],...(supplied?{nonrecommendationBasis:supplied}:{})});
+   const out=verifyJudgement({assessmentComplete:true,statements:[{text:basis.quote,verdict:'correct',claim:'C1',evidence:basis.quote}],recommendationExpressions:extraction([expression])},buildJudgeInput(args),args);
+   assert.equal(out.recommendationExpressions.items[0].state,'unknown');
+   assert.equal(out.recommendationExpressions.coverage,'partial');
+   assert.equal(out.statements[0].verdict,'correct');
+  }
+ }
+});
+test('C3 F2 only retains recommendation order when the verbatim ordinal token agrees with the declared number',()=>{
+ for(const [quote,position,positionQuote,positionToken] of [['Alpha is recommended.',99,'Alpha',undefined],['First choice: Alpha.',99,'First choice: Alpha.',undefined],['First choice: Alpha.',99,'First choice: Alpha.','First'],['10. Alpha recommended.',1,'10. Alpha recommended.','1'],['Alpha is recommended.',1,'Alpha','Alpha']]){
+  const out=judge(quote,[item(quote,'Alpha','recommended',{explicitPosition:position,positionQuote,positionToken})]);
+  assert.equal(out.recommendationExpressions.items[0].explicitPosition,null);
+ }
+ for(const [quote,position,positionToken] of [['First choice: Alpha.',1,'First'],['第十二顺位推荐 Alpha。',12,'第十二'],['The 99th recommendation is Alpha.',99,'99th']]){
+  const out=judge(quote,[item(quote,'Alpha','recommended',{explicitPosition:position,positionQuote:quote,positionToken})]);
+  assert.equal(out.recommendationExpressions.items[0].explicitPosition,position);
+ }
+ const list=judge('1. Alpha\n2. Beta',[item('1. Alpha','Alpha','mention_only',{explicitPosition:1,positionQuote:'1. Alpha',positionToken:'1'})]);
+ assert.equal(list.recommendationExpressions.items[0].explicitPosition,null);
+});
+test('C3 F3 exact longest-name ownership excludes substring aliases while retaining independent same-answer occurrences',()=>{
+ for(const [quote,entities,expected] of [['AlphaBeta is recommended.',['AlphaBeta'],['AlphaBeta']],['AlphaBeta and Alpha are recommended.',['AlphaBeta'],['Alpha','AlphaBeta']],['甲牌增强 is recommended.',['甲牌增强'],['甲牌增强']],['甲牌增强与甲牌均可考虑。',['甲牌增强'],['甲牌','甲牌增强']]]){
+  const short=quote.includes('Alpha')?'Alpha':'甲牌';
+  const args={...input(quote),product:{brandName:short},entities};
+  const items=[item(quote,short,'recommended'),...entities.map(entity=>item(quote,entity,'recommended'))];
+  const out=verifyJudgement({assessmentComplete:true,statements:[],entities,recommendationExpressions:extraction(items)},buildJudgeInput(args),args);
+  assert.deepEqual(out.recommendationExpressions.items.map(expression=>expression.entity),expected);
+ }
+ const substring=judge('AlphaBeta is recommended.',[item('AlphaBeta is recommended.','Alpha','recommended')]);
+ assert.equal(substring.recommendationExpressions.items.length,0);
+});
