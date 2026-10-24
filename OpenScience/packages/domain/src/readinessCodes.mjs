@@ -128,10 +128,10 @@ export const READINESS_ERROR_MESSAGES_ZH = Object.freeze({
   openviking_skill_missing: 'OpenViking 里缺少官方编译技能，自动安装没有成功，知识编译暂停。',
   openviking_skill_drifted: 'OpenViking 里的官方编译技能和本版本固定的内容不一致，知识编译暂停；请核对后重新安装。',
   openviking_skill_source_drifted: '随版本发布的官方编译技能文件和固定的摘要对不上，没有安装；请核对发布内容。',
-  openviking_shim_unreachable: 'OpenViking 的编译身份转发程序没有应答，知识编译暂停；请查看该容器。',
-  openviking_shim_absent: 'OpenViking 的编译请求没有经过身份转发程序，知识编译暂停；请检查它的配置和启动入口。',
-  openviking_shim_unprobed: '官方编译技能还没有就绪，所以还没有检查编译身份转发程序。',
-  openviking_shim_probe_unreadable: '检查编译身份转发程序时没有读到任务编号，知识编译暂停。',
+  openviking_compile_unconfigured: 'OpenViking 没有可用的编译运行时（内置机器人没有启动，或它的配置没有生效），知识编译暂停；请检查机器人的开关和渲染出的配置。',
+  openviking_compile_unprobed: '官方编译技能还没有就绪，所以还没有检查编译运行时。',
+  openviking_compile_probe_unexpected: 'OpenViking 的编译检查没有得到预期的结果（身份没有传到编译运行时，或它没有应答），知识编译暂停；请查看该容器的日志。',
+  openviking_compile_probe_unreadable: '检查编译运行时时没有读到任务编号，知识编译暂停。',
   // The engine's model path (`openVikingModelCaller.mjs`): what the gateway answers the engine, and what readiness shows for it.
   openviking_model_budget_exhausted: 'OpenViking 这一天的模型预算已经用完，新的记忆提取和知识编译会被拒绝；可以调高预算，或等额度恢复。',
   // The engine volume's copy (`openVikingBackupReadiness.mjs`, `checks.backup.openviking`): notices, never a red check.

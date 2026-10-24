@@ -5,7 +5,7 @@ import { createHash, createHmac } from "node:crypto";
  * the `viking://` roots every module of ours addresses.
  *
  * Hidden knowledge: these values are written in four places that cannot import
- * each other — the compose file (mounts, the entrypoint, the health check), the
+ * each other — the compose file (mounts, the health check), the
  * rendered `ov.conf` (`scripts/ops/configure-production-state.mjs`), the control
  * plane's startup self-check and the two modules built on the client (resources
  * and sessions). A path that differed in one of them is the silent kind of
@@ -35,12 +35,6 @@ export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
 export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   "profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts",
 ]);
-
-/** The identity shim the entrypoint starts beside the server, and the loopback port `compile_api.base_url` names. */
-export const OPENVIKING_SHIM_PATH = "/opt/evimed-shim/identity_shim.py";
-export const OPENVIKING_SHIM_PORT = 18791;
-/** The entrypoint wrapper: the shim, then the image's own entrypoint as PID 1. */
-export const OPENVIKING_ENTRYPOINT_PATH = "/opt/evimed-shim/entrypoint.sh";
 
 /** Where the account-shared skills are installed; a compile names one as `<root>/<name>`. */
 export const OPENVIKING_SKILLS_ROOT = "viking://agent/skills";
