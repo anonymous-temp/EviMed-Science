@@ -115,6 +115,21 @@ class GeoToolDefinitionTests(unittest.TestCase):
 
 
 class GeoReadTests(_GatewayCase):
+    def test_metric_matrix_and_round_descriptors_survive_the_native_tool_boundary(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
+        for selector in [
+            {"viewId": "V02", "timeGrain": "round", "dimension": "engine"},
+            {"viewId": "V05", "entityKind": "generic", "entityKey": "Preserved generic", "dimension": "group"},
+        ]:
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "success")
+            self.assertEqual(_Gateway.seen[-1]["body"]["filter"], selector)
+        sent = len(_Gateway.seen)
+        for field, value in [("timeGrain", "year"), ("entityKind", "market"), ("entityKey", 4)]:
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": {"viewId": "V05", field: value}})
+            self.assertEqual(result["status"], "error")
+        self.assertEqual(len(_Gateway.seen), sent)
+
     def test_diagnosis_progress_follows_its_page_cursor_without_losing_the_round(self):
         _Gateway.answers["read"] = (200, {"data": {"roundId": "round_one", "cells": [{"jobId": "job_first"}],
             "page": {"total": 51, "more": True, "nextOffset": 50}}})

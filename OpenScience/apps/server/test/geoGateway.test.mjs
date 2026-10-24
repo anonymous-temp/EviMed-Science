@@ -82,6 +82,18 @@ async function serve(t, handler) {
 
 const on = { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [], geoSocialTimeoutMs: 2_000 };
 
+test('selected analysis descriptors pass intact and cannot leak into another read or frozen input', async t => {
+  const { geo, calls } = geoDouble(on);
+  const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  for (const filter of [{ viewId: 'V02', timeGrain: 'round', dimension: 'engine' }, { viewId: 'V05', dimension: 'group', entityKind: 'generic', entityKey: 'Preserved generic' }]) {
+    assert.equal((await post('read', { what: 'analysis', filter })).status, 200);
+    const forwarded = calls.at(-1)[3];
+    for (const [key, value] of Object.entries(filter)) assert.equal(forwarded[key], value);
+  }
+  for (const filter of [{ timeGrain: 'round' }, { entityKind: 'generic', entityKey: 'name' }]) assert.equal((await post('read', { what: 'snapshots', filter })).status, 400);
+  assert.equal((await post('read', { what: 'analysis', filter: { planContextRef: `gpc_${'a'.repeat(64)}`, timeGrain: 'round' } })).status, 400);
+});
+
 test("exact member continuation can reach every observation in a bounded selection", async (t) => {
   const { geo, calls } = geoDouble(on);
   const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
