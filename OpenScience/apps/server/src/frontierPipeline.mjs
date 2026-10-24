@@ -2163,6 +2163,7 @@ export class FrontierPipeline {
         const rows = (await client.query(`SELECT i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags,
             i.safety_alert, i.lane, i.lang, i.title_raw, i.score_total, i.verification, i.selected, i.selected_rule,
             i.primary_source_id, i.event_id, length(btrim(coalesce(i.summary_zh, ''))) > 0 AS summarized,
+            (to_jsonb(i)->'event_selection'->>'addsValue')::boolean AS adds_value,
             s.authority AS source_authority, s.source_type AS source_source_type, t.publication_types,
             ${frontierBesideSelectedSql("i")} AS beside_selected
           FROM evimed_frontier.items i
@@ -2171,11 +2172,11 @@ export class FrontierPipeline {
           WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2`, [start, end])).rows;
         if (!rows.length) return;
         const eventIds = [...new Set(rows.map((/** @type {any} */ row) => row.event_id).filter((id) => id != null).map(String))];
-        /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null }>>} */
+        /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null, selected: boolean }>>} */
         const events = {};
         if (eventIds.length) {
           const members = (await client.query(`SELECT ei.event_id, i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type,
-              i.flags, i.safety_alert, i.lane
+              i.flags, i.safety_alert, i.lane, i.selected
             FROM evimed_frontier.event_items ei
             JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
             JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
@@ -2183,7 +2184,7 @@ export class FrontierPipeline {
           for (const member of members) {
             const key = String(member.event_id);
             const list = events[key] ?? [];
-            list.push({ id: String(member.id), genre: frontierMixGenre(member), evidenceType: member.evidence_type ?? null });
+            list.push({ id: String(member.id), genre: frontierMixGenre(member), evidenceType: member.evidence_type ?? null, selected: member.selected === true });
             events[key] = list;
           }
         }
@@ -2200,6 +2201,7 @@ export class FrontierPipeline {
               && !frontierJournalWithoutAbstract({ source, flags })
               && !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote,
             summarized: row.summarized === true, besideSelected: row.beside_selected === true,
+            addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null,
             eventId: row.event_id == null ? null : String(row.event_id),
           };
         });

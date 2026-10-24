@@ -65,6 +65,14 @@ test('merge rules: a roundup never; a news rewrite and an X post of a paper give
     { verdict: null, paperId: null }, 'a review or an opinion piece is no paper a story rewrites')
   assert.deepEqual(frontierMixMergeVerdict({ genre: 'news' }, [{ id: 'x', genre: 'preprint' }]).verdict, 'paper-rewrite')
   assert.deepEqual(frontierMixMergeVerdict({ genre: 'industry' }, [paper]), { verdict: null, paperId: 'p' })
+  // A news report stands beside its paper only once the paper is selected and the event's grouping call said it adds something.
+  const selectedPaper = { ...paper, selected: true }
+  assert.deepEqual(frontierMixMergeVerdict({ genre: 'news', addsValue: true }, [selectedPaper]), { verdict: null, paperId: 'p' })
+  assert.deepEqual(frontierMixMergeVerdict({ genre: 'news', addsValue: true }, [paper]).verdict, 'paper-rewrite', 'never over an unselected paper')
+  assert.deepEqual(frontierMixMergeVerdict({ genre: 'news', addsValue: null }, [selectedPaper]).verdict, 'paper-rewrite', 'unjudged is a rewrite')
+  assert.deepEqual(frontierMixMergeVerdict({ genre: 'social', addsValue: true }, [selectedPaper]).verdict, 'paper-discussion', 'a post never')
+  assert.deepEqual(frontierMixMergeVerdict({ genre: 'news' }, [{ id: 'q', genre: 'paper' }, { id: 's', genre: 'paper', selected: true }]).paperId, 's',
+    'the selected paper is the one named')
 })
 
 test('the line is the bar: above it a group takes places to its ceiling; research is capped at 45 % of the day', () => {

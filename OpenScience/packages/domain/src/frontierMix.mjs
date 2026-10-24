@@ -23,11 +23,12 @@
  * - **Safety alerts are always in** and count against nothing (`safety-bypass`, the pipeline's own rule). An operator's
  *   pin counts against nothing either.
  * - **The per-source cap** (3 a day, 5 for an authority-5 journal) binds every rule here, as it bound the line.
- * - **Merge rules** (`frontierMixMergeVerdict`): a roundup is never selected; a news rewrite of a paper in the paper's
- *   event is never selected over it, and neither is an X post announcing it — the post is discussion, counted by the
- *   event's heat; when either of them would have cleared the line, the paper takes the place (`event-primary`) if it is
- *   in the medium band. A Chinese 解读 of the paper may stand beside it (Chinese value), whatever the event's
- *   one-selected-report rule said.
+ * - **Merge rules** (`frontierMixMergeVerdict`): a roundup is never selected; a news report of a paper in the paper's
+ *   event is never selected over it — only beside the paper once the paper is selected, and only when the event's
+ *   grouping call judged that it adds something (`addsValue`); an X post announcing a paper is never selected — the post
+ *   is discussion, counted by the event's heat. When either of them would have cleared the line, the paper takes the
+ *   place (`event-primary`) if it is in the medium band. A Chinese 解读 of the paper may stand beside it (Chinese value),
+ *   whatever the event's one-selected-report rule said.
  * - **Selection is sticky** (the pipeline's rule): what is already selected counts against its group, its source and
  *   the day, and is never taken back here.
  *
@@ -133,8 +134,8 @@ export function frontierMixSourceCap(source) {
 }
 
 /**
- * @typedef {{ id: string, genre: string, evidenceType?: string | null }} FrontierMixEventMember
- * Another published report of the candidate's event (any day, enabled source).
+ * @typedef {{ id: string, genre: string, evidenceType?: string | null, selected?: boolean }} FrontierMixEventMember
+ * Another published report of the candidate's event (any day, enabled source), and whether it is selected.
  */
 
 /** Whether a member is the event's paper: a research paper or preprint, not a review or an opinion. @param {FrontierMixEventMember} member */
@@ -145,15 +146,18 @@ function isPaper(member) {
 /**
  * What the merge rules say about a candidate, given the other reports of its event: excluded (`roundup`,
  * `paper-rewrite`, `paper-discussion`) with the paper it gives way to, allowed beside the paper (`beside-paper`: a
- * Chinese 解读 of it), or nothing to say.
- * @param {{ genre: string, zh?: boolean }} candidate @param {readonly FrontierMixEventMember[]} [members]
+ * Chinese 解读 of it), or nothing to say. A news report stands beside its paper only when the paper is selected and the
+ * event's grouping call judged it adds something (`addsValue: true`); otherwise it is the paper's rewrite.
+ * @param {{ genre: string, zh?: boolean, addsValue?: boolean | null }} candidate @param {readonly FrontierMixEventMember[]} [members]
  * @returns {{ verdict: 'roundup' | 'paper-rewrite' | 'paper-discussion' | 'beside-paper' | null, paperId: string | null }}
  */
 export function frontierMixMergeVerdict(candidate, members = []) {
   if (/** @type {readonly string[]} */ (FRONTIER_MIX_NEVER).includes(candidate.genre)) return { verdict: 'roundup', paperId: null }
-  const paper = members.find(isPaper) ?? null
+  const paper = members.find((member) => isPaper(member) && member.selected === true) ?? members.find(isPaper) ?? null
   if (!paper) return { verdict: null, paperId: null }
-  if (candidate.genre === 'news') return { verdict: 'paper-rewrite', paperId: paper.id }
+  if (candidate.genre === 'news') {
+    return paper.selected === true && candidate.addsValue === true ? { verdict: null, paperId: paper.id } : { verdict: 'paper-rewrite', paperId: paper.id }
+  }
   if (candidate.genre === 'social') return { verdict: 'paper-discussion', paperId: paper.id }
   if (candidate.genre === 'commentary' && candidate.zh === true) return { verdict: 'beside-paper', paperId: paper.id }
   return { verdict: null, paperId: paper.id }
@@ -173,11 +177,13 @@ export function frontierMixMergeVerdict(candidate, members = []) {
  *   eligible: boolean,
  *   summarized: boolean,
  *   besideSelected?: boolean,
+ *   addsValue?: boolean | null,
  *   eventId?: string | null,
  * }} FrontierMixCandidate
  * One published item of the day. `eligible`: verified, not demoted, not retracted, not a journal's paper without its
  * abstract (what the line already asked). `summarized`: it has a Chinese summary (asked of every place under the line).
- * `besideSelected`: the event's one-selected-report rule named another report it adds nothing to (fr-events).
+ * `besideSelected`: the event's one-selected-report rule named another report it adds nothing to (fr-events); `addsValue`:
+ * that rule's verdict as given (`event_selection.addsValue`), null when none was asked.
  * `rule`: the `selected_rule` of an item already selected.
  */
 
@@ -457,7 +463,8 @@ export function frontierMixReplay(rows, { threshold, timeZone = 'Asia/Shanghai',
   for (const row of rows) {
     if (row.event_id == null) continue
     const members = events[String(row.event_id)] ?? []
-    members.push({ id: String(row.public_id), genre: genreOf(row), evidenceType: row.evidence_type ?? null })
+    // Each day is selected from nothing in the replay: a member is selected only as a safety alert.
+    members.push({ id: String(row.public_id), genre: genreOf(row), evidenceType: row.evidence_type ?? null, selected: row.safety_alert === true })
     events[String(row.event_id)] = members
   }
   /** @type {Map<string, Record<string, any>[]>} */
@@ -493,6 +500,7 @@ export function frontierMixReplay(rows, { threshold, timeZone = 'Asia/Shanghai',
         eligible: verified && !flags(row).includes('retracted') && !(row.source_type === 'journal' && flags(row).includes('no-abstract')),
         summarized: verified,
         besideSelected: row.same_event_item_id != null,
+        addsValue: typeof row.adds_value === 'boolean' ? row.adds_value : null,
         eventId: row.event_id == null ? null : String(row.event_id),
       }
     })

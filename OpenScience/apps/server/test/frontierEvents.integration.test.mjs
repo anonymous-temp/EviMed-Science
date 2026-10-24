@@ -7,7 +7,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_GROUP_INSTRUCTIONS, FRONTIER_GROUP_PAIR_INSTRUCTIONS } from "../src/frontierEventGrouping.mjs";
 import { frontierItemFollowups } from "../src/frontierEventReading.mjs";
-import { FrontierEvents } from "../src/frontierEvents.mjs";
+import { FrontierEvents, frontierEventCounterparts } from "../src/frontierEvents.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { insertSource } from "./helpers/frontierFixtures.mjs";
 import { eventOf, insertComposedItem, metaValue, resetFrontier, testEmbedder, vectorAt } from "./helpers/frontierComposeFixtures.mjs";
@@ -668,6 +668,53 @@ test("one selected item per event: a report that adds nothing to the selected on
   assert.equal((await eventOf(database, second.id)).id, (await eventOf(database, fresh.id)).id);
   const untouched = (await database.query("SELECT selected, event_selection FROM evimed_frontier.items WHERE id = $1", [second.id])).rows[0];
   assert.deepEqual([untouched.selected, untouched.event_selection], [true, null]);
+});
+
+test("merge rules (ct-mix): once a paper is in the event its news rewrite and an X post leave the selected feed; a Chinese 解读 stands beside it and the two point at each other", options, async () => {
+  await insertSource(database, "xfeed", { name: "X 医学账号", source_type: "media", authority: 3, owner_entity: "x-account" });
+  await insertSource(database, "wx", { name: "医学界", source_type: "media", authority: 2, owner_entity: "yxj" });
+  const quiet = stubEditor({ selection: { addsValue: false, reason: "已入选报道已写出主要结果" } });
+  const valuable = stubEditor({ selection: { addsValue: true, reason: "补充了数据" } });
+  // A rewrite selected by the line before the paper arrived: an event of its own.
+  const rewrite = await insertComposedItem(database, { sourceId: "reuters", sourceType: "media", title: "Drug cuts events, study finds", registryIds: ["NCT77"],
+    selected: true, selectedRule: "threshold", scoreTotal: 90, visibleAt: hoursAgo(10), timelineAt: hoursAgo(10) });
+  await layer({ editor: valuable, embedder: null }).clusterPending();
+  // The paper joins it, unselected (under the line): the rewrite gives way to it whatever the paper's own verdict said.
+  const paper = await insertComposedItem(database, { sourceId: "nejm", title: "Paper", registryIds: ["NCT77"], clusterKeys: [], scoreTotal: 70,
+    visibleAt: hoursAgo(8), timelineAt: hoursAgo(8) });
+  const events = layer({ editor: valuable, embedder: null });
+  const before = await metaValue(database, "content_version");
+  await events.clusterPending();
+  const row = async (/** @type {string} */ id) => (await database.query("SELECT selected, selected_rule, same_event_item_id FROM evimed_frontier.items WHERE id = $1", [id])).rows[0];
+  assert.equal((await eventOf(database, paper.id)).id, (await eventOf(database, rewrite.id)).id);
+  assert.deepEqual(Object.values(await row(rewrite.id)).map(String), ["false", "null", paper.id], "never selected over the paper; it names it");
+  assert.deepEqual((await database.query("SELECT reason FROM evimed_frontier.item_changes WHERE item_id = $1", [rewrite.id])).rows.map((change) => change.reason), ["same-event"]);
+  assert.ok(await metaValue(database, "content_version") > before);
+  assert.equal(events.counters.mergeUnselected, 1);
+  // An X post announcing it, though its grouping call said it adds something: discussion, never selected.
+  const post = await insertComposedItem(database, { sourceId: "xfeed", sourceType: "media", title: "New in NEJM: the drug cuts events", registryIds: ["NCT77"],
+    clusterKeys: [], selected: true, selectedRule: "threshold", scoreTotal: 99, visibleAt: hoursAgo(6), timelineAt: hoursAgo(6) });
+  await database.query("UPDATE evimed_frontier.items SET platform = 'x', channel = 'x' WHERE id = $1", [post.id]);
+  await events.clusterPending();
+  assert.deepEqual([(await row(post.id)).selected, String((await row(post.id)).same_event_item_id)], [false, paper.id]);
+  // A Chinese 解读 the grouping call found to add nothing stays beside the paper; an operator's pin and a safety alert are never touched.
+  await database.query("UPDATE evimed_frontier.items SET selected = true, selected_rule = 'threshold' WHERE id = $1", [paper.id]);
+  const reading = await insertComposedItem(database, { sourceId: "wx", sourceType: "media", lang: "zh", title: "NEJM 重磅：新药降低心血管事件",
+    registryIds: ["NCT77"], clusterKeys: [], selected: true, selectedRule: "zh-target", scoreTotal: 78, visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  await database.query("UPDATE evimed_frontier.items SET platform = 'wechat', channel = 'wechat' WHERE id = $1", [reading.id]);
+  const gate = layer({ editor: quiet, embedder: null });
+  await gate.clusterPending();
+  assert.deepEqual(Object.values(await row(reading.id)).map(String), ["true", "zh-target", "null"], "a Chinese 解读 of the paper is Chinese value beside it");
+  assert.equal(gate.counters.besidePaper, 1);
+  const counterparts = await frontierEventCounterparts(database, [reading.id, paper.id, rewrite.id]);
+  assert.deepEqual(counterparts.get(reading.id)?.map((entry) => [entry.id, entry.relation]), [[paper.id, "paper"]]);
+  assert.deepEqual(counterparts.get(paper.id)?.map((entry) => [entry.id, entry.relation]), [[reading.id, "reading"]]);
+  assert.equal(counterparts.has(rewrite.id), false, "a rewrite points at nothing");
+  // A news report with value stands beside a selected paper: joined after the paper was selected, judged as adding something.
+  const subgroup = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Subgroup data", registryIds: ["NCT77"], clusterKeys: [],
+    selected: true, selectedRule: "threshold", scoreTotal: 88, visibleAt: hoursAgo(2), timelineAt: hoursAgo(2) });
+  await layer({ editor: valuable, embedder: null }).clusterPending();
+  assert.equal((await row(subgroup.id)).selected, true);
 });
 
 test("an item without a vector is recalled by its words: the same policy from two outlets meets, a stranger does not", options, async () => {
