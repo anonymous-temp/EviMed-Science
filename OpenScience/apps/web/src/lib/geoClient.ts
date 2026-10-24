@@ -555,6 +555,10 @@ export interface GeoSourceRow {
 
 /** One answer of the latest round that cites a source (`GET …/sources/:sourceId`). */
 export interface GeoSourceAnswer {
+  /** Preserved snapshot text is readable even when no judgment exists. */
+  answerText?: string | null;
+  /** Only the selected snapshot facts; null means unknown, not an inferred verdict. */
+  judgment?: unknown | null;
   snapshotId: string;
   engine: GeoEngine;
   questionId: string | null;

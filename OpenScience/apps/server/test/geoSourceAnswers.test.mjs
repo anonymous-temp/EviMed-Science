@@ -46,7 +46,7 @@ test("the counts of the answers that cite a site are the row's tally over them",
   assert.deepEqual(countsOf([], "news.example.org"), { cited: 0, wrongOurs: 0, mentionsOurs: 0 });
   assert.deepEqual(countsOf(answers, "news.example.org"), { cited: 2, wrongOurs: 1, mentionsOurs: 2 }, "an answer that does not cite the site is not counted");
   assert.equal(tallySources(answers).get("news.example.org")?.byEngine.kimi.cited, 1);
-  assert.equal(citedDomain({ domain: "WWW.News.Example.org" }), "news.example.org");
+  assert.equal(citedDomain({ url: "https://WWW.News.Example.org/a" }), "news.example.org");
 });
 
 test('a source exposes page 251 in the default complete universe and paginates only after ranking',()=>{
@@ -63,4 +63,5 @@ test('source tally and page identity follow the preserved URL, never absent or c
  assert.equal(citedDomain(items[2].citations[0]),'','a domain annotation without a usable URL remains unobservable');
  assert.equal(countsOf(items,'news.example').cited,2);assert.equal(countsOf(items,'another.example').cited,0);
  assert.equal(pagesCited(items,'news.example').total,2);
+ for(const url of ['https://www.','javascript:alert(1)','https://user:pass@news.example/a','not-a-url'])assert.equal(citedDomain({url,domain:'news.example'}),'');
 });

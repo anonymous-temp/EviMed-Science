@@ -103,3 +103,17 @@ test('source categories reject row 20001 before histories or a trailing citation
  assert.throws(()=>buildGeoSourceAnalysis(selected,{viewId:'V18',sourceLevel:'page',topN:15}),error=>error.status===422&&error.code==='geo_read_filter_invalid');
  assert.equal(tailVisited,false);
 });
+
+test('the admitted upper bound keeps every round zero, unknown timestamp and exact source member without rescanning the cohort',async()=>{
+ const {buildGeoSourceAnalysis}=await import('../src/geoAnalysisSources.mjs');
+ let roundReads=0;const count=20000;
+ const rows=Array.from({length:count},(_,n)=>({...observation(`upper-${n}`,[citation(`https://news.example/page?n=${n}`)],{askedAt:null,facts:null}),get roundId(){roundReads++;return `r${n%120}`;}}));
+ const rounds=Array.from({length:120},(_,n)=>({id:`r${n}`,kind:n%2?'weekly':'baseline'})),kinds=new Map(rounds.map(round=>[round.id,round.kind]));
+ const built=buildGeoSourceAnalysis({computed:{balance:{deduped:rows}},selection:{methodVersion:'upper'},rounds},{viewId:'V18',sourceLevel:'page',topN:15});
+ assert.equal(built.rows.length,count);assert.equal(built.definition.unknownTimeAnswers,count);assert.ok(roundReads<count*20,`round reads ${roundReads} must remain linear in the selected cohort`);
+ for(const row of built.rows){const item=built.memberItems.get(`${row.key}:answers`)[0],round=item.roundId;
+  assert.equal(row.values.answers.value,1);assert.equal(row.values.pages.value,1);assert.equal(row.dimensions.history.length,120);
+  assert.ok(row.dimensions.history.every(point=>point.kind===kinds.get(point.roundId)&&point.citedAnswers===(point.roundId===round?1:0)));
+  assert.equal(item.askedAt,null);assert.equal(item.judgment,null);assert.equal(item.source.pages[0].sourceKey,row.dimensions.sourceKey);
+ }
+});

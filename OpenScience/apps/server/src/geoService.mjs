@@ -1603,10 +1603,14 @@ export class GeoService {
     };
     const cited = pagesCited(citing, domain, { limit: Infinity });
     const detail = new Map((citing.length === 0 ? [] : (await this.store.query(`SELECT s.id, q.text AS question_text,
-        CASE WHEN f.failure_mode = 'wrong_ours' THEN s.answer_text END AS answer_text,
+        s.answer_text,
         CASE WHEN f.failure_mode = 'wrong_ours' THEN f.statements END AS statements
-      FROM evimed_geo.snapshots s JOIN evimed_geo.facts f ON f.snapshot_id = s.id LEFT JOIN evimed_geo.questions q ON q.id = s.question_id
-      WHERE s.geo_project_id = $1 AND s.id = ANY($2::text[])`, [project.id, citing.map((answer) => answer.id)])).rows).map((/** @type {any} */ entry) => [String(entry.id), entry]));
+      FROM evimed_geo.snapshots s
+        LEFT JOIN evimed_geo.facts f ON f.snapshot_id=s.id AND f.geo_project_id=s.geo_project_id AND f.user_id=s.user_id
+        LEFT JOIN evimed_geo.questions q ON q.id=s.question_id AND q.geo_project_id=s.geo_project_id AND q.user_id=s.user_id
+      WHERE s.geo_project_id=$1 AND s.user_id=$3 AND s.id=ANY($2::text[])`, [project.id, citing.map((answer) => answer.id),project.userId])).rows).map((/** @type {any} */ entry) => [String(entry.id), entry]));
+    // Use the admitted snapshot facts only; an optional current assessment overlay cannot make an unjudged snapshot judged.
+    const selectedFacts=new Map(selected.rows.map(member=>[member.snapshotId,member.facts??null]));
     const answers = citing.map((answer) => {
       const entry = detail.get(answer.id);
       const statements = Array.isArray(entry?.statements) ? entry.statements : [];
@@ -1615,6 +1619,7 @@ export class GeoService {
       const view = { answerText: text(entry?.answer_text), citations: answer.citations };
       return {
         snapshotId: answer.id, engine: answer.engine, questionId: answer.questionId, question: text(entry?.question_text), askedAt: iso(answer.askedAt),
+        answerText:text(entry?.answer_text), judgment:selectedFacts.get(answer.id)??null,
         mentionsOurs: answer.mentionsOurs, misstated: answer.wrongOurs,
         wrong: sentences.map((sentence) => ({ text: sentence, fromThisSite: sentenceSource(view, sentence, domain) })),
       };

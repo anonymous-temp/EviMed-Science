@@ -25,9 +25,22 @@ import { citedFor } from "./geoErrors.mjs";
 
 const list = (/** @type {unknown} */ value) => (Array.isArray(value) ? value : []);
 
-/** The site a cited link belongs to: lower case, `www.` folded. @param {any} citation */
+/** A usable preserved URL is the source authority; optional domain metadata cannot replace it.
+ * Exact lower-case host, with leading www folded, and the existing query-preserving page key.
+ * @param {any} citation
+ */
+export function sourceCitation(citation) {
+  try {
+    const url=new URL(citation?.url);
+    if (!['https:','http:'].includes(url.protocol)||url.username||url.password) return null;
+    const domain=url.hostname.toLowerCase().replace(/^www\./u,''),key=pageKey(citation.url);
+    return domain&&key?{domain,key}:null;
+  } catch { return null; }
+}
+
+/** An unlinked citation remains unobservable, even when it carries a domain annotation. @param {any} citation */
 export function citedDomain(citation) {
-  return String(citation?.domain ?? "").toLowerCase().replace(/^www\./u, "");
+  return sourceCitation(citation)?.domain??"";
 }
 
 /** The distinct sites one answer cites. @param {unknown} citations @returns {Set<string>} */
@@ -167,10 +180,9 @@ export function pagesCited(citing, domain, { limit = Infinity, offset = 0 } = {}
     /** @type {Set<string>} */
     const seen = new Set();
     for (const citation of answer.citations) {
-      const url = String(citation?.url ?? "").trim().split("#", 1)[0];
-      if (!url || citedDomain(citation) !== wanted) continue;
-      const key = pageKey(url);
-      if (!key) continue;
+      const reference=sourceCitation(citation);
+      if (!reference||reference.domain!==wanted) continue;
+      const url=String(citation.url).trim().split("#",1)[0],key=reference.key;
       const page = byPage.get(key) ?? { url, titles: new Map(), cited: 0, wrongOurs: 0 };
       const title = String(citation?.title ?? "").replace(/\s+/gu, " ").trim();
       if (title) page.titles.set(title, (page.titles.get(title) ?? 0) + 1);

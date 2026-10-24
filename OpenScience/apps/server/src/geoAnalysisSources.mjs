@@ -1,7 +1,8 @@
 /** Complete preserved citation universe over the selected source-answer cohort. No retrieval inference or live URL resolution. */
 import { createHash } from 'node:crypto';
 import { documentExportDigest, GEO_SOURCE_KIND_LABELS_ZH } from '@evimed/domain';
-import { pageKey } from './geoSourceAnswers.mjs';
+import { sourceCitation } from './geoSourceAnswers.mjs';
+import { HttpError } from './security.mjs';
 const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
 const groupBy = (items, key) => {
     const groups = new Map();
@@ -14,18 +15,9 @@ const groupBy = (items, key) => {
     return groups;
 };
 const unique = items => [...new Map(items.map(item => [item.id, item])).values()];
-const domainOf = url => url.hostname.toLowerCase().replace(/^www\./u, '');
 const answerItem = row => ({
     id: row.snapshotId, unit: 'answers', snapshotId: row.snapshotId, questionId: row.questionId, roundId: row.roundId, engine: row.engine, repeatIndex: row.repeatIndex, askedAt: row.askedAt ?? null, status: row.status, judgment: row.assessmentFacts ?? row.facts ?? null, citations: row.citations ?? []
 });
-/** Preserve the existing source identity: exact lower-case host, with leading www folded; no parent-domain inference. */
-function sourceCitation(citation) {
-    try {
-        const url = new URL(citation?.url);
-        if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return null;
-        return {domain:domainOf(url), key:pageKey(citation.url)};
-    } catch { return null; }
-}
 /** Complete relevant catalogue keys, before type/name filters are applied. @param {any} selected */
 export function selectedSourceDomains(selected) {
     return [...new Set(selectedSourceObservations(selected).flatMap(row => (row.citations??[]).flatMap(citation => {
@@ -40,7 +32,7 @@ export function selectedSourceObservations(selected) {
 /** @param {any} selected @param {any} view @param {any} [context] */
 export function buildGeoSourceAnalysis(selected, view, context = {}) {
     const observations = selectedSourceObservations(selected), catalog = new Map((context.sources ?? []).map(source => [String(source.domain).toLowerCase().replace(/^www\./u, ''), source]));
-    const bySnapshot = new Map(), byDomain = new Map(), byPage = new Map(), pairs = [], rowBySnapshot = new Map(observations.map(row => [row.snapshotId, row])), sourceTypes = new Set();
+    const bySnapshot = new Map(), byDomain = new Map(), byPage = new Map(), pairs = [], rowBySnapshot = new Map(observations.map(row => [row.snapshotId, row])), sourceTypes = new Set(), categories = new Map();
     for (const row of observations) {
         const seen = new Map();
         for (const citation of row.citations ?? []) {
@@ -67,6 +59,12 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
                 continue;
             if (view.sourceSearch && !`${pair.domain} ${pair.name ?? ''} ${pair.originalUrls.join(' ')} ${pair.titles.join(' ')}`.toLowerCase().includes(view.sourceSearch.toLowerCase()))
                 continue;
+            const category=view.viewId==='V17'?pair.sourceType:view.sourceLevel==='page'?pair.sourceKey:pair.domain;
+            if (!categories.has(category)) {
+                if (categories.size>=20000) throw new HttpError(422,'geo_read_filter_invalid','Narrow the scope to at most 20,000 analysis rows.');
+                categories.set(category,[]);
+            }
+            categories.get(category).push(pair);
             pairs.push(pair);
             for (const [map, key] of [[bySnapshot, row.snapshotId], [byDomain, pair.domain], [byPage, pair.sourceKey]]) {
                 if (!map.has(key))
@@ -75,6 +73,8 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
             }
         }
     }
+    const roundMetadata=new Map(selected.rounds.map(round=>[round.id,round.kind??null]));
+    const zeroHistory=[...new Set(observations.map(row=>row.roundId))].sort().map(roundId=>Object.freeze({roundId,kind:roundMetadata.get(roundId)??null,citedAnswers:0}));
     const pageContext = batch => [...groupBy(batch, pair => pair.sourceKey)].sort(([a], [b]) => a.localeCompare(b)).map(([key, matching]) => ({
         sourceKey: key, domain: matching[0].domain, sourceType: matching[0].sourceType, originalUrls: [...new Set(matching.flatMap(pair => pair.originalUrls))].sort(), titles: [...new Set(matching.flatMap(pair => pair.titles))].sort(), snapshotIds: [...new Set(matching.map(pair => pair.snapshotId))].sort()
     }));
@@ -95,8 +95,8 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
     }));
     const denominator = bySnapshot.size;
     function append(key, label, batch, dimensions) {
-        const answers = answerMembers(batch), pages = pageMembers(batch), pairItems = pairMembers(batch), rounds = [...new Set(batch.map(pair => pair.row.roundId))].sort();
-        const history = [...new Set(observations.map(row => row.roundId))].sort().map(roundId => ({ roundId, kind: selected.rounds.find(round => round.id === roundId)?.kind ?? null, citedAnswers: new Set(batch.filter(pair => pair.row.roundId === roundId).map(pair => pair.snapshotId)).size }));
+        const answers=answerMembers(batch),pages=pageMembers(batch),pairItems=pairMembers(batch),answersByRound=groupBy(answers,answer=>answer.roundId),rounds=[...answersByRound.keys()].sort();
+        const history=zeroHistory.map(zero=>answersByRound.has(zero.roundId)?{...zero,citedAnswers:answersByRound.get(zero.roundId).length}:zero);
         const times = answers.map(answer => answer.askedAt).filter(Boolean).sort(), row = {
             key: hash([view.viewId, key]), label, metricId: null, dimensions: {
                 ...dimensions, originalUrls: [...new Set(batch.flatMap(pair => pair.originalUrls))].sort(), firstObserved: times[0] ?? null, lastObserved: times.at(-1) ?? null, history, cooccurrenceOnly: true
@@ -104,7 +104,7 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
         };
         const members = {
             answers, coverage: answers, pairs: pairItems, pages, rounds: rounds.map(roundId => ({
-                id: roundId, unit: 'rounds', roundId, citingAnswers: answers.filter(answer => answer.roundId === roundId)
+                id: roundId, unit: 'rounds', roundId, citingAnswers: answersByRound.get(roundId)
             })), wrong: answers.filter(answer => rowBySnapshot.get(answer.snapshotId)?.failureMode === 'wrong_ours'), mentions: answers.filter(answer => rowBySnapshot.get(answer.snapshotId)?.mentionsOurs === true), knownTime: answers.filter(answer => answer.askedAt), unknownTime: answers.filter(answer => !answer.askedAt)
         };
         for (const column of columns) {
@@ -117,21 +117,9 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
         rows.push(row);
         return row;
     }
-    if (view.viewId === 'V17') {
-        const types = new Map();
-        for (const pair of pairs) {
-            if (!types.has(pair.sourceType))
-                types.set(pair.sourceType, []);
-            types.get(pair.sourceType).push(pair);
-        }
-        for (const [type, batch] of types)
-            append(type, GEO_SOURCE_KIND_LABELS_ZH[type] ?? (type === 'unknown' ? '类型未知' : type), batch, { kind: 'source_type', sourceType: type });
-    }
-    else {
-        for (const [key, batch] of view.sourceLevel === 'page' ? byPage : byDomain)
-            append(key, view.sourceLevel === 'page' ? batch[0].originalUrls[0] : key, batch, {
-                kind: view.sourceLevel === 'page' ? 'source_page' : 'source_domain', domain: batch[0].domain, sourceKey: view.sourceLevel === 'page' ? key : null, sourceId: batch[0].sourceId, sourceType: batch[0].sourceType
-            });
+    for (const [key,batch] of categories) {
+        if (view.viewId==='V17') append(key,GEO_SOURCE_KIND_LABELS_ZH[key]??(key==='unknown'?'类型未知':key),batch,{kind:'source_type',sourceType:key});
+        else append(key,view.sourceLevel==='page'?batch[0].originalUrls[0]:key,batch,{kind:view.sourceLevel==='page'?'source_page':'source_domain',domain:batch[0].domain,sourceKey:view.sourceLevel==='page'?key:null,sourceId:batch[0].sourceId,sourceType:batch[0].sourceType});
     }
     rows.sort((a, b) => b.values.answers.value - a.values.answers.value || b.values.pairs.value - a.values.pairs.value || a.key.localeCompare(b.key));
     const chartRows = rows.slice(0, view.topN ?? 15), chartColumn = view.viewId === 'V17' ? 'coverage' : 'pairs', cells = chartRows.map(row => ({
@@ -152,14 +140,7 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
         }, contextualBasis: context.sources?.length ? [{
                 kind: 'source_catalogue', id: 'sources', version: null, digest: hash(context.sources), temporalBasis: 'current_context'
             }] : [], dependencies: { sources: context.sources ?? [] }, availability: { status: rows.length ? 'ready' : 'empty', reasons: ['preserved_citations_partial_judgement', 'source_relationship_cooccurrence_only', 'unlinked_citations_unobservable'], remedy: null }, definition: {
-            unit: view.viewId === 'V17' ? 'answers' : 'source_pairs', methodVersion: selected.selection.methodVersion, sourceTypes: [...sourceTypes].sort(), countingRule: 'Distinct admitted selected valid/refusal answers; partial judgement retains usable preserved citations. Each type is a distinct-answer union; type coverage overlaps and is not a composition. Query-preserving source keys deduplicate repeated pages within one answer.', denominatorRule: 'Type coverage divides by filtered cited answers. Concentration divides by all filtered distinct (snapshot, source-key) pairs, including the complete remainder. Wrong/brand columns are co-occurrence, never source causation. Catalogue labels are current context; no live redirects or inferred alias merges.', knownTimeAnswers: citedAnswers.filter(answer => answer.askedAt).length, unknownTimeAnswers: citedAnswers.filter(answer => !answer.askedAt).length, refusedAnswers: observations.filter(row => row.status === 'refusal').length, linklessAnswers: observations.filter(row => (row.citations ?? []).length && !bySnapshot.has(row.snapshotId) && !(row.citations ?? []).some(citation => {
-                try {
-                    return ['http:', 'https:'].includes(new URL(citation.url).protocol);
-                }
-                catch {
-                    return false;
-                }
-            })).length, unlinkedCitationCapability: 'unobservable', maps: { snapshots: bySnapshot.size, domains: byDomain.size, pages: byPage.size }
+            unit: view.viewId === 'V17' ? 'answers' : 'source_pairs', methodVersion: selected.selection.methodVersion, sourceTypes: [...sourceTypes].sort(), countingRule: 'Distinct admitted selected valid/refusal answers; partial judgement retains usable preserved citations. Each type is a distinct-answer union; type coverage overlaps and is not a composition. Query-preserving source keys deduplicate repeated pages within one answer.', denominatorRule: 'Type coverage divides by filtered cited answers. Concentration divides by all filtered distinct (snapshot, source-key) pairs, including the complete remainder. Wrong/brand columns are co-occurrence, never source causation. Catalogue labels are current context; no live redirects or inferred alias merges.', knownTimeAnswers: citedAnswers.filter(answer => answer.askedAt).length, unknownTimeAnswers: citedAnswers.filter(answer => !answer.askedAt).length, refusedAnswers: observations.filter(row => row.status === 'refusal').length, linklessAnswers: observations.filter(row => (row.citations ?? []).length && !bySnapshot.has(row.snapshotId) && !(row.citations ?? []).some(sourceCitation)).length, unlinkedCitationCapability: 'unobservable', maps: { snapshots: bySnapshot.size, domains: byDomain.size, pages: byPage.size }
         }
     };
 }
