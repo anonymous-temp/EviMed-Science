@@ -9885,8 +9885,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   }
   if (knowledge?.pages) {
     addMetric(lines, "open_science_knowledge_compile_total",
-      "What the knowledge-page scheduler did since this process started: rounds finished, compile tasks submitted and failed, steps postponed.", "counter",
-      [["rounds", "round"], ["compiles", "submitted"], ["failed", "failed"], ["deferred", "deferred"]]
+      "What the knowledge-page scheduler did since this process started: rounds finished, compile tasks submitted and failed, steps postponed, wiki compiles asked again because they wrote only an index.", "counter",
+      [["rounds", "round"], ["compiles", "submitted"], ["failed", "failed"], ["deferred", "deferred"], ["indexOnlyRetries", "index_only_retry"]]
         .map(([key, event]) => ({ value: Number(knowledge.pages[key] ?? 0), labels: { event } })));
     addMetric(lines, "open_science_knowledge_mirror_total",
       "Compiled files the product ledger mirrored from the engine since this process started, and what was laid on them: a person's blocks put back, write-backs (and those the engine refused because the page had changed), quotation labels.", "counter",

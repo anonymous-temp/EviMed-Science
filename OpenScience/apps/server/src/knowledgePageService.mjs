@@ -68,6 +68,15 @@ const QUOTATION_INSTRUCTION = "For every claim-level source link, put the suppor
   + "Keep the file name of every source link exactly as it is, including its .md.";
 const GRAPH_INSTRUCTION = "Use general entity types that fit the material; when it is clinical or scientific, types such as drug, disease, gene, trial, outcome and guideline are welcome.";
 /** One compile of the graph (2026-10-13, live) wrote a whole second graph one level down, under `<target>/<target name>/`. */
+/**
+ * Whether a finished compile is asked once more: a wiki round that ended `completed` with at most one typed page in its target
+ * (the index alone) and was not already asked again. About two compiles in nine did that on the v0.5.1.1 lab (2026-10-23).
+ * @param {{ tree: string, status: string, typed: number, retried: boolean }} round
+ */
+export function asksAgainForIndexOnly({ tree, status, typed, retried }) {
+  return tree === "wiki" && status === "completed" && !retried && Number(typed) <= 1;
+}
+
 const LAYOUT_INSTRUCTION = "Write every file directly under the target directory — index.md, the type directories and relations.jsonl at its top level — and never create a subdirectory named after the target.";
 const LANGUAGE_NAMES = new Map([["zh", "Simplified Chinese"], ["zh-cn", "Simplified Chinese"], ["zh-hans", "Simplified Chinese"], ["zh-tw", "Traditional Chinese"],
   ["zh-hk", "Traditional Chinese"], ["zh-hant", "Traditional Chinese"], ["en", "English"], ["ja", "Japanese"], ["ko", "Korean"], ["fr", "French"], ["de", "German"],
@@ -141,7 +150,7 @@ export class KnowledgePageService {
   constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, libraryText = null, now = () => new Date(), report = () => {} }) {
     this.config = config; this.documents = documents; this.jobs = jobs; this.sources = sources; this.store = store;
     this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.now = now; this.report = report;
-    this.counters = { rounds: 0, failed: 0, compiles: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, writeBackConflicts: 0, deferred: 0,
+    this.counters = { rounds: 0, failed: 0, compiles: 0, indexOnlyRetries: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, writeBackConflicts: 0, deferred: 0,
       quotationsPresent: 0, quotationsAbsent: 0, tokens: 0, misplaced: 0 };
   }
 
@@ -808,6 +817,20 @@ export class KnowledgePageService {
         warnings: (task?.result?.warnings ?? []).slice(0, 5).map((/** @type {string} */ line) => line.slice(0, 300)), ...mirrored };
       const failed = outcome.status !== "completed";
       if (failed) this.counters.failed += 1;
+      // About two compiles in nine end `completed` with only index.md written (the v0.5.1.1 lab, 2026-10-23): from documents enough
+      // for a wiki that is a round that did not happen. It is asked once more, never twice; the second answer stands whatever it is.
+      if (asksAgainForIndexOnly({ tree, status: outcome.status, typed: mirrored.typed, retried: Boolean(held.retried) })
+        && (await this.#readableSources(userId, projectId)).length >= this.config.knowledgePagesMinSources) {
+        const again = await this.#submit(user, project, "wiki", state, (Number(held.attempt) || 0) + 1);
+        this.counters.indexOnlyRetries += 1;
+        await this.#updateState(userId, projectId, (value) => {
+          if (!value.run) return null;
+          value.run.summary = { ...value.run.summary, wikiIndexOnly: outcome };
+          value.run.wiki = { ...again, attempt: (Number(held.attempt) || 0) + 1, retried: true };
+          return value;
+        });
+        return defer("knowledge_compile_running", POLL_MS);
+      }
       await this.#updateState(userId, projectId, (value) => {
         if (!value.run) return null;
         value.pages = { ...value.pages, [tree]: mirrored.typed };
