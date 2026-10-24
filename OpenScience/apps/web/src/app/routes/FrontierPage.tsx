@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { getWebProjectId } from "@/lib/apiClient";
 import {
-  reportFrontierExposure,
   fetchFrontierForYou,
   fetchFrontierHotBoard,
   fetchFrontierStatus,
@@ -26,11 +25,13 @@ import {
   type FrontierHotWindow,
   type FrontierItem,
   type FrontierItemState,
+  type FrontierItemsPage,
   type FrontierItemsQuery,
   type FrontierStatus,
   type FrontierTagRef,
   type FrontierWindow,
 } from "@/lib/frontierClient";
+import { serveFrontierList, trackFrontierFilter, trackFrontierItemAction, useFrontierListTracking, type FrontierTrackSurface } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
 import { PageShell } from "@/components/layout/PageShell";
 import { frontierToolbar, type PageView } from "@/components/frontier/FrontierControls";
@@ -52,6 +53,10 @@ import { ZoneDirectoryBody, readZoneScope, useZoneDirectory, zoneDirectoryContro
 
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
 const STATUS_POLL_MS = 120_000;
+
+/** The control of the list each filter is, as a `filter-change` names it — never what it was set to (frontierTracking). */
+const FILTER_CONTROLS: Record<keyof FrontierFilterValue, string> = { channel: "channel", lane: "lane", specialties: "specialty", tag: "tag", evidence: "evidence",
+  starred: "starred", unread: "unread", window: "window", byTime: "sort" };
 
 /** The views whose list the feed's filters narrow: a tag chosen anywhere else opens 全部 with it. */
 const FEED_VIEWS: ReadonlySet<PageView> = new Set(["selected", "all", "following"]);
@@ -152,6 +157,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const zoneScope = readZoneScope(params.get("scope"));
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
   const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || (follow && follow !== "all"));
+  /** Where the list on screen is, as its events name it (frontierTracking): the feed, a search or the follows. */
+  const listSurface: FrontierTrackSurface = q ? "search" : view === "following" ? "follows" : "feed";
+  /** Where a card's star or hide is taken: 与我相关 or the list. */
+  const cardSurface: FrontierTrackSurface = view === "foryou" ? "for-you" : listSurface;
 
   const query = useMemo<FrontierItemsQuery>(() => ({
     view: view === "all" || view === "following" ? "all" : "selected",
@@ -197,11 +206,16 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
 
   const [listError, setListError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [fresh, setFresh] = useState<{ count: number; listing: Listing } | null>(null);
+  const [fresh, setFresh] = useState<{ count: number; listing: Listing; page: FrontierItemsPage } | null>(null);
   const cache = useRef(new Map<string, Listing>());
   const generation = useRef(0);
   /** The content version the list on screen was read at, or the last one checked. */
   const seenVersion = useRef<string | null>(null);
+
+  /** What a list answer served, registered for its impressions and opens: its list id and each entry's slot, from `offset`. */
+  const serve = useCallback((surface: FrontierTrackSurface, page: FrontierItemsPage, offset = 0) => {
+    serveFrontierList(surface, page.listId, page.items.map((item) => ({ id: item.id, slot: page.slots?.[item.id] ?? null })), { offset });
+  }, []);
 
   const show = useCallback((next: Listing) => {
     cache.current.set(next.key, next);
@@ -218,6 +232,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     try {
       const page = await listFrontierItems({ ...query, limit: FEED_PAGE_SIZE });
       if (current !== generation.current) return;
+      serve(listSurface, page);
       let restored = page;
       const position = restore.current;
       if (position?.query === params.toString()) {
@@ -225,7 +240,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         for (let index = 1; index < position.pages && restored.nextCursor; index++) {
           const next = await listFrontierItems({ ...query, cursor: restored.nextCursor, limit: FEED_PAGE_SIZE });
           if (current !== generation.current) return;
-          if (next.restarted) { restored = next; restoredPages = 1; break; }
+          if (next.restarted) { restored = next; restoredPages = 1; serve(listSurface, next); break; }
+          serve(listSurface, next, restored.items.length);
           const known = new Set(restored.items.map((item) => item.id));
           restored = { ...next, related: restored.related, items: [...restored.items, ...next.items.filter((item) => !known.has(item.id))] };
           restoredPages += 1;
@@ -249,13 +265,13 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         });
         restore.current = undefined;
       } else pages.current = 1;
-      show({ key, exposure: restored.exposure, items: restored.items, nextCursor: restored.nextCursor, version: restored.version, loadedAt: Date.now(), related: restored.related });
+      show({ key, items: restored.items, nextCursor: restored.nextCursor, version: restored.version, loadedAt: Date.now(), related: restored.related });
     } catch (error) {
       if (current !== generation.current) return;
       if (frontierAbsence(error) === "off") { onOff(); return; }
       setListError(frontierErrorMessage(error));
     }
-  }, [key, query, show, onOff, params]);
+  }, [key, query, show, onOff, params, serve, listSurface]);
 
   useEffect(() => {
     setLoadingMore(false);
@@ -284,14 +300,16 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       if (page.restarted) {
         pages.current = 1;
         // The list changed under the cursor: page one again, in place.
-        show({ key, exposure: page.exposure, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related });
+        serve(listSurface, page);
+        show({ key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related });
         scrollToListTop();
         return;
       }
       pages.current += 1;
+      serve(listSurface, page, listing.items.length);
       patchListing((list) => {
         const known = new Set(list.items.map((item) => item.id));
-        return { ...list, exposures: [...(list.exposures ?? (list.exposure ? [list.exposure] : [])), ...(page.exposure ? [page.exposure] : [])], items: [...list.items, ...page.items.filter((item) => !known.has(item.id))], nextCursor: page.nextCursor };
+        return { ...list, items: [...list.items, ...page.items.filter((item) => !known.has(item.id))], nextCursor: page.nextCursor };
       });
     } catch (error) {
       if (current === generation.current) toast.error(frontierErrorMessage(error));
@@ -314,7 +332,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       const top = listing.items[0] ? Date.parse(listing.items[0].timelineAt) : 0;
       const count = page.items.filter((item) => !known.has(item.id) && Date.parse(item.timelineAt) >= top).length;
       if (count > 0) {
-        setFresh({ count, listing: { key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related } });
+        setFresh({ count, page, listing: { key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related } });
       }
     }, () => { /* a hint, not a read: it is asked again when the list or the version next changes */ });
     return () => { active = false; };
@@ -325,33 +343,14 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const [forYou, setForYou] = useState<ForYouState>({ kind: "loading" });
   const [forYouAttempt, setForYouAttempt] = useState(0);
   useEffect(() => {
-    const exposures = view === "foryou" && forYou.kind === "ready"
-      ? [forYou.forYou?.exposure].filter((value) => value !== undefined)
-      : listing?.exposures ?? (listing?.exposure ? [listing.exposure] : []);
-    if (!exposures.length || typeof IntersectionObserver === "undefined") return;
-    const sent = new Set<string>();
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).flatMap((entry) => {
-        const id = (entry.target as HTMLElement).dataset.frontierItem;
-        const exposure = exposures.find((snapshot) => id && snapshot.candidateIds.includes(id));
-        const position = id && exposure
-          ? Array.from(pageRoot.current?.querySelectorAll("[data-frontier-item]") ?? []).indexOf(entry.target) : -1;
-        if (!id || position < 0 || sent.has(id)) return [];
-        sent.add(id);
-        return [{ id, position, token: exposure!.token }];
-      });
-      for (const token of new Set(visible.map((item) => item.token))) {
-        void reportFrontierExposure(token, visible.filter((item) => item.token === token).map(({id,position}) => ({id,position}))).catch(() => {});
-      }
-    }, { threshold: 0.5 });
-    pageRoot.current?.querySelectorAll("[data-frontier-item]").forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, [listing, view, forYou]);
-  useEffect(() => {
     if (!ready || view !== "foryou") return;
     let active = true;
     fetchFrontierForYou().then(
-      (answer: FrontierForYou | null) => { if (active) setForYou({ kind: "ready", forYou: answer }); },
+      (answer: FrontierForYou | null) => {
+        if (!active) return;
+        if (answer) serveFrontierList("for-you", answer.listId, answer.items.map((entry) => ({ id: entry.item.id, slot: entry.slot ?? null })));
+        setForYou({ kind: "ready", forYou: answer });
+      },
       (error: unknown) => { if (active) setForYou({ kind: "failed", message: frontierErrorMessage(error) }); },
     );
     return () => { active = false; };
@@ -375,6 +374,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     setItemState(item.id, { starred: next });
     try {
       setItemState(item.id, await (next ? starFrontierItem(item.id) : unstarFrontierItem(item.id)));
+      trackFrontierItemAction(next ? "star" : "unstar", item.id, { surface: cardSurface });
     } catch (error) {
       setItemState(item.id, { starred: !next });
       toast.error(frontierErrorMessage(error));
@@ -399,7 +399,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     };
     patchListing((list) => ({ ...list, items: list.items.filter((entry) => entry.id !== item.id) }));
     patchForYou((items) => items.filter((entry) => entry.item.id !== item.id));
-    const hidden = hideFrontierItem(item.id).then(() => true, (error: unknown) => {
+    const surface = cardSurface;
+    const hidden = hideFrontierItem(item.id).then(() => { trackFrontierItemAction("hide", item.id, { surface }); return true; }, (error: unknown) => {
       restore();
       toast.error(frontierErrorMessage(error));
       return false;
@@ -410,7 +411,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         onClick: () => {
           restore();
           void hidden
-            .then((done) => (done ? unhideFrontierItem(item.id) : null))
+            .then((done) => (done ? unhideFrontierItem(item.id).then((state) => { trackFrontierItemAction("unhide", item.id, { surface }); return state; }) : null))
             .catch((error: unknown) => toast.error(frontierErrorMessage(error)));
         },
       },
@@ -433,6 +434,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         toast.error("暂时不能存入知识库");
         return;
       }
+      trackFrontierItemAction("save", item.id, { surface: cardSurface });
       toast.success("已存入知识库");
     } catch (error) {
       toast.error(frontierErrorMessage(error));
@@ -463,7 +465,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     if (!ready || !hotNeeded) return;
     let active = true;
     fetchFrontierHotBoard(hotAsked).then(
-      (board) => { if (active) setHot((current) => ({ ...current, [hotAsked]: { board, error: null } })); },
+      (board) => {
+        if (!active) return;
+        if (board) serveFrontierList("hot", board.listId, board.events.map((event) => ({ id: event.id, kind: "event" as const, slot: null })));
+        setHot((current) => ({ ...current, [hotAsked]: { board, error: null } }));
+      },
       (error: unknown) => {
         if (active) setHot((current) => ({ ...current, [hotAsked]: { board: current[hotAsked]?.board ?? null, error: frontierErrorMessage(error) } }));
       },
@@ -482,15 +488,27 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     if (!ready || !safetyNeeded) return;
     let active = true;
     listFrontierItems({ view: "all", safety: true, window: "3d", limit: 50 }).then(
-      (page) => { if (active) setSafety(recentAlerts(page.items)); },
+      (page) => {
+        if (!active) return;
+        serve("safety", page);
+        setSafety(recentAlerts(page.items));
+      },
       () => { if (active) setSafety("failed"); },
     );
     return () => { active = false; };
-  }, [ready, safetyNeeded, safetyAttempt]);
+  }, [ready, safetyNeeded, safetyAttempt, serve]);
 
   const daily = useFrontierDaily(view === "daily" ? day : null, ready && view === "daily");
   const week = readDay(params.get("week"));
   const weekly = useFrontierWeekly(week, ready && view === "weekly");
+  // What an issue served: its list id and each item's slot, in the order it shows them (lead, safety, sections).
+  useEffect(() => {
+    for (const [surface, issue] of [["daily", daily.issue], ["weekly", weekly.issue]] as const) {
+      if (!issue?.listId) continue;
+      const shown = [issue.lead?.item, ...issue.safety, ...issue.sections.flatMap((section) => section.items)].filter((item): item is FrontierItem => Boolean(item));
+      serveFrontierList(surface, issue.listId, shown.map((item) => ({ id: item.id, slot: issue.slots?.[item.id] ?? null })));
+    }
+  }, [daily.issue, weekly.issue]);
   // 证据专区: the directory, read while its view is open; the search box searches the zones there. A reader coming back from a zone
   // finds as many pages as they had read.
   const zones = useZoneDirectory({
@@ -525,6 +543,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const searchOrigin = useRef<PageView | null>(null);
 
   const setView = (next: PageView) => {
+    if (next !== view) trackFrontierFilter("view", listSurface);
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
     // A view is a fresh look: the search, the day, the time range and the zones' scope belong to the view they were chosen in.
@@ -554,6 +573,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   }, [requestParam, requestable, setAsking, setParams]);
 
   const setFilters = (change: Partial<FrontierFilterValue>) => {
+    const current: FrontierFilterValue = { channel, lane, specialties, tag, evidence, starred, unread, window: windowFilter, byTime };
+    for (const [name, value] of Object.entries(change) as Array<[keyof FrontierFilterValue, unknown]>) {
+      if (value !== undefined && JSON.stringify(value) !== JSON.stringify(current[name]) && FILTER_CONTROLS[name]) trackFrontierFilter(FILTER_CONTROLS[name], listSurface);
+    }
     const updated = new URLSearchParams(params);
     const assign = (name: string, value: string | boolean | undefined) => {
       if (value === undefined) return;
@@ -575,6 +598,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   };
 
   const setHotWindow = (next: FrontierHotWindow) => {
+    if (next !== hotWindow) trackFrontierFilter("window", "hot");
     const updated = new URLSearchParams(params);
     if (next === "current") updated.delete("window"); else updated.set("window", next);
     setParams(updated, { replace: true });
@@ -592,6 +616,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
    * its filters; anywhere else (与我相关, a search) it opens 全部 with it. The search lets go, and the view it began in comes back.
    */
   const chooseTag = (chosen: FrontierTagRef) => {
+    trackFrontierFilter("tag", view === "foryou" ? "for-you" : listSurface);
     rememberTagName(chosen.slug, chosen.name);
     const updated = new URLSearchParams(params);
     const origin = searchOrigin.current;
@@ -625,6 +650,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       // The zones' own search: it stays in 证据专区.
       if (text) updated.set("q", text); else updated.delete("q");
     } else if (text) {
+      // A search's words never leave the page: only that one ran.
+      trackFrontierFilter("search", "search");
       if (!q) searchOrigin.current = view;
       updated.set("q", text);
       updated.set("view", "all");
@@ -683,6 +710,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     return () => window.removeEventListener(FRONTIER_LEAVING, remember);
   }, [params, expanded, view]);
 
+  // What is seen and opened in every list on the page (frontierTracking): observed again whenever what it shows changes.
+  useFrontierListTracking(pageRoot, [listing, view, forYou, hot, daily.issue, weekly.issue, safety, ready]);
+
   /* ---------------------------------------------------------- render */
 
   const card = (item: FrontierItem, grouped: boolean) => (
@@ -702,7 +732,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const clearFilters = () => setFilters({ ...NO_FILTERS, byTime: false });
 
   const feed = (
-    <FeedList
+    <div data-frontier-list={listSurface} className="contents"><FeedList
       view={view === "all" || view === "following" ? "all" : "selected"}
       q={q}
       filtered={filtered}
@@ -714,11 +744,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       loadingMore={loadingMore}
       renderItem={card}
       onRetry={() => void loadList(true)}
-      onFresh={() => { if (fresh) { pages.current = 1; show(fresh.listing); scrollToListTop(); } }}
+      onFresh={() => { if (fresh) { pages.current = 1; serve(listSurface, fresh.page); show(fresh.listing); scrollToListTop(); } }}
       onMore={() => void loadMore()}
       onAll={() => setView("all")}
       onClear={() => { clearFilters(); setDraft(""); }}
-    />
+    /></div>
   );
 
   const openWeek = (next: string) => setParams((current) => {
@@ -778,13 +808,14 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const main = (() => {
     switch (view) {
       case "hot":
-        return <HotBoard state={hot[hotWindow] ?? null} onRetry={() => setHotAttempt((value) => value + 1)} />;
+        return <div data-frontier-list="hot" className="contents"><HotBoard state={hot[hotWindow] ?? null} onRetry={() => setHotAttempt((value) => value + 1)} /></div>;
       case "weekly":
-        return <WeeklyView expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={weekly} onWeek={openWeek} />;
+        return <div data-frontier-list="weekly" className="contents"><WeeklyView expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={weekly} onWeek={openWeek} /></div>;
       case "daily":
-        return <DailyIssue expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={daily} onDay={openDay} />;
+        return <div data-frontier-list="daily" className="contents"><DailyIssue expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={daily} onDay={openDay} /></div>;
       case "foryou":
-        return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)} />;
+        return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)}
+          onOnboarded={() => setForYouAttempt((value) => value + 1)} />;
       case "following":
         // The followed evidence zones are the first group of the feed, not a block above its filters.
         return <FollowingView state={following} feed={feed} onAdd={() => setManageFollows(true)} />;
@@ -804,8 +835,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         return (
           <>
             <div className="space-y-4">
-              <SafetyStrip alerts={safety} onRetry={() => setSafetyAttempt((value) => value + 1)} onOpened={opened} />
-              {!q && !filtered && <HotCard events={hot.current?.board?.events ?? []} onOpenAll={() => setView("hot")} />}
+              <div data-frontier-list="safety" className="contents"><SafetyStrip alerts={safety} onRetry={() => setSafetyAttempt((value) => value + 1)} onOpened={opened} /></div>
+              {!q && !filtered && <div data-frontier-list="hot" className="contents"><HotCard events={hot.current?.board?.events ?? []} onOpenAll={() => setView("hot")} /></div>}
             </div>
             <div className="mt-8">{feed}</div>
           </>
@@ -826,6 +857,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       {ready ? main : <FrontierSkeleton />}
       {manageFollows && <Drawer title="管理关注" onClose={() => setManageFollows(false)}>
         <FrontierFollows selected={follow === "all" ? null : follow} onSelect={(id) => {
+          trackFrontierFilter("follow", "follows");
           setParams((current) => {
             const updated = new URLSearchParams(current);
             if (id) updated.set("follow", id); else updated.delete("follow");

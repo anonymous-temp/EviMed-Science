@@ -31,6 +31,7 @@ import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EXTERNAL, isSocialItem } from "@/components/frontier/frontierText";
 import { toast } from "@/lib/toast";
+import { useFrontierReadTracking } from "@/lib/frontierTracking";
 
 type ArticleState = { kind: "loading" } | { kind: "ready"; item: FrontierItemDetail } | { kind: "gone" } | { kind: "off" } | { kind: "error"; message: string };
 
@@ -91,6 +92,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   const wide = useWide();
   const prefix = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [textOpen, setTextOpen] = useState(false);
+  useFrontierReadTracking(item.id, { language, expanded: textOpen, url: item.url, state: item.state });
   const update = async (action: "star" | "hide") => {
     try {
       const next = await (action === "hide" ? hideFrontierItem(item.id) : item.state.starred ? unstarFrontierItem(item.id) : starFrontierItem(item.id));

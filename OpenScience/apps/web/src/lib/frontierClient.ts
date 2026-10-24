@@ -399,10 +399,15 @@ export interface FrontierItemsQuery {
   limit?: number;
 }
 
-export interface FrontierExposure { token: string; surface: string; policyRevisionId: string; candidateIds: string[] }
+/** Why an entry is where it is in a served list (contract C); a chronological list's entries have none. */
+export type FrontierSlot = "editorial" | "personal" | "must-see" | "explore";
+const FRONTIER_SLOT_WORDS = ["editorial", "personal", "must-see", "explore"] as const;
 
 export interface FrontierItemsPage {
-  exposure?: FrontierExposure;
+  /** The server's id of this answer: what an impression or an open names back (contract C). Absent from an older server. */
+  listId?: string | null;
+  /** Each entry's slot by item id. */
+  slots?: Record<string, FrontierSlot | null>;
   items: FrontierItem[];
   nextCursor: string | null;
   /** The content version the page was read at; compared with `/status`. */
@@ -523,11 +528,14 @@ export interface FrontierOpsTags {
  * so the block has nothing for them until they switch it on.
  */
 export interface FrontierForYou {
-  exposure?: FrontierExposure;
+  /** The server's id of this answer (contract C). */
+  listId?: string | null;
+  /** Show the onboarding card: the reader has neither answered nor skipped it, and the platform knows too little of them. */
+  onboarding?: boolean;
   state: "available" | "unavailable" | "off";
   basis: "vector" | "tags" | null;
   paused: boolean;
-  items: Array<{ item: FrontierItem; reason: { text: string; topic: string | null; memoryId: string | null } }>;
+  items: Array<{ item: FrontierItem; reason: { text: string; topic: string | null; memoryId: string | null }; slot?: FrontierSlot | null }>;
 }
 
 /** What makes an event's first-hand material first-hand: 「含原始论文」「含官方公告」…. */
@@ -579,6 +587,8 @@ export interface FrontierHotEvent {
  * month the moment it was computed, over the window from `since`.
  */
 export interface FrontierHotBoard {
+  /** The server's id of this answer, as this reader was served it (contract C). */
+  listId?: string | null;
   window: FrontierHotWindow;
   takenAt: string | null;
   since: string | null;
@@ -663,6 +673,9 @@ export interface FrontierFollowedZone {
  * `markdown` is the issue as it reads now — the institutions' names, no withdrawn item — ready to copy.
  */
 export interface FrontierDaily {
+  /** The server's id of this answer and each item's slot (contract C). */
+  listId?: string | null;
+  slots?: Record<string, FrontierSlot | null>;
   day: string;
   windowStart: string | null;
   windowEnd: string | null;
@@ -707,6 +720,17 @@ const count = (value: unknown): number => (typeof value === "number" && Number.i
 const strings = (value: unknown, max = 50): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim() !== "").slice(0, max) : []);
 const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? value as T : fallback);
 const orNull = <T extends string>(value: unknown, allowed: readonly T[]): T | null => (allowed.includes(value as T) ? value as T : null);
+
+/** Each served entry's slot by its id, from a list answer's raw entries (what `frontierTracking` registers). */
+function slotsOf(rows: unknown): Record<string, FrontierSlot | null> {
+  const slots: Record<string, FrontierSlot | null> = {};
+  for (const entry of Array.isArray(rows) ? rows : []) {
+    const row = record(entry);
+    const itemId = text(row?.id);
+    if (row && itemId) slots[itemId] = orNull(row.slot, FRONTIER_SLOT_WORDS);
+  }
+  return slots;
+}
 /** A whole number the server computed — a heat shown, hours on the list — or null when it sent none. */
 const whole = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null);
 /** A rank: a whole number from 1, or null. */
@@ -1081,9 +1105,9 @@ function parseItems(value: unknown): FrontierItem[] {
 
 function parseItemsPage(value: unknown, restarted: boolean): FrontierItemsPage {
   const raw = record(value) ?? {};
-  const exposure = record(raw.exposure);
   return {
-    exposure: exposure && text(exposure.token) ? exposure as unknown as FrontierExposure : undefined,
+    listId: text(raw.listId),
+    slots: slotsOf(raw.items),
     items: parseItems(raw.items),
     nextCursor: text(raw.nextCursor),
     version: version(raw.version),
@@ -1192,6 +1216,7 @@ function parseHotBoard(value: unknown, window: FrontierHotWindow): FrontierHotBo
   const raw = record(value) ?? {};
   const rows = Array.isArray(raw.events) ? raw.events : Array.isArray(raw.items) ? raw.items : [];
   return {
+    listId: text(raw.listId),
     window: oneOf(raw.window, FRONTIER_HOT_WINDOWS, window),
     takenAt: moment(raw.takenAt),
     since: moment(raw.since),
@@ -1285,7 +1310,11 @@ function parseDaily(value: unknown): FrontierDaily | null {
     const items = parseItems(section?.items);
     return items.length > 0 ? [{ lane, laneLabel: text(section?.laneLabel) ?? LANE_LABELS[lane] ?? "", items }] : [];
   });
+  const leadRaw = record(raw.lead)?.item;
   return {
+    listId: text(raw.listId),
+    slots: { ...slotsOf(leadRaw ? [leadRaw] : []), ...slotsOf(raw.safety),
+      ...Object.assign({}, ...(Array.isArray(raw.sections) ? raw.sections : []).map((section) => slotsOf(record(section)?.items))) },
     day,
     windowStart: moment(raw.windowStart),
     windowEnd: moment(raw.windowEnd),
@@ -1571,10 +1600,12 @@ export function fetchFrontierForYou(): Promise<FrontierForYou | null> {
       const item = parseFrontierItem(row?.item);
       const reason = record(row?.reason);
       const because = text(reason?.text);
-      return item && because ? [{ item, reason: { text: because, topic: text(reason?.topic), memoryId: text(reason?.memoryId) } }] : [];
+      return item && because ? [{ item, reason: { text: because, topic: text(reason?.topic), memoryId: text(reason?.memoryId) },
+        slot: orNull(row?.slot, FRONTIER_SLOT_WORDS) }] : [];
     }).slice(0, 8);
     return {
-      exposure: record(raw.exposure) && text(record(raw.exposure)?.token) ? raw.exposure as FrontierExposure : undefined,
+      listId: text(raw.listId),
+      onboarding: raw.onboarding === true,
       state: oneOf(raw.state ?? raw.status, ["available", "unavailable", "off"] as const, "off"),
       basis: orNull(raw.basis, ["vector", "tags"] as const),
       paused: raw.paused === true,
@@ -1739,10 +1770,6 @@ export async function setFrontierNotificationSwitch(key: FrontierNotificationSwi
     channels: current.channels, expectedRevision: current.revision,
   });
   return saved.switches[key] ?? saved.switches.frontier !== false;
-}
-
-export async function reportFrontierExposure(token: string, items: {id: string; position: number}[]): Promise<void> {
-  await productRequest("/frontier/exposures", "POST", { token, items });
 }
 
 export function markFrontierEventRead(eventId: string, mark: Record<string, string>): Promise<unknown> {

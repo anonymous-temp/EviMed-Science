@@ -5,6 +5,7 @@ import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem, type FrontierTagRef } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { trackFrontierItemAction } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
@@ -71,6 +72,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(itemMarkdown(item));
+      trackFrontierItemAction("share", item.id, { detail: "markdown" });
       toast.success("已复制");
     } catch {
       toast.error("没有复制成功");
@@ -80,7 +82,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     try { await addFrontierFollow({ kind, key, label, muted }); toast.success(muted ? "已屏蔽" : "已关注"); }
     catch (error) { toast.error(frontierErrorMessage(error)); }
   };
-  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } });
+  const research = () => { trackFrontierItemAction("research", item.id); navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } }); };
   const openEvent = () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); };
   const more: MenuEntry[] = [
     ...(reader ? [] : [{ label: "深入研究", onSelect: research }]),
