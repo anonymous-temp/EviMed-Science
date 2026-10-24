@@ -233,7 +233,7 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
           <div className="space-y-2">
             {event.changes?.map(change => <div key={change.id} className="text-ui">
               <p className="text-text"><span className="text-accent">{change.kind === "added" ? "新增报道" : "内容更新"} · </span>{change.title}</p>
-              {change.summary && <p className="mt-1 text-text-2">{change.summary}</p>}
+              {change.summary && <p data-prose="" className="mt-1 text-text-2">{change.summary}</p>}
             </div>)}
           </div>
         </Section>

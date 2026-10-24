@@ -107,7 +107,7 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  * | `data-fact-list` | `FactList` | the one key / value list |
  * | `data-state-screen` | `StateScreen` | a whole page's failure or wrong address |
  * | `data-master-detail` | `MasterDetail` | `split` or `single` |
- * | `data-prose` | `MarkdownViewer` | a document's own text; the walk does not call it an orphan sentence |
+ * | `data-prose` | `MarkdownViewer`, 前沿动态's cards, rows and reader | a document's or an item's own words; the walk calls it no orphan sentence and reads no back-office vocabulary in it |
  * | `data-show-more` | `ShowMore` | a long list read a page at a time |
  *
  * ```tsx

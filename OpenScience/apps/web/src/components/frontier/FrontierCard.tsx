@@ -196,7 +196,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
 
         <div className="flex gap-4">
           <div className="min-w-0 flex-1">
-            <h3 id={titleId} data-row-title className="mt-1.5 text-body font-semibold leading-6">
+            <h3 id={titleId} data-row-title data-prose="" className="mt-1.5 text-body font-semibold leading-6">
               <Link
                 to={articlePath(item.id)}
                 state={articleState}
@@ -212,7 +212,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
                 {item.title}
               </Link>
             </h3>
-            {item.summary && <p className="mt-1 line-clamp-2 max-w-measure whitespace-pre-line text-ui text-text-2 sm:line-clamp-3">{item.summary}</p>}
+            {item.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure whitespace-pre-line text-ui text-text-2 sm:line-clamp-3">{item.summary}</p>}
           </div>
           {/* The item's first picture, beside the title and not a second link to the same article: the release walk counts a
             * hidden duplicate link as a control without a name, and each picture height as one more kind of control. A

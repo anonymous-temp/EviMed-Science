@@ -260,7 +260,7 @@ function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
                   <p className="text-body font-semibold leading-6 text-text">
                     <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}/evidence/${encodeURIComponent(card.id)}`} className="hover:text-accent hover:underline">{card.title}</Link>
                   </p>
-                  {card.summary && <p className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{card.summary}</p>}
+                  {card.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{card.summary}</p>}
                 </div>
               </li>
             ))}
@@ -300,8 +300,8 @@ function DailyRow({ item, number, safety }: { item: FrontierItem; number: number
     <li className="flex gap-2 border-b border-border py-3">
       <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(number)}</span>
       <div className="min-w-0 flex-1">
-        <p data-row-title className="text-body font-semibold leading-6 text-text"><ArticleLink item={item}>{item.title}</ArticleLink></p>
-        {!safety && item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
+        <p data-row-title data-prose="" className="text-body font-semibold leading-6 text-text"><ArticleLink item={item}>{item.title}</ArticleLink></p>
+        {!safety && item.summary && <p data-prose="" className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
           {/* The feed card's own look for this action: a sized button here was the page's tenth kind of control. */}
