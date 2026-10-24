@@ -24,7 +24,13 @@ import { presentGeoAnalysis, freezeGeoAnalysisDocument } from '../../../../serve
 import { computeGeoSelection } from '../../../../server/src/geoReadScope.mjs';
 function domainView({count=50,viewId='V04',metricId='M-01',pool='P2',groupName='Same · imported name'}: {count?:number;viewId?:'V04'|'V05';metricId?:string;pool?:string;groupName?:string} = {}) {
   const rows=Array.from({length:count},(_,index)=>({snapshotId:`s${index}`,questionId:`q${index}`,engine:'deepseek',roundId:'r1',roundKind:'baseline',repeatIndex:0,status:'valid',pool,groupId:'g1',askedAt:'2026-10-01T00:00:00Z',facts:{brands:[],recommendedOurs:false,statements:[],checks:{judgementCoverage:{status:'complete'}}}}));
-  const metricOptions={engines:['deepseek','kimi'],samplingMode:'web'};
+  const metricOptions={
+    engines:['deepseek','kimi'],
+    samplingMode:'web',
+    competitors:[],
+    owned:{},
+    arms:{pilot:['g1'],control:[]},
+  };
   const selected={scope:{timeZone:'Asia/Shanghai'},selection:{reference:'gsel_visual',dataRevision:'visual',methodVersion:'visual',roundIds:['r1'],engines:metricOptions.engines,counts:{snapshots:rows.length}},rows,rounds:[{id:'r1',set_version:1}],questions:[],metricOptions,computed:computeGeoSelection(rows,metricOptions)};
   return presentGeoAnalysis(selected,{viewId,metricId},{allRows:true,groups:[{id:'g1',set_version:1,name:groupName}]}) as GeoAnalysisView;
 }
