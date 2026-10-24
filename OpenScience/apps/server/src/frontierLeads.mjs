@@ -231,7 +231,7 @@ export class FrontierLeads {
         if (!lead) continue;
         addresses += 1;
         this.counters.addresses += 1;
-        sent += await this.#handOver(lead, plan.trigger, [{ url: plan.url, title: null, snippet: null, publishedDate: null }], null);
+        sent += await this.#handOver(lead, plan.trigger, [{ url: plan.url, title: null, snippet: null, publishedDate: null }]);
         continue;
       }
       if (searched >= LEADS_PER_TICK) break;
@@ -254,7 +254,7 @@ export class FrontierLeads {
       this.counters.results += rows.length;
       const engines = Array.isArray(answer?.data?.engines) ? answer.data.engines : [];
       await this.database.query("UPDATE evimed_frontier.leads SET status = 'searched', cost_cny = $2 WHERE id = $1", [lead.id, frontierLeadCost(engines)]);
-      sent += await this.#handOver(lead, plan.trigger, plan.chineseOnly ? rows.filter((row) => isChineseTitle(row?.title)) : rows, plan.excludeHost ?? null);
+      sent += await this.#handOver(lead, plan.trigger, rows, { excludeHost: plan.excludeHost ?? null, chineseOnly: plan.chineseOnly === true });
     }
     this.lastTick = { at: now.toISOString(), searched, sent };
     return { searched, addresses, sent };
@@ -317,12 +317,14 @@ export class FrontierLeads {
 
   /**
    * The results the feed does not have, handed to the plugin: at most `FRONTIER_LEAD_RESULTS_PER_QUERY`, none from
-   * `excludeHost` (the report's own site), none the feed already has or already handed over. Records what the plugin
-   * answered for each, and the lead's outcome. Returns how many were accepted.
-   * @param {{ id: string }} lead @param {string} trigger @param {any[]} rows @param {string | null} excludeHost
+   * `excludeHost` (the report's own site) or a social network, none without a Chinese title when `chineseOnly`, none the
+   * feed already has or already handed over. Records every result with why it was left out, what the plugin answered for
+   * each handed over, and the lead's outcome. Returns how many were accepted.
+   * @param {{ id: string }} lead @param {string} trigger @param {any[]} rows
+   * @param {{ excludeHost?: string | null, chineseOnly?: boolean }} [rules]
    */
-  async #handOver(lead, trigger, rows, excludeHost) {
-    /** @type {Array<{ url: string, title: string | null, snippet: string | null, publishedDate: string | null }>} */
+  async #handOver(lead, trigger, rows, { excludeHost = null, chineseOnly = false } = {}) {
+    /** @type {Array<{ url: string, title: string | null, snippet: string | null, publishedDate: string | null, skipped: string | null }>} */
     const fresh = [];
     const seen = new Set();
     for (const row of rows) {
@@ -330,10 +332,11 @@ export class FrontierLeads {
       if (!url || seen.has(url)) continue;
       seen.add(url);
       const host = new URL(url).hostname;
-      if ((excludeHost && host.replace(/^www\./, "") === excludeHost) || frontierLeadSkipHost(host)) continue;
-      fresh.push({ url, title: typeof row.title === "string" ? row.title.slice(0, 300) : null,
-        snippet: typeof row.snippet === "string" ? row.snippet.slice(0, 700) : null,
-        publishedDate: typeof row.publishedDate === "string" ? row.publishedDate : null });
+      const title = typeof row.title === "string" ? row.title.slice(0, 300) : null;
+      const skipped = excludeHost && host.replace(/^www\./, "") === excludeHost ? "own-site"
+        : frontierLeadSkipHost(host) ? "social-network" : chineseOnly && !isChineseTitle(title) ? "not-chinese" : null;
+      fresh.push({ url, title, snippet: typeof row.snippet === "string" ? row.snippet.slice(0, 700) : null,
+        publishedDate: typeof row.publishedDate === "string" ? row.publishedDate : null, skipped });
     }
     const urls = fresh.map((entry) => entry.url);
     const known = new Set();
@@ -346,7 +349,7 @@ export class FrontierLeads {
         if (match) known.add(match);
       }
     }
-    const handed = fresh.filter((entry) => !known.has(entry.url)).slice(0, FRONTIER_LEAD_RESULTS_PER_QUERY);
+    const handed = fresh.filter((entry) => !known.has(entry.url) && !entry.skipped).slice(0, FRONTIER_LEAD_RESULTS_PER_QUERY);
     this.counters.newUrls += handed.length;
     /** @type {Map<string, string>} */
     const outcomes = new Map(handed.map((entry) => [entry.url, "unsent"]));
@@ -372,7 +375,7 @@ export class FrontierLeads {
     }
     const accepted = [...outcomes.values()].filter((outcome) => outcome === "accepted").length;
     const results = fresh.map((entry) => ({ url: entry.url, title: entry.title, publishedDate: entry.publishedDate,
-      known: known.has(entry.url), outcome: outcomes.get(entry.url) ?? null }));
+      known: known.has(entry.url), ...(entry.skipped ? { skipped: entry.skipped } : {}), outcome: outcomes.get(entry.url) ?? null }));
     await this.database.query(`UPDATE evimed_frontier.leads SET status = $2, status_code = $3, results = $4::jsonb, sent = $5, accepted = $6 WHERE id = $1`,
       [lead.id, failure ? "failed" : handed.length ? "sent" : "empty", failure, JSON.stringify(results), failure ? 0 : handed.length, accepted]);
     return accepted;
