@@ -581,3 +581,64 @@ test('SPEC-3: an authorized bound source review imports its preserved value idem
     assert.ok(result.failed?.includes('geo_plan_output_unavailable')); assert.equal((await store.latestValue(geo.id)).version, profile.version);
   }
 });
+
+test('QUALITY-Q2: real strategy field refusals keep valid summary partial and preserve two-attempt and corrected-recovery behavior', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/partial-strategy/strategy.json', produced = { id: `quality-${geo.id}`, status: 'succeeded', artifacts: [relative] };
+  const context = { mode: 'strategy', runId: produced.id, scopeKey: 'quality-original', basis: { original: true } };
+  let file = JSON.stringify({ summary: 'Usable preserved summary', gaps: 42 });
+  const make = () => importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => file }).importDelivery;
+  const importer = make(), first = await importer(control, produced);
+  assert.ok(first.failed?.includes('geo_plan_output_unavailable')); assert.equal(first.files.refused, 1);
+  assert.ok(first.files.unavailable.some(path => path.includes('gaps'))); assert.equal(importer.counters.imported, 0);
+  const kept = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.equal(kept.summary, 'Usable preserved summary'); assert.equal(kept.gaps, null);
+  assert.ok((await importer(control, produced)).failed?.includes('geo_plan_output_unavailable'));
+  assert.equal(await importer(control, produced), null); assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, kept.version);
+  file = JSON.stringify({ summary: 'Usable preserved summary', gaps: [{ gapId: 'corrected', class: 'benefit_only', text: 'Preserved correction' }] });
+  const recovered = await importer(control, produced, { recovery: true }); assert.equal(recovered.failed, undefined);
+  const corrected = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey }); assert.equal(corrected.gaps[0].gapId, 'corrected');
+  await make()(control, produced, { recovery: true }); assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, corrected.version);
+});
+
+test('QUALITY-Q2: invalid source rows stay partial beside a valid strategy and accepted source rows', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const produced = { id: `quality-sources-${geo.id}`, status: 'succeeded', artifacts: ['deliverables/source-strategy/strategy.json'] };
+  const context = { mode: 'strategy', runId: produced.id, scopeKey: 'quality-source', basis: {} };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context,
+    readRunFile: async () => JSON.stringify({ summary: 'Valid strategy', sources: [{ domain: 'valid.example', name: 'Retained' }, { domain: 'not a host', name: 'Refused' }] }) });
+  const result = await importDelivery(control, produced);
+  assert.ok(result.failed?.includes('geo_plan_output_unavailable')); assert.equal(result.files.sources, 1);
+  assert.ok(result.files.unavailable.some(path => path.includes('sources'))); assert.equal(importDelivery.counters.imported, 0);
+  assert.deepEqual((await store.listSources(geo.id)).map(source => source.domain), ['valid.example']);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).summary, 'Valid strategy');
+});
+
+test('QUALITY-Q2: numeric ownership declines, advisory notices and optional markers do not make a valid strategy unavailable', options, async () => {
+  const { control } = await projectWithBaseline();
+  const produced = { id: 'quality-advisory', status: 'succeeded', artifacts: ['deliverables/advisory/strategy.json'] };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'strategy', runId: produced.id, scopeKey: 'advisory', basis: {} }),
+    readRunFile: async () => JSON.stringify({ summary: 'Supported', acceptanceMark: 'ignored', minimal: true, chosenTier: 'standard',
+      tiers: [{ tier: 'standard', placements: 2, budgetCny: 10, targets: [{ baseline: null, target: 0.98, dataType: 'forecast' }] }], expectations: [{ engine: 'deepseek', retrieval: 0.3 }],
+      actions: [{ gapId: 'unmatched', what: { layer: 'popular' } }] }) });
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined); assert.deepEqual(result.files.unavailable, []); assert.equal(importDelivery.counters.imported, 1);
+});
+
+for (const capability of ['geo-strategy', 'geo-content', 'geo-insight']) test(`QUALITY-Q3: source-review-only intent using ${capability} requires only its authorized value output`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/review/geo-value.json', produced = { id: `quality-review-${geo.id}`, status: 'succeeded', effectiveAgentId: capability, artifacts: [relative] };
+  const basis = { intent: 'review', signal: { kind: 'source_changed', id: 'signal', basisDigest: 'digest' }, event: { notice: { id: 'source' }, targets: [{ key: 'selected' }] }, focusRefs: ['selected'] };
+  const context = { mode: 'signal', runId: produced.id, referenceId: 'context', basis };
+  const review = { signalId: 'signal', basisDigest: 'digest', contextRef: 'context', targets: [{ targetKey: 'selected', outcome: 'uncertain', reason: 'Original unavailable' }] };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => JSON.stringify({ sourceChanges: [{ id: 'source', review }] }) });
+  const result = await importDelivery(control, produced);
+  assert.equal(result.valueFiles.imported, 1); assert.equal(result.failed, undefined); assert.equal(importDelivery.counters.imported, 1);
+  assert.deepEqual((await store.latestValue(geo.id)).data.sourceChanges[0].review, review);
+  if (capability !== 'geo-insight') {
+    const invalidDeclared = { ...produced, deliverables: [{ id: 'invalid', capability }] };
+    const partial = await importDelivery(control, invalidDeclared, { recovery: true });
+    assert.ok(partial.failed?.includes('geo_plan_output_unavailable'), 'A separately declared structured candidate keeps its own failure');
+    assert.equal(partial.valueFiles.imported, 1);
+  }
+});

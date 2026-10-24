@@ -12,6 +12,7 @@ import { GeoService } from '../src/geoService.mjs';
 import { GeoPlanContext } from '../src/geoPlanContext.mjs';
 import { AgentRunStore } from '../src/agentRuns.mjs';
 import { persistRunTranscript } from '../src/runTranscripts.mjs';
+import { createResultProducerCapture } from '../src/resultProducerCapture.mjs';
 import { ResultProvenanceService } from '../src/resultProvenanceService.mjs';
 import { createGeoDeliveryImport } from '../src/geoDeliveryImport.mjs';
 import { createGeoArtifactRefresh } from '../src/geoPreservedRunImport.mjs';
@@ -52,7 +53,7 @@ test('actual ledger refresh and immutable PG results recover only the frozen nat
   const finished = await runs.finishInternal(control, reserved.run.id, { status: 'succeeded', artifacts: [relative], presentedFiles: [relative], verification: 'unverified', qualityNotices: ['Preserved notice'] });
   const transcript = { messages: [
     { seq: 2, role: 'user', source: 'user', sourceRequestId: 'actual-request', turnStartSeq: 1, time: start.getTime(), parts: [] },
-    { seq: 4, role: 'tool', source: 'system', turnStartSeq: 1, time: start.getTime() + 10, parts: [{ type: 'tool', tool: 'edit', status: 'completed', callId: 'actual-edit', completedSeq: 5, completedAt: start.getTime() + 20, input: { file_path: path.join(control.workspaceDir, relative) }, output: 'Edited' }] },
+    { seq: 4, role: 'tool', source: 'system', turnStartSeq: 1, time: start.getTime() + 10, parts: [{ type: 'tool', tool: 'edit', status: 'completed', callId: 'actual-edit', completedSeq: 5, completedAt: start.getTime() + 20, input: { file_path: `/workspace/${relative}` }, output: 'Edited' }] },
     { seq: 6, role: 'tool', source: 'system', turnStartSeq: 1, time: start.getTime() + 30, parts: [{ type: 'tool', tool: 'present', status: 'completed', callId: 'present', completedSeq: 7, input: { files: [relative] }, output: 'Presented' }] },
   ], exhausted: true, lastSeq: 8 };
   const receipt = await persistRunTranscript({ project: control, run: finished, sessions: [{ sessionId: finished.sessionId, parentSessionId: null, label: 'root', capability: null, transcript, error: null }] });
@@ -82,7 +83,13 @@ test('actual ledger refresh and immutable PG results recover only the frozen nat
   assert.ok(noChange.geoImport.failed.includes('geo_plan_output_unavailable'));
   assert.equal(await readFile(path.join(control.metaDir, 'runs.jsonl'), 'utf8'), firstInventory);
   await put(original);
-  const captured = await results.captureFile({ userId: user.id, project: control, relativePath: relative, producer: { kind: 'tool', runId: historical.id, sessionId: historical.sessionId, callId: 'actual-edit', eventId: '5' } });
+  // The original owned producer resolves a container path against its trusted runtime root; recovery later has no live runtime.
+  const originalCapture = createResultProducerCapture({ service: results, runtimeWorkspaceRoot: () => '/workspace' });
+  await originalCapture.observe(control, historical.id, { sessionId: historical.sessionId, event: { type: 'tool/call', seq: 4, tool: 'edit', callId: 'actual-edit', input: { file_path: `/workspace/${relative}` } } });
+  const captured = await originalCapture.observe(control, historical.id, { sessionId: historical.sessionId, event: { type: 'tool/result', seq: 5, callId: 'actual-edit', status: 'completed' } });
+  await originalCapture.observe(control, historical.id, { sessionId: historical.sessionId, event: { type: 'tool/call', seq: 8, tool: 'edit', callId: 'foreign-edit', input: { file_path: `/foreign/${relative}` } } });
+  assert.equal(await originalCapture.observe(control, historical.id, { sessionId: historical.sessionId, event: { type: 'tool/result', seq: 9, callId: 'foreign-edit', status: 'completed' } }), null);
+
   assert.equal(captured.coverage.producer, 'observed'); assert.equal(captured.digest, sha(original));
   await put('{"summary":"Mutable later bytes"}');
   const realCapture = results.captureFile.bind(results); results.captureFile = async (...args) => { sideEffects.push('capture'); return realCapture(...args); };

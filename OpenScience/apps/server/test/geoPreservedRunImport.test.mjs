@@ -92,3 +92,22 @@ test('SPEC-3: bound signal review pins only handed canonical geo-value bytes of 
   const analysis = await pinGeoRunOutputs({ project, run: reviewRun, context: { mode: 'analysis' }, transcript: t, results: f.results });
   await assert.rejects(analysis.readFile(project, reviewRun, relative), { code: 'geo_plan_output_unavailable' });
 });
+
+test('QUALITY-Q1: historical Docker witnesses reuse only their exact original capture path association without a live runtime', async () => {
+  const f = fixture(), host = { ...project, workspaceDir: '/owned/project/workspace' };
+  const frozen = transcript('write', String(f.bytes));
+  const pinned = await pinGeoRunOutputs({ results: f.results, project: host, run, context, transcript: frozen });
+  assert.equal(String(await pinned.readFile(host, run, relative)), String(f.bytes));
+  for (const patch of [{ path: 'deliverables/foreign/strategy.json' }, { producer: { ...f.version.producer, callId: 'foreign' } },
+    { producer: { ...f.version.producer, eventId: '6' } }, { producer: { ...f.version.producer, kind: 'workspace' } },
+    { producer: { ...f.version.producer, kind: 'deliverable', eventId: 'native' } }, { producer: { ...f.version.producer, runId: 'foreign' } },
+    { producer: { ...f.version.producer, sessionId: 'foreign' } }]) {
+    const version = { ...f.version, ...patch };
+    const refused = await pinGeoRunOutputs({ results: { ...f.results, list: async () => ({ items: [version], nextCursor: null }) }, project: host, run, context, transcript: frozen });
+    await assert.rejects(refused.readFile(host, run, relative), { code: 'geo_plan_output_unavailable' });
+  }
+  const wrongPath = structuredClone(frozen); wrongPath.messages[1].parts[0].input.file_path = '/workspace/deliverables/foreign/strategy.json';
+  const other = await pinGeoRunOutputs({ results: f.results, project: host, run, context, transcript: wrongPath });
+  await assert.rejects(other.readFile(host, run, relative), { code: 'geo_plan_output_unavailable' });
+  await assert.rejects(pinned.readFile(host, run, 'deliverables/foreign/strategy.json'), { code: 'geo_plan_output_unavailable' });
+});
