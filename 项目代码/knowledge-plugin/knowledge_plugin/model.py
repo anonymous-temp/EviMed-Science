@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-CONTRACT_VERSION = "1.5.1"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
+CONTRACT_VERSION = "1.6.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
                              # 1.2.0 (2026-09-22): Health.last_ok_fetch_at, Health.rate_limited_1h;
                              # 1.3.0 (2026-10-05): Source.platform_produced (flywheel F09);
                              # 1.4.0 (2026-10-10): Health.host_budget (today's use against each host's daily cap);
@@ -40,7 +40,9 @@ CONTRACT_VERSION = "1.5.1"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliat
                              #   EntryText.body_text, GET /v1/media/{id}, Health.providers and Health.discovery,
                              #   the read methods socialdata / dajiala / social-crawl;
                              # 1.5.1 (2026-10-22): EntryText.fetched_from openalex / landing / publisher-feed /
-                             #   europepmc-fulltext / elsevier, and body_text's section titles ("## Title")
+                             #   europepmc-fulltext / elsevier, and body_text's section titles ("## Title");
+                             # 1.6.0 (2026-10-24, ct-mix): POST /v1/leads (addresses the platform found, read under the
+                             #   plugin's rules), the read method `lead` (a lead source, never polled), Health.leads
 PLUGIN_NAME = "evimed-knowledge-plugin"
 
 # ---------------------------------------------------------------------------------------------
@@ -52,7 +54,7 @@ SOURCE_TYPES = ("journal", "regulator", "evidence-body", "preprint", "company", 
 EGRESSES = ("direct", "browser", "relay", "bridge", "api")
 ACCESSES = (
     "crossref-issn", "eutils-query", "europepmc", "json-api", "rss", "atom", "html-list",
-    "browser-list", "relay", "wechat-bridge", "evimed-api", "socialdata", "dajiala", "social-crawl",
+    "browser-list", "relay", "wechat-bridge", "evimed-api", "socialdata", "dajiala", "social-crawl", "lead",
 )
 LAUNCH_TIERS = ("P0", "P1", "P2")
 HEALTH_STATES = ("new", "healthy", "degraded", "unreadable", "drifted", "disabled")
@@ -113,12 +115,15 @@ BATCH1_EGRESSES = frozenset({"direct", "api"})
 # What this build implements (batch 2 adds the Tokyo relay, the headless browser and the team's
 # EviMed API scans). An enabled source outside these sets fails the registry load test; a source an
 # operator enables anyway is refused by name (egress_unavailable / adapter_unavailable), never guessed.
-IMPLEMENTED_ACCESSES = BATCH1_ACCESSES | {"browser-list", "evimed-api", "socialdata", "dajiala", "social-crawl"}
+IMPLEMENTED_ACCESSES = BATCH1_ACCESSES | {"browser-list", "evimed-api", "socialdata", "dajiala", "social-crawl", "lead"}
 # The social read methods (contract 1.5.0) are not polled by the scheduler's per-source loop: a paid search packs two dozen
 # X accounts into one request, a WeChat account is read twice a day in priority order, and the six-platform monitor spreads
 # its requests over the day. ``knowledge_plugin.social`` runs them, writes their entries through the same store and their
 # polls into the same fetch log, so health, the stream and retention treat them like any other source.
 SOCIAL_ACCESSES = frozenset({"socialdata", "dajiala", "social-crawl"})
+# Contract 1.6.0 (ct-mix 2026-10-24): a lead source (``leads.py``) holds the pages the platform's lead triggers handed over;
+# its entries are written by the leads loop, so the per-source loop never claims it either.
+UNPOLLED_ACCESSES = SOCIAL_ACCESSES | {"lead"}
 IMPLEMENTED_EGRESSES = BATCH1_EGRESSES | {"relay", "browser"}
 # Refusals that are about this deployment, not about the source: the scheduler reschedules them
 # without counting a failure (a missing exit or key must not turn 60 sources "unreadable").

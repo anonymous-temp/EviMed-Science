@@ -390,3 +390,37 @@ CREATE INDEX IF NOT EXISTS knowledge_provider_calls_idx ON evimed_knowledge.prov
 -- article's text is bought, never read as a page (robots.txt refuses mp.weixin.qq.com), and a call that failed for a reason
 -- that passes (code 20002 while the balance ran low, 2026-10-22) is tried again later — at most six calls per entry.
 ALTER TABLE evimed_knowledge.entry_texts ADD COLUMN IF NOT EXISTS paid_attempts smallint NOT NULL DEFAULT 0;
+
+-- ct-mix 2026-10-24
+-- leads: the addresses the platform's lead triggers handed over (POST /v1/leads, contract 1.6.0), one row per canonical
+-- address (idempotent), counted against the day's cap by `day` (Asia/Shanghai), read by the leads loop (`leads.py`) and
+-- answered by what came of it. Kept 30 days.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.leads (
+  url_sha256      text PRIMARY KEY CHECK (url_sha256 ~ '^[a-f0-9]{64}$'),
+  url             text NOT NULL CHECK (char_length(url) <= 2048),
+  trigger         text NOT NULL CHECK (char_length(trigger) <= 40),
+  query           text CHECK (char_length(query) <= 300),
+  title           text CHECK (char_length(title) <= 300),
+  snippet         text CHECK (char_length(snippet) <= 700),
+  published_hint  timestamptz(3),
+  received_at     timestamptz(3) NOT NULL,
+  day             date NOT NULL,
+  state           text NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'fetched', 'stale', 'failed', 'refused')),
+  state_reason    text CHECK (char_length(state_reason) <= 200),
+  attempts        smallint NOT NULL DEFAULT 0,
+  next_attempt_at timestamptz(3) NOT NULL,
+  source_id       text,
+  entry_id        text,
+  done_at         timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS knowledge_leads_queue_idx ON evimed_knowledge.leads (next_attempt_at) WHERE state = 'queued';
+CREATE INDEX IF NOT EXISTS knowledge_leads_day_idx ON evimed_knowledge.leads (day);
+-- lead_sources: one registry row per site, WeChat account or journal a lead was read from and no registered source covers
+-- (access `lead`, never polled); composed into the registry with every other channel (`dynamic_registry`).
+CREATE TABLE IF NOT EXISTS evimed_knowledge.lead_sources (
+  id            text PRIMARY KEY CHECK (char_length(id) BETWEEN 1 AND 120),
+  key           text NOT NULL UNIQUE CHECK (char_length(key) BETWEEN 1 AND 300),
+  row           jsonb NOT NULL,
+  created_at    timestamptz(3) NOT NULL,
+  last_entry_at timestamptz(3)
+);

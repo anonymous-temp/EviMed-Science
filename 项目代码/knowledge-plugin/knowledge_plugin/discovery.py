@@ -17,7 +17,9 @@ The candidate lines (``discovery_lines.py``), each with its own daily cap on val
                  waits while this build has none for its platform);
 - ``request``    rows asked for in the platform's public source-request manifest, any lane, validated like the rest;
 - ``parent-feed`` the advertised feeds of trusted publishers (``medical_discovery.py``, counted here);
-- ``readmit``    retired sources due for a re-check.
+- ``readmit``    retired sources due for a re-check;
+- ``lead``       the sites, WeChat accounts and journals of the pages the platform's lead triggers handed over
+                 (``leads.py``, contract 1.6.0), proposed as each page is read.
 
 Validation, in order: reachable (direct, then through the Tokyo relay when this deployment has one), robots allows it
 (the protected fetch asks), an existing adapter parses it, at least one item dated within the last 30 days, and the
@@ -56,13 +58,13 @@ from .registry import RegistryError, parse_registry, source_from_row
 
 log = logging.getLogger("knowledge_plugin.discovery")
 
-LINES = ("outbound", "journal", "directory", "hot-origin", "social", "request", "parent-feed", "readmit")
+LINES = ("outbound", "journal", "directory", "hot-origin", "social", "request", "parent-feed", "readmit", "lead")
 # Validations a line may spend a day, sized from the yields measured on 2026-10-22 over a day of production entries
 # (handoff fr-sources): journals 41 of 60 validated (MEDLINE, ≥ 8 articles in 30 days), directories 10 of 60, outbound
 # sites 2–8 of 60 (a third or fewer of them medical by the screen). At these caps ~115–205 candidates are validated a
 # day and about 15–20 admitted, most of them journals.
 DEFAULT_CAPS = {"outbound": 60, "journal": 25, "directory": 30, "hot-origin": 15, "social": 20, "request": 25,
-                "readmit": 30}
+                "readmit": 30, "lead": 20}
 # Discovered journals are read through Crossref, whose daily allowance the registry's journals share (budget.py): the
 # journal line waits for tomorrow while today's use is past this share of the cap.
 CROSSREF_HOST = "api.crossref.org"
