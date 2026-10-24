@@ -214,7 +214,7 @@ test("switched off, without a search, a plugin or an owner the module does nothi
   const orphan = new FrontierLeads({ database, plugin: fakePlugin(), webSearch: fakeSearch(), owner: () => null });
   assert.equal((await orphan.tick()).skipped, "no_owner");
   assert.equal(frontierLeadUrl("javascript:alert(1)"), null);
-  assert.equal(frontierLeadUrl("https://user:pw@example.org/x"), null);
+  assert.equal(frontierLeadUrl("https://fake:fake@example.org/x"), null);
   assert.equal(frontierLeadUrl("https://example.org/a?b=1#c"), "https://example.org/a?b=1");
   assert.equal(createHash("sha256").update("x").digest("hex").length, 64);
 });
