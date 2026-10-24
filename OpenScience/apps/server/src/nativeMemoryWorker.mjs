@@ -531,20 +531,43 @@ export class NativeMemoryWorker {
     const sessions = context.sessions, file = nativeMemoryFile(uri, sessions.memoryRoot(userId));
     if (!file || context.kind === 'geo-project' && !sessions.memoryTypes.includes(file.type)) throw new HttpError(403, 'memory_scope_denied', 'The source label is outside the approved memory files.');
     type = file.type;
-    const projectId = context.kind === 'geo-project' ? context.projectId : (await this.overlay.file(userId, uri))?.projectId ?? null;
+    const held = await this.overlay.file(userId, uri);
+    const projectId = context.kind === 'geo-project' ? context.projectId : held?.projectId ?? null;
     const current = await sessions.read(userId, uri);
     if (current === null) return false;
-    const lines = current.split("\n").filter((line) => !(isLabelLine(line) && line.includes(source.id)));
     const words = /** @type {Record<string, string>} */ (LABEL_WORDS)[state];
-    if (words) lines.push(`${SOURCE_LABEL_PREFIX}${source.id} ${words}（${this.now().toISOString().slice(0, 10)}）`);
+    let retained = false;
+    const lines = current.split("\n").filter((line) => {
+      // Compare the entire source identity and state suffix, never a DOI substring.
+      const label = line.trim();
+      const ownState = Object.values(LABEL_WORDS).find(value => {
+        const prefix = `${SOURCE_LABEL_PREFIX}${source.id} ${value}（`;
+        return label.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}）$/.test(label.slice(prefix.length));
+      });
+      if (!ownState) return true;
+      if (ownState === words && !retained) { retained = true; return true; }
+      return false;
+    });
+    if (words && !retained) lines.push(`${SOURCE_LABEL_PREFIX}${source.id} ${words}（${this.now().toISOString().slice(0, 10)}）`);
     const next = lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
-    if (contentHash(next) === contentHash(current)) return false;
-    await sessions.replace(userId, uri, next);
-    await this.overlay.addRevision({ userId, uri, memoryType: type, change: "updated", actor: "platform", reason: words ? `source ${state}` : "source current again", before: current, after: next, projectId });
-    await this.overlay.upsertFile({ userId, uri, memoryType: type, body: next, projectId });
+    const changed = contentHash(next) !== contentHash(current);
+    if (changed) await sessions.replace(userId, uri, next);
+    // A retry may find the engine write already complete while the overlay still
+    // owes its revision, body or labels. Finish each step before marking the link.
+    const before = changed ? current : held?.body;
+    const reason = words ? `source ${state}` : "source current again";
+    if (before != null && before !== next) {
+      const latest = (await this.overlay.revisionsOf(userId, uri, { limit: 1 }))[0];
+      if (latest?.actor !== "platform" || latest.reason !== reason || latest.before !== before || latest.after !== next) {
+        await this.overlay.addRevision({ userId, uri, memoryType: type, change: "updated", actor: "platform", reason, before, after: next, projectId });
+      }
+    }
+    if (!held || held.body !== next || held.contentHash !== contentHash(next) || held.memoryType !== type || held.projectId !== projectId) {
+      await this.overlay.upsertFile({ userId, uri, memoryType: type, body: next, projectId });
+    }
     const labels = next.split("\n").filter(isLabelLine).map((line) => line.slice(SOURCE_LABEL_PREFIX.length));
-    await this.overlay.setLabels(userId, uri, labels);
-    recordNativeWrite(words ? "source_label_added" : "source_label_removed");
-    return true;
+    if (!held || JSON.stringify(held.labels) !== JSON.stringify(labels.slice(0, 16))) await this.overlay.setLabels(userId, uri, labels);
+    if (changed) recordNativeWrite(words ? "source_label_added" : "source_label_removed");
+    return changed;
   }
 }

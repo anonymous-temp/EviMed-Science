@@ -8,7 +8,7 @@ import { ProductDocuments } from '../src/productStore.mjs';
 import { GeoStore } from '../src/geoStore.mjs';
 import { GeoSharedContext } from '../src/geoSharedContext.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
-import { NativeMemoryOverlay } from '../src/nativeMemoryOverlay.mjs';
+import { contentHash, NativeMemoryOverlay } from '../src/nativeMemoryOverlay.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
 import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { OpenVikingClient } from '../src/openVikingClient.mjs';
@@ -171,3 +171,74 @@ test('bounded namespace scans rotate and a scan failure cannot strand an already
   assert.equal((await f.overlay.commit(f.owner.id, archive)).state, 'completed');
   assert.ok(f.reports.some(line => line.includes('namespace scans')));
 });
+
+
+test('unchanged source states retain their original date and revisions while genuine transitions use their change date', options, async t => {
+  const f = await fixture(t), source = { type: 'doi', id: '10.1000/example' }, uri = f.file(f.a);
+  await f.archive(f.a); await f.worker.scanArchives(f.owner.id); await f.worker.processCommits({ userId: f.owner.id });
+  f.worker.now = () => new Date('2026-10-24T00:00:00Z');
+  assert.equal(await f.worker.labelSource(f.owner.id, source, 'retracted'), 1);
+  const body = await f.a.sessions.read(f.owner.id, uri), revisions = await f.overlay.revisionsOf(f.owner.id, uri);
+  f.worker.now = () => new Date('2026-10-25T00:00:00Z');
+  assert.equal(await f.worker.labelSource(f.owner.id, source, 'retracted'), 0);
+  assert.equal(await f.a.sessions.read(f.owner.id, uri), body);
+  assert.equal((await f.overlay.revisionsOf(f.owner.id, uri)).length, revisions.length);
+  assert.equal(await f.worker.labelSource(f.owner.id, source, 'changed'), 1);
+  assert.match(await f.a.sessions.read(f.owner.id, uri), /已更正（2026-10-25）/);
+});
+
+test('source label identity is exact even when a DOI is a prefix of another DOI', options, async t => {
+  const f = await fixture(t, { after: 'Facts. doi:10.1000/example doi:10.1000/example-long' });
+  await f.archive(f.a); await f.worker.scanArchives(f.owner.id); await f.worker.processCommits({ userId: f.owner.id });
+  const longer = { type: 'doi', id: '10.1000/example-long' }, source = { type: 'doi', id: '10.1000/example' };
+  await f.worker.labelSource(f.owner.id, longer, 'expired');
+  const before = await f.a.sessions.read(f.owner.id, f.file(f.a));
+  await f.worker.labelSource(f.owner.id, source, 'retracted');
+  assert.ok((await f.a.sessions.read(f.owner.id, f.file(f.a))).includes(before.split('\n').at(-1)));
+  await f.worker.labelSource(f.owner.id, source, 'current');
+  assert.equal(await f.a.sessions.read(f.owner.id, f.file(f.a)), before);
+});
+
+for (const state of ['retracted', 'current']) for (const boundary of ['replace', 'addRevision', 'upsertFile', 'setLabels', 'markSource']) for (const timing of ['before', 'after']) {
+  test(`source ${state} retry converges when interrupted ${timing} ${boundary}`, options, async t => {
+    const f = await fixture(t), source = { type: 'doi', id: '10.1000/example' }, uri = f.file(f.a);
+    await f.archive(f.a); await f.worker.scanArchives(f.owner.id); await f.worker.processCommits({ userId: f.owner.id });
+    f.worker.now = () => new Date('2026-10-24T00:00:00Z');
+    if (state === 'current') await f.worker.labelSource(f.owner.id, source, 'retracted');
+    const previous = await f.overlay.file(f.owner.id, uri);
+    await f.overlay.upsertFile({ userId: f.owner.id, uri, memoryType: 'entities', sensitive: true });
+    const target = boundary === 'replace' ? f.a.sessions.rootClient : f.overlay;
+    const method = boundary === 'replace' ? 'request' : boundary;
+    const original = target[method].bind(target);
+    let injected = false;
+    target[method] = async (...args) => {
+      const applies = !injected && (boundary !== 'replace' || args[0].path === '/api/v1/content/write');
+      if (applies) {
+        injected = true;
+        if (timing === 'before') throw new Error('Injected source interruption');
+      }
+      const result = await original(...args);
+      if (applies) throw new Error('Injected source interruption');
+      return result;
+    };
+    await assert.rejects(f.worker.labelSource(f.owner.id, source, state), /Injected source interruption/);
+    assert.equal(injected, true);
+    if (boundary !== 'markSource' || timing === 'before') assert.equal((await f.overlay.sources(f.owner.id, [uri]))[0].state, state === 'current' ? 'retracted' : 'current');
+    target[method] = original;
+    f.worker.now = () => new Date('2026-10-25T00:00:00Z');
+    await f.worker.labelSource(f.owner.id, source, state);
+    const body = await f.a.sessions.read(f.owner.id, uri), file = await f.overlay.file(f.owner.id, uri);
+    assert.ok(body.startsWith('A scoped project fact. doi:10.1000/example'));
+    assert.equal(file.body, body); assert.equal(file.contentHash, contentHash(body));
+    assert.equal(file.projectId, f.a.projectId); assert.equal(file.memoryType, 'entities'); assert.equal(file.sensitive, true);
+    assert.deepEqual(file.labels, state === 'current' ? [] : [body.split('\n').at(-1).slice('> 来源变更：'.length)]);
+    assert.equal((await f.overlay.sources(f.owner.id, [uri]))[0].state, state);
+    const revisions = (await f.overlay.revisionsOf(f.owner.id, uri)).filter(row => row.actor === 'platform' && row.reason === (state === 'current' ? 'source current again' : 'source retracted'));
+    assert.equal(revisions.length, 1); assert.equal(revisions[0].before, previous.body); assert.equal(revisions[0].after, body);
+    if (state === 'retracted') assert.ok(body.includes(boundary === 'replace' && timing === 'before' ? '2026-10-25' : '2026-10-24'));
+    const writes = f.stub.sent('POST', '/api/v1/content/write').length;
+    assert.equal(await f.worker.labelSource(f.owner.id, source, state), 0);
+    assert.equal(f.stub.sent('POST', '/api/v1/content/write').length, writes);
+    assert.equal((await f.overlay.revisionsOf(f.owner.id, uri)).filter(row => row.actor === 'platform' && row.reason === revisions[0].reason).length, 1);
+  });
+}
