@@ -282,7 +282,8 @@ export class CapsuleService {
   /** @param {string} userId @param {string} capsuleId @param {Record<string,any>} options */
   async entries(userId, capsuleId, options = {}) {
     await this.get(userId, capsuleId);
-    return this.documents.list(userId, "fact", { limit: options.limit, cursor: options.cursor, filter: { capsuleId } });
+    return this.documents.list(userId, "fact", { limit: options.limit, cursor: options.cursor, projectId: options.projectId,
+      fields: options.fields, filter: { capsuleId } });
   }
 
   /** Generated/inferred entries are candidates; the user approves them explicitly.

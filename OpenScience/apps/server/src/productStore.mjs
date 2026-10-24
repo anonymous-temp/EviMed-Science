@@ -153,8 +153,10 @@ export class ProductDocuments {
 
   /** Bounded lexical fallback; semantic retrieval can enrich it without weakening ownership.
    * @param {string} userId @param {string} kind @param {string} query
-   * @param {{ limit?: number, filter?: Record<string,any>, since?: string|null, any?: { field: string, values: string[] } }} options */
-  async search(userId, kind, query, { limit = 20, filter = {}, since = null, any = { field: "", values: [] } } = {}) {
+   * `projectId` has the list's semantics: omitted means all, null means account records only.
+   * @param {{ limit?: number, filter?: Record<string,any>, since?: string|null, any?: { field: string, values: string[] }, projectId?: string|null }} options */
+  async search(userId, kind, query, { limit = 20, filter = {}, since = null, any = { field: "", values: [] }, projectId = undefined } = {}) {
+    if (projectId != null) productId(projectId, "project");
     if (since != null && (typeof since !== "string" || since.length > 40 || !Number.isFinite(Date.parse(since)))) throw new HttpError(400, "product_filter_invalid", "Invalid record date.");
     if (typeof any?.field !== "string" || any.field.length > 80 || !Array.isArray(any.values) || any.values.length > 100
       || any.values.some((value) => typeof value !== "string" || value.length > 200)) throw new HttpError(400, "product_filter_invalid", "Invalid record filter.");
@@ -168,8 +170,9 @@ export class ProductDocuments {
       AND strpos(lower(coalesce(payload->>'content','')),lower($4))>0
       AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
       AND (cardinality($8::text[])=0 OR payload->>$7::text=ANY($8::text[]))
+      AND ($9::boolean=false OR project_id IS NOT DISTINCT FROM $10::text)
       ORDER BY updated_at DESC,id DESC LIMIT $5`,
-    [productId(userId, "user"), productKind(kind), filterJson, query, limit, since, any.field, any.values]);
+    [productId(userId, "user"), productKind(kind), filterJson, query, limit, since, any.field, any.values, projectId !== undefined, projectId ?? null]);
     return result.rows.map(record);
   }
 
