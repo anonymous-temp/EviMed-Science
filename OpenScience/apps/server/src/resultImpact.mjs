@@ -22,6 +22,11 @@ const isMissing = error => [401, 403, 404].includes(error?.status) || ["result_n
 function matches(input, source) {
   if (input?.kind !== "source" && !(source.contentDigest && input?.kind === "data")) return false;
   if (input.availability === "restricted") return false;
+  if (source.logicalPath) {
+    const inputPath = input.path ?? (input.id === source.logicalPath ? input.id : null);
+    if (inputPath) return inputPath === source.logicalPath && input.digest === source.contentDigest;
+    if (source.sourceRetired === false) return false;
+  }
   if (source.contentDigest && DIGEST.test(source.contentDigest) && input.digest === source.contentDigest) return true;
   if (input.kind !== "source") return false;
   const sameId = identity(source) && (input.id === identity(source) || doiOf(input.id) && doiOf(input.id) === doiOf(identity(source)));
@@ -35,7 +40,8 @@ function matches(input, source) {
 function sourceReference(value) {
   const id = identity(value);
   if (!id || id.length > 512) throw new HttpError(400, "result_impact_source_invalid", "An exact source identity is required.");
-  return { id, ...(value.digest ? { digest: String(value.digest) } : {}),
+  return { id, ...(value.logicalPath ? { logicalPath: String(value.logicalPath), sourceRetired: value.sourceRetired !== false } : {}),
+    ...(value.publicationOccurrence ? { publicationOccurrence: String(value.publicationOccurrence) } : {}), ...(value.digest ? { digest: String(value.digest) } : {}),
     ...(value.versionId ? { versionId: String(value.versionId) } : {}), ...(doiOf(value.doi) ? { doi: doiOf(value.doi) } : {}),
     ...(DIGEST.test(String(value.contentDigest ?? "")) ? { contentDigest: String(value.contentDigest) } : {}),
     ...(SOURCE_ID.test(String(value.replacedBy ?? "")) ? { replacedBy: String(value.replacedBy) } : {}) };
@@ -275,15 +281,16 @@ export class ResultImpactService {
    * The knowledge base received new bytes for a file it already held (a new content-addressed document beside the old
    * one): the work that rests on the old document is affected the way work that rests on a corrected paper is. The old
    * document is named by its id and by the digest of its exact bytes, which is how a result that read the file recorded
-   * it, and what replaced it by its id. Found by those recorded links, never by the file's name.
-   * @param {string} userId @param {{projectId:string, replaced:{sourceId:string, sha256:string}, by?:{sourceId?:string, at?:string|null}}} input
+   * it, and what replaced it by its id. A publication binding matches its exact recorded path and bytes;
+   * content-only links participate only after the final alias of the source is retired.
+   * @param {string} userId @param {{projectId:string, logicalPath?:string, familyId?:string, sourceRetired?:boolean, replaced:{sourceId:string, sha256:string}, by?:{sourceId?:string, version?:number, at?:string|null}}} input
    */
-  async reconcileReplacement(userId, { projectId, replaced, by = {} }) {
+  async reconcileReplacement(userId, { projectId, replaced, by = {}, logicalPath, familyId, sourceRetired = true }) {
     const date = typeof by.at === "string" && /^\d{4}-\d{2}-\d{2}/.test(by.at) ? by.at.slice(0, 10) : null;
     const status = { state: "changed", checkedAt: this.now().toISOString(), reason: "replaced",
       updates: [{ kind: SOURCE_REPLACED_KIND, noticeDoi: null, date, source: null }] };
     return this.reconcileSourceUpdate(userId, { projectId, status,
-      source: { id: replaced.sourceId, contentDigest: replaced.sha256, ...(by.sourceId ? { replacedBy: by.sourceId } : {}) } }, { exact: true });
+      source: { id: replaced.sourceId, contentDigest: replaced.sha256, ...(logicalPath ? { logicalPath, sourceRetired, publicationOccurrence: `${familyId}:${by.version}` } : {}), ...(by.sourceId ? { replacedBy: by.sourceId } : {}) } }, { exact: true, strictPages: true });
   }
 
   /**
@@ -372,17 +379,22 @@ export class ResultImpactService {
    * rests on it is affected too, and so are the memories that name it and the learned methods linked to those versions:
    * each is found by its recorded link, labelled with the source's new state and listed on the impact. Work that rests
    * on nothing the source touches gets no row and is not asked to run again.
-   * @param {string} userId @param {{projectId:string, source:any, status:any}} input @param {{exact?:boolean, scan?:Array<{id:string,inputs:any[]}>|null}} [options]
+   * @param {string} userId @param {{projectId:string, source:any, status:any}} input @param {{exact?:boolean, scan?:Array<{id:string,inputs:any[]}>|null,strictPages?:boolean}} [options]
    */
-  async reconcileSourceUpdate(userId, { projectId, source, status }, { exact = false, scan = null } = {}) {
+  async reconcileSourceUpdate(userId, { projectId, source, status }, { exact = false, scan = null, strictPages = false } = {}) {
     const project = await this.results.scope(userId, projectId);
     const ownerId = project.userId;
     const ref = sourceReference(source);
     const checked = await this.#withRecorded(ref, statusProjection(status));
     // Memories rest on the source whether or not a result of this project does; the label is about the source.
-    const memories = this.knowledge ? await this.knowledge.memories(ownerId, projectId, ref, checked) : { unknown: "unavailable" };
+    const memories = ref.sourceRetired === false ? { items: [], total: 0, status: "none" } : this.knowledge ? await this.knowledge.memories(ownerId, projectId, ref, checked) : { unknown: "unavailable" };
     // The knowledge pages that quote it are labelled and queued the same way; the impact record does not list them.
-    if (this.knowledge?.pages) await this.knowledge.pages(ownerId, projectId, ref, checked).catch(() => null);
+    if (ref.sourceRetired !== false && this.knowledge?.pages) {
+      if (strictPages) {
+        const pages = await this.knowledge.pages(ownerId, projectId, ref, checked);
+        if (pages?.unknown === "lookup_failed") throw new HttpError(503, "source_replacement_pages_unavailable", "Source replacement page reconciliation failed.");
+      } else await this.knowledge.pages(ownerId, projectId, ref, checked).catch(() => null);
+    }
     if (checked.state === "no_update") return { items: [], scanned: 0 };
     const { ids, scanned } = await this.#naming(userId, projectId, ref, exact, scan);
     const changeKey = hash([ref, checked.state, checked.reason ?? null, checked.updates]);

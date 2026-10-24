@@ -1736,11 +1736,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     afterReplace: async event => {
       const outcomes = await Promise.allSettled([
         resultImpacts?.reconcileReplacement(event.userId, event),
-        geoValueSourceReplaced(geo?.store, event),
+        event.sourceRetired !== false ? geoValueSourceReplaced(geo?.store, event) : null,
         // The pages that quote the document that was replaced are labelled and queued for a recompile.
-        knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.replaced.sourceId, reason: "changed" }]),
+        event.sourceRetired !== false ? knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.replaced.sourceId, reason: "changed" }], { strict: true }) : null,
         // The engine's copy follows: the document that was replaced goes, the one that replaces it is pushed when it is read.
-        sourceSync?.note(event.userId, event.projectId, event.replaced.sourceId),
+        event.sourceRetired !== false ? sourceSync?.note(event.userId, event.projectId, event.replaced.sourceId) : null,
       ]);
       const failed = outcomes.find(outcome => outcome.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;

@@ -31,7 +31,7 @@ const TERMINAL_ERRORS = new Set([
   // 「重新分析」 starts over once it is done.
   "source_parser_payload_too_large", "source_parser_checksum_failed", "source_parser_rejected",
   "source_parser_auth_failed", "source_parser_quota_exhausted", "source_parser_unconfigured",
-  "source_not_found", "source_account_changed", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
+  "source_not_found", "source_account_changed", "source_replacement_scope_invalid", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
   "source_folder_not_found", "source_folder_invalid", "source_folder_conflict",
 ]);
 
@@ -183,6 +183,13 @@ export class SourceIngestionWorker {
     let artifactPath = null;
     let textIn = false;
     try {
+      if (job.payload?.action === "source-replace") {
+        const result = await this.sources.consumeReplacement(job);
+        await this.jobs.finish(job.userId, job.id, job.leaseToken, result);
+        this.lastError = null;
+        this.lastCompletedAt = new Date().toISOString();
+        return result;
+      }
       if (job.payload?.action === "source-run-cancel") {
         if (!this.cancelUnderstanding) throw Object.assign(new Error("Source run cancellation is unavailable."), { code: "source_cancel_unconfigured" });
         return await this.sources.consumeRunCancellation(job, this.cancelUnderstanding);

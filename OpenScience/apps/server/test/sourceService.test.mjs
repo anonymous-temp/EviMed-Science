@@ -224,8 +224,13 @@ test("a file that arrives with new bytes tells what rests on the document it rep
   await service.register("user-one", upload());
   assert.deepEqual(events, [], "the same bytes read again replace nothing");
   const second = await service.register("user-one", upload({ sha256: "b".repeat(64), size: 8192 }));
+  const replacementJobs = () => jobs.enqueued.filter(job => job.payload.action === "source-replace");
+  assert.equal(events.length, 0, "replacement is committed durably before callbacks");
+  const replay = job => service.consumeReplacement({ ...job, projectId: job.options.projectId });
+  await replay(replacementJobs()[0]);
   assert.equal(events.length, 1);
   assert.deepEqual(events[0], { userId: "user-one", projectId: "project-one",
+    logicalPath: first.source.payload.paths[0], familyId: first.source.payload.familyId, sourceRetired: true, sourceGeneration: 2,
     replaced: { sourceId: first.source.id, sha256: "a".repeat(64), version: 1 },
     by: { sourceId: second.source.id, version: 2, at: "2026-09-06T01:00:00.000Z" } });
   assert.equal("replaces" in second, false, "the event is not part of what the caller is handed");
@@ -235,8 +240,10 @@ test("a file that arrives with new bytes tells what rests on the document it rep
   const third = await service.register("user-one", upload({ sha256: "d".repeat(64), size: 9000 }));
   assert.equal(third.duplicate, false);
   assert.equal(third.source.payload.version, 3);
+  await assert.rejects(replay(replacementJobs()[1]), /impact store down/);
+  failing = false;
   assert.equal(events[1].replaced.sourceId, second.source.id, "what rests on the newest earlier version is told, since older ones were told before");
-  assert.deepEqual(reported, ["product_state_unavailable"], "the failure is traceable and the registration stands");
+  assert.deepEqual(reported, [], "callback failure propagates for durable worker retry");
   const other = await service.register("user-one", upload({ path: "knowledge-base/another-file.docx", sha256: "e".repeat(64) }));
   assert.equal(other.duplicate, false);
   assert.equal(events.length, 2, "a different file is not a replacement");
@@ -1212,4 +1219,46 @@ test("an ambiguous legacy note merge is preserved for old references and never g
   const saved = await service.register("user-one", upload({ path: "knowledge-base/notes/first.md" }));
   assert.notEqual(saved.source.id, legacyId);
   assert.deepEqual(await documents.get("user-one", "source", legacyId), legacy);
+});
+
+test("alias changes persist distinct binding events and replay retirement only while the generation stays retired", async () => {
+  const documents = new MemoryDocuments(), jobs = new MemoryJobs(), events = [];
+  const service = new SourceService(documents, jobs, { afterReplace: async event => events.push(event) });
+  const a = await service.register("user-one", upload());
+  await service.register("user-one", upload({ path: "knowledge-base/copy.txt" }));
+  await service.register("user-one", upload({ sha256: "b".repeat(64) }));
+  let replacementJobs = jobs.enqueued.filter(job => job.payload.action === "source-replace");
+  assert.equal(replacementJobs.length, 1);
+  assert.equal(replacementJobs[0].payload.event.sourceRetired, false);
+  const replay = job => service.consumeReplacement({ ...job, projectId: job.options.projectId });
+  await replay(replacementJobs[0]);
+  assert.equal(events[0].sourceRetired, false);
+  await service.register("user-one", upload({ path: "knowledge-base/copy.txt", sha256: "b".repeat(64) }));
+  replacementJobs = jobs.enqueued.filter(job => job.payload.action === "source-replace");
+  const retirement = replacementJobs.at(-1);
+  assert.equal(retirement.payload.event.sourceRetired, true);
+  await replay(retirement);
+  assert.equal(events.at(-1).sourceRetired, true);
+  await service.register("user-one", upload());
+  assert.equal((await service.get("user-one", a.source.id)).payload.publication.current, true);
+  await replay(retirement);
+  assert.equal(events.at(-1).sourceRetired, false, "delayed old retirement cannot revoke reintroduced bytes");
+  await service.register("user-one", upload({ sha256: "b".repeat(64) }));
+  replacementJobs = jobs.enqueued.filter(job => job.payload.action === "source-replace");
+  const sameFamily = replacementJobs.filter(job => job.payload.event.familyId === a.source.payload.familyId);
+  assert.deepEqual(sameFamily.map(job => job.payload.event.by.version), [2, 3, 4]);
+  await replay(retirement);
+  assert.equal(events.at(-1).sourceRetired, false, "an old retirement cannot revoke a later retired generation");
+});
+
+test("replacement replay refuses an account reincarnation before invoking dependencies", async () => {
+  const documents = new MemoryDocuments(), jobs = new MemoryJobs();
+  let called = false;
+  const service = new SourceService(documents, jobs, { afterReplace: async () => { called = true; } });
+  documents.database = { query: async () => ({ rows: [{ generation: "new-account" }] }) };
+  service.withRegistrationLocks = async (_keys, operation) => operation();
+  await assert.rejects(service.consumeReplacement({ userId: "user-one", projectId: "project-one", payload: {
+    accountCreatedAt: "old-account", event: { userId: "user-one", projectId: "project-one", replaced: { sourceId: "old" } },
+  } }), { code: "source_account_changed" });
+  assert.equal(called, false);
 });

@@ -486,3 +486,21 @@ test("canceling while the materials are being read stops the ingestion like canc
   assert.equal(calls.some((call) => call.method === "materialize"), false);
   assert.equal(calls.some((call) => call.method === "publishUnderstanding"), false);
 });
+
+test("a durable binding replacement retries callback failure and replays before any parse or generation check", async () => {
+  const { calls, job, sources, worker } = fixture({ sourceGeneration: 9, jobRevision: 1 });
+  job.payload = { action: "source-replace", event: { logicalPath: "knowledge-base/original.txt", by: { version: 2 } } };
+  let attempts = 0;
+  sources.consumeReplacement = async actual => {
+    assert.equal(actual, job);
+    attempts++;
+    if (attempts === 1) throw Object.assign(new Error("callback unavailable"), { code: "product_state_unavailable" });
+    return { publicationRevision: 2 };
+  };
+  await worker.tick();
+  assert.equal(calls.find(call => call.method === "fail").args[4].retry, true);
+  assert.equal(calls.some(call => call.method === "finish"), false);
+  await worker.tick();
+  assert.equal(calls.filter(call => call.method === "finish").length, 1);
+  assert.equal(calls.some(call => ["beginIngestion", "recordFailure"].includes(call.method)), false);
+});

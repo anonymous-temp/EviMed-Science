@@ -572,7 +572,7 @@ export class SourceService {
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
    * `afterRemove` is told once a document is recorded as going, so what rests on it can be labelled.
-   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
+   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
   constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
     this.judgeService = judgeService;
@@ -714,13 +714,15 @@ export class SourceService {
             await withdrawDerivedMemory(client, userId, { sourceIds: [previous.id], reason: "source_republished" });
           });
         }
-        if (!current && this.afterReplace && sourceOriginOf({ connectorType: sourceConnector.type, path: logicalPath }) !== "wiki") {
-          await this.afterPublication(async () => {
-            try { await this.afterReplace({ userId, projectId,
-              replaced: { sourceId: previous.id, sha256: previous.payload.fingerprint.sha256, version: Number(previousBindings[familyId].publicationRevision) || 1 },
-              by: { sourceId, version: publicationRevision, at: this.now().toISOString() } }); }
-            catch (error) { this.report(typeof error?.code === "string" ? error.code : "source_replacement_unrecorded"); }
-          });
+        if (this.afterReplace && sourceOriginOf({ connectorType: sourceConnector.type, path: logicalPath }) !== "wiki") {
+          const event = { userId, projectId, logicalPath, familyId, sourceRetired: !current, sourceGeneration: retired.payload.generation,
+            replaced: { sourceId: previous.id, sha256: previous.payload.fingerprint.sha256,
+              version: Number(previousBindings[familyId].publicationRevision) || 1 },
+            by: { sourceId, version: publicationRevision, at: this.now().toISOString() } };
+          const account = this.documents.database ? await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]) : null;
+          await this.jobs.enqueue(userId, "ingest", { action: "source-replace", event,
+            ...(account?.rows[0]?.generation ? { accountCreatedAt: account.rows[0].generation } : {}) },
+            { projectId, idempotencyKey: `source-replace:${projectId}:${familyId}:${publicationRevision}` });
         }
       }
       const job = ["queued", "parsing"].includes(exact.payload.status) ? await this.enqueue(exact, userId, { rearmFailed: reactivated }) : null;
@@ -2147,6 +2149,23 @@ export class SourceService {
     const result = Number(value);
     if (!Number.isSafeInteger(result) || result < 0 || result > 1_000_000) throw new HttpError(400, "source_output_invalid", `${field} count is invalid.`);
     return result;
+  }
+
+  /** A historical binding change is durable; content-wide effects require current retirement. @param {any} job */
+  async consumeReplacement(job) {
+    const event = job.payload.event;
+    if (!event || event.userId !== job.userId || event.projectId !== job.projectId) throw new HttpError(409, "source_replacement_scope_invalid", "Source replacement scope changed.");
+    if (!this.afterReplace) throw new HttpError(503, "source_replacement_unconfigured", "Source replacement reconciliation is unavailable.");
+    return this.withRegistrationLocks([`publication:${job.userId}:${job.projectId}`, `source:${job.userId}:${event.replaced.sourceId}`], async () => {
+      if (this.documents.database && job.payload.accountCreatedAt) {
+        const account = await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1 FOR KEY SHARE", [job.userId]);
+        if (account.rows[0]?.generation !== job.payload.accountCreatedAt) throw new HttpError(409, "source_account_changed", "Source account changed.");
+      }
+      const live = await this.documents.get(job.userId, "source", event.replaced.sourceId);
+      if (live && live.projectId !== job.projectId) throw new HttpError(409, "source_replacement_scope_invalid", "Source replacement project changed.");
+      await this.afterReplace({ ...event, sourceRetired: event.sourceRetired && live?.payload.publication?.current === false && live.payload.generation === event.sourceGeneration });
+      return { sourceId: event.replaced.sourceId, publicationRevision: event.by.version };
+    });
   }
 
   async enqueue(source, userId, { rearmFailed = false } = {}) {
