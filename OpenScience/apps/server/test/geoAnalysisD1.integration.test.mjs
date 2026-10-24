@@ -99,3 +99,26 @@ test('D1 frozen native rows retain exact member identity, immutable values and s
     assert.deepEqual((await service.runtimeRead(project, 'analysis', { planContextRef: staged.referenceId, limit: 50 })).rows, full.rows.slice(0, 50));
     await assert.rejects(service.analysis(user, project.id, { selectionRef: view.selection.reference, ...view.view }), error => error.status === 409);
 });
+
+test('D1 catalogue source 2001 keeps exact type, identity, detail action and revision invalidation',opts,async()=>{
+ await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'d1-catalogue-control','Catalogue',1048576)",[user.id]);
+ const catalogueProject=await store.createProject({userId:user.id,projectId:'d1-catalogue-control',engines:['deepseek'],coverageDays:90,product:{brandName:'Alpha'}});
+ await store.query("INSERT INTO evimed_geo.sources(id,user_id,geo_project_id,domain,name,kind) SELECT 'd1-cat-'||n::text,$1,$2,'d'||lpad(n::text,4,'0')||'.example','Source '||n::text,'news' FROM generate_series(1,2001) AS n",[user.id,catalogueProject.id]);
+ await store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('d1-cat-g',$1,$2,1,'P2','Catalogue')",[user.id,catalogueProject.id]);
+ await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) VALUES('d1-cat-q',$1,$2,'d1-cat-g',1,'P2','Question?',true)",[user.id,catalogueProject.id]);
+ await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES('d1-cat-r',$1,$2,'baseline','done',1,'{deepseek}','2026-10-01','{\"mode\":\"web\"}')",[user.id,catalogueProject.id]);
+ const links=[{url:'https://www.d2001.example/page',domain:'www.d2001.example'},{url:'https://child.d2001.example/page',domain:'child.d2001.example'}];
+ await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface,citations) VALUES('d1-cat-a',$1,$2,'d1-cat-r','d1-cat-q','deepseek','2026-10-01','valid','Original catalogue answer','{\"mode\":\"web\"}',$3::jsonb)",[user.id,catalogueProject.id,JSON.stringify(links)]);
+ const view=await service.analysis(user,catalogueProject.id,{round:'d1-cat-r',viewId:'V18',sourceLevel:'page'}),tail=view.rows.find(row=>row.dimensions.domain==='d2001.example');
+ assert.equal(tail.dimensions.sourceType,'news');assert.equal(tail.dimensions.sourceId,'d1-cat-2001');
+ assert.equal(view.rows.find(row=>row.dimensions.domain==='child.d2001.example').dimensions.sourceType,'unknown','a parent catalogue domain must not absorb a different subdomain');
+ const exact={selectionRef:view.selection.reference,viewId:'V18',sourceLevel:'page'};
+ const filtered=await service.analysis(user,catalogueProject.id,{...exact,sourceType:'news'});assert.equal(filtered.rows.length,1);assert.equal(filtered.rows[0].dimensions.sourceId,'d1-cat-2001');
+ assert.equal((await service.source(user,catalogueProject.id,tail.dimensions.sourceId,{selectionRef:view.selection.reference})).pages[0].url,'https://www.d2001.example/page');
+ assert.equal((await store.listSources(catalogueProject.id)).length,2000,'existing catalogue list callers keep their bounded behaviour');
+ await store.query("UPDATE evimed_geo.sources SET kind='academic',name='Updated source' WHERE id='d1-cat-2001'");
+ await assert.rejects(service.analysis(user,catalogueProject.id,{...exact,expectedDigest:view.digest}),error=>error.status===409);
+ const renamed=await service.analysis(user,catalogueProject.id,{...exact,sourceType:'academic',sourceSearch:'Updated source'});assert.equal(renamed.rows.length,1);assert.equal(renamed.rows[0].dimensions.sourceId,'d1-cat-2001');
+ await assert.rejects(service.analysis(user,project.id,{...exact}),error=>error.status===404);
+ if(process.env.GEO_D1_RECEIPTS_DIR)await writeFile(`${process.env.GEO_D1_RECEIPTS_DIR}/catalogue-2001.json`,JSON.stringify({before:view,after:renamed},null,2));
+});

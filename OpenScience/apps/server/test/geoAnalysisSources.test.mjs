@@ -83,3 +83,13 @@ test('every numeric bucket has its complete members and actual round history inc
   const row=view.rows.find(row=>row.dimensions.sourceType==='news');assert.equal(row.dimensions.history.find(round=>round.roundId==='r3').citedAnswers,0);
  }
 });
+
+test('source prose exports use compact readable tables while exact source metadata stays in typed data',()=>{
+ const full=presentGeoAnalysis(sourceFixture(),{viewId:'V18',sourceLevel:'page'},context()),document=freezeGeoAnalysisDocument(full);
+ assert.ok(!document.canonicalMarkdown.includes('"originalUrls"'),'raw source context must not expand the printed source label');
+ assert.ok(!document.canonicalMarkdown.includes('(状态 known;'),'printed counts must not repeat the same state prose in every cell');
+ assert.match(document.canonicalMarkdown,/## 引用与页面/);assert.match(document.canonicalMarkdown,/## 共同出现与采样时间/);
+ assert.deepEqual(document.cover.analysis.rows,full.rows);
+ assert.equal(document.typedTable.rows.length,252);assert.ok(document.typedTable.rows.every(row=>JSON.parse(row.dimensions).originalUrls.length));
+ for(const row of full.rows)assert.ok(document.canonicalMarkdown.includes(row.dimensions.sourceKey));
+});
