@@ -3219,7 +3219,8 @@ process.exit(0);
 /** A `CapsuleService` stand-in holding one capsule of entries. */
 function fakeCapsuleService(items, entriesById) {
   return {
-    async active(_userId, projectId = null) { return { record: null, items: projectId == null ? [] : items }; },
+    // One capsule per person since 2026-10-24: what is in force is the account's list, read without a project.
+    async active(_userId) { return { record: null, items }; },
     async entries(_userId, capsuleId) { return { items: entriesById[capsuleId] ?? [], nextCursor: null }; },
   };
 }
