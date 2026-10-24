@@ -78,6 +78,25 @@ export function GeoAnalysisVisual({ data, onSelect }: {
       <ul aria-label={history?"逐轮引用与变化明细":"来源交叉明细"}>{cells.map(cell=><li key={cell.rowKey} className="min-w-0"><Button size="sm" variant="text" className="h-auto max-w-full whitespace-normal break-all text-left" onClick={()=>onSelect(cell)}>{cell.label} · {history?`${observationWord(cell)} ${transitionWord(cell.transition)}`:`${cell.value??"未知"} 回答`}</Button></li>)}</ul>
     </ChartCard>;
   }
+  if (chart.kind === "opportunities") {
+    const cells=chart.cells??[], known=cells.filter(cell=>cell.state==="known"&&cell.yState==="known"&&cell.x!=null&&cell.y!=null);
+    const maxSample=Math.max(1,...cells.map(cell=>cell.sampleSize??0));
+    return <ChartCard title="品牌提及与登记自有信源引用" state={known.length?"content":"empty"} emptyText="尚无完整坐标；每组的读数、分母和对象仍可在下表查看。"
+      footnote="气泡面积表示实际回答样本；不代表需求规模、医学优先级或因果。人工信源关系与登记自有指标分开保留。"
+      legend={<ul aria-label="机会图精确问题群">{cells.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.label} · 样本 {cell.sampleSize??0} · X {cell.x??"未知"}% · Y {cell.y??"未知"}%</Button><span className="text-caption text-text-3">X 分母 {cell.xDenominator??"未知"} · Y 分母 {cell.yDenominator??"未知"}</span></li>)}</ul>}>
+      <svg role="img" aria-label="品牌提及与登记自有信源引用" viewBox="0 0 600 360" className="w-full">
+        <line x1="60" x2="560" y1="300" y2="300" className="stroke-border"/><line x1="60" x2="60" y1="40" y2="300" className="stroke-border"/>
+        <text x="60" y="330" className="fill-current text-text-2">X：品牌提及 M-01（0—100%）</text><text x="60" y="24" className="fill-current text-text-2">Y：登记自有信源 {data.view.ownedMetricId??"M-08"}（0—100%）</text>
+        {known.map(cell=><circle key={cell.rowKey} cx={60+cell.x!*5} cy={300-cell.y!*2.6} r={Math.sqrt((cell.sampleSize??0)/maxSample)*16} className="fill-current text-accent opacity-70"><title>{cell.label} · X {cell.x}% · Y {cell.y}% · 样本 {cell.sampleSize}</title></circle>)}
+      </svg>
+    </ChartCard>;
+  }
+  if (chart.kind === "source_relationships") {
+    const cells=chart.cells??[];
+    return <ChartCard title="已确认信源关系" footnote="当前人工注释按精确页面优先于域名解析；关系不推定为采样时状态，也不依赖品牌提及。">
+      <BarList label="信源关系与回答页面配对" rows={cells.map(cell=>({key:cell.rowKey,label:cell.label,value:cell.value??0,unit:"配对"}))} onSelect={key=>{const cell=cells.find(cell=>cell.rowKey===key);if(cell)onSelect(cell);}}/>
+    </ChartCard>;
+  }
   if (chart.kind === "sources") {
     const cells=chart.cells??[], coverage=chart.mode==="type_coverage";
     return <ChartCard title={coverage?"来源类型回答覆盖率":"来源引用集中度"} state={cells.length?"content":"empty"} emptyText="这个范围没有可核对链接；无法观测的引用能力保留未知。"

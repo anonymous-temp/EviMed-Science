@@ -51,3 +51,13 @@ it('opens the actual missing scheduled repeat as an ask without fabricating an a
  expect(await screen.findByText('Original planned question?')).toBeVisible();expect(screen.getByText(/计划中的重复采集尚无回答/)).toBeVisible();
  const href=screen.getByRole('link',{name:'查看采集进度与恢复选项'}).getAttribute('href')!;expect(new URL(href,'https://geo.invalid').searchParams.get('diagnosisRound')).toBe('r2');expect(screen.queryByRole('link',{name:'查看原始回答与依据'})).toBeNull();
 });
+vi.mock('./tabs/SourceRelationship',()=>({SourceRelationship:({target,canEdit}:{target:{value:string};canEdit:boolean})=><div data-testid="relationship-editor">{target.value} · editable {String(canEdit)}</div>}));
+it('V20 pages beyond the first ten expose exact read-time annotation revisions and the existing editor with viewer abilities',async()=>{
+ const member:GeoAnalysisMembers={selectionRef:'gsel_relationship',view:{viewId:'V20'},rowKey:'own',columnKey:'pages',expectedDigest:'relation',unit:'source_pages',total:21,exact:true};
+ const item=(n:number)=>({id:`page-${n}`,unit:'source_pages',source:{pages:[{sourceKey:`shared.example/s?id=${n}`,domain:'shared.example',sourceType:'news',originalUrls:[`https://shared.example/s?id=${n}`],annotations:[{url:`https://shared.example/s?id=${n}`,relation:'own',origin:'page',reference:{id:`annotation-${n}`,revision:n},reviewedAt:'2026-10-24T00:00:00Z'}]}],cooccurrenceOnly:true}});
+ read.mockImplementation(async(_geo,_ref,offset=0)=>({unit:'source_pages',total:21,nextOffset:offset===0?20:null,digest:'relation',items:offset===0?Array.from({length:20},(_,n)=>item(n+1)):[item(21)]}));
+ render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" project={{access:{abilities:['read'],roles:['viewer'],owner:false}} as never} members={member} onClose={()=>{}}/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'下一批'}));fireEvent.click(await screen.findByText('完整来源页面与原始地址'));
+ expect(screen.getByText(/annotation-21.*21/)).toBeTruthy();expect(screen.getByText(/读取时的当前上下文/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'查看或修改此页面关系'}));expect(screen.getByTestId('relationship-editor')).toHaveTextContent('https://shared.example/s?id=21 · editable false');
+});

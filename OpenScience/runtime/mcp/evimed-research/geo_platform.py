@@ -59,6 +59,7 @@ ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu")
 POOLS = ("P1", "P2", "P3", "P4")
 SOCIAL_PLATFORMS = ("xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels")
 SOCIAL_SORTS = ("hot", "latest")
+OWNED_SOURCE_METRIC_IDS = ("M-08", "M-08S")
 READ_MAX_LIMIT = 50
 # An action's key (`kind:group:ref`), as the domain's `parseGeoActionKey` bounds it.
 ACTION_KEY_MAX = 240
@@ -115,8 +116,9 @@ def tool_definitions():
                             "groupIds": {"type": "array", "items": ID, "maxItems": 100},
                             "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
                             "selectionRef": ID,
-                            "viewId": {"type": "string", "enum": ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09", "V11", "V12", "V14", "V17", "V18", "V19", "V22"]},
+                            "viewId": {"type": "string", "enum": ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09", "V11", "V12", "V14", "V17", "V18", "V19", "V20", "V21", "V22"]},
                             "metricId": {"type": "string", "pattern": "^M-[0-9]{2}[A-Z]?$"},
+                            "ownedMetricId": {"type": "string", "enum": list(OWNED_SOURCE_METRIC_IDS), "description": "V21 only: existing registered-owned metric; manual source annotations remain separate."},
                             "dimension": {"type": "string", "enum": ["project", "engine", "group"]},
                             "categoryMode": {"type": "string", "enum": ["original_group", "client_tags"]},
                             "timeGrain": {"type": "string", "enum": ["day", "round"]},
@@ -306,6 +308,14 @@ def read(arguments: dict) -> dict:
     what = arguments.get("what")
     if what not in READ_WHATS:
         raise GeoPlatformError("geo_read_what_invalid", "what must be one of: %s." % ", ".join(READ_WHATS))
+    selector = arguments.get("filter")
+    if isinstance(selector, dict) and "ownedMetricId" in selector:
+        if (what != "analysis" or selector.get("viewId") != "V21"
+                or selector["ownedMetricId"] not in OWNED_SOURCE_METRIC_IDS or "planContextRef" in selector):
+            raise GeoPlatformError(
+                "geo_read_filter_invalid",
+                "ownedMetricId requires a direct V21 analysis with M-08 or M-08S; frozen input cannot be replaced.",
+            )
     payload = {"what": what}
     for field in ("planContextRef", "promptRequestId"):
         if arguments.get(field) is not None:

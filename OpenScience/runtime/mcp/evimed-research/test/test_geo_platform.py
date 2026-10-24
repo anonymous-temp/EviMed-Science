@@ -134,6 +134,49 @@ class GeoReadTests(_GatewayCase):
             self.assertEqual(result["status"], "error")
         self.assertEqual(len(_Gateway.seen), sent)
 
+    def test_confirmed_relationship_and_opportunity_analysis_forward_exact_native_selectors(self):
+        selectors = [
+            {"viewId": "V20", "selectionRef": "gsel_d3", "sourceSearch": "shared.example/s?id=001", "sourceRelationship": "all"},
+            {"viewId": "V21", "selectionRef": "gsel_d3"},
+            {"viewId": "V21", "ownedMetricId": "M-08", "selectionRef": "gsel_d3", "limit": 20, "offset": 20},
+            {"viewId": "V21", "ownedMetricId": "M-08S", "selectionRef": "gsel_d3", "rowKey": "exact-group", "columnKey": "owned", "expectedDigest": "a" * 64},
+        ]
+        for selector in selectors:
+            with self.subTest(selector=selector):
+                rows = [{"key": "exact-group", "values": {"owned": {"value": None, "state": "unknown"}, "sample": {"value": 0, "state": "known"}}}]
+                _Gateway.answers["read"] = (200, {"data": {"view": selector, "rows": rows, "page": {"total": 1}}})
+                before = len(_Gateway.seen)
+                result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+                self.assertEqual(result["status"], "success", result)
+                self.assertEqual(len(_Gateway.seen), before + 1)
+                self.assertEqual(_Gateway.seen[-1]["body"], {"what": "analysis", "filter": selector})
+                self.assertEqual(result["data"]["rows"], rows)
+                self.assertEqual(result["data"]["view"], selector)
+
+    def test_owned_source_metric_invalid_values_views_and_frozen_overrides_make_no_gateway_request(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": []}})
+        controls = [
+            ("analysis", {"viewId": "V21", "ownedMetricId": value})
+            for value in ("M-09", "M-08B", "M-01", "m-08s", "", None, 8, True, ["M-08"], {"id": "M-08"})
+        ] + [
+            ("analysis", {"viewId": "V20", "ownedMetricId": "M-08"}),
+            ("analysis", {"viewId": "V19", "ownedMetricId": "M-08S"}),
+            ("analysis", {"ownedMetricId": "M-08"}),
+            ("analysis", {"viewId": "V99"}),
+            ("analysis", {"viewId": "V21", "ownedMetricId": "M-08", "planContextRef": "gpc_" + "a" * 64}),
+            ("claims", {"viewId": "V21", "ownedMetricId": "M-08S"}),
+        ]
+        for what, selector in controls:
+            with self.subTest(what=what, selector=selector):
+                result = self.server.call_tool("geo_read", {"what": what, "filter": selector})
+                self.assertEqual(result["status"], "error", result)
+                self.assertFalse(result["error"]["retryable"])
+                self.assertEqual(_Gateway.seen, [])
+        selected = {"planContextRef": "gpc_" + "a" * 64, "offset": 0, "limit": 1}
+        result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selected})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "analysis", "filter": selected})
+
     def test_signal_material_pages_keep_the_bound_context_and_exact_target(self):
         selected = {"planContextRef": "gpc_" + "a" * 64, "targetKey": "target_exact", "limit": 1, "offset": 2}
         _Gateway.answers["read"] = (200, {"data": {"items": [{"part": 2, "text": "Preserved material"}], "total": 4, "more": True, "nextOffset": 3}})

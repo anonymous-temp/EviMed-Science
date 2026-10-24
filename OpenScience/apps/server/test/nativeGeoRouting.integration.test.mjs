@@ -86,6 +86,20 @@ for (const learning of ['disabled','paused','enabled']) test(`native GEO selecti
   const frozen=await app.geo.service.runtimeRead(await app.geo.store.getProject(user.id,id),'analysis',{planContextRef:analysis.referenceId,limit:1});
   assert.equal(frozen.digest,view.digest,'ordinary read reaches the exact frozen data');
   await assert.rejects(app.geo.service.runtimeRead(await app.geo.store.getProject(user.id,id),'strategy',{planContextRef:analysis.referenceId}),{code:'geo_plan_context_mismatch'});
+  // V21 planning reuses the same authenticated native admission and ordinary classifier.
+  await app.geo.store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('d3-native-g',$1,$2,1,'P2','Exact opportunity')",[user.id,id]);
+  await app.geo.store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) VALUES('d3-native-q',$1,$2,'d3-native-g',1,'P2','Exact question?',true)",[user.id,id]);
+  await app.geo.store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES('d3-native-r',$1,$2,'baseline','done',1,'{deepseek}','2026-10-01',$3::jsonb)",[user.id,id,JSON.stringify({mode:'web'})]);
+  await app.geo.store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface,citations) VALUES('d3-native-s',$1,$2,'d3-native-r','d3-native-q','deepseek','2026-10-01','valid','Original observed answer',$3::jsonb,'[]')",[user.id,id,JSON.stringify({mode:'web'})]);
+  const opportunityView=await app.geo.service.analysis(user,id,{round:'d3-native-r',viewId:'V21'});
+  const opportunity=await app.geo.service.planContexts.stage(user,id,{requestKey:'d3-opportunity',sessionId,mode:'strategy',selectionRef:opportunityView.selection.reference,view:opportunityView.view,expectedDigest:opportunityView.digest,intent:'next_steps',focus:{rowKey:opportunityView.rows[0].key,columnKey:'owned'}});
+  const planningWire=await send(prompt('d3-opportunity-plan',opportunity.draft,opportunity));
+  const planningRoute=await reader.routeFor(project,sessionId,['d3-opportunity-plan'],nativeInputText(planningWire.content));
+  assert.equal(planningRoute.effectiveAgentId,'geo-strategy');assert.equal(planningRoute.geoContextRef,opportunity.referenceId);
+  assert.equal(classified.at(-1).query,opportunity.draft);
+  const planningProject=await app.geo.store.getProject(user.id,id);
+  const planningAnalysis=await app.geo.service.runtimeRead(planningProject,'analysis',{planContextRef:opportunity.referenceId});assert.equal(planningAnalysis.digest,opportunityView.digest);
+  const planningRead=await app.geo.service.runtimeRead(planningProject,'strategy',{planContextRef:opportunity.referenceId});assert.deepEqual(planningRead.view.basis.groups.map(group=>[group.id,group.setVersion]),[['d3-native-g',1]]);
   const geoProject = await app.geo.store.getProject(user.id, id);
   const signal = await app.geo.signals.record(geoProject, { kind: 'citation_observed', objectKey: 'exact-page', eventVersion: 'first', title: 'A preserved citation', basis: { url: 'https://example.org/preserved', snapshotId: 'preserved-answer' } });
   const signalSelection = await app.geo.service.planContexts.stage(user, id, { requestKey: 'signal-input', sessionId, mode: 'signal', signalId: signal.id, expectedSignalRevision: 1, intent: 'analyse' });

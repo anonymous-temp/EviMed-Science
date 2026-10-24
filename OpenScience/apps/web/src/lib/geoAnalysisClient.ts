@@ -21,6 +21,8 @@ export type GeoAnalysisId =
   | "V17"
   | "V18"
   | "V19"
+  | "V20"
+  | "V21"
   | "V22";
 export interface GeoAnalysisDescriptor {
   viewId: GeoAnalysisId;
@@ -35,6 +37,7 @@ export interface GeoAnalysisDescriptor {
   sourceLevel?: "domain" | "page";
   sourceFacet?: "engine" | "group";
   topN?: number;
+  ownedMetricId?: "M-08" | "M-08S";
   categoryMode?: "original_group" | "client_tags";
 }
 export interface GeoAnalysisMembers {
@@ -62,6 +65,13 @@ export interface GeoAnalysisRow {
   label: string;
   metricId: string | null;
   dimensions: {
+    ownershipBasis?: string;
+    relationship?: string;
+    temporalBasis?: string;
+    configureAction?: {step:string;action:string};
+    annotationContext?: {pages:Array<{url:string;recordIndex:number}>;records:Array<{relation:string;origin?:string;reference:{id:string;revision:number}|null}>};
+    annotations?: Array<{url:string;relation:string;origin?:string;reference:{id:string;revision:number}|null}>;
+    gaps?: Record<"evidence"|"source"|"content",{state:string;items:Array<{id?:string;url?:string;version?:number;resultVersionId?:string|null;status?:string;digest?:string|null;quote?:string;statement?:string;sourceRef?:string;verifiedAt?:string|null;sourceKey?:string;annotation?:unknown}>;publications?:Array<{id:string;url:string;articleId:string;resultVersionId:string|null}>;action:{step:string;groupId:string|null;setVersion:number|null}}> ;
     sourceFacet?: "engine" | "group";
     groupState?: "known" | "unmapped" | "unknown";
     questionId?: string | null;
@@ -109,6 +119,7 @@ export interface GeoAnalysisRow {
   values: Record<string, GeoAnalysisValue>;
 }
 export interface GeoAnalysisChartCell {
+  x?: number | null; y?: number | null; sampleSize?: number; yState?: string; xDenominator?: number | null; yDenominator?: number | null;
   sourceKey?: string | null; sourceLabel?: string; facetKey?: string | null;
   roundId?: string; roundLabel?: string; comparisonCohortKey?: string; questionId?: string | null; observation?: string | null; transition?: string | null;
   rowKey: string; columnKey: string; label: string;
@@ -120,10 +131,11 @@ export interface GeoAnalysisChartCell {
 export interface GeoAnalysisView {
   definition?: {sourceTypes?: string[]};
   chart?: {
-    kind?: "bars" | "matrix" | "comparison" | "rivals" | "recommendations" | "sources" | "source_facets" | "source_history";
+    kind?: "bars" | "matrix" | "comparison" | "rivals" | "recommendations" | "sources" | "source_facets" | "source_history" | "source_relationships" | "opportunities";
     mode?: "type_coverage" | "source_concentration";
     denominator?: number;
     topN?: number;
+  ownedMetricId?: "M-08" | "M-08S";
     totalCategories?: number;
     cells?: GeoAnalysisChartCell[];
     labels: string[];
@@ -171,7 +183,7 @@ export interface GeoAnalysisMemberItem {
   askedAt?: string | null;
   judgment?: unknown;
   comparisonCohortKey?: string;
-  source?: {sourceKey?: string;domain?: string;originalUrls?: string[];pages:Array<{sourceKey:string;domain:string;sourceType:string;originalUrls:string[];titles:string[];snapshotIds:string[];preservedCitations?: Array<{url?:string;marker?:unknown;position?:unknown;inBody?:boolean|null;[key:string]:unknown}>}>;cooccurrenceOnly:true};
+  source?: {sourceKey?: string;domain?: string;originalUrls?: string[];pages:Array<{sourceKey:string;domain:string;sourceType:string;originalUrls:string[];titles:string[];snapshotIds:string[];annotations?:Array<{url:string;relation:string;origin?:string;reference:{id:string;revision:number}|null;reviewedAt?:string|null}>;preservedCitations?: Array<{url?:string;marker?:unknown;position?:unknown;inBody?:boolean|null;[key:string]:unknown}>}>;cooccurrenceOnly:true};
   citingAnswers?: GeoAnalysisMemberItem[];
   extraction?: {genericMentions: unknown; parserVersion: string | null; registryKey?: string | null; judgedAt: string | null} | null;
   assessmentVersion?: string | null;

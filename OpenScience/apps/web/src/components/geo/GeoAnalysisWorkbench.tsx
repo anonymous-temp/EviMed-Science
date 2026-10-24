@@ -33,6 +33,8 @@ import { GeoMetricMembersDrawer } from "./GeoMetricMembersDrawer";
 import { formatGeoValue, geoCellWord } from "./GeoCellText";
 import { metricUnit } from "./tabs/geoTabText";
 import { GeoAnalysisVisual } from "./GeoAnalysisVisual";
+import { useOpenPublication } from "./spine/useOpenPublication";
+import { SourceRelationship } from "./tabs/SourceRelationship";
 import { engineName } from "./geoText";
 
 export function GeoAnalysisWorkbench({
@@ -112,6 +114,7 @@ function AnalysisPage({
 }) {
   const scope = useGeoReadScope(),
     frame = useGeoFrame();
+  const openPublication = useOpenPublication(project);
   const contextPath = useGeoPath();
   const [page, setPage] = useState<{
     offset: number;
@@ -125,6 +128,7 @@ function AnalysisPage({
     open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [relationshipUrl, setRelationshipUrl] = useState<string | null>(null);
   const { state, reload } = useGeoLoad(
     `analysis:${geoId}:${geoReadScopeQuery(scope)}:${JSON.stringify(view)}:${page?.offset ?? 0}`,
     () =>
@@ -148,7 +152,7 @@ function AnalysisPage({
     for(const [key,value] of Object.entries(changes))query.set(key,value);
     return `/app/geo/${encodeURIComponent(geoId)}/sources?${query}`;
   };
-  const explain = async () => {
+  const explain = async (focus?: {rowKey:string;columnKey:string}) => {
     if (!data) return;
     setBusy(true);
     setError("");
@@ -164,11 +168,12 @@ function AnalysisPage({
       const context = await stageGeoPlanContext(geoId, {
         requestKey: crypto.randomUUID(),
         sessionId,
-        mode: "analysis",
+        mode: focus ? "strategy" : "analysis",
         selectionRef: data.selection.reference,
         view: data.view,
         expectedDigest: data.digest,
-        intent: "explain",
+        intent: focus ? "next_steps" : "explain",
+        ...(focus ? {focus} : {}),
       });
       await open(
         {
@@ -213,6 +218,8 @@ function AnalysisPage({
               { value: "V17", label: "来源类型覆盖" },
               { value: "V18", label: "域名与页面排名" },
               { value: "V19", label: "来源与平台或问题群" },
+              { value: "V20", label: "已确认信源关系" },
+              { value: "V21", label: "问题群提及与自有引用" },
               { value: "V22", label: "页面引用观察历史" },
             ],
             onChange: (value) =>
@@ -221,13 +228,14 @@ function AnalysisPage({
                 dimension: value === "V05" ? "group" : ["V02", "V03", "V04"].includes(value ?? "") ? "engine" : "project",
               }),
           },
-          ...(["V17","V18","V19","V22"].includes(view.viewId)?[
+          ...(["V17","V18","V19","V20","V22"].includes(view.viewId)?[
             {kind:"select" as const,label:"来源类型",value:view.sourceType??null,allLabel:"全部类型",options:[...Object.entries({...GEO_SOURCE_KIND_LABELS_ZH,...Object.fromEntries((data?.definition?.sourceTypes??[]).filter(type=>type!=="unknown"&&!(type in GEO_SOURCE_KIND_LABELS_ZH)).map(type=>[type,type]))}).map(([value,label])=>({value,label:String(label)})),{value:"unknown",label:"类型未知"}],onChange:(value:string|null)=>setView({...view,sourceType:value??undefined})},
             {kind:"select" as const,label:"共同出现",value:view.sourceRelationship??"all",options:[{value:"all",label:"全部引用回答"},{value:"wrong",label:"共同出现我方错误"},{value:"mentions",label:"共同出现品牌提及"}],onChange:(value:string|null)=>setView({...view,sourceRelationship:value==="wrong"?"wrong":value==="mentions"?"mentions":"all"})},
             ...(["V18","V19"].includes(view.viewId)?[{kind:"select" as const,label:"排名对象",value:view.sourceLevel??"domain",options:[{value:"domain",label:"域名"},{value:"page",label:"页面"}],onChange:(value:string|null)=>setView({...view,sourceLevel:value==="page"?"page":"domain"})}]:[]),
             ...(view.viewId==="V19"?[{kind:"select" as const,label:"来源交叉维度",value:view.sourceFacet??"engine",options:[{value:"engine",label:"平台"},{value:"group",label:"版本化问题群"}],onChange:(value:string|null)=>setView({...view,sourceFacet:value==="group"?"group":"engine"})}]:[]),
             {kind:"select" as const,label:"图表显示",value:String(view.topN??15),options:[5,15,30,50].map(value=>({value:String(value),label:`前 ${value} 项及其余`})),onChange:(value:string|null)=>setView({...view,topN:Number(value??15)})},
           ]:[]),
+          ...(view.viewId === "V21" ? [{kind:"select" as const,label:"自有引用口径",value:view.ownedMetricId??"M-08",options:[{value:"M-08",label:"M-08 · 可追溯检索"},{value:"M-08S",label:"M-08S · 全部合资格回答"}],onChange:(value:string|null)=>setView({...view,ownedMetricId:value==="M-08S"?"M-08S":"M-08"})}] : []),
           ...(["V01", "V02", "V03"].includes(view.viewId)
             ? [
                 {
@@ -292,7 +300,7 @@ function AnalysisPage({
               ]
             : []),
         ]}
-        search={["V17","V18","V19","V22"].includes(view.viewId)?{label:"搜索引用来源",value:view.sourceSearch??"",maxLength:300,onChange:value=>{setPage(null);setView({...view,sourceSearch:value||undefined});},onClear:()=>{setPage(null);setView({...view,sourceSearch:undefined});}}:undefined}
+        search={["V17","V18","V19","V20","V22"].includes(view.viewId)?{label:"搜索引用来源",value:view.sourceSearch??"",maxLength:300,onChange:value=>{setPage(null);setView({...view,sourceSearch:value||undefined});},onClear:()=>{setPage(null);setView({...view,sourceSearch:undefined});}}:undefined}
         actions={
           data ? (
             <Button
@@ -331,6 +339,9 @@ function AnalysisPage({
             .map(
               (reason) =>
                 ({
+                  registered_metric_not_manual_relationship: "登记自有指标按现有域名与地址规则匹配；人工页面关系单独保留，不能互换。",
+                  opportunity_denominators: "两条指标的合资格分母与样本要求可能不同。气泡面积仅表示实际回答样本；缺少关联对象不等于对象不存在。",
+                  owned_not_registered: "尚未登记自有信源，Y 保留未知。可从现有行动登记自主发布地址。",
                   citation_history_selected_scope: "首次仅指所选范围内首次观察；变化只在同一可比问题及采集范围内解释。",
                   citation_completeness_required: "可观测未引用需要完整采集计划、每次重复的有效回答及采集端记录的引用列表完整性；缺少声明、无链接、失败、拒答或未采样均为未知，不代表已穷尽全网或模型信息。",
                   preserved_citations_partial_judgement: "来源分析保留部分判定回答的可用引用，不能据此声称回答已完成医学准确性判定。",
@@ -411,6 +422,13 @@ function AnalysisPage({
                 )}
                 {row.dimensions.groupState && <p className="text-caption text-text-2">{row.dimensions.groupName} · 问题版本 {row.dimensions.setVersion??"未知"} · {row.dimensions.groupState==="known"?"已映射":row.dimensions.groupState==="unmapped"?"未映射":"未知"}</p>}
                 {row.dimensions.groupState === "known" && row.dimensions.groupId && <Link className="text-accent" to={sourceActionPath({group:row.dimensions.groupId})}>查看问题群与行动</Link>}
+                {row.dimensions.kind === "source_relationship" && <Disclosure summary="当前关系注释与编辑"><p className="text-caption text-text-3">当前上下文；采样时间单独保留，以下先列 10 条，全部页面见数值明细。</p>{row.dimensions.annotationContext?.pages.slice(0,10).map(annotation=><p key={annotation.url}><Button size="sm" variant="text" onClick={()=>setRelationshipUrl(annotation.url)}>{annotation.url} · {row.dimensions.annotationContext?.records[annotation.recordIndex].origin??"未知"} · 修订 {row.dimensions.annotationContext?.records[annotation.recordIndex].reference?.revision??"未标记"}</Button></p>)}</Disclosure>}
+                {row.dimensions.kind === "opportunity" && <>
+                  <Button size="sm" variant="text" disabled={!!project.access&&!project.access.abilities.includes("edit")} loading={busy} onClick={()=>void explain({rowKey:row.key,columnKey:"owned"})}>按此问题群拟定方案</Button>
+                  {row.values.owned?.reason === "owned_not_registered" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/actions`)}>登记自有发布地址</Link>}
+                  <p className="text-caption text-text-3">登记自有指标与人工关系分别解释；关联为读取时当前上下文。</p>
+                  {row.dimensions.gaps && <OpportunityLinks gaps={row.dimensions.gaps} openPublication={openPublication}/>}
+                </>}
                 {row.dimensions.kind === "source_history" && <p className="text-caption text-text-2">{row.dimensions.roundLabel} · 问题版本 {row.dimensions.setVersion??"未知"} · {row.dimensions.mode??"采样方式未知"} · {row.dimensions.questionId??"问题未知"}</p>}
                 {row.dimensions.sourceType && <p className="text-caption text-text-2">{GEO_SOURCE_KIND_LABELS_ZH[row.dimensions.sourceType as keyof typeof GEO_SOURCE_KIND_LABELS_ZH] ?? (row.dimensions.sourceType === "unknown" ? "类型未知" : row.dimensions.sourceType)} · 所选范围内首次 {row.dimensions.firstObserved??"采样时间未知"} · 最近 {row.dimensions.lastObserved??"采样时间未知"}</p>}
                 {row.dimensions.originalUrls && <Disclosure summary="原始引用地址与所选轮次"><ul>{row.dimensions.originalUrls.map(url=><li key={url}>{url}</li>)}</ul>{row.dimensions.history?.map(round=><p key={round.roundId}>{round.roundId} · {round.citedAnswers} 个引用回答</p>)}{row.dimensions.sourceId&&<Link className="text-accent" to={sourceActionPath({source:row.dimensions.sourceId})}>查看来源与行动</Link>}{row.dimensions.sourceKey&&row.dimensions.originalUrls[0]&&<Link className="block text-accent" to={sourceActionPath({planUrl:row.dimensions.originalUrls[0]})}>将此页面用于方案</Link>}</Disclosure>}
@@ -468,7 +486,7 @@ function AnalysisPage({
             },
           })),
         ]}
-        footnote={["V17","V18","V19","V22"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
+        footnote={["V17","V18","V19","V20","V22"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
       />
       {data && (
         <>
@@ -517,11 +535,13 @@ function AnalysisPage({
           />
         </>
       )}
+      {relationshipUrl && <SourceRelationship geoId={geoId} target={{kind:"page",value:relationshipUrl}} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={refresh}/> }
       {members &&
         ("rowKey" in members ? (
           <GeoAnalysisMembersDrawer
             geoId={geoId}
             members={members}
+            project={project}
             onClose={() => setMembers(null)}
           />
         ) : (
@@ -562,5 +582,20 @@ function sourceObservationWord(value:string):string {
 }
 
 function analysisReason(reason: string): string {
- return ({sampling_plan_unknown:"缺少完整采集计划，未引用保持未知",sampling_plan_incomplete:"采集计划缺少重复任务，未引用保持未知",scheduled_observation_missing:"计划中的重复采集尚无回答",sampling_scope_incomplete:"重复回答未完整落入所选范围",citation_completeness_unknown:"采集端未记录完整引用列表",citations_without_links:"引用缺少可核对链接",answer_not_returned:"失败或拒答，无法观察未引用",no_sampling:"未采样，保持未知",comparison_cohort_unknown:"可比问题或采集范围未知",sampling_time_unknown:"采样时间未知",sampling_order_unknown:"采样顺序未知",comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",own_brand_not_registered:"该范围未登记本品品牌，通用名独立观测",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";
+ return ({owned_not_registered:"尚未登记自有信源",group_metric_unavailable:"该问题群没有适用的指标读数",sampling_plan_unknown:"缺少完整采集计划，未引用保持未知",sampling_plan_incomplete:"采集计划缺少重复任务，未引用保持未知",scheduled_observation_missing:"计划中的重复采集尚无回答",sampling_scope_incomplete:"重复回答未完整落入所选范围",citation_completeness_unknown:"采集端未记录完整引用列表",citations_without_links:"引用缺少可核对链接",answer_not_returned:"失败或拒答，无法观察未引用",no_sampling:"未采样，保持未知",comparison_cohort_unknown:"可比问题或采集范围未知",sampling_time_unknown:"采样时间未知",sampling_order_unknown:"采样顺序未知",comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",own_brand_not_registered:"该范围未登记本品品牌，通用名独立观测",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";
+}
+
+function OpportunityLinks({gaps,openPublication}:{gaps:NonNullable<GeoAnalysisRow['dimensions']['gaps']>;openPublication(version:string,digest:string):Promise<void>}) {
+  return <Disclosure summary="依据、信源与内容关联">
+    <p className="text-caption text-text-3">缺少精确关联时保持未知；本区先列每类 10 项，完整关联保留于所选分析和方案上下文。</p>
+    {(['evidence','source','content'] as const).map(kind=><div key={kind}>
+      <p>{({evidence:'依据',source:'信源',content:'内容'})[kind]} · {gaps[kind].items.length} 个显式关联 · {gaps[kind].state==='no_explicit_links'?'尚无显式关联':gaps[kind].state==='unobservable'?'无法观测':'已关联'}</p>
+      {gaps[kind].items.slice(0,10).map((item,index)=><div key={item.id??item.url??index}>
+        {item.url?<a className="text-accent" href={item.url} target="_blank" rel="noreferrer">{item.url}</a>
+          :kind==='content'&&item.resultVersionId&&item.digest?<Button size="sm" variant="text" onClick={()=>void openPublication(item.resultVersionId!,item.digest!)}>{item.id} · 版本 {item.resultVersionId}</Button>
+          :kind==='evidence'?<Disclosure summary={`${item.id??'依据未知'} · 版本 ${item.version??'未知'}`}><p>{item.statement??'结论文字未提供'}</p><blockquote>{item.quote??'引文未提供'}</blockquote><p>来源：{item.sourceRef??'未提供'} · 核对时间：{item.verifiedAt??'未记录'} · 原始状态：{item.status??'未知'}</p></Disclosure>
+          :<p>{item.id??'标识未知'} · 版本 {item.resultVersionId??item.version??'未知'} · {item.status??'状态未知'}</p>}
+      </div>)}
+    </div>)}
+  </Disclosure>;
 }

@@ -5,6 +5,9 @@ import {
   type GeoAnalysisMembers,
   type GeoAnalysisMemberItem,
 } from "@/lib/geoAnalysisClient";
+import type { GeoProject } from "@/lib/geoClient";
+import { SourceRelationship } from "./tabs/SourceRelationship";
+import { GEO_SOURCE_RELATIONSHIP_LABELS_ZH } from "@evimed/domain";
 import { geoSearchWithScope } from "@/lib/geoReadScope";
 import { FactList } from "@/components/ui/FactList";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -33,10 +36,12 @@ const units: Record<string, string> = {
 };
 export function GeoAnalysisMembersDrawer({
   geoId,
+  project,
   members,
   onClose,
 }: {
   geoId: string;
+  project?: GeoProject;
   members: GeoAnalysisMembers;
   onClose(): void;
 }) {
@@ -84,7 +89,7 @@ export function GeoAnalysisMembersDrawer({
           />
           {state.data.items.length ? (
             state.data.items.map((item) => (
-              <Member key={item.id} geoId={geoId} item={item} selectionRef={["V17","V18","V19","V22"].includes(members.view.viewId)||item.source||item.citingAnswers?members.selectionRef:undefined} />
+              <Member key={item.id} canEdit={!!project&&(!project.access||project.access.abilities.includes("edit"))} geoId={geoId} item={item} selectionRef={["V17","V18","V19","V22"].includes(members.view.viewId)||item.source||item.citingAnswers?members.selectionRef:undefined} />
             ))
           ) : (
             <EmptyState title="这个分类没有记录" />
@@ -117,10 +122,12 @@ function Member({
   geoId,
   item,
   selectionRef,
+  canEdit,
 }: {
   geoId: string;
   item: GeoAnalysisMemberItem;
   selectionRef?: string;
+  canEdit: boolean;
 }) {
   const contextPath = useGeoPath();
   const location = useLocation(),
@@ -155,9 +162,9 @@ function Member({
           ]}
         />
       )}
-      {item.source && <Disclosure summary="完整来源页面与原始地址"><Note action={null}>错误与品牌提及仅表示共同出现，不能据此推断来源导致错误。部分判定保留原判定状态。</Note>{item.source.pages.map(page=><article key={page.sourceKey}><p className="text-caption text-text-2">{page.sourceKey}</p>{page.originalUrls.map(url=><a key={url} className="block text-accent" href={safeCitationUrl(url)?url:undefined} target="_blank" rel="noreferrer">{url}</a>)}{page.preservedCitations?.map((citation,index)=><p key={index} className="text-caption text-text-2">{citation.marker!=null?`引用标记：${String(citation.marker)}`:""}{citation.position!=null?` · 保留位置：${String(citation.position)}`:""}</p>)}</article>)}</Disclosure>}
+      {item.source && <Disclosure summary="完整来源页面与原始地址"><Note action={null}>错误与品牌提及仅表示共同出现，不能据此推断来源导致错误。部分判定保留原判定状态。</Note>{item.source.pages.map(page=><article key={page.sourceKey}><p className="text-caption text-text-2">{page.sourceKey}</p>{page.originalUrls.map(url=><a key={url} className="block text-accent" href={safeCitationUrl(url)?url:undefined} target="_blank" rel="noreferrer">{url}</a>)}{page.annotations?.length ? <SourceAnnotations geoId={geoId} annotations={page.annotations} canEdit={canEdit}/> : null}{page.preservedCitations?.map((citation,index)=><p key={index} className="text-caption text-text-2">{citation.marker!=null?`引用标记：${String(citation.marker)}`:""}{citation.position!=null?` · 保留位置：${String(citation.position)}`:""}</p>)}</article>)}</Disclosure>}
       {!!item.judgment && <Disclosure summary="原始判定"><pre className="whitespace-pre-wrap text-caption">{JSON.stringify(item.judgment,null,2)}</pre></Disclosure>}
-      {item.citingAnswers?.map(answer=><Member key={answer.id} geoId={geoId} item={answer} selectionRef={selectionRef}/>)}
+      {item.citingAnswers?.map(answer=><Member key={answer.id} canEdit={canEdit} geoId={geoId} item={answer} selectionRef={selectionRef}/>)}
       {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取版本",value:item.extraction.parserVersion ?? "未知"},{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名原始提取",value:JSON.stringify(item.extraction.genericMentions)}]} /></Disclosure>}
       {item.expression && <FactList rows={[
         {label:"表达对象",value:item.expression.entity ?? "对象未保留"},
@@ -250,4 +257,16 @@ function safeCitationUrl(value: string | undefined) {
   } catch {
     return false;
   }
+}
+
+function SourceAnnotations({geoId,annotations,canEdit}:{geoId:string;annotations:NonNullable<GeoAnalysisMemberItem['source']>['pages'][number]['annotations'];canEdit:boolean}) {
+  const [url,setUrl]=useState<string|null>(null);
+  return <section aria-label="精确信源关系注释"><p className="text-caption text-text-3">以下为读取时的当前上下文，采样时间单独保留；编辑器读取当前关系。</p>
+    {annotations?.map(annotation=><div key={annotation.url}>
+      <p>{GEO_SOURCE_RELATIONSHIP_LABELS_ZH[annotation.relation as keyof typeof GEO_SOURCE_RELATIONSHIP_LABELS_ZH]??'未确认'} · {annotation.origin==='page'?'精确页面':annotation.origin==='domain'?'域名标记':'未标记'}</p>
+      <p>{annotation.reference?.id??'没有注释记录'} · 修订 {annotation.reference?.revision??'未知'} · 注释日期 {annotation.reviewedAt??'未记录'}</p>
+      <Button size="sm" variant="text" onClick={()=>setUrl(annotation.url)}>查看或修改此页面关系</Button>
+    </div>)}
+    {url&&<SourceRelationship geoId={geoId} target={{kind:'page',value:url}} canEdit={canEdit}/>}
+  </section>;
 }

@@ -167,3 +167,16 @@ it('V22 history shows unknown intervals and selected-scope first observations wi
  expect(screen.getByText('未知')).toBeTruthy();expect(screen.getByText('可观测未引用')).toBeTruthy();
  fireEvent.click(screen.getByRole('button',{name:/page r2/}));expect(selected).toHaveBeenLastCalledWith(cells[1]);
 });
+
+it('opportunity scatter preserves actual sample bubble areas and keyboard accessible exact cohorts while null Y stays unplotted',()=>{
+ const selected=vi.fn(),cells=[{rowKey:'a',columnKey:'mention',label:'Same v1',groupId:'g1',setVersion:1,engine:null,x:20,y:50,sampleSize:50,value:20,state:'known',yState:'known',xDenominator:50,yDenominator:25},{rowKey:'b',columnKey:'mention',label:'Same v2',groupId:'g2',setVersion:2,engine:null,x:20,y:null,sampleSize:200,value:20,state:'known',yState:'unknown'}];
+ render(<GeoAnalysisVisual data={{view:{viewId:'V21',ownedMetricId:'M-08'},chart:{kind:'opportunities',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={selected}/>);
+ expect(screen.getByRole('img',{name:'品牌提及与登记自有信源引用'}).querySelectorAll('circle')).toHaveLength(1);
+ fireEvent.click(screen.getByRole('button',{name:/Same v2.*200/}));expect(selected).toHaveBeenCalledWith(cells[1]);
+ expect(screen.getByText(/气泡面积.*实际回答样本/)).toBeTruthy();expect(screen.getByText(/X 分母 50.*Y 分母 25/)).toBeTruthy();
+});
+it('confirmed relationship bars have exact members independently of brand mentions',()=>{
+ const selected=vi.fn(),cells=[{rowKey:'other',columnKey:'pairs',label:'其他',value:50,state:'known',unit:'source_pairs',engine:null,groupId:null,setVersion:null}];
+ render(<GeoAnalysisVisual data={{view:{viewId:'V20'},chart:{kind:'source_relationships',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={selected}/>);
+ fireEvent.click(screen.getByRole('button',{name:/其他/}));expect(selected).toHaveBeenCalledWith(cells[0]);expect(screen.getByText(/当前人工注释/)).toBeTruthy();
+});

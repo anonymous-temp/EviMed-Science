@@ -26,6 +26,14 @@ export const GEO_FROZEN_ANALYSIS_LIMITS = Object.freeze({
   summaryBytes: 200000,
   chartBytes: 16 * 1024,
 });
+/** Only the server-validated V21 strategy supplement may share the frozen analysis reader. */
+export function hasGeoFrozenAnalysisContext(payload) {
+  if(payload?.mode==="analysis") return true;
+  const basis=payload?.basis,focus=basis?.analysisFocus,analysis=basis?.analysis;
+  return payload?.mode==="strategy" && focus?.viewId==="V21" && analysis?.view?.viewId==="V21" && focus.analysisDigest===analysis.digest
+    && focus.parentSelectionRef===analysis.selection?.reference && focus.childSelectionRef===basis.selection?.reference
+    && basis.groups?.length===1 && basis.groups[0].id===focus.groupId && basis.groups[0].setVersion===focus.setVersion;
+}
 /** @param {any} analysis @param {{parentId:string,project:any,actorId:string}} input */
 export function freezeGeoAnalysisPages(
   analysis,
@@ -166,7 +174,7 @@ export async function readFrozenGeoAnalysisPage(
     parent.projectId !== project.projectId ||
     parent.payload.recordType !== "geo-plan-context" ||
     parent.payload.geoId !== project.id ||
-    parent.payload.mode !== "analysis" ||
+    !hasGeoFrozenAnalysisContext(parent.payload) ||
     parent.payload.state !== "bound" ||
     parent.payload.basisDigest !== hash(parent.payload.basis)
   )
@@ -187,7 +195,7 @@ export async function readFrozenGeoAnalysisPage(
     parent.projectId !== project.projectId ||
     parent.payload.recordType !== "geo-plan-context" ||
     parent.payload.geoId !== project.id ||
-    parent.payload.mode !== "analysis" ||
+    !hasGeoFrozenAnalysisContext(parent.payload) ||
     parent.payload.state !== "bound" ||
     parent.payload.basisDigest !== hash(parent.payload.basis) ||
     manifest.schemaVersion !== 1 ||

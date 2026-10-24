@@ -143,6 +143,23 @@ test("the runtime's own token is the only way in, and it names the project", asy
   assert.ok(failures.some((failure) => failure.code === "geo_no_project"), "failures reach the platform's ledger");
 });
 
+test('D3 native analysis descriptors retain the selected owned metric through closed gateway fields', async t => {
+  const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+  for(const filter of [{viewId:'V20',selectionRef:'gsel_d3',sourceRelationship:'all'}, {viewId:'V21',selectionRef:'gsel_d3'},
+    ...['M-08','M-08S'].map(ownedMetricId=>({viewId:'V21',ownedMetricId,selectionRef:'gsel_d3',rowKey:'exact-group',columnKey:'owned',expectedDigest:'a'.repeat(64)}))]) {
+    const result=await post('read',{what:'analysis',filter});assert.equal(result.status,200,JSON.stringify(result.body));
+    const forwarded=calls.at(-1)[3];for(const [key,value]of Object.entries(filter))assert.equal(forwarded[key],value);
+    if(filter.viewId==='V21')assert.equal(forwarded.ownedMetricId,filter.ownedMetricId??'M-08');
+  }
+  const count=calls.length;
+  for(const filter of [{viewId:'V21',ownedMetricId:'M-09'},{viewId:'V20',ownedMetricId:'M-08'}, {viewId:'V99'},
+    {ownedMetricId:'M-08'},{viewId:'V21',ownedMetricId:'M-08S',planContextRef:'gpc_'+'a'.repeat(64)}]) {
+    const result=await post('read',{what:'analysis',filter});assert.equal(result.status,400);assert.equal(result.body.code,'geo_read_filter_invalid');
+  }
+  assert.equal((await post('read',{what:'claims',filter:{viewId:'V21',ownedMetricId:'M-08S'}})).status,400);
+  assert.equal(calls.length,count,'invalid descriptors never reach runtimeRead');
+});
+
 test("off, or not open to the account, every operation says geo_disabled", async (t) => {
   const off = { ...on, geoEnabled: false };
   const { post } = await serve(t, createGeoGatewayHandler(off, runtimeManager, { geo: geoDouble(off).geo }));

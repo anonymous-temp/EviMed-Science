@@ -63,7 +63,7 @@ import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
-import { readFrozenGeoAnalysisPage } from "./geoAnalysisFrozenPages.mjs";
+import { readFrozenGeoAnalysisPage, hasGeoFrozenAnalysisContext } from "./geoAnalysisFrozenPages.mjs";
 import { readGeoAnalysis, presentGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
 import { geoRivalMonitoringRows } from "./geoAnalysisMetrics.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
@@ -2363,7 +2363,7 @@ export class GeoService {
     if (input.planContextRef) {
       if (Object.keys(input).some(key => !["planContextRef", "limit", "offset"].includes(key))) throw new HttpError(400, "geo_read_filter_invalid", "Use the frozen context without replacing its selection.");
       const row = await this.planContexts?.documents.get(project.userId, "geo-plan-context", input.planContextRef);
-      if (!row || row.projectId !== project.projectId || row.payload.geoId !== project.id || row.payload.mode !== "analysis" || row.payload.state !== "bound") throw new HttpError(404, "geo_plan_context_not_found", "The selected analysis is unavailable.");
+      if (!row || row.projectId !== project.projectId || row.payload.geoId !== project.id || !hasGeoFrozenAnalysisContext(row.payload) || row.payload.state !== "bound") throw new HttpError(404, "geo_plan_context_not_found", "The selected analysis is unavailable.");
       await this.requireProject({ id: row.payload.actorId }, project.id);
       return readFrozenGeoAnalysisPage(this.planContexts.documents, project, row, input);
     }

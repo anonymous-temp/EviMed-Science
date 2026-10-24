@@ -21,7 +21,7 @@ import { GEO_ANALYSIS_DESCRIPTOR_FIELDS, GEO_ANALYSIS_REGISTRY, normalizeGeoAnal
 import { buildGeoRecommendationAnalysis } from "./geoAnalysisRecommendations.mjs";
 import { buildGeoMetricAnalysis, buildGeoComparisonAnalysis, buildGeoRivalAnalysis } from "./geoAnalysisMetrics.mjs";
 export { normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
-import { buildGeoSourceAnalysis, selectedSourceDomains } from "./geoAnalysisSources.mjs";
+import { buildGeoSourceAnalysis, selectedSourceDomains, readGeoSourceAnnotations, readGeoOpportunityLinks } from "./geoAnalysisSources.mjs";
 import { HttpError } from "./security.mjs";
 
 const hash = (value) =>
@@ -470,7 +470,7 @@ export async function readGeoAnalysis(
       ),
     ];
     const groups =
-      (view.dimension === "group" || view.viewId === "V19" && view.sourceFacet === "group")
+      (view.dimension === "group" || view.viewId === "V19" && view.sourceFacet === "group" || view.viewId === "V21")
         ? (
             await store.query(
               "SELECT id,name,set_version FROM evimed_geo.question_groups WHERE geo_project_id=$1 AND user_id=$2 AND id=ANY($3::text[]) ORDER BY id",
@@ -593,10 +593,14 @@ export async function readGeoAnalysis(
       ).rows;
     }
     const sources = GEO_ANALYSIS_REGISTRY[view.viewId].family === "sources" ? (await store.sourcesForDomains(project, selectedSourceDomains(selected))).map(source=>({id:source.id,domain:source.domain,name:source.name,kind:source.kind})) : [];
+    const sourceAnnotations = ["V20", "V21"].includes(view.viewId) ? await readGeoSourceAnnotations(store, project, selected) : [];
+    const opportunityLinks = ["V20", "V21"].includes(view.viewId) ? await readGeoOpportunityLinks(store, project, selected) : null;
     const memberItems = new Map();
     const result = presentGeoAnalysis(selected, view, {
       targets,
       sources,
+      sourceAnnotations,
+      opportunityLinks,
       product: project.product,
       competitors: project.competitors,
       tier: project.tier,
@@ -902,6 +906,35 @@ ${view.columns.map((column) => `| ${clean(column.label)} | ${clean(reportReading
           canonicalMarkdown = overview + "## 引用与页面\n\n观察日期为首次至最近一次已知采样日期。\n\n" + table(["来源", "回答", "配对", "页面", "观察日期"], [48, 7, 7, 7, 24], view.rows.map((row, index) => [`${index + 1}. ${row.dimensions.sourceKey ?? row.dimensions.domain ?? row.label}`, ...["answers", "pairs", "pages"].map(key => count(row, key)), dateRange(row)])) +
               "\n## 共同出现与采样时间\n\n序号与上表来源一致。同错回答指共同出现我方错误的回答，同提回答指共同出现品牌提及的回答，均为共同出现计数。时间覆盖以回答为单位，轮次仅计实际出现的轮次。\n\n" + table(["序号", "轮次", "同错回答", "同提回答", "时间已知", "时间未知"], [10, 10, 18, 18, 18, 18], view.rows.map((row, index) => [index + 1, ...["rounds", "wrong", "mentions", "knownTime", "unknownTime"].map(key => count(row, key))]));
       }
+  }
+  if (["V20", "V21"].includes(view.viewId)) {
+      const table = (headers, widths, items) => `| ${headers.join(" | ")} |\n| ${widths.map(width => "-".repeat(width)).join(" | ")} |\n${items.map(cells => `| ${cells.map(clean).join(" | ")} |`).join("\n")}\n`;
+      const count = (row, key) => { const cell = row.values[key]; return cell.value == null ? "未知" : cell.state === "known" ? String(cell.value) : `${cell.value}（${({insufficient:"样本不足",unknown:"未知",not_applicable:"不适用"})[cell.state] ?? "需核对"}）`; };
+      const overview = `# 信源关系与问题群机会分析\n\n所选范围：${view.scope.from ?? "不限开始日期"} 至 ${view.scope.to ?? "不限结束日期"}；${view.scope.timeZone ?? "Asia/Shanghai"}。分析版本：${view.digest}。方法：${clean(view.definition.methodVersion)}。\n\n当前人工注释按精确页面优先于域名解析，不推定为采样时的关系；采样时间与注释日期分别保留。完整地址、注释修订及关联对象固定在导出数据和记录中。\n\n`;
+      if (view.viewId === "V20") {
+          canonicalMarkdown = overview + "## 已确认信源关系\n\n引用回答按关系分别去重，回答与页面配对独立统计，不依赖品牌提及。一个回答可同时引用多种关系，回答数不构成互斥比例。\n\n" + table(["关系", "引用回答", "回答页面配对", "不同页面"], [30,20,22,20], view.rows.map(row=>[row.label,...["answers","pairs","pages"].map(key=>count(row,key))])) + "\n## 共同出现与采样覆盖\n\n错误与品牌提及仅为共同出现，不代表来源引起错误。\n\n" + table(["关系","实际轮次","同错回答","同提回答","时间已知","时间未知"],[24,14,14,14,14,14],view.rows.map(row=>[row.label,...["rounds","wrong","mentions","knownTime","unknownTime"].map(key=>count(row,key))]));
+      } else {
+          canonicalMarkdown = overview + `## 品牌提及与登记自有引用\n\nX 为现有 M-01；Y 为所选现有 ${view.view.ownedMetricId}，保持登记域名与地址匹配口径，与人工页面关系分别解释。两条指标的合资格分母可能不同；气泡面积仅表示实际回答样本，不表示需求规模、医学优先级或因果。未登记自有信源时 Y 保留未知，可从现有行动登记自主发布地址。\n\n` + table(["精确问题群与版本","M-01（%）",`${view.view.ownedMetricId}（%）`,"实际回答样本"],[45,18,18,20],view.rows.map(row=>[`${row.dimensions.groupName} · v${row.dimensions.setVersion??"未知"} · ${row.dimensions.groupId??"未映射"}`,...["mention","owned","sample"].map(key=>count(row,key))])) + "\n## 两条指标的合资格分母\n\n" + table(["问题群","X 分子","X 合资格分母","Y 分子","Y 合资格分母"],[38,16,22,16,22],view.rows.map(row=>[row.dimensions.groupId??"未映射",row.values.mention.numerator??"未知",row.values.mention.denominator??"未知",row.values.owned.numerator??"未知",row.values.owned.denominator??"未知"])) + "\n显式依据、来源页面和内容版本关联保留于数据表与冻结上下文。缺少关联不表示不存在；活动结论也不自动视为已核实证据。\n";
+      }
+  }
+  // Excel limits a text cell to 32,767 characters. D3 keeps exact large contexts in ordered typed continuation rows.
+  if (["V20", "V21"].includes(view.viewId) && rows.some(row=>Object.values(row).some(value=>typeof value==="string"&&value.length>30000))) {
+      columns.push(...["context_parent", "context_field", "context_part"].map(key=>({key,label:key,type:"text"})));
+      const continued = [];
+      for (const row of rows) {
+          const main = {...row}, parts = [];
+          for (const column of columns) {
+              const value = main[column.key];
+              if (typeof value!=="string" || value.length<=30000) continue;
+              main[column.key]=null;
+              const characters=Array.from(value), total=Math.ceil(characters.length/15000);
+              for(let index=0;index<total;index++) parts.push({key:`${row.key}:context:${column.key}:${index+1}`,label:"精确上下文续行",context_parent:row.key,context_field:column.key,context_part:`${index+1}/${total}`,[column.key]:characters.slice(index*15000,(index+1)*15000).join("")});
+          }
+          continued.push(main,...parts);
+          if(continued.length>20000) throw new HttpError(422,"geo_read_filter_invalid","Narrow the selected context before exporting more than 20,000 typed rows.");
+      }
+      rows=continued;
+      canonicalMarkdown+="\nCSV 和 Excel 中过长的精确上下文按 context_parent、context_field、context_part 顺序保留为续行。续行不重复测量值；完整对象与修订固定在导出记录中。\n";
   }
   return {
     canonicalMarkdown,

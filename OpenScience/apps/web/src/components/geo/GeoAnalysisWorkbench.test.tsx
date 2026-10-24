@@ -4,8 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
 const read=vi.hoisted(()=>vi.fn());
 const memberRead=vi.hoisted(()=>vi.fn());
-const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn(),scope:vi.fn()}));
+const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn(),scope:vi.fn(),publication:vi.fn()}));
 vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read,getGeoAnalysisMembers:memberRead}));
+vi.mock('./spine/useOpenPublication',()=>({useOpenPublication:()=>navigation.publication}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.open}));
 vi.mock('@/lib/apiClient',async original=>({...await original<typeof import('@/lib/apiClient')>(),createWebRuntimeSession:navigation.create}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage}));
@@ -174,4 +175,18 @@ it.each(['V19','V22'] as const)('%s retains loading, read error and empty states
  read.mockImplementationOnce(()=>new Promise(()=>{}));const first=render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView={viewId} embedded/></MemoryRouter>);expect(first.container.querySelector('.animate-pulse')).toBeTruthy();first.unmount();
  read.mockRejectedValueOnce(new Error('Selected source read failed'));const failed=render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView={viewId} embedded/></MemoryRouter>);expect(await screen.findByRole('button',{name:'重试'})).toBeVisible();failed.unmount();
  read.mockResolvedValueOnce({view:{viewId},selection:{reference:'gsel_empty'},digest:'empty',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}});render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView={viewId} embedded/></MemoryRouter>);expect(await screen.findByText('这个范围尚无可用读数。')).toBeVisible();
+});
+
+it('V21 stages an unsent next-steps draft with exact row, metric and frozen gaps; keeps own configuration action for missing Y',async()=>{
+ navigation.open.mockReset().mockResolvedValue(true);navigation.current.mockResolvedValue({projectId:'control',sessionId:'session'});
+ navigation.stage.mockReset().mockResolvedValue({referenceId:'gpc_opportunity',sessionId:'session',draft:'Unsent exact group plan'});
+ read.mockReset().mockResolvedValue({view:{viewId:'V21',dimension:'project',ownedMetricId:'M-08'},selection:{reference:'gsel_d3'},digest:'d'.repeat(64),columns:[{key:'owned',label:'登记自有 M-08'}],rows:[{key:'exact-row',label:'Same · v1',metricId:null,dimensions:{kind:'opportunity',groupId:'g1',setVersion:1,configureAction:{step:'sources',action:'configure_owned_sources'},gaps:{evidence:{state:'linked',items:[{id:'claim-1',version:1,statement:'Claim',quote:'Preserved source quote',sourceRef:'https://evidence.example/a',status:'active'}],action:{step:'evidence',groupId:'g1',setVersion:1}},source:{state:'observed',items:[{url:'https://shared.example/a?id=1'}],action:{step:'sources',groupId:'g1',setVersion:1}},content:{state:'linked',items:[{id:'article-old',resultVersionId:'001',digest:'a'.repeat(64)}],action:{step:'content',groupId:'g1',setVersion:1}}}},values:{owned:{value:null,state:'unknown',reason:'owned_not_registered',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial',reasons:['owned_not_registered']}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V21" embedded/></MemoryRouter>);
+ const action=await screen.findByRole('button',{name:'按此问题群拟定方案'});fireEvent.click(action);
+ await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({intent:'next_steps',mode:'strategy',selectionRef:'gsel_d3',expectedDigest:'d'.repeat(64),focus:{rowKey:'exact-row',columnKey:'owned'}})));
+ expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_opportunity'}}),'Unsent exact group plan');
+ expect(screen.getByRole('link',{name:'登记自有发布地址'})).toBeTruthy();
+ expect(screen.getByRole('link',{name:'https://shared.example/a?id=1'})).toHaveAttribute('href','https://shared.example/a?id=1');
+ fireEvent.click(screen.getByRole('button',{name:/article-old.*001/}));expect(navigation.publication).toHaveBeenCalledWith('001','a'.repeat(64));
+ fireEvent.click(screen.getByText(/claim-1.*1/));expect(screen.getByText('Preserved source quote')).toBeTruthy();
 });
