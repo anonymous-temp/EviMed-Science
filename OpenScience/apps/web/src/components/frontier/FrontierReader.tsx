@@ -252,9 +252,10 @@ export function ReaderInsight({ insight, item, className }: { insight: FrontierI
     <Block label="AI 解读" labelClassName={AI_LABEL} className={className}>
       <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-reading text-text xl:max-w-read xl:text-reading-lg">
         {parts.map((part, index) => (typeof part === "string" ? part : (
-          <sup key={index}>
+          <sup key={index} className="text-caption leading-none">
             {/* One line of 12 px text with the page's corner: the look of the quoted post's 「原文」, so a citation is not a kind of
-              * control of its own beside the reader's others (the release walk counts them; a post with all its blocks has 9). */}
+              * control of its own beside the reader's others (the release walk counts them; a post with all its blocks has 9). The
+              * size is the sup's own: the base sheet's 75% of an 18 px paragraph is 13.5 px, a size of no scale and a pair of its own. */}
             <Link to={articlePath(part.publicId)} state={state} aria-label={part.title}
               className="inline-block rounded px-px leading-none tabular-nums text-link hover:underline">[{part.n}]</Link>
           </sup>
