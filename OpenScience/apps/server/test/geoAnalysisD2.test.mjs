@@ -2,7 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { presentGeoAnalysis, normalizeGeoAnalysisView, freezeGeoAnalysisDocument } from '../src/geoAnalysis.mjs';
 const link = { url: 'https://www.news.example/page?x=1', domain: 'wrong.example', marker: '[1]', position: 12 };
+const contract = { samplingMode: 'recurring', repeats: 1, engines: ['deepseek', 'kimi'], metricIds: ['M-03'], sourceBasis: 'answers', reportPresentation: 'detailed' };
 const complete = { mode: 'web', citationObservation: { schemaVersion: 1, capability: 'linked_list', complete: true } };
+function declaredPlan(selected, cells) {
+    selected.sourceObservationPlan = { schemaVersion: 1, jobs: cells.flatMap(([roundId, questionId, engine, ids]) => {
+        const round = selected.rounds.find(item => item.id === roundId);
+        round.surface = { mode: 'web', measurementContract: { ...contract, repeats: ids.length } };
+        return ids.map((id, repeatIndex) => ({ id: `${roundId}-${repeatIndex}`, roundId, questionId, engine, repeatIndex, status: 'done', snapshotId: id, admittedSnapshotId: id }));
+    }) };
+    for (const row of selected.rows) if (row.repeatIndex == null) row.repeatIndex = 0;
+    return selected;
+}
 function fixture() {
     const rows = [
         { snapshotId: 'a', questionId: 'q1', groupId: 'g1', roundId: 'r1', engine: 'deepseek', status: 'valid', surface: { mode: 'web' }, citations: [link], facts: null },
@@ -12,7 +22,7 @@ function fixture() {
     ];
     for (const row of rows)
         row.askedAt = `2026-10-0${row.roundId.slice(1)}T00:00:00Z`;
-    return { scope: { timeZone: 'Asia/Shanghai' }, selection: { reference: 'gsel_d2', dataRevision: 'd2', methodVersion: 'm' }, rows, computed: { balance: { deduped: rows } }, questions: [{ id: 'q1', group_id: 'g1', set_version: 1, text: 'Original unjudged?' }, { id: 'q2', group_id: 'g2', set_version: 2, text: 'Other?' }], rounds: [1, 2, 3, 4].map(n => ({ id: `r${n}`, set_version: n === 4 ? 2 : 1, started_at: `2026-10-0${n}T00:00:00Z` })), comparison: null };
+    return declaredPlan({ scope: { timeZone: 'Asia/Shanghai' }, selection: { reference: 'gsel_d2', dataRevision: 'd2', methodVersion: 'm' }, rows, computed: { balance: { deduped: rows } }, questions: [{ id: 'q1', group_id: 'g1', set_version: 1, text: 'Original unjudged?' }, { id: 'q2', group_id: 'g2', set_version: 2, text: 'Other?' }], rounds: [1, 2, 3, 4].map(n => ({ id: `r${n}`, set_version: n === 4 ? 2 : 1, started_at: `2026-10-0${n}T00:00:00Z` })), comparison: null }, [['r1','q1','deepseek',['a']],['r2','q1','deepseek',['b']],['r3','q1','deepseek',['c']],['r4','q2','kimi',['d']]]);
 }
 const context = () => ({ allRows: true, memberItems: new Map(), sources: [{ id: 'source', domain: 'news.example', kind: 'news' }], groups: [{ id: 'g1', set_version: 1, name: 'Same' }, { id: 'g2', set_version: 2, name: 'Same' }] });
 test('D2 descriptors close source facet and level combinations', () => {
@@ -105,6 +115,7 @@ test('V22 only valid linked repeats supply presence while non-valid URL provenan
         if (mixed !== 'none') selected.rows.push({ ...selected.rows[0], snapshotId: 'valid-repeat', repeatIndex: 1, status: 'valid', surface: complete, citations: mixed === 'valid_linked' ? [link] : [] });
         selected.computed.balance.deduped = selected.rows;
         selected.rounds = selected.rounds.slice(0, 3);
+        declaredPlan(selected, [['r1','q1','deepseek',mixed === 'none'?['a']:['a','valid-repeat']],['r2','q1','deepseek',['absent']],['r3','q1','deepseek',['positive']]]);
         const ctx = context(), view = presentGeoAnalysis(selected, { viewId: 'V22' }, ctx);
         const [first, absent, positive] = view.rows, hasValidPositive = mixed === 'valid_linked';
         const detail = `${status}, declared ${declaration}, mixed ${mixed}`;
@@ -133,4 +144,26 @@ test('V22 only valid linked repeats supply presence while non-valid URL provenan
             assert.equal(sources.rows[0].values.answers.value, hasValidPositive ? 3 : 2, 'V19 keeps admitted refused citation provenance');
         }
     }
+});
+test('V22 needs an explicit complete scheduled cohort and never infers expected repeats from captured maxima', () => {
+    const cases = [
+        ['no plan', selected => { delete selected.sourceObservationPlan; }, 'sampling_plan_unknown'],
+        ['legacy contract', selected => { delete selected.rounds[2].surface.measurementContract; }, 'sampling_plan_unknown'],
+        ['contract missing repeat', selected => { selected.rounds[2].surface.measurementContract.repeats = 2; }, 'sampling_plan_incomplete'],
+        ['missing capture', selected => { const job=selected.sourceObservationPlan.jobs.find(item=>item.roundId==='r3');job.snapshotId=null;job.admittedSnapshotId=null;job.status='failed'; }, 'scheduled_observation_missing'],
+        ['outside selection', selected => { selected.sourceObservationPlan.jobs.find(item=>item.roundId==='r3').admittedSnapshotId=null; }, 'sampling_scope_incomplete'],
+        ['wrong reciprocal snapshot', selected => { selected.sourceObservationPlan.jobs.find(item=>item.roundId==='r3').admittedSnapshotId='a'; }, 'sampling_scope_incomplete'],
+        ['wrong repeat index', selected => { selected.rows[2].repeatIndex=1; }, 'sampling_scope_incomplete'],
+        ['wrong round mode', selected => { selected.rounds[2].surface.mode='inclusion'; }, 'sampling_plan_unknown'],
+        ['wrong set version', selected => { selected.rounds[2].set_version=2; }, 'sampling_plan_unknown'],
+    ];
+    for (const [name,change,reason] of cases) {
+        const selected=fixture();change(selected);
+        const view=presentGeoAnalysis(selected,{viewId:'V22'},context()),row=view.rows.find(item=>item.dimensions.roundId==='r3'&&item.dimensions.questionId==='q1');
+        assert.equal(row.values.observation.value,null,name);assert.equal(row.values.observation.reason,reason,name);assert.equal(row.values.transition.value,null,name);
+        assert.equal(row.dimensions.observationPlan.reason,reason,name);
+        assert.equal(view.rows.find(item=>item.dimensions.roundId==='r1'&&item.dimensions.questionId==='q1').values.observation.value,'present','positive citation remains visible independently of missing plan');
+    }
+    const selected=fixture();const full=presentGeoAnalysis(selected,{viewId:'V22'},context());selected.sourceObservationPlan.jobs[0].status='queued';
+    const changed=presentGeoAnalysis(selected,{viewId:'V22'},context());assert.notEqual(changed.digest,full.digest);assert.equal(changed.selection.reference,full.selection.reference);
 });

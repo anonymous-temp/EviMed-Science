@@ -44,3 +44,10 @@ it('source history exact old/new actions keep original questions and preserved m
  expect(await screen.findAllByText('Original unjudged?')).toHaveLength(2);fireEvent.click(screen.getByText('完整来源页面与原始地址'));
  expect(screen.getByText(/引用标记：\[7\].*保留位置：42/)).toBeVisible();expect(screen.getAllByRole('link',{name:'查看原始回答与依据'}).map(link=>link.getAttribute('href'))).toEqual(expect.arrayContaining([expect.stringContaining('/old?selectionRef=gsel_history'),expect.stringContaining('/new?selectionRef=gsel_history')]));
 });
+it('opens the actual missing scheduled repeat as an ask without fabricating an answer',async()=>{
+ const member:GeoAnalysisMembers={selectionRef:'gsel_missing',view:{viewId:'V22'},rowKey:'missing',columnKey:'observation',expectedDigest:'missing-plan',unit:'observations',total:1,exact:true};
+ read.mockResolvedValue({unit:'observations',total:1,nextOffset:null,digest:'missing-plan',items:[{id:'actual-job-1',unit:'asks',roundId:'r2',questionId:'q1',repeatIndex:1,engine:'deepseek',status:'failed',reason:'scheduled_observation_missing',question:{text:'Original planned question?'}}]});
+ render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member} onClose={()=>{}}/></MemoryRouter>);
+ expect(await screen.findByText('Original planned question?')).toBeVisible();expect(screen.getByText(/计划中的重复采集尚无回答/)).toBeVisible();
+ const href=screen.getByRole('link',{name:'查看采集进度与恢复选项'}).getAttribute('href')!;expect(new URL(href,'https://geo.invalid').searchParams.get('diagnosisRound')).toBe('r2');expect(screen.queryByRole('link',{name:'查看原始回答与依据'})).toBeNull();
+});

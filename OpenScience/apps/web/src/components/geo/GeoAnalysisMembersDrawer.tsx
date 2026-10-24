@@ -137,7 +137,7 @@ function Member({
           item.repeatIndex != null ? `第 ${item.repeatIndex + 1} 次` : null,
           item.askedAt ?? item.answer?.asked_at ?? "采样时间未知",
           item.status,
-          item.reason,
+          ({ sampling_plan_unknown:"缺少完整采集计划", sampling_plan_incomplete:"采集计划缺少重复任务", scheduled_observation_missing:"计划中的重复采集尚无回答", sampling_scope_incomplete:"重复回答未完整落入所选范围" } as Record<string,string>)[item.reason??""]??item.reason,
         ]
           .filter(Boolean)
           .join(" · ")}

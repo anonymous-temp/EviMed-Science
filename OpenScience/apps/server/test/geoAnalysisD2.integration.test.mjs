@@ -11,6 +11,7 @@ import { readGeoSelection } from '../src/geoReadScope.mjs';
 import { freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from '../src/geoAnalysis.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, opts = { skip: !url && 'Disposable local PostgreSQL required' }, user = { id: 'd2-owner' };
+const singleContract = { samplingMode: 'recurring', repeats: 1, engines: ['deepseek', 'kimi'], metricIds: ['M-03'], sourceBasis: 'answers', reportPresentation: 'detailed' };
 const complete = { schemaVersion: 1, capability: 'linked_list', complete: true }, link = { url: 'https://www.news.example/page?x=1', domain: 'wrong.example', marker: '[1]', position: 12 };
 let isolated, database, store, measure, service, project;
 before(async () => {
@@ -35,7 +36,9 @@ before(async () => {
     for (const n of [1, 2, 3, 4]) {
         const version = n === 4 ? 2 : 1, engine = n === 4 ? 'kimi' : 'deepseek';
         await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES($1,$2,$3,'baseline','done',$4,$5::text[],$6,'{\"mode\":\"web\"}')", [`d2-r${n}`, user.id, project.id, version, [engine], `2026-10-0${n}`]);
-        await measure.insertSnapshot({ id: `d2-s${n}`, userId: user.id, geoProjectId: project.id, roundId: `d2-r${n}`, questionId: `d2-q${version}`, engine, askedAt: new Date(`2026-10-0${n}T00:00:00Z`), status: n === 2 ? 'refusal' : 'valid', answerText: `Original answer ${n}`, answerSha256: null, citations: n === 1 || n === 4 ? [link] : [], surface: { mode: 'web', ...(n === 3 ? { citationObservation: complete } : {}) }, screenshotSha256: null, latencyMs: null, warnings: [], probeJobId: null });
+        await store.query("UPDATE evimed_geo.rounds SET surface=$2::jsonb WHERE id=$1", [`d2-r${n}`, JSON.stringify({ mode:'web', measurementContract:singleContract })]);
+        await store.query("INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,repeat_index,status,snapshot_id) VALUES($1,$2,$3,$4,$5,$6,0,'done',$7)", [`d2-job${n}`,user.id,project.id,`d2-r${n}`,`d2-q${version}`,engine,`d2-s${n}`]);
+        await measure.insertSnapshot({ id: `d2-s${n}`, userId: user.id, geoProjectId: project.id, roundId: `d2-r${n}`, questionId: `d2-q${version}`, engine, askedAt: new Date(`2026-10-0${n}T00:00:00Z`), status: n === 2 ? 'refusal' : 'valid', answerText: `Original answer ${n}`, answerSha256: null, citations: n === 1 || n === 4 ? [link] : [], surface: { mode: 'web', ...(n === 3 ? { citationObservation: complete } : {}) }, screenshotSha256: null, latencyMs: null, warnings: [], probeJobId: `d2-job${n}` });
     }
 });
 after(async () => { await database?.close(); await isolated?.drop(); });
@@ -133,9 +136,10 @@ test('V22 eligible repeat status controls stored presence and absence without lo
         const roundId = `d2-status-r${n}`, at = `2026-10-${10 + n}T00:00:00Z`;
         await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES($1,$2,$3,'baseline','done',1,'{deepseek}',$4,'{\"mode\":\"web\"}')", [roundId, user.id, statusProject.id, at.slice(0, 10)]);
         const statuses = [3, 7, 8].includes(n) ? ['refusal', 'valid'] : [n === 1 ? 'refusal' : n === 2 ? 'failed' : 'valid'];
+        await store.query("UPDATE evimed_geo.rounds SET surface=$2::jsonb WHERE id=$1", [roundId,JSON.stringify({mode:'web',measurementContract:{...singleContract,repeats:[3,7,8].includes(n)?2:1}})]);
         for (const [repeatIndex, status] of statuses.entries()) {
             const id = `d2-status-s${n}-${status}`, jobId = `${id}-job`;
-            await store.query("INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,repeat_index,status) VALUES($1,$2,$3,$4,'d2-status-q','deepseek',$5,'done')", [jobId, user.id, statusProject.id, roundId, repeatIndex]);
+            await store.query("INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,repeat_index,status,snapshot_id) VALUES($1,$2,$3,$4,'d2-status-q','deepseek',$5,'done',$6)", [jobId, user.id, statusProject.id, roundId, repeatIndex,id]);
             await measure.insertSnapshot({ id, userId: user.id, geoProjectId: statusProject.id, roundId, questionId: 'd2-status-q', engine: 'deepseek', askedAt: new Date(at), status, answerText: `Original ${status} result`, answerSha256: null, citations: [4, 6, 8].includes(n) || n === 3 && status === 'valid' ? [] : [link], surface: { mode: 'web', citationObservation: complete }, screenshotSha256: null, latencyMs: null, warnings: [], probeJobId: jobId });
         }
     }
@@ -181,5 +185,54 @@ test('V22 eligible repeat status controls stored presence and absence without lo
     const native = await service.runtimeRead(statusProject, 'analysis', { planContextRef: staged.referenceId, limit: 50 });
     assert.deepEqual(native.rows, full.rows);
     assert.deepEqual(native.chart.cells.slice(0, 3).map(cell => [cell.value, cell.state, cell.reason]), [[null, 'unknown', 'answer_not_returned'], [null, 'unknown', 'answer_not_returned'], [null, 'unknown', 'answer_not_returned']]);
+    if (process.env.GEO_D2_RECEIPTS_DIR) await writeFile(`${process.env.GEO_D2_RECEIPTS_DIR}/document-v22.json`, JSON.stringify({ ...document, version: 1, rendererVersion: 'pandoc-chromium-v1', sourceDigest: full.digest, sourceType: 'typed-table', formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, null, 2));
+});
+test('V22 requires every scheduled repeat in the exact selected scope before absence and preserves frozen job missingness', opts, async () => {
+    await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'d2-repeat-control','Repeat history',1048576)", [user.id]);
+    const planned = await store.createProject({ userId: user.id, projectId: 'd2-repeat-control', engines: ['deepseek'], coverageDays: 90, product: {} });
+    await store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('d2-repeat-g',$1,$2,1,'P2','Repeats')", [user.id, planned.id]);
+    await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) VALUES('d2-repeat-q',$1,$2,'d2-repeat-g',1,'P2','Same planned original question?',true)", [user.id, planned.id]);
+    const contract = { samplingMode: 'recurring', repeats: 2, engines: ['deepseek'], metricIds: ['M-03'], sourceBasis: 'answers', reportPresentation: 'detailed' };
+    const missingStatuses = ['failed', 'skipped', 'queued', 'failed', null, null, null, null, null];
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+        const roundId = `d2-repeat-r${n}`, day = `2026-10-${String(n).padStart(2, '0')}`;
+        const surface = { mode: 'web', ...(n === 8 ? {} : { measurementContract: contract }) };
+        await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface,planned) VALUES($1,$2,$3,'baseline','partial',1,'{deepseek}',$4,$5::jsonb,2)", [roundId, user.id, planned.id, day, JSON.stringify(surface)]);
+        for (const repeatIndex of n === 7 || n === 8 ? [0] : [0, 1]) {
+            const jobId = `${roundId}-job${repeatIndex}`, snapshotId = `${roundId}-s${repeatIndex}`, missingStatus = repeatIndex ? missingStatuses[n - 1] : null;
+            await store.query("INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,repeat_index,status,snapshot_id) VALUES($1,$2,$3,$4,'d2-repeat-q','deepseek',$5,$6,$7)", [jobId, user.id, planned.id, roundId, repeatIndex, missingStatus ?? 'done', missingStatus ? null : snapshotId]);
+            if (missingStatus) continue;
+            await measure.insertSnapshot({ id: snapshotId, userId: user.id, geoProjectId: planned.id, roundId, questionId: 'd2-repeat-q', engine: 'deepseek', askedAt: new Date(n === 9 && repeatIndex ? '2026-11-01T00:00:00Z' : `${day}T00:00:00Z`), status: 'valid', answerText: `Valid repeat ${repeatIndex}`, answerSha256: null, citations: [4, 6].includes(n) && !repeatIndex ? [link] : [], surface: { mode: 'web', citationObservation: complete }, screenshotSha256: null, latencyMs: null, warnings: [], probeJobId: jobId });
+        }
+    }
+    const view = await service.analysis(user, planned.id, { from: '2026-10-01', to: '2026-10-09', viewId: 'V22' });
+    const full = await freezeSelectedGeoAnalysis(store, planned, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest });
+    assert.deepEqual(full.rows.map(row => [row.values.observation.value, row.values.transition.value]), [[null, null], [null, null], [null, null], ['present', 'first_observed_in_scope'], ['absent', 'no_longer_observed'], ['present', 'new_appearance'], [null, null], [null, null], [null, null]]);
+    for (const row of full.rows.slice(0, 3)) {
+        assert.equal(row.values.observation.reason, 'scheduled_observation_missing');
+        const members = await service.analysisMembers(user, planned.id, { selectionRef: view.selection.reference, ...view.view, expectedDigest: view.digest, rowKey: row.key, columnKey: 'observation' });
+        assert.ok(members.items.some(item => item.unit === 'asks' && item.repeatIndex === 1 && ['failed', 'skipped', 'queued'].includes(item.status)), 'the actual missing scheduled job stays drillable');
+    }
+    assert.equal(full.rows[6].values.observation.reason, 'sampling_plan_incomplete', 'a contract repeat without a scheduled job cannot be inferred from the observed maximum');
+    assert.equal(full.rows[7].values.observation.reason, 'sampling_plan_unknown', 'legacy missing full contract stays unknown');
+    assert.equal(full.rows[8].values.observation.reason, 'sampling_scope_incomplete', 'a returned repeat outside the exact date selection cannot supply absence');
+    const unplanned = await service.analysisMembers(user, planned.id, { selectionRef:view.selection.reference,...view.view,expectedDigest:view.digest,rowKey:full.rows[6].key,columnKey:'observation' });
+    assert.ok(unplanned.items.every(item=>item.unit!=='asks'),'a missing job is never invented from the contract repeat count');
+    const outside = await service.analysisMembers(user, planned.id, { selectionRef:view.selection.reference,...view.view,expectedDigest:view.digest,rowKey:full.rows[8].key,columnKey:'observation' });
+    const excludedJob=outside.items.find(item=>item.id==='d2-repeat-r9-job1');assert.equal(excludedJob.unit,'asks');assert.equal(excludedJob.snapshotId,undefined);assert.equal(excludedJob.answer,undefined,'an outside-scope answer is not hydrated through a missing-job member');
+    const document = freezeGeoAnalysisDocument(full);
+    assert.deepEqual(document.typedTable.rows.map(row => row.observation), full.rows.map(row => row.values.observation.value));
+    const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
+    service.planContexts = adapter;
+    const staged = await adapter.stage(user, planned.id, { requestKey: 'd2-repeat-history', sessionId: 'd2-repeat-session', mode: 'analysis', selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest, intent: 'explain' });
+    const request = { requestId: 'd2-repeat-request', sessionId: 'd2-repeat-session', content: [{ type: 'text', text: 'Explain selected repeat missingness.' }], geoPlanContext: { referenceId: staged.referenceId } };
+    await adapter.prepare(user, { id: planned.projectId, userId: user.id }, request); await adapter.bind(user, { id: planned.projectId, userId: user.id }, request);
+    assert.deepEqual((await service.runtimeRead(planned, 'analysis', { planContextRef: staged.referenceId, limit: 50 })).rows, full.rows);
+    await store.query("UPDATE evimed_geo.probe_jobs SET status='queued' WHERE id='d2-repeat-r1-job1'");
+    await assert.rejects(service.analysis(user, planned.id, { selectionRef: view.selection.reference, ...view.view, expectedDigest: view.digest }), error => error.status === 409);
+    const refreshed = await service.analysis(user, planned.id, { selectionRef: view.selection.reference, ...view.view });
+    assert.equal(refreshed.selection.reference, view.selection.reference, 'unreturned job changes do not rewrite observed selection identity');
+    assert.notEqual(refreshed.digest, view.digest, 'the exact current job plan participates in analysis identity');
+    assert.deepEqual((await service.runtimeRead(planned, 'analysis', { planContextRef: staged.referenceId, limit: 50 })).rows, full.rows);
     if (process.env.GEO_D2_RECEIPTS_DIR) await writeFile(`${process.env.GEO_D2_RECEIPTS_DIR}/document-v22.json`, JSON.stringify({ ...document, version: 1, rendererVersion: 'pandoc-chromium-v1', sourceDigest: full.digest, sourceType: 'typed-table', formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, null, 2));
 });

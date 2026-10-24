@@ -3,20 +3,20 @@ import { createHash } from 'node:crypto';
 import { documentExportDigest } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { sourceCitation } from './geoSourceAnswers.mjs';
-import { geoSourceCohort, geoSourceCitationComplete } from './geoAnalysisSourceCohort.mjs';
+import { geoSourceCohort, geoSourceCitationComplete, geoSourceObservationPlans } from './geoAnalysisSourceCohort.mjs';
 const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
 const unknown = reason => ({ value: null, state: 'unknown', reason, unit: 'observations', metric: null, members: null });
 const known = value => ({ value, state: 'known', reason: null, unit: 'observations', metric: null, members: null });
 
 /** Classify the collection once per cohort and round, independently of any source page. */
-function collection(batch, cohort) {
+function collection(batch, cohort, plan) {
     const reason = !cohort.known ? 'comparison_cohort_unknown'
         : !batch.length ? 'no_sampling'
         : batch.some(row => row.status !== 'valid') ? 'answer_not_returned'
         : batch.some(row => (row.citations ?? []).some(citation => !sourceCitation(citation))) ? 'citations_without_links'
-        : batch.some(row => !geoSourceCitationComplete(row)) ? 'citation_completeness_unknown' : null;
+        : batch.some(row => !geoSourceCitationComplete(row)) ? 'citation_completeness_unknown' : plan.reason;
     const times = batch.map(row => row.askedAt).filter(Boolean).sort();
-    return { batch, reason, time: times.length === batch.length && times.length ? times.at(-1) : null };
+    return { batch, reason, plan, time: times.length === batch.length && times.length ? times.at(-1) : null };
 }
 
 export function buildGeoSourceHistory(selected, view, base) {
@@ -34,8 +34,8 @@ export function buildGeoSourceHistory(selected, view, base) {
     }
     // Bound the complete rectangular output before per-page expansion; never truncate it.
     if (base.rows.length * cohorts.size * rounds.size > 20000) throw new HttpError(422, 'geo_read_filter_invalid', 'Narrow the pages, questions or rounds to at most 20,000 history rows.');
-    const collections = new Map();
-    for (const [key, cohort] of cohorts) collections.set(key, new Map([...rounds.keys()].map(roundId => [roundId, collection(byRound.get(key).get(roundId) ?? [], cohort)])));
+    const collections = new Map(), observationPlan = geoSourceObservationPlans(selected);
+    if (base.rows.length) for (const [key, cohort] of cohorts) collections.set(key, new Map([...rounds.values()].map(round => { const batch = byRound.get(key).get(round.id) ?? []; return [round.id, collection(batch, cohort, observationPlan(round, cohort, batch))]; })));
     // The display axis uses actual observations only. Missing timestamps never borrow a planned date.
     const ordered = [...rounds.values()].sort((a, b) => String(roundTime.get(a.id) ?? 'z').localeCompare(String(roundTime.get(b.id) ?? 'z')) || a.id.localeCompare(b.id));
     const memberItems = new Map(), rows = [], cells = [];
@@ -63,7 +63,7 @@ export function buildGeoSourceHistory(selected, view, base) {
                 const sampled = collections.get(key).get(round.id), batch = sampled.batch;
                 // Only a valid repeat can establish presence; completeness and other repeats still govern absence.
                 const observation = batch.some(row => row.status === 'valid' && preserved.has(row.snapshotId)) ? 'present' : sampled.reason ? null : 'absent';
-                points.set(round.id, { ...sampled, roundId: round.id, observation, items: batch.map(row => member(row, page, preserved.get(row.snapshotId))), previous: null, transition: null });
+                points.set(round.id, { ...sampled, roundId: round.id, observation, items: [...batch.map(row => member(row, page, preserved.get(row.snapshotId))), ...sampled.plan.missingJobs.map(job => ({ id: job.id, unit: 'asks', roundId: job.roundId, questionId: job.questionId, engine: job.engine, repeatIndex: job.repeatIndex, status: job.status, reason: sampled.plan.reason }))], previous: null, transition: null });
             }
             // Cohort chronology is its own answer timestamps, even when another cohort was sampled earlier in a round.
             const chronological = [...points.values()].filter(point => point.observation && cohort.known && point.time).sort((a, b) => a.time.localeCompare(b.time) || a.roundId.localeCompare(b.roundId));
@@ -95,6 +95,7 @@ export function buildGeoSourceHistory(selected, view, base) {
                         ...pageRow.dimensions, history: null, kind: 'source_history', ...cohort,
                         roundId: round.id, roundLabel: `第 ${ordinal + 1} 轮`, roundOrdinal: ordinal + 1, roundKind: round.kind ?? null,
                         askedAt: point.time, firstObserved: observedTimes[0] ?? null, lastObserved: observedTimes.at(-1) ?? null, firstObservedBasis: 'selected_scope', previousRoundId: old?.roundId ?? null,
+                        observationPlan: point.plan.basis,
                         citationCompleteness: point.batch.map(answer => ({ snapshotId: answer.snapshotId, declaration: answer.surface?.citationObservation ?? null })), observation, transition,
                     },
                     values: { observation: observation ? known(observation) : unknown(point.reason), transition: transition ? known(transition) : unknown(transitionReason) }, links: [],
@@ -115,11 +116,11 @@ export function buildGeoSourceHistory(selected, view, base) {
     return {
         ...base, rows, columns, memberItems,
         chart: { kind: 'source_history', labels: ordered.map((round, index) => `第 ${index + 1} 轮`), series: [], cells, totalCategories: rows.length, topN: view.topN ?? 15 },
-        dependencies: { ...base.dependencies, observations: selected.computed.balance.deduped },
+        dependencies: { ...base.dependencies, observations: selected.computed.balance.deduped, sourceObservationPlan: selected.sourceObservationPlan ?? null },
         availability: { status: rows.length ? 'ready' : 'empty', reasons: ['citation_history_selected_scope', 'citation_completeness_required'], remedy: null },
         definition: {
             ...base.definition, unit: 'observations',
-            countingRule: 'Preserved citation presence requires a valid returned repeat with a usable URL; a non-valid repeat cannot establish presence. A valid positive remains observable in a mixed batch. Absence requires every selected repeat to be valid with an explicit complete linked citation list. Without a valid positive, legacy empty arrays, linkless retrieval, refusal, failure and missing samples remain unknown. First observation is in selected scope only. Citation completeness is the collection producer’s preserved declaration, not evidence of exhaustive knowledge across the web or model.',
+            countingRule: 'Preserved citation presence requires a valid returned repeat with a usable URL; a non-valid repeat cannot establish presence. A valid positive remains observable in a mixed batch. Absence requires the explicit preserved round contract and exact scheduled repeat jobs, each with a reciprocally linked admitted valid snapshot and complete linked citation list. Missing jobs, missing captures, out-of-scope snapshots and unavailable historical plans remain unknown. Without a valid positive, legacy empty arrays, linkless retrieval, refusal, failure and missing samples remain unknown. First observation is in selected scope only. Citation completeness is the collection producer’s preserved declaration, not evidence of exhaustive knowledge across the web or model.',
             denominatorRule: 'Only the same immutable question, set version, exact engine and sampling mode form a comparison cohort. New appearance requires prior comparable observable absence; no-longer-observed requires later comparable observable absence. Unknown intervals remain blank. No fitted citation lifetime or causal interpretation.',
         },
     };
