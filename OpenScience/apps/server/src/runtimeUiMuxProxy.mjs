@@ -74,19 +74,23 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   let closed = false;
   const streams = new Map();
   const retiring = new Set();
+  const authorizing = new Set();
   // Native cancellation has no terminal response; failure has only an error.
   // Keep small tombstones for in-flight late frames, never payloads or active
-  // stream capacity. Bound their lifetime by this carrier and their count.
+  // stream capacity. Never evict an identity on a live carrier: unread native
+  // frames could otherwise acquire a different endpoint's projection on reuse.
+  // Rotate the carrier before admitting more than this lifetime identity budget.
+  const MAX_LIFETIME_STREAMS = 4096;
   const closedStreams = new Map();
   const rememberClosed = (id, cancelled) => {
     closedStreams.set(id, { streamId: id, cancelled, terminalError: !cancelled, finished: true });
-    if (closedStreams.size > 4096) closedStreams.delete(closedStreams.keys().next().value);
   };
   const finishStream = operation => {
     if (!operation || operation.finished) return;
     operation.finished = true;
     operation.controller?.abort();
     retiring.delete(operation);
+    authorizing.delete(operation);
     try { onStreamClosed?.(operation.endpoint, operation.streamId); } catch { /* Closing must still release both peers. */ }
   };
   const acknowledgements = new Map();
@@ -104,6 +108,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     closed = true;
     for (const operation of streams.values()) finishStream(operation);
     for (const operation of retiring) finishStream(operation);
+    for (const operation of authorizing) finishStream(operation);
     streams.clear();
     closedStreams.clear();
     for (const pending of acknowledgements.values()) pending.reject(new Error("Prompt acceptance is unknown."));
@@ -213,7 +218,11 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       // A duplicate ID cannot receive an independent error: it aliases an
       // already active stream, so the malformed connection is refused.
       if (streams.has(frame.streamId) || projectItem && closedStreams.has(frame.streamId)) { shutdown(1008, "runtime_ui_stream_duplicate"); return; }
+      if (projectItem && closedStreams.size + streams.size + authorizing.size >= MAX_LIFETIME_STREAMS) {
+        shutdown(1001, 'runtime_ui_generation_complete'); return;
+      }
       const operation = { streamId: frame.streamId, endpoint: frame.endpoint, payload: frame.payload, controller: new AbortController(), cancelled: false, terminalError: false, finished: false };
+      authorizing.add(operation);
       try {
         if (streams.size >= MAX_STREAMS) throw new HttpError(429, "runtime_ui_stream_limit", "Too many active mux streams.");
         await authorize(frame.endpoint, frame.payload, { streamId: frame.streamId, signal: operation.controller.signal });
@@ -223,6 +232,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
         return;
       }
       if (closed) { finishStream(operation); return; }
+      authorizing.delete(operation);
       streams.set(frame.streamId, operation);
     }
     // Preserve endpoint payloads and cancellation semantics byte-for-byte.

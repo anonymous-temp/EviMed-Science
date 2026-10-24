@@ -313,6 +313,41 @@ test('a queued normal terminal cannot transfer its stream id to a new endpoint',
   release();
 });
 
+test('carrier closure aborts and cleans a pending authorization before it settles', { timeout: 5000 }, async t => {
+  let enter, release, signal, revoked = false;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const ended = [];
+  const f = await fixture(t, {}, { revalidate: async () => { if (revoked) throw new Error('Revoked'); }, authorize: async (_endpoint, _payload, context) => { signal = context.signal; enter(); await barrier; }, onStreamClosed: (_endpoint, id) => ended.push(id) });
+  t.after(() => release());
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('pending', 'session/page')); await entered;
+  const closed = once(c.ws, 'close'); revoked = true; await closed;
+  await eventually(() => signal.aborted);
+  assert.deepEqual(ended, ['pending']);
+  release(); await delay(20);
+  assert.deepEqual(ended, ['pending']); assert.equal(f.received.length, 0);
+});
+
+test('a scoped carrier retires at its lifetime identity budget without evicting old bindings', { timeout: 30000 }, async t => {
+  let wake;
+  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => ({ forward: true, value }), onStreamClosed: () => wake?.() });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  const sent = [];
+  peer.on('message', raw => sent.push(JSON.parse(raw.toString())));
+  let closeCode = null; c.ws.on('close', code => { closeCode = code; wake?.(); });
+  for (let index = 0; index < 4100 && closeCode === null; index++) {
+    const done = new Promise(resolve => { wake = resolve; });
+    c.send(open(`lifetime-${index}`, 'session/page'));
+    c.send({ type: 'cancel', streamId: `lifetime-${index}` });
+    await done; wake = null;
+  }
+  assert.equal(closeCode, 1001, 'a fresh carrier starts before any retired identity can be reused');
+  assert.equal(sent.filter(item => item.type === 'open').length, 4096);
+  const next = f.connect(); assert.equal(await next.opened, 101, 'rotation does not disable new native reading');
+});
+
 test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
   const checked = [], charged = [], forwarded = [];
   const f = await fixture(t, {}, {}, {
