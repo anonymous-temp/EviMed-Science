@@ -42,20 +42,24 @@ export function storedSourceScope(value) {
   if (!Array.isArray(value) || value.length > MAX_SOURCE_SCOPE || value.some((id) => typeof id !== "string" || !sourceIdPattern.test(id))) {
     throw new HttpError(500, "research_sessions_corrupt", "A research session's source scope is invalid.");
   }
-  return value.length ? Object.freeze([...new Set(value)]) : null;
+  return Object.freeze([...new Set(value)]);
 }
 
 /**
- * A source scope as a request states it: a list of document ids, or an empty one to go back to all of them.
+ * A source scope as a request states it: a list of document ids, or a legacy empty one to go back to all of them. Explicit selected mode retains an empty list.
  * @param {unknown} value
+ * @param {unknown} [mode]
  * @returns {readonly string[] | null}
  */
-export function requestedSourceScope(value) {
+export function requestedSourceScope(value, mode = undefined) {
+  if (mode !== undefined && mode !== "project" && mode !== "selected") throw invalid("sourceScopeMode must be project or selected.");
+  if (mode === "project") return null;
+  if (mode === "selected" && value == null) value = [];
   if (value == null) return null;
   if (!Array.isArray(value) || value.length > MAX_SOURCE_SCOPE || value.some((id) => typeof id !== "string" || !sourceIdPattern.test(id))) {
     throw invalid(`sourceIds must be at most ${MAX_SOURCE_SCOPE} document ids (src_…).`);
   }
-  return value.length ? Object.freeze([...new Set(value)].sort()) : null;
+  return value.length || mode === "selected" ? Object.freeze([...new Set(value)].sort()) : null;
 }
 
 function validateStoredRecord(value) {
@@ -319,16 +323,16 @@ export class ResearchSessionStore {
   }
 
   /**
-   * Limits one conversation to the knowledge-base documents named, or lifts the limit (null / an empty list). The
+   * Limits one conversation to the knowledge-base documents named, or lifts the limit (project mode, or a legacy empty list). Explicit selected-empty remains narrow. The
    * conversation's research session is made first when it has none — a conversation opened from the knowledge base is
    * scoped before it has asked anything — as an open-domain one, which is what an unbound conversation is.
    * Only the scope changes: the session's identity (its mode and agent) is never touched here.
-   * @param {any} project @param {string} rawSessionId @param {unknown} sourceIds
+   * @param {any} project @param {string} rawSessionId @param {unknown} sourceIds @param {unknown} [mode]
    * @returns {Promise<any>} the session as it now stands
    */
-  async setSourceScope(project, rawSessionId, sourceIds) {
+  async setSourceScope(project, rawSessionId, sourceIds, mode = undefined) {
     const sessionId = safeId(rawSessionId, "research session id");
-    const scope = requestedSourceScope(sourceIds);
+    const scope = requestedSourceScope(sourceIds, mode);
     if (!(await this.get(project, sessionId))) await this.putRecord(project, sessionId, { mode: "open-domain" });
     if (typeof this.stateStore?.setResearchSessionSourceScope === "function") {
       return this.stateStore.setResearchSessionSourceScope(project, sessionId, scope);

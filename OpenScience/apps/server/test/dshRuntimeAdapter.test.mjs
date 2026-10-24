@@ -235,7 +235,7 @@ test("owned plugin probe methods have exact actual Typert registrations and clos
   } finally { await ctx.fiber.dispose(); }
 });
 
-test("scoped skill methods have exact actual Typert registrations and one request argument", async () => {
+test("scoped skill methods have exact actual Typert registrations and positional wire arguments", async () => {
   const { Context } = await loadHarnessModule("@deepseek-ai/cordis");
   const { remoteMethods } = await loadHarnessModule("@deepseek-ai/dsh-typert-protocol");
   const ctx = new Context();
@@ -246,8 +246,9 @@ test("scoped skill methods have exact actual Typert registrations and one reques
     assert.deepEqual(SEAMS.wire.unary.filter(method => method.startsWith("evimedSkills/")).sort(), actual);
     for (const method of actual) {
       assert.ok(ALLOWED_WIRE_METHODS.has(method));
-      assert.deepEqual(SEAMS.wire.unaryArgs[method], ["request"]);
-      assert.equal(catalogue[method.split("/")[1]].length, 2, "the local signal is transport-owned");
+      const args = method === "evimedSkills/list" ? ["sessionId"] : ["sessionId", "key"];
+      assert.deepEqual(SEAMS.wire.unaryArgs[method], args);
+      assert.equal(catalogue[method.split("/")[1]].length, args.length + 1, "the local signal is transport-owned");
     }
   } finally { await ctx.fiber.dispose(); }
 });

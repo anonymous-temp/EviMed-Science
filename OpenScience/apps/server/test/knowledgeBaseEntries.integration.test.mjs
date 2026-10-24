@@ -36,7 +36,7 @@ test("a note is written, listed as a note, edited into its next version, and nev
     const note = (await created.json()).data;
     assert.equal(note.job, undefined);
     const rel = note.source.payload.paths[0];
-    assert.match(rel, /^knowledge-base\/notes\/10月3日组会记录-[0-9a-f]{6}\.md$/);
+    assert.match(note.source.payload.logicalPath, /^knowledge-base\/notes\/10月3日组会记录-[0-9a-f]{6}\.md$/);
     assert.equal(await readFile(path.join(project.baseDir, rel), "utf8"), "# 10月3日组会记录\n\n确定 C1–C3 三类比较分开合并；局限性写明全文未获取。\n");
     assert.deepEqual([note.source.payload.docType, note.source.display.kind, note.source.display.origin, note.source.display.title, note.source.display.typeShort],
       ["note-memo", "note", "note", "10月3日组会记录", "笔记"]);
@@ -47,7 +47,7 @@ test("a note is written, listed as a note, edited into its next version, and nev
     assert.deepEqual(await (await fetch(`${base}/api/sources/${note.source.id}/note`, { headers })).json().then((body) => body.data),
       { title: "10月3日组会记录", body: "确定 C1–C3 三类比较分开合并；局限性写明全文未获取。" });
 
-    // Saved unchanged: nothing new. Saved changed: the next version of the same note, and the one it replaces is gone.
+    // Saved unchanged: nothing new. Saved changed: the next version of the same note, while the prior version remains readable history.
     const same = await fetch(`${base}/api/sources/${note.source.id}/note`, { method: "PUT", headers,
       body: JSON.stringify({ title: "10月3日组会记录", body: "确定 C1–C3 三类比较分开合并；局限性写明全文未获取。" }) });
     assert.equal(same.status, 200);
@@ -60,12 +60,29 @@ test("a note is written, listed as a note, edited into its next version, and nev
     const next = (await edited.json()).data;
     assert.equal(next.changed, true);
     assert.notEqual(next.source.id, note.source.id);
-    assert.equal(next.source.payload.paths[0], rel, "the same path");
+    assert.equal(next.source.payload.logicalPath, note.source.payload.logicalPath);
+    assert.notEqual(next.source.payload.paths[0], rel, "immutable version bytes");
     assert.equal(next.source.payload.version, 2);
     assert.equal(next.source.display.title, "10月3日组会记录（修订）");
     assert.deepEqual((await listed(base, headers, project.id)).items.map((item) => item.id), [next.source.id], "one note, not two");
-    assert.equal((await fetch(`${base}/api/sources/${note.source.id}`, { headers })).status, 404, "the replaced version is gone");
-    assert.equal(await readFile(path.join(project.baseDir, rel), "utf8"), "# 10月3日组会记录（修订）\n\n增加：敏感性分析另行报告。\n");
+    const historicalResponse = await fetch(`${base}/api/sources/${note.source.id}`, { headers });
+    assert.equal(historicalResponse.status, 200, "historical source addresses remain readable");
+    const historical = (await historicalResponse.json()).data;
+    assert.equal(historical.payload.publication.current, false, "the reader uses this marker for a read-only historical editor");
+    assert.equal(historical.payload.publication.bindings[note.source.payload.familyId].current, false);
+    assert.equal(next.source.payload.publication.bindings[note.source.payload.familyId].current, true);
+    assert.deepEqual((await (await fetch(`${base}/api/sources/${note.source.id}/note`, { headers })).json()).data,
+      { title: "10月3日组会记录", body: "确定 C1–C3 三类比较分开合并；局限性写明全文未获取。" });
+    assert.equal(await readFile(path.join(project.baseDir, rel), "utf8"), "# 10月3日组会记录\n\n确定 C1–C3 三类比较分开合并；局限性写明全文未获取。\n");
+    const staleEdit = await fetch(`${base}/api/sources/${note.source.id}/note`, { method: "PUT", headers,
+      body: JSON.stringify({ title: "Old editor", body: "This must not overwrite the current note." }) });
+    assert.equal(staleEdit.status, 409);
+    assert.equal((await staleEdit.json()).code, "source_revision_conflict");
+    const family = (await (await fetch(`${base}/api/sources/${note.source.id}/family`, { headers })).json()).data;
+    assert.equal(family.currentVersion, 2);
+    assert.deepEqual(family.items.map(item => [item.id, item.payload.version]), [[next.source.id, 2], [note.source.id, 1]]);
+    assert.deepEqual((await listed(base, headers, project.id)).items.map(item => item.id), [next.source.id], "stale editing cannot change the current pointer");
+    assert.equal(await readFile(path.join(project.baseDir, next.source.payload.paths[0]), "utf8"), "# 10月3日组会记录（修订）\n\n增加：敏感性分析另行报告。\n");
 
     // What is refused is refused by name, and a document that is not a note has no editor.
     assert.equal((await post(base, headers, "/api/sources/notes", { projectId: project.id, title: "", body: "x" })).status, 400);
@@ -90,14 +107,14 @@ test("a web page is kept as a snapshot with its address and time, read again on 
     const link = (await added.json()).data;
     assert.equal(link.job, undefined);
     const rel = link.source.payload.paths[0];
-    assert.match(rel, /^knowledge-base\/links\/nmpa\.gov\.cn-notice-[0-9a-f]{8}\.md$/);
+    assert.match(link.source.payload.logicalPath, /^knowledge-base\/links\/nmpa\.gov\.cn-notice-[0-9a-f]{8}\.md$/);
     const snapshot = await readFile(path.join(project.baseDir, rel), "utf8");
     assert.ok(snapshot.startsWith("---\nurl: https://www.nmpa.gov.cn/notice\n"));
     assert.match(snapshot, /\ntitle: "国家药监局关于修订阿莫西林制剂说明书的公告"\n/);
     assert.match(snapshot, /\nfetched_at: \d{4}-\d{2}-\d{2}T/);
     assert.ok(snapshot.includes("增加严重皮肤不良反应警示"));
     const original = link.source.payload.link.original;
-    assert.match(original, /^knowledge-base\/\.evimed-snapshots\/nmpa\.gov\.cn-notice-[0-9a-f]{8}\.html$/);
+    assert.match(original, /^knowledge-base\/\.evimed-snapshots\/nmpa\.gov\.cn-notice-[0-9a-f]{8}-[0-9a-f]{16}\.html$/);
     assert.ok((await readFile(path.join(project.baseDir, original), "utf8")).includes("<h1>"), "the original page is kept");
     assert.deepEqual([link.source.payload.docType, link.source.display.kind, link.source.display.origin, link.source.display.site, link.source.display.title],
       ["webpage", "page", "link", "www.nmpa.gov.cn", "国家药监局关于修订阿莫西林制剂说明书的公告"]);
@@ -112,16 +129,26 @@ test("a web page is kept as a snapshot with its address and time, read again on 
     const same = (await unchanged.json()).data;
     assert.equal(same.changed, false);
     assert.equal(same.source.id, link.source.id);
-    // The page changed: the next version of the same address, and the one it replaces is gone.
+    // The page changed: the next version of the same address, while the prior version remains readable history.
     web.state.pages.set("/notice", { body: web.html("国家药监局关于修订阿莫西林制剂说明书的公告", "新增：肾功能不全患者的剂量调整。") });
     const changed = await post(base, headers, `/api/sources/${link.source.id}/refetch`, {});
     assert.equal(changed.status, 200);
     const next = (await changed.json()).data;
     assert.equal(next.changed, true);
     assert.notEqual(next.source.id, link.source.id);
-    assert.equal(next.source.payload.paths[0], rel);
+    assert.equal(next.source.payload.logicalPath, link.source.payload.logicalPath);
+    assert.notEqual(next.source.payload.paths[0], rel);
     assert.deepEqual((await listed(base, headers, project.id)).items.map((item) => item.id), [next.source.id]);
-    assert.ok((await readFile(path.join(project.baseDir, rel), "utf8")).includes("肾功能不全"));
+    assert.ok((await readFile(path.join(project.baseDir, next.source.payload.paths[0]), "utf8")).includes("肾功能不全"));
+    const historicalResponse = await fetch(`${base}/api/sources/${link.source.id}`, { headers });
+    assert.equal(historicalResponse.status, 200);
+    const historical = (await historicalResponse.json()).data;
+    assert.equal(historical.payload.publication.current, false);
+    assert.equal(next.source.payload.publication.current, true);
+    assert.equal(await readFile(path.join(project.baseDir, rel), "utf8"), snapshot, "refetch preserves the prior snapshot bytes");
+    const family = (await (await fetch(`${base}/api/sources/${link.source.id}/family`, { headers })).json()).data;
+    assert.equal(family.currentVersion, 2);
+    assert.deepEqual(family.items.map(item => [item.id, item.payload.version]), [[next.source.id, 2], [link.source.id, 1]]);
     // Searching finds a page by its address too.
     assert.equal((await listed(base, headers, project.id, "&q=nmpa.gov.cn")).items.length, 1);
 
@@ -162,7 +189,7 @@ test("a PDF behind an address is kept as the PDF, and the intake reads it like a
     assert.equal(added.status, 201);
     const link = (await added.json()).data;
     const rel = link.source.payload.paths[0];
-    assert.match(rel, /^knowledge-base\/links\/example\.org-consensus\.pdf-[0-9a-f]{8}\.pdf$/);
+    assert.match(link.source.payload.logicalPath, /^knowledge-base\/links\/example\.org-consensus\.pdf-[0-9a-f]{8}\.pdf$/);
     assert.deepEqual(await readFile(path.join(project.baseDir, rel)), pdf, "the original bytes");
     assert.deepEqual([link.source.payload.docType, link.source.display.origin], ["document", "link"]);
     assert.ok(link.source.display.title, "the page's title, or the site's name");
@@ -182,11 +209,12 @@ test("a file a conversation produced is saved into this project's knowledge base
     const saved = await command("save_to_knowledge_base", { path: "report/评价报告.md" });
     assert.equal(saved.status, 200);
     const result = (await saved.json()).data;
-    assert.match(result.path, /^knowledge-base\/chat\/评价报告-[0-9a-f]{8}\.md$/);
+    assert.match(result.path, /^knowledge-base\/chat\/\.evimed-revisions\/[a-f0-9]{64}\/评价报告-[0-9a-f]{8}\.md$/);
     assert.equal(result.duplicate, false);
     assert.equal(await readFile(path.join(project.baseDir, result.path), "utf8"), "# 评价报告\n\n结论：可以使用。");
     const source = await app.sourceService.get(user.id, result.sourceId);
     assert.equal(source.projectId, project.id);
+    assert.ok(source.payload.paths.includes(result.path), "the returned saved file is the committed source version");
     const row = (await listed(base, headers, project.id)).items.find((item) => item.id === result.sourceId);
     assert.deepEqual([row.display.origin, row.display.title], ["conversation", "评价报告-" + result.path.match(/-([0-9a-f]{8})\.md$/)[1] + ".md"]);
 
@@ -196,6 +224,7 @@ test("a file a conversation produced is saved into this project's knowledge base
     await command("add_text_to_workspace", { filename: "report/评价报告.md", content: "# 评价报告\n\n结论：暂不推荐。" });
     const changed = (await (await command("save_to_knowledge_base", { path: "report/评价报告.md" })).json()).data;
     assert.notEqual(changed.path, result.path);
+    assert.equal(await readFile(path.join(project.baseDir, changed.path), "utf8"), "# 评价报告\n\n结论：暂不推荐。");
 
     // No format is refused by its name (2026-10-13: what nothing here reads is kept as the original); a path outside the
     // workspace and a file that is not there are refused.
@@ -206,7 +235,7 @@ test("a file a conversation produced is saved into this project's knowledge base
     assert.equal((await command("save_to_knowledge_base", { path: "../../etc/passwd" })).status, 403);
     assert.equal((await command("save_to_knowledge_base", { path: "report" })).status, 400);
     const files = await readdir(path.join(project.baseDir, "knowledge-base/chat"));
-    assert.equal(files.length, 3, "the two saved versions of the report and the file nobody listed were written, and nothing else");
+    assert.equal(files.filter(name => !name.startsWith(".evimed-")).length, 3, "the two saved versions of the report and the file nobody listed were written, and nothing else");
     await assert.rejects(stat(path.join(project.baseDir, "knowledge-base/chat/data.sav")), { code: "ENOENT" });
   } finally { await close(); }
 });

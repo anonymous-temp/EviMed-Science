@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
-import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, platformSessionOf } from "./openVikingSessions.mjs";
+import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -471,11 +471,12 @@ export class NativeMemoryStore {
 
   /**
    * The page's list read with filters (`GET /api/memory/records`): scopes, kinds and a project, as the legacy route takes them.
-   * @param {string} userId @param {{ scopes?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number }} filters
+   * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number }} filters
    */
-  async listRecords(userId, { scopes = [], kinds = [], scopeId = "", query = "", pageSize = 100 } = {}) {
+  async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100 } = {}) {
     const words = String(query ?? "").trim().toLowerCase();
     return (await this.records(userId))
+      .filter((record) => !statuses.length || statuses.includes(record.status))
       .filter((record) => !scopes.length || scopes.includes(record.scope))
       .filter((record) => !kinds.length || kinds.includes(record.kind))
       .filter((record) => !scopeId || record.scopeId === scopeId)
@@ -912,6 +913,111 @@ export class NativeMemoryStore {
       if (nativeFileId(revision.uri) === fileId) return revision.uri;
     }
     return null;
+  }
+
+  /** Confirm one external candidate revision through the existing extracting session path.
+   * The durable admission is created before the first engine side effect.
+   * @param {string} userId @param {{ candidateId: string, revision: number, text: string, projectId?: string | null }} input */
+  async admitCandidate(userId, input) {
+    this.#assertConfigured();
+    const text = String(input.text ?? "").trim();
+    if (!text || text.length > 262144) throw new HttpError(400, "memory_payload_invalid", "The candidate is empty or too large.");
+    if (identifierShapesIn(text).length) throw new HttpError(400, "memory_content_refused", "A memory cannot carry a credential or a personal identifier.");
+    const engineSession = `evimed-external-${createHash("sha256").update(JSON.stringify([userId,input.candidateId,input.revision])).digest("hex").slice(0,48)}`;
+    const admission = await this.overlay.queueAdmission(userId, { ...input, text, engineSession });
+    return this.processAdmission(userId, admission);
+  }
+
+  /** Recover admissions after restart and attach every resulting native file, never assuming one candidate produces one fact.
+   * @param {string} userId */
+  async processAdmissions(userId) {
+    for (const admission of await this.overlay.openAdmissions(userId)) await this.processAdmission(userId, admission);
+  }
+
+  /** @param {string} userId @param {any} admission */
+  async processAdmission(userId, admission) {
+    const receipt = (/** @type {any} */ row) => ({ candidateId: row.candidateId, revision: row.revision, state: row.state,
+      engineSession: row.engineSession, archiveUri: row.archiveUri ?? null, taskId: row.taskId ?? null,
+      recordIds: row.recordIds ?? [], ...(row.error ? { error: row.error } : {}) });
+    if (["completed", "cancelled"].includes(admission.state)) return receipt(admission);
+    let row = typeof this.overlay.claimAdmission === "function"
+      ? await this.overlay.claimAdmission(userId, admission.candidateId, admission.revision) : admission;
+    if (!row) return receipt((await this.overlay.admission(userId, admission.candidateId, admission.revision)) ?? admission);
+    const save = async (/** @type {any} */ patch) => {
+      row = await this.overlay.updateAdmission(userId, admission.candidateId, admission.revision, patch);
+      return row;
+    };
+    /** @param {string | null} [unattemptedPhase] */
+    const authorized = async (unattemptedPhase = null) => {
+      if (typeof this.overlay.admissionAuthority !== "function") return true;
+      const policy = await this.overlay.admissionAuthority(userId, row);
+      if (policy.allowed) return true;
+      await save({ state: policy.state, error: policy.reason, phase: unattemptedPhase, release: true });
+      return false;
+    };
+    try {
+      if (!await authorized()) return receipt(row);
+      const commits = await this.overlay.commitsOfSession(userId, row.engineSession);
+      if (!row.archiveUri && commits.length) await save({ archiveUri: commits[0].archiveUri, taskId: commits[0].taskId, state: "pending" });
+      if (!row.archiveUri) {
+        if (!await authorized()) return receipt(row);
+        await this.sessions.register(userId);
+        if (!await authorized()) return receipt(row);
+        await this.sessions.createSession(userId, row.engineSession);
+        await this.overlay.noteSession(userId, row.engineSession, row.projectId);
+        const status = (await this.sessions.readSession(userId, row.engineSession))?.result;
+        // A timed-out commit can already have archived the batch. Discover it before considering another write.
+        if (Number(status?.commit_count) > 0) {
+          const nodes = await this.sessions.tree(userId, `${this.sessions.sessionUri(userId,row.engineSession)}/history`, { showHidden: true });
+          const archive = nodes.map((node) => parseArchiveUri(node.uri)).find(Boolean)?.archiveUri;
+          if (!archive) { await save({ state: "uncertain", error: "commit_archive_not_visible", release: true }); return receipt(row); }
+          const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: "tool" });
+          await save({ archiveUri: archive, taskId: commit.taskId, state: "pending" });
+        } else {
+          if (!status || !Number.isFinite(Number(status.message_count))) throw new HttpError(503, "memory_engine_unavailable", "The session state could not be inspected.");
+          if (Number(status.message_count) === 0) {
+            // An uncertain append may still finish after its HTTP timeout. Zero messages is not proof it was refused.
+            if (["message_submitting", "commit_submitting"].includes(row.phase)) {
+              await save({ state: "uncertain", error: "submission_outcome_unknown", release: true }); return receipt(row);
+            }
+            const priorPhase = row.phase;
+            await save({ state: "submitting", phase: "message_submitting", error: "" });
+            // A denied final guard attempted no append; restore that fact before releasing this lease.
+            if (!await authorized(priorPhase)) return receipt(row);
+            await this.sessions.addMessage(userId, row.engineSession, { role: "user", parts: [{ type: "text", text: maskIdentifiers(row.text) }] });
+          } else if (Number(status.message_count) !== 1) {
+            await save({ state: "uncertain", error: "unexpected_session_messages", release: true }); return receipt(row);
+          }
+          const priorPhase = row.phase;
+          await save({ state: "submitting", phase: "commit_submitting" });
+          if (!await authorized(priorPhase)) return receipt(row);
+          const result = (await this.sessions.commit(userId, row.engineSession))?.result;
+          if (result?.status !== "accepted" || typeof result.archive_uri !== "string") throw new HttpError(503,"memory_engine_unavailable","The memory service did not accept the candidate.");
+          const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: row.engineSession,
+            projectId: row.projectId, origin: "tool", taskId: result.task_id ?? null });
+          await save({ state: "pending", archiveUri: commit.archiveUri, taskId: commit.taskId, error: "" });
+          this.#touch(userId);
+        }
+      }
+      // The existing native worker owns task settlement and replay. Follow its archive chain instead of extracting twice.
+      let commit = typeof this.overlay.commit === "function" ? await this.overlay.commit(userId, row.archiveUri) : null;
+      for (let depth = 0; commit?.state === "replayed" && commit.replayedAs && depth < 100; depth++) {
+        await save({ archiveUri: commit.replayedAs });
+        commit = await this.overlay.commit(userId, commit.replayedAs);
+      }
+      if (commit?.state === "completed") {
+        const revisions = await this.overlay.admissionRevisions(userId, commit.archiveUri);
+        await save({ state: "completed", recordIds: [...new Set(revisions.filter((revision) => revision.change !== "deleted").map((revision) => nativeFileId(revision.uri)))], error: "", release: true });
+      } else {
+        await save({ state: commit?.state === "abandoned" ? "failed" : "pending", error: commit?.error ?? "", release: true });
+      }
+      return receipt(row);
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code === "memory_admission_gone") throw error;
+      await save({ state: ["message_submitting","commit_submitting"].includes(row.phase) ? "uncertain" : "failed",
+        error: String(/** @type {any} */ (error)?.code ?? "memory_admission_failed").slice(0,200), release: true });
+      return receipt(row);
+    }
   }
 
   /**

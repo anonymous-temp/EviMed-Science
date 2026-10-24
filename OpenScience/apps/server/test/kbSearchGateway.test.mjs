@@ -129,3 +129,22 @@ test("saved conversation scope intersects requested sources before either search
   });
   assert.equal((await unavailable.call({ query: "q", sessionId: "selected-session" })).body.code, "kb_search_unavailable");
 });
+
+
+test("trusted owning-root scope remains selected or empty and unknown children fail closed", async t => {
+  const { resolveConversationSourceScope } = await import("../src/sourceConversationContext.mjs");
+  const records = { parent: { sourceScope: [SOURCE] }, empty: { sourceScope: [] }, normal: { sourceScope: null } };
+  const sessions = { get: async (_project, id) => records[id], list: async () => Object.values(records) };
+  const requests = [];
+  const { call } = await withGateway(t, { index: { search: async request => { requests.push(request); return { files: [] }; } }, sourceScope: (_identity, id) => resolveConversationSourceScope(sessions, {}, id) });
+  assert.equal((await call({ query: "q", sessionId: "parent" })).status, 200);
+  assert.deepEqual(requests.at(-1).sourceIds, [SOURCE]);
+  assert.equal((await call({ query: "q", sessionId: "empty" })).status, 200);
+  assert.deepEqual(requests.at(-1).sourceIds, []);
+  assert.equal((await call({ query: "q", sessionId: "normal" })).status, 200);
+  assert.equal(requests.at(-1).sourceIds, null);
+  const count = requests.length;
+  assert.equal((await call({ query: "q", sessionId: "unknown-child" })).status, 503);
+  assert.equal((await call({ query: "q" })).status, 503);
+  assert.equal(requests.length, count);
+});

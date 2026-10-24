@@ -1892,7 +1892,7 @@ def _managed_status_with_wait(status_call, arguments):
 # wrapper (packages/harness-port/src/engineContext.mjs) attaches it to exactly
 # these, replacing anything a model wrote under that name;
 # apps/server/test/engineToolContract.test.mjs holds the two rosters equal.
-ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", "kb_search", *specialist_jobs.SPECS})
+ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", "kb_search", "kb_browse", *specialist_jobs.SPECS})
 
 
 def call_tool(name, arguments):
@@ -2159,7 +2159,7 @@ def _dispatch(name, arguments, execution_context=None):
         return result
     if name == "kb_browse":
         try:
-            result = kb_browse.browse(arguments)
+            result = kb_browse.browse(arguments, execution_context=execution_context) if execution_context else kb_browse.browse(arguments)
         except kb_browse.KbBrowseError as error:
             # A call the run built wrongly, or a path that is not there, is the run's to correct; an outage may pass;
             # a deployment without the knowledge engine still has the search and the files.

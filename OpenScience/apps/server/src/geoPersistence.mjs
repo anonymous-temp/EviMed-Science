@@ -96,6 +96,7 @@ export const GEO_TABLES = Object.freeze([
 export const GEO_ORDER_ARTICLE_LIVE_STATES = Object.freeze(["planned", "reserved", "submitted", "accepted", "published", "verified", "settled", "unknown"]);
 
 const migrations = new WeakMap();
+const committedMigrations = new WeakSet();
 
 /** `IN (...)` over a closed vocabulary, refusing any member that is not a plain word. @param {readonly string[]} words */
 function inList(words) {
@@ -773,13 +774,14 @@ CREATE TABLE IF NOT EXISTS evimed_geo.action_choices (
  * Create or complete the schema: one transaction behind an advisory lock, so
  * two processes starting together cannot interleave their DDL. Cached per
  * database object; a failed attempt is forgotten so the next call retries.
- * @param {{ transaction: (operation: (client: any) => Promise<any>) => Promise<any> }} database
+ * @param {{ transaction: (operation: (client: any) => Promise<any>) => Promise<any>, transactionScope?: () => ReturnType<import("./controlPlaneDatabase.mjs").ControlPlaneDatabase["transactionScope"]> }} database
  * @returns {Promise<{ schema: string, tables: readonly string[] }>}
  */
 export async function migrateGeo(database) {
   if (!database || typeof database.transaction !== "function") throw new TypeError("The GEO migration needs the product database.");
+  const scoped = Boolean(database.transactionScope?.());
   const cached = migrations.get(database);
-  if (cached) return cached;
+  if (cached && (!scoped || committedMigrations.has(database))) return cached;
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-v1'))");
     const ddl = sql();
@@ -789,7 +791,9 @@ export async function migrateGeo(database) {
     await refreshVocabularyChecks(client, ddl, GEO_SCHEMA);
     return { schema: GEO_SCHEMA, tables: GEO_TABLES };
   });
-  migrations.set(database, attempt);
-  try { return await attempt; }
-  catch (error) { migrations.delete(database); throw error; }
+  // DDL released from a savepoint is still owned by the enclosing transaction.
+  // Its rollback must not leave a successful migration cached for the retry.
+  if (!scoped) migrations.set(database, attempt);
+  try { const result = await attempt; if (!scoped) committedMigrations.add(database); return result; }
+  catch (error) { if (!scoped) migrations.delete(database); throw error; }
 }

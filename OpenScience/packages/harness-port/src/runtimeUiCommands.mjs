@@ -690,7 +690,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         h('button', { type: 'button', style: textButton, 'aria-label': failed ? '移除资料范围失败，重试' : '移除资料范围',
           onClick: async () => {
             try {
-              const result = await kit.hub.request('source-scope', { sessionId: selection.sessionId, sourceIds: [] });
+              const result = await kit.hub.request('source-scope', { sessionId: selection.sessionId, sourceIds: [], sourceScopeMode: 'project' });
               if (!result.ok) setFailed(true);
             } catch { setFailed(true); }
           },

@@ -398,3 +398,12 @@ test("the project tab's card reads the labels of an English conversation as well
   assert.equal(card.find((entry) => entry.slot === "field").text, "data engineering");
   assert.equal(card.find((entry) => entry.slot === "stage").text, "Waiting for the retry proposal");
 });
+
+test("the actual overlay returns the 201st sensitive URI and refuses any incomplete bounded enumeration", options, async t => {
+  const { userId, overlay, root } = await fixture(t);
+  const uris = Array.from({ length: 201 }, (_, i) => `${root}/preferences/sensitive-${String(i).padStart(3, "0")}.md`);
+  for (const uri of uris) await overlay.upsertFile({ userId, uri, memoryType: "preferences", body: "Private preference", sensitive: true });
+  const complete = await overlay.sensitiveUris(userId);
+  assert.deepEqual(complete, uris);
+  await assert.rejects(overlay.sensitiveUris(userId, 200), { code: "memory_index_listing_too_large" });
+});

@@ -201,14 +201,13 @@ RUN set -eux; \
     rm -rf "${source}"; \
   done
 
-# The private GEO method pack (runtime/skills/geo-private): instruction text and
-# standard-library Python the skills call, never installed by the base, so a
-# delta replaces the whole tree from the source it is built from. The tree is
-# not in git; the release script appends it to the delta archive. A base older
-# than the root has no directory to remove, which `rm -rf` does not mind.
-RUN set -eux; \
-  rm -rf /opt/evimed/skills/geo-private
-COPY runtime/skills/geo-private /opt/evimed/skills/geo-private
+# A public checkout carries only the private pack's README. Keep the verified
+# base's pack in that case; a complete receipt-bound private source replaces it.
+COPY deploy/runtime-dsh/refresh-geo-pack.mjs /tmp/evimed-refresh-geo-pack.mjs
+COPY runtime/skills/geo-private /tmp/evimed-geo-pack-source
+RUN set -eu; \
+  node /tmp/evimed-refresh-geo-pack.mjs /tmp/evimed-geo-pack-source /opt/evimed/skills/geo-private; \
+  rm -rf /tmp/evimed-geo-pack-source /tmp/evimed-refresh-geo-pack.mjs
 
 # The preset's system-trusted skill roots, and the copy of the preset under the
 # kernel's own root. Both are rebuilt from the skill trees the base already has,

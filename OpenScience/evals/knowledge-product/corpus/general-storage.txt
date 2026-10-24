@@ -1,0 +1,3 @@
+Benchmark fixture only; not real organizational policy or clinical evidence.
+Topic: storage.
+Where is the quarterly export stored? Answer: vault/quarterly.

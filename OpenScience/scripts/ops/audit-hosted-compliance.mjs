@@ -435,7 +435,7 @@ async function checkDeepSeekCompatibilityPreflight() {
 }
 
 /** Check protocol 8: fixed endpoints, typed settings and independently verified opaque generations. */
-export function controllerLaunchPlanIsScoped(source) {
+export function controllerLaunchPlanIsScoped(source, managerSource = "") {
   const code = String(source).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const body = code.match(/async function startRuntime\(project, payload\)\s*\{([\s\S]*?)\n {2}function runtimeStatus\(/)?.[1];
   if (!body) return false;
@@ -444,7 +444,16 @@ export function controllerLaunchPlanIsScoped(source) {
   const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
   let fields;
   try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
-  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills"].sort();
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile"].sort();
+  // Match the entire reviewed resolver: a profile cannot carry an arbitrary URL,
+  // escape the gate namespace, or silently fall back when unconfigured.
+  const managerCode = String(managerSource).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/\s+/g, "");
+  const profileResolver = managerCode.match(/exportfunctionreleaseGateModelGatewayUrl\(config,project,profile\)\{([\s\S]*?)returnurl\.href;\}/)?.[1];
+  const expectedResolver = `if(profile===undefined||profile===null||profile==="")returnnull;
+if(profile!=="release-gate"||project.userId!=="release-gate"||(project.tenantId&&project.tenantId!=="release-gate")||!/^gate-[a-f0-9]{12}$/.test(project.id)){thrownewHttpError(403,"runtime_model_gateway_profile_forbidden","Model gateway profile is not permitted for this project.");}
+leturl;try{url=newURL(String(config.releaseGateModelGatewayInternalUrl??""));}catch{thrownewHttpError(503,"runtime_model_gateway_profile_unconfigured","Release gate model gateway is not configured.");}
+if(url.protocol!=="http:"||!url.port||url.username||url.password||url.search||url.hash||url.pathname!=="/internal/model/v1"){thrownewHttpError(503,"runtime_model_gateway_profile_invalid","Release gate model gateway configuration is invalid.");}`.replace(/\s+/g, "");
+  if (profileResolver !== expectedResolver || !managerCode.includes("constmodelGatewayUrl=releaseGateModelGatewayUrl(config,project,modelGatewayProfile);")) return false;
   return Array.isArray(fields) && JSON.stringify(fields.sort()) === JSON.stringify(expected)
     && /functionassertExactKeys\(value,allowed\)\{constallowlist=newSet\(allowed\);constunexpected=Object\.keys\(value\?\?\{\}\)\.find\(\(key\)=>!allowlist\.has\(key\)\);if\(unexpected\)\{throwcontrollerFailure\(400,["']runtime_controller_payload_invalid["'],/.test(compact)
     && compact.includes("assertExactKeys(payload,allowed);constproject=awaitprojectFromReference(config,payload);")
@@ -471,10 +480,10 @@ export function controllerLaunchPlanIsScoped(source) {
     && launch.includes("constpersonal=payload.personalSkillGeneration?awaitverifyPersonalSkillGeneration(config,project,payload.personalSkillGeneration):null;")
     && launch.includes("canonicalJson(extension.projection.personal.reference)!==canonicalJson(payload.personalSkillGeneration??null)")
     && launch.includes("inspectRuntimeImage(config).imageId!==extension.identity.baseRuntimeImageDigest")
-    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,geoSkills,pluginConfig,platformSkillGeneration:platform?.reference??null,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
+    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{modelGatewayProfile:payload.modelGatewayProfile??\"\",capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,geoSkills,pluginConfig,platformSkillGeneration:platform?.reference??null,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
     && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
     && launch.includes("spawn(plan.command,plan.args,{")
-    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|geoSkills|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration)\b/g, ""));
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:modelGatewayProfile|port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|geoSkills|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration)\b/g, ""));
 }
 
 async function checkRuntimeContainerTopology() {
@@ -514,7 +523,7 @@ async function checkRuntimeContainerTopology() {
     /Web API container must not mount \/var\/run\/docker\.sock/.test(workflow) &&
     /Web API controller mount must be read-only/.test(workflow) &&
     // V6 adds validated fixed plugin settings, not caller-owned Docker options.
-    controllerLaunchPlanIsScoped(controller)
+    controllerLaunchPlanIsScoped(controller, manager)
   ) {
     pass("runtime_controller_privilege_boundary", "Only the unexposed runtime controller holds the Docker socket; the capability-free, read-only API receives a read-only control-socket mount, and the controller reconstructs fixed launch plans from scoped project identifiers.");
   } else {

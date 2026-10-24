@@ -1805,7 +1805,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   if (config.modelGatewaySigningSecret) {
     environment.EVIMED_MODEL_GATEWAY_TOKEN_FILE = `${runtimeDshHome}/${modelGatewayTokenFileName}`;
   }
-  environment.EVIMED_MODEL_GATEWAY_URL = gateways ? String(gateways.model) : modelGatewayProviderUrl(config);
+  environment.EVIMED_MODEL_GATEWAY_URL = plan.modelGatewayUrl ?? (gateways ? String(gateways.model) : modelGatewayProviderUrl(config));
   environment.EVIMED_MODEL_GATEWAY_MODEL = String(config.deepseekModel ?? "");
   environment.EVIMED_MODEL_GATEWAY_REASONING_EFFORT = String(config.deepseekReasoningEffort ?? "high");
   // Set even when empty, unlike the adapter URLs below. A container that keeps
@@ -1932,6 +1932,22 @@ export function validateEviMedAdapterConfig(config) {
     specialistAdaptersRequired: Boolean(config.requireAllSpecialistAdapters),
     tokenRequired: enabledAdapters.length > 0,
   };
+}
+
+/** Resolve only an operator-owned model destination; ancillary routes retain their normal origin. */
+export function releaseGateModelGatewayUrl(config, project, profile) {
+  if (profile === undefined || profile === null || profile === "") return null;
+  if (profile !== "release-gate" || project.userId !== "release-gate" || (project.tenantId && project.tenantId !== "release-gate") || !/^gate-[a-f0-9]{12}$/.test(project.id)) {
+    throw new HttpError(403, "runtime_model_gateway_profile_forbidden", "Model gateway profile is not permitted for this project.");
+  }
+  let url;
+  try { url = new URL(String(config.releaseGateModelGatewayInternalUrl ?? "")); } catch {
+    throw new HttpError(503, "runtime_model_gateway_profile_unconfigured", "Release gate model gateway is not configured.");
+  }
+  if (url.protocol !== "http:" || !url.port || url.username || url.password || url.search || url.hash || url.pathname !== "/internal/model/v1") {
+    throw new HttpError(503, "runtime_model_gateway_profile_invalid", "Release gate model gateway configuration is invalid.");
+  }
+  return url.href;
 }
 
 function modelGatewayProviderUrl(config) {
@@ -2130,7 +2146,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
   const gateways = plan.gateways ?? null;
   const capsuleGatewayUrl = gateways ? String(gateways.capsule ?? "") : capsuleGatewayProviderUrl(config);
   return {
-    modelGatewayUrl: gateways ? String(gateways.model) : modelGatewayProviderUrl(config),
+    modelGatewayUrl: plan.modelGatewayUrl ?? (gateways ? String(gateways.model) : modelGatewayProviderUrl(config)),
     model,
     // Rendered into the profile so the kernel asks for what the gateway will
     // send anyway; the gateway is the one that decides.
@@ -2535,6 +2551,7 @@ export function pluginUpstreamHealth(value) {
  * outright, and `pluginService.test.mjs` is where that is held.
  */
 export function buildRuntimeLaunchPlan(config, project, port, {
+  modelGatewayProfile = "",
   capsuleGatewayUrl = capsuleGatewayProviderUrl(config),
   revisionGatewayUrl = revisionGatewayProviderUrl(config),
   publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config),
@@ -2553,6 +2570,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   extensionGeneration = null,
   extensionImageId = null,
 } = {}) {
+  const modelGatewayUrl = releaseGateModelGatewayUrl(config, project, modelGatewayProfile);
   const sandboxMode = config.runtimeSandboxMode;
   if (sandboxMode === "docker") {
     // Unix only. The kernel's web host binds loopback inside the container, so
@@ -2643,6 +2661,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const readOnlyViews = readOnlyWorkspaceViews(config, project);
     return {
       sandboxMode,
+      modelGatewayProfile,
+      modelGatewayUrl,
       containerName,
       networkMode,
       // `{ code, field? }` when the deployment disagrees with its release
@@ -3093,9 +3113,7 @@ function realDirectory(target) {
  * @returns {{ knowledgeBase: string | null, library: string | null }}
  */
 export function readOnlyWorkspaceViews(config, project) {
-  const inBaseWorkspace = Boolean(project.baseDir)
-    && path.resolve(String(project.workspaceDir)) === path.resolve(String(project.baseDir));
-  const knowledgeBase = inBaseWorkspace ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
+  const knowledgeBase = project.baseDir ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
   const library = config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
   return {
     knowledgeBase: knowledgeBase && realDirectory(knowledgeBase) ? knowledgeBase : null,
@@ -3198,7 +3216,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -3217,6 +3235,8 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  * @property {(project: Record<string, any>, plan: Record<string, any>) => Promise<void>} [abandon] lets go of what a failed launch prepared outside this process
  * @property {(project: Record<string, any>) => string[]} [acceptedWorkloadTokens] the workload tokens a runtime whose token file is not on this host may present
  * @property {(runtime: Record<string, any>) => boolean} [tolerateTokenRefreshFailure] whether a failed renewal can wait for the next one
+ * @property {(project: Record<string, any>) => string | null} [mirrorUploadIdentity] exact active remote identity
+ * @property {(project: Record<string, any>, relative: string, content: Buffer) => Promise<any>} [mirrorUploadReceipt] internal verified replica receipt
  * @property {(project: Record<string, any>, relative: string, content: Buffer) => Promise<boolean>} [mirrorUpload] a researcher's upload the running kernel should see now
  * @property {(child: any) => Record<string, any> | null} [describe] what the runtime's own machine reported at start
  * @property {() => Promise<Record<string, any>>} [readiness] the provider's readiness, when it is not the Docker controller's
@@ -3258,8 +3278,8 @@ export class DockerRuntimeProvider {
     if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "" }) {
     const manager = this.manager;
     // Before the plan, for the same reason as the capsule methods: the
     // read-only view of the knowledge base is mounted when the directory
@@ -3277,7 +3297,7 @@ export class DockerRuntimeProvider {
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
-      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills });
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile });
     plan.platformSkillGeneration = platformSkillGeneration;
     plan.personalSkillGeneration = personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
@@ -3355,6 +3375,7 @@ export class DockerRuntimeProvider {
         plan.platformSkillGeneration?.reference ?? null,
         String(plan.memoryGatewayUrl ?? ""),
         plan.geoSkills === true,
+        plan.modelGatewayProfile,
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -4380,7 +4401,7 @@ export class RuntimeManager {
 
   /**
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any }} [options] `opening`: the researcher is
+   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, modelGatewayProfile?: string }} [options] `opening`: the researcher is
    *   opening a conversation in this project (the shell's own start of its
    *   frame) rather than a request of a surface that is already open — see
    *   `makeRoomFor`. It shapes only a start this call begins; one already
@@ -4415,8 +4436,8 @@ export class RuntimeManager {
     return this.startAdmitted(project, options, true);
   }
 
-  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, replaceRuntime?: (()=>Promise<boolean|void>) | null }} [options] @param {boolean} [withPluginAdmission] */
-  async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null } = {}, withPluginAdmission = false) {
+  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, modelGatewayProfile?: string, replaceRuntime?: (()=>Promise<boolean|void>) | null }} [options] @param {boolean} [withPluginAdmission] */
+  async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null, modelGatewayProfile = "" } = {}, withPluginAdmission = false) {
     const key = this.key(project);
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(key)) throw this.cleanupRequired();
@@ -4467,7 +4488,7 @@ export class RuntimeManager {
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
-        const runtime = await this.startKernel(project, modelGatewayScope);
+        const runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile);
         this.runtimes.set(key, runtime);
         this.yieldedRuntimes.delete(key);
         this.pendingModelGatewayScopes.delete(key);
@@ -4571,7 +4592,7 @@ export class RuntimeManager {
     }
   }
 
-  async startKernel(project, modelGatewayScope = null) {
+  async startKernel(project, modelGatewayScope = null, modelGatewayProfile = "") {
     const key = this.key(project);
     const port = await freePort();
     // Only the controller protocol still carries this: its `startRuntime` field
@@ -4641,7 +4662,7 @@ export class RuntimeManager {
     const memoryGatewayUrl = await this.memoryGatewayUrlFor(project);
     // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
     const geoSkills = await this.geoSkillsFor(project);
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills });
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -5008,7 +5029,7 @@ export class RuntimeManager {
    * @param {Record<string, any>} project
    */
   async ensureKnowledgeBaseDir(project) {
-    if (!project.baseDir || path.resolve(String(project.workspaceDir)) !== path.resolve(String(project.baseDir))) return;
+    if (!project.baseDir) return;
     const opened = await openScopedDirectoryNoFollow(project.baseDir, path.join(project.baseDir, KNOWLEDGE_BASE_DIR), { create: true })
       .catch(() => null);
     await opened?.handle.close();
@@ -5170,20 +5191,66 @@ export class RuntimeManager {
 
   /**
    * A researcher's upload that a running remote kernel should see now; the
-   * host copy is already written. Only a file inside the project's workspace
-   * is carried, and a failure waits for the next start's push.
+   * host copy is already written. Workspace files and the base project's knowledge
+   * view are mapped separately, including when the active workspace is a subdirectory.
    * @param {Record<string, any>} project @param {string} file absolute host path @param {Buffer} content
    */
   async mirrorWorkspaceUpload(project, file, content) {
     if (typeof this.provider.mirrorUpload !== "function") return false;
-    const relative = path.relative(path.resolve(project.workspaceDir), path.resolve(file));
-    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return false;
+    const relative = this.runtimeUploadRelativePath(project, file);
+    if (!relative) return false;
+    try { return await this.provider.mirrorUpload(project, relative, content); }
+    catch { return false; }
+  }
+
+  runtimeUploadRelativePath(project, file) {
+    const baseKnowledge = project.baseDir ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
+    const knowledgeRelative = baseKnowledge ? path.relative(path.resolve(baseKnowledge), path.resolve(file)) : null;
+    const workspaceRelative = path.relative(path.resolve(project.workspaceDir), path.resolve(file));
+    const within = relative => relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+    return within(knowledgeRelative) ? `${KNOWLEDGE_BASE_DIR}/${knowledgeRelative.split(path.sep).join("/")}`
+      : within(workspaceRelative) ? workspaceRelative.split(path.sep).join("/") : null;
+  }
+
+  runtimeReplicaIdentity(project) {
+    if (typeof this.provider.mirrorUploadIdentity === "function") return this.provider.mirrorUploadIdentity(project);
+    return this.runtimes.get(this.key(project))?.containerName ?? null;
+  }
+
+  /** Internal replica receipt. The public boolean wrapper retains its existing contract. */
+  async mirrorWorkspaceUploadReceipt(project, file, content) {
+    const sha256 = createHash("sha256").update(content).digest("hex");
+    const provider = this.providerName();
+    const relative = this.runtimeUploadRelativePath(project, file);
+    const base = { provider, sha256, relativePath: relative, runtimeIdentity: null };
+    if (!relative) return { ...base, state: "retryable-failure", code: "runtime_replica_path_unmapped" };
+    if (provider === "docker" && typeof this.provider.mirrorUpload !== "function") return { ...base, state: "not-needed", code: "local-bind-mount" };
+    const transfer = async () => {
+      if (typeof this.provider.mirrorUploadReceipt === "function") {
+        try { return { ...base, ...await this.provider.mirrorUploadReceipt(project, relative, content) }; }
+        catch { return { ...base, state: "retryable-failure", code: "runtime_replica_upload_failed" }; }
+      }
+      const runtime = this.runtimes.get(this.key(project));
+      if (!runtime) return { ...base, state: "deferred", code: "runtime_replica_not_active" };
+      const runtimeIdentity = runtime.containerName ?? runtime.id ?? null;
+      if (typeof this.provider.mirrorUpload !== "function") return { ...base, runtimeIdentity, state: "retryable-failure", code: "runtime_replica_unsupported" };
+      try {
+        const accepted = await this.provider.mirrorUpload(project, relative, content);
+        if (this.runtimes.get(this.key(project)) !== runtime) return { ...base, runtimeIdentity, state: "retryable-failure", code: "runtime_replica_changed" };
+        return { ...base, runtimeIdentity, state: accepted ? "acknowledged" : "retryable-failure",
+          ...(accepted ? {} : { code: "runtime_replica_upload_failed" }) };
+      } catch { return { ...base, runtimeIdentity, state: "retryable-failure", code: "runtime_replica_upload_failed" }; }
+    };
+    // Replica delivery is derived work. Bound the account/source fence even if a provider
+    // loses its response; late writes target immutable content, and never publish an acknowledgment.
+    const timeoutMs = Math.min(5000, Math.max(1, Number(this.config.runtimeProxyConnectTimeoutMs) || 5000));
+    let timer;
     try {
-      return await this.provider.mirrorUpload(project, relative.split(path.sep).join("/"), content);
-    } catch {
-      // isolated: evimed_runtime_mirror_upload_failures_total
-      return false;
-    }
+      return await Promise.race([transfer(), new Promise(resolve => {
+        timer = setTimeout(() => resolve({ ...base, runtimeIdentity: this.runtimeReplicaIdentity(project),
+          state: "retryable-failure", code: "runtime_replica_timeout" }), timeoutMs);
+      })]);
+    } finally { clearTimeout(timer); }
   }
 
   /** Every call into a runtime container needs a deadline. Without one, a socket

@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { securityYamlPin } from "./runtime-yaml-security.mjs";
+import { securityPackagePins } from "./runtime-yaml-security.mjs";
 
 function readManifest(file) {
   const value = JSON.parse(readFileSync(file, "utf8"));
@@ -73,8 +73,9 @@ export function seedProfileKernelPins(cliManifestPath, profileDir, policyPath, v
   const policy = readFileSync(policyPath, "utf8");
   if (/^overrides\s*:/m.test(policy)) throw new Error("Profile policy already defines overrides");
   for (const [name, pin] of Object.entries(security)) {
-    if (name !== "js-yaml" || !/^4\.\d+\.\d+$/.test(pin)) throw new Error("Unsupported runtime security override");
-    if (communityPeers[name] && communityPeers[name] !== pin) throw new Error("A community peer cannot weaken runtime security");
+    if (!["js-yaml", "zod@>=4 <5"].includes(name) || !/^4\.\d+\.\d+$/.test(pin)) throw new Error("Unsupported runtime security override");
+    const packageName = name === "zod@>=4 <5" ? "zod" : name;
+    if (communityPeers[packageName] && communityPeers[packageName] !== pin) throw new Error("A community peer cannot weaken runtime security");
   }
   // rc.1's plugin manager reconciles only dependencies into active bundle
   // layers. devDependencies satisfy pnpm 11.7's prerelease peer resolution
@@ -95,8 +96,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     throw new Error("Usage: profile-kernel-pins.mjs CLI_PACKAGE_JSON PROFILE_DIR POLICY_YAML DSH_VERSION CORDIS_VERSION [PEER@EXACT_VERSION ...]");
   }
   const community = peerPins(peers);
-  const security = securityYamlPin("/opt/evimed/runtime-deps-version.json");
-  const pins = seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, community, { [security.name]: security.version });
+  const security = Object.fromEntries(securityPackagePins("/opt/evimed/runtime-deps-version.json").map(pin => [pin.name === "zod" ? "zod@>=4 <5" : pin.name, pin.version]));
+  const pins = seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, community, security);
   console.log(`Pinned ${Object.keys(pins).length} profile namespace packages to the verified CLI closure`
     + (Object.keys(community).length ? ` and ${Object.keys(community).length} community peer(s): ${Object.entries(community).map(([n, v]) => `${n}@${v}`).join(", ")}` : ""));
 }

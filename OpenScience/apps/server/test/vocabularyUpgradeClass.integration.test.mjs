@@ -85,6 +85,19 @@ after(async () => {
   if (isolated) await isolated.drop();
 });
 
+test("native admission state CHECK keeps its fresh identity across migration", options, async () => {
+  const read = async () => (await database.query(
+    `SELECT oid::text, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+      WHERE conrelid = 'evimed_memory.native_admissions'::regclass
+        AND conname = 'native_admissions_state_check'`)).rows;
+  const fresh = await read();
+  assert.equal(fresh.length, 1);
+  assert.match(fresh[0].definition, /'suspended'::text/);
+  assert.match(fresh[0].definition, /'cancelled'::text/);
+  await migrateNativeMemory(restart());
+  assert.deepEqual(await read(), fresh);
+});
+
 for (const [schema, migrate] of modules) {
   test(`${schema}: a word added to a list after the table was created reaches the existing constraint`, options, async () => {
     const checks = await listChecks(schema);

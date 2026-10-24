@@ -1,3 +1,4 @@
+import { mirrorSourceRuntimeReplica } from "./sourceRuntimeReplica.mjs";
 import { createVcrStudyStart } from "./vcrStudyStart.mjs";
 import { WebVitals } from './webVitals.mjs';
 import { GeoJudge } from './geoJudge.mjs';
@@ -133,7 +134,7 @@ import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMM
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
-import { sourceConversationContext } from "./sourceConversationContext.mjs";
+import { resolveConversationSourceScope, sourceConversationContext } from "./sourceConversationContext.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
@@ -235,7 +236,7 @@ import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAu
 import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { createVcrModelSources } from "./vcrModelSources.mjs";
-import { SourceService, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
+import { SourceService, projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
@@ -420,6 +421,7 @@ import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
 import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
+import { knowledgeQueueMetricFamilies } from "./knowledgeQueueMetrics.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
@@ -449,6 +451,7 @@ import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, read
 import {
   HttpError,
   apiBaseFromRequest,
+  attachmentDisposition,
   appendJsonLineNoFollow,
   assertNoSymlinkPath,
   assertObject,
@@ -1360,7 +1363,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
   const nativeMemoryWorker = new NativeMemoryWorker({
-    config, researchMemory, sessions: openVikingSessions, overlay: nativeMemoryOverlay,
+    config, researchMemory, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory,
     // A line the engine writes that is near one the person removed is put to one model call a commit (`nativeMemoryRejections.mjs`).
     rejectionJudge: createRejectionJudge({ config, usageLedger }),
     // The runtime manager is composed further down; the worker asks only after boot.
@@ -1394,7 +1397,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // Which component ranks a recall. The records themselves stay in the
   // control-plane database whichever provider is selected.
   const memorySubstrate = new MemorySubstrate(config, {
-    store: researchMemory, openViking: openVikingClient, rerank: memoryRerank,
+    store: researchMemory, openViking: openVikingClient, rerank: memoryRerank, nativeMemory,
     jobs: memoryIndexActive ? productJobs : null,
   });
   // One switch governs both recall paths: the capsule index is the same
@@ -1751,14 +1754,40 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, { evolutionSignals,
     judgeService,
+    prepareRegistration: async (userId, input) => {
+      if (input.connector?.type !== "openlist") return input;
+      if (!openListConnector) throw new HttpError(503, "openlist_unavailable", "OpenList is unavailable.");
+      const user = await store.userById(userId);
+      if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
+      const project = await store.requireProject(user, input.projectId);
+      const buffer = await openListConnector.capture(userId, input);
+      const logicalPath = input.logicalPath ?? input.path;
+      const name = path.posix.basename(String(input.connector.id));
+      const relative = `knowledge-base/.evimed-revisions/${input.sha256}/${name}`;
+      const full = resolveScopedPath(project.baseDir, relative);
+      await withProjectStorageMutation(project, async () => {
+        let existing;
+        try { existing = await readFileNoFollow(project.baseDir, full); }
+        catch (error) { if (!["ENOENT", "file_not_found"].includes(error.code)) throw error; }
+        if (existing) {
+          if (createHash("sha256").update(existing).digest("hex") !== input.sha256) {
+            throw new HttpError(409, "source_changed", "The preserved OpenList original changed.");
+          }
+          return;
+        }
+        await assertProjectCapacity(project, full, buffer.length, config);
+        await writeFileAtomicNoFollow(project.baseDir, full, buffer, { mode: 0o600 });
+      });
+      return { ...input, logicalPath, path: relative };
+    },
     afterReplace: async event => {
       const outcomes = await Promise.allSettled([
         resultImpacts?.reconcileReplacement(event.userId, event),
-        geoValueSourceReplaced(geo?.store, event),
+        event.sourceRetired !== false ? geoValueSourceReplaced(geo?.store, event) : null,
         // The pages that quote the document that was replaced are labelled and queued for a recompile.
-        knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.replaced.sourceId, reason: "changed" }]),
+        event.sourceRetired !== false ? knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.replaced.sourceId, reason: "changed" }], { strict: true }) : null,
         // The engine's copy follows: the document that was replaced goes, the one that replaces it is pushed when it is read.
-        sourceSync?.note(event.userId, event.projectId, event.replaced.sourceId),
+        event.sourceRetired !== false ? sourceSync?.note(event.userId, event.projectId, event.replaced.sourceId) : null,
       ]);
       const failed = outcomes.find(outcome => outcome.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
@@ -1865,6 +1894,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const knowledgeBaseUploads = {
     /** @param {string} root @param {string} rel */
     covers: (root, rel) => root === "base" && (rel === "knowledge-base" || rel.startsWith("knowledge-base/")),
+    publish: (ctx, rel, buffer) => writeProjectUpload(ctx, { root: "base", rel, buffer }),
     // No file is refused for its format (2026-10-13; until then a closed list of twenty-nine extensions answered
     // 415 here): what a file is decides who reads its text (`sourceReadRoute`), and one nothing reads is kept as an
     // original. What an upload is still refused for — its size, the project's room, an unsafe path — its callers check.
@@ -1873,6 +1903,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     /** @param {any} ctx @param {string} rel @param {Buffer} buffer */
     register: async (ctx, rel, buffer, meta = null) => {
       if (!sourceService) return null;
+      // Native upload/save commands share the immutable publication path as HTTP uploads.
+      if (!meta?.logicalPath && !/^knowledge-base\/(wiki|kg)\//.test(rel)) {
+        return writeProjectUpload(ctx, { root: "base", rel, buffer });
+      }
       const registered = await sourceService.register(ctx.user.id, {
         projectId: ctx.project.id,
         connector: { type: "upload", id: `${ctx.project.id}-library` },
@@ -1884,6 +1918,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // What a saved page or a note says about itself beyond its bytes (`knowledgeBaseEntries.mjs`).
         ...(meta?.title ? { title: meta.title } : {}),
         ...(meta?.link ? { link: meta.link } : {}),
+        ...(meta?.logicalPath ? { logicalPath: meta.logicalPath } : {}),
       });
       await audit(ctx, "source.register", "completed", { target: registered.source.id, duplicate: registered.duplicate });
       return registered;
@@ -1903,17 +1938,79 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const writeProjectUpload = async (ctx, { root, rel, buffer, meta = undefined, register = true }) => {
     if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
     const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
-    const full = resolveScopedPath(base, rel);
     const knowledge = knowledgeBaseUploads.covers(root, rel);
+    if (knowledge && register && sourceService && !sourceService.publicationActive()) {
+      return sourceService.withRegistrationLocks([`publication:${ctx.user.id}:${ctx.project.id}:${meta?.logicalPath ?? rel}`],
+        () => writeProjectUpload(ctx, { root, rel, buffer, meta, register }));
+    }
+    // Publish immutable bytes first. Every source reader follows the ledger's paths; a later
+    // edit or a failed registration cannot overwrite the bytes of an earlier source.
+    const logicalPath = meta?.logicalPath ?? rel;
+    const immutablePath = (logical, sha256) => `${path.posix.dirname(logical)}/.evimed-revisions/${sha256}/${path.posix.basename(logical)}`;
+    if (knowledge && register && sourceService && !/^knowledge-base\/(wiki|kg)\//.test(logicalPath)) {
+      // Legacy originals are verified before their ledger pointers move. Their stable aliases
+      // remain untouched: older revision records and citations may still name those paths.
+      for (const deleted of [false, true]) {
+        let cursor = null;
+        do {
+          const page = await sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id,
+            filter: { paths: [logicalPath] }, deleted, limit: 100, cursor });
+          for (const legacy of page.items) {
+            let opened;
+            try { opened = await openScopedFileNoFollow(base, resolveScopedPath(base, logicalPath)); }
+            catch (error) { if (error?.code === "ENOENT" || error?.code === "file_not_found") continue; throw error; }
+            let original;
+            try {
+              if (opened.stat.size > config.maxFileBytes) continue;
+              original = await opened.handle.readFile();
+            } finally { await opened.handle.close(); }
+            const sha256 = createHash("sha256").update(original).digest("hex");
+            if (sha256 !== legacy.payload.fingerprint?.sha256) continue;
+            const frozen = immutablePath(logicalPath, sha256);
+            await withProjectStorageMutation(ctx.project, async () => {
+              const destination = resolveScopedPath(base, frozen);
+              await assertProjectCapacity(ctx.project, destination, original.length, config);
+              await writeFileAtomicNoFollow(base, destination, original, { mode: 0o600 });
+            });
+            await sourceService.freezePublicationPath(ctx.user.id, legacy, logicalPath, frozen);
+          }
+          cursor = page.nextCursor;
+        } while (cursor);
+      }
+    }
+    if (knowledge && register && !/^knowledge-base\/(wiki|kg)\//.test(rel)) {
+      const sha256 = createHash("sha256").update(buffer).digest("hex");
+      rel = immutablePath(logicalPath, sha256);
+      meta = { ...meta, logicalPath };
+    }
+    const full = resolveScopedPath(base, rel);
     if (knowledge) knowledgeBaseUploads.admit(rel);
     await withProjectStorageMutation(ctx.project, async () => {
       await assertProjectCapacity(ctx.project, full, buffer.length, config);
       await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
     });
     // rt: a running remote runtime sees the upload now (plan §3.1 #4).
-    await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
+    // Registered knowledge files use their durable lifecycle outbox. A false-returning
+    // best-effort mirror must never masquerade as a replica acknowledgment.
+    if (!knowledge || !register) await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
     await audit(ctx, "file.upload", "completed", { target: root === "base" ? `${root}:${rel}` : rel, bytes: buffer.length });
-    return knowledge && register ? knowledgeBaseUploads.register(ctx, rel, buffer, meta) : null;
+    const registered = knowledge && register ? await knowledgeBaseUploads.register(ctx, rel, buffer, meta) : null;
+    // Workspace browsing keeps the requested filename as a convenience alias. Source readers
+    // and the parser use only the immutable path committed above, including historical versions.
+    if (registered && logicalPath !== rel) {
+      await sourceService.afterPublication(async () => {
+        const alias = resolveScopedPath(base, logicalPath);
+        await withProjectStorageMutation(ctx.project, async () => {
+          // Keep existing aliases until all historical references have been migrated. A
+          // committed current source always reads its immutable path, never this alias.
+          try { await fsp.lstat(alias); return; }
+          catch (error) { if (error?.code !== "ENOENT") throw error; }
+          await assertProjectCapacity(ctx.project, alias, buffer.length, config);
+          await writeFileAtomicNoFollow(base, alias, buffer, { mode: 0o600 });
+        });
+      });
+    }
+    return registered;
   };
   const sourceProject = async (job) => {
     const user = await store.userById(job.userId);
@@ -1996,7 +2093,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const project = await sourceProject(job);
       job.sourceProject = project;
       let localPath;
-      if (connectorType === "openlist") {
+      if (connectorType === "openlist" && !String(source.payload.paths?.[0] ?? "").startsWith("knowledge-base/.evimed-revisions/")) {
         if (!openListConnector) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
         const remotePath = source.payload.connector?.id;
         const buffer = await openListConnector.read(job.userId, remotePath);
@@ -4397,18 +4494,48 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // and an engine to compile with.
   if (sourceService && knowledgeEntries && productDocuments && productJobs) {
     const knowledgeActive = config.ovKnowledgeEnabled === true && openVikingResources.configured;
-    if (knowledgeActive) {
+    {
       sourceSync = new OpenVikingSourceSync({ config, sources: sourceService, resources: openVikingResources, jobs: productJobs, engine: openVikingEngine,
-        library: libraryService, report: code => { void securityAudit(config, "knowledge.sources.sync", "failed", { code }).catch(() => {}); } });
+        library: libraryService,
+        lifecycle: async job => {
+          const event = job.payload;
+          if (event.scope === "library") {
+            const copies = await libraryService?.syncCopies({ userId: job.userId });
+            if (copies?.failed) throw Object.assign(new Error("Library copies could not be synchronised."), { code: "library_copy_failed" });
+            const record = await productDocuments.get(job.userId, "preferences", event.documentId);
+            await knowledgePages?.noteLibraryChanged(job.userId, event.sourceId, record ? "changed" : "removed");
+            return;
+          }
+          const runtimeReplica = await mirrorSourceRuntimeReplica({ documents: productDocuments, sources: sourceService, store, runtimeManager, config }, job);
+          await libraryService?.refreshSourceCurrent(job.userId, event.sourceId, { strict: true });
+          const current = await productDocuments.get(job.userId, "source", event.sourceId);
+          const readable = Boolean(current && sourceReadable(current.payload));
+          if (researchMemory?.configured !== false) await researchMemory?.markSourceLinks(job.userId,
+            { type: "knowledge_source", id: event.sourceId }, { state: readable ? "current" : "expired",
+              reason: readable ? "source restored" : "source unavailable",
+              onlyFrom: readable ? ["expired", "unknown"] : ["current", "unknown", "changed", "expired"] });
+          await nativeMemoryWorker?.labelSource(job.userId, { type: "knowledge_source", id: event.sourceId },
+            current && sourceReadable(current.payload) ? "current" : "removed");
+          if (current && sourceReadable(current.payload)) {
+            await knowledgePages?.noteSourceReady(job.userId, current.projectId, event.sourceId, { strict: true });
+            if (config.documentMemoryEnabled && current.payload.currentUnderstandingId) {
+              await libraryService?.publishSourceUnderstandingCurrent(job.userId, event.sourceId);
+            }
+          } else if (event.projectId) {
+            await knowledgePages?.noteSourcesChanged(job.userId, event.projectId, [{ sourceId: event.sourceId, reason: "removed" }], { strict: true });
+          }
+          return { runtimeReplica };
+        },
+        report: code => { void securityAudit(config, "knowledge.sources.sync", "failed", { code }).catch(() => {}); } });
       sourceSyncWorker = new OpenVikingSourceSyncWorker({ jobs: productJobs, service: sourceSync, reconcileMs: config.knowledgeSourceSyncReconcileMs,
-        projects: () => readableSourceProjects(productDatabase) });
+        projects: () => readableSourceProjects(productDatabase, { includeLibrary: true }) });
     }
     knowledgePages = new KnowledgePageService({
       config, documents: productDocuments, jobs: productJobs, sources: sourceService, store, entries: knowledgeEntries,
       resources: openVikingResources, engine: openVikingEngine, sourceSync,
       // A page may cite a document of the account's library; its read-only copy there is the text the compile was given.
       libraryText: async (userId, sourceId) => (libraryService && /^src_[a-f0-9]{32}$/.test(sourceId)
-        ? fsp.readFile(path.join(libraryService.libraryDir(userId), sourceId, "index.md"), "utf8").catch(() => null) : null),
+        ? libraryService.readCopyText(userId, sourceId) : null),
       report: code => { void securityAudit(config, "knowledge.pages", "failed", { code }).catch(() => {}); },
     });
     knowledgePageRoutes = createKnowledgePageRoutes({ store, service: knowledgePages, sources: sourceService, maxJsonBytes: config.maxJsonBytes });
@@ -5327,17 +5454,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   sourceChanges?.useLookup(sourceUpdates);
   const resultSourceUpdatesRoutes = createResultSourceUpdatesRoutes({ store, results: resultProvenance,
     lookup: sourceUpdates, impacts: resultImpacts, maxJsonBytes: config.maxJsonBytes });
+  const conversationSourceScope = async (identity, sessionId) => {
+    // Only the native tool wrapper supplies session context. Missing context is never a route around a selected conversation.
+    const user = await store.userById(identity.userId);
+    const project = await store.requireProject(user, identity.projectId);
+    return resolveConversationSourceScope(researchSessions, project, sessionId);
+  };
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex, evaluationIsolation,
-    sourceScope: async (identity, sessionId) => {
-      const user = await store.userById(identity.userId);
-      const project = await store.requireProject(user, identity.projectId);
-      return (await researchSessions.get(project, sessionId))?.sourceScope ?? null;
-    },
+    sourceScope: conversationSourceScope,
   });
-  // `kb_browse`: the same token, the engine's own tree of the project. With the knowledge switch off or no engine it
-  // answers `kb_browse_disabled` (kbBrowseGateway.mjs); a document is named by the title the knowledge base shows.
   const kbBrowseGatewayHandler = createKbBrowseGatewayHandler(config, runtimeManager, { resources: openVikingResources, evaluationIsolation,
-    sources: sourceService, library: libraryService, titleOf: (source) => projectSourceManifestRecord(source).display.title });
+    sources: sourceService, library: libraryService, titleOf: (source) => projectSourceManifestRecord(source).display.title,
+    sourceScope: conversationSourceScope,
+    compiledScope: (identity, target) => knowledgePages.browseEligibility(identity.userId, identity.projectId, target.root, target.path),
+  });
   // `frontier_search`: the page's own list, read for the runtime's account;
   // with the module off it answers `frontier_disabled` (frontierGateway.mjs).
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
@@ -7007,22 +7137,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const ctx = await context(req, res);
         if (req.method === "GET") {
           const session = await researchSessions.get(ctx.project, sessionId);
-          sendJson(res, 200, { data: { sourceScope: session?.sourceScope ?? null, originReference: session?.originReference ?? null } });
+          sendJson(res, 200, { data: { sourceScope: session?.sourceScope ?? null, sourceScopeMode: session?.sourceScope == null ? "project" : "selected", originReference: session?.originReference ?? null } });
           return;
         }
         const body = await readJson(req, config.maxJsonBytes);
-        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "sourceIds")) {
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "sourceIds" && key !== "sourceScopeMode")) {
           throw new HttpError(400, "invalid_research_session", "A source scope has one field, sourceIds.");
         }
-        const ids = requestedSourceScope(body.sourceIds);
-        if (ids && !sourceService) throw new HttpError(503, "product_state_unavailable", "Source storage is temporarily unavailable.");
+        const ids = requestedSourceScope(body.sourceIds, body.sourceScopeMode);
+        if (ids?.length && !sourceService) throw new HttpError(503, "product_state_unavailable", "Source storage is temporarily unavailable.");
         // Each is a document of this account, in this project or shared with it: the ones `kb_search` can see.
         for (const id of ids ?? []) {
           const source = await sourceService.get(ctx.user.id, id).catch(() => null);
           const readable = source && (source.projectId === ctx.project.id || (await sourceService.isShared(ctx.user.id, source)) === true);
           if (!readable) throw new HttpError(404, "source_not_found", "This document is not in the knowledge base.");
         }
-        sendJson(res, 200, { data: await researchSessions.setSourceScope(ctx.project, sessionId, ids) });
+        sendJson(res, 200, { data: await researchSessions.setSourceScope(ctx.project, sessionId, ids, ids === null ? "project" : "selected") });
         return;
       }
 
@@ -8451,6 +8581,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
+    sourceSyncWorker?.pause();
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
@@ -9205,7 +9336,7 @@ async function sendWorkspaceFile(req, res, ctx, rel, download) {
       "X-Content-Type-Options": "nosniff",
     };
     if (download) {
-      headers["Content-Disposition"] = `attachment; filename="${safeDownloadFilename(path.basename(full))}"`;
+      headers["Content-Disposition"] = attachmentDisposition(path.basename(full));
     } else {
       // A preview is shown in a frame of the shell, and only there: framed by
       // this origin and no other.
@@ -9877,6 +10008,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   }
   // The knowledge module built on the engine: documents pushed as the files a compile reads, compile rounds and what
   // their mirror did, and where the module is stopped. Counters since this process started (`knowledgeStatus`).
+  for (const family of await knowledgeQueueMetricFamilies(productDatabase)) addMetric(lines, family.name, family.help, family.type, family.series);
   const knowledge = readiness.checks.memoryIndex?.knowledge ?? null;
   if (knowledge?.sources) {
     addMetric(lines, "open_science_knowledge_source_sync_total",

@@ -57,6 +57,28 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_accounts (
   migrated_at timestamptz(3),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
+CREATE TABLE IF NOT EXISTS evimed_memory.native_admissions (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  candidate_id text NOT NULL CHECK (char_length(candidate_id) BETWEEN 1 AND 200),
+  candidate_revision integer NOT NULL CHECK (candidate_revision > 0),
+  engine_session text NOT NULL CHECK (engine_session ~ '^[A-Za-z0-9_.@-]{1,200}$'),
+  project_id text,
+  state text NOT NULL DEFAULT 'queued' CHECK (state IN ('queued','submitting','pending','completed','failed','uncertain','suspended','cancelled')),
+  phase text NOT NULL DEFAULT 'queued',
+  pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 262144),
+  archive_uri text,
+  task_id text,
+  record_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  error text NOT NULL DEFAULT '',
+  lease_until timestamptz,
+  account_created_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, candidate_id, candidate_revision),
+  UNIQUE (user_id, engine_session)
+);
+CREATE INDEX IF NOT EXISTS native_admissions_open_idx ON evimed_memory.native_admissions (user_id,state)
+  WHERE state <> 'completed';
 -- The consolidation of an account's memories (nativeMemoryConsolidation.mjs), kept on its account row: when the last one ended and
 -- the shape of the files it left (a consolidation is asked for again only after they changed), when the files were last looked at, the
 -- engine task in flight, and the lease that keeps two workers from submitting one account twice.

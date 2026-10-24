@@ -359,7 +359,7 @@ export class CapsuleTransferService {
     const snapshot = native ? await this.#nativeSnapshot(userId, kinds) : null;
     const nativeFacts = snapshot?.facts ?? null;
     await migrateResearchMemory(this.documents.database);
-    return this.documents.database.transaction(async client => {
+    const assembled = await this.documents.database.transaction(async client => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const capsule = await client.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='capsule' AND id=$2 AND deleted_at IS NULL", [productId(userId), productId(capsuleId)]);
       if (!capsule.rows[0]) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
@@ -471,6 +471,8 @@ export class CapsuleTransferService {
       const room = ticked(knowledge).slice(0, Math.max(0, MAX_ENTRIES + (native ? 1 : 0) - kept.length));
       return { revision: capsule.rows[0].revision, facts: [...kept, ...room], unticked, held };
     });
+    await this.#verifyNativeSnapshot(userId, snapshot?.facts ?? []);
+    return assembled;
   }
 
   /**
@@ -524,8 +526,19 @@ export class CapsuleTransferService {
    * The extraction templates admit only the person's statements; this is file provenance, never inferred line adoption.
    * Files in the derived capsule index are excluded by nativeMemoryFile. Preserve the exact body and source hash privately.
    * `sensitive` is how many the person marked sensitive, which stay out and are counted for the sender's preview.
-   * @param {string} userId @param {readonly string[]} kinds
+   * @param {string} userId @param {any[]} facts
    */
+  async #verifyNativeSnapshot(userId, facts) {
+    if (!facts.length) return;
+    const overlay = await this.nativeMemory.overlay.files(userId);
+    for (const fact of facts) {
+      const body = await this.nativeMemory.sessions.read(userId, fact.nativeUri);
+      if (typeof body !== "string" || digest(body) !== fact.nativeSource.sha256 || overlay.get(fact.nativeUri)?.sensitive) {
+        throw new HttpError(409, "capsule_native_snapshot_changed", "The selected memories changed while the snapshot was being prepared. Try again.");
+      }
+    }
+  }
+
   async #nativeSnapshot(userId, kinds) {
     if (!this.nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
     const files = await this.nativeMemory.files(userId);

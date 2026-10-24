@@ -1,0 +1,2 @@
+// Authored evaluation input, not production policy.
+export const policy = "Benchmark fixture only; not real organizational policy or clinical evidence.\nTopic: unknown-vendor.\nThe requested fact is not provided in the supplied evidence.\n";

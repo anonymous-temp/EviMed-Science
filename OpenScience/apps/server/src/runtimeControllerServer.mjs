@@ -600,7 +600,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       const existing = spawnSync(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
       if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
     }
-    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
+    const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     plan.platformSkillGeneration = platform;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
@@ -910,7 +910,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         // Protocol 8 deliberately accepts this exact version-7 citation shape;
         // Selected extension generations add only a fixed opaque immutable reference.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);

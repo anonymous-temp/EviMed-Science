@@ -49,7 +49,7 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
   const [params] = useSearchParams();
   const [open, setOpen] = useState(false);
   if (!link.available || link.status === "source_missing") {
-    return <Tooltip content="这份资料已不在知识库里"><span className="text-text-3">{children}</span></Tooltip>;
+    return <Tooltip content="这份资料已不在知识库里"><span className="text-text-3">{children}{link.checkedAt && <span className="ml-1 text-caption">{`曾核对于 ${new Date(link.checkedAt).toLocaleString("zh-CN")}${link.sourceVersion != null ? ` · 来源第 ${link.sourceVersion} 版` : ""}，当前不可读取`}</span>}</span></Tooltip>;
   }
   const mark = link.status === "present" ? (
     <span role="img" aria-label="原文里找到了这句引文" className="ml-0.5 inline-block align-text-bottom"><CircleCheck size={16} aria-hidden="true" className="text-ok" /></span>
@@ -61,6 +61,7 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
     <>
       <button type="button" className={`${LINK} text-left`} onClick={() => void openQuotation(link.sourceId, link.quote, navigate, listParams(readListState(params)).toString())}>{children}</button>
       {mark}
+      {link.checkedAt && <span className="ml-1 text-caption text-text-3">{`核对于 ${new Date(link.checkedAt).toLocaleString("zh-CN")}${link.sourceVersion != null ? ` · 来源第 ${link.sourceVersion} 版` : ""}`}</span>}
       {link.status === "absent" && open && (
         <span role="note" className="mx-1 rounded-tag bg-warn-soft px-1.5 py-0.5 text-caption text-warn-strong">
           {MISSING_QUOTE}：“{link.quote}”

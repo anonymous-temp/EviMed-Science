@@ -320,7 +320,7 @@ describe("知识库", () => {
 
     it.each([
       ["a saved page", page, "网页 · nmpa.gov.cn · 链接"],
-      ["a note", note, "笔记 · 300 B · 笔记"],
+      ["a note", note, "笔记 · 300 B"],
       ["a cloud-drive document", policy, "制度文件 · 42 页 · 网盘"],
     ])("says where %s came from", async (_name, source, meta) => {
       mocks.listSources.mockResolvedValue(listing([source]));
@@ -397,6 +397,20 @@ describe("知识库", () => {
       await menuOf(sheet.display.title);
       await userEvent.click(await screen.findByRole("menuitem", { name: "改为仅本项目" }));
       await waitFor(() => expect(mocks.removeFromLibrary).toHaveBeenCalledWith("src_sheet"));
+    });
+
+    it("removes only the deleted source from selected references", async () => {
+      renderPage();
+      await userEvent.click(await screen.findByRole("checkbox", { name: `选择“${guideline.display.title}”` }));
+      await userEvent.click(screen.getByRole("checkbox", { name: `选择“${sheet.display.title}”` }));
+      await menuOf(guideline.display.title);
+      await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+      mocks.listSources.mockResolvedValue(listing([sheet]));
+      await userEvent.click(await screen.findByRole("button", { name: "删除" }));
+      await waitFor(() => expect(screen.getByRole("group", { name: "所选资料" })).toHaveTextContent("已选 1 份"));
+      await userEvent.click(within(screen.getByRole("group", { name: "所选资料" })).getByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+      expect(JSON.parse(screen.getByTestId("location").dataset.state!).runtimeUiIntent.references).toEqual([{ id: sheet.id, title: sheet.display.title }]);
     });
 
     it("deletes after a confirmation", async () => {

@@ -294,7 +294,7 @@ export class OpenVikingClient {
    *  that still names it is refused, so every write would fail), and v0.5.0 treats it as optional. How long a
    *  waiting write may take is the client's own deadline (`timeoutMs`, `request`), which is what bounded it in
    *  practice — the engine's bound was always set below that deadline. */
-  async write(userId, uri, content, { tags = [], wait = false } = {}) {
+  async write(userId, uri, content, { tags = [], wait = false, timeoutSeconds = null } = {}) {
     this.#assertConfigured();
     return this.request({
       method: "POST",
@@ -307,6 +307,9 @@ export class OpenVikingClient {
         wait: Boolean(wait),
         ...(tags.length ? { tags, tag_mode: "replace" } : {}),
       },
+      // Waiting is bounded by HTTP; v0.5.1 removed the body timeout. An HTTP
+      // abort does not cancel the engine's already accepted background work.
+      timeoutMs: timeoutSeconds == null ? null : Number(timeoutSeconds) * 1_000,
     });
   }
 

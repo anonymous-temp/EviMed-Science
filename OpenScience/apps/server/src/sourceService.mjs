@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { HttpError } from "./security.mjs";
 import { withdrawDerivedMemory, withdrawOrphanedDerivedMemory } from "./derivedMemory.mjs";
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
@@ -43,8 +44,20 @@ import { materialsRecordIds, materialsRecords } from "./sourceMaterials.mjs";
  * text of it to search, to name with 「@知识库」, to push or to compile.
  * @param {any} payload a source record's payload
  */
+/** Legacy aliases are adopted only when their logical identity is unambiguous.
+ * @param {any} source @returns {Record<string, any>} */
+export function sourcePublicationBindings(source) {
+  if (source.payload.publication?.bindings) return source.payload.publication.bindings;
+  const payload = source.payload;
+  const logicalPath = payload.logicalPath ?? (payload.paths?.length === 1 ? payload.paths[0] : null);
+  if (!logicalPath || !payload.familyId) return {};
+  return { [payload.familyId]: { logicalPath, current: payload.publication?.current !== false,
+    publicationRevision: Number(payload.version) || 1 } };
+}
+
 export function sourceReadable(payload) {
   const status = payload?.status;
+  if (payload?.publication?.current === false) return false;
   if (payload?.original && payload.original.generation === payload.generation) return false;
   if (status === "complete" || status === "needs_attention") return true;
   return (status === "parsing" || status === "failed") && typeof payload?.analysis?.readAt === "string"
@@ -99,6 +112,7 @@ export function sourceStateOf(payload) {
 export const SOURCE_READABLE_SQL = `((d.payload->>'status' IN ('complete','needs_attention')
   OR (d.payload->>'status' IN ('parsing','failed') AND coalesce(jsonb_typeof(d.payload->'analysis'->'readAt')='string',false)
     AND coalesce(d.payload->'analysis'->'generation'=d.payload->'generation',false)))
+  AND coalesce(d.payload->'publication'->>'current','true') <> 'false'
   AND NOT coalesce(d.payload->'original'->'generation'=d.payload->'generation',false))`;
 
 /**
@@ -236,6 +250,7 @@ const UNIT_TYPES = Object.freeze(["page", "slide", "segment", "column", "chunk",
 const UNIT_STATUSES = Object.freeze(["extracted", "indexed_only", "no_content", "failed"]);
 const shaPattern = /^[a-f0-9]{64}$/;
 const registrationLocks = new Map();
+const publicationEffects = new AsyncLocalStorage();
 
 /**
  * The materialized `index.md` a run reads: a bibliographic header, then the
@@ -557,8 +572,8 @@ export class SourceService {
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
    * `afterRemove` is told once a document is recorded as going, so what rests on it can be labelled.
-   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, report = () => {}, evolutionSignals = null, judgeService = null } = {}) {
+   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
+  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
     this.judgeService = judgeService;
     this.documents = documents;
@@ -567,6 +582,7 @@ export class SourceService {
     this.now = now;
     this.afterReplace = afterReplace;
     this.afterRemove = afterRemove;
+    this.prepareRegistration = prepareRegistration;
     this.report = report;
     this.evolutionSignals = evolutionSignals;
     /** @type {Map<string,any>} */
@@ -597,6 +613,7 @@ export class SourceService {
   /** @param {string} userId @param {Record<string,any>} input */
   async register(userId, input) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new HttpError(400, "source_payload_invalid", "Source manifest is invalid.");
+    if (this.prepareRegistration) input = await this.prepareRegistration(userId, input);
     const projectId = text(input.projectId, "project id", 160);
     const sourceConnector = connector(input.connector);
     // No format is refused (2026-10-13): what a file is decides who reads its text, never whether it is kept.
@@ -609,91 +626,109 @@ export class SourceService {
     const mimeType = text(input.mimeType ?? "application/octet-stream", "MIME type", 160);
     const providerHash = input.providerHash == null ? null : text(input.providerHash, "provider hash", 256);
     const facts = registrationFacts(input);
-    const sourceId = sourceIdFor(projectId, sha256);
-    const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${file}`).slice(0, 32)}`;
-    const { replaces, ...registered } = await this.withRegistrationLocks([`source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
-    let exact = await this.documents.get(userId, "source", sourceId);
-    if (exact) {
-      if (exact.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
-      if (!exact.payload.paths.includes(file)) {
-        try {
-          exact = await this.documents.put(userId, "source", sourceId,
-            { ...exact.payload, paths: [...exact.payload.paths, file].sort(), updatedAt: this.now().toISOString() },
-            { expectedRevision: exact.revision, projectId });
-        } catch (error) {
-          if (!isConflict(error)) throw error;
-          exact = await this.documents.get(userId, "source", sourceId);
+    const logicalPath = input.logicalPath == null ? file : sourcePath(input.logicalPath);
+    // Notes belong to the document the person created, even when another note has identical bytes.
+    // Existing content-addressed identities remain readable and are reused for their original note.
+    const note = sourceOriginOf({ connectorType: sourceConnector.type, path: logicalPath }) === "note";
+    const legacyId = sourceIdFor(projectId, sha256);
+    const legacy = note ? await this.documents.get(userId, "source", legacyId, { includeDeleted: true }) : null;
+    const legacyPaths = legacy?.payload.paths ?? [];
+    const unambiguousLegacy = legacy?.payload.logicalPath === logicalPath || (legacyPaths.includes(logicalPath)
+      && legacyPaths.filter(entry => sourceOriginOf({ connectorType: sourceConnector.type, path: entry }) === "note").length === 1);
+    const sourceId = note && !unambiguousLegacy
+      ? sourceIdFor(projectId, digest(`${logicalPath}\0${sha256}`)) : legacyId;
+    const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${logicalPath}`).slice(0, 32)}`;
+    return this.withRegistrationLocks([`publication:${userId}:${projectId}`, `source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
+      if (this.documents.database) await this.documents.database.query("SELECT 1 FROM evimed_control.users WHERE id=$1 FOR KEY SHARE", [userId]);
+      const rows = [];
+      let cursor = null;
+      do {
+        const page = await this.documents.list(userId, "source", { projectId, limit: 100, cursor });
+        rows.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor);
+      const members = rows.filter(row => sourcePublicationBindings(row)[familyId]);
+      const predecessors = members.filter(row => row.id !== sourceId && sourcePublicationBindings(row)[familyId].current);
+      for (const id of [...new Set([sourceId, ...predecessors.map(row => row.id)])].sort()) await this.lockSourceMutation(userId, id);
+      let exact = await this.documents.get(userId, "source", sourceId, { includeDeleted: true });
+      if (exact && exact.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
+      const tombstone = exact?.deletedAt ? exact : null;
+      const wasExisting = Boolean(exact && !tombstone);
+      const bindings = exact && !tombstone ? sourcePublicationBindings(exact) : {};
+      const unchanged = Boolean(bindings[familyId]?.current && !predecessors.length);
+      const publicationRevision = unchanged ? Number(bindings[familyId].publicationRevision) || 1
+        : Math.max(Number(tombstone && sourcePublicationBindings(tombstone)[familyId]?.publicationRevision) || 0,
+          ...members.map(row => Number(sourcePublicationBindings(row)[familyId].publicationRevision) || 0)) + 1;
+      const reactivated = wasExisting && exact.payload.publication?.current === false;
+      if (wasExisting) {
+        if (exact.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
+        const ambiguousLegacy = !exact.payload.publication?.bindings && !Object.keys(bindings).length;
+        const capturedOriginal = sourceConnector.type === "openlist" && file.startsWith("knowledge-base/.evimed-revisions/");
+        const paths = [...new Set([...exact.payload.paths, file])].sort();
+        const payload = { ...exact.payload,
+          paths: capturedOriginal ? [file, ...paths.filter(entry => entry !== file)] : paths,
+          ...(capturedOriginal && !exact.payload.logicalPath && bindings[exact.payload.familyId]
+            ? { logicalPath: bindings[exact.payload.familyId].logicalPath } : {}),
+          ...(reactivated ? { generation: (Number(exact.payload.generation) || 1) + 1, status: "queued", ...retiredSourceRun(exact.payload) } : {}),
+          publication: { ...exact.payload.publication, current: true,
+            ...(ambiguousLegacy ? { legacyAmbiguous: true } : {}),
+            bindings: { ...bindings, [familyId]: { logicalPath, current: true, publicationRevision } } },
+          ...(exact.payload.familyId === familyId ? { version: publicationRevision } : {}), updatedAt: this.now().toISOString() };
+        if (!unchanged || !exact.payload.paths.includes(file) || (capturedOriginal && exact.payload.paths[0] !== file)) exact = await this.documents.put(userId, "source", sourceId, payload,
+          { expectedRevision: exact.revision, projectId });
+        exact = await this.refreshFacts(userId, exact, facts);
+      } else {
+        const [docType, depth, reason] = classify(file);
+        const now = this.now().toISOString();
+        const payload = { schemaVersion: 1, connector: sourceConnector, paths: [file],
+          ...(logicalPath !== file ? { logicalPath } : {}), fingerprint: { sha256, size, mtime, providerHash, mimeType },
+          familyId, version: publicationRevision, generation: tombstone ? Number(tombstone.payload.generation) + 1 : 1,
+          ...(tombstone ? { deletion: null } : {}), docType, depth, valueVector: defaultValueVector(docType), reasons: [reason],
+          status: "queued", extractorVersion: this.extractorVersion, coverage: null, outputs: {}, override: null,
+          ...(facts.title ? { title: facts.title } : {}), ...(facts.link ? { link: facts.link } : {}), createdAt: now, updatedAt: now,
+          publication: { current: true, bindings: { [familyId]: { logicalPath, current: true, publicationRevision } } } };
+        exact = await this.documents.put(userId, "source", sourceId, payload,
+          { expectedRevision: tombstone?.revision ?? 0, projectId, restoreDeleted: Boolean(tombstone) });
+      }
+      for (const candidate of predecessors) {
+        const previous = await this.documents.get(userId, "source", candidate.id);
+        if (!previous) continue;
+        const previousBindings = sourcePublicationBindings(previous);
+        const nextBindings = { ...previousBindings, [familyId]: { ...previousBindings[familyId], current: false } };
+        const current = previous.payload.publication?.legacyAmbiguous === true || Object.values(nextBindings).some(binding => binding.current);
+        const previousPayload = { ...previous.payload, publication: { ...previous.payload.publication, current, bindings: nextBindings },
+          ...(!current ? { generation: (Number(previous.payload.generation) || 1) + 1, ...retiredSourceRun(previous.payload) } : {}),
+          updatedAt: this.now().toISOString() };
+        const retired = await this.documents.put(userId, "source", previous.id, previousPayload,
+          { expectedRevision: previous.revision, projectId });
+        if (!current && this.documents.database) {
+          await this.enqueueRunCancellations(userId, retired);
+          await this.documents.database.transaction(async client => {
+            await client.query(`WITH changed AS (
+              UPDATE evimed_product.documents SET revision=revision+1,updated_at=clock_timestamp(),
+                payload=payload || jsonb_build_object('status','retired','sourceSuperseded',jsonb_build_object('sourceId',$2::text,'at',clock_timestamp()))
+              WHERE user_id=$1 AND kind=ANY($3::text[]) AND deleted_at IS NULL
+                AND (payload->>'sourceId'=$2 OR payload @> jsonb_build_object('provenance',jsonb_build_array(jsonb_build_object('type','source','id',$2::text))))
+              RETURNING user_id,kind,id,revision,payload,deleted_at
+            ) INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM changed`,
+            [userId, previous.id, ["method", "knowledge", "profile"]]);
+            await withdrawDerivedMemory(client, userId, { sourceIds: [previous.id], reason: "source_republished" });
+          });
+        }
+        if (this.afterReplace && sourceOriginOf({ connectorType: sourceConnector.type, path: logicalPath }) !== "wiki") {
+          const event = { userId, projectId, logicalPath, familyId, sourceRetired: !current, sourceGeneration: retired.payload.generation,
+            replaced: { sourceId: previous.id, sha256: previous.payload.fingerprint.sha256,
+              version: Number(previousBindings[familyId].publicationRevision) || 1 },
+            by: { sourceId, version: publicationRevision, at: this.now().toISOString() } };
+          const account = this.documents.database ? await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]) : null;
+          await this.jobs.enqueue(userId, "ingest", { action: "source-replace", event,
+            ...(account?.rows[0]?.generation ? { accountCreatedAt: account.rows[0].generation } : {}) },
+            { projectId, idempotencyKey: `source-replace:${projectId}:${familyId}:${publicationRevision}` });
         }
       }
-      // The same bytes read again (a link refreshed, a note saved unchanged) say when they were read and what they are
-      // called now; the document itself is not touched.
-      exact = await this.refreshFacts(userId, exact, facts);
-      const job = ["queued", "parsing"].includes(exact.payload.status)
-        ? await this.enqueue(exact, userId) : null;
-      return { source: exact, duplicate: true, job };
-    }
-    const family = await this.documents.list(userId, "source", { projectId, filter: { familyId }, limit: 100 });
-    const [docType, depth, reason] = classify(file);
-    const now = this.now().toISOString();
-    const payload = {
-      schemaVersion: 1,
-      connector: sourceConnector,
-      paths: [file],
-      fingerprint: { sha256, size, mtime, providerHash, mimeType },
-      familyId,
-      version: Math.max(0, ...family.items.map((item) => Number(item.payload.version) || 0)) + 1,
-      generation: 1,
-      docType,
-      depth,
-      valueVector: defaultValueVector(docType),
-      reasons: [reason],
-      status: "queued",
-      extractorVersion: this.extractorVersion,
-      coverage: null,
-      outputs: {},
-      override: null,
-      ...(facts.title ? { title: facts.title } : {}),
-      ...(facts.link ? { link: facts.link } : {}),
-      createdAt: now,
-      updatedAt: now,
-    };
-    try {
-      exact = await this.documents.put(userId, "source", sourceId, payload, { expectedRevision: 0, projectId });
-    } catch (error) {
-      if (!isConflict(error)) throw error;
-      exact = await this.documents.get(userId, "source", sourceId);
-      if (exact) return { source: exact, duplicate: true, job: null };
-      // The id is the digest of the bytes, so bytes a retired version had (a knowledge page brought back to an earlier text,
-      // a file put back after it was removed) meet that version's row, deleted: it is brought back as this registration.
-      exact = await this.reviveRetired(userId, sourceId, projectId, payload, error);
-    }
-    const job = await this.enqueue(exact, userId);
-    // The newest version this one follows: what rests on an older one was told when that one was replaced.
-    const previous = family.items.filter((item) => item.payload.fingerprint?.sha256 && item.id !== sourceId)
-      .sort((a, b) => (Number(b.payload.version) || 0) - (Number(a.payload.version) || 0))[0];
-    return { source: exact, duplicate: false, job, replaces: previous ? { replaced: { sourceId: previous.id, sha256: previous.payload.fingerprint.sha256,
-      version: Number(previous.payload.version) || 1 }, by: { sourceId, version: Number(payload.version) || 1, at: payload.createdAt } } : null };
+      const job = ["queued", "parsing"].includes(exact.payload.status) ? await this.enqueue(exact, userId, { rearmFailed: reactivated }) : null;
+      return { source: exact, duplicate: wasExisting && !reactivated && !predecessors.length, job };
     });
-    // Outside the registration locks: it reads results and memories, and the registration is complete without it.
-    // A knowledge page is rewritten by the compile and by the researcher; nothing a result or a memory rests on is the page.
-    if (replaces && this.afterReplace && sourceOriginOf({ connectorType: sourceConnector.type, path: file }) !== "wiki") {
-      try { await this.afterReplace({ userId, projectId, ...replaces }); }
-      catch (error) { this.report(typeof error?.code === "string" ? error.code : "source_replacement_unrecorded"); }
-    }
-    return registered;
-  }
-
-  /**
-   * A registration whose bytes are a retired source's: restore that row and write this registration over it, a revision of
-   * its own, so history keeps both. Anything else that answered the insert with a conflict is the conflict it was.
-   * @param {string} userId @param {string} sourceId @param {string} projectId @param {Record<string, any>} payload @param {unknown} conflict
-   */
-  async reviveRetired(userId, sourceId, projectId, payload, conflict) {
-    const retired = await this.documents.get(userId, "source", sourceId, { includeDeleted: true });
-    if (!retired?.deletedAt) throw conflict;
-    if (retired.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
-    const restored = await this.documents.restore(userId, "source", sourceId, retired.revision);
-    return this.documents.put(userId, "source", sourceId, payload, { expectedRevision: restored.revision, projectId });
   }
 
   /**
@@ -1382,10 +1417,11 @@ export class SourceService {
     }
     const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
     const selectedFamily = familyId == null || familyId === "" ? null : text(familyId, "family id", 80);
-    return this.documents.list(userId, "source", {
+    const page = await this.documents.list(userId, "source", {
       projectId: text(projectId, "project id", 160), limit, cursor,
       filter: { ...(selectedStatus ? { status: selectedStatus } : {}), ...(selectedFamily ? { familyId: selectedFamily } : {}) },
     });
+    return selectedFamily ? page : { ...page, items: page.items.filter(row => row.payload.publication?.current !== false) };
   }
 
   /**
@@ -1424,7 +1460,7 @@ export class SourceService {
             WHERE s.user_id=${user} AND s.kind='source' AND s.deleted_at IS NULL
             ORDER BY s.payload->'fingerprint'->>'sha256', (s.id=l.payload->>'sourceId') DESC, s.created_at DESC, s.id DESC) d`
         : "evimed_product.documents d";
-      const where = [shared ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=${bind(projectId)}`];
+      const where = ["coalesce(d.payload->'publication'->>'current','true') <> 'false'", shared ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=${bind(projectId)}`];
       if (state) where.push(SOURCE_STATE_SQL[state]);
       if (q) where.push(`(${searchSql(bind(q), bodyShas.length ? bind(bodyShas) : null)})`);
       if (withKind && kind) where.push(`${KIND_SQL}=${bind(kind)}`);
@@ -1459,16 +1495,54 @@ export class SourceService {
   /** The version chain a source belongs to: same project, same connector, same
    * path, newest version first. `familyId` and `version` were written on every
    * source since intake shipped; this is the read path that makes them visible.
-   * @param {string} userId @param {string} sourceId @param {{limit?:number}} options */
-  async family(userId, sourceId, { limit = 50 } = {}) {
+   * @param {string} userId @param {string} sourceId @param {{limit?:number,familyId?:string|null}} options */
+  async family(userId, sourceId, { limit = 50, familyId: requestedFamily = null } = {}) {
     const source = await this.requireSource(userId, sourceId);
-    const familyId = typeof source.payload.familyId === "string" ? source.payload.familyId : null;
-    if (!familyId) return { sourceId, familyId: null, currentVersion: Number(source.payload.version) || null, items: [], nextCursor: null };
-    const page = await this.documents.list(userId, "source", { projectId: source.projectId, filter: { familyId },
-      limit: Math.min(Math.max(Number(limit) || 50, 1), 100) });
-    const items = [...page.items].sort((a, b) => (Number(b.payload.version) || 0) - (Number(a.payload.version) || 0)
-      || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    return { sourceId, familyId, currentVersion: Number(source.payload.version) || null, items, nextCursor: page.nextCursor };
+    const bindings = sourcePublicationBindings(source);
+    const familyId = requestedFamily ?? source.payload.familyId;
+    if (requestedFamily && !bindings[requestedFamily]) throw new HttpError(404, "source_family_not_found", "The source does not belong to that document family.");
+    if (!familyId) return { sourceId, familyId: null, currentVersion: null, items: [], nextCursor: null };
+    const bounded = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    if (!this.documents.database) {
+      const page = await this.documents.list(userId, "source", { projectId: source.projectId, filter: { familyId }, limit: bounded });
+      const items = [...page.items].sort((a, b) => Number(b.payload.version) - Number(a.payload.version));
+      return { sourceId, familyId, currentVersion: Math.max(0, ...items.map(row => Number(row.payload.version) || 0)), items, nextCursor: page.nextCursor };
+    }
+    const history = await this.documents.database.query(`WITH snapshots AS (
+      SELECT r.*,d.project_id,d.created_at,d.updated_at,d.payload AS live_payload,
+        CASE WHEN r.payload->'publication'->'bindings' ? $3 THEN r.payload->'publication'->'bindings'->$3
+          WHEN r.payload->>'familyId'=$3 AND (r.payload ? 'logicalPath' OR jsonb_array_length(r.payload->'paths')=1)
+            THEN jsonb_build_object('current',coalesce(r.payload->'publication'->>'current','true') <> 'false',
+              'publicationRevision',coalesce(r.payload->'version','1'::jsonb)) END AS binding
+      FROM evimed_product.revisions r JOIN evimed_product.documents d
+        ON d.user_id=r.user_id AND d.kind=r.kind AND d.id=r.id
+      WHERE r.user_id=$1 AND r.kind='source' AND d.project_id=$2 AND d.deleted_at IS NULL AND r.deleted_at IS NULL
+        AND (r.payload->'publication'->'bindings' ? $3 OR r.payload->>'familyId'=$3)
+    ), occurrences AS (
+      SELECT DISTINCT ON (id,(binding->>'publicationRevision')::bigint) *,
+        min(recorded_at) OVER (PARTITION BY id,(binding->>'publicationRevision')::bigint) AS published_at
+      FROM snapshots WHERE binding->>'current'='true'
+      ORDER BY id,(binding->>'publicationRevision')::bigint,revision DESC
+    ) SELECT * FROM occurrences ORDER BY (binding->>'publicationRevision')::bigint DESC,id LIMIT $4`,
+    [userId, source.projectId, familyId, bounded]);
+    const occurrences = new Map();
+    let currentVersion = 0;
+    for (const row of history.rows) {
+      const binding = sourcePublicationBindings({ payload: row.payload })[familyId];
+      if (!binding || !binding.current) continue;
+      const version = Number(binding.publicationRevision) || 1;
+      const key = `${row.id}:${version}`;
+      if (occurrences.has(key)) continue;
+      const live = { id: row.id, userId, projectId: row.project_id, kind: "source", payload: row.live_payload,
+        createdAt: productTime(row.published_at), updatedAt: productTime(row.updated_at), deletedAt: null };
+      const liveBinding = sourcePublicationBindings(live)[familyId];
+      const current = liveBinding?.current && Number(liveBinding.publicationRevision) === version;
+      if (current) currentVersion = Math.max(currentVersion, version);
+      occurrences.set(key, { ...live, payload: { ...row.payload, familyId, version,
+        publication: { ...row.payload.publication, current: Boolean(current) } }, revision: row.revision });
+    }
+    const items = [...occurrences.values()].sort((a, b) => Number(b.payload.version) - Number(a.payload.version)).slice(0, bounded);
+    return { sourceId, familyId, currentVersion: currentVersion || null, items, nextCursor: null };
   }
 
   /** @param {string} userId @param {string} sourceId */
@@ -1840,6 +1914,7 @@ export class SourceService {
   /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number}} input */
   async retry(userId, sourceId, input) {
     const current = await this.requireSource(userId, sourceId);
+    if (current.payload.publication?.current === false) throw new HttpError(409, "source_revision_conflict", "Historical source versions cannot be read again.");
     if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "The source changed; reload before retrying it.");
     if (!["canceled", "failed", "needs_attention", "complete"].includes(current.payload.status)) {
       throw new HttpError(409, "source_state_conflict", "This source is already processing.");
@@ -1972,7 +2047,7 @@ export class SourceService {
       const cancelling = job.payload.action === "source-run-cancel";
       if (!row || row.project_id !== job.projectId || (!cancelling && Number(row.payload.generation) !== Number(job.payload.sourceGeneration ?? job.payload.sourceRevision))
         || (deleting ? !row.deleted_at || row.payload.deletion?.jobId !== job.id || row.payload.deletion?.revision !== job.payload.deletionRevision
-          : row.deleted_at || (!cancelling && !["queued", "parsing", "failed"].includes(row.payload.status) && !understandingPending(row.payload)))) throw new HttpError(409, "source_generation_stale", "This source job was superseded.");
+          : row.deleted_at || (!cancelling && row.payload.publication?.current === false) || (!cancelling && !["queued", "parsing", "failed"].includes(row.payload.status) && !understandingPending(row.payload)))) throw new HttpError(409, "source_generation_stale", "This source job was superseded.");
       const output = await operation(sourceRecord(row), client);
       const live = await client.query("SELECT 1 FROM evimed_product.jobs WHERE id=$1 AND user_id=$2 AND lease_token=$3 AND status='running' AND lease_expires_at>clock_timestamp()", [job.id, job.userId, job.leaseToken]);
       if (!live.rowCount) throw new HttpError(409, "product_job_lease_lost", "The source job lease expired.");
@@ -2077,6 +2152,23 @@ export class SourceService {
     return result;
   }
 
+  /** A historical binding change is durable; content-wide effects require current retirement. @param {any} job */
+  async consumeReplacement(job) {
+    const event = job.payload.event;
+    if (!event || event.userId !== job.userId || event.projectId !== job.projectId) throw new HttpError(409, "source_replacement_scope_invalid", "Source replacement scope changed.");
+    if (!this.afterReplace) throw new HttpError(503, "source_replacement_unconfigured", "Source replacement reconciliation is unavailable.");
+    return this.withRegistrationLocks([`publication:${job.userId}:${job.projectId}`, `source:${job.userId}:${event.replaced.sourceId}`], async () => {
+      if (this.documents.database && job.payload.accountCreatedAt) {
+        const account = await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1 FOR KEY SHARE", [job.userId]);
+        if (account.rows[0]?.generation !== job.payload.accountCreatedAt) throw new HttpError(409, "source_account_changed", "Source account changed.");
+      }
+      const live = await this.documents.get(job.userId, "source", event.replaced.sourceId);
+      if (live && live.projectId !== job.projectId) throw new HttpError(409, "source_replacement_scope_invalid", "Source replacement project changed.");
+      await this.afterReplace({ ...event, sourceRetired: event.sourceRetired && live?.payload.publication?.current === false && live.payload.generation === event.sourceGeneration });
+      return { sourceId: event.replaced.sourceId, publicationRevision: event.by.version };
+    });
+  }
+
   async enqueue(source, userId, { rearmFailed = false } = {}) {
     const account = this.documents.database ? await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]) : null;
     return this.jobs.enqueue(userId, "ingest", {
@@ -2084,6 +2176,45 @@ export class SourceService {
       ...(account?.rows[0]?.generation ? { accountCreatedAt: account.rows[0].generation } : {}),
       extractorVersion: this.extractorVersion,
     }, { idempotencyKey: `ingest:${source.id}:generation:${source.payload.generation}`, projectId: source.projectId, rearmFailed });
+  }
+
+  /** Jobs precede source rows everywhere: registration, worker publication and deletion. */
+  async lockSourceMutation(userId, sourceId) {
+    if (!this.documents.database) return;
+    await this.documents.database.query("SELECT id FROM evimed_control.users WHERE id=$1 FOR SHARE", [userId]);
+    await this.documents.database.query(`SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'sourceId'=$2
+      AND (kind='ingest' OR (kind='consolidate' AND payload->>'action'='source-delete')) ORDER BY id FOR UPDATE`, [userId, sourceId]);
+    await this.documents.database.query("SELECT id FROM evimed_product.documents WHERE user_id=$1 AND kind='source' AND id=$2 FOR UPDATE", [userId, sourceId]);
+  }
+
+  publicationActive() { return Boolean(publicationEffects.getStore()); }
+
+  /** Files and runtime replicas are published only after the owning ledger transaction commits. */
+  async afterPublication(effect) {
+    const effects = publicationEffects.getStore();
+    if (effects) effects.push(effect);
+    else await effect();
+  }
+
+  /** Freeze an already verified legacy original without changing identity or deletion state. */
+  async freezePublicationPath(userId, source, logicalPath, immutablePath) {
+    return this.withRegistrationLocks([`family:${userId}:${source.payload.familyId}`, `source:${userId}:${source.id}`],
+      () => this.freezePublicationPathCurrent(userId, source, logicalPath, immutablePath));
+  }
+
+  /** The caller already owns the source registration/advisory guard. */
+  async freezePublicationPathCurrent(userId, source, logicalPath, immutablePath) {
+    await this.lockSourceMutation(userId, source.id);
+    const database = this.documents.database;
+    const current = await this.documents.get(userId, "source", source.id, { includeDeleted: true });
+    if (!current?.payload.paths?.includes(logicalPath)) return current;
+    const payload = { ...current.payload, logicalPath: current.payload.logicalPath ?? logicalPath,
+      paths: current.payload.paths.map(rel => rel === logicalPath ? immutablePath : rel) };
+    const changed = await database.query(`UPDATE evimed_product.documents SET payload=$3::jsonb,revision=revision+1,updated_at=clock_timestamp()
+      WHERE user_id=$1 AND kind='source' AND id=$2 AND revision=$4 RETURNING *`, [userId, source.id, JSON.stringify(payload), current.revision]);
+    if (!changed.rowCount) throw new HttpError(409, "source_revision_conflict", "The source changed during publication migration.");
+    await recordRevision(database, changed.rows[0]);
+    return sourceRecord(changed.rows[0]);
   }
 
   async withRegistrationLocks(keys, operation) {
@@ -2098,7 +2229,28 @@ export class SourceService {
       await previous;
       held.push({ key, tail, release });
     }
-    try { return await operation(); }
+    try {
+      const inherited = publicationEffects.getStore();
+      const effects = inherited ?? [];
+      const execute = async () => {
+        if (!this.documents.database) return operation();
+        await migrateProductStore(this.documents.database);
+        // A transaction-scoped advisory guard coordinates separate server processes. The guarded
+        // ledger operations share this transaction; immutable staged bytes need no rollback.
+        return this.documents.database.transaction(async client => {
+          for (const key of [...new Set(keys)].sort()) {
+            await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [key]);
+          }
+          return this.documents.database.withTransactionClient(client, operation);
+        });
+      };
+      const effectStart = effects.length;
+      let result;
+      try { result = await publicationEffects.run(effects, execute); }
+      catch (error) { effects.splice(effectStart); throw error; }
+      if (!inherited) for (const effect of effects) await effect();
+      return result;
+    }
     finally {
       for (const item of held.reverse()) {
         item.release();

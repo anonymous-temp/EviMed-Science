@@ -408,3 +408,20 @@ test("the backup check carries the engine's copy only when the engine is the dep
   const withoutEngine = await readinessBackup({ ...production, openVikingUrl: "http://evimed-openviking:1933", openVikingApiKey: "root-key-of-a-fixture", memoryIndexProvider: "builtin" });
   assert.ok(!("openviking" in withoutEngine), "a deployment that pinned the term matcher was asked about an engine it does not use");
 });
+
+test("operator CLIs execute when invoked through the serving release symlink", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "evimed-cli-link-"));
+  try {
+    await symlink(repoRoot, path.join(directory, "current"));
+    for (const [script, status, message] of [
+      ["openviking-backup.mjs", 0, /openviking backup: not enabled/],
+      ["source-publication-inventory.mjs", 1, /OPEN_SCIENCE_DATABASE_URL is required/],
+    ]) {
+      const env = { ...process.env, OPEN_SCIENCE_OPENVIKING_BACKUP_ENABLED: "false" };
+      delete env.OPEN_SCIENCE_DATABASE_URL;
+      const result = spawnSync(process.execPath, [path.join(directory, "current", "scripts/ops", script), "run"], { env, encoding: "utf8", timeout: 10_000 });
+      assert.equal(result.status, status, script);
+      assert.match(`${result.stdout}${result.stderr}`, message, script);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

@@ -171,8 +171,9 @@ test("compose hands research-topic the NCBI key its settings read", async () => 
 test("the controller audit accepts only validated internal endpoints in a reconstructed launch plan", async () => {
   const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
-  assert.equal(controllerLaunchPlanIsScoped(controller), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
+  const manager = await readFile(new URL("../src/runtimeManager.mjs", import.meta.url), "utf8");
+  assert.equal(controllerLaunchPlanIsScoped(controller, manager), true);
+  const call = "buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? \"\", capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
   const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
@@ -186,6 +187,11 @@ test("the controller audit accepts only validated internal endpoints in a recons
   const pluginGuard = controller.match(/    if \(!pluginConfig[^\n]+\n/)?.[0];
   const pluginValidation = controller.match(/    validatePluginConfig\([^\n]+\n/)?.[0];
   assert.ok(pluginGuard && pluginValidation, "the fixed plugin shape and typed validator must be exercised");
+  for (const [from, to] of [[ 'profile !== "release-gate"', 'false' ], [ 'project.userId !== "release-gate"', 'false' ], [ 'project.tenantId !== "release-gate"', 'false' ], [ '!/^gate-[a-f0-9]{12}$/.test(project.id)', 'false' ], [ 'url.pathname !== "/internal/model/v1"', 'false' ], [ 'config.releaseGateModelGatewayInternalUrl', 'profile' ]]) {
+    const changed = manager.replace(from, to);
+    assert.notEqual(changed, manager);
+    assert.equal(controllerLaunchPlanIsScoped(controller, changed), false, from);
+  }
   const cases = [
     ["arbitrary fourth argument", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, payload)")],
     ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, args: payload.args })")],
@@ -205,7 +211,7 @@ test("the controller audit accepts only validated internal endpoints in a recons
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
     ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
-    ["unknown fields allowed", controller.replace('"platformSkillGeneration", "memoryGatewayUrl", "geoSkills"]', '"platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "args"]')],
+    ["unknown fields allowed", controller.replace('"platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile"]', '"platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "args"]')],
     ["plugin shape guard removed", controller.replace(pluginGuard, "")],
     ["plugin validator removed", controller.replace(pluginValidation, "")],
     ["plugin validation only mentioned in a comment", controller.replace(pluginValidation, `/* ${pluginValidation} */`)],
@@ -227,7 +233,7 @@ test("the controller audit accepts only validated internal endpoints in a recons
   ];
   for (const [label, source] of cases) {
     assert.notEqual(source, controller, `${label} must actually mutate the reviewed source`);
-    assert.equal(controllerLaunchPlanIsScoped(source), false, label);
+    assert.equal(controllerLaunchPlanIsScoped(source, manager), false, label);
   }
 });
 

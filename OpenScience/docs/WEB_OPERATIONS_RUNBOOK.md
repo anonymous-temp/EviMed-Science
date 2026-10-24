@@ -181,6 +181,22 @@ services with `compose up --no-build --pull never`. The host preflight keeps a
 10 GiB default floor and refuses overrides below 5 GiB. Build/transfer success
 alone is not deployment or OPS03 acceptance.
 
+## Knowledge and memory consistency operations (2026-10-23)
+
+Knowledge resources and native memories use the same OpenViking service, with different authority and namespaces. The deployment has one upstream account; EviMed users and project subscopes remain opaque mapped identities. PostgreSQL owns source eligibility, versions, personal-library membership, capsule activation and the native-memory overlay. Native memory text remains engine-owned. A personal library shares only within its owning EviMed account.
+
+Source registration publishes immutable version paths before advancing the ledger. The existing source-sync job ledger also carries revision-bound source/library lifecycle work. A remote runtime replica is acknowledged only after its current runtime identity and content digest are verified. Deferred, failed and uncertain work remain observable and retryable; a stale generation cannot make itself current. Do not delete immutable originals to repair an index.
+
+The operator metrics distinguish `source_sync`, `wiki_compile`, `capsule_index`, `native_extraction` and `native_admission` through `open_science_knowledge_queue_*`: observation availability, retained item states, unresolved age, attempts beyond the first, and last successful completion. A missing/unreadable ledger is unknown, not a healthy zero. Counts contain no account/source identifiers. These durable gauges complement the existing process counters and platform-purpose cost ledger; upstream calls without trustworthy tenant attribution remain platform costs. Alert thresholds for shared-engine latency must come from the controlled load run, not an invented SLA.
+
+Before publication migration, run `scripts/ops/source-publication-inventory.mjs` with the configured database and an optional protected roots manifest. It is read-only and reports merged-note ambiguity, conflicting families and original-byte hash mismatches. Preserve its report privately. A hash mismatch cannot be repaired by silently overwriting the only original; restore verified historical bytes when available and retain unresolved evidence otherwise.
+
+An empty explicitly selected-source scope returns no knowledge. Clearing that restriction uses `sourceScopeMode: "project"`; `"selected"` with an empty list remains empty. Source revocation immediately removes retrieval eligibility even if asynchronous engine deletion is delayed. Historical chat text and previously exported files are not remotely erased.
+
+Knowledge-page edits retain the unsaved draft and its original citation mapping when recompilation creates a new source version. The reader offers an explicit comparison before another save. Current quotation labels include verification time and source version; reparse changes invalidate the cached check. Missing locators remain unknown.
+
+Native external episodes stay candidate notes until an existing confirmation route is called. Durable admission preserves the candidate revision, native session/task and resulting record IDs; ambiguous append/commit outcomes are inspected before retry. Use-memory and learn-memory remain separate controls. A snapshot rechecks native file hashes before capsule publication; share revocation prevents future imports, not erasure of recipient copies already imported.
+
 ## Full rebuild on the isolated CI runner
 
 For a dependency upgrade, push the reviewed candidate to a `codex/release-*`
@@ -205,6 +221,35 @@ services: validate those against the candidate's protected configuration before
 opening traffic. Preserve tenant volumes, credentials and tested backups;
 recreate the selected services using `--no-build --pull never`, then complete
 the deployment checks below. Keep other products on a shared host untouched.
+
+For the owner-authorized test-stage cutover without rollback retention, a first
+import may instead use the verified private loopback registry. This bootstrap is
+separate from `release-images.mjs`'s measured-pull procedure: a new image cannot
+have a previous target-engine peak or target-host smoke result. Keep that
+command's evidence requirements unchanged. Bind the successful CI artifact to
+its exact source, config and ordered layers. Any private skill overlay must be
+assembled outside the serving host, limited to the approved data paths and seed
+seal, with unchanged execution configuration and a recorded base-to-final digest
+chain. Pull only the final single-platform manifest digest.
+
+Before this bootstrap, derive a conservative storage upper bound from verified
+blob sizes, expanded layer entries, block allocation and metadata, the actual
+storage driver, retained compressed content, concurrent downloads and unpacking
+or snapshot copies. Include bounded smoke/log writes and an explicit growth
+reserve. Each physical filesystem must retain at least **5 GiB plus that growth
+reserve**, matching the existing hard minimum; this explicitly replaces the
+archive path's 10 GiB floor for this scoped procedure. Missing bounds or capacity
+refuse the operation. Authorized old-runtime removal may precede the import
+after baseline evidence is saved; count only actually reclaimed space.
+
+Monitor the owned digest pull and subsequent smoke from before their first
+writes through completion. Unreadable capacity/identity probes or a breached
+reserve stop the owned operation; confirm daemon work stopped before retrying.
+After import, verify the exact native image config, platform and ordered rootfs,
+then run the original smoke, relocated seed/seal and effective private-skill
+catalogue checks before activation. Record admission **upper bounds** separately
+from sampled observations of this transfer; neither is fabricated prior peak
+evidence. Preserve all tenant data and unrelated services.
 
 The knowledge-source plugin is a separate thirteenth image: the Web workflow's
 full twelve-image archive does not include `docker-compose.knowledge.yml`.
@@ -2007,3 +2052,17 @@ what already runs and `onArrival` what the input turns on. An independently labe
 matching set is evaluated with
 `node evals/vcr-matching/run_matching_evaluation.mjs --dataset <set.json>`; the report
 carries the file's SHA-256 so the holdout can be frozen before tuning.
+
+### Release gate model counter endpoint
+
+The standalone `node scripts/ops/deepseek-kernel-release-gate.mjs` operator command requires
+`OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL`, for example
+`http://open-science-release-receipt:8798/internal/model/v1`. Configure the same fixed
+address in the receipt operator and runtime controller. It is disabled when unset;
+ordinary runtimes keep `OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL`.
+The address requires HTTP, an explicit port and the exact `/internal/model/v1` path,
+without credentials, query or fragment. The hostname must resolve from runtime containers
+to the operator running the counter. The gate binds that port and fails if occupied;
+it never switches to a random port. Invalid configuration is rejected before paid provider
+compatibility calls. Only explicit release-gate projects may select this model destination;
+knowledge, memory and other auxiliary gateways retain their normal addresses.

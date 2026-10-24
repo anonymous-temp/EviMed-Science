@@ -152,6 +152,65 @@ const NOT_KEPT = Object.freeze({
 const ok = (/** @type {unknown} */ result) => ({ status: "ok", result, error: null });
 const refusal = (/** @type {string} */ code, /** @type {string} */ message) => ({ status: "error", result: null, error: { code, message } });
 
+/** Only the native memory tree belongs to this gateway; knowledge resources have their own scoped service.
+ * @param {string} uri @param {string} userRoot */
+function insideNativeMemories(uri, userRoot) {
+  const full = absolute(uri, userRoot), root = `${userRoot}/memories`;
+  return insideOwnSpace(uri, userRoot) && (full === root || full.startsWith(`${root}/`));
+}
+
+/** Native list search has no context-only exclusion fields; filter structured rows before returning any bytes.
+ * @param {any} sessions @param {any} ctx @param {any} given */
+async function scopedListSearch(sessions, ctx, given) {
+  const target = absolute(typeof given.target_uri === "string" && given.target_uri ? given.target_uri : `${ctx.userRoot}/memories`, ctx.userRoot);
+  if (!insideNativeMemories(target, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
+  const excluded = [...await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : []), ...await ctx.hiddenSet()].map(uri => absolute(uri, ctx.userRoot));
+  const hidden = uri => excluded.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`));
+  const empty = { memories: [], resources: [], skills: [], total: 0 };
+  if (hidden(target)) return ok(empty);
+  const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
+  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit, target_uri: target, level: 2 });
+  if (!answer || answer.error || !answer.result || typeof answer.result !== "object") throw new HttpError(502, "memory_gateway_upstream_invalid", "Native memory search is unavailable.");
+  const result = { ...empty };
+  let remaining = limit;
+  for (const kind of ["memories", "resources", "skills"]) {
+    result[kind] = (Array.isArray(answer.result[kind]) ? answer.result[kind] : []).filter(hit => {
+      const uri = typeof hit?.uri === "string" ? hit.uri : "";
+      return uri === absolute(uri, ctx.userRoot) && Boolean(nativeMemoryFile(uri, `${ctx.userRoot}/memories`)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
+    }).slice(0, remaining).map(hit => ({ uri: hit.uri,
+      ...(typeof hit.context_type === "string" ? { context_type: hit.context_type } : {}),
+      ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
+      ...(typeof hit.abstract === "string" ? { abstract: hit.abstract } : {}),
+      ...(Array.isArray(hit.tags) ? { tags: hit.tags.filter(tag => typeof tag === "string") } : {}) }));
+    remaining -= result[kind].length;
+  }
+  result.total = result.memories.length + result.resources.length + result.skills.length;
+  return ok(result);
+}
+
+/** Structured native listing, with no parent summaries or raw engine metadata crossing the memory boundary.
+ * @param {any} sessions @param {any} ctx @param {string} requested @param {Record<string,string>} query */
+async function scopedMemoryList(sessions, ctx, requested, query = {}) {
+  const target = absolute(requested, ctx.userRoot), root = `${ctx.userRoot}/memories`;
+  if (!insideNativeMemories(target, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The listing target is outside native memories.");
+  if (await ctx.hidden(target)) return { ...ok([]), has_more: false };
+  let body;
+  try { body = await sessions.client.request({ path: "/api/v1/fs/ls", userId: ctx.user.id, query: { ...query, uri: target }, timeoutMs: sessions.fastTimeoutMs * 2 }); }
+  catch (error) { if (error.code === "memory_index_not_found") return { ...ok([]), has_more: false }; throw error; }
+  if (!Array.isArray(body?.result)) throw new HttpError(502, "memory_gateway_upstream_invalid", "Native listing did not return structured entries.");
+  const hidden = await ctx.hiddenSet();
+  const entries = body.result.filter(entry => {
+    const uri = typeof entry?.uri === "string" ? entry.uri : "";
+    return uri === absolute(uri, ctx.userRoot) && insideNativeMemories(uri, ctx.userRoot) && (uri === target || uri.startsWith(`${target}/`))
+      && !hidden.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`))
+      && Boolean(nativeMemoryFile(entry.isDir === true ? `${uri}/scope-check.md` : uri, root));
+  }).map(entry => ({ uri: entry.uri, isDir: entry.isDir === true,
+    ...(typeof entry.name === "string" ? { name: entry.name } : {}), ...(typeof entry.rel_path === "string" ? { rel_path: entry.rel_path } : {}),
+    ...(entry.isDir !== true && Number.isFinite(entry.size) ? { size: entry.size } : {}), ...(entry.isDir !== true && typeof entry.modTime === "string" ? { modTime: entry.modTime } : {}) }));
+  // A native truncated page says nothing about more visible memories; do not leak hidden continuation counts or claim completion.
+  return { ...ok(entries), ...(body.has_more === false ? { has_more: false } : { pagination: "unknown" }) };
+}
+
 /** Whether a viking:// URI is inside one account's own space (`viking://~` is the engine's alias for it). */
 function insideOwnSpace(uri, userRoot) {
   const text = String(uri ?? "");
@@ -479,22 +538,22 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         recordGatewayWithheld(admitted.recallReason ?? "legacy_engine");
         return { status: 200, json: ok(context ? { entries: [], rendered: "", digest: "" } : { memories: [], resources: [], skills: [], total: 0 }), outcome: "withheld" };
       }
-      if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideOwnSpace(given.target_uri, ctx.userRoot))) {
+      if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideNativeMemories(given.target_uri, ctx.userRoot))) {
         throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
       }
+      if (!context) return { status: 200, json: await scopedListSearch(sessions, ctx, given), outcome: "forwarded" };
+      if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
       const { purpose: _purpose, quotas: _quotas, peer_scope: _peerScope, ...rest } = given;
-      const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : []) };
-      // List mode searches a target; with none it would search every scope the account can see.
-      if (!context && !body.target_uri) body.target_uri = `${ctx.userRoot}/memories`;
+      const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : [], true) };
       return { status: 200, json: await /** @type {any} */ (sessions).search(ctx.user.id, body), outcome: "forwarded" };
     },
     async read(ctx) {
       const uri = String(ctx.query.get("uri") ?? "");
-      if (!insideOwnSpace(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside the caller's own space.");
+      if (!insideNativeMemories(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
       const admitted = await ctx.admit(null);
       const missing = { status: 404, json: refusal("NOT_FOUND", "File not found."), outcome: "withheld" };
       if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "legacy_engine"); return missing; }
-      if (await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
+      if (!nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
       const text = await /** @type {any} */ (sessions).read(ctx.user.id, uri, { timeoutMs: /** @type {any} */ (sessions).fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
       return { status: 200, json: ok(text), outcome: "forwarded" };
@@ -505,7 +564,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (uri === "viking://user") {
         return { status: 200, json: { ...ok([{ name: ctx.engineUser, size: 0, isDir: true, uri: ctx.userRoot }]), has_more: false }, outcome: "local" };
       }
-      if (!insideOwnSpace(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside the caller's own space.");
+      if (absolute(uri, ctx.userRoot) === ctx.userRoot) return { status: 200, json: { ...ok([{ name: "memories", uri: `${ctx.userRoot}/memories`, isDir: true }]), has_more: false }, outcome: "local" };
+      if (!insideNativeMemories(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
       const admitted = await ctx.admit(null);
       const empty = { status: 200, json: { ...ok([]), has_more: false } };
       if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "legacy_engine"); return { ...empty, outcome: "withheld" }; }
@@ -516,17 +576,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const value = ctx.query.get(name);
         if (value !== null && value.length <= 600) query[name] = value;
       }
-      let body;
-      try {
-        body = await /** @type {any} */ (sessions).client.request({ path: "/api/v1/fs/ls", userId: ctx.user.id, query, timeoutMs: /** @type {any} */ (sessions).fastTimeoutMs * 2 });
-      } catch (error) {
-        // A directory the engine has not made yet (it makes an account's tree at its first session) is an empty one.
-        if (/** @type {any} */ (error)?.code === "memory_index_not_found") return { ...empty, outcome: "forwarded" };
-        throw error;
-      }
-      const hiddenUris = await ctx.hiddenSet();
-      const entries = (Array.isArray(body?.result) ? body.result : []).filter((/** @type {any} */ entry) => !hiddenUris.some((/** @type {string} */ prefix) => String(entry?.uri ?? "") === prefix || String(entry?.uri ?? "").startsWith(`${prefix}/`)));
-      return { status: 200, json: { ...body, result: entries }, outcome: "forwarded" };
+      return { status: 200, json: await scopedMemoryList(sessions, ctx, uri, query), outcome: "forwarded" };
     },
     // OpenViking's skill store is not part of this product's memory: the catalogue is empty and nothing is asked upstream.
     async skills() {
@@ -562,7 +612,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const admitted = await ctx.admit(null);
         // Every URI a tool names stays inside the caller's own space: `read` takes `uris`, `list` and `forget` `uri`, `search` `target_uri`.
         const named = [args.uri, args.target_uri, ...(Array.isArray(args.uris) ? args.uris : [args.uris])].filter((value) => typeof value === "string" && value);
-        if (named.some((uri) => !insideOwnSpace(uri, ctx.userRoot))) {
+        if (named.some((uri) => !insideNativeMemories(uri, ctx.userRoot))) {
           recordGatewayRefusal("memory_gateway_uri_refused");
           local.push(rpcError(message.id, -32602, "The URI is outside the user's own memories."));
           continue;
@@ -576,36 +626,29 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           const hiddenUris = await ctx.hiddenSet();
           const isHidden = (/** @type {string} */ uri) => { const full = absolute(uri, ctx.userRoot); return hiddenUris.some((/** @type {string} */ prefix) => full === prefix || full.startsWith(`${prefix}/`)); };
           if (name === "read") {
-            const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && !isHidden(uri)).slice(0, 10);
+            const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10);
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
           } else if (name === "list") {
             const uri = typeof args.uri === "string" && args.uri ? args.uri : `${ctx.userRoot}/memories`;
             if (isHidden(uri)) { local.push(toolText(message.id, "（空）")); continue; }
-            forward.push({ ...message, params: { ...message.params, arguments: { uri, recursive: args.recursive === true } } });
+            local.push(toolText(message.id, JSON.stringify(await scopedMemoryList(sessions, ctx, uri, { recursive: args.recursive === true ? "true" : "false" }))));
           } else {
-            const limit = Math.max(1, Math.min(20, Math.trunc(Number(args.limit)) || 5));
-            const target = typeof args.target_uri === "string" && args.target_uri && !isHidden(args.target_uri) ? args.target_uri : `${ctx.userRoot}/memories`;
+            const result = await scopedListSearch(sessions, ctx, args);
+            const content = [ { type: "text", text: JSON.stringify(result.result) } ];
             const query = String(args.query ?? "").slice(0, 2_000);
-            forward.push({ ...message, params: { ...message.params, arguments: {
-              query, limit, target_uri: target, query_expansion: "off", exclude_uris: await ctx.excluded([]),
-            } } });
-            // The capsule's half (item 9 above): asked at the same time as the engine, for a search over the whole of the person's
-            // memories and not for one that names a directory of its own. It is added to the answer, and costs the answer nothing
-            // when it fails.
-            if (capsuleSearch && query.trim() && target === `${ctx.userRoot}/memories` && message.id !== undefined) {
-              const capsule = Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query, limit })).catch(() => []);
-              afterCall.set(message.id, async (answer) => {
-                // Waited for as long as the engine is (`memoryGatewayTimeoutMs`), and no longer: a capsule half that hangs is
-                // one that said nothing, and the engine's answer goes back at once.
-                /** @type {ReturnType<typeof setTimeout> | undefined} */
-                let timer;
-                const items = await Promise.race([capsule, new Promise((resolve) => { timer = setTimeout(() => resolve([]), capsuleWaitMs); })]);
-                clearTimeout(timer);
-                const text = capsuleSearchText(/** @type {any} */ (items));
-                if (text && Array.isArray(answer?.result?.content)) answer.result.content.push({ type: "text", text });
-              });
+            const target = typeof args.target_uri === "string" && args.target_uri ? args.target_uri : `${ctx.userRoot}/memories`;
+            if (capsuleSearch && query.trim() && target === `${ctx.userRoot}/memories`) {
+              let timer;
+              const items = await Promise.race([
+                Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query, limit: Math.max(1, Math.min(20, Math.trunc(Number(args.limit)) || 5)) })).catch(() => []),
+                new Promise(resolve => { timer = setTimeout(() => resolve([]), capsuleWaitMs); }),
+              ]);
+              clearTimeout(timer);
+              const text = capsuleSearchText(/** @type {any} */ (items));
+              if (text) content.push({ type: "text", text });
             }
+            local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
           continue;
         }
@@ -742,14 +785,25 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.
         hiddenSet: () => {
-          hiddenList ??= (async () => [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(overlay?.configured ? await overlay.sensitiveUris(user.id).catch(() => []) : [])])();
+          hiddenList ??= (async () => [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(overlay?.configured ? await overlay.sensitiveUris(user.id) : [])])();
           return hiddenList;
         },
         hidden: async (/** @type {string} */ uri) => (await ctx.hiddenSet()).some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`)),
         // `exclude_uris` of a search: the account-shared areas hold nothing of this user's and their scaffolding ranks as hits.
-        excluded: async (/** @type {unknown[]} */ given) => [...new Set([
-          ...given.filter((uri) => typeof uri === "string" && uri.length <= 600), "viking://resources", "viking://agent", ...(await ctx.hiddenSet()),
-        ])].slice(0, 200),
+        excluded: async (/** @type {unknown[]} */ given, context = false) => {
+          const mandatory = ["viking://resources", "viking://agent", `${userRoot}/resources`, ...(await ctx.hiddenSet())];
+          if (context) for (const protectedUri of [...mandatory]) {
+            if (!protectedUri.startsWith(`${userRoot}/`)) continue;
+            let ancestor = protectedUri.endsWith(".md") ? protectedUri.slice(0, protectedUri.lastIndexOf("/")) : protectedUri;
+            while (ancestor === userRoot || ancestor.startsWith(`${userRoot}/`)) {
+              mandatory.push(`${ancestor}/.abstract.md`, `${ancestor}/.overview.md`);
+              ancestor = ancestor.slice(0, ancestor.lastIndexOf("/"));
+            }
+          }
+          const exclusions = [...new Set([...mandatory, ...given.filter(uri => typeof uri === "string" && uri.length <= 600)])];
+          if (context && exclusions.length > 200) throw new HttpError(503, "memory_gateway_exclusions_unavailable", "Complete context exclusions exceed the native search limit.");
+          return exclusions;
+        },
       };
       const answer = await handlers[route](ctx);
       recordGatewayRequest(route, answer.outcome);

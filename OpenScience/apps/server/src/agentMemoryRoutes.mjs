@@ -1,3 +1,5 @@
+import { NATIVE_RECORD_ID } from "./nativeMemoryStore.mjs";
+import { createHash } from "node:crypto";
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, nativeRecallSource, recallForAgent } from "./agentMemoryRecall.mjs";
 import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
@@ -48,7 +50,7 @@ import { isPlatformAccount } from "./platformAccount.mjs";
  *     `/episodes` answered 202 and wrote nothing, `/recall` read stale copies, and a forget through `/records` changed rows the
  *     engine never reads. Now an account on the native engine is read and acted on through the store the memory page uses
  *     (`nativeMemory`): `/recall` reads the engine's files, `/records`, `/dashboard` and every record act go to them (a forget
- *     removes the file from the engine, with the page's undo), and `/episodes` is refused by name
+ *     removes the file from the engine, with the page's undo), and `/episodes` stages a pending candidate before explicit confirmation
  *     (`memory_engine_unsupported`) — the engine's own extraction writes what it finds with nothing held for the owner, which is
  *     the one thing rule 1 forbids this API from doing. Every answer that reads or acts on an account's memory carries its
  *     engine: `engine` in an object body, `X-Memory-Engine` on every one of them. Notes (`/note`), observations and methods are
@@ -181,13 +183,17 @@ export function createAgentMemoryRoutes({
 
     /**
      * Which engine keeps this account's memory. A subject that has no account yet is a new one, and a new account takes the
-     * deployment's default; an account that cannot be read as either is the PostgreSQL one, as everywhere.
+     * deployment's default. An unreadable engine identity must never select stale legacy rows.
      * @param {any} user @returns {Promise<"native" | "legacy">}
      */
     const engineOf = async (user) => {
       if (!user) return config.ovNativeMemoryEnabled === true ? "native" : "legacy";
       if (typeof researchMemory?.memoryEngine !== "function") return "legacy";
-      return (await researchMemory.memoryEngine(user.id).catch(() => "legacy")) === "native" ? "native" : "legacy";
+      let selected;
+      try { selected = await researchMemory.memoryEngine(user.id); }
+      catch { throw new HttpError(503, "memory_engine_unavailable", "The memory engine identity is unavailable."); }
+      if (!["native", "legacy"].includes(selected)) throw new HttpError(503, "memory_engine_unavailable", "The memory engine identity is unavailable.");
+      return selected;
     };
     /**
      * The native store, for an account on that engine — and a refusal by name, never the legacy rows served as that account's
@@ -366,7 +372,6 @@ export function createAgentMemoryRoutes({
     if (action === "episodes" && method === "POST") {
       requireScope("memory.write");
       const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.episodes);
-      if (!memoryIntelligence) throw new HttpError(503, "product_state_unavailable", "Memory extraction is unavailable.");
       if (!Array.isArray(input.messages) || input.messages.length === 0 || input.messages.length > 200) {
         throw new HttpError(400, "agent_memory_payload_invalid", "messages must be a list of 1–200 turns.");
       }
@@ -388,16 +393,21 @@ export function createAgentMemoryRoutes({
           sender: message.role === "user" ? "user" : "assistant",
         };
       });
-      // Refused before any account is made for a subject: on the native engine the extraction writes what it finds with nothing
-      // held for the owner (rule 1 forbids this API from doing that), so the answer is "not on this engine" and not a 202 over nothing.
-      if (await engineOf(await accountFor({ create: false })) === "native") {
-        throw new HttpError(400, "memory_engine_unsupported", "An episode cannot be submitted for an account on the native memory engine: its extraction keeps what it finds with nothing held for the account's owner, which this API never does. Propose a fact with POST /note instead.");
-      }
       const user = /** @type {any} */ (await accountFor({ create: true }));
       // A subject's episode belongs to its one project whether or not it is named.
       const projectId = (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null);
       if (!projectId) throw new HttpError(400, "agent_memory_payload_invalid", "An episode belongs to a project; name one.");
       const project = await store.requireProject(user, projectId);
+      if (await nativeFor(user)) {
+        const entry = await capsules.note(user.id, projectId, {
+          factKind: "project_fact", content: `External session ${sessionId}: ${createHash("sha256").update(JSON.stringify(messages)).digest("hex")}\n${messages.map((message) => `${message.sender}: ${message.parts[0].text}`).join("\n").slice(0,16000)}`,
+          origin: "inferred", review: true, externalSession: { sessionId, messages },
+        });
+        sendJson(res, 202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
+          state: "pending_confirmation", confirm: { path: `${AGENT_MEMORY_PATH}/notes/${encodeURIComponent(entry.id)}/confirm`, expectedRevision: entry.revision } } });
+        return true;
+      }
+      if (!memoryIntelligence) throw new HttpError(503, "product_state_unavailable", "Memory extraction is unavailable.");
       const run = {
         id: `ext_${identity.keyId}_${Date.now().toString(36)}`,
         sessionId,
@@ -418,9 +428,8 @@ export function createAgentMemoryRoutes({
           activated: outcome.activated,
           pending: outcome.pending,
           rejected: outcome.rejected,
-          engine: "legacy",
         },
-      }, { "X-Memory-Engine": "legacy" });
+      });
       return true;
     }
 
@@ -430,7 +439,7 @@ export function createAgentMemoryRoutes({
       if (!researchMemory?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       const user = await accountFor({ create: false });
       const native = await nativeFor(user);
-      const board = await memoryBoard({ researchMemory, learning, capsules, observations, native }, user);
+      const board = await memoryBoard({ researchMemory, learning, capsules, observations, nativeMemory: native, projectId: identity.projectId }, user);
       // A subject with no account yet has no engine to name but the one its account would be given.
       const engine = await engineOf(user);
       sendJson(res, 200, { data: { ...board, engine } }, { "X-Memory-Engine": engine });
@@ -455,11 +464,11 @@ export function createAgentMemoryRoutes({
       requireScope("memory.manage");
       const input = fields(body, ["learningPaused", "recallPaused"]);
       const user = /** @type {any} */ (await accountFor({ create: true }));
+      const engine = await engineOf(user);
       const settings = await researchMemory.updateSettings(user.id, input);
       await trail("settings.update", user, { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused });
       // On the native engine the pause is the engine's own policy too (what the memory page's switch does); the gateway reads
       // the setting on every request, so the switch has taken effect whether or not the engine could be told now.
-      const engine = await engineOf(user);
       if (engine === "native" && typeof input.learningPaused === "boolean" && nativeMemory?.configured) {
         await nativeMemory.setLearning(user.id, !settings.learningPaused)
           .catch((/** @type {any} */ error) => trail("settings.engine", user, { code: String(error?.code ?? "memory_engine_unavailable") }));
@@ -475,7 +484,11 @@ export function createAgentMemoryRoutes({
       if (!user) throw new HttpError(404, "memory_not_found", "Memory not found.");
       const act = record.act || "edit";
       const native = await nativeFor(user);
-      const outcome = await recordAction({ researchMemory, feedbackEvents, native }, user, record.id, act, body);
+      if (identity.projectId) {
+        const existing = await (native && NATIVE_RECORD_ID.test(record.id) ? native : researchMemory).getRecord(user.id, record.id);
+        if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
+      }
+      const outcome = await recordAction({ researchMemory, feedbackEvents, nativeMemory: native }, user, record.id, act, body);
       await trail(outcome.event, user, { target: record.id });
       sendJson(res, 200, { data: outcome.record }, { "X-Memory-Engine": native ? "native" : "legacy" });
       return true;
@@ -495,7 +508,7 @@ export function createAgentMemoryRoutes({
       if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
       const changed = await methodAction({ learning }, user, habit.id, habit.act, body);
       await trail(`method.${habit.act}`, user, { target: habit.id });
-      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null } });
+      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
       return true;
     }
 
@@ -504,9 +517,13 @@ export function createAgentMemoryRoutes({
       requireScope("memory.manage");
       const user = await accountFor({ create: false });
       if (!user) throw new HttpError(404, "note_not_found", "No such proposed note.");
-      const changed = await noteAction({ capsules }, user, note.id, note.act, body);
+      if (identity.projectId) {
+        const existing = await capsules.documents.get(user.id, "fact", note.id);
+        if (!existing || existing.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This note belongs to a different project.");
+      }
+      const changed = await noteAction({ capsules, researchMemory, nativeMemory }, user, note.id, note.act, body);
       await trail(`note.${note.act}`, user, { target: note.id });
-      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null } });
+      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
       return true;
     }
 

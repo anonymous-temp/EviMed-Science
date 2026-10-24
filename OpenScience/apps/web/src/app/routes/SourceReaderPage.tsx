@@ -25,7 +25,7 @@ import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { SourceDependents } from "@/components/sources/SourceDependents";
 import { SourceKeyPoints } from "@/components/sources/SourceKeyPoints";
 import { SourceOriginal } from "@/components/sources/SourceOriginal";
-import { SourceQuotation } from "@/components/sources/SourceQuotation";
+import { SourceQuotation, type ConversationExcerpt } from "@/components/sources/SourceQuotation";
 import { sourceMenuItems } from "@/components/sources/SourceRow";
 import { KnowledgePageView } from "@/components/sources/KnowledgePageView";
 import { conversationReferences, knowledgeConversationDraft } from "@/components/sources/knowledgeView";
@@ -103,7 +103,9 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   }, [load]);
 
   // Polled while it is still being read: the text and the key points appear without a reload.
-  const reading = source ? isReading(source) : false;
+  // Compiled pages are already readable from their mirror. Ingestion status belongs to
+  // raw sources; polling a superseded page ID would unmount an unsaved page editor.
+  const reading = source ? !isKnowledgePage(source) && isReading(source) : false;
   useEffect(() => {
     if (!reading) return undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -164,13 +166,15 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   // 「在对话中使用」: the document's own project when it is a project's (the conversation reads that project's knowledge
   // base), else the project the tab is in (a shared document is readable from every project). The question is left in
   // the composer unsent, naming the document by its title and its file.
-  const useInConversation = () => {
+  const prepareConversation = (excerpt?: ConversationExcerpt) => {
     if (!source) return;
     const target = listState.scope === SHARED_SCOPE ? currentProjectId : source.projectId;
     const page = isKnowledgePage(source) ? knowledgePage : null;
     void select(target, () => {
       navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: {
-        ...newRuntimeUiIntent(page ? knowledgeConversationDraft(source.display.title) : conversationDraft(source)),
+        ...newRuntimeUiIntent(excerpt
+          ? `请结合“${source.display.title}”第 ${source.revision} 版${excerpt.page ? `，第 ${excerpt.page} 页` : ""}的这段原文继续讨论（字符 ${excerpt.start}–${excerpt.end}）：\n\n${excerpt.text}`
+          : page ? knowledgeConversationDraft(source.display.title) : conversationDraft(source)),
         references: conversationReferences({ id: source.id, title: source.display.title }, page?.sources ?? []),
       } } });
     }).catch((failure) => toast.error(webErrorMessage(failure)));
@@ -203,12 +207,12 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   const tab: ReaderTab = view.tab ?? (source && isEditableNote(source) ? "original" : "content");
   const menu = source ? sourceMenuItems(source, {
     duplicate: group !== null, busy, onRetry: readAgain, onShare: toggleShared, onDuplicates: () => setDuplicatesOpen(true), onDelete: () => setDeleting(true),
-  }) : [];
+  }).filter((item) => source.payload.publication?.current !== false || item === "separator" || !("label" in item) || item.label !== "重新读取") : [];
 
   const start = Number(params.get("start")), end = Number(params.get("end")), sha = params.get("sha") ?? "";
   const span = params.has("start") && Number.isSafeInteger(start) && start >= 0 && Number.isSafeInteger(end)
     && end > start && end - start <= 2000 && /^[a-f0-9]{64}$/.test(sha) ? { start, end, sha } : undefined;
-  const original = source && (span ? <SourceQuotation source={source} page={view.page ?? undefined} span={span} onNoteSaved={noteSaved} />
+  const original = source && (span ? <SourceQuotation source={source} page={view.page ?? undefined} span={span} onNoteSaved={noteSaved} onUseExcerpt={prepareConversation} />
     : <SourceOriginal source={source} page={view.page ?? undefined} onNoteSaved={noteSaved} />);
   const points = source && (
     <div className="space-y-6">
@@ -225,7 +229,7 @@ function SourceReader({ sourceId }: { sourceId: string }) {
         meta={source ? readerMeta(source) : undefined}
         actions={source && (
           <>
-            <Button disabled={!isUsable(source)} onClick={useInConversation}>
+            <Button disabled={!isUsable(source)} onClick={() => prepareConversation()}>
               <MessageSquare size={16} aria-hidden="true" />在对话中使用
             </Button>
             <Button variant="secondary" disabled={!path || source.payload.status === "missing"} onClick={() => void download()}>下载</Button>

@@ -73,6 +73,7 @@ export async function projectComposition(database, userId, projectId) {
       CASE WHEN jsonb_typeof(d.payload->'metadata'->'keywords')='array' THEN d.payload->'metadata'->'keywords' END AS keywords
     FROM evimed_product.documents d
     WHERE d.user_id=$1 AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=$2
+      AND coalesce(d.payload->'publication'->>'current','true') <> 'false'
       AND coalesce(d.payload->'paths'->>0,'') NOT LIKE 'knowledge-base/wiki/%'
     ORDER BY d.created_at, d.id`, [userId, projectId]);
   return composeLibrary(result.rows);

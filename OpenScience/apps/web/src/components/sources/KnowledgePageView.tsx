@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Pencil } from "lucide-react";
 import { knowledgePageTypeLabel } from "@evimed/domain";
@@ -144,8 +144,8 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
 
 /**
  * The whole page's text in one field. The version it was loaded from goes back with the text; if a compile has rewritten
- * the page meanwhile the control plane refuses (`knowledge_page_changed`), the editor takes the newer version in and says
- * so in one sentence — the person's change is theirs to make again, never silently laid over the new one.
+ * the page meanwhile the control plane refuses (`knowledge_page_changed`), the editor retains the draft and shows
+ * the newer version separately. The person chooses which text to continue from before saving again.
  */
 function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
   page: KnowledgePage;
@@ -156,9 +156,11 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
 }) {
   const [base, setBase] = useState(page);
   // The engine's address in front of each link to a document is not the person's to read or to keep; it goes back on when saved.
-  const masked = useMemo(() => maskEngineAddresses(base.markdown), [base.markdown]);
+  // The draft keeps its original address map even when a conflict advances the save revision.
+  const [masked, setMasked] = useState(() => maskEngineAddresses(page.markdown));
   const [text, setText] = useState(masked.text);
   const [saving, setSaving] = useState(false);
+  const [newer, setNewer] = useState<KnowledgePage | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -171,14 +173,12 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
       if (live.current) onSaved(saved.page);
     } catch (failure) {
       if (!live.current) return;
-      if (failure instanceof WebApiError && failure.code === "knowledge_page_changed") {
+      if (failure instanceof WebApiError && (failure.code === "knowledge_page_changed" || failure.status === 404)) {
         try {
           const fresh = await getKnowledgePageAt(projectId, base.tree, base.path);
           if (!live.current) return;
-          setBase(fresh);
-          setText(maskEngineAddresses(fresh.markdown).text);
-          onReloaded(fresh);
-          setMessage("这一页刚被重新整理过，已换成最新的版本，请在它的基础上再改一次。");
+          setNewer(fresh);
+          setMessage("这一页刚被重新整理过，你的修改已保留。请对照最新版本后继续编辑。");
         } catch (reloadFailure) { setMessage(productErrorMessage(reloadFailure)); }
       } else setMessage(productErrorMessage(failure));
     } finally {
@@ -189,9 +189,17 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
     <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (changed && text.trim() && !saving) void save(); }}>
       <Textarea label="页面全文" value={text} rows={22} onChange={(event) => setText(event.target.value)} disabled={saving} error={message}
         className="font-mono" />
+      {newer && <div className="space-y-3">
+        <Textarea label="最新版本" value={maskEngineAddresses(newer.markdown).text} rows={12} readOnly />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={() => { void navigator.clipboard.writeText(text).then(() => toast.success("已复制我的修改"), () => toast.error("无法复制，请手动选择全文复制")); }}>复制我的修改</Button>
+          <Button type="button" variant="secondary" onClick={() => { setBase(newer); const fresh = maskEngineAddresses(newer.markdown); setMasked(fresh); setText(fresh.text); onReloaded(newer); setNewer(null); setMessage(null); }}>使用最新版本</Button>
+          <Button type="button" variant="secondary" onClick={() => { setBase(newer); setNewer(null); setMessage("已保留你的修改，请核对后保存。"); }}>以我的修改继续编辑</Button>
+        </div>
+      </div>}
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="text" onClick={onCancel} disabled={saving}>取消</Button>
-        <Button type="submit" loading={saving} disabled={!changed || !text.trim()}>保存</Button>
+        <Button type="submit" loading={saving} disabled={!changed || !text.trim() || newer !== null}>保存</Button>
       </div>
     </form>
   );

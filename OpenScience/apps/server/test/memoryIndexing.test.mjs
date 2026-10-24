@@ -33,7 +33,7 @@ function openVikingFake({ pageSize = 1_000 } = {}) {
     const method = options.method ?? "GET";
     const headers = options.headers ?? {};
     const body = options.body == null ? null : JSON.parse(options.body);
-    calls.push({ path: target.pathname, method, params: target.searchParams, body });
+    calls.push({ path: target.pathname, method, params: target.searchParams, body, signal: options.signal });
     if (target.pathname === "/health") return reply(200, { status: "ok", healthy: true, version: "v0.4.19", auth_mode: "trusted" });
     if (headers["X-API-Key"] !== apiKey) {
       return failed(401, "UNAUTHENTICATED", "Missing API Key in trusted mode with Root API Key enabled.");
@@ -356,6 +356,7 @@ test("rebuild rewrites the capsule subtree, waits for each write and publishes t
   assert.equal([...fake.files.values()][0].startsWith("analysis / knowledge\n\n"), true, "the kind and the layer lead the file");
   const writes = fake.calls.filter((call) => call.path === "/api/v1/content/write");
   assert.ok(writes.every((call) => call.body.wait === true),
+
     "a file the server has not embedded yet is invisible to find, so the readback that follows would be a coin toss");
   assert.ok(writes.every((call) => !Object.hasOwn(call.body, "timeout")), "v0.5.1 refuses a write body that names a timeout");
   assert.equal(fake.calls.filter((call) => call.method === "DELETE").length, 1);

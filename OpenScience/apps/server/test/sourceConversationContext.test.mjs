@@ -25,3 +25,10 @@ test("an unavailable scoped library never becomes an instruction to read everyth
   assert.ok(note.endsWith("[]"));
   await assert.rejects(sourceConversationContext({ get: async () => { throw new Error("database down"); } }, { id: "p" }, { sourceScope: ["gone"] }), /database down/);
 });
+
+test("explicit selected-empty context never advertises unrestricted knowledge", async () => {
+  const context = await sourceConversationContext(null, { userId: "user-1", id: "project-1" }, { sourceScope: [] }, true);
+  assert.match(context, /No selected document is currently eligible/);
+  assert.match(context, /do not broaden/);
+  assert.doesNotMatch(context, /currently applies no document selection/);
+});
