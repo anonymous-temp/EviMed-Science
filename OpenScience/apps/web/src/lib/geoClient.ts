@@ -28,6 +28,7 @@ import { fetchWebMe, WebApiError, webApiBase, type WebMe } from "./apiClient";
 import { formatRelativeTime } from "./format";
 import { productRequest } from "./productClient";
 import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
+import type { GeoAnalysisMembers, GeoAnalysisValue } from "./geoAnalysisClient";
 
 /* ---------------------------------------------------------------- vocabulary */
 
@@ -723,6 +724,8 @@ export interface GeoSeriesPoint {
   k: number | null;
   /** What the point's round measured (engines that answered, question set and pools, probe surface); null: no answer to name it from. Absent from an older server. */
   coverage?: string | null;
+  status?: GeoAnalysisValue['state'];
+  analysisMembers?: GeoAnalysisMembers | null;
 }
 export interface GeoMonitoring extends GeoScopedView {
   series: Array<{ key: string; points: GeoSeriesPoint[] }>;
@@ -733,8 +736,9 @@ export interface GeoMonitoring extends GeoScopedView {
     netEffect: GeoCell & { noiseBand: number | null; noiseMeasured?: boolean | null };
   };
   byEngine: Array<{ engine: GeoEngine; points: GeoSeriesPoint[] }>;
-  /** Each registered rival's mention rate over the same questions as ours (M-16 beside M-01S), per full measurement. */
-  rivals?: Array<{ name: string; points: GeoSeriesPoint[] }>;
+  /** Selected pool-specific rival rates; ownPoints use that rival's exact eligible cohort. */
+  rivals?: Array<{ name: string; label?: string; entityKey?: string; pool?: string;
+    points: GeoSeriesPoint[]; ownPoints?: GeoSeriesPoint[]; unknownTimeCount?: number }>;
   cited: Array<{ articleId: string; title: string; engine: GeoEngine; firstSeen: string }>;
   newErrors: GeoErrorRow[];
   next: { date: string; kind: string } | null;

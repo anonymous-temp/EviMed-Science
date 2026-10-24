@@ -7,6 +7,7 @@ import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { measureRound } from "../src/geoMetricsJob.mjs";
 import { readGeoSelection, readGeoSelectionErrors } from "../src/geoReadScope.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+import { brandRegistry, registryKey } from "../src/geoParse.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -374,7 +375,20 @@ test("unfiltered histories use the observation start day after a cross-day queue
       ('queued-date-rival',$1,$2,'queued-date-round','project','M-16','Other','ok',50,'2026-10-04')`, [user.id, queued.id]);
   const view = await service.monitoring(user, queued.id);
   assert.equal(view.series.find((entry) => entry.key === "mention").points[0].date, "2026-10-02");
-  assert.equal(view.rivals[0].points[0].date, "2026-10-02");
+  assert.deepEqual(view.rivals, [], "an unregistered historic aggregate is not an exact rival cohort");
+  const product = { brandName: "Ours" }, competitors = [{ id: "other", brandName: "Other" }], owned = { domains: [], urls: [] };
+  await store.query('UPDATE evimed_geo.projects SET product=$2::jsonb,competitors=$3::jsonb WHERE id=$1', [queued.id, JSON.stringify(product), JSON.stringify(competitors)]);
+  await store.query("UPDATE evimed_geo.rounds SET set_version=1,engines='{deepseek}',surface='{\"mode\":\"web\"}',ref=$1::jsonb WHERE id='queued-date-round'", [JSON.stringify({ evaluationBasis: { product, competitors, owned } })]);
+  await store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('queue-group',$1,$2,1,'P2','Queue fixture')", [user.id, queued.id]);
+  await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) SELECT 'queue-q-'||n,$1,$2,'queue-group',1,'P2','Question '||n,true FROM generate_series(1,50)n", [user.id, queued.id]);
+  await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) SELECT 'queue-s-'||n,$1,$2,'queued-date-round','queue-q-'||n,'deepseek','2026-10-01T16:30:00Z','valid','Fictional answer','{\"mode\":\"web\"}' FROM generate_series(1,50)n", [user.id, queued.id]);
+  await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,checks,registry_key) SELECT 'queue-s-'||n,$1,$2,'2026-10-02',jsonb_build_array(jsonb_build_object('name','Other','competitor',true,'count',1)),'{\"judgementCoverage\":{\"status\":\"complete\"}}',$3 FROM generate_series(1,50)n", [user.id, queued.id, registryKey(brandRegistry(product, competitors), owned)]);
+  const scoped = await service.monitoring(user, queued.id, { round: 'queued-date-round' });
+  assert.equal(scoped.rivals[0].points[0].date, "2026-10-02");
+  assert.equal(scoped.rivals[0].pool, 'P2');
+  assert.equal(scoped.rivals[0].points[0].n, 50);
+  assert.equal(scoped.rivals[0].ownPoints[0].n, 50);
+  assert.equal(scoped.rivals[0].points[0].analysisMembers.selectionRef, scoped.selection.reference);
 });
 
 test("GVI comparisons reject a changed measurable component basis even for identical answers", options, async () => {

@@ -64,7 +64,8 @@ import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
 import { readFrozenGeoAnalysisPage } from "./geoAnalysisFrozenPages.mjs";
-import { readGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
+import { readGeoAnalysis, presentGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
+import { geoRivalMonitoringRows } from "./geoAnalysisMetrics.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
 import { GeoOwnedPublications } from "./geoOwnedPublications.mjs";
 
@@ -944,8 +945,14 @@ export class GeoService {
         view.byEngine = selection.engines.map((engine) => ({ engine, points: history(GEO_VIEW_METRIC_IDS.mention, engine),
           metrics: engineMetricDescriptors().map(({ metricId, variant }) => ({ metricId, variant, points: history(metricId, engine, variant) })) }));
         view.arms = { pilot: [], control: [], netEffect: { ...GEO_ABSENT_CELL, reason: "observational_selection" } };
-        view.rivals = [];
       }
+    }
+    if (kind === "monitoring") {
+      // Rival rates and their paired own-brand cohorts are the selected V08 analysis,
+      // including pool and frozen-registry eligibility. Do not overlay global rates.
+      view.rivals = geoRivalMonitoringRows(presentGeoAnalysis(selected,
+        { viewId: "V08", metricId: "M-16", timeGrain: "day" },
+        { allRows: true, product: project.product, competitors: project.competitors }));
     }
     return { ...view, scope, selection, comparison: selected.comparison };
   }

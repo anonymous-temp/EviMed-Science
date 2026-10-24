@@ -2,11 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { geoPlanDigest } from "../src/geoPlanContext.mjs";
 import { presentGeoAnalysis } from "../src/geoAnalysis.mjs";
+import { computeGeoSelection } from "../src/geoReadScope.mjs";
 import {
   freezeGeoAnalysisPages,
   readFrozenGeoAnalysisPage,
 } from "../src/geoAnalysisFrozenPages.mjs";
 const project = { id: "geo", projectId: "control", userId: "owner" };
+test("a 600-group chart pages all canonical values without repeating the entire chart in the native envelope", async () => {
+  const rows = Array.from({ length: 600 }, (_, index) => ({ snapshotId: `s${index}`, questionId: `q${index}`, groupId: `g${index}`, engine: "deepseek", roundId: "r", status: "valid", pool: "P2", repeatIndex: 0, askedAt: "2026-10-01T00:00:00Z", facts: { brands: [], statements: [], checks: { judgementCoverage: { status: "complete" } } } }));
+  const metricOptions = { engines: ["deepseek"], samplingMode: "web" };
+  const selected = { scope: { timeZone: "Asia/Shanghai" }, selection: { reference: "gsel_wide_chart", dataRevision: "one", methodVersion: "method", engines: ["deepseek"], counts: {} }, rows, questions: [], rounds: [{ id: "r", set_version: 1 }], metricOptions, computed: computeGeoSelection(rows, metricOptions), comparison: null };
+  const view = presentGeoAnalysis(selected, { viewId: "V05", metricId: "M-01" }, { allRows: true });
+  assert.equal(view.rows.length, 600);
+  assert.ok(Buffer.byteLength(JSON.stringify(view.chart)) > 200000);
+  const pack = freezeGeoAnalysisPages(view, { parentId: "gpc_parent", project, actorId: "actor" });
+  assert.ok(Buffer.byteLength(JSON.stringify(pack.analysis)) < 200000);
+  assert.equal(pack.analysis.chart.source, "frozen_rows");
+  assert.equal(pack.analysis.nativeProjection.chartDigest, geoPlanDigest(view.chart));
+  const fixture = stored(pack), restored = [];
+  for (let offset = 0; offset < view.rows.length; offset += 37) restored.push(...(await readFrozenGeoAnalysisPage(fixture.documents, project, fixture.parent, { offset, limit: 37 })).rows);
+  assert.deepEqual(restored, view.rows);
+  assert.equal(pack.analysis.digest, view.digest);
+});
 function wide() {
   const engines = ["deepseek", "kimi", "doubao", "qwen", "baidu"],
     questions = Array.from({ length: 130 }, (_, i) => ({

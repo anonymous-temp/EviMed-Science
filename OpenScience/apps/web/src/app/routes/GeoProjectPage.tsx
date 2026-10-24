@@ -141,6 +141,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   /** The dialog the ⋯ menu — or a tab — opened: who else is in the project, who speaks for the product, its name, or the budget. */
   const [panel, setPanel] = useState<GeoPanel | null>(null);
+  const [scopeOpen, setScopeOpen] = useState(false);
   const [suggested, setSuggested] = useState<number | null>(null);
   const resolved = resolveGeoTab(onChat ? new URLSearchParams(location.search).get("result") : tabParam);
   // An answer is read inside the band and keeps 问题与回答 selected: it is where the answer was asked.
@@ -251,6 +252,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const api = useMemo<GeoFrameApi | null>(
     () => (loaded.kind === "ready" ? { geoId, scope, scopePending: loaded.scopeKey !== scopeKey, scopeError: loaded.scopeError,
       project: loaded.project, tab, step: viewedStep, refreshError: loaded.refreshError, reload, openPanel, data, setToolbar,
+      openAnalysisScope: () => setScopeOpen(true),
       refreshScope: () => {
         if (scope?.selectionRef && loaded.project.scope) {
           navigate({ pathname: location.pathname, search: geoSearchWithScope(location.search, { ...loaded.project.scope, selectionRef: undefined }) }, { replace: true });
@@ -282,7 +284,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
 
   return (
     <GeoFrameContext.Provider value={api}>
-      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} conversationError={conversationError} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} />
+      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} conversationError={conversationError} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} scopeOpen={scopeOpen} onScopeOpen={setScopeOpen} />
     </GeoFrameContext.Provider>
   );
 }
@@ -297,6 +299,8 @@ function GeoBand({
   panel,
   suggested,
   onPanel,
+  scopeOpen,
+  onScopeOpen: setScopeOpen,
 }: {
   api: GeoFrameApi;
   onChat: boolean;
@@ -306,9 +310,10 @@ function GeoBand({
   panel: GeoPanel | null;
   suggested: number | null;
   onPanel: (panel: GeoPanel | null) => void;
+  scopeOpen: boolean;
+  onScopeOpen: (open: boolean) => void;
 }) {
   const { geoId, project, tab, reload } = api;
-  const [scopeOpen, setScopeOpen] = useState(false);
   const { snapshotId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();

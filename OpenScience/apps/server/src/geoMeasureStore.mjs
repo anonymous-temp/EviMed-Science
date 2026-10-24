@@ -1188,7 +1188,7 @@ export class GeoMeasureStore {
         r.kind AS round_kind, r.surface->'measurementContract' AS measurement_contract, coalesce(j.repeat_index, 0) AS repeat_index, coalesce(q.pool, g.pool) AS pool, q.group_id, g.is_control,
         f.snapshot_id IS NOT NULL AS has_facts, f.judged_at, f.brands, f.first_ours, f.position_ours, f.recommended_ours, f.retrieval_triggered,
         f.statements, f.red_flag_expected, f.red_flag_hits, f.safety_terms_hit, f.failure_mode, f.mentions_ours,
-        f.checks, f.judge_extract, f.parser_version
+        f.checks, f.judge_extract, f.parser_version, f.registry_key
       FROM evimed_geo.snapshots s
         JOIN evimed_geo.rounds r ON r.id = s.round_id AND r.geo_project_id = s.geo_project_id AND r.user_id = s.user_id
         LEFT JOIN evimed_geo.probe_jobs j ON j.id = s.probe_job_id AND j.round_id = s.round_id AND j.geo_project_id = s.geo_project_id AND j.user_id = s.user_id
@@ -1208,7 +1208,7 @@ export class GeoMeasureStore {
         facts: usable ? {
           checks: row.checks && typeof row.checks === "object" ? row.checks : {},
           judgeExtract: row.judge_extract && typeof row.judge_extract === "object" ? row.judge_extract : null,
-          judgedAt: iso(row.judged_at), genericMentions: list(row.judge_extract?.genericMentions), parserVersion: row.parser_version ?? null, judged: row.judged_at != null,
+          judgedAt: iso(row.judged_at), genericMentions: list(row.judge_extract?.genericMentions), parserVersion: row.parser_version ?? null, registryKey: row.registry_key ?? null, judged: row.judged_at != null,
           brands: list(row.brands), firstOurs: row.first_ours ?? null, positionOurs: num(row.position_ours),
           recommendedOurs: row.recommended_ours ?? null, retrievalTriggered: row.retrieval_triggered ?? null, statements: list(row.statements),
           redFlagExpected: list(row.red_flag_expected), redFlagHits: list(row.red_flag_hits),

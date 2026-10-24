@@ -30,6 +30,8 @@ export interface GeoFrameApi {
   reload(): void;
   /** Explicitly leave an outdated saved selection, keeping its resolved range, then read current observations. */
   refreshScope?(): void;
+  /** Open the existing range/comparison dialog from a scoped analytical action. */
+  openAnalysisScope?(): void;
   /**
    * Open one of the page's own panels over the tab: the project's name, its members, who speaks for the product, the budget. A tab
    * that asks does not own the dialog, and the layout does not navigate for it.

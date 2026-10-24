@@ -101,6 +101,13 @@ export function freezeGeoAnalysisPages(
   );
   const compact = {
     ...analysis,
+    // Charts and comparison summaries duplicate the canonical row values. Native
+    // readers page those rows; copying every chart cell here defeated paging.
+    chart: analysis.chart ? { kind: analysis.chart.kind ?? null, labels: [], series: [], cells: [], source: "frozen_rows" } : analysis.chart,
+    comparison: analysis.comparison ? { ...analysis.comparison, cells: [], cellsSource: "frozen_rows" } : analysis.comparison,
+    nativeProjection: { chartDigest: analysis.chart ? hash(analysis.chart) : null,
+      comparisonCellsDigest: analysis.comparison?.cells ? hash(analysis.comparison.cells) : null,
+      instruction: "Read every frozen row page for full values and comparison evidence; chart arrays are not repeated in this native projection." },
     rows: preview,
     page: {
       total: analysis.rows.length,
