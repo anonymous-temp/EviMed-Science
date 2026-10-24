@@ -13,8 +13,9 @@ The candidate lines (``discovery_lines.py``), each with its own daily cap on val
                  catalogue in rotation; admitted as a ``crossref-issn`` row, the same adapter the 154 journals use;
 - ``directory``  organisations listed in ``registry/discovery.json`` (regulators, agencies, hospitals, societies, media);
 - ``hot-origin`` the origins of entries several publishers carried in the last two days (a DOI's journal, a site);
-- ``social``     accounts quoted or reposted in social entries (their adapters are another package's; a candidate
-                 waits while this build has none for its platform);
+- ``social``     accounts quoted or reposted in social entries, and the WeChat accounts our WeChat bodies credit as their
+                 origin (``social/wechat_discovery.py``: one Dajiala call validates one, at most 20 a day); X accounts
+                 wait while this build validates none;
 - ``request``    rows asked for in the platform's public source-request manifest, any lane, validated like the rest;
 - ``parent-feed`` the advertised feeds of trusted publishers (``medical_discovery.py``, counted here);
 - ``readmit``    retired sources due for a re-check.
@@ -390,7 +391,7 @@ class Validator:
     would read it, and builds the registry row. Writes nothing."""
 
     def __init__(self, fetcher, settings, now: datetime, *, known_urls: set[str], known_issns: set[str],
-                 excluded_hosts: set[str], adapters: dict | None = None) -> None:
+                 excluded_hosts: set[str], adapters: dict | None = None, wechat=None) -> None:
         if adapters is None:
             from .adapters import REGISTRY as adapters
         self.fetcher = fetcher
@@ -401,6 +402,7 @@ class Validator:
         self.excluded_hosts = excluded_hosts
         self.adapters = adapters
         self.relay = bool(getattr(fetcher, "egress_configured", lambda _e: False)("relay"))
+        self.wechat = wechat            # social.wechat_discovery.WechatValidator when this deployment reads WeChat
 
     async def fetch(self, url: str, *, egress: str, api: bool = False, allowed: list[str] | None = None):
         spec = RequestSpec(url=url, conditional=False, api=api)
@@ -497,7 +499,7 @@ class Validator:
             if kind == "row":
                 return await self.validate_row(candidate, hint)
             if kind == "social":
-                return self.validate_social(candidate, hint)
+                return await self.validate_social(candidate, hint)
         except FetchError as error:
             if error.outcome == "host-budget":
                 return Verdict("deferred", "host_budget")
@@ -639,8 +641,13 @@ class Validator:
         return Verdict("trial", None, requested, {"exit": probe.egress, "fresh": probe.fresh, "titles": probe.titles},
                        candidate.get("medical_basis"))
 
-    def validate_social(self, candidate: dict, hint: dict) -> Verdict:
+    async def validate_social(self, candidate: dict, hint: dict) -> Verdict:
         platform = candidate["key"].split(":", 1)[0]
+        if platform == "wechat":
+            # ct-src 2026-10-24: one Dajiala call names the account (social.wechat_discovery); X stays deferred.
+            if self.wechat is None:
+                return Verdict("deferred", "adapter_unavailable:wechat")
+            return await self.wechat.validate(candidate)
         access = (hint.get("row") or {}).get("access")
         if not access or access not in self.adapters:
             # The adapters for social accounts are another package's; the candidate waits for them, it has not failed.
@@ -818,6 +825,27 @@ async def validate_readmission(validator: Validator, conn, candidate: dict) -> V
                                                          "titles": probe.titles})
 
 
+# A deferral that did no work — no adapter for the platform yet (X), the day's WeChat validations spent, Dajiala paused —
+# does not use up a line's validations for the day: the candidate waits, the line's room goes to the next one.
+WAITING_REASONS = ("adapter_unavailable", "wechat_validation_budget", "dajiala_")
+
+
+def waiting(verdict: Verdict) -> bool:
+    return verdict.status == "deferred" and (verdict.reason or "").startswith(WAITING_REASONS)
+
+
+async def wechat_validator(settings, pool, fetcher, clock, conn):
+    """The WeChat candidates' validator when this deployment reads WeChat (a Dajiala key), else ``None``."""
+    if not settings.secret("dajiala_key"):
+        return None
+    from .social.providers import DajialaClient
+    from .social.spend import ProviderLedger
+    from .social.wechat_discovery import WechatValidator, known_accounts
+
+    ledger = ProviderLedger(pool, clock)
+    return WechatValidator(DajialaClient(fetcher, ledger, settings, clock), ledger, clock, await known_accounts(conn))
+
+
 async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] | None = None,
                         outbound_pages: int = DEFAULT_OUTBOUND_PAGES, deadline_s: float = RUN_DEADLINE_S,
                         data: dict | None = None, gather_lines=None) -> dict:
@@ -871,7 +899,7 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
             known_urls, known_issns, excluded = await known_urls_and_hosts(conn, base)
             excluded |= {h for h in data.get("exclude_hosts", [])}
             validator = Validator(fetcher, settings, clock(), known_urls=known_urls, known_issns=known_issns,
-                                  excluded_hosts=excluded)
+                                  excluded_hosts=excluded, wechat=await wechat_validator(settings, pool, fetcher, clock, conn))
             attempts = status.setdefault("attempts", {})
             crossref_tight = await crossref_spent(fetcher)
             report["crossrefTight"] = crossref_tight
@@ -912,7 +940,8 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
                         verdict = Verdict("deferred", f"internal:{type(error).__name__}")
                     async with conn.transaction():
                         outcome = await record_verdict(conn, candidate, verdict, clock(), day)
-                attempts[candidate["line"]] = int(attempts.get(candidate["line"], 0)) + 1
+                if not waiting(verdict):
+                    attempts[candidate["line"]] = int(attempts.get(candidate["line"], 0)) + 1
                 bucket = report["validated"].setdefault(candidate["line"], {})
                 bucket[outcome] = bucket.get(outcome, 0) + 1
                 if outcome in ("trial", "admitted"):

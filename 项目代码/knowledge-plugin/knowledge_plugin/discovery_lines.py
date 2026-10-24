@@ -251,17 +251,20 @@ async def hot_origin(conn, fetcher, now: datetime, *, cap: int, known_issns: set
 
 
 async def social(conn, now: datetime, *, cap: int) -> list[Candidate]:
-    """(e) Accounts quoted or reposted in social entries: an X post's quoted author, the account a WeChat repost names.
-    Read only when this build stores those fields (another package's adapters); the candidate carries the registry row
-    shape the social adapters read, and waits while this build has no adapter for its platform."""
+    """(e) Accounts quoted or reposted in social entries — an X post's quoted author, the account a WeChat repost names —
+    and the WeChat accounts our WeChat bodies credit as their origin (``social.wechat_discovery``, ct-src 2026-10-24).
+    An X candidate waits while this build validates none; a WeChat one is validated by one Dajiala call."""
     if cap <= 0:
         return []
+    from .social.wechat_discovery import origin_candidates
+
+    wechat = await origin_candidates(conn, now, cap=cap)
     columns = {row["column_name"] for row in await (await conn.execute(
         """SELECT column_name FROM information_schema.columns
             WHERE table_schema = 'evimed_knowledge' AND table_name = 'entries' AND column_name IN ('platform', 'quoted')""",
     )).fetchall()}
     if columns != {"platform", "quoted"}:
-        return []
+        return wechat
     rows = await (await conn.execute(
         """SELECT platform, quoted->'author'->>'handle' AS handle, quoted->'author'->>'name' AS name, count(*) AS n
              FROM evimed_knowledge.entries
@@ -278,7 +281,7 @@ async def social(conn, now: datetime, *, cap: int) -> list[Candidate]:
         found.append(Candidate("social", "social", key, name=row["name"] or account,
                                hint={"platform": row["platform"], "account": account},
                                evidence={"quoted_times_7d": int(row["n"])}))
-    return found
+    return wechat + found
 
 
 async def readmit(conn, now: datetime, *, cap: int) -> list[Candidate]:
