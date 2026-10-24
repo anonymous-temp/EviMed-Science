@@ -156,14 +156,12 @@ export function AccountSection() {
       </Panel>
 
       <Panel title="记忆">
-        <PanelRow label="会记什么" description="你说过、确认过、纠正过的做法和背景，以及项目的情况。" />
-        <PanelRow label="不会记什么" description="密码、证件号和银行卡号，别人的身份信息，文档和网页里的内容；健康等敏感信息，除非你说“记住”。" />
         <PanelRow
-          label="查看、修改和删除"
-          description="在记忆胶囊页逐条查看、修改和忘记，也可以整体重置。"
+          label="会记什么"
+          description="你说过、确认过、纠正过的做法和背景，以及项目的情况；在记忆胶囊里可以逐条查看、修改、忘记，也可以整体重置。"
           control={<Button variant="text" onClick={() => navigate("/app/memory")}>打开记忆胶囊</Button>}
         />
-        <PanelRow label="不用于训练" description="记忆只用来帮你工作，不会用来训练模型。" />
+        <PanelRow label="不会记什么" description="密码、证件号和银行卡号，别人的身份信息，文档和网页里的内容；健康等敏感信息，除非你说“记住”。记忆只用来帮你工作，不会用来训练模型。" />
       </Panel>
     </div>
   );
