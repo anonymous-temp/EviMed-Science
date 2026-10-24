@@ -1295,8 +1295,10 @@ Moving v0.5.0 to v0.5.1.1 (the pin PR of 2026-10-23; the engine's task store has
 is not readable by v0.5.0, so the way back is the backup and the previous pin, never a downgrade in place): take a verified backup of
 the volume (`scripts/ops/openviking-backup.mjs`, engine frozen, restore drilled); drain before the switch — no knowledge round running
 (the page worker's queue empty) and `GET /api/v1/observer/queue` reporting nothing pending or in progress — because a task in
-flight is the one thing nothing converts; release through the normal path (the release's compose has no `entrypoint:` override and
-no shim mounts, so `evimed-openviking-init` and `evimed-openviking` are recreated from the new image); wait for
+flight is the one thing nothing converts; delete `secrets/openviking-ov.conf` and re-run `pnpm configure:production-state` (the stored file is compared byte for byte
+and the new rendering has no `compile_api` section: a file left as it was points Compile at the dead shim port and every compile fails; the
+generated keys are kept); release through the normal path (the release's compose has no `entrypoint:` override and no shim mounts, so
+`evimed-openviking-init` and `evimed-openviking` are recreated from the new image); wait for
 `checks.memoryIndex.engine.ok` (the `version` fact says `v0.5.1.1`; `compileIdentity` takes about 30 s and `memoryTemplates` may say
 `openviking_registration_pending` for up to ten minutes on a volume the engine registers anew); watch
 `open_science_native_memory_turn_commits_total{outcome}` and the `memory-extraction` and `knowledge` spend for 24 h; keep the
