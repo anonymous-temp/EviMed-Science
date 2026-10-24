@@ -5,7 +5,7 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
 import { GEO_MEASUREMENT_METHOD_VERSION, geoValueJudged } from "@evimed/domain";
 import { migrateProductStore } from "./productPersistence.mjs";
-import { preserveGeoAssessment } from "./geoLearningSignals.mjs";
+import { preserveGeoAssessment, geoAssessmentId } from "./geoLearningSignals.mjs";
 /**
  * SQL for 「循证 GEO」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
@@ -1188,7 +1188,7 @@ export class GeoMeasureStore {
         r.kind AS round_kind, r.surface->'measurementContract' AS measurement_contract, coalesce(j.repeat_index, 0) AS repeat_index, coalesce(q.pool, g.pool) AS pool, q.group_id, g.is_control,
         f.snapshot_id IS NOT NULL AS has_facts, f.judged_at, f.brands, f.first_ours, f.position_ours, f.recommended_ours, f.retrieval_triggered,
         f.statements, f.red_flag_expected, f.red_flag_hits, f.safety_terms_hit, f.failure_mode, f.mentions_ours,
-        f.checks, f.judge_extract, f.parser_version, f.registry_key
+        f.checks, f.judge_extract, f.parser_version, f.registry_key, q.set_version AS question_version
       FROM evimed_geo.snapshots s
         JOIN evimed_geo.rounds r ON r.id = s.round_id AND r.geo_project_id = s.geo_project_id AND r.user_id = s.user_id
         LEFT JOIN evimed_geo.probe_jobs j ON j.id = s.probe_job_id AND j.round_id = s.round_id AND j.geo_project_id = s.geo_project_id AND j.user_id = s.user_id
@@ -1197,6 +1197,10 @@ export class GeoMeasureStore {
         LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id AND f.geo_project_id = s.geo_project_id AND f.user_id = s.user_id
       WHERE s.round_id = $1 AND ($2::text IS NULL OR s.geo_project_id = $2) AND ($3::text IS NULL OR s.user_id = $3)
         AND ($4::text[] IS NULL OR s.id = ANY($4::text[])) ORDER BY s.asked_at, s.id`, [roundId, geoProjectId, userId, snapshotIds]);
+    const assessments = result.rows.length ? (await this.query(`SELECT payload FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL
+      AND id=ANY($1::text[]) AND ($2::text IS NULL OR user_id=$2) AND ($3::text IS NULL OR payload->>'geoProjectId'=$3)`,
+      [result.rows.map(row => geoAssessmentId(String(row.id))), userId, geoProjectId])).rows : [];
+    const assessmentBySnapshot = new Map(assessments.map(row => [row.payload.snapshotId, row.payload]));
     return result.rows.map((row) => {
       const inclusion = row.surface?.mode === "inclusion";
       const usable = row.has_facts && (row.judged_at != null || inclusion);
@@ -1215,7 +1219,13 @@ export class GeoMeasureStore {
           // An inclusion answer has no text to read safety terms from: not extracted, never "none".
           ...(inclusion ? {} : { safetyTermsHit: list(row.safety_terms_hit) }),
         } : null,
-        observedBrands: list(row.brands), assessmentFacts: row.has_facts ? { statements: list(row.statements), checks: row.checks ?? {}, judgedAt: iso(row.judged_at) } : null,
+        observedBrands: list(row.brands), assessmentFacts: row.has_facts ? {
+          statements: list(row.statements), checks: row.checks ?? {}, judgedAt: iso(row.judged_at),
+          judgeExtract: row.judge_extract ?? null, registryKey: row.registry_key ?? null, parserVersion: row.parser_version ?? null,
+          questionVersion: row.question_version ?? null,
+          ...(assessmentBySnapshot.get(String(row.id))?.assessment ?? {}),
+          assessmentVersion: assessmentBySnapshot.get(String(row.id))?.assessmentVersion ?? null,
+        } : null,
         failureMode: row.failure_mode ?? null,
         mentionsOurs: row.mentions_ours ?? null,
       };

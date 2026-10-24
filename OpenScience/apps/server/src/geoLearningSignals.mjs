@@ -4,22 +4,25 @@ import { ProductDocuments } from './productStore.mjs';
 import { isInternalProject } from './internalProjects.mjs';
 
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
-const assessmentId = snapshotId => `geo-assessment-${digest(snapshotId)}`;
+export const geoAssessmentId = snapshotId => `geo-assessment-${digest(snapshotId)}`;
+const assessmentId = geoAssessmentId;
 const lockKey = snapshotId => `evimed-geo-assessment:${snapshotId}`;
 const compact = value => String(value ?? '').replace(/\s+/g, '');
 const excludedProject = project => !project || Boolean(project.deleted_at) || project.internal === true || isInternalProject(project.project_id);
 
 /** Private assessment provenance shares the product revision ledger and the facts transaction. */
 export async function preserveGeoAssessment({ database, client, snapshotId, facts }) {
-  const snapshot = (await client.query(`SELECT s.*, p.project_id, p.internal, r.ref->'evaluationBasis'->'claims' AS frozen_claims FROM evimed_geo.snapshots s
+  const snapshot = (await client.query(`SELECT s.*, p.project_id, p.internal, q.set_version AS question_version, r.ref->'evaluationBasis'->'claims' AS frozen_claims FROM evimed_geo.snapshots s
     JOIN evimed_geo.projects p ON p.id=s.geo_project_id AND p.user_id=s.user_id
+    LEFT JOIN evimed_geo.questions q ON q.id=s.question_id AND q.geo_project_id=s.geo_project_id AND q.user_id=s.user_id
     LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id WHERE s.id=$1`, [snapshotId])).rows[0];
   if (!snapshot) return null;
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey(snapshotId)]);
   const id = assessmentId(snapshotId);
   const previous = (await client.query("SELECT * FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND id=$2", [snapshot.user_id, id])).rows[0];
   const rawBasis = (Array.isArray(facts.assessmentBasis) ? facts.assessmentBasis : Array.isArray(snapshot.frozen_claims) ? snapshot.frozen_claims : [])
-    .filter((claim, _index, claims) => (facts.statements ?? []).some(statement => geoClaimForStatement(claims, statement) === claim));
+    .filter((claim, _index, claims) => (facts.statements ?? []).some(statement => geoClaimForStatement(claims, statement) === claim)
+      || facts.judgeExtract?.recommendationExpressions?.items?.some(item => item.claimRefs?.some(ref => ref.claimId === claim.id && ref.claimVersion === claim.version)));
   // Source bytes already belong to immutable claim/card or frozen round versions. Keep their identities and digests here,
   // not thirty repeated full sources that could exceed the shared ledger's record limit.
   const basis = rawBasis.map(claim => ({ id: claim.id, key: claim.key ?? null, version: claim.version ?? null, identity: geoClaimAssessmentIdentity(claim), applicability: geoClaimApplicability(claim),
@@ -27,6 +30,7 @@ export async function preserveGeoAssessment({ database, client, snapshotId, fact
     sourceRef: claim.sourceRef ?? null, quoteDigest: digest(claim.quote ?? ''), statementDigest: digest(claim.statement ?? '') }));
   const assessment = { parserVersion: facts.parserVersion ?? null, judgedAt: facts.judgedAt ?? null,
     answerDigest: snapshot.answer_sha256 ?? digest(snapshot.answer_text ?? ''),
+    ...(facts.judgeExtract?.recommendationExpressions ? { judgeExtract: facts.judgeExtract, registryKey: facts.registryKey ?? null, questionVersion: snapshot.question_version ?? null } : {}),
     statements: facts.statements ?? [], checks: facts.checks ?? {}, basis };
   const assessmentVersion = digest(assessment);
   const excluded = snapshot.internal === true || isInternalProject(snapshot.project_id);

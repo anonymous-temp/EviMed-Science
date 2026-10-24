@@ -150,8 +150,9 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "只依据给出的主张库判定，不用你自己的知识补充；拿不准的判 unverifiable。编号只能用给出的编号。不要输出任何解释。",
   "12. assessmentComplete：是否已处理所展示回答的全部适用陈述、推荐及安全信息。仍有未覆盖内容、触及条数上限或无法完成提取时为 false；逐条列出 unverifiable 不等于未处理。不得从正确的局部推断整体正确。",
   "13. clinicalApplicability：输出 {schemaVersion:1,rubric:geo-clinical-applicability-v1,status:applicable/not_applicable/unknown,quote,reason}。not_applicable 仅表示完整回答不包含可评估的临床陈述，例如纯导航或格式说明；quote 必须逐字来自回答，reason 说明判断依据。用药安全建议、合理不推荐、超出某人群适用范围、主张库无依据的临床内容仍属于 applicable，必须提取陈述，不得以 not_applicable 代替 unverifiable。拒答、部分覆盖或不能确认时用 unknown。只评价是否含临床陈述，不更改正确性与指标分母。",
+  "14. recommendationExpressions：同一次阅读中提取全部药品表达，最多 60 条，输出 {schemaVersion:1,rubric:geo-recommendation-expression-v1,coverage:complete/partial/unknown,items:[{quote,entity,state,conditionQuote,rationale,claimRefs,explicitPosition,positionQuote}]}。quote 逐字来自所展示回答，entity 是片段内药名原写法且来自登记名称或 entities。state 为 recommended（推荐选用）、conditional（条件推荐，conditionQuote 逐字保留条件）、reasonable_nonrecommendation（主张库有依据的合理不推荐，必须也提取对应正确 statements 并给真实 claimId/claimVersion）、mention_only（列表、单纯提及、比较）、unknown（无依据的不推荐或无法判断）。claimRefs 为 [{claimId,claimVersion}]，只用给定真实主张和版本，没有给空数组。无药名的转介和拒答不是推荐。多药同句逐药判断推荐与否定；同药不同条件分别保留。rationale 可为 null，缺少依据绝不判合理。explicitPosition 只在原文明说推荐顺位时为正整数，positionQuote 逐字来自 quote 且含药名；列表或提及顺序不能推出顺位，无明确顺位两项为 null。conditionQuote 无条件时为 null。未覆盖全文、触及上限或提取不全为 partial，不可据局部宣布无提及；不知道为 unknown。不得改变 recommendations、临床正确性或 clinicalApplicability 来填分类。",
   "输出格式（键名固定）：",
-  "{\"assessmentComplete\":false,\"clinicalApplicability\":{\"schemaVersion\":1,\"rubric\":\"geo-clinical-applicability-v1\",\"status\":\"unknown\",\"quote\":\"\",\"reason\":\"\"},\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
+  "{\"assessmentComplete\":false,\"clinicalApplicability\":{\"schemaVersion\":1,\"rubric\":\"geo-clinical-applicability-v1\",\"status\":\"unknown\",\"quote\":\"\",\"reason\":\"\"},\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"recommendationExpressions\":{\"schemaVersion\":1,\"rubric\":\"geo-recommendation-expression-v1\",\"coverage\":\"unknown\",\"items\":[]},\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
 ].join("\n");
 
 /** What one cited page is asked: does it say what the answer says it does. */
@@ -330,7 +331,7 @@ export function buildJudgeInput(input) {
       rx: input.product?.rx ?? null, indication: input.product?.indication ?? null,
     },
     competitors: (input.competitors ?? []).map((competitor) => ({ brandName: competitor?.brandName ?? null, genericName: competitor?.genericName ?? null, aliases: competitor?.aliases ?? [], genericAliases: competitor?.genericAliases ?? [] })),
-    claims: claims.map((claim) => ({ id: claim.alias, statement: claim.statement, quote: String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS),
+    claims: claims.map((claim) => ({ id: claim.alias, claimId: claim.id, claimVersion: claim.version ?? null, statement: claim.statement, quote: String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS),
       label: labelClaim(claim), population: claim.population ?? null, elements: claim.elements ?? {}, inLabel: claim.inLabel ?? null,
       evidenceLevel: claim.evidenceLevel ?? null, validUntil: claim.validUntil ?? null })),
     // The scope, the summary and the findings: research reports and the rest of the profile are not what an answer is judged against.
@@ -359,7 +360,7 @@ export function buildJudgeInput(input) {
 
 /**
  * @typedef {{ text: string, verdict: "correct" | "wrong" | "unverifiable", claimId: string | null, claimKey: string | null,
- *   errorType: string | null, severity: string | null, evidence: string | null, topic: string, cardId: string | null,
+ *   errorType: string | null, severity: string | null, evidence: string | null, topic: string, claimVersion?: number | null, cardId: string | null,
  *   cardClaimId: string | null, cardRevision: number | null }} GeoVerifiedStatement
  * @typedef {{ link: string, url: string, statement: string, exists: boolean | null, supports: string | null, evidence: string | null }} GeoCitationCheck
  * @typedef {{ offLabel: string[], omittedSafety: Array<{ claimId: string, claimKey: string | null, cardId: string | null, cardClaimId: string | null, cardRevision: number | null }>,
@@ -373,6 +374,7 @@ export function buildJudgeInput(input) {
  * @property {GeoVerifiedStatement[]} statements
  * @property {string[]} entities
  * @property {import("./geoParse.mjs").GeoRecommendation[]} recommendations
+ * @property {any} [recommendationExpressions]
  * @property {boolean} careHint
  * @property {string[]} redFlagExpected   flag texts
  * @property {string[]} redFlagHits       flag texts
@@ -591,6 +593,7 @@ export function verifyJudgement(answer, built, input) {
     statements,
     entities,
     recommendations,
+    ...(Object.hasOwn(answer, "recommendationExpressions") ? { recommendationExpressions: verifyRecommendationExpressions(answer.recommendationExpressions, built, knownEntities, statements, answer.refusal === true, judgementCoverage.status !== "complete") } : {}),
     careHint: answer.careHint === true,
     redFlagExpected: expectedIds.map((id) => /** @type {string} */ (flags.get(id))),
     redFlagHits: hitIds.map((id) => /** @type {string} */ (flags.get(id))),
@@ -598,6 +601,58 @@ export function verifyJudgement(answer, built, input) {
     dropped,
     checks: { offLabel, omittedSafety, citations, judgementCoverage, clinicalApplicability },
   };
+}
+
+/** Verify the optional extraction independently of clinical completeness. Semantics remain the model's.
+ * @param {any} raw @param {ReturnType<typeof buildJudgeInput>} built
+ * @param {Set<string>} knownEntities @param {GeoVerifiedStatement[]} statements @param {boolean} refusal @param {boolean} incomplete
+ */
+function verifyRecommendationExpressions(raw, built, knownEntities, statements, refusal, incomplete) {
+  const base = { schemaVersion: 1, rubric: "geo-recommendation-expression-v1" };
+  const states = ["recommended", "conditional", "reasonable_nonrecommendation", "mention_only", "unknown"];
+  const reasons = [];
+  if (!raw || raw.schemaVersion !== 1 || raw.rubric !== base.rubric || !["complete", "partial", "unknown"].includes(raw.coverage) || !Array.isArray(raw.items))
+    return { ...base, coverage: "unknown", items: [], reasons: ["expression_schema_invalid"] };
+  if (built.truncated) reasons.push("answer_truncated");
+  if (refusal) reasons.push("refused_answer");
+  if (incomplete) reasons.push("assessment_incomplete");
+  if (raw.items.length >= 60) reasons.push("expression_limit_reached");
+  const items = [], seen = new Set();
+  for (const item of raw.items.slice(0, 60)) {
+    if (!item || typeof item.quote !== "string" || !item.quote.trim() || item.quote.length > 8000 || !built.shown.includes(item.quote)
+      || typeof item.entity !== "string" || !item.entity || !item.quote.includes(item.entity) || !knownEntities.has(foldText(item.entity))
+      || !states.includes(item.state) || !Array.isArray(item.claimRefs) || item.claimRefs.length > 30
+      || !(item.rationale === null || typeof item.rationale === "string" && item.rationale.length <= 1200)
+      || !(item.conditionQuote === null || typeof item.conditionQuote === "string" && item.conditionQuote.length > 0 && item.quote.includes(item.conditionQuote))
+      || item.state === "conditional" && item.conditionQuote === null) {
+      reasons.push("expression_anchor_invalid"); continue;
+    }
+    const refs = item.claimRefs.filter(ref => ref && typeof ref.claimId === "string" && Number.isInteger(ref.claimVersion) && ref.claimVersion > 0
+      && built.claims.some(claim => claim.id === ref.claimId && claim.version === ref.claimVersion && String(claim.quote ?? "").trim()));
+    if (refs.length !== item.claimRefs.length) reasons.push("expression_claim_unknown");
+    const supported = refs.some(ref => statements.some(statement => statement.verdict === "correct" && statement.claimId === ref.claimId
+      && statement.claimVersion === ref.claimVersion && item.quote.includes(statement.text) && statement.evidence));
+    const state = item.state === "reasonable_nonrecommendation" && !supported ? "unknown" : item.state;
+    if (state !== item.state) reasons.push("nonrecommendation_basis_unverified");
+    const positionValid = ["recommended", "conditional"].includes(state) && Number.isInteger(item.explicitPosition) && item.explicitPosition > 0 && item.explicitPosition <= 100
+      && typeof item.positionQuote === "string" && item.positionQuote.length > 0 && item.quote.includes(item.positionQuote) && item.positionQuote.includes(item.entity);
+    if ((item.explicitPosition != null || item.positionQuote != null) && !positionValid) reasons.push("expression_position_unverified");
+    const answerOffsets = [];
+    for (let offset = built.shown.indexOf(item.quote); offset !== -1; offset = built.shown.indexOf(item.quote, offset + item.quote.length)) answerOffsets.push(offset);
+    const clean = { quote: item.quote, entity: item.entity, state, conditionQuote: item.conditionQuote, rationale: item.rationale,
+      claimRefs: refs.map(ref => ({ claimId: ref.claimId, claimVersion: ref.claimVersion })),
+      explicitPosition: positionValid ? item.explicitPosition : null, positionQuote: positionValid ? item.positionQuote : null,
+      answerOffset: built.shown.indexOf(item.quote), answerOffsets };
+    const key = JSON.stringify([clean.quote, clean.entity, clean.conditionQuote]);
+    if (!seen.has(key)) { seen.add(key); items.push(clean); }
+    else {
+      const previous = items.find(prior => JSON.stringify([prior.quote, prior.entity, prior.conditionQuote]) === key);
+      if (previous && previous.state !== clean.state) { previous.state = "unknown"; previous.explicitPosition = null; previous.positionQuote = null; reasons.push("expression_classification_conflict"); }
+    }
+  }
+  const mentioned = matchedMentions(foldText(built.shown), [...knownEntities]);
+  if (mentioned.some(span => !items.some(item => foldText(item.entity) === span.alias))) reasons.push("entity_expression_missing");
+  return { ...base, coverage: reasons.length ? "partial" : raw.coverage, items, reasons: [...new Set(reasons)] };
 }
 
 /** The model's JSON wherever it put it. @param {unknown} content */
@@ -834,6 +889,7 @@ export function judgeInputOf(context, question, snapshot) {
  */
 export function factsOf({ snapshot, judged, registry, countedOwned, at, claims = [] }) {
   const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [],
+    ...(judged?.recommendationExpressions ? { recommendationExpressions: judged.recommendationExpressions } : {}),
     valueCoverage: judged?.valueCoverage ?? [], valueBasisVersion: judged?.valueBasisVersion ?? 0, rubricVersion: GEO_JUDGE_VERSION };
   const code = parseAnswer({
     answer: snapshot.answerText,
@@ -852,7 +908,7 @@ export function factsOf({ snapshot, judged, registry, countedOwned, at, claims =
   }
   const facts = {
     ...code,
-    assessmentBasis: claims.filter(claim => statements.some(statement => geoClaimForStatement(claims, statement) === claim)),
+    assessmentBasis: claims.filter(claim => statements.some(statement => geoClaimForStatement(claims, statement) === claim) || judged?.recommendationExpressions?.items?.some(item => item.claimRefs.some(ref => ref.claimId === claim.id && ref.claimVersion === claim.version))),
     careHint: judged ? judged.careHint : null,
     statements,
     failureMode: failureMode({ status, mentionsOurs: code.mentionsOurs, statements, checks, judgedAt: judged ? at.toISOString() : null }),

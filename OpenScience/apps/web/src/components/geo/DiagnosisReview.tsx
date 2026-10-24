@@ -1,6 +1,6 @@
 import { geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, geoStatementAssessmentIdentity } from "@evimed/domain";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { getGeoDiagnosisReview, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction, type GeoDiagnosisReview } from "@/lib/geoClient";
 import { safeWebHref } from "@/lib/readPages";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -32,6 +32,29 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
   const [older, setOlder] = useState<{ snapshotId: string; version: string | null; history: GeoDiagnosisReview["history"]; feedback: GeoDiagnosisReview["feedback"]; historyPage?: GeoDiagnosisReview["historyPage"]; feedbackPage?: GeoDiagnosisReview["feedbackPage"]; feedbackCursors?: string[] } | null>(null);
   const [readingOlder, setReadingOlder] = useState(false);
   const ready = review.state.kind === "ready" ? review.state.data : null;
+  const location = useLocation();
+  const requestedVersion = new URLSearchParams(location.search).get("assessmentVersion");
+  const [focused, setFocused] = useState<{snapshotId:string; version:string; entry:GeoDiagnosisReview["history"][number] | null; state:"loading"|"ready"|"missing"|"error"} | null>(null);
+  useEffect(() => {
+    if (!ready || !requestedVersion || !/^[a-f0-9]{64}$/.test(requestedVersion)) { setFocused(null); return; }
+    let live = true;
+    const snapshotId=data.snapshot.id, version=requestedVersion;
+    setFocused({snapshotId,version,entry:null,state:"loading"});
+    void (async () => {
+      let page=ready;
+      const seen=new Set<number>();
+      while (live) {
+        const entry=page.history.find(row=>row.version===version);
+        if (entry) {setFocused({snapshotId,version,entry,state:"ready"});return;}
+        const cursor=page.historyPage?.nextBefore;
+        if (cursor==null || seen.has(cursor)) {setFocused({snapshotId,version,entry:null,state:"missing"});return;}
+        seen.add(cursor);
+        page=await getGeoDiagnosisReview(geoId,snapshotId,{historyBefore:cursor});
+        if (page.assessmentVersion!==ready.assessmentVersion) {if(live)setFocused({snapshotId,version,entry:null,state:"error"});return;}
+      }
+    })().catch(()=>{if(live)setFocused({snapshotId,version,entry:null,state:"error"});});
+    return ()=>{live=false;};
+  },[ready,requestedVersion,geoId,data.snapshot.id]);
   const observed = useRef<{ snapshotId: string; version: string | null } | null>(null);
   useEffect(() => {
     if (!ready) return;
@@ -112,7 +135,14 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
     void open({ projectId: project.projectId, sessionId: project.sessionId }, `${correctionBrief(claim, product, action)}\n当前复核上下文：${JSON.stringify(context)}`);
   };
   return <Section title="逐句诊断与反馈" level="section">
-    <div className="flex flex-col gap-6">
+    <div id="geo-judgment-history" className="flex flex-col gap-6">
+      {focused?.snapshotId===data.snapshot.id && focused.version===requestedVersion && <section aria-label="所选历史判定" className="flex flex-col gap-2">
+        <p className="text-ui">所选历史判定</p>
+        {focused.state==="loading" ? <p>正在读取这条表达的判定。</p> : focused.state==="missing" ? <p>未找到这次判定，原始回答仍可查阅。</p> : focused.state==="error" ? <Note action={<Button variant="secondary" size="sm" onClick={reloadReview}>重试读取判定</Button>}>这次判定暂时无法读取。</Note> : <>
+          {(focused.entry?.assessment.statements ?? []).map((statement,index)=><p key={index}>{statement.text} · {verdictWords[statement.verdict]}</p>)}
+          {((focused.entry?.assessment as {judgeExtract?:{recommendationExpressions?:{items?:Array<{quote:string;conditionQuote?:string|null}>}}})?.judgeExtract?.recommendationExpressions?.items ?? []).map((item,index)=><p key={index}>{item.quote} · 条件：{item.conditionQuote ?? "未陈述"}</p>)}
+        </>}
+      </section>}
       {statements.map(statement => {
         const prior = original.find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement));
         const current = (ready.current?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement));

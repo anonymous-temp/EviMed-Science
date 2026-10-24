@@ -196,6 +196,7 @@ function AnalysisPage({
               { value: "V01", label: "当前水平与目标" },
               { value: "V02", label: "指标趋势" },
               { value: "V03", label: "可比变化排序" },
+              { value: "V09", label: "推荐表达与条件" },
               { value: "V08", label: "已登记竞品与趋势" },
               { value: "V04", label: "平台指标比较" },
               { value: "V05", label: "问题群与平台" },
@@ -386,6 +387,7 @@ function AnalysisPage({
                   row.dimensions.engine ?? "\u0000",
                   engineName(row.dimensions.engine ?? ""),
                 )}
+                {row.dimensions.kind === "expression" && <p className="text-caption text-text-2">条件：{row.dimensions.conditionQuote ?? "未陈述"} · 推荐顺位：{row.dimensions.explicitPosition ?? "未明确"}</p>}
                 {row.dimensions.period === "round"
                   ? ` · ${row.dimensions.date ?? "采样时间未知"} · ${row.dimensions.roundLabel ?? (row.dimensions.roundKind === "baseline" ? "基线轮" : "复测轮")}`
                   : row.dimensions.date
@@ -518,6 +520,7 @@ function unitWord(unit: string) {
         asks: "任务",
         questions: "问题",
         statements: "陈述",
+  expressions: "表达",
         records: "记录",
       } as Record<string, string>
     )[unit] ?? unit

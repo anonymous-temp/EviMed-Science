@@ -133,3 +133,12 @@ it('displays the domain M16 rate with registry-qualified refusal members instead
   expect(chosen).toHaveBeenLastCalledWith(expect.objectContaining({ value: 20, members: expect.objectContaining({ total: 100 }) }));
   expect(screen.queryByText('40%')).toBeNull();
 });
+
+it('V09 bars use exclusive expression counts and leave an incomplete category unknown',()=>{
+ const choose=vi.fn(),cells=[{...cell('recommended','deepseek',2),columnKey:'expressions',label:'推荐',unit:'expressions'},{...cell('conditional','deepseek',null,'unknown'),columnKey:'expressions',label:'条件性推荐',reason:'recommendation_coverage_incomplete',unit:'expressions'}];
+ render(<GeoAnalysisVisual data={{chart:{kind:'recommendations',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={choose}/>);
+ expect(screen.getByText('条件性推荐 · 分类覆盖不足')).toBeVisible();
+ expect(screen.getByText(/合理不推荐不计为负面/)).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:/推荐.*2/}));
+ expect(choose).toHaveBeenCalledWith(cells[0]);
+});

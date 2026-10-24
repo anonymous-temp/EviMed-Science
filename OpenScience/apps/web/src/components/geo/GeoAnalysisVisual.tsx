@@ -61,6 +61,15 @@ export function GeoAnalysisVisual({ data, onSelect }: {
   const statusId = useId();
   const chart = data.chart;
   if (!chart) return null;
+  if (chart.kind === "recommendations") {
+    const cells = chart.cells ?? [], known = cells.filter(cell => cell.state === "known" && cell.value !== null);
+    return <ChartCard title="推荐表达分布" state={known.length ? "content" : "empty"} emptyText="尚无完整分类；已保留的表达与未知覆盖见下表。"
+      footnote="每条表达归入一个分类；同一回答可包含多条表达，并同时进入多个回答分类。合理不推荐不计为负面。"
+      legend={<ul aria-label="推荐分类与覆盖">{cells.filter(cell => cell.value === null).map(cell => <li key={cell.rowKey}>{cell.label} · 分类覆盖不足</li>)}</ul>}>
+      <BarList label="推荐表达分布" rows={known.map(cell => ({key:cell.rowKey,label:cell.label,value:cell.value!,unit:"表达"}))}
+        onSelect={key => {const cell=cells.find(item=>item.rowKey===key);if(cell)onSelect(cell);}} />
+    </ChartCard>;
+  }
   if (chart.kind === "comparison") {
     const cells = chart.cells ?? [], known = cells.filter(cell => cell.state === "known" && cell.value !== null);
     const max = Math.max(1, ...known.map(cell => Math.abs(cell.value!)));

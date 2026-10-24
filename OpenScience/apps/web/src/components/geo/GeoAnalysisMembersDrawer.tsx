@@ -23,6 +23,7 @@ const units: Record<string, string> = {
   asks: "采集任务",
   questions: "问题",
   statements: "陈述",
+  expressions: "表达",
   records: "记录",
 };
 export function GeoAnalysisMembersDrawer({
@@ -120,7 +121,7 @@ function Member({
   return (
     <article className="flex flex-col gap-2">
       <p className="text-ui">
-        {item.statement?.text ?? question.text ?? "采集任务"}
+        {item.expression?.quote ?? item.statement?.text ?? question.text ?? "采集任务"}
       </p>
       <p className="text-caption text-text-3">
         {[
@@ -148,6 +149,15 @@ function Member({
         />
       )}
       {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取版本",value:item.extraction.parserVersion ?? "未知"},{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名原始提取",value:JSON.stringify(item.extraction.genericMentions)}]} /></Disclosure>}
+      {item.expression && <FactList rows={[
+        {label:"表达对象",value:item.expression.entity ?? "对象未保留"},
+        {label:"分类",value:({recommended:"推荐",conditional:"条件性推荐",reasonable_nonrecommendation:"合理不推荐",mention_only:"仅提及",unknown:"尚未分类"} as Record<string,string>)[item.expression.state] ?? "未知"},
+        {label:"原文条件",value:item.expression.conditionQuote ?? "未陈述"},
+        {label:"分类说明",value:item.expression.rationale ?? "未记录"},
+        {label:"明确推荐顺位",value:item.expression.explicitPosition ?? "未明确"},
+        {label:"顺位原文",value:item.expression.positionQuote ?? "未陈述"},
+        {label:"主张版本",value:item.expression.claimRefs.map(ref=>`${ref.claimId} · ${ref.claimVersion}`).join("；") || "未提供"},
+      ]} />}
       {item.statement && (
         <FactList
           rows={[
@@ -189,6 +199,7 @@ function Member({
           查看原始回答与依据
         </Link>
       )}
+      {item.snapshotId && item.assessmentVersion && <Link className="text-accent" to={(() => {const query=new URLSearchParams(location.search);query.set("assessmentVersion",item.assessmentVersion!);return `${answerPath(geoId,item.snapshotId!)}?${query}#geo-judgment-history`;})()}>查看这条表达的判定历史</Link>}
       {item.answer && (
         <Disclosure summary="完整回答与引用">
           <p className="whitespace-pre-wrap text-ui">

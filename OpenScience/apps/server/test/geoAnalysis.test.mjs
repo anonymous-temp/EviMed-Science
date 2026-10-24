@@ -7,7 +7,7 @@ const selected = () => ({scope:{timeZone:'Asia/Shanghai'},selection:{reference:'
 test('the registry refuses unsupported views, arbitrary filters and metrics', () => {
   assert.equal(normalizeGeoAnalysisView({viewId:'V03'}).metricId,'M-01');
   assert.equal(normalizeGeoAnalysisView({viewId:'V08'}).metricId,'M-16');
-  assert.throws(() => normalizeGeoAnalysisView({viewId:'V09'}));
+  assert.equal(normalizeGeoAnalysisView({viewId:'V09'}).metricId,null);
   assert.throws(() => normalizeGeoAnalysisView({viewId:'V08',metricId:'M-19'}));
   assert.throws(() => normalizeGeoAnalysisView({viewId:'V01',sql:'SELECT 1'}));
   assert.throws(() => normalizeGeoAnalysisView({viewId:'V02',metricId:'account_score'}));

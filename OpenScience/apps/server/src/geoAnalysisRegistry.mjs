@@ -12,6 +12,8 @@ export const GEO_ANALYSIS_REGISTRY = Object.freeze(Object.fromEntries([
   ], [
     'V08', 'rivals'
   ], [
+    'V09', 'recommendations'
+  ], [
     'V04', 'metrics'
   ], [
     'V05', 'metrics'
@@ -48,7 +50,7 @@ export function normalizeGeoAnalysisView(input = {}) {
     'original_group', 'client_tags'
   ].includes(input.categoryMode)))
     throw invalid();
-  if (family === 'coverage' && viewId !== 'V06' && metricId != null)
+  if ((family === 'coverage' && viewId !== 'V06' || family === 'recommendations') && metricId != null)
     throw invalid();
   if (input.timeGrain != null && (!['V02', 'V08'].includes(viewId) || ![
     'day', 'round'
@@ -63,6 +65,7 @@ export function normalizeGeoAnalysisView(input = {}) {
   if (input.entityKey != null && (viewId !== 'V08' && input.entityKind !== 'generic' || typeof input.entityKey !== 'string' || !input.entityKey.trim() || input.entityKey.length > 300))
     throw invalid();
   if (viewId === 'V08' && (input.entityKind === 'generic' || !['M-16','M-17'].includes(metricId))) throw invalid();
+  if (viewId === 'V09' && dimension !== 'project') throw invalid();
   if (viewId === 'V04' && dimension !== 'engine' || viewId === 'V05' && dimension !== 'group')
     throw invalid();
   return {

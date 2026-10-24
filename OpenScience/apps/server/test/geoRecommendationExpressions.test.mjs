@@ -48,3 +48,19 @@ test('C3 facts and registry recount retain versioned extraction without reinterp
  assert.deepEqual(recounted.judgeExtract.recommendationExpressions,judged.recommendationExpressions);
  assert.equal(recountedFacts({brands:[{ours:true,recommended:true}],statements:[],judgeExtract:null,status:'valid',answerText:'Alpha',citations:[]},registry,{}).judgeExtract.recommendationExpressions,undefined);
 });
+
+test('C3 repeated quote occurrences remain distinct and conflicting classifications remain unresolved',()=>{
+ const text='Alpha recommended. Alpha recommended.';
+ const out=judge(text,[item('Alpha recommended.','Alpha','recommended')]);
+ assert.deepEqual(out.recommendationExpressions.items[0].answerOffsets,[0,19]);
+ const conflict=judge(text,[item('Alpha recommended.','Alpha','recommended'),item('Alpha recommended.','Alpha','mention_only')]);
+ assert.equal(conflict.recommendationExpressions.items.length,1);
+ assert.equal(conflict.recommendationExpressions.items[0].state,'unknown');
+ assert.equal(conflict.recommendationExpressions.coverage,'partial');
+ const missing=judge('Alpha mentioned.',[]);
+ assert.equal(missing.recommendationExpressions.coverage,'partial');
+ const incomplete=judge('No product named.',[],{assessmentComplete:false});
+ assert.equal(incomplete.recommendationExpressions.coverage,'partial');
+ const absent=verifyJudgement({assessmentComplete:true,statements:[]},buildJudgeInput(input('No product named.')),input('No product named.'));
+ assert.equal(Object.hasOwn(absent,'recommendationExpressions'),false);
+});

@@ -117,3 +117,12 @@ it('keeps same-text same-id variants separate and submits the selected full stat
   await waitFor(() => expect(client.submitGeoDiagnosisFeedback).toHaveBeenCalledTimes(1));
   expect(client.submitGeoDiagnosisFeedback.mock.calls[0][1].statementIdentity).toBe(geoStatementAssessmentIdentity(second));
 });
+
+it('opens the exact linked assessment through existing history pages and shows preserved expressions', async () => {
+  const target='b'.repeat(64);
+  client.getGeoDiagnosisReview.mockImplementation(async (_id, _snapshot, page) => page?.historyBefore ? { ...saved(), historyPage:{total:2,shown:1,more:false,nextBefore:null}, history:[{version:target,state:'active',assessment:{statements:[],judgeExtract:{recommendationExpressions:{items:[{quote:'If adult, Alpha is recommended.',conditionQuote:'If adult',state:'conditional',entity:'Alpha'}]}}}}] } : {...saved(),historyPage:{total:2,shown:1,more:true,nextBefore:8}});
+  render(<MemoryRouter initialEntries={[`/?assessmentVersion=${target}#geo-judgment-history`]}><DiagnosisReview geoId="geo_1" data={answerFilled} project={geoProject()} actions={[]} /></MemoryRouter>);
+  expect(await screen.findByRole('region',{name:'所选历史判定'})).toHaveTextContent('If adult, Alpha is recommended.');
+  expect(screen.getByRole('region',{name:'所选历史判定'})).toHaveTextContent('If adult');
+  expect(client.getGeoDiagnosisReview.mock.calls[1][2]).toEqual({historyBefore:8});
+});

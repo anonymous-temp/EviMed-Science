@@ -121,3 +121,14 @@ it('V03 keeps a working comparison action and both exact period member requests'
  fireEvent.click(screen.getByRole('button',{name:'0 %'}));await waitFor(()=>expect(memberRead).toHaveBeenCalledWith('geo',expect.objectContaining({columnKey:'previous',expectedDigest:'compare-digest'}),0));
  expect(screen.getByTestId('export').textContent).toContain('gsel_compare');
 });
+
+it('V09 retains quoted conditions and independent units while staging the same selected unsent native context',async()=>{
+ navigation.open.mockReset().mockResolvedValue(true);navigation.current.mockResolvedValue({projectId:'control',sessionId:'session-c3'});navigation.stage.mockReset().mockResolvedValue({referenceId:'gpc_c3',sessionId:'session-c3',draft:'Explain preserved expressions'});
+ read.mockResolvedValue({view:{viewId:'V09',dimension:'project'},selection:{reference:'gsel_c3'},digest:'c3-digest',columns:[{key:'expressions',label:'表达数（互斥分类）'},{key:'answers',label:'独立回答数（分类间可重叠）'}],rows:[{key:'expression',label:'条件性推荐 · Alpha',metricId:null,dimensions:{kind:'expression',conditionQuote:'If adult',explicitPosition:null},values:{expressions:{value:2,state:'known',unit:'expressions',metric:null,members:null},answers:{value:1,state:'known',unit:'answers',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V09"/></MemoryRouter>);fireEvent.click(screen.getByText('所选数据分析'));
+ expect(await screen.findByText(/条件：If adult/)).toBeVisible();expect(screen.getByText('2 表达')).toBeVisible();expect(screen.getByText('1 回答')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'在对话中解释'}));
+ await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({mode:'analysis',view:{viewId:'V09',dimension:'project'},selectionRef:'gsel_c3',expectedDigest:'c3-digest'})));
+ expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_c3'}}),'Explain preserved expressions');
+ expect(screen.getByTestId('export')).toHaveTextContent('gsel_c3');
+});

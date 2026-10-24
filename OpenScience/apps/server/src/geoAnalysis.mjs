@@ -18,6 +18,7 @@ import {
   buildGeoCoverageAnalysis,
 } from "./geoAnalysisCoverage.mjs";
 import { GEO_ANALYSIS_DESCRIPTOR_FIELDS, GEO_ANALYSIS_REGISTRY, normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
+import { buildGeoRecommendationAnalysis } from "./geoAnalysisRecommendations.mjs";
 import { buildGeoMetricAnalysis, buildGeoComparisonAnalysis, buildGeoRivalAnalysis } from "./geoAnalysisMetrics.mjs";
 export { normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
 import { HttpError } from "./security.mjs";
@@ -79,7 +80,7 @@ const plain = (value, state = "known") => ({
  */
 export function presentGeoAnalysis(selected, request, context = {}) {
   const view = normalizeGeoAnalysisView(request);
-  if (["coverage", "metrics", "comparison", "rivals"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family))
+  if (["coverage", "metrics", "comparison", "rivals", "recommendations"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family))
     return presentAggregate(selected, view, context);
   const matches = (cell) =>
     cell.scope === view.dimension &&
@@ -371,7 +372,7 @@ export function presentGeoAnalysis(selected, request, context = {}) {
 /** @param {any} selected @param {any} view @param {any} context */
 function presentAggregate(selected, view, context) {
   const family = GEO_ANALYSIS_REGISTRY[view.viewId].family;
-  const built = family === "metrics" ? buildGeoMetricAnalysis(selected, view, context) : family === "comparison" ? buildGeoComparisonAnalysis(selected, view, context) : family === "rivals" ? buildGeoRivalAnalysis(selected, view, context) : buildGeoCoverageAnalysis(selected, view, context);
+  const built = family === "recommendations" ? buildGeoRecommendationAnalysis(selected, view, context) : family === "metrics" ? buildGeoMetricAnalysis(selected, view, context) : family === "comparison" ? buildGeoComparisonAnalysis(selected, view, context) : family === "rivals" ? buildGeoRivalAnalysis(selected, view, context) : buildGeoCoverageAnalysis(selected, view, context);
   if (built.rows.length > 20_000) throw new HttpError(422, "geo_read_filter_invalid", "Narrow the scope to at most 20,000 analysis rows.");
   const basis = {
     schemaVersion: 1,
@@ -617,7 +618,7 @@ export async function readGeoAnalysis(
       if (
         !input.selectionRef ||
         !input.expectedDigest ||
-        !["coverage", "metrics", "comparison", "rivals"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family) ||
+        !["coverage", "metrics", "comparison", "rivals", "recommendations"].includes(GEO_ANALYSIS_REGISTRY[view.viewId].family) ||
         typeof input.rowKey !== "string" ||
         typeof input.columnKey !== "string"
       )

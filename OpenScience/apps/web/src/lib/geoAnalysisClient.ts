@@ -10,6 +10,7 @@ export type GeoAnalysisId =
   | "V02"
   | "V03"
   | "V08"
+  | "V09"
   | "V04"
   | "V05"
   | "V06"
@@ -66,6 +67,15 @@ export interface GeoAnalysisRow {
     unit?: string;
     basis?: string;
     conditions?: unknown;
+    kind?: string;
+    category?: string;
+    quote?: string;
+    entity?: string;
+    conditionQuote?: string | null;
+    explicitPosition?: number | null;
+    positionQuote?: string | null;
+    assessmentVersion?: string | null;
+    snapshotId?: string;
   };
   values: Record<string, GeoAnalysisValue>;
 }
@@ -78,7 +88,7 @@ export interface GeoAnalysisChartCell {
 }
 export interface GeoAnalysisView {
   chart?: {
-    kind?: "bars" | "matrix" | "comparison" | "rivals";
+    kind?: "bars" | "matrix" | "comparison" | "rivals" | "recommendations";
     cells?: GeoAnalysisChartCell[];
     labels: string[];
     series: Array<{
@@ -124,6 +134,10 @@ export interface GeoAnalysisMemberItem {
   reason?: string;
   askedAt?: string | null;
   extraction?: {genericMentions: unknown; parserVersion: string | null; registryKey?: string | null; judgedAt: string | null} | null;
+  assessmentVersion?: string | null;
+  questionVersion?: number;
+  registryKey?: string | null;
+  expression?: { rationale?: string | null; quote: string; entity: string | null; state: string; conditionQuote: string | null; explicitPosition: number | null; positionQuote: string | null; claimRefs: Array<{claimId: string; claimVersion: number}> };
   statement?: {
     text: string;
     verdict: string;
