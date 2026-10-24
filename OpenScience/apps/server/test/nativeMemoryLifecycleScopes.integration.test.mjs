@@ -158,3 +158,15 @@ test('personal-only export retains exact bytes but still checks account incarnat
   assert.equal(requested, false);
 });
 
+test('project cleanup refuses a stale personal account view before touching its tagged memory or overlay', options, async t => {
+  const f = await fixture(t), user = f.owner.id;
+  const uri = f.seed(f.personal, 'projects/card.md', 'Replacement-sensitive content', [`project=${f.a.projectId}`]);
+  await f.overlay.upsertFile({ userId: user, uri, memoryType: 'project_context', projectId: f.a.projectId, body: 'Replacement-sensitive content' });
+  f.contexts.all = async () => [f.personal];
+  await f.accounts.database.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id=$1", [user]);
+  const before = f.stub.requests.length;
+  await assert.rejects(f.store.deleteProject(user, f.a.projectId), error => error.code === 'memory_scope_denied');
+  assert.equal(f.stub.requests.length, before);
+  assert.ok(await f.overlay.file(user, uri));
+});
+

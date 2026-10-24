@@ -869,6 +869,8 @@ export class NativeMemoryStore {
     // Snapshot all exact registered incarnations whose policy rows will cascade
     // with this control project. Never discover them after the project delete.
     const views = await this.#contexts(userId);
+    const personal = views.find(context => context.kind === 'owned');
+    if (!personal) throw new HttpError(403, 'memory_scope_denied', 'The personal memory context is unavailable.');
     const registered = views.filter(context => context.kind === 'geo-project' && context.projectId === projectId);
     let files = 0, sessions = 0;
     for (const context of registered) {
@@ -879,14 +881,15 @@ export class NativeMemoryStore {
       sessions += await this.#deleteSessions(userId, () => true, context);
       await this.overlay.purgeNamespace(userId, context.userRoot);
     }
-    const root = this.sessions.memoryRoot(userId);
-    const tagged = await this.#engine(() => this.sessions.tree(userId, root, { levelLimit: 8, tags: [`project=${projectId}`] }));
+    if (this.memoryContexts) await this.memoryContexts.assertKnown(personal);
+    const root = personal.sessions.memoryRoot(userId);
+    const tagged = await this.#engine(() => personal.sessions.tree(userId, root, { levelLimit: 8, tags: [`project=${projectId}`] }));
     const fromOverlay = await this.overlay.projectFiles(userId, projectId);
     const uris = new Set([...tagged.filter((node) => !node.isDir).map((node) => node.uri), ...fromOverlay.map((file) => file.uri)]
       .filter(uri => nativeMemoryFile(uri, root)));
-    for (const uri of uris) if (await this.#engine(() => this.sessions.remove(userId, uri))) files += 1;
+    for (const uri of uris) if (await this.#engine(() => personal.sessions.remove(userId, uri))) files += 1;
     const engineSessions = new Set(await this.overlay.projectSessions(userId, projectId));
-    sessions += await this.#deleteSessions(userId, (name) => engineSessions.has(name));
+    sessions += await this.#deleteSessions(userId, (name) => engineSessions.has(name), personal);
     await this.overlay.purgeProject(userId, projectId);
     return { files, sessions };
   }
