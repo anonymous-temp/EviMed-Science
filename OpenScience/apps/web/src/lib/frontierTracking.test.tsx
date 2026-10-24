@@ -99,11 +99,11 @@ describe("impressions: seen, not rendered", () => {
     act(() => { vi.advanceTimersByTime(400); });
     show(second, 0.4);
     act(() => { vi.advanceTimersByTime(2_000); });
-    expect(ofType("impression")).toHaveLength(1, "scrolled past in under a second: not seen");
+    expect(ofType("impression"), "scrolled past in under a second: not seen").toHaveLength(1);
     show(first, 0);
     show(first, 0.9);
     act(() => { vi.advanceTimersByTime(1_500); });
-    expect(ofType("impression")).toHaveLength(1, "once per list and item");
+    expect(ofType("impression"), "once per list and item").toHaveLength(1);
   });
 
   it("stops the clock in a hidden tab and starts it again for what is still in view", () => {
@@ -114,10 +114,10 @@ describe("impressions: seen, not rendered", () => {
     act(() => { vi.advanceTimersByTime(600); });
     setVisibility("hidden");
     act(() => { vi.advanceTimersByTime(5_000); });
-    expect(ofType("impression")).toHaveLength(0, "a background tab sees nothing");
+    expect(ofType("impression"), "a background tab sees nothing").toHaveLength(0);
     setVisibility("visible");
     act(() => { vi.advanceTimersByTime(999); });
-    expect(ofType("impression")).toHaveLength(0, "the second starts again, continuous");
+    expect(ofType("impression"), "the second starts again, continuous").toHaveLength(0);
     act(() => { vi.advanceTimersByTime(1); });
     expect(ofType("impression")).toHaveLength(1);
   });
@@ -141,7 +141,7 @@ describe("opens join the list and hand their view to the reading page", () => {
     expect(open.view).toMatch(/^view_/);
     feed.unmount();
     const reader = render(<Reader item="cccccccccccc" />);
-    expect(ofType("open")).toHaveLength(1, "the list's open is the open: no second one");
+    expect(ofType("open"), "the list's open is the open: no second one").toHaveLength(1);
     // Ten seconds of reading with a scroll, then the tab is switched away.
     act(() => { vi.advanceTimersByTime(5_000); });
     fireEvent.scroll(document);
@@ -184,7 +184,7 @@ describe("opens join the list and hand their view to the reading page", () => {
     expect(ofType("share").map((event) => [event.surface, event.view, event.detail])).toEqual([["reader", view, "markdown"]]);
     reader.unmount();
     trackFrontierItemAction("research", "eeeeeeeeeeee");
-    expect(ofType("research").map((event) => [event.surface, event.view])).toEqual([["direct", null]], "the reading page gone: no view any more");
+    expect(ofType("research").map((event) => [event.surface, event.view]), "the reading page gone: no view any more").toEqual([["direct", null]]);
   });
 });
 
@@ -198,13 +198,13 @@ describe("delivery", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const first = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { events: Array<{ id: string; list: string; slot: string; surface: string }> };
     expect(first.events[0]).toMatchObject({ surface: "feed", list: LIST, slot: "editorial" });
-    expect(pendingFrontierEvents()).toHaveLength(1, "kept for the retry");
+    expect(pendingFrontierEvents(), "kept for the retry").toHaveLength(1);
     await act(async () => { vi.advanceTimersByTime(29_000); });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await act(async () => { vi.advanceTimersByTime(1_500); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const second = JSON.parse(String(fetchMock.mock.calls[1][1]?.body)) as { events: Array<{ id: string }> };
-    expect(second.events[0].id).toBe(first.events[0].id, "the same id: the server keeps it once");
+    expect(second.events[0].id, "the same id: the server keeps it once").toBe(first.events[0].id);
     await act(async () => { await Promise.resolve(); });
     expect(pendingFrontierEvents()).toHaveLength(0);
   });
@@ -213,7 +213,7 @@ describe("delivery", () => {
     const beacon = vi.fn(() => true);
     vi.stubGlobal("navigator", { ...navigator, sendBeacon: beacon });
     trackFrontierItemAction("hide", "aaaaaaaaaaaa", { surface: "feed", detail: "not-a-reason" });
-    expect(pendingFrontierEvents()).toHaveLength(0, "a reason outside the closed list is never sent");
+    expect(pendingFrontierEvents(), "a reason outside the closed list is never sent").toHaveLength(0);
     trackFrontierItemAction("hide", "aaaaaaaaaaaa", { surface: "feed", detail: "promotional" });
     flushFrontierEvents("unload");
     expect(beacon).toHaveBeenCalledTimes(1);
@@ -228,8 +228,7 @@ describe("delivery", () => {
     expect(body.events[0]).toMatchObject({ detail: "promotional" });
     expect(body.events[0].device).toMatch(/^(narrow|wide)$/);
     expect(body.events[0].session).toMatch(/^ses_/);
-    expect(Object.keys(body.events[0]).sort()).toEqual(["at", "detail", "device", "id", "item", "session", "surface", "type"],
-      "no URL, no text, nothing personal: closed words, ids and numbers");
+    expect(Object.keys(body.events[0]).sort(), "no URL, no text, nothing personal: closed words, ids and numbers").toEqual(["at", "detail", "device", "id", "item", "session", "surface", "type"]);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(pendingFrontierEvents()).toHaveLength(0);
   });
