@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { entryReaches } from "./capsuleEntryProject.mjs";
 import { HttpError } from "./security.mjs";
 import { capsuleFactUri, capsuleMemoryRoot, capsuleSegment, capsuleTreeUri, parseCapsuleFactUri, userMemoryRoot } from "./openVikingClient.mjs";
 
@@ -14,6 +15,14 @@ function provenanceIds(provenance) {
 function accountLockName(userId) {
   return `memory-index-account:${userId}`;
 }
+
+/**
+ * How many more hits the index is asked for than the caller wants. A person has one capsule and so one subtree, and the notes of their
+ * other projects rank beside the project's own: the index cannot tell them apart (the path names the capsule, not the project), so the
+ * label is read from the canonical row and what does not reach the project is dropped before the reranker sees it. Asking for more is what
+ * keeps a project's own notes from being crowded out of the first hits by notes it may not read.
+ */
+const LABEL_HEADROOM = 4;
 
 /** How many facts are written at once. A write waits for its vector (`wait: true`) under the client's own request
  *  deadline; the engine's `timeout` field is gone from v0.5.1, so there is no second, shorter bound to set. */
@@ -359,8 +368,8 @@ export class MemoryIndexing {
    *  read from the canonical row, so the worst a stale index can do is name a
    *  fact that is then dropped.
    * @param {string} userId @param {string} accountCreatedAt @param {{capsuleId:string,mode:string}[]} selections
-   * @param {string} query @param {number} limit */
-  async recall(userId, accountCreatedAt, selections, query, limit) {
+   * @param {string} query @param {number} limit @param {string|null} projectId the project the recall is for: an entry labelled with another project is not a candidate */
+  async recall(userId, accountCreatedAt, selections, query, limit, projectId = null) {
     const current = await this.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]);
     if (current.rows[0]?.generation !== accountCreatedAt) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
     if (!selections.length) return [];
@@ -375,7 +384,7 @@ export class MemoryIndexing {
     // nothing outside `peers/`, and the isolation that matters is the target
     // list plus the canonical re-check below.
     const hits = await this.openViking.find(userId, query, {
-      targets, limit: Math.max(1, Math.min(100, Number(limit) || 1)), scoreThreshold: this.scoreThreshold,
+      targets, limit: Math.max(1, Math.min(100, (Number(limit) || 1) * LABEL_HEADROOM)), scoreThreshold: this.scoreThreshold,
     });
     const candidates = [];
     const nominated = new Set();
@@ -410,7 +419,7 @@ export class MemoryIndexing {
       const row = byId.get(candidate.factId);
       if (!row || seen.has(row.id) || row.revision !== candidate.revision
         || row.payload.status !== "approved" || row.payload.capsuleId !== candidate.capsuleId
-        || !active.has(candidate.capsuleId)) continue;
+        || !active.has(candidate.capsuleId) || !entryReaches(row, projectId)) continue;
       seen.add(row.id);
       eligible.push({ row, selection: { capsuleId: candidate.capsuleId, mode: active.get(candidate.capsuleId) } });
     }

@@ -14,6 +14,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { withdrawProjectDerivedMemory } from "../src/derivedMemory.mjs";
 import { MemoryIndexWithdrawals } from "../src/memoryIndexWithdrawals.mjs";
 import { MemoryIndexing } from "../src/memoryIndexing.mjs";
+import { capsuleFactUri } from "../src/openVikingClient.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 
@@ -176,4 +177,26 @@ test("the person's export leaves the assistant's notes out, however many project
   await capsules.updateEntry(USER, own.id, note.id, { content: `回答先给结论，再给证据 ${tag}`, expectedRevision: note.revision });
   const after = await transfers.exportPreview(USER, own.id, { scopes: ["workstyle"] });
   assert.deepEqual(after.entries.filter((entry) => entry.content.includes(tag)).map((entry) => entry.content), [`回答先给结论，再给证据 ${tag}`]);
+});
+
+test("a semantic recall reaches a project's notes in that project only: the index nominates the whole capsule and the label decides", options, async () => {
+  const own = await capsules.ownCapsule(USER);
+  const generation = await indexing.accountGeneration(USER);
+  const mine = (await capsules.mine(USER)).entries.filter((entry) => entry.payload.content.includes(tag));
+  assert.ok(mine.length >= 8);
+  // An index that nominates every note of the capsule, whatever the project asked: it holds one subtree for the person.
+  const hits = mine.map((entry, rank) => ({ uri: capsuleFactUri(USER, { accountCreatedAt: generation, capsuleId: own.id, factKind: entry.payload.factKind, factId: entry.id, revision: entry.revision }),
+    score: 1 - rank / 100 }));
+  const asking = [];
+  const openViking = { find: async (_userId, query, request) => { asking.push({ query, targets: request.targets }); return hits; } };
+  const semantic = new CapsuleService(documents, { indexing: new MemoryIndexing({ database, openViking, jobs: {}, withdrawals }) });
+  const [one, two] = [PROJECTS[5], PROJECTS[6]];
+  const readIn = (/** @type {string | null} */ projectId) => semantic.recall(USER, { query: "项目的笔记", projectId, limit: 30 });
+  const inOne = await readIn(one);
+  assert.equal(inOne.mode, "semantic");
+  assert.deepEqual(inOne.items.map((item) => item.content), [`第 5 个项目的笔记 ${tag}`]);
+  assert.deepEqual((await readIn(two)).items.map((item) => item.content), [`第 6 个项目的笔记 ${tag}`]);
+  assert.deepEqual((await readIn(null)).items.map((item) => item.content), [], "a recall in no project reads the account's entries alone, and there are none here");
+  const inForce = (await capsules.active(USER)).items.length;
+  assert.equal(asking.length >= 3 && asking.every((call) => call.targets.length === inForce), true, "the subtrees searched are the capsules in force for the account, the same in every project");
 });

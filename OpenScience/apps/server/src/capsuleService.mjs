@@ -882,7 +882,7 @@ export class CapsuleService {
   async #semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt }) {
     const generation = accountCreatedAt ?? await this.indexing.accountGeneration(userId);
     if (!generation) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
-    const nominated = await this.indexing.recall(userId, generation, active, needle, Math.min(100, limit * 4));
+    const nominated = await this.indexing.recall(userId, generation, active, needle, Math.min(100, limit * 4), projectId);
     const kept = new Set((await this.#inProject(userId, projectId, nominated.map((/** @type {any} */ match) => match.row))).map((row) => row.id));
     const ranked = nominated.filter((/** @type {any} */ match) => kept.has(match.row.id));
     const items = [];
