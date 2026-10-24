@@ -437,6 +437,38 @@
    "biz_matches": true
   }
  ],
+ "not_listed_2026_10_24": [
+  {
+   "name": "中国政府网",
+   "reason": "general State Council feed, not health (the registry reads gov-cn-policy)"
+  },
+  {
+   "name": "中国疾控动态",
+   "reason": "already listed"
+  },
+  {
+   "name": "肿瘤资讯",
+   "reason": "already listed"
+  },
+  {
+   "name": "梅斯肿瘤新前沿",
+   "reason": "nickname not confirmed"
+  },
+  {
+   "name": "动脉橙产业智库",
+   "reason": "nickname not confirmed"
+  }
+ ],
+ "method": {
+  "how_names_were_found": [
+   "WeChat article pages (mp.weixin.qq.com/s/…): the page's nick_name and var biz — the 15 accounts with a biz here",
+   "Sogou WeChat article search (https://weixin.sogou.com/weixin?type=2&query=<name>): each result names its publishing account by its current name; confidence high when the exact name publishes most of the first page, medium when once or twice",
+   "organisations' own sites: natcm.gov.cn (official WeChat → 中国中医), chinacdc.cn, medlive.cn/weixin_list.php, cma.org.cn",
+   "media catalogue pages carrying an article link per account (chuanshenggang.com/media/detail/<id>)"
+  ],
+  "live": "every account is resolved again by Dajiala before its first read; 35 names were checked live on 2026-10-24 (live_checks)",
+  "not_confirmed": "accounts searched for and left out are under not_listed_2026_10_24 and in this list: 医学参考报, 八点健闻, JAMA, GRADE中国中心, 中华医学会 (main account), 国家药典委员会, 药物警戒, 中国药学会, 临床药师, 国家疾控局, 中华预防医学会, 返朴, 摩熵医药 (as 药融云 instead), 四川大学华西医院, 同济医院, 北京大学第一医院, 北京大学人民医院, 华山医院, 复旦大学附属肿瘤医院, 武汉协和医院, 中日友好医院, 国家癌症中心, 国家心血管病中心"
+ },
  "accounts": [
   {
    "id": "wx-aiera",
@@ -3701,28 +3733,6 @@
    "evidence": [
     "https://weixin.sogou.com/weixin?type=2&query=复旦大学附属中山医院"
    ]
-  }
- ],
- "not_listed_2026_10_24": [
-  {
-   "name": "中国政府网",
-   "reason": "general State Council feed, not health (the registry reads gov-cn-policy)"
-  },
-  {
-   "name": "中国疾控动态",
-   "reason": "already listed"
-  },
-  {
-   "name": "肿瘤资讯",
-   "reason": "already listed"
-  },
-  {
-   "name": "梅斯肿瘤新前沿",
-   "reason": "nickname not confirmed"
-  },
-  {
-   "name": "动脉橙产业智库",
-   "reason": "nickname not confirmed"
   }
  ]
 }
