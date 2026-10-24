@@ -219,6 +219,21 @@ export function verifyLoopxArchive(file, expected) {
   return actual;
 }
 
+/**
+ * The address a build fetches a pinned archive from: a GitHub release through GITHUB_DOWNLOAD_PREFIX and an npm tarball
+ * through NPM_REGISTRY when the build passes them — the serving host reaches neither origin at a usable speed (the first
+ * full runtime build there, 2026-10-24, died on github.com with `curl: (18)`). The sha256 check after the download is what
+ * makes a mirror safe.
+ * @param {string} url @param {NodeJS.ProcessEnv} [env]
+ */
+export function mirroredArchiveUrl(url, env = process.env) {
+  const prefix = env.GITHUB_DOWNLOAD_PREFIX || '';
+  if (prefix && url.startsWith('https://github.com/')) return prefix + url;
+  const registry = (env.NPM_REGISTRY || '').replace(/\/+$/, '');
+  if (registry && url.startsWith('https://registry.npmjs.org/')) return registry + url.slice('https://registry.npmjs.org'.length);
+  return url;
+}
+
 export function installLoopx({ pins, root = '/opt/evimed/loopx', python = '/opt/evimed/venv/bin/python',
   cli = '/opt/evimed/venv/bin/loopx', archives = root, record = WORKFLOW_SKILLS_RECORD } = {}) {
   const pin = pins.loopx;
@@ -229,8 +244,8 @@ export function installLoopx({ pins, root = '/opt/evimed/loopx', python = '/opt/
     const file = path.join(archives, artifact.filename);
     try { verifyLoopxArchive(file, artifact.sha256); }
     catch {
-      execFileSync('curl', ['--fail', '--silent', '--show-error', '--location', '--retry', '3',
-        '--connect-timeout', '20', '--max-time', '600', artifact.url, '-o', file], { env, stdio: 'inherit' });
+      execFileSync('curl', ['--http1.1', '--fail', '--silent', '--show-error', '--location', '--retry', '5', '--retry-all-errors',
+        '--retry-delay', '2', '--connect-timeout', '20', '--max-time', '600', mirroredArchiveUrl(artifact.url), '-o', file], { env, stdio: 'inherit' });
       verifyLoopxArchive(file, artifact.sha256);
     }
   }
