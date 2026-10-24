@@ -115,9 +115,10 @@ test("a small library is answered with the files to read, and a deleted source l
 test("an embedding outage leaves the keyword index standing", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
+  let queryRequests = 0;
   const failing = { configured: true, modelKey: `broken@${DIMENSION}`, counters: {},
     async embedDocuments() { throw Object.assign(new Error("down"), { code: "kb_embedding_unavailable" }); },
-    async embedQuery() { throw Object.assign(new Error("down"), { code: "kb_embedding_unavailable" }); } };
+    async embedQuery() { queryRequests += 1; throw Object.assign(new Error("down"), { code: "kb_embedding_unavailable" }); } };
   const context = await signedIn({ kbEmbedder: failing });
   try {
     const { app, user, project } = context;
@@ -125,7 +126,12 @@ test("an embedding outage leaves the keyword index standing", {
     const result = await app.kbIndex.search({ userId: user.id, projectId: project.id, query: "达比加群" });
     assert.equal(result.mode, "keyword", "no vector leg answered");
     assert.equal(result.hits[0].title, fixture.documents[0].title);
-    if (app.kbIndex.capabilities.vector) assert.equal(result.vectorSkipped, "kb_embedding_unavailable");
+    assert.equal(queryRequests, 0, "no query embedding is requested when the outage left no valid vector candidates");
+    if (app.kbIndex.capabilities.vector) {
+      const rebuilt = await app.kbIndex.rebuild({ userIds:[user.id] });
+      assert.ok(rebuilt.pendingEmbedding > 0, "a provider outage must not be reported as complete embedding");
+      assert.equal(app.kbIndex.lastError,"kb_embedding_unavailable");
+    }
   } finally { await context.close(); }
 });
 
