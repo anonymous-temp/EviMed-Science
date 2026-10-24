@@ -88,17 +88,6 @@ export function archiveMemoryRecord(id: string, expectedVersion: number) {
   return productRequest<WebStructuredMemory>(`/memory/records/${encodeURIComponent(id)}`, "PATCH", { status: "archived", expectedVersion });
 }
 
-/** 「不对」 on a learned method: retired, and restorable by rolling back to the revision before. */
-export function retireLearnedMethod(methodId: string, expectedRevision: number) {
-  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/retire`, "POST",
-    { expectedRevision, reason: "在对话中被标为不对" });
-}
-
-export function restoreLearnedMethod(methodId: string, expectedRevision: number, targetRevision: number) {
-  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/rollback`, "POST",
-    { expectedRevision, targetRevision });
-}
-
 /** 「不对」 on a capsule entry: retired, as a revision the entry's undo can take back. */
 export function retireCapsuleEntry(capsuleId: string, entryId: string, expectedRevision: number) {
   return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(capsuleId)}/entries/${encodeURIComponent(entryId)}`, "PATCH",
@@ -137,9 +126,11 @@ export function ensureMyCapsule() {
 
 /*
  * The timeline read (`/memory/timeline`) is gone from the page with the
- * 「最近变化」 block it fed (2026-09-23 plan §5.6): a method's history is its
- * row's own 「历史版本」, a memory's is its revisions, and a list of back-office
- * events above the list said the same thing twice.
+ * 「最近变化」 block it fed (2026-09-23 plan §5.6), and from the server with its
+ * last reader (2026-10-24): a method's history is its row's own 「历史版本」,
+ * a memory's is its revisions, and a list of back-office events above the list
+ * said the same thing twice. The overview's growth card and the map's time
+ * view are the map's own document.
  */
 
 /**

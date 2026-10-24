@@ -167,7 +167,6 @@ import { resetLearnedMemory } from "./memoryReset.mjs";
 import { ResidentProfiles } from "./residentProfile.mjs";
 import { eraseRetiredMemos } from "./retiredMemos.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
-import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { createMemoryMapRoutes } from "./memoryMap.mjs";
 import { MapEdgeCorrections } from "./memoryMapEdges.mjs";
 import { MemoryTopics } from "./memoryTopics.mjs";
@@ -5142,9 +5141,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           : { id: item.id, kind: item.kind ?? "note", scope: item.scope ?? "user" })),
       }),
     } : null });
-  // The timeline, derived when read from the records, the ledger and the methods (the capsule's growth is the map's own document).
-  const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context,
-    native: { store: nativeMemory, engine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId) } });
   // 「记忆地图」: one read-only document assembled from independent sources, the topics a model groups the memories into, and the
   // links the memory drawer shows. An account on the native engine is drawn from its files; the compiled graph of the knowledge base comes from the ledger's mirror.
   // The account's memories as the map draws them, from whichever engine keeps them: the topics are one view for both kinds of account.
@@ -6903,7 +6899,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (await memoryMapRoutes(req, res)) return;
       if (await memoryRoutes(req, res)) return;
-      if (await memoryTimelineRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;
 
       if (pathname === "/api/feedback/events" && req.method === "GET") {

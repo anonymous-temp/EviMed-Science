@@ -939,23 +939,6 @@ export class ResearchMemoryStore {
   }
 
   /**
-   * What the timeline derives its memory events from: the account's records
-   * a project sees (its own and the account's), light, the most recently
-   * changed `limit` of them. Run summaries are the run's own events, so they
-   * do not spend the bound. The timeline used to read every record whole
-   * through `profile` — up to 100,000 of them — on every page.
-   * @param {string} userId @param {{ projectId?: string | null, limit?: number }} [options]
-   */
-  async timelineRecords(userId, { projectId = null, limit = 1000 } = {}) {
-    const owner = assertUserId(userId);
-    const bound = Math.max(1, Math.min(5000, Number(limit) || 1000));
-    const result = await this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records
-      WHERE user_id=$1 AND kind <> 'run_summary' AND (scope='user' OR (scope='project' AND scope_id=$2))
-      ORDER BY updated_at DESC, id DESC LIMIT $3`, [owner, String(projectId ?? ""), bound]);
-    return result.rows.map(publicRecord);
-  }
-
-  /**
    * What the memory map draws (`memoryMap.mjs`, 2026-10-12): the account's memories, light, the most recently changed
    * `limit` of them — those in force, pending and replaced; never a run summary, never a sensitive one (as it is never
    * recalled, it is never drawn), never one the researcher forgot. `projectId` narrows to that project's own.
@@ -1031,31 +1014,6 @@ export class ResearchMemoryStore {
           UNION SELECT record_id FROM evimed_memory.record_conflicts WHERE user_id=$1 AND other_id=$2) LIMIT 20`, [owner, id]),
     ]);
     return { replaced: replaced.rows.map(light), replacedBy: successor.rows[0] ? light(successor.rows[0]) : null, conflicts: conflicts.rows.map(light) };
-  }
-
-  /**
-   * How many memories began to hold, and how many stopped, on each calendar
-   * day in a zone: what the capsule page's growth line is drawn from. The
-   * memories are the ones the page lists (the account's and its projects',
-   * never a run summary). One stops holding when it is forgotten — its last
-   * change is the archiving — or replaced (`invalid_since`). Grouped in the
-   * database, so an account of any size costs one row per day it changed,
-   * never a read of every memory.
-   * @param {string} userId @param {{ timeZone?: string }} [options]
-   * @returns {Promise<Array<{ day: string, added: number, ended: number }>>}
-   */
-  async growthDays(userId, { timeZone = "UTC" } = {}) {
-    const owner = assertUserId(userId);
-    const result = await this.#query(`SELECT day, sum(added)::integer AS added, sum(ended)::integer AS ended FROM (
-        SELECT to_char(created_at AT TIME ZONE $2, 'YYYY-MM-DD') AS day, 1 AS added, 0 AS ended
-          FROM evimed_memory.records WHERE user_id=$1 AND kind <> 'run_summary' AND scope IN ('user','project')
-        UNION ALL
-        SELECT to_char((CASE WHEN status='superseded' THEN coalesce(invalid_since, updated_at) ELSE updated_at END) AT TIME ZONE $2,
-            'YYYY-MM-DD'), 0, 1
-          FROM evimed_memory.records WHERE user_id=$1 AND kind <> 'run_summary' AND scope IN ('user','project')
-            AND status IN ('archived','superseded')
-      ) AS changes GROUP BY day ORDER BY day`, [owner, String(timeZone)]);
-    return result.rows.map((/** @type {any} */ row) => ({ day: String(row.day), added: Number(row.added) || 0, ended: Number(row.ended) || 0 }));
   }
 
   /**

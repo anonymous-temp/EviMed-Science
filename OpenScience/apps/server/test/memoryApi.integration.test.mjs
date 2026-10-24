@@ -57,12 +57,14 @@ async function fixture(t, extra = {}) {
   return { app, base, headers, user };
 }
 
-test("the memory page reads its status, its rows and its search, and the note routes are gone", options, async (t) => {
+test("the memory page reads its rows and its search, and the note, status and timeline routes are gone", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
 
-  const status = await (await fetch(`${base}/api/memory/status`, { headers })).json();
-  assert.deepEqual(status.data, { configured: true, connected: true, code: null, structured: true },
-    "the status page reads these four fields; a store on the database answers all four");
+  // `GET /api/memory/status` (no page read it since the 记忆 page lost its status line) and `GET /api/memory/timeline` (none since the
+  // 成长 tab went; the overview's growth card and the map's time view are the map's own document) are not routes any more.
+  for (const path of ["/api/memory/status", "/api/memory/timeline"]) {
+    assert.equal((await fetch(`${base}${path}`, { headers })).status, 404, `GET ${path} is not a route any more`);
+  }
 
   // 「你写下的笔记」 and its three routes went with `evimed_memory.notes` on
   // 2026-09-20: a composer for exactly what the extractor already writes.

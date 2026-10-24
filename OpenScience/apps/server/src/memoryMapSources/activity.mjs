@@ -39,7 +39,9 @@ const laneOfRecord = (record) => (record.scope === "project" && record.scopeId ?
  */
 export function memoryEventsOf(records) {
   const byId = new Map(records.map((record) => [record.id, record]));
-  return records.flatMap((record) => recordEvents(record, byId).map((event) => ({
+  // A native memory is a file and its `summary` is the file's name, not what changed: its events say the words the file held (the
+  // rule the timeline's own read of a native account had, before that read was deleted with its route).
+  return records.flatMap((record) => recordEvents(record.uri ? { ...record, summary: "" } : record, byId).map((event) => ({
     id: event.id, at: event.at, type: /** @type {const} */ ("memory"), change: event.change, kind: record.kind,
     ref: nodeId("memory", record.id), lane: laneOfRecord(record), text: excerpt(event.after ?? "", 80),
   })));

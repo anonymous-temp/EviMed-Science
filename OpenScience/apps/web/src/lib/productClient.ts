@@ -1,4 +1,4 @@
-import { fetchWithWebAuth, getWebProjectId, WebApiError, webApiBase, webErrorMessage, webRetryAfterSeconds } from "./apiClient";
+import { fetchWithWebAuth, WebApiError, webApiBase, webErrorMessage, webRetryAfterSeconds } from "./apiClient";
 
 export interface ProductRecord<T> {
   id: string;
@@ -72,29 +72,8 @@ export function productErrorMessage(error: unknown): string {
   });
 }
 
-export function listCapsules({ deleted = false, cursor = null }: { deleted?: boolean; cursor?: string | null } = {}) {
-  const query = new URLSearchParams({ deleted: String(deleted) });
-  if (cursor) query.set("cursor", cursor);
-  return productRequest<ProductPage<CapsuleRecord>>(`/capsules?${query}`);
-}
-export function createCapsule(input: CapsulePayload) { return productRequest<CapsuleRecord>("/capsules", "POST", input); }
-export function listCapsuleEntries(id: string, cursor?: string | null) {
-  return productRequest<ProductPage<CapsuleEntry>>(`/capsules/${encodeURIComponent(id)}/entries${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
-}
-export function addCapsuleEntry(id: string, input: Pick<CapsuleEntryPayload, "factKind" | "layer" | "content">) {
-  return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(id)}/entries`, "POST", input);
-}
 export function updateCapsuleEntry(id: string, entryId: string, input: { expectedRevision: number; status?: string; content?: string }) {
   return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(id)}/entries/${encodeURIComponent(entryId)}`, "PATCH", input);
-}
-export function activateCapsule(id: string, mode = "own") {
-  return productRequest(`/capsules/${encodeURIComponent(id)}/activate`, "POST", { mode, projectId: getWebProjectId() });
-}
-export function trashCapsule(id: string, expectedRevision: number) {
-  return productRequest<CapsuleRecord>(`/capsules/${encodeURIComponent(id)}`, "DELETE", { expectedRevision });
-}
-export function restoreCapsule(id: string, expectedRevision: number) {
-  return productRequest<CapsuleRecord>(`/capsules/${encodeURIComponent(id)}/restore`, "POST", { expectedRevision });
 }
 
 export interface CapsuleExportSnapshot {

@@ -1,5 +1,11 @@
 /**
- * 「时间轴」 — how the capsule grew, derived when it is read.
+ * 「时间轴」 — the events of how the capsule grew, derived when they are read.
+ *
+ * What is left of the timeline (2026-10-24): its own page, route and read (`GET /api/memory/timeline`, `memoryTimeline`) are gone —
+ * no page had read them since the 成长 tab went (2026-10-17), and the 记忆总览's growth card and the map's time view are drawn
+ * from the map's own document (`memoryMap.mjs`), which cannot tell a second story. What stays is what that document is made of:
+ * the functions that turn a memory, a run, a learned method and a researcher's correction into events (`recordEvents`,
+ * `runEvents`, `methodEvents`, `feedbackTimelineEvents`) and the two helpers of a calendar day (`dayOf`, `timeZoneOrDefault`).
  *
  * Hidden knowledge: this module writes nothing, on purpose. Every event it
  * shows already has an owner — a memory's revision history (who changed it, in
@@ -18,20 +24,9 @@
 
 import { cleanMethodDisplay, isVerificationRun } from "@evimed/domain";
 
-import { HttpError, sendJson } from "./security.mjs";
-
-/** The kinds of event a timeline shows. */
-export const MEMORY_TIMELINE_TYPES = Object.freeze(["memory", "run", "method", "feedback"]);
-
-/** How many days the density band covers. */
-export const MEMORY_TIMELINE_DENSITY_DAYS = 365;
+import { HttpError } from "./security.mjs";
 
 const DEFAULT_TIME_ZONE = "Asia/Shanghai";
-const MAX_PAGE = 100;
-/** How many memories, the most recently changed, the timeline derives events
- *  from. It read every memory of the account whole on every page — up to
- *  100,000 rows of up to 100,000 characters each (security review 2026-09-20). */
-export const MEMORY_TIMELINE_RECORDS = 1000;
 
 /** @param {unknown} value @param {number} [max] */
 function excerpt(value, max = 200) {
@@ -192,104 +187,4 @@ export function timeZoneOrDefault(value) {
   } catch {
     throw new HttpError(400, "memory_timeline_invalid", "The time zone is not recognised.");
   }
-}
-
-/**
- * One page of the timeline, newest first, and the density band over the last
- * year. Each source is read bounded: the memories the account changed most
- * recently (`MEMORY_TIMELINE_RECORDS`, read light), the project's runs, the
- * newest methods and feedback. A source that cannot be read leaves its events
- * out and is named in `missing` rather than failing the page.
- *
- * `native` is the native memory engine's reader (`NativeMemoryStore.timelineRecords`) and the account's engine: an account on it has
- * its memory events read from the files' revisions, the same events from another store.
- * @param {{ researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, now?: () => Date,
- *   native?: { store: { timelineRecords: (userId: string, options: any) => Promise<any[]> }, engine: (userId: string) => Promise<string> } | null }} sources
- * @param {{ id: string }} user @param {any} project
- * @param {{ before?: string | null, limit?: number, timeZone?: string | null }} [options]
- */
-export async function memoryTimeline({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, native = null, now = () => new Date() },
-  user, project, { before = null, limit = 50, timeZone = null } = {}) {
-  const zone = timeZoneOrDefault(timeZone);
-  const pageSize = Math.max(1, Math.min(MAX_PAGE, Number(limit) || 50));
-  const cursor = before == null || before === "" ? null : instant(String(before));
-  if (before && !cursor) throw new HttpError(400, "memory_timeline_invalid", "before is not a time.");
-  /** @type {string[]} */
-  const missing = [];
-  const read = async (/** @type {string} */ name, /** @type {() => Promise<any>} */ operation, /** @type {any} */ fallback) => {
-    try { return await operation(); } catch { missing.push(name); return fallback; }
-  };
-
-  const onNative = native ? await native.engine(user.id).then((engine) => engine === "native", () => false) : false;
-  const records = await read("memory", () => (onNative && native
-    ? native.store.timelineRecords(user.id, { projectId: project.id, limit: MEMORY_TIMELINE_RECORDS })
-    : researchMemory.timelineRecords(user.id, { projectId: project.id, limit: MEMORY_TIMELINE_RECORDS })), []);
-  const byId = new Map(records.map((/** @type {any} */ record) => [record.id, record]));
-  const runs = agentRuns ? await read("runs", () => agentRuns.list(project), []) : [];
-  const methods = learning ? await read("methods", async () => (await learning.listMethods(user.id, { limit: 100 })).items ?? [], []) : [];
-  const feedback = feedbackEvents ? await read("feedback", async () => (await feedbackEvents.list(user.id, { limit: 200 })).items ?? [], []) : [];
-
-  const events = [
-    ...records.flatMap((/** @type {any} */ record) => recordEvents(record, byId)),
-    ...runs.flatMap(runEvents),
-    ...methods.flatMap(methodEvents),
-    ...feedback.flatMap(feedbackTimelineEvents),
-  ].sort((left, right) => right.at.localeCompare(left.at) || right.id.localeCompare(left.id));
-
-  const format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
-  const from = new Date(now().getTime() - MEMORY_TIMELINE_DENSITY_DAYS * 86_400_000).toISOString();
-  /** @type {Map<string, { day: string, memory: number, run: number, method: number, feedback: number }>} */
-  const density = new Map();
-  for (const item of events) {
-    if (item.at < from) continue;
-    const day = dayOf(item.at, format);
-    const bucket = density.get(day) ?? { day, memory: 0, run: 0, method: 0, feedback: 0 };
-    bucket[/** @type {"memory"|"run"|"method"|"feedback"} */ (item.type)] += 1;
-    density.set(day, bucket);
-  }
-
-  const eligible = cursor ? events.filter((item) => item.at < cursor) : events;
-  // A page never ends inside one instant. The next page is "strictly before
-  // the last time shown", so an event stamped in the same millisecond as the
-  // page's last one and cut off by the page size was on neither page. The
-  // page runs on to the end of that instant instead.
-  let end = Math.min(pageSize, eligible.length);
-  while (end < eligible.length && eligible[end].at === eligible[end - 1].at) end += 1;
-  const items = eligible.slice(0, end).map((item) => ({ ...item, day: dayOf(item.at, format) }));
-  return {
-    items,
-    nextBefore: end < eligible.length ? items.at(-1)?.at ?? null : null,
-    density: [...density.values()].sort((left, right) => left.day.localeCompare(right.day)),
-    timeZone: zone,
-    missing,
-  };
-}
-
-/**
- * `GET /api/memory/timeline?before=&limit=&timeZone=`.
- *
- * `GET /api/memory/growth` and `GET /api/memory/learned` were here until the overview of 记忆胶囊 (2026-10-23): the line of how much the
- * capsule held and the list of what was learned each day had no page that read them since the 成长 tab went (2026-10-17), and the
- * overview's growth card is drawn from the map's own document (`memoryMap.mjs`: the memories' events, the methods, the documents' days and
- * the capsule's notes, for both engines), which cannot disagree with the marks under it. Two routes nobody calls are two stories to keep
- * equal to the one that is told.
- *
- * @param {{ config: any, researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, native?: any,
- *   context: (req: any, res: any) => Promise<any> }} dependencies
- * @returns {(req: any, res: any) => Promise<boolean>}
- */
-export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, native = null, context }) {
-  return async function memoryTimelineRoutes(req, res) {
-    const url = new URL(req.url ?? "/", "http://evimed.local");
-    if (url.pathname !== "/api/memory/timeline") return false;
-    if (req.method !== "GET") throw new HttpError(405, "method_not_allowed", "The timeline is read-only.");
-    if (!researchMemory?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
-    const ctx = await context(req, res);
-    sendJson(res, 200, { data: await memoryTimeline({ researchMemory, agentRuns, feedbackEvents, learning, native }, ctx.user, ctx.project, {
-      before: url.searchParams.get("before"),
-      limit: Number(url.searchParams.get("limit") ?? 50),
-      timeZone: url.searchParams.get("timeZone"),
-    }) });
-    return true;
-  };
 }

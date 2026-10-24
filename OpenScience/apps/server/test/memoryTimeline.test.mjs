@@ -1,17 +1,10 @@
 // 「时间轴」 is derived when read: every event below comes from a record that
 // already has an owner, so nothing here writes, and nothing can be missing
-// because a writer forgot.
+// because a writer forgot. The page, route and read that listed them are gone (2026-10-24); the map's document is made of these.
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
 import test from "node:test";
 
-import {
-  MEMORY_TIMELINE_RECORDS, createMemoryTimelineRoutes, feedbackTimelineEvents, memoryTimeline, methodEvents, recordEvents, runEvents,
-} from "../src/memoryTimeline.mjs";
-import { sendError } from "../src/security.mjs";
-
-const user = { id: "usr_1" };
-const project = { id: "prj_1", userId: "usr_1" };
+import { dayOf, feedbackTimelineEvents, methodEvents, recordEvents, runEvents, timeZoneOrDefault } from "../src/memoryTimeline.mjs";
 
 function record(overrides = {}) {
   return {
@@ -86,99 +79,12 @@ test("runs, methods and the researcher's own acts are events; the platform's own
     .map((event) => event.change), ["deliverable-adopted"]);
 });
 
-function sources({ failRuns = false } = {}) {
-  const records = [
-    record({ id: "rec_1", createdAt: "2026-09-01T01:00:00Z" }),
-    record({ id: "rec_2", key: "k2", createdAt: "2026-09-10T16:30:00Z" }),
-  ];
-  return {
-    researchMemory: { configured: true, timelineRecords: async () => records },
-    agentRuns: { list: async () => { if (failRuns) throw new Error("ledger"); return [{ id: "run_1", status: "succeeded", title: "t", finishedAt: "2026-09-05T00:00:00Z" }]; } },
-    learning: { listMethods: async () => ({ items: [{ id: "mth_1", createdAt: "2026-09-08T00:00:00Z", payload: { status: "candidate", frontmatter: { name: "m" } } }] }) },
-    feedbackEvents: { list: async () => ({ items: [] }) },
-    now: () => new Date("2026-09-20T00:00:00Z"),
-  };
-}
-
-test("a page is newest first with a cursor, and the density band counts days in the researcher's zone", async () => {
-  const first = await memoryTimeline(sources(), user, project, { limit: 2 });
-  assert.deepEqual(first.items.map((item) => item.id), ["memory:rec_2:created", "method:mth_1:created"]);
-  assert.equal(first.nextBefore, "2026-09-08T00:00:00.000Z");
-  const second = await memoryTimeline(sources(), user, project, { limit: 2, before: first.nextBefore });
-  assert.deepEqual(second.items.map((item) => item.id), ["run:run_1", "memory:rec_1:created"]);
-  assert.equal(second.nextBefore, null);
+test("a calendar day is the day in the researcher's zone, and a zone that does not exist is refused by name", () => {
+  const format = (/** @type {string} */ timeZone) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
   // 16:30 UTC on 9-10 is 00:30 on 9-11 in Shanghai.
-  assert.equal(first.items[0].day, "2026-09-11");
-  assert.ok(first.density.some((bucket) => bucket.day === "2026-09-11" && bucket.memory === 1));
-  assert.equal((await memoryTimeline(sources(), user, project, { timeZone: "UTC" })).items[0].day, "2026-09-10");
-  await assert.rejects(() => memoryTimeline(sources(), user, project, { timeZone: "Mars/Olympus" }), { code: "memory_timeline_invalid" });
-  await assert.rejects(() => memoryTimeline(sources(), user, project, { before: "yesterday" }), { code: "memory_timeline_invalid" });
-
-  // A source that cannot be read is named, and the rest is still the page.
-  const partial = await memoryTimeline(sources({ failRuns: true }), user, project, {});
-  assert.deepEqual(partial.missing, ["runs"]);
-  assert.equal(partial.items.length, 3);
-});
-
-test("a page never ends inside one instant: events stamped in the same millisecond are all on one page", async () => {
-  // Three memories written in one millisecond (one import, one transaction)
-  // and an older one. The next page is "strictly before the last time
-  // shown", so a page cut after the first of the three put the other two on
-  // neither page.
-  const records = [
-    record({ id: "rec_a", key: "a", createdAt: "2026-09-10T00:00:00.123Z" }),
-    record({ id: "rec_b", key: "b", createdAt: "2026-09-10T00:00:00.123Z" }),
-    record({ id: "rec_c", key: "c", createdAt: "2026-09-10T00:00:00.123Z" }),
-    record({ id: "rec_d", key: "d", createdAt: "2026-09-01T00:00:00Z" }),
-  ];
-  const read = { researchMemory: { configured: true, timelineRecords: async () => records }, now: () => new Date("2026-09-20T00:00:00Z") };
-  /** @type {string[]} */
-  const seen = [];
-  let before = null;
-  for (let page = 0; page < 5; page += 1) {
-    const result = await memoryTimeline(read, user, project, { limit: 1, before });
-    seen.push(...result.items.map((item) => item.id));
-    before = result.nextBefore;
-    if (!before) break;
-  }
-  assert.deepEqual(seen, ["memory:rec_c:created", "memory:rec_b:created", "memory:rec_a:created", "memory:rec_d:created"],
-    "every event exactly once, newest first");
-  const first = await memoryTimeline(read, user, project, { limit: 1 });
-  assert.equal(first.items.length, 3, "the page runs on to the end of its last instant");
-  assert.equal(first.nextBefore, "2026-09-10T00:00:00.123Z");
-  const last = await memoryTimeline(read, user, project, { limit: 3 });
-  assert.equal(last.items.length, 3);
-  assert.equal(last.nextBefore, "2026-09-10T00:00:00.123Z", "an instant that exactly fills a page still has a next page");
-});
-
-test("the memory half of a page reads the most recently changed memories of the project's view, bounded", async () => {
-  // Security review 2026-09-20: every page read every memory of the account
-  // whole — up to 100,000 rows of up to 100,000 characters.
-  /** @type {any[]} */ const asked = [];
-  const source = sources();
-  source.researchMemory = { configured: true, timelineRecords: async (/** @type {string} */ userId, /** @type {any} */ options) => {
-    asked.push({ userId, ...options });
-    return [];
-  } };
-  await memoryTimeline(source, user, project, {});
-  assert.deepEqual(asked, [{ userId: "usr_1", projectId: "prj_1", limit: MEMORY_TIMELINE_RECORDS }]);
-  assert.ok(MEMORY_TIMELINE_RECORDS <= 5_000);
-});
-
-test("the route is read-only and answers only its own path", async (t) => {
-  const routes = createMemoryTimelineRoutes({ ...sources(), config: {}, context: async () => ({ user, project }) });
-  const server = createServer((req, res) => {
-    routes(req, res).then((handled) => { if (!handled) { res.statusCode = 404; res.end(); } }).catch((error) => sendError(res, error));
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const page = await (await fetch(`${base}/api/memory/timeline?limit=1&timeZone=UTC`)).json();
-  assert.equal(page.data.items.length, 1);
-  assert.equal(page.data.timeZone, "UTC");
-  assert.equal((await fetch(`${base}/api/memory/timeline`, { method: "POST" })).status, 405);
-  assert.equal((await fetch(`${base}/api/memory/other`)).status, 404);
-  // The growth line and the list of what was learned were two stories the overview's own document tells once: the routes are gone.
-  assert.equal((await fetch(`${base}/api/memory/growth`)).status, 404);
-  assert.equal((await fetch(`${base}/api/memory/learned`)).status, 404);
+  assert.equal(dayOf("2026-09-10T16:30:00Z", format("Asia/Shanghai")), "2026-09-11");
+  assert.equal(dayOf("2026-09-10T16:30:00Z", format("UTC")), "2026-09-10");
+  assert.equal(timeZoneOrDefault("UTC"), "UTC");
+  assert.equal(timeZoneOrDefault(""), "Asia/Shanghai");
+  assert.throws(() => timeZoneOrDefault("Mars/Olympus"), { code: "memory_timeline_invalid" });
 });

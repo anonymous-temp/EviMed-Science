@@ -549,21 +549,6 @@ export interface WebResearchSession {
 }
 
 /**
- * The research-memory store is part of the control plane, not a service with
- * its own account: there is no identity to show and the only codes it reports
- * are `memory_unconfigured`, `memory_schema_unavailable`, `memory_unavailable`
- * and `memory_timeout`. `structured` is absent on a status the page fabricates
- * for itself (no backend, or a failed load), so the capability is optional here
- * while the store always states it.
- */
-export interface WebMemoryStatus {
-  configured: boolean;
-  connected: boolean;
-  code: string | null;
-  structured?: boolean;
-}
-
-/**
  * The researcher's own switches over their memory. Pausing deletes nothing;
  * `resetMemory` is the separate, explicit act that does.
  */
@@ -1651,12 +1636,6 @@ export async function listWebResearchAgents(): Promise<WebResearchAgent[]> {
   if (!hasWebApi) throw new BackendUnavailableError("agents.list");
   const res = await fetchWithWebAuth(apiUrl("/agents"));
   return parseApiResponse<WebResearchAgent[]>(res);
-}
-
-export async function fetchMemoryStatus(): Promise<WebMemoryStatus> {
-  if (!hasWebApi) throw new BackendUnavailableError("memory.status");
-  const res = await fetchWithWebAuth(apiUrl("/memory/status"));
-  return parseApiResponse<WebMemoryStatus>(res);
 }
 
 export async function fetchMemorySettings(): Promise<WebMemorySettings> {
