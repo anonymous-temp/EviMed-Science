@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 ca-cert
 COPY platform/ /fixture/platform/
 COPY install-sdk.mjs make-fixtures.mjs /fixture/
 COPY validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
-COPY catalogue-fixture.mjs fixture.mjs /fixture/
+COPY catalogue-fixture.mjs catalogueWireArgs.mjs fixture.mjs /fixture/
 RUN NODE_USE_ENV_PROXY=1 node /fixture/install-sdk.mjs && node /fixture/make-fixtures.mjs \
  && mkdir -p /opt/evimed/socket /fixture/platform/node_modules \
  && ln -s /fixture/platform/node_modules /opt/evimed/socket/node_modules

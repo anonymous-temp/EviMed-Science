@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {catalogueWireArgs} from './catalogueWireArgs.mjs';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {browserSessionCookie,generateBrowserSessionSecret} from '/fixture/platform/server/dshBrowserAuth.mjs';
@@ -48,7 +49,7 @@ await fs.writeFile(profile+'/cordis.patch.yml',`
             name: '@deepseek-ai/dsh-tool-skill'
 `);
 const child=spawn(process.execPath,['/opt/sdk/node_modules/@deepseek-ai/dsh/lib/bin.js','--profile','catalogue','--host','127.0.0.1','--port','19091','--no-open'],{cwd:'/tmp/workspace',env:{PATH:process.env.PATH,HOME:home,DSH_HOME:home,DSH_TELEMETRY_DISABLED:'1',NARB_DISABLE_NATIVE_CACHE:'1'},stdio:['ignore','pipe','pipe']});let diagnostic='';for(const stream of [child.stdout,child.stderr])stream.on('data',bytes=>{diagnostic=(diagnostic+bytes).slice(-12000);});
-const call=async(method,request)=>{const response=await fetch('http://127.0.0.1:19091/api/'+method,{method:'POST',headers:{cookie:browserSessionCookie({secret,authority:'127.0.0.1:19091'}),'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'catalogue-proof',method,payload:{args:method==='session/list'?{_request:{}}:{request}}}),signal:AbortSignal.timeout(5000)});const result=await response.json();if(!result.result?.ok)throw Error(JSON.stringify(result.result?.error));return result.result.value;};
+const call=async(method,request)=>{const response=await fetch('http://127.0.0.1:19091/api/'+method,{method:'POST',headers:{cookie:browserSessionCookie({secret,authority:'127.0.0.1:19091'}),'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'catalogue-proof',method,payload:{args:catalogueWireArgs(method,request)}}),signal:AbortSignal.timeout(5000)});const result=await response.json();if(!result.result?.ok)throw Error(JSON.stringify(result.result?.error));return result.result.value;};
 try{
  let ready=false;for(let i=0;i<120;i++){try{await call('session/list',null);ready=true;break;}catch{ /* The bounded startup poll retries before reporting retained diagnostics. */ }if(child.exitCode!==null)break;await new Promise(resolve=>setTimeout(resolve,100));}if(!ready)throw Error('catalogue_kernel_not_ready '+diagnostic.replace(/token=[^\s]+/g,'token=[fixture]'));
  const sessionId='catalogue-session';await call('session/create',{sessionId,cwd:'/tmp/workspace',agentPreset:'catalogue-proof'});

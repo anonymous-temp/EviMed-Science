@@ -94,10 +94,18 @@ export async function createBudgetProxy({models,providers,token,capCny=50,ledger
  return {url:`http://127.0.0.1:${server.address().port}`,budget,wiring,close:()=>new Promise(resolve=>server.close(resolve))};
 }
 /** Install before importing/starting the isolated control plane. Unadmitted provider calls are refused. */
-export async function installBudgetFetch({scope,coordinatorUrl,tokenFile,providerOrigins,providerRoutes={},containerId=null,fetchImpl=globalThis.fetch}) {
+export async function installBudgetFetch({scope,coordinatorUrl,tokenFile,providerOrigins,providerRoutes={},nativeSessionOrigins=[],containerId=null,fetchImpl=globalThis.fetch}) {
+ const nativeOrigins=new Set();
+ if(!Array.isArray(nativeSessionOrigins))throw new Error('eval_native_session_origin_invalid');
+ for(const origin of nativeSessionOrigins){
+  let url;try{url=new URL(origin);}catch{throw new Error('eval_native_session_origin_invalid');}
+  if(typeof origin!=='string'||url.origin!==origin||!['http:','https:'].includes(url.protocol)||!['127.0.0.1','[::1]'].includes(url.hostname)||url.username||url.password||url.search||url.hash)throw new Error('eval_native_session_origin_invalid');
+  nativeOrigins.add(origin);
+ }
  const token=fs.readFileSync(tokenFile,'utf8').trim();
  const wrapped=async(input,init={})=>{
   const url=new URL(typeof input==='string'?input:input.url??String(input));
+  if(nativeOrigins.has(url.origin)&&!url.username&&!url.password&&!url.search&&!url.hash&&String(init.method??input?.method??'GET').toUpperCase()==='POST'&&/^\/api\/v1\/sessions\/[A-Za-z0-9_.@-]{1,200}\/messages$/.test(url.pathname))return fetchImpl(input,{...init,redirect:'error'});
   const route=providerRoutes[url.origin+url.pathname]??providerOrigins[url.origin];
   const descriptor=typeof route==='string'?{provider:route}:route;
   const provider=descriptor?.provider;

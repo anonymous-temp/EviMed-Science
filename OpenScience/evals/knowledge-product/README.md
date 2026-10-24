@@ -69,3 +69,14 @@ not a replacement routing hash. The operator must hold the lifetime lock and ver
 old PID/start identity before invoking recovery. The resumed proxy starts unarmed with
 no collector wiring; admission requires fresh proofs and arming. Omitting the checkpoint
 keeps new-ledger behavior and never resets an existing ledger.
+
+The fetch preload accepts an optional operator-owned `nativeSessionOrigins` list
+(default `[]`). Entries must be canonical literal loopback origins (`127.0.0.1`
+or `[::1]`, with HTTP or HTTPS). Only `POST
+/api/v1/sessions/<bounded-session-id>/messages` without a query or fragment passes
+through at those origins with headers, body and signal preserved. Redirects are
+forced to `error` so a native endpoint cannot redirect outside accounting. This is OpenViking session ingestion, not a
+model request; it neither reserves budget nor grants access to `/v1/messages` or
+other model paths. Invalid configuration fails before the boundary probe. Keep
+this list in the protected per-process wiring; the coordinator ledger and its
+identity do not change.

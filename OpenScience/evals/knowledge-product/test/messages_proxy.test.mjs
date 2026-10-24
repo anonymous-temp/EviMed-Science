@@ -1,3 +1,4 @@
+import http from 'node:http';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -44,4 +45,32 @@ test('Messages route cannot inherit a chat origin fallback',async t=>{
  assert.equal(seen.length,1);
  await wrapped('https://api.deepseek.com/anthropic/v1/messages',{body:JSON.stringify(request)});
  assert.equal(seen[1].body.protocol,'messages');assert.equal(seen[1].body.provider,'messages');assert.deepEqual(seen[1].body.request,request);
+});
+
+test('explicit native session origins preserve only exact session message POSTs',async t=>{
+ const {installBudgetFetch}=await import('../budget_proxy.mjs');
+ const original=globalThis.fetch,dir=await mkdtemp(path.join(os.tmpdir(),'native-session-route-')),tokenFile=path.join(dir,'token');await writeFile(tokenFile,'fixture');
+ t.after(async()=>{globalThis.fetch=original;await rm(dir,{recursive:true,force:true});});
+ const seen=[],native='http://127.0.0.1:19441';
+ const wrapped=await installBudgetFetch({scope:'candidate',coordinatorUrl:'http://127.0.0.1:1',tokenFile,providerOrigins:{'https://api.deepseek.com':'chat'},nativeSessionOrigins:[native],fetchImpl:async(input,init)=>{seen.push({input,init});return new Response(JSON.stringify({probe:JSON.parse(init.body).nonce}));}});
+ const signal=new AbortController().signal,init={method:'POST',headers:{'x-test':'preserved'},body:'{"role":"user","parts":[]}',signal};
+ const url=native+'/api/v1/sessions/dsh-J17_example/messages';await wrapped(url,init);
+ assert.equal(seen.length,2);assert.equal(seen[1].input,url);assert.deepEqual(seen[1].init,{...init,redirect:'error'});assert.equal(seen[1].init.signal,signal);
+ for(const target of ['http://user:pass@127.0.0.1:19441/api/v1/sessions/dsh-test/messages','http://127.0.0.1:19442/api/v1/sessions/dsh-test/messages',native+'/v1/messages',native+'/api/v1/sessions/dsh-test/messages?x=1',native+'/api/v1/sessions/dsh-test/messages#x'])await assert.rejects(wrapped(target,init));
+ await assert.rejects(wrapped(url,{...init,method:'GET'}));assert.equal(seen.length,2);
+ for(const origin of ['https://example.com','http://localhost:19441','http://127.0.0.1:19441/','http://127.0.0.1:19441/path','http://user@127.0.0.1:19441',native+'?x=1'])await assert.rejects(installBudgetFetch({scope:'candidate',coordinatorUrl:'http://127.0.0.1:1',tokenFile,providerOrigins:{'https://api.deepseek.com':'chat'},nativeSessionOrigins:[origin],fetchImpl:async()=>{throw Error('must not probe');}}),/eval_native_session_origin_invalid/);
+ assert.equal(seen.length,2);
+});
+
+for(const status of [307,308])test(`native session redirect ${status} never reaches an unmetered target`,async t=>{
+ const {installBudgetFetch}=await import('../budget_proxy.mjs');
+ const original=globalThis.fetch,dir=await mkdtemp(path.join(os.tmpdir(),'native-redirect-')),tokenFile=path.join(dir,'token');await writeFile(tokenFile,'fixture');
+ let hits=0;const target=http.createServer((req,res)=>{hits++;res.end('{}');});
+ await new Promise(resolve=>target.listen(0,'127.0.0.1',resolve));
+ const source=http.createServer((req,res)=>{res.writeHead(status,{location:`http://127.0.0.1:${target.address().port}/v1/messages`});res.end();});
+ await new Promise(resolve=>source.listen(0,'127.0.0.1',resolve));
+ t.after(async()=>{globalThis.fetch=original;await Promise.all([new Promise(r=>source.close(r)),new Promise(r=>target.close(r))]);await rm(dir,{recursive:true,force:true});});
+ const origin=`http://127.0.0.1:${source.address().port}`;
+ const wrapped=await installBudgetFetch({scope:'candidate',coordinatorUrl:'http://127.0.0.1:1',tokenFile,providerOrigins:{'https://api.deepseek.com':'chat'},nativeSessionOrigins:[origin],fetchImpl:async(input,init)=>String(input).endsWith('/__eval/probe')?new Response(JSON.stringify({probe:JSON.parse(init.body).nonce})):original(input,init)});
+ await assert.rejects(wrapped(origin+'/api/v1/sessions/dsh-test/messages',{method:'POST',body:'{}',redirect:'follow'}));assert.equal(hits,0);
 });

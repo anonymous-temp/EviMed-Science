@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { catalogueWireArgs } from '../../../apps/server/test/fixtures/catalogueWireArgs.mjs'
 import test from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -96,6 +97,14 @@ test('registered catalogue exposes caller wire fields and separate cancellation'
   await assert.rejects(service.snapshotBuiltin(f.agent.id, listed.items[0].key), /skill_catalogue_unavailable/)
 })
 
+test('extension catalogue fixture flattens catalogue calls without changing kernel session envelopes', () => {
+  const input = { sessionId: 'fixture-session', key: 'builtin:example' }
+  for (const method of ['list', 'read', 'snapshotBuiltin']) assert.equal(catalogueWireArgs('evimedSkills/' + method, input), input)
+  assert.deepEqual(catalogueWireArgs('session/list', null), { _request: {} })
+  assert.deepEqual(catalogueWireArgs('session/create', input), { request: input })
+  assert.deepEqual(catalogueWireArgs('evimedSkills/futureMethod', input), { request: input })
+})
+
 // Supply a qualified seed's profile/node_modules directory; no kernel binary or provider is started.
 test('pinned gateway dispatch accepts flat catalogue arguments', { skip: !process.env.EVIMED_TEST_SEED_MODULES }, async t => {
   const { createRequire } = await import('node:module')
@@ -109,7 +118,7 @@ test('pinned gateway dispatch accepts flat catalogue arguments', { skip: !proces
   const gateway = new TypertGatewayService(f.ctx, {})
   await registerScopedSkillCatalogue(f.ctx, { roots: [{ root: f.builtin, source: 'builtin', duplicate: true }, { root: f.community, source: 'community', duplicate: true }] })
   const peer = { principal: { kind: 'owner' }, signal: new globalThis.AbortController().signal }
-  const call = (/** @type {string} */ method, /** @type {any} */ args) => gateway.invoke({ namespace: 'evimedSkills', method, args, peer })
+  const call = (/** @type {string} */ method, /** @type {any} */ args) => gateway.invoke({ namespace: 'evimedSkills', method, args: catalogueWireArgs('evimedSkills/' + method, args), peer })
   assert.deepEqual(gateway.resolveDescriptor('evimedSkills', 'list', 'evimedSkills/list').parameters.map((/** @type {any} */ item) => item.wire), ['sessionId'])
   const listed = await call('list', { sessionId: f.agent.id })
   assert.equal(listed.complete, true)
