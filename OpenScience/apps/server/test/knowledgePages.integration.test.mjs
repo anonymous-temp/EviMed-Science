@@ -247,6 +247,45 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     page = (await api(`/api/knowledge-pages/page?sourceId=${saved.body.data.page.sourceId}`)).body.data;
     assert.ok(page.markdown.includes(mine));
 
+    // ---- 5b. a write-back is a checked write: a page the engine changed behind the ledger is not overwritten ----------------
+    // The engine's own Compile rewrote the page after the last mirror (here: the stub is told to). The person saves again from
+    // the ledger's copy: the write names the hash the engine held when the page was last mirrored, the engine refuses it, the
+    // save is queued — and the next round drops it instead of overwriting, because the person's paragraph is on the record
+    // and the round names it to the compile and puts it back after.
+    const alphaUri = `${roots.wiki}/concept/Alpha 协议.md`;
+    const engineWrote = `${edited}\n引擎在两次整理之间改写了这一页。\n`;
+    engine.put(alphaUri, engineWrote);
+    const mine2 = "团队备注（二）：同步周期的现场配置由运维组维护。";
+    const second2 = await api("/api/knowledge-pages/page", { method: "PUT", body: JSON.stringify({ sourceId: alphaPage.sourceId, markdown: edited.replace("## 相关", `${mine2}\n\n## 相关`), baseSha256: sha256(edited) }) });
+    assert.equal(second2.status, 200, JSON.stringify(second2.body));
+    assert.deepEqual([second2.body.data.changed, second2.body.data.writeBack], [true, "queued"], "the write went over a page the engine had changed");
+    assert.equal(engine.text(alphaUri), engineWrote, "the engine's page was overwritten");
+    assert.equal((await api(`/api/knowledge-pages?projectId=${project.id}`)).body.data.writeBacksQueued, 1);
+    const conflictsBefore = app.knowledgePages.status().writeBackConflicts;
+    compiles.length = 0;
+    await api("/api/knowledge-pages/compile", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    await compileRound();
+    assert.equal(app.knowledgePages.status().writeBackConflicts, conflictsBefore + 1, "the refused save was not counted");
+    assert.equal((await api(`/api/knowledge-pages?projectId=${project.id}`)).body.data.writeBacksQueued, 0, "a save the engine refused stays queued for ever");
+    assert.ok(compiles[0].instruction.includes(mine2), "the compile was not told about the paragraph the refused save carried");
+    // What the round mirrored is the engine's page with the person's paragraphs put back: both are on the engine and in the ledger.
+    page = (await api(`/api/knowledge-pages/page?sourceId=${saved.body.data.page.sourceId}`)).body.data;
+    assert.ok(page.markdown.includes(mine) && page.markdown.includes(mine2), "a paragraph of the person's was lost");
+    assert.equal(engine.text(alphaUri), page.markdown, "the engine's page and the ledger's disagree after the round");
+    // A directory the engine is still processing is a busy refusal, not a changed page: the save stays queued to be tried again.
+    engine.setBusy(`${roots.wiki}/concept`);
+    const third2 = await api("/api/knowledge-pages/page", { method: "PUT", body: JSON.stringify({ sourceId: alphaPage.sourceId, markdown: `${page.markdown}\n补充一行。\n`, baseSha256: page.sha256 }) });
+    assert.deepEqual([third2.status, third2.body.data.writeBack], [200, "queued"]);
+    engine.setBusy(`${roots.wiki}/concept`, false);
+    const conflictsAfter = app.knowledgePages.status().writeBackConflicts;
+    compiles.length = 0;
+    await api("/api/knowledge-pages/compile", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    await compileRound();
+    assert.equal(app.knowledgePages.status().writeBackConflicts, conflictsAfter, "a busy directory was counted as a changed page");
+    assert.ok(engine.text(alphaUri)?.includes("补充一行。"), "the save that found the directory busy was not written when it was tried again");
+    page = (await api(`/api/knowledge-pages/page?sourceId=${saved.body.data.page.sourceId}`)).body.data;
+    assert.equal(engine.text(alphaUri), page.markdown);
+
     // ---- 6. a document is removed: its pages are labelled at once, the engine's copy goes, a recompile is queued -----
     const beta = await app.sourceService.get(user.id, ids["beta.txt"]);
     const dependents = await api(`/api/sources/${ids["beta.txt"]}/dependents`);

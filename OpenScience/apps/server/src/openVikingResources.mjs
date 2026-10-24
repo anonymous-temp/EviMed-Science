@@ -312,15 +312,32 @@ export class OpenVikingResources {
   // Writing a page back
 
   /**
-   * Write one page of a compiled tree: a person's edit, or their blocks put back after a compile. Unlike a source this
-   * is written in the engine's default mode, so the page's summary and vector follow its new text. v0.5.0 has no
-   * version precondition on this route — the caller makes sure no compile is writing the same target.
+   * Write one page of a compiled tree back — a person's edit, or their blocks put back after a compile — as a checked write:
+   * one `batch-write` operation that names the hash of the bytes the caller last read (`expectedSha256`), so a page the
+   * engine's own Compile changed since is not overwritten. Unlike a source it is written in the engine's default mode, so
+   * the page's summary and vector follow its new text; `wait` (the default) answers once that is done, which is also what
+   * keeps the next write to the same directory from finding it busy. A page whose bytes are no longer the ones named
+   * @param {{ expectedSha256: string, wait?: boolean }} options `expectedSha256`: the hex digest of the file as last read
+   * answers `knowledge_page_engine_changed` (409) and is not written; a directory still being processed answers the
+   * client's `memory_index_conflict` (retryable). Before v0.5.1 the route had no precondition and the caller had to make
+   * sure no compile was writing the same target.
    * @param {string} userId @param {string} uri @param {string} content
    */
-  async writePage(userId, uri, content) {
-    const written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: WRITE_TIMEOUT_MS,
-      body: { uri, content: String(content ?? ""), mode: "replace", wait: false } });
-    return { uri, bytes: Number(written?.result?.written_bytes) || 0 };
+  async writePage(userId, uri, content, { expectedSha256, wait = true }) {
+    if (!/^[a-f0-9]{64}$/.test(String(expectedSha256 ?? ""))) throw new HttpError(500, "knowledge_write_back_invalid", "A write-back always names the hash of the page it replaces.");
+    const parent = String(uri).slice(0, String(uri).lastIndexOf("/"));
+    try {
+      await this.client.request({ method: "POST", path: "/api/v1/content/batch-write", userId, timeoutMs: WRITE_TIMEOUT_MS,
+        body: { root_uri: parent, wait: Boolean(wait), operations: [{ uri, content: String(content ?? ""), mode: "replace", expected_sha256: expectedSha256 }] } });
+    } catch (error) {
+      // 409 is two refusals: the directory is still being processed (`path_busy`, retryable), and the page is not the
+      // one that was read ("Content revision changed", or no longer there).
+      if (/** @type {any} */ (error)?.code === "memory_index_conflict" && /** @type {any} */ (error)?.upstreamDetails?.conflict_type !== "path_busy") {
+        throw new HttpError(409, "knowledge_page_engine_changed", "The page in the engine is not the one this write was made against.");
+      }
+      throw error;
+    }
+    return { uri, bytes: Buffer.byteLength(String(content ?? "")) };
   }
 
   /** Remove a whole subtree (a project's resources, a staging directory). @param {string} userId @param {string} uri */

@@ -32,7 +32,10 @@ import { projectSourceManifestRecord, sourceIndexDocument } from "./sourceServic
  * - **A person's edit is a ledger revision first, then a write-back.** Their blocks are kept on the page's record,
  *   named verbatim in every compile instruction, and put back by code after a compile that dropped them (measured: the
  *   engine keeps them one recompile and loses them the next). A compile and a write-back never touch one target at
- *   the same time: while a round runs, a save is queued and written when the round ends.
+ *   the same time: while a round runs, a save is queued and written when the round ends. Since v0.5.1.1 that is also a
+ *   checked write: a write-back names the hash of the bytes the engine held when the page was last mirrored or written
+ *   (`engineSha256`), and a page the engine's Compile changed since is refused by the engine (409) and not overwritten —
+ *   the mirror and its re-application then put the person's blocks on the engine's newer text.
  * - **Quotation labels are laid on afterwards.** For every source link whose title carries a quotation, whether it is
  *   in the captured text of the document it names (`checkPageQuotations`). ✓ and ⚠ are stored beside the page; a page
  *   or a sentence without a quotation simply has no label, and no page waits for or is refused by any of it.
@@ -137,7 +140,7 @@ export class KnowledgePageService {
   constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, libraryText = null, now = () => new Date(), report = () => {} }) {
     this.config = config; this.documents = documents; this.jobs = jobs; this.sources = sources; this.store = store;
     this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.now = now; this.report = report;
-    this.counters = { rounds: 0, failed: 0, compiles: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, limited: 0, deferred: 0,
+    this.counters = { rounds: 0, failed: 0, compiles: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, writeBackConflicts: 0, limited: 0, deferred: 0,
       quotationsPresent: 0, quotationsAbsent: 0, tokens: 0, misplaced: 0 };
   }
 
@@ -566,6 +569,8 @@ export class KnowledgePageService {
         const bytes = await this.resources.download(userId, entry.uri);
         if (!bytes) continue;
         const engineText = bytes.toString("utf8");
+        // The hash of what the engine holds for this page after this pass: its bytes, or the text written over them below.
+        let engineHash = sha256(bytes);
         if (isTypedKnowledgePage(rel, engineText)) summary.typed += 1;
         const record = known.get(rel);
         let text = engineText;
@@ -576,17 +581,23 @@ export class KnowledgePageService {
           if (applied.changed) {
             text = applied.markdown;
             restored = [...applied.restored, ...applied.removedAgain];
-            await this.resources.writePage(userId, entry.uri, text);
+            await this.resources.writePage(userId, entry.uri, text, { expectedSha256: engineHash });
+            engineHash = sha256(text);
             this.counters.writeBacks += 1; this.counters.blocksRestored += restored.length; summary.restored += restored.length;
           }
         }
         const digest = sha256(text);
-        if (record && record.sha256 === digest) { summary.unchanged += 1; continue; }
+        if (record && record.sha256 === digest) {
+          summary.unchanged += 1;
+          // Keep the hash a later write-back names true to the engine's bytes (a re-applied page changed them under the record).
+          if (record.engineSha256 !== engineHash) await this.#savePage(userId, projectId, tree, rel, (value) => value && ({ ...value, engineSha256: engineHash }));
+          continue;
+        }
         const described = await this.#describe(userId, projectId, tree, rel, text, texts);
         const written = await this.entries.writePage({ user, project, tree, rel, buffer: Buffer.from(text, "utf8"), title: described.title });
         const at = this.now().toISOString();
         await this.#savePage(userId, projectId, tree, rel, (value) => ({
-          recordType: PAGE_RECORD, projectId, tree, path: rel, uri: entry.uri, pageSourceId: written.source.id, sha256: digest, engineSha256: sha256(engineText),
+          recordType: PAGE_RECORD, projectId, tree, path: rel, uri: entry.uri, pageSourceId: written.source.id, sha256: digest, engineSha256: engineHash,
           type: described.type, title: described.title, typed: described.typed, dependsOn: described.dependsOn, links: described.links, quotations: described.quotations,
           userEdits: value?.userEdits ?? null, basis: value?.userEdits ? "user" : "compiler",
           restored: restored.length ? { at, count: restored.length, round } : value?.restored ?? null,
@@ -615,7 +626,37 @@ export class KnowledgePageService {
     return summary;
   }
 
-  /** Write the saves that were queued while a round ran, or while the engine could not be reached. @param {any} user @param {any} project */
+  /**
+   * The hash a write-back to one page names: the bytes the engine held when the page was last mirrored or written back
+   * (`engineSha256` of its record) or, for a record that carries none, the bytes it holds now.
+   * @param {string} userId @param {string} uri @param {any} record
+   */
+  async #expectedHash(userId, uri, record) {
+    if (/^[a-f0-9]{64}$/.test(String(record?.engineSha256 ?? ""))) return /** @type {string} */ (record.engineSha256);
+    const bytes = await this.resources.download(userId, uri);
+    if (!bytes) throw new HttpError(409, "knowledge_page_engine_changed", "The page is no longer in the engine.");
+    return sha256(bytes);
+  }
+
+  /**
+   * Write one page of the ledger back to the engine as a checked write, and remember the hash of what it now holds.
+   * @param {string} userId @param {string} projectId @param {"wiki" | "kg"} tree @param {string} rel @param {string} text
+   * @param {{ wait?: boolean }} [options]
+   */
+  async #writeBack(userId, projectId, tree, rel, text, { wait = true } = {}) {
+    const uri = `${this.resources.treeUri(userId, projectId, tree)}/${rel}`;
+    const record = (await this.documents.get(userId, "knowledge", pageId(projectId, tree, rel)))?.payload ?? null;
+    await this.resources.writePage(userId, uri, text, { expectedSha256: await this.#expectedHash(userId, uri, record), wait });
+    this.counters.writeBacks += 1;
+    await this.#savePage(userId, projectId, tree, rel, (value) => value && ({ ...value, engineSha256: sha256(text) }));
+  }
+
+  /**
+   * Write the saves that were queued while a round ran, or while the engine could not be reached. A save whose page the
+   * engine's Compile has changed since it was last read is not written: it is dropped from the queue (counted), because
+   * its blocks are on the page's record and the round that follows names them to the compile and puts them back.
+   * @param {any} user @param {any} project
+   */
   async #flushWriteBacks(user, project) {
     const { value } = await this.#state(user.id, project.id);
     const queued = Array.isArray(value.writeBacks) ? value.writeBacks : [];
@@ -625,11 +666,11 @@ export class KnowledgePageService {
     for (const entry of queued) {
       try {
         const text = await this.entries.readPage(project, entry.tree, entry.path);
-        if (text != null) {
-          await this.resources.writePage(user.id, `${this.resources.treeUri(user.id, project.id, entry.tree)}/${entry.path}`, text);
-          this.counters.writeBacks += 1;
-        }
-      } catch (error) { left.push(entry); this.report(codeOf(error)); }
+        if (text != null) await this.#writeBack(user.id, project.id, entry.tree, entry.path, text);
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code === "knowledge_page_engine_changed") { this.counters.writeBackConflicts += 1; this.report("knowledge_page_engine_changed"); continue; }
+        left.push(entry); this.report(codeOf(error));
+      }
     }
     await this.#updateState(user.id, project.id, (state) => {
       const done = new Set(queued.filter((entry) => !left.includes(entry)).map((entry) => `${entry.tree}/${entry.path}`));
@@ -870,7 +911,9 @@ export class KnowledgePageService {
     let writeBack = "queued";
     const { value: state } = await this.#state(user.id, project.id);
     if (this.resources?.configured && !state.run) {
-      try { await this.resources.writePage(user.id, uri, text); writeBack = "written"; this.counters.writeBacks += 1; }
+      // Not waited for: the person's save answers when the file is written, not when the engine has summarised it. A second
+      // save inside those seconds finds the directory busy and is queued, like any write the engine could not take.
+      try { await this.#writeBack(user.id, project.id, where.tree, where.rel, text, { wait: false }); writeBack = "written"; }
       catch (error) { this.report(codeOf(error)); }
     }
     if (writeBack === "queued") {

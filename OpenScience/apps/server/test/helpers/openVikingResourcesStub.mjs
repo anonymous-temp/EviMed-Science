@@ -9,6 +9,11 @@
 
 /** @typedef {{ content: Buffer, tags: string[], modTime: string }} StubFile */
 
+import { createHash } from "node:crypto";
+
+/** @param {Buffer | string} bytes */
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
 /**
  * @param {{ compile?: (request: { from: string[], to: string, skill: string, instruction: string | null, user: string }, engine: ReturnType<typeof createOpenVikingStub>) => void | Promise<void>,
  *   compileUsage?: { input_tokens: number, output_tokens: number, total_tokens: number } }} [options]
@@ -27,6 +32,8 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
   let taskSeq = 0;
   /** How many polls a task stays running before it ends. */
   let pollsToFinish = 1;
+  /** Directories a write is refused in as busy (`path_busy`), the way the engine's are while a write is processed. @type {Set<string>} */
+  const busy = new Set();
 
   const stamp = () => new Date((clock += 1000)).toISOString();
   const ok = (/** @type {unknown} */ result, extra = {}) => json(200, { status: "ok", result, error: null, ...extra });
@@ -52,6 +59,8 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
     setPollsToFinish(/** @type {number} */ value) { pollsToFinish = value; },
 
     /** The `fetch` the client is given. @param {string | URL} input @param {RequestInit} [init] */
+    /** Make writes under one directory answer `path_busy` (or not). @param {string} root @param {boolean} [value] */
+    setBusy(root, value = true) { if (value) busy.add(root); else busy.delete(root); },
     async fetch(input, init = {}) {
       if (down) throw Object.assign(new Error("connect ECONNREFUSED"), { name: "TypeError" });
       const url = new URL(String(input));
@@ -76,6 +85,29 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
       }
       if (path === "/api/v1/content/set_tags" && method === "POST") {
         const file = files.get(uri);
+      if (path === "/api/v1/content/batch-write" && method === "POST") {
+        const root = String(body.root_uri ?? "");
+        if (!root || !allowed(root, user)) return fail(403, "PERMISSION_DENIED", "Access denied");
+        if (busy.has(root)) return json(409, { status: "error", result: null, error: { code: "CONFLICT", message: `resource is busy and cannot be written now: ${root}`, details: { resource: root, uri: root, conflict_type: "path_busy", retryable: true } } });
+        /** @type {string[]} */ const created = [];
+        /** @type {string[]} */ const updated = [];
+        /** @type {Array<{ uri: string, code: string, message: string }>} */ const conflicts = [];
+        for (const operation of body.operations ?? []) {
+          const target = String(operation.uri);
+          const held = files.get(target);
+          const wanted = operation.expected_sha256;
+          const refusal = wanted && !held ? `Expected content no longer exists: ${target}`
+            : wanted && sha256(held?.content ?? "") !== wanted ? `Content revision changed: ${target}` : null;
+          if (refusal) {
+            if (!body.skip_conflicts) return json(409, { status: "error", result: null, error: { code: "CONFLICT", message: refusal, details: {} } });
+            conflicts.push({ uri: target, code: "CONFLICT", message: refusal });
+            continue;
+          }
+          (held ? updated : created).push(target);
+          files.set(target, { content: Buffer.from(String(operation.content ?? ""), "utf8"), tags: held?.tags ?? [], modTime: stamp() });
+        }
+        return ok({ root_uri: root, created, updated, unchanged: [], queue_status: null, semantic_status: "complete", vector_status: "complete", ...(conflicts.length ? { conflicts } : {}) });
+      }
         if (!file) return fail(404, "NOT_FOUND", "not found");
         file.tags = body.tags;
         return ok({ uri, tags: body.tags });

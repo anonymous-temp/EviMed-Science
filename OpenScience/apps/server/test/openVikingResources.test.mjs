@@ -115,6 +115,51 @@ test("an engine that has no file to replace is answered with a create, and any o
   });
 });
 
+test("a page is written back as one checked operation: the hash it was read at, and a changed page is refused and left alone", async () => {
+  const pageBody = (await fixture("provenance")).fixtures["content-batch-write-checked"].request_body;
+  const written = readdress(await fixture("content-batch-write-checked"));
+  const stale = await fixture("content-batch-write-checked-stale");
+  const missing = await fixture("content-batch-write-checked-missing");
+  const busy = await fixture("content-batch-write-checked-busy");
+  assert.equal(pageBody.operations[0].mode, "replace");
+  assert.match(pageBody.operations[0].expected_sha256, /^[a-f0-9]{64}$/);
+  const uri = `${OUR_ROOT}/wiki/concept/page.md`;
+  const hash = "a".repeat(64);
+  await withEngine(() => ({ body: written }), async ({ resources, seen }) => {
+    const done = await resources.writePage(USER, uri, "---\ntype: concept\n---\n\nnew\n", { expectedSha256: hash });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].path, "/api/v1/content/batch-write");
+    assert.deepEqual(seen[0].body, { root_uri: `${OUR_ROOT}/wiki/concept`, wait: true, operations: [{ uri, content: "---\ntype: concept\n---\n\nnew\n", mode: "replace", expected_sha256: hash }] });
+    assert.equal(done.bytes, Buffer.byteLength("---\ntype: concept\n---\n\nnew\n"));
+    assert.equal(seen[0].headers["x-openviking-user"], openVikingUserId(USER));
+    assert.equal(seen[0].headers["x-openviking-role"], undefined);
+  });
+  // A save that must answer at once does not wait for the summary and the vector.
+  await withEngine(() => ({ body: written }), async ({ resources, seen }) => {
+    await resources.writePage(USER, uri, "x\n", { expectedSha256: hash, wait: false });
+    assert.equal(seen[0].body.wait, false);
+  });
+  // The page is not the one that was read: 409 CONFLICT "Content revision changed" (or the file is gone) is the caller's
+  // `knowledge_page_engine_changed`; a directory still being processed is the client's own conflict, which the caller retries.
+  for (const refusal of [stale, missing]) {
+    await withEngine(() => ({ status: 409, body: refusal }), async ({ resources, seen }) => {
+      await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), { code: "knowledge_page_engine_changed", status: 409 });
+      assert.equal(seen.length, 1, "a changed page was retried");
+    });
+  }
+  assert.equal(busy.error.details.conflict_type, "path_busy");
+  await withEngine(() => ({ status: 409, body: busy }), async ({ resources }) => {
+    await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), { code: "memory_index_conflict", upstreamDetails: { retryable: true } });
+  });
+  // No write goes out without the hash it is checked against.
+  await withEngine(() => ({ body: written }), async ({ resources, seen }) => {
+    for (const bad of [undefined, "", "abc", "A".repeat(64)]) {
+      await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: /** @type {any} */ (bad) }), { code: "knowledge_write_back_invalid" });
+    }
+    assert.equal(seen.length, 0);
+  });
+});
+
 test("the documents under sources/ are listed page by page with what their tags say", async () => {
   const pages = [readdress(await fixture("fs-ls-page-1")), readdress(await fixture("fs-ls-page-2")), { status: "ok", result: [], has_more: false }];
   await withEngine(({ query }) => ({ body: pages[Number(query.get("offset") ?? 0) / 2] ?? pages[2] }), async ({ resources, seen }) => {
