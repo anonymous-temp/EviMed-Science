@@ -320,7 +320,7 @@ describe("知识库", () => {
 
     it.each([
       ["a saved page", page, "网页 · nmpa.gov.cn · 链接"],
-      ["a note", note, "笔记 · 300 B · 笔记"],
+      ["a note", note, "笔记 · 300 B"],
       ["a cloud-drive document", policy, "制度文件 · 42 页 · 网盘"],
     ])("says where %s came from", async (_name, source, meta) => {
       mocks.listSources.mockResolvedValue(listing([source]));
