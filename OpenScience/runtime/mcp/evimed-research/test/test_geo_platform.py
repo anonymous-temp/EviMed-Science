@@ -133,6 +133,7 @@ class GeoReadTests(_GatewayCase):
             {"viewId": "V02", "timeGrain": "round", "dimension": "engine"},
             {"viewId": "V03", "metricId": "M-01", "dimension": "group"},
             {"viewId": "V08", "metricId": "M-16", "entityKey": "registered-rival", "timeGrain": "round"},
+            {"viewId": "V09"},
             {"viewId": "V05", "entityKind": "generic", "entityKey": "Preserved generic", "dimension": "group"},
         ]:
             result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})

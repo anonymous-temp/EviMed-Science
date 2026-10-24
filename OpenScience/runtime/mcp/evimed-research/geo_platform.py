@@ -115,7 +115,7 @@ def tool_definitions():
                             "groupIds": {"type": "array", "items": ID, "maxItems": 100},
                             "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
                             "selectionRef": ID,
-                            "viewId": {"type": "string", "enum": ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V11", "V12", "V14"]},
+                            "viewId": {"type": "string", "enum": ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09", "V11", "V12", "V14"]},
                             "metricId": {"type": "string", "pattern": "^M-[0-9]{2}[A-Z]?$"},
                             "dimension": {"type": "string", "enum": ["project", "engine", "group"]},
                             "categoryMode": {"type": "string", "enum": ["original_group", "client_tags"]},
