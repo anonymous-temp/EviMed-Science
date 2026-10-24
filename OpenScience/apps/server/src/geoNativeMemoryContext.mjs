@@ -69,6 +69,33 @@ export class GeoNativeMemoryContext {
     return context;
   }
 
+  assertUri(context, value) {
+    const uri = canonicalUri(value);
+    if (uri !== context.userRoot && !uri.startsWith(`${context.userRoot}/`)) throw refused();
+    return uri;
+  }
+
+  /** Policy initialization and explicit pause/resume share one namespace lock.
+   * Restating types must not race a pause and accidentally enable extraction.
+   * Lifecycle callers may use a retained historical namespace here as well.
+   */
+  async configure(context, { learning = null } = {}) {
+    if (context.kind !== 'geo-project' || learning !== null && typeof learning !== 'boolean') throw refused();
+    return this.withOwner(context.ownerId, async (_created, client) => {
+      await this.assertKnown(context);
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`native-memory-policy:${context.namespaceId}`]);
+      await context.sessions.register(context.ownerId);
+      const current = await context.sessions.settings(context.ownerId);
+      const enabled = learning ?? (current?.learning !== false);
+      const expected = [...context.sessions.memoryTypes].sort();
+      const matches = value => value?.learning === enabled && canonicalJson(value?.memoryTypes?.slice().sort()) === canonicalJson(expected);
+      if (matches(current)) return current;
+      const applied = await context.sessions.setLearning(context.ownerId, enabled);
+      if (!matches(applied)) throw refused();
+      return applied;
+    });
+  }
+
   /** Historical exports may use an old project incarnation, but never an old
    * account. Only live forwarding additionally requires the current project.
    */
