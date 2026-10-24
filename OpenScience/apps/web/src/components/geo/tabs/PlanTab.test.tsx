@@ -361,3 +361,41 @@ it("creates the first ordinary session before staging a plan draft",async()=>{
   expect(open).toHaveBeenCalledTimes(1);
   expect(open).toHaveBeenCalledWith(expect.objectContaining({projectId:project.projectId,sessionId:"created-plan-session",geoPlanContext:{referenceId:"gpc_first_plan"}}),"Selected unsent plan");
 });
+
+
+it("shows three narrative-only tiers and their metric qualifications to a reader without inventing numeric targets", async () => {
+  const summaries = [
+    "除平台硬线外不写效果预测：g1 仅 1 条回答且未判定，M-01、M-06 均为 not_measurable（0/0）；位置数与预算也未取得依据。",
+    "平台默认档位。除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+    "除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+  ];
+  const note = "平台准确率硬线 98%，不是本项目基线推算；g1 的 M-06 判定为 0/0（not_adjudicated），基线不可测。";
+  const plan: GeoStrategyView = { ...strategyFilled, targets: { ...strategyFilled.targets, rows: [] },
+    tiers: strategyFilled.tiers.map((tier, index) => ({ ...tier, name: null, summary: summaries[index], buys: null, notPromised: [], contentUnits: null,
+      placements: null, budgetCny: null, targetCount: 0, targetNotes: [{ metricId: "M-06", name: "事实准确率", pool: "P2", note }] })) };
+  client.getGeoStrategy.mockResolvedValue(plan);
+  const viewer = { ...project, access: { roles: ["viewer"], abilities: ["read"], owner: false } };
+  const view = render(<MemoryRouter><GeoFrameHarness project={viewer} tab="plan"><PlanTab geoId="geo_1" project={viewer} /></GeoFrameHarness></MemoryRouter>);
+  await screen.findByRole("heading", { name: "目标" });
+  const cards = [...view.container.querySelectorAll<HTMLElement>("[data-geo-tier]")];
+  expect(cards).toHaveLength(3);
+  cards.forEach((card, index) => {
+    expect(within(card).getByText(summaries[index])).toBeInTheDocument();
+    const notes = within(card).getByRole("list", { name: "指标说明" });
+    expect(notes).toHaveTextContent("事实准确率"); expect(notes).toHaveTextContent("P2"); expect(notes).toHaveTextContent(note);
+    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    expect(card).not.toHaveTextContent(/已达到|月.*日前|预算|0 个投放位|0 篇稿件/);
+  });
+  expect(view.container.querySelectorAll("[data-geo-target], [data-bullet-target], [role=progressbar]")).toHaveLength(0);
+});
+
+it("keeps non-head metric notes and multiline plain text visible without interpreting markup", async () => {
+  const extra = "First\n\n<script>plain text</script>";
+  client.getGeoStrategy.mockResolvedValue({ ...strategyFilled, tiers: strategyFilled.tiers.map(tier => ({ ...tier,
+    targetNotes: [{ metricId: "M-09", name: "Other metric", pool: null, note: extra }] })) });
+  const view = renderPlan(); await screen.findByRole("heading", { name: "目标" });
+  expect(screen.getAllByRole("list", { name: "指标说明" })).toHaveLength(3);
+  expect(screen.getAllByText("Other metric")).toHaveLength(3);
+  expect(screen.getAllByText(/<script>plain text<\/script>/)).toHaveLength(3);
+  expect(view.container.querySelector("script")).toBeNull();
+});
