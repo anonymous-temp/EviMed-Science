@@ -352,3 +352,12 @@ test("a compile reports its tokens under meta.pipeline.tokens, and the request i
   assert.deepEqual(Object.keys(request).sort(), ["from", "skill", "to"], "a compile is submitted with no args and no other field");
   assert.match(provenanceOf["compile-submit"].request_headers["Idempotency-Key"], /^[A-Za-z0-9_-]{16,128}$/);
 });
+
+test("a recorded memory consolidation is read into the task the native worker settles", async () => {
+  const { memoryConsolidationTask } = await import("../../../apps/server/src/openVikingResources.mjs");
+  const fixture = await readJson("./fixtures/memory/consolidation-task.json");
+  const task = memoryConsolidationTask(fixture.response.result);
+  assert.equal(task.status, "completed");
+  assert.equal(task.terminal, true);
+  assert.deepEqual([task.result.adds, task.result.updates, task.result.deletes, task.result.errors], [[], [], [], []]);
+});

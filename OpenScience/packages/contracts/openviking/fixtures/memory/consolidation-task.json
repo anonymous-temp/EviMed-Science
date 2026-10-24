@@ -1,7 +1,17 @@
 {
-  "recordedAt": "2026-10-24T07:08:01Z",
-  "engine": "ghcr.io/volcengine/openviking:v0.5.1.1",
-  "note": "POST /api/v1/compile {to: <memories root>, skill: \"memory\", instruction} on an isolated lab engine, then GET /api/v1/tasks/<id>: three conversations' memory files, no duplicate left for it to merge, so adds/updates/deletes are empty and every file was byte-identical afterwards.",
+  "note": "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>, skill: memory, instruction}) read back: three conversations' files, nothing duplicated, so adds/updates/deletes are empty and the files were byte-identical afterwards (lab, 2026-10-24).",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tasks/0f1e10fa-39c5-42b2-b79b-8c86f3219dd8",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-consolidation"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
   "response": {
     "status": "ok",
     "result": {

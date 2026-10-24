@@ -537,7 +537,7 @@ function compileTask(task) {
  * wrong in part. A task that changed nothing and says nothing is a completed no-op; `errors` are read whatever the status.
  * @param {any} task
  */
-function memoryConsolidationTask(task) {
+export function memoryConsolidationTask(task) {
   if (!task || typeof task !== "object" || typeof task.task_id !== "string") throw new HttpError(502, "memory_index_response_invalid", "The engine answered without a task.");
   const result = task.result && typeof task.result === "object" ? task.result : null;
   const uris = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(String).filter((uri) => uri.startsWith("viking://")).slice(0, 2_000) : []);
