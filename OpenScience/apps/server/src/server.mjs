@@ -7531,7 +7531,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const memory = researchMemory.configured ? await researchMemory.exportUserMemory(user.id) : null;
           let entries = appendMemoryArchiveEntry(await collectUserArchiveEntries(user, projects, config), memory, config);
           // An account on the native engine also carries the engine's own pack of its memory files (a ZIP with a hash per file).
-          if (await nativeMemoryHeldBy(user.id)) entries = appendBinaryArchiveEntry(entries, "memory/native-memory.zip", await nativeMemory.exportPack(user.id), config);
+          if (await nativeMemoryHeldBy(user.id)) {
+            const collectNative = () => nativeMemory.exportPack(user.id);
+            const pack = snapshot ? await snapshot.withDatabaseSnapshot(collectNative) : await collectNative();
+            entries = appendBinaryArchiveEntry(entries, "memory/native-memory.zip", pack, config);
+          }
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);

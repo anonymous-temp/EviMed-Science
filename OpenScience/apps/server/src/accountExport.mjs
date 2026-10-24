@@ -501,7 +501,16 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     if (skillResources.resources.length) state.personalSkillResources = skillResources.resources;
     const data = Buffer.from(`${JSON.stringify(state)}\n`, "utf8");
     if (data.length > maxBytes) throw tooLarge();
-    return operation({ projects: tables.projects, data });
+    // Native pack collection may need the namespace registry from this exact
+    // snapshot. Borrow only this held client, not another pool connection or a
+    // transaction that happens to reuse the client after this callback ends.
+    let collecting = true;
+    const withDatabaseSnapshot = async work => {
+      if (!collecting) throw new HttpError(409, 'account_export_snapshot_closed', 'The account export snapshot has ended.');
+      return database.withTransactionClient(client, work);
+    };
+    try { return await operation({ projects: tables.projects, data, withDatabaseSnapshot }); }
+    finally { collecting = false; }
   });
 }
 
