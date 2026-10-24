@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { GEO_CITING_LAYERS, deliverableDir, deliverableIdOfPath } from "@evimed/domain";
-import { geoArticleItemOfFile, geoArticleReader, geoArticlesFileCoverage, geoRuntimeWrite, geoStrategyFileCoverage, geoStrategyWriteOfFile,
+import { geoArticleItemOfFile, geoArticleReader, geoArticlesFileCoverage, geoRuntimeWrite, geoStrategyDraft, geoStrategyFileCoverage, geoStrategyWriteOfFile,
   GEO_WRITE_LIMITS } from "./geoWrites.mjs";
 import { readFileNoFollow, resolveScopedPath } from "./security.mjs";
 import { geoValueCapabilitySupported, importGeoValue } from "./geoValueImport.mjs";
@@ -370,7 +370,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       const files = await importRunFiles({ project, run, geoProject, deliverables, failed, trustedContext: boundInput, reader });
       const handed = [run.presentedFiles, run.artifacts, run.unverifiedArtifacts, run.outputFiles].some(list => Array.isArray(list) && list.length);
       const specialist = ["geo-strategy", "geo-content"].includes(run.effectiveAgentId ?? run.agentId);
-      if ((!paths.length && handed && specialist && ["strategy", "content", "signal"].includes(boundInput.mode))
+      const reviewedValue = boundInput.mode === "signal" && boundInput.basis?.intent === "review" && valueFiles.imported > 0;
+      if ((!paths.length && handed && specialist && !reviewedValue && ["strategy", "content", "signal"].includes(boundInput.mode))
         || (paths.length && !files.strategies && !files.registered && !files.enriched && !files.existing)) {
         if (!failed.length) { failed.push("geo_plan_output_unavailable"); report("geo_plan_output_unavailable"); }
       }
@@ -526,6 +527,15 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       if (!trustedContext) return;
       failed.push("geo_plan_output_unavailable"); out.unavailable.push(path); out.refused += 1; report(`geo_plan_output_unavailable:${path}`);
     };
+    const refusals = (/** @type {any[]} */ issues, /** @type {string} */ relative, prefix = "", offset = 0) => {
+      const real = issues.filter(issue => !["notice", "ignored_fields", "declined_fields"].includes(issue.code));
+      if (!trustedContext) { out.refused += real.length; return; }
+      for (const issue of real) {
+        const field = `${prefix}${issue.index == null ? "" : `[${issue.index + offset}]`}${prefix ? "." : ""}${issue.field ?? "write"}`;
+        const location = `${relative}#${field}`;
+        if (!out.unavailable.includes(location)) unavailable(location);
+      }
+    };
     /** @param {string} id @param {string} file */
     const parsedFile = async (id, file) => {
       try {
@@ -549,6 +559,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       // A run that wrote its strategy through the platform has written it in the platform's own words: its file only adds what the
       // platform does not hold yet. A run that did not (the stored strategy is older than the run) is the file's to say.
       const originatingContext = trustedContext;
+      const relative = `${deliverableDir(id)}/strategy.json`;
+      if (originatingContext) refusals(geoStrategyDraft(fileData).issues, relative);
       if (originatingContext && !Object.keys(fileData).length) { unavailable(`${deliverableDir(id)}/strategy.json`); continue; }
       const stored = await store.latestStrategy(geoProject.id, { scopeKey: originatingContext?.scopeKey ?? null });
       const startedAt = Date.parse(String(run.startedAt ?? run.createdAt ?? ""));
@@ -562,19 +574,21 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
         if (Object.keys(data).length) {
           const written = await geoRuntimeWrite({ store, project: geoProject, what: "strategy", body: { data }, planningContext: originatingContext });
           counters.ignoredFields += ignoredIn(written.issues);
-          out.refused += written.issues.filter((issue) => issue.code !== "notice" && issue.code !== "ignored_fields").length;
+          refusals(written.issues, relative);
           out.gaps += Array.isArray(data.gaps) ? data.gaps.length : 0;
           out.actions += Array.isArray(data.actions) ? data.actions.length : 0;
           if (written.ids.length) out.strategies += 1;
           else if (originatingContext) failed.push("geo_plan_output_unavailable");
         }
         if (originatingContext && wroteItself && !Object.keys(data).length) out.strategies += 1;
+        let sourceOffset = 0;
         for (const page of pagesOf(Array.isArray(sources) ? sources : [], GEO_WRITE_LIMITS.sources)) {
           const written = await geoRuntimeWrite({ store, project: geoProject, what: "sources", body: { items: page } });
           counters.ignoredFields += ignoredIn(written.issues);
           counters.declinedFields += written.declined ?? 0;
           out.sources += written.ids.length;
-          out.refused += written.issues.filter((issue) => issue.code !== "notice" && issue.code !== "ignored_fields").length;
+          refusals(written.issues, relative, "sources", sourceOffset);
+          sourceOffset += page.length;
         }
       } catch (error) {
         const code = codeOf(error, "geo_strategy_import_failed");

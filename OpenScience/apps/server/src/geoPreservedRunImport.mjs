@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
 import { HttpError } from "./security.mjs";
 import { observedResultPath } from "./resultProducerCapture.mjs";
 import { readVerifiedRunTranscript } from "./runTranscripts.mjs";
@@ -9,23 +10,34 @@ const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 
 /** Native completed tool witnesses, bounded to the original run's accepted root turn.
  * An edit witnesses an event, never a digest; an observed capture for that event remains usable with its existing label.
- * @param {any} project @param {any} run @param {any} transcript @param {string} relative */
-function witnesses(project, run, transcript, relative) {
+ * @param {any} project @param {any} run @param {any} transcript @param {string} relative @param {any[]} candidates */
+function witnesses(project, run, transcript, relative, candidates) {
   const messages = transcript?.messages ?? [];
   const start = Date.parse(run.startedAt), end = Date.parse(run.finishedAt);
   const turns = new Set(messages.filter(message => message.sessionId === run.sessionId && message.role === "user"
     && message.source === "user" && (run.kernelRequestIds ?? []).includes(message.sourceRequestId)).map(message => message.turnStartSeq));
   if (run.nativeTurn?.startSeq != null) turns.add(run.nativeTurn.startSeq);
-  return messages.filter(message => message.sessionId === run.sessionId && turns.has(message.turnStartSeq)
-    && message.time >= start && message.time <= end).flatMap(message => (message.parts ?? []).flatMap(part => {
-    if (part.type !== "tool" || part.status !== "completed" || !["write", "edit", "file_write", "file_edit"].includes(part.tool)
-      || !Number.isSafeInteger(part.completedSeq) || !part.callId || (part.completedAt != null && part.completedAt > end)) return [];
-    let path;
-    try { path = observedResultPath(project, part.input?.file_path ?? part.input?.filePath ?? part.input?.path); } catch { return []; }
-    if (path !== relative) return [];
+  const native = messages.filter(message => message.sessionId === run.sessionId && turns.has(message.turnStartSeq)
+    && message.time >= start && message.time <= end).flatMap(message => message.parts ?? []).filter(part => part.type === "tool"
+      && part.status === "completed" && ["write", "edit", "file_write", "file_edit"].includes(part.tool)
+      && Number.isSafeInteger(part.completedSeq) && part.callId && (part.completedAt == null || part.completedAt <= end));
+  const observedPath = part => part.input?.file_path ?? part.input?.filePath ?? part.input?.path;
+  // The original producer applied its trusted runtime mapper before storing this exact file/event association.
+  // Retain the exact full native path so later same-file events remain ordered even when their snapshot is missing.
+  // This set conveys no prefix or permission to map a different file, owner, run or session after restart.
+  const associatedPaths = new Set(native.filter(part => candidates.some(version => version.producer.kind === "tool" && version.path === relative
+    && version.producer.callId === part.callId && version.producer.eventId === String(part.completedSeq))).map(observedPath)
+    .filter(observed => typeof observed === "string" && path.isAbsolute(observed) && path.normalize(observed) === observed
+      && !observed.includes("\\") && observed.endsWith(`/${relative}`)));
+  return native.flatMap(part => {
+    const observed = observedPath(part);
+    let canonical;
+    try { canonical = observedResultPath(project, observed); }
+    catch { if (!associatedPaths.has(observed)) return []; canonical = relative; }
+    if (canonical !== relative) return [];
     const content = ["write", "file_write"].includes(part.tool) && typeof part.input?.content === "string" ? part.input.content : null;
     return [{ eventId: String(part.completedSeq), callId: part.callId, order: part.completedSeq, digest: content === null ? null : sha(content) }];
-  })).sort((a, b) => b.order - a.order);
+  }).sort((a, b) => b.order - a.order);
 }
 
 /** Pin only versions that existed before the refresh. Workspace inventory, mutable files and capture timestamps have no authority.
@@ -46,7 +58,7 @@ export async function pinGeoRunOutputs({ results, project, run, context, transcr
         && version.producer?.sessionId === run.sessionId && version.producer?.kind !== "workspace" && version.coverage?.snapshot === "complete"));
       cursor = page.nextCursor;
     } while (cursor);
-    const events = transcript ? witnesses(project, run, transcript, relative) : candidates.filter(version => version.producer.kind === "tool"
+    const events = transcript ? witnesses(project, run, transcript, relative, candidates) : candidates.filter(version => version.producer.kind === "tool"
       && /^\d+$/.test(version.producer.eventId ?? "") && version.producer.callId).map(version => ({
       eventId: version.producer.eventId, callId: version.producer.callId, order: Number(version.producer.eventId), digest: null,
     })).sort((a, b) => b.order - a.order);
