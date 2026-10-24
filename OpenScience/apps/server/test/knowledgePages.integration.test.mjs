@@ -257,9 +257,8 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     const alphaNow = async () => (await api(`/api/knowledge-pages/page?sourceId=${(await api(`/api/knowledge-pages/tree?projectId=${project.id}`)).body.data.pages.find((/** @type {any} */ entry) => entry.path === "concept/Alpha 协议.md").sourceId}`)).body.data;
     const engineWrote = `${edited}\n引擎在两次整理之间改写了这一页。\n`;
     engine.put(alphaUri, engineWrote);
-    // Each compile of these two rounds ends the page in words no earlier version had: bytes identical to a version the ledger has
-    // already retired are a document the ledger already knows (a page that returns to an earlier text cannot be mirrored: noted in
-    // the package's handoff, and not this test's business).
+    // Each compile of these two rounds ends the page in words no earlier version had. (A page brought back to an earlier text meets
+    // that version's retired row and revives it — `sourceRegisterRevives.test.mjs` holds that; this test is about the edit.)
     const plainScript = script;
     let rewrites = 0;
     script = (request, stub) => {
