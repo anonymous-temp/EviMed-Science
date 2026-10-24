@@ -141,9 +141,30 @@ test('coverage keeps unhandled and uncertain scope separate from completed attem
   assert.equal(result.handled, 1); assert.equal(result.remaining, 2); assert.equal(result.uncertain, 1); assert.equal(result.unhandled, 1);
   assert.equal(summarizeGeoSourceReviews([], []).state, 'unknown');
   assert.equal(summarizeGeoSourceReviews(targets, [{ sourceReview: { availability: 'unknown' } }, older]).state, 'unknown');
-  const unavailable = { sourceReview: { availability: 'unknown', selectedTargetKeys: ['one', 'two'], records: [{ targetKey: 'one', outcome: 'updated', artifact: { versionId: 'kept' } }] } };
+  const unavailable = { sourceReview: { availability: 'unknown', selectedTargetKeys: ['one', 'two'], records: [{ targetKey: 'one', outcome: 'updated', artifact: { versionId: 'kept' }, after: { version: 'accepted' } }] } };
+  const preserved = summarizeGeoSourceReviews(targets, [unavailable]);
+  assert.equal(preserved.records[0].after.version, 'accepted'); assert.equal(preserved.records[0].artifact.versionId, 'kept');
+  const retryUnavailable = summarizeGeoSourceReviews(targets, [{ sourceReview: { availability: 'unknown', selectedTargetKeys: ['one'], records: [] } }, unavailable]);
+  assert.equal(retryUnavailable.records[0].after.version, 'accepted'); assert.equal(retryUnavailable.records[0].artifact.versionId, 'kept');
   const partial = summarizeGeoSourceReviews(targets, [{ sourceReview: { availability: 'available', records: [{ targetKey: 'one', outcome: 'no_change_needed' }] } }, unavailable]);
   assert.equal(partial.state, 'unknown'); assert.equal(partial.handled, 1); assert.equal(partial.remaining, 2);
   assert.equal(partial.records.find(record => record.targetKey === 'two').availability, 'unknown');
   assert.equal(partial.records.find(record => record.targetKey === 'three').outcome, 'unhandled');
+});
+
+test('a duplicate review with a temporary successor lookup failure cannot replace prior accepted evidence', async () => {
+  const project = { userId: 'owner', id: 'geo', projectId: 'control' }, run = { id: 'run', sessionId: 'session' };
+  const signal = { id: 'signal', payload: { basisDigest: 'basis', basis: { notice: { id: 'source' } } } };
+  const files = ['one', 'two'].map(id => ({ versionId: id, digest: id, size: 600, path: `deliverables/${id}/geo-value.json`, producer: { kind: 'tool', runId: 'run', sessionId: 'session' } }));
+  const reader = new GeoSourceReviews({ bridge: { scope: async () => ({ context: { id: 'context', payload: { basis: { focusRefs: ['target'] } } } }) }, store: {}, results: {
+    list: async () => ({ items: files, nextCursor: null }), raw: async (_owner, _project, id) => ({ version: files.find(file => file.versionId === id), bytes: Buffer.from(JSON.stringify({ sourceChanges: [{ id: 'source', review: {
+      signalId: 'signal', basisDigest: 'basis', contextRef: 'context', targets: [{ targetKey: 'target', outcome: 'updated', reason: 'Preserved accepted change.', after: { resultVersionId: 'accepted' } }],
+    } }] })) }),
+  } });
+  let calls = 0;
+  reader.successor = async () => { if (++calls > 1) throw new Error('Temporary lookup failure'); return { version: 'accepted' }; };
+  const result = await reader.forRun(project, signal, run, [{ key: 'target' }]);
+  assert.equal(result.availability, 'unknown'); assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].after.version, 'accepted'); assert.equal(result.records[0].artifact.versionId, 'one');
+  assert.equal(result.records[0].warning, null);
 });

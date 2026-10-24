@@ -74,7 +74,12 @@ export class GeoSourceReviews {
             if (!target || !outcomes.includes(item?.outcome) || typeof item.reason !== 'string' || !item.reason.trim() || item.reason.length > 4000) { issues.push('review_target_invalid'); continue; }
             let after = null;
             try { if (item.outcome === 'updated') after = await this.successor(project, target, item.after, run); }
-            catch { issues.push('review_successor_unavailable'); unavailable = true; }
+            catch {
+              // Failure to inspect a successor is not a contradictory review.
+              // Keep an already supported result, including its original proof;
+              // the attempt's unknown scope below still prevents false closure.
+              issues.push('review_successor_unavailable'); unavailable = true; continue;
+            }
             const record = { targetKey: target.key, outcome: item.outcome === 'updated' && !after ? 'update_proposed' : item.outcome,
               reason: item.reason.trim(), after, verification: 'reported_review',
               warning: item.outcome === 'updated' && !after ? 'successor_unconfirmed' : null,
