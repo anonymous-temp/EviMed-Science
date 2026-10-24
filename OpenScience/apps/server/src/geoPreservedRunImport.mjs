@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import { observedResultPath } from "./resultProducerCapture.mjs";
 import { readVerifiedRunTranscript } from "./runTranscripts.mjs";
-import { geoStructuredRunPaths } from "./geoDeliveryImport.mjs";
+import { geoSignalValueRunPaths, geoStructuredRunPaths } from "./geoDeliveryImport.mjs";
 
 const unavailable = () => new HttpError(409, "geo_plan_output_unavailable", "The producing run's preserved output is unavailable; retain the files and refresh after its original capture is restored.");
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -30,7 +30,7 @@ function witnesses(project, run, transcript, relative) {
 
 /** Pin only versions that existed before the refresh. Workspace inventory, mutable files and capture timestamps have no authority.
  * @param {{results:any,project:any,run:any,context:any,transcript?:any,paths?:string[]}} input */
-export async function pinGeoRunOutputs({ results, project, run, context, transcript = null, paths = geoStructuredRunPaths(run, context) }) {
+export async function pinGeoRunOutputs({ results, project, run, context, transcript = null, paths = [...geoStructuredRunPaths(run, context), ...geoSignalValueRunPaths(run, context)] }) {
   const pinned = new Map();
   const folders = new Set(paths.map(file => file.split("/")[1]));
   const handed = ["outputFiles", "presentedFiles", "artifacts", "unverifiedArtifacts"].flatMap(key => Array.isArray(run[key]) ? run[key] : [])

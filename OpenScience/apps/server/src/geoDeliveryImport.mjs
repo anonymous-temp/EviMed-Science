@@ -4,7 +4,7 @@ import { GEO_CITING_LAYERS, deliverableDir, deliverableIdOfPath } from "@evimed/
 import { geoArticleItemOfFile, geoArticleReader, geoArticlesFileCoverage, geoRuntimeWrite, geoStrategyFileCoverage, geoStrategyWriteOfFile,
   GEO_WRITE_LIMITS } from "./geoWrites.mjs";
 import { readFileNoFollow, resolveScopedPath } from "./security.mjs";
-import { importGeoValue } from "./geoValueImport.mjs";
+import { geoValueCapabilitySupported, importGeoValue } from "./geoValueImport.mjs";
 import { canonicalJson } from "./geoStore.mjs";
 
 /** The parts of a strategy the import may add to. */
@@ -253,6 +253,46 @@ export function geoStructuredRunPaths(run, context) {
   return [...new Set(paths.filter(file => typeof file === "string" && new RegExp(`^deliverables/[A-Za-z0-9_-]{1,160}/${name.replace(".", "\\.")}$`).test(file)))].slice(0, 64);
 }
 
+/** Only an actually handed geo-value file of the run's supported capability participates in a bound signal import.
+ * @param {any} run @param {any} context @returns {string[]} */
+export function geoSignalValueRunPaths(run, context) {
+  if (context?.mode !== "signal" || !geoValueCapabilitySupported(run.effectiveAgentId ?? run.capabilityId ?? run.agentId)) return [];
+  return [...new Set(["outputFiles", "presentedFiles", "artifacts", "unverifiedArtifacts"]
+    .flatMap(key => Array.isArray(run[key]) ? run[key] : []).map(file => typeof file === "string" ? file : file?.path)
+    .filter(file => typeof file === "string" && /^deliverables\/[A-Za-z0-9_-]{1,160}\/geo-value\.json$/.test(file)))].slice(0, 20);
+}
+
+/** Keep only the explicit source-review result within its frozen target authorization. Successor and closure semantics stay in GeoSourceReviews.
+ * @param {any} patch @param {any} context @returns {{data:any,refused:boolean}} */
+function scopedSignalReview(patch, context) {
+  const basis = context.basis, object = value => value && typeof value === "object" && !Array.isArray(value);
+  const authorized = basis?.intent === "review" && basis?.signal?.kind === "source_changed" && context.referenceId
+    && basis.signal.id && basis.signal.basisDigest && basis.event?.notice?.id;
+  const selected = new Set((basis?.event?.targets ?? []).filter(target => basis.focusRefs?.includes(target.key)).map(target => target.key));
+  const changes = [], outcomes = ["no_change_needed", "update_proposed", "updated", "uncertain"];
+  let refused = !authorized || !object(patch) || !Array.isArray(patch?.sourceChanges) || !patch.sourceChanges.length
+    || Object.keys(patch ?? {}).some(key => key !== "sourceChanges");
+  for (const change of Array.isArray(patch?.sourceChanges) ? patch.sourceChanges : []) {
+    const review = change?.review;
+    if (!authorized || change?.id !== basis.event.notice.id || !object(review) || review.signalId !== basis.signal.id
+      || review.basisDigest !== basis.signal.basisDigest || review.contextRef !== context.referenceId
+      || !Array.isArray(review.targets) || !review.targets.length || review.targets.length > 100) { refused = true; continue; }
+    const targets = [];
+    const seen = new Set();
+    if (Object.keys(change).some(key => !["id", "review"].includes(key))
+      || Object.keys(review).some(key => !["signalId", "basisDigest", "contextRef", "targets"].includes(key))) refused = true;
+    for (const item of review.targets) {
+      if (!object(item) || !selected.has(item.targetKey) || seen.has(item.targetKey) || !outcomes.includes(item.outcome)
+        || typeof item.reason !== "string" || !item.reason.trim() || item.reason.length > 4000) { refused = true; continue; }
+      seen.add(item.targetKey);
+      if (Object.keys(item).some(key => !["targetKey", "outcome", "reason", "after"].includes(key))) refused = true;
+      targets.push({ targetKey: item.targetKey, outcome: item.outcome, reason: item.reason, ...(object(item.after) ? { after: item.after } : {}) });
+    }
+    if (targets.length) changes.push({ id: change.id, review: { signalId: review.signalId, basisDigest: review.basisDigest, contextRef: review.contextRef, targets } });
+  }
+  return { data: { sourceChanges: changes }, refused: refused || !changes.length };
+}
+
 /**
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
  *   audit?: ((event: string, status: string, details: Record<string, any>) => Promise<unknown> | unknown) | null,
@@ -299,17 +339,42 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
     const boundInput = planningContext ? await planningContext(geoProject, run) : null;
     // A selected request owns only its files; legacy project-wide reconciliation belongs to unbound runs.
     if (boundInput) {
+      const valueFiles = { imported: 0, unavailable: /** @type {string[]} */ ([]) };
+      const reader = options.readRunFile ?? readRunFile;
+      for (const relative of geoSignalValueRunPaths(run, boundInput)) {
+        let wrote = false;
+        try {
+          if (!reader) throw new Error("No preserved run reader");
+          const bytes = await reader(project, run, relative);
+          if (Buffer.byteLength(bytes) > 256 * 1024) throw new Error("Value output exceeds its bound");
+          const parsed = JSON.parse(String(bytes));
+          const scoped = scopedSignalReview(parsed, boundInput);
+          if (scoped.refused) { failed.push("geo_plan_output_unavailable"); valueFiles.unavailable.push(relative); }
+          if (scoped.data.sourceChanges.length) {
+            const imported = await importGeoValue({ project, geoProject,
+              run: { ...run, deliverables: [{ id: relative.split("/")[1], capability: run.effectiveAgentId ?? run.capabilityId ?? run.agentId }] },
+              store: { writeValue: async (userId, geoId, patch, runId) => { const saved = await store.writeValue(userId, geoId, patch, runId); wrote = true; return saved; } },
+              readFile: async (_root, path) => { if (path !== relative) throw new Error("Only the selected value file is available"); return JSON.stringify(scoped.data); },
+              report, valueOnly: true });
+            failed.push(...imported.failed);
+            if (wrote) valueFiles.imported += 1;
+          }
+          if (!wrote && !valueFiles.unavailable.includes(relative)) { failed.push("geo_plan_output_unavailable"); valueFiles.unavailable.push(relative); }
+        } catch (error) {
+          const code = codeOf(error, "geo_plan_output_unavailable"); failed.push(code); valueFiles.unavailable.push(relative); report(code);
+        }
+      }
       const paths = geoStructuredRunPaths(run, boundInput);
       const capability = boundInput.mode === "strategy" ? "geo-strategy" : "geo-content";
       const deliverables = paths.map(file => ({ id: file.split("/")[1], capability }));
-      const files = await importRunFiles({ project, run, geoProject, deliverables, failed, trustedContext: boundInput, reader: options.readRunFile ?? readRunFile });
+      const files = await importRunFiles({ project, run, geoProject, deliverables, failed, trustedContext: boundInput, reader });
       const handed = [run.presentedFiles, run.artifacts, run.unverifiedArtifacts, run.outputFiles].some(list => Array.isArray(list) && list.length);
       const specialist = ["geo-strategy", "geo-content"].includes(run.effectiveAgentId ?? run.agentId);
       if ((!paths.length && handed && specialist && ["strategy", "content", "signal"].includes(boundInput.mode))
         || (paths.length && !files.strategies && !files.registered && !files.enriched && !files.existing)) {
         if (!failed.length) { failed.push("geo_plan_output_unavailable"); report("geo_plan_output_unavailable"); }
       }
-      return { imported: 0, issues: 0, located: 0, gated: 0, ...(paths.length ? { files } : {}) };
+      return { imported: 0, issues: 0, located: 0, gated: 0, ...(paths.length ? { files } : {}), ...(valueFiles.imported || valueFiles.unavailable.length ? { valueFiles } : {}) };
     }
     failed.push(...(await importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs })).failed);
     const deliverables = [.../** @type {any[]} */ (run.deliverables ?? run.progress?.deliverables ?? [])];
@@ -456,7 +521,11 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
    */
   const importRunFiles = async ({ project, run, geoProject, deliverables, failed, trustedContext = null, reader = readRunFile }) => {
     const out = { strategies: 0, gaps: 0, actions: 0, sources: 0, refused: 0, declined: 0, dropped: /** @type {string[]} */ ([]),
-      articles: 0, enriched: 0, registered: 0, existing: 0, skipped: 0 };
+      articles: 0, enriched: 0, registered: 0, existing: 0, skipped: 0, unavailable: /** @type {string[]} */ ([]) };
+    const unavailable = (/** @type {string} */ path) => {
+      if (!trustedContext) return;
+      failed.push("geo_plan_output_unavailable"); out.unavailable.push(path); out.refused += 1; report(`geo_plan_output_unavailable:${path}`);
+    };
     /** @param {string} id @param {string} file */
     const parsedFile = async (id, file) => {
       try {
@@ -475,11 +544,12 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
     // ---- the strategy
     for (const id of trustedContext && trustedContext.mode !== "strategy" ? [] : idsOf("geo-strategy")) {
       const file = await parsedFile(id, "strategy.json");
-      if (!file || typeof file !== "object") continue;
+      if (!file || typeof file !== "object") { unavailable(`${deliverableDir(id)}/strategy.json`); continue; }
       const { sources, ...fileData } = geoStrategyWriteOfFile(file);
       // A run that wrote its strategy through the platform has written it in the platform's own words: its file only adds what the
       // platform does not hold yet. A run that did not (the stored strategy is older than the run) is the file's to say.
       const originatingContext = trustedContext;
+      if (originatingContext && !Object.keys(fileData).length) { unavailable(`${deliverableDir(id)}/strategy.json`); continue; }
       const stored = await store.latestStrategy(geoProject.id, { scopeKey: originatingContext?.scopeKey ?? null });
       const startedAt = Date.parse(String(run.startedAt ?? run.createdAt ?? ""));
       const wroteItself = originatingContext ? stored?.runId === run.id : Boolean(stored) && Number.isFinite(startedAt) && Date.parse(String(stored.createdAt)) >= startedAt;
@@ -518,24 +588,30 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       const claimIdByKey = new Map((await store.listClaims(geoProject.id)).map((claim) => [claim.claimKey, claim.id]));
       for (const id of contentIds) {
         const file = await parsedFile(id, "articles.json");
-        if (!file || typeof file !== "object") continue;
+        if (!file || typeof file !== "object") { unavailable(`${deliverableDir(id)}/articles.json`); continue; }
         const coverage = geoArticlesFileCoverage(file);
         out.declined += Object.keys(coverage.declined).length;
         counters.declinedFields += Object.keys(coverage.declined).length;
         out.dropped.push(...coverage.dropped.map((path) => `${id}:${path}`));
         const entries = Array.isArray(file.articles) ? file.articles : Array.isArray(file) ? file : [];
+        if (!entries.length) unavailable(`${deliverableDir(id)}/articles.json`);
         const held = await store.listArticles(geoProject.id);
-        for (const entry of entries) {
-          if (!entry || typeof entry !== "object" || typeof entry.path !== "string") { out.skipped += 1; continue; }
+        for (const [index, entry] of entries.entries()) {
+          const location = `${deliverableDir(id)}/articles.json#articles[${index}]`;
+          if (!entry || typeof entry !== "object" || typeof entry.path !== "string") { out.skipped += 1; unavailable(location); continue; }
           out.articles += 1;
           const fullPath = entry.path.startsWith("deliverables/") ? entry.path : `${deliverableDir(id)}/${entry.path}`;
+          if (trustedContext && (!fullPath.startsWith(`${deliverableDir(id)}/`) || fullPath.includes("\\")
+            || fullPath.split("/").some(part => !part || part === "." || part === ".."))) {
+            out.skipped += 1; unavailable(location); continue;
+          }
           const known = held.find((article) => article.path === fullPath
             || (article.path === entry.path && (article.deliverableId == null || article.deliverableId === id)));
           try {
             const preservedDigest = trustedContext ? createHash("sha256").update(await reader(project, run, fullPath)).digest("hex") : null;
             if (trustedContext && ((entry.contentSha256 && entry.contentSha256 !== preservedDigest)
-              || (known && (known.contentSha256 !== preservedDigest || known.runId !== run.id)))) {
-              failed.push("geo_plan_output_unavailable"); out.skipped += 1; continue;
+              || (known && (known.contentSha256 !== preservedDigest || known.runId !== run.id || known.deliverableId !== id)))) {
+              unavailable(location); out.skipped += 1; continue;
             }
             if (known) {
               out.existing += 1;
@@ -552,7 +628,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
               articleExists: async (_geo, path) => { try { await (trustedContext ? reader(project, run, path) : readFile(project.workspaceDir, path)); return true; } catch { return false; } } });
             counters.ignoredFields += ignoredIn(written.issues);
             if (written.ids.length) out.registered += 1;
-            else out.skipped += 1;
+            else { out.skipped += 1; unavailable(location); }
           } catch (error) {
             const code = codeOf(error, "geo_articles_import_failed");
             failed.push(code);
