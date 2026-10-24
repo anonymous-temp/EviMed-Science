@@ -21,7 +21,7 @@ export async function checked(api, method, route, body, statuses = [200,201]) {
   if (!statuses.includes(r.status)) throw new Error(`${method} ${route}: HTTP ${r.status} ${r.json?.code ?? ''}`);
   return r.json?.data;
 }
-export async function provision({base, dataDir, privateDir, benchmark, arm = 'candidate', seedCorpus = true, coverage = false, sharedBudget = null, runtimeMode='kernel',runtimeEvidence=null,databaseBindingsFile=null}) {
+export async function provision({base, dataDir, privateDir, benchmark, arm = 'candidate', seedCorpus = true, coverage = false, sharedBudget = null, runtimeMode='kernel',runtimeEvidence=null,databaseBindingsFile=null,reviewSeeds=null,reviewTimeoutMs=120000}) {
   await verifyCorpus(benchmark);
   if(sharedBudget)await verifyBoundCollector(base,arm,sharedBudget);
   await fs.mkdir(privateDir, {recursive:true,mode:0o700});
@@ -53,7 +53,7 @@ export async function provision({base, dataDir, privateDir, benchmark, arm = 'ca
     api.project = account.projects['project-alpha'].id;
   }
   const owner = context.accounts['account-alpha'];
-  if (coverage) await seedContexts({context,benchmark,dataDir,sharedBudget});
+  if (coverage) await seedContexts({context,benchmark,dataDir,sharedBudget,reviewSeeds,reviewTimeoutMs});
   if (seedCorpus && !coverage) for (const source of benchmark.sources) {
     const bytes = await fs.readFile(path.join(root,source.path));
     const originalOnly=source.originalOnly===true,relative=`${originalOnly?'originals':'knowledge-base'}/${source.id}${path.extname(source.path)}`;
@@ -67,11 +67,16 @@ export async function provision({base, dataDir, privateDir, benchmark, arm = 'ca
   context.bindings = bindings;
   return context;
   } catch (error) {
+    if(error.seedPreparationHeld){
+      await fs.writeFile(path.join(privateDir,'held-preparation.json'),JSON.stringify({runId,arm,created:context.receipt.created,reason:error.message,cleanup:false}),{mode:0o600});
+      await fs.writeFile(path.join(privateDir,'held-cleanup-private.json'),JSON.stringify({runId,accounts:Object.values(context.accounts).map(a=>({userId:a.userId,password:a.password,credentialsFile:a.credentialsFile,projects:a.projects}))}),{mode:0o600});
+      throw error;
+    }
     try { await context.cleanup(); } catch (cleanupError) { throw new AggregateError([error,cleanupError], 'Provisioning and owned fixture cleanup failed'); }
     throw error;
   }
 }
-async function seedContexts({context,benchmark,dataDir,sharedBudget}) {
+async function seedContexts({context,benchmark,dataDir,sharedBudget,reviewSeeds,reviewTimeoutMs}) {
   // The live coordinator is checked before a source upload or memory commit can trigger paid background work.
   await verifyLiveBudgetWiring(sharedBudget);
   const primary=context.accounts['account-alpha'].projects['project-alpha'];primary.contexts={};
@@ -110,7 +115,7 @@ async function seedContexts({context,benchmark,dataDir,sharedBudget}) {
     if(evaluation.substrate!=='knowledge'){
       const receipts=await seedAuthoredMemory((...args)=>checked(owner.api,...args),{projectId:id,seeds,beforeEach:()=>verifyLiveBudgetWiring(sharedBudget)});
       scope.seededArchiveIds.push(...receipts.map(receipt=>receipt.id));scope.seededMemoryChunks=receipts.length;
-      scope.memoryFreeze=await freezeSeededMemory((...args)=>checked(owner.api,...args),{seedIds:scope.seededArchiveIds,requiredSeeds:seeds,judge:await (await import('./automatic_judge.mjs')).createSemanticJudge(sharedBudget)});
+      scope.memoryFreeze=await freezeSeededMemory((...args)=>checked(owner.api,...args),{seedIds:scope.seededArchiveIds,requiredSeeds:seeds,reviewSeeds,reviewTimeoutMs,reviewIdentity:{runId:context.runId,arm:context.arm,contextId:key,ownerId:owner.userId,projectId:id,preparedBy:"benchmark-preparation-agent"},judge:await (await import('./automatic_judge.mjs')).createSemanticJudge(sharedBudget)});
     }
     scope.documentCount=material.length;
     // Completion of intake/recall is checked again from genuine tool output by the report; seeding alone is never readiness proof.

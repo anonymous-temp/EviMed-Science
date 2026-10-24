@@ -1,3 +1,4 @@
+import {fileSeedReview,verifyReviewedProfile,REVIEWED_SEED_MODE} from './seed_review.mjs';
 // Real product transport only. Deployment-owned fixture bindings supply accounts and source identities.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -50,7 +51,7 @@ async function execute(c, binding, repetition, arm, out) {
   assertActiveRuntime(binding);
   const projectScope = binding.accounts[c.actor]?.projects[c.project];
   const scope = c.evaluation && projectScope?.contexts ? projectScope.contexts[contextId(c.evaluation)] : projectScope;
-  if(c.memorySeeds?.length&&scope?.memoryFreeze?.mode!=='semantic-authored-seed')throw Error('Main quality requires semantic authored seed freeze; canary mode is ineligible');
+  if(c.memorySeeds?.length&&scope?.memoryFreeze?.mode!==REVIEWED_SEED_MODE)throw Error('Main quality requires semantic authored seed freeze; canary mode is ineligible');
   if (!scope) throw new Error(`Missing real fixture scope ${arm}/${c.actor}/${c.project}`);
   const api = new Api(binding.base);
   const credentials = JSON.parse(await fs.readFile(scope.credentialsFile??binding.accounts[c.actor].credentialsFile, 'utf8'));
@@ -65,6 +66,7 @@ async function execute(c, binding, repetition, arm, out) {
   if(scope.memoryFreeze){
     const settings=await call(api,'GET','/api/memory/settings');
     const profile=await call(api,'GET','/api/memory/profile');
+    verifyReviewedProfile(scope.memoryFreeze,c.memorySeeds??[],profile,{...scope.memoryFreeze.reviewIdentity,arm,contextId:contextId(c.evaluation),ownerId:scope.userId??binding.accounts[c.actor].userId,projectId:scope.id});
     if(settings.learningPaused!==true||settings.recallPaused!==false||profile.pending?.length||memoryHash(profile)!==scope.memoryFreeze.hash)throw new Error('Frozen memory identity changed before question');
   }
   const memoryInventoryBefore = c.evaluation?.substrate !== 'knowledge' ? await call(api,'GET','/api/memory/records?pageSize=100') : null;
@@ -85,8 +87,8 @@ async function execute(c, binding, repetition, arm, out) {
   const retrieval = collectRetrieval(transcriptLines);
   partial.run=run;
   const filename = `${arm}-${c.id}-${repetition}.json`;
-  const evidence = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, arm, repetition, run, digest, retrieval, actions, sourceMap,collectorBinding:binding.listenerProof,memoryInventoryBefore,actualUserId:scope.userId??binding.accounts[c.actor].userId, originalFiles:scope.originalFiles??{},originalTexts:scope.originalTexts??{},memoryFreeze:scope.memoryFreeze??null,evaluation:c.evaluation,memorySeeds:c.memorySeeds??[],nativeMemoryContext:collectNativeMemoryContext(transcriptLines),documentCount:scope.documentCount,runtime: binding.runtimeEvidence, transcriptSha256: sha(transcript) };
-  if(scope.memoryFreeze){const after=await call(api,'GET','/api/memory/profile');evidence.memoryAfterHash=memoryHash(after);evidence.memoryVerified=!after.pending?.length&&evidence.memoryAfterHash===scope.memoryFreeze.hash;}
+  const evidence = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, arm, repetition, run, digest, retrieval, actions, sourceMap,collectorBinding:binding.listenerProof,memoryInventoryBefore,actualProjectId:scope.id,actualUserId:scope.userId??binding.accounts[c.actor].userId, originalFiles:scope.originalFiles??{},originalTexts:scope.originalTexts??{},memoryFreeze:scope.memoryFreeze??null,evaluation:c.evaluation,memorySeeds:c.memorySeeds??[],nativeMemoryContext:collectNativeMemoryContext(transcriptLines),documentCount:scope.documentCount,runtime: binding.runtimeEvidence, transcriptSha256: sha(transcript) };
+  if(scope.memoryFreeze){const after=await call(api,'GET','/api/memory/profile');verifyReviewedProfile(scope.memoryFreeze,c.memorySeeds??[],after,{...scope.memoryFreeze.reviewIdentity,arm,contextId:contextId(c.evaluation),ownerId:scope.userId??binding.accounts[c.actor].userId,projectId:scope.id});evidence.memoryProfileAfter=after;evidence.memoryAfterHash=memoryHash(after);evidence.memoryVerified=!after.pending?.length&&evidence.memoryAfterHash===scope.memoryFreeze.hash;}
   await fs.writeFile(path.join(out, filename), JSON.stringify(evidence, null, 2));
   await fs.writeFile(path.join(out, `${filename}.transcript.jsonl`), transcript);
   if(scope.memoryFreeze&&!evidence.memoryVerified)throw new Error('Frozen memory identity changed after question');
@@ -118,13 +120,14 @@ export async function main() {
   const os = await import('node:os');
   const privateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'knowledge-eval-private-'));
   for(const arm of arms){
-   let ctx=null;
+   let ctx=null;let retainPreparation=false;
    try {
       await beginArm(out,execution,arm);
       await armSharedBudget(bindings.sharedBudget);
       if (!bindings[arm].dataDir) throw new Error(`${arm}: isolated product dataDir is required for automatic fixture setup`);
       bindings[arm].listenerProof=(await verifyBoundCollector(bindings[arm].base,arm,bindings.sharedBudget)).binding;
-      ctx = await provision({base:bindings[arm].base,dataDir:bindings[arm].dataDir,privateDir:path.join(privateDir,arm),benchmark:b,arm,coverage:true,sharedBudget:bindings.sharedBudget,runtimeMode:'kernel',runtimeEvidence:bindings[arm].runtimeEvidence,databaseBindingsFile:bindings[arm].databaseBindingsFile});
+      await fs.writeFile(path.join(out,arm+'-seed-review-preparation.json'),JSON.stringify({reviewDirectory:path.join(privateDir,arm,'seed-reviews'),reviewTimeoutMs:300000,method:'independent-agent-review',credentialsIncluded:false}),{mode:0o600,flag:'wx'});
+      ctx = await provision({base:bindings[arm].base,dataDir:bindings[arm].dataDir,privateDir:path.join(privateDir,arm),benchmark:b,arm,coverage:true,reviewSeeds:fileSeedReview(path.join(privateDir,arm,"seed-reviews"),{timeoutMs:300000}),reviewTimeoutMs:300000,sharedBudget:bindings.sharedBudget,runtimeMode:'kernel',runtimeEvidence:bindings[arm].runtimeEvidence,databaseBindingsFile:bindings[arm].databaseBindingsFile});
       ctx.evidenceDir=path.join(out,arm,'lifecycle-native');
       bindings[arm].accounts = ctx.bindings.accounts;
       for (const repetition of [1,2,3]) {
@@ -141,6 +144,7 @@ export async function main() {
       bindings[arm].listenerProof=(await verifyBoundCollector(bindings[arm].base,arm,bindings.sharedBudget)).binding;
       await sealArm(out,execution,arm,assertActiveRuntime(bindings[arm]),{inconclusiveCells,review,budget:await verifyLiveBudgetWiring(bindings.sharedBudget)});
    }catch(error){
+      if(error.seedPreparationHeld)retainPreparation=true;
       if(execution.arms[arm].status==='collecting'){
        execution.arms[arm]={...execution.arms[arm],status:fatalCollectionError(error)?'stopped-safety':'inconclusive',error:error.message};
        execution.status=fatalCollectionError(error)?'stopped-safety':'inconclusive';execution.error=error.message;
@@ -149,8 +153,8 @@ export async function main() {
       }
       throw error;
    }finally{
-      if(ctx)await ctx.cleanup();
-      await fs.rm(path.join(privateDir,arm),{recursive:true,force:true});
+      if(!retainPreparation){if(ctx)await ctx.cleanup();
+      await fs.rm(path.join(privateDir,arm),{recursive:true,force:true});}
    }
   }
   await fs.rm(privateDir,{recursive:true,force:true});

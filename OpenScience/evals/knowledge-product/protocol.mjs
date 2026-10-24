@@ -1,7 +1,8 @@
+import {reviewRequest,validateSeedReview,verifyReviewedProfile,REVIEWED_SEED_MODE} from './seed_review.mjs';
 import {seedMemoryProof} from './personal_context.mjs';
 import { createHash } from 'node:crypto';
 export const memoryHash=profile=>createHash('sha256').update(JSON.stringify((profile.records??[]).map(r=>({id:r.id,value:r.value,version:r.version})).sort((a,b)=>String(a.id).localeCompare(String(b.id))))).digest('hex');
-export async function freezeSeededMemory(call,{seedIds,requiredSeeds=[],judge,sleep=ms=>new Promise(r=>setTimeout(r,ms)),timeoutMs=180000}={}) {
+export async function freezeSeededMemory(call,{seedIds,requiredSeeds=[],judge,reviewSeeds,reviewIdentity,reviewTimeoutMs=120000,sleep=ms=>new Promise(r=>setTimeout(r,ms)),timeoutMs=180000}={}) {
  if(typeof judge!=='function')throw new Error('Semantic seed judge is required for freeze');
  if(!requiredSeeds?.length)throw new Error('Native freeze requires authored seed provenance');
  if(!seedIds?.length)throw new Error('Native seeding completion receipts missing');
@@ -10,14 +11,28 @@ export async function freezeSeededMemory(call,{seedIds,requiredSeeds=[],judge,sl
   profile=await call('GET','/api/memory/profile');
   if(profile.engine!=='native')throw new Error('Native memory identity mismatch');
   if(Array.isArray(profile.pending)&&profile.pending.length===0&&profile.records?.length){
-   const provenance=await seedMemoryProof(requiredSeeds,profile,{judge});
    const settings=await call('PUT','/api/memory/settings',{learningPaused:true,recallPaused:false});
-   if(settings.learningPaused!==true||settings.recallPaused!==false)throw new Error('Native memory freeze was not applied');
+   if(settings.learningPaused!==true||settings.recallPaused!==false)throw Error('Native memory freeze was not applied');
    const verified=await call('GET','/api/memory/settings');
-   if(verified.learningPaused!==true||verified.recallPaused!==false)throw new Error('Native memory freeze identity mismatch');
    const frozen=await call('GET','/api/memory/profile');
-   if(frozen.pending?.length||memoryHash(frozen)!==memoryHash(profile))throw Error('Frozen memory identity changed during semantic freeze');
-   return {mode:'semantic-authored-seed',seedIds:[...seedIds],provenance,pending:0,records:profile.records.length,hash:memoryHash(profile),settings:verified};
+   if(verified.learningPaused!==true||verified.recallPaused!==false||frozen.pending?.length||memoryHash(frozen)!==memoryHash(profile))throw Error('Frozen memory identity changed during preparation');
+   let reviewManifest=null,review=null;
+   if(reviewSeeds)try{
+    if(!Number.isSafeInteger(reviewTimeoutMs)||reviewTimeoutMs<1||reviewTimeoutMs>600000)throw Error('Bounded seed review timeout required');
+    const request=reviewRequest(reviewIdentity,requiredSeeds,frozen);
+    if(reviewRequest(reviewIdentity,requiredSeeds,profile).profileSha256!==request.profileSha256)throw Error('Native URI/body profile changed while freezing');
+    let timer;
+    try{reviewManifest=await Promise.race([reviewSeeds(request),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Native seed review timed out; preparation inconclusive')),reviewTimeoutMs);})]);}finally{clearTimeout(timer);}
+    review=validateSeedReview(request,reviewManifest);
+   }catch(error){error.seedPreparationHeld=true;throw error;}
+   let provenance;
+   try{provenance=await seedMemoryProof(requiredSeeds,frozen,{judge,selectedRecords:review?.selected});}catch(error){if(review)error.seedPreparationHeld=true;throw error;}
+   const afterSettings=await call('GET','/api/memory/settings');
+   if(afterSettings.learningPaused!==true||afterSettings.recallPaused!==false)throw Object.assign(Error('Frozen memory settings changed during seed review'),{seedPreparationHeld:Boolean(review)});
+   const after=await call('GET','/api/memory/profile');
+   if(review)try{verifyReviewedProfile({mode:REVIEWED_SEED_MODE,reviewSeeds:requiredSeeds,reviewManifest,reviewManifestSha256:review.manifestSha256,reviewRequestSha256:review.requestSha256},requiredSeeds,after,reviewIdentity);}catch(error){error.seedPreparationHeld=true;throw error;}
+   else if(memoryHash(after)!==memoryHash(frozen)||after.pending?.length)throw Error('Frozen memory identity changed during semantic freeze');
+   return {mode:review?REVIEWED_SEED_MODE:'semantic-authored-seed',...(review?{reviewIdentity,reviewSeeds:requiredSeeds,reviewManifest,reviewManifestSha256:review.manifestSha256,reviewRequestSha256:review.requestSha256,reviewMethod:reviewManifest.method}:{}),seedIds:[...seedIds],provenance,pending:0,records:profile.records.length,hash:memoryHash(profile),settings:afterSettings};
   }
   await sleep(500);
  }while(Date.now()<deadline);

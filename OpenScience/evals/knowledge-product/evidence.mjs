@@ -1,6 +1,7 @@
+import {verifyReviewedProfile} from './seed_review.mjs';
 import fs from 'node:fs';
 import {personalRetrievalProof} from './personal_context.mjs';
-import { SIZES } from './coverage.mjs';
+import { SIZES, contextId } from './coverage.mjs';
 import { normalizeTool } from '../general-tasks/runner/cell.mjs';
 export function toolOutput(value) {
   if (typeof value === 'string') { try {return toolOutput(JSON.parse(value));}catch{return value;} }
@@ -68,6 +69,7 @@ export function validateCollectedEvidence(c,row,e,seen) {
   if(e.prompt!==row.prompt||e.run?.id!==row.evidence.runId||e.arm!==row.arm||e.caseId!==row.caseId||e.actor!==row.actor||e.project!==row.project||e.repetition!==row.repetition)throw new Error('Collected evidence identity mismatch');
   if(seen.has(e.run.id))throw new Error('Product run ID reused across independent repetitions');
   if(e.run.status!=='succeeded')throw new Error('Run did not succeed');
+  if(c.memorySeeds?.length)verifyReviewedProfile(e.memoryFreeze,c.memorySeeds,e.memoryProfileAfter,{...e.memoryFreeze?.reviewIdentity,arm:e.arm,ownerId:e.actualUserId,projectId:e.actualProjectId,contextId:contextId(c.evaluation)});
   if(e.memoryFreeze&&e.memoryVerified!==true)throw new Error('Frozen memory evidence was not verified after the question');
   if(e.runtime?.model!==row.evidence.provider)throw new Error('Model receipt mismatch');
   if(c.evaluation?.maliciousControl)maliciousSourceExposure(e);

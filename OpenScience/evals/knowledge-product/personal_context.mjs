@@ -38,7 +38,7 @@ function candidateScore(seed,proposition,value){
  const words=new Set(normalized(value).match(/[\p{L}\p{N}]+/gu)??[]);
  return (matchesSeed(seed,value)?10000:0)+[...terms].filter(term=>words.has(term)).length;
 }
-export async function seedMemoryProof(seeds,profile,{judge}={}){
+export async function seedMemoryProof(seeds,profile,{judge,selectedRecords}={}){
  if(typeof judge!=='function')throw Error('Semantic seed judge is required');
  if(profile.engine!=='native')throw Error('Authenticated native memory profile is required');
  const records=profile.records??[];
@@ -50,7 +50,7 @@ export async function seedMemoryProof(seeds,profile,{judge}={}){
  const proofs=[];
  for(const seed of seeds){
   const proposition=seedProposition(seed);
-  const candidates=[...native].sort((a,b)=>candidateScore(seed,proposition,b.value)-candidateScore(seed,proposition,a.value)||String(a.uri).localeCompare(String(b.uri))).slice(0,MAX_SEED_CANDIDATES);
+  const candidates=selectedRecords ? native.filter(r=>r.uri===selectedRecords[seed.id]?.uri&&r.record.id===selectedRecords[seed.id]?.recordId&&approvedBodyHash(r.value)===selectedRecords[seed.id]?.bodySha256) : [...native].sort((a,b)=>candidateScore(seed,proposition,b.value)-candidateScore(seed,proposition,a.value)||String(a.uri).localeCompare(String(b.uri))).slice(0,MAX_SEED_CANDIDATES);
   const attempts=[];let accepted=null;
   for(const candidate of candidates){
    let result;

@@ -140,3 +140,22 @@ nonce in a native-URI record and stable paused-learning/active-recall state. Its
 `canary-presence-only` receipt is not semantic eligibility. The main collector rejects that mode before
 question dispatch; semantic evidence validation also rejects it. No canary helper changes main question
 prompts, source contracts, user seed statements, thresholds, repetitions or the aggregate CNY50 cap.
+
+Main memory/combined preparation now requires independent agent review of the
+actual frozen native seed profile. The runner writes a mode-0600 request under
+its private arm `seed-reviews/` directory, identified by the mode-0600
+`<arm>-seed-review-preparation.json` pointer. Main review waits at most 300 seconds. Root and a separate reviewing agent
+inspect the complete statements and native bodies and provide a matching
+`<requestSha256>.review.json` manifest with explicit scope, qualification,
+ordering, negation and conflicting-content verdicts. This records agent review,
+not human review. Missing or timed-out review is inconclusive; it sends no case
+question and retains the owned preparation for explicit resumption.
+
+The manifest selects exactly one existing native record (record ID, document URI and body hash) per seed. Multiple profile lines
+may share a document URI and each authored seed has its own review assignment. Only that
+record receives the unchanged bounded semantic check; rejected selection never
+falls back to another candidate. Main dispatch requires mode
+`reviewed-authored-seed-with-semantic-check` and revalidates full native URI/body
+and manifest bindings before every question. Legacy semantic-only helper output
+and lifecycle canaries remain ineligible for main quality comparisons. No new
+calibration or judge-model search is performed by this preparation step.
