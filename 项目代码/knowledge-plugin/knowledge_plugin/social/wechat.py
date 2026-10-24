@@ -195,6 +195,12 @@ def resolution(detail: dict, row: dict, now: datetime) -> dict | None:
     return resolved
 
 
+# Some accounts' articles carry their paragraph breaks as the two characters backslash-n inside the text (12 bodies
+# on production, 2026-10-24, e.g. 「吉利德获得全球权益。\\n\\n值得注意的是」): a run of them is one paragraph break,
+# written the way `clean_markup` writes one.
+LITERAL_BREAKS = re.compile(r"(?:[ \t]*\\n)+[ \t]*")
+
+
 def body_of(detail: dict) -> str | None:
     """The plain text of an ``article_detail`` answer, paragraph by paragraph: from the article's own HTML
     (``content_multi_text``), else from the light HTML (``content``, mode 1), whose paragraphs are split at every
@@ -204,7 +210,7 @@ def body_of(detail: dict) -> str | None:
         if isinstance(content, str) and content.strip():
             text = clean_markup(content, keep_paragraphs=True)
             if text:
-                return text
+                return LITERAL_BREAKS.sub("\n", text).strip()
     return None
 
 

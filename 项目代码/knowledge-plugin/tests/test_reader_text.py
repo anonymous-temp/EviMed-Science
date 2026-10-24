@@ -128,3 +128,10 @@ def test_the_container_reading_wins_only_when_trafilatura_missed_the_article(mon
 
 def test_trafilatura_failing_on_a_page_is_a_page_without_its_text():
     assert extracted_text("") == "" and extracted_text("\x00\x01") == ""
+
+
+def test_wechat_literal_backslash_n_is_a_paragraph_break():
+    # 2026-10-24: 12 WeChat bodies on production carried 「。\n\n值得」 as backslash-n characters inside the text.
+    html = "<p>吉利德获得全球权益。\\n\\n值得注意的是，这不是授权。\\n \\n本卡包覆盖</p><p>第二段</p>"
+    assert body_of({"content_multi_text": html}) == "吉利德获得全球权益。\n值得注意的是，这不是授权。\n本卡包覆盖\n第二段"
+    assert body_of({"content_multi_text": "<p>没有转义的正文</p>"}) == "没有转义的正文"
