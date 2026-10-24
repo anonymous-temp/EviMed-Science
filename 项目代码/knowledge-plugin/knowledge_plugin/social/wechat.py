@@ -11,6 +11,15 @@ After AIHOT's ``providers/dajiala.ts`` and ``sources/mp.ts`` (MIT, engine at 475
   gave); otherwise it is parked for 30 days with the reason ``wechat_nickname_mismatch`` — a mismatch costs ¥0.03, not
   a read. A resolved account is read by its original id (``post_history``, ¥0.14); an answer without ``user_name`` is
   read by the link instead. The resolution lives in the source's cursor and starts again when the registry row changes.
+- **By name when the link cannot say** (ct-src 2026-10-24). 44 of the 68 accounts listed on 2026-10-22 were never read:
+  their verified link was a Sogou temporary link (``/s?src=11&timestamp=…&signature=…``, expired before the first
+  resolution), and every ``article_detail`` on it answered code 20002. An account whose link is temporary, absent, or
+  answers a code that passes (or names a deleted article) is asked for by its name instead: ``post_history`` by
+  ``nickname`` (¥0.16) answers the account it found — ``nickname``, ``ghid`` — and its latest posts, whose links carry the
+  account's ``__biz``. It is kept only when that nickname is one of ``expected_names`` and, when the registry knows the
+  account's ``biz`` (``config.biz``), every post carries it (any other biz is a mismatch, parked for 30 days like a
+  nickname mismatch; no post at all leaves it unconfirmed, asked again in three days). The posts of that call are the
+  account's first read: nothing is paid twice. The name asked is the first of ``expected_names``.
 - **Pace and priority.** At most ``config.polls_per_day`` reads a day (two for the first priority tier, one for the rest),
   due accounts highest priority first, every call within the day's cap — with the balance at about ¥30 on 2026-10-22,
   the regulators, journals and societies are read before the portals and the trade press.
@@ -51,6 +60,9 @@ BODY_STREAK = 5                         # body calls failing in a row that pause
 BODY_PAUSE = timedelta(hours=1)         # ... for this long
 
 
+UNCONFIRMED_RETRY = timedelta(days=3)
+
+
 def normalize_name(name: str | None) -> str:
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(name or ""))).lower()
 
@@ -58,6 +70,67 @@ def normalize_name(name: str | None) -> str:
 def nickname_matches(nickname: str | None, row: dict) -> bool:
     expected = (row.get("config") or {}).get("expected_names") or [row.get("name")]
     return bool(nickname) and normalize_name(nickname) in {normalize_name(name) for name in expected if name}
+
+
+def temporary_link(url: str | None) -> bool:
+    """A Sogou search result's temporary article link (``/s?src=11&timestamp=…&signature=…``, also ``src=3``): it expires
+    within hours and names no account (module docstring). A format check, never a fetch."""
+    if not isinstance(url, str):
+        return False
+    parts = urlsplit(url.strip().replace("&amp;", "&"))
+    if parts.hostname != "mp.weixin.qq.com":
+        return False
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    return "__biz" not in query and "signature" in query and "timestamp" in query
+
+
+def resolvable_link(row: dict) -> str | None:
+    """The registry's verified article link when it can name the account (a WeChat article link that is not a temporary
+    one: the long ``__biz`` form or the short ``/s/<token>`` form), else ``None``."""
+    url = (row.get("config") or {}).get("verified_url")
+    if not isinstance(url, str) or temporary_link(url):
+        return None
+    parts = urlsplit(url.strip())
+    return url.strip() if parts.hostname == "mp.weixin.qq.com" and parts.path.startswith("/s") else None
+
+
+def ask_name(row: dict) -> str | None:
+    """The nickname an account is asked for by: the first of ``expected_names``, else the row's name."""
+    names = [name for name in (row.get("config") or {}).get("expected_names") or [] if isinstance(name, str) and name.strip()]
+    name = names[0] if names else row.get("name")
+    return name.strip() if isinstance(name, str) and name.strip() else None
+
+
+def known_biz(row: dict) -> str | None:
+    value = (row.get("config") or {}).get("biz")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def post_bizes(posts: list[dict]) -> set[str]:
+    """The ``__biz`` of every post link that has one."""
+    return {keys["__biz"] for keys in (article_link(post.get("url"))[1] for post in posts) if keys.get("__biz")}
+
+
+def name_resolution(nickname: str | None, ghid: str | None, posts: list[dict], row: dict,
+                    now: datetime) -> tuple[dict | None, str | None]:
+    """The account a ``post_history`` by nickname answered, when it is the one the registry expects: ``(resolution,
+    None)``, else ``(None, reason)`` — ``wechat_nickname_mismatch``, ``wechat_biz_mismatch`` (a post of another
+    account), or ``wechat_unconfirmed`` (the registry knows the biz and no post carries one)."""
+    if not nickname_matches(nickname, row):
+        return None, "wechat_nickname_mismatch"
+    bizes = post_bizes(posts)
+    expected = known_biz(row)
+    if expected and bizes - {expected}:
+        return None, "wechat_biz_mismatch"
+    if expected and not bizes:
+        return None, "wechat_unconfirmed"
+    resolved = {"nickname": nickname.strip(), "at": now.isoformat(), "via": "nickname"}
+    if isinstance(ghid, str) and ghid.strip():
+        resolved["ghid"] = ghid.strip()
+    biz = expected or (next(iter(bizes)) if len(bizes) == 1 else None)
+    if biz:
+        resolved["biz"] = biz
+    return resolved, None
 
 
 def polls_per_day(row: dict) -> int:

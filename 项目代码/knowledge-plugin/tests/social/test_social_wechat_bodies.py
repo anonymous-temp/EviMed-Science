@@ -299,7 +299,7 @@ async def test_the_ops_command_reports_first_then_buys_the_lost_bodies_and_deliv
     report = await lost_bodies.report(collector, pool, clock())
     assert sorted(line["entry_id"].split(":")[0] for line in report["entries"]) == ["wx-dxy-heart"] * 3
     assert report["summary"]["candidates"] == 3 and report["summary"]["estimate_cny"] == 0.09
-    assert report["summary"]["daily_cap_cny"] == 30.0 and report["summary"]["dajiala_configured"] is True
+    assert report["summary"]["daily_cap_cny"] == 90.0 and report["summary"]["dajiala_configured"] is True
     assert len(dajiala.asked) == asked and await texts(pool) == before, "the report calls nobody and writes nothing"
 
     dajiala.answers = {link(7): [ok_detail("<p>找回的正文。</p>")], link(8): [failing(101)], link(9): [failing(20002)]}
