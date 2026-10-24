@@ -153,6 +153,23 @@ def test_a_lead_source_is_a_registry_row_that_loads_and_is_never_polled():
                                                                           url="https://news.example.cn/", source_type="media", owner="x")["id"]
 
 
+
+def test_a_lead_source_is_served_by_the_sources_listing():
+    # 2026-10-24: api.AccessName was a copy of the read methods without `lead`; every /v1/sources page reaching a lead
+    # source answered 500 and the platform's mirror stopped, so lead items showed their source's id as its name.
+    from typing import get_args
+
+    from knowledge_plugin.api import AccessName, serialize_source
+
+    assert get_args(AccessName) == ACCESSES
+    row = {**lead_source_row("site:news.example.cn", name="示例医药网", homepage="https://news.example.cn/",
+                             url="https://news.example.cn/", source_type="media", owner="news.example.cn"),
+           "retired_at": None, "health": "new", "last_ok_at": None, "last_new_entry_at": None,
+           "consecutive_failures": 0, "entries_7d": 0, "registry_sha256": "0" * 64}
+    row["poll_interval_s"] = row["poll_floor_s"]
+    served = serialize_source(row)
+    assert served["access"] == "lead" and served["name"] == "示例医药网"
+
 # ------------------------------------------------------------------------------------ the API
 
 

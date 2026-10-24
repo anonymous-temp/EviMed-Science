@@ -43,7 +43,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__
 from .db import meta_get
 from .model import (
-    BODY_TEXT_MAX, CHANNELS, CONTRACT_VERSION, DATE_PRECISIONS, DEFECTS, EGRESSES, ENRICHMENT_TYPES, ENTRIES_PAGE_MAX,
+    ACCESSES, BODY_TEXT_MAX, CHANNELS, CONTRACT_VERSION, DATE_PRECISIONS, DEFECTS, EGRESSES, ENRICHMENT_TYPES, ENTRIES_PAGE_MAX,
     FACT_TYPES, FETCHED_FROM, HEALTH_STATES, LANES, LAUNCH_TIERS, PLATFORMS, PLUGIN_NAME, SOURCES_PAGE_MAX, SUMMARY_MAX,
 )
 from .normalize import clean_author, clean_media, clean_metrics, clean_quoted, whitelist_facts
@@ -97,8 +97,9 @@ class ContractModel(BaseModel):
 Lane = Literal["evidence", "guideline", "regulatory", "safety", "pipeline", "public-health", "research", "ai", "mixed"]
 SourceTypeName = Literal["journal", "regulator", "evidence-body", "preprint", "company", "media"]
 EgressName = Literal["direct", "browser", "relay", "bridge", "api"]
-AccessName = Literal["crossref-issn", "eutils-query", "europepmc", "json-api", "rss", "atom", "html-list",
-                     "browser-list", "relay", "wechat-bridge", "evimed-api", "socialdata", "dajiala", "social-crawl"]
+# The read methods are written once, in model.ACCESSES: a copy here lacked contract 1.6.0's `lead`, and every page of
+# /v1/sources that reached a lead source answered 500 (2026-10-24), which stopped the platform's source mirror.
+AccessName = Literal[ACCESSES]  # type: ignore[valid-type]
 ChannelName = Literal["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"]
 PlatformName = Literal["x", "wechat", "xiaohongshu", "douyin", "zhihu", "weibo", "bilibili", "channels", "web"]
 HealthName = Literal["new", "healthy", "degraded", "unreadable", "drifted", "disabled"]
