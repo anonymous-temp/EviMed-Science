@@ -114,8 +114,11 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   the capsule grew. It drew the stock — a line that rose to 75 and fell to 42, under a heading that began on another day than its
   first point — and could not say what happened. It is gone (2026-10-17): what happened to the memories is the time view of the
   map, the weekly bars of 记下 / 合并 / 忘记 counted from the same events as the list under them, with the window's one slider in the
-  card's header, and `?tab=growth` arrives there. Every tab of the memory page is a list and nothing else; no peer's memory page has a
-  chart, so a chart on a list page needs an argument of this size. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
+  card's header. **What the capsule gained since its first day is the one chart that came back (2026-10-23), as the first card of 总览**
+  (`/app/memory/overview`, a data page of its own): a dot for each gain up to thirty in a lane for each kind that has any (记下 ●, 学会 ▲,
+  资料 ■, 收下 ◆), weekly counts after that, counting gains only — what was replaced or forgotten is the time view's — and `?tab=growth`
+  arrives at 总览. 总览 and 地图 are the memory page's two pictures; its three lists (关于你, 项目, 做法) are lists and nothing else; no peer's
+  memory page has a chart, so a chart on a list page needs an argument of this size. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
   rule 1), reached from the memory page's last tab, 「地图」 (its page is drawn by the same `MemoryFrame` — one title, one column, the same four tabs in the sticky band — so the two read as one page: a map behind a menu item was not found, 2026-10-14; and its five views are one chip group of the one toolbar row, not a second row of tabs); it draws in the brand blue, the warn amber and one grey, tells a
   mark's kind by shape and words, and prints a radar's numbers at its axes; the knowledge base's graph follows the same grammar.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
@@ -393,14 +396,16 @@ pages after every release.
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
-   one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`) and the knowledge base's graph
+   one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`), the 记忆总览 (`/app/memory/overview`: the capsule as six cards of one grammar — a sentence whose numbers
+   link to their parts, 成长 the page's only canvas, 关于你, 项目, 我的做法, 知识, 收到的 — each changing form with the amount it has to show: 0 a recipe with one button, 1–5 the
+   things themselves, 6–30 ranked bars or dots, 31 and more folded; held to two kinds of section and five size × weight pairs, of which four are used) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
    view at a time over one shared selection, switched by one row, with the same marks listed under the canvas, and
    every mark opening the record's own drawer or the document's own page — so its three shapes (the sentence with
    its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
    themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2. A data
    page is also held to the data-page budget of controls — 10 kinds and 7 text colours, against a reading
-   page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget: the shell's three, the view
+   page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget (and so does 总览; 2026-10-23, measured in Chromium on the pages' own fixtures with the walk's `measure`: a button the header or a recipe adds is a `text` button, the look of the sidebar's 28 px controls, because a filled one was the eleventh kind): the shell's three, the view
    switch's two (the chosen view is a second kind), the chips, the search, the mark rows, the timeline
    scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
 2. **A row opens by the nature of what it is** (long configuration/mapping uses the main area under the October 20 correction below) (adopted 2026-10-08 with release 13, from the owner's
@@ -471,7 +476,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | T1 列表页 | 前沿动态, 知识库, 记忆 (关于你 / 项目 / 做法), 收件箱, 科研工具, 插件与技能, the GEO and study homes | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
 | T2 主从页 | 定时任务, 方法库, 假设卡 | header · `MasterDetail` (list 320–360 px, the record beside it; below 1024 px a `Drawer`, or the page swaps for a conversation) | a list and one record | the right-hand column |
 | T3 模块页 | 循证 GEO, 虚拟临床研究 (and one GEO answer, read inside the band under 问题与回答) | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
-| T4 数据页 | 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
+| T4 数据页 | 记忆总览, 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
 

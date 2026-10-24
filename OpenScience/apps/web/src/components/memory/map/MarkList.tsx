@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import type { MapNode } from "@/lib/memoryMapClient";
@@ -16,6 +17,8 @@ export interface MarkLine {
   onOpen?: () => void;
   /** An address of its own the row goes to (a document's page), instead of a drawer. */
   to?: string;
+  /** The row's own 「⋯」: 「就这个提问」 (`AskMenu`). */
+  menu?: ReactNode;
 }
 
 /**
@@ -36,6 +39,7 @@ export function MarkList({ lines, label, empty, unit = "个" }: { lines: readonl
             meta={[line.kind, line.note].filter(Boolean).join(" · ")}
             to={line.to}
             onOpen={line.to ? undefined : line.onOpen}
+            menu={line.menu}
           />
         ))}
       </List>

@@ -125,7 +125,7 @@ export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.m
 export { safeAppReturnPath } from './src/returnPath.mjs'
 
 
-// toolNames — 28 exports
+// toolNames — 30 exports
 export {
   MCP_MANAGED_JOB_BASE_NAMES,
   MCP_SERVER_NAME,
@@ -140,6 +140,7 @@ export {
   OPENVIKING_MEMORY_TOOL_NAMES,
   KERNEL_MOUNTED_TOOL_NAMES,
   MOUNTED_TOOL_NAMES,
+  PLATFORM_CHOREOGRAPHY_TOOL_NAMES,
   RETIRED_MCP_TOOL_NAMES,
   RETIRED_SOCKET_TOOL_NAMES,
   ROOT_VISIBLE_MCP_BASE_NAMES,
@@ -150,6 +151,7 @@ export {
   isMcpToolName,
   isOpenVikingMemoryToolName,
   isOpenVikingToolName,
+  isPlatformChoreographyTool,
   isSocketToolName,
   mcpToolBaseName,
   mcpToolName,
@@ -452,6 +454,40 @@ export {
   toolCalls,
   totalOutputTokens,
 } from './src/runTranscript.mjs'
+
+// artifactShape + trajectoryDigest — what the learning loop reads of a run: the person's requests and interventions, the files it
+// left (by structural shape) and the order of the work's tools with the platform's choreography removed
+export {
+  ARTIFACT_SHAPE_LIMITS,
+  ARTIFACT_SHAPE_MATCH_JACCARD,
+  ARTIFACT_SHAPE_MIN_LABELS,
+  artifactShapesMatch,
+  cleanArtifactShape,
+  cleanArtifactShapes,
+  normalizeShapeLabel,
+} from './src/artifactShape.mjs'
+export {
+  TRAJECTORY_ANCHOR_RADIUS,
+  TRAJECTORY_DIGEST_LIMITS,
+  ownTurnStarts,
+  rootSessionOf,
+  steeredMessages,
+  trajectoryDigest,
+  transcriptMessageText,
+} from './src/trajectoryDigest.mjs'
+
+// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent)
+export {
+  LEARNING_CORRECTION_VERDICTS,
+  LEARNING_EVIDENCE_KINDS,
+  LEARNING_EVIDENCE_LIMITS,
+  LEARNING_EVIDENCE_SUBJECT_TYPE,
+  LEARNING_EVIDENCE_TRIGGER,
+  LEARNING_EVIDENCE_VERDICTS,
+  LEARNING_FOLLOW_UP_WINDOW_MS,
+  cleanLearningEvidence,
+  isLearningCorrection,
+} from './src/learningEvidence.mjs'
 
 // skillSupply — a skill package's source, licence, version, scripts, references, dependencies and operations as one
 // record, and whether the deployment can supply what it needs (read as a label by the availability projection)
@@ -760,6 +796,9 @@ export {
 /** @typedef {import('./src/receipt.mjs').DeliveryReceipt} DeliveryReceipt */
 /** @typedef {import('./src/receipt.mjs').DeliveryReceiptEntry} DeliveryReceiptEntry */
 /** @typedef {import('./src/receipt.mjs').ReceiptFile} ReceiptFile */
+/** @typedef {import('./src/artifactShape.mjs').ArtifactShape} ArtifactShape */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryReaction} TrajectoryReaction */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryDigest} TrajectoryDigest */
 /** @typedef {import('./src/runTranscript.mjs').RunEvent} RunEvent */
 /** @typedef {import('./src/runTranscript.mjs').RunTranscript} RunTranscript */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptMessage} TranscriptMessage */

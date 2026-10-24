@@ -47,6 +47,19 @@ describe("收到的分享", () => {
     expect(share.openShareLink).toHaveBeenCalledWith("T".repeat(32));
   });
 
+  it("shows how the sender works as the 工作方式卡 of the pack that comes in — three categories and what is in each, nothing the scan left out", async () => {
+    const wide = { ...preview, entries: [
+      ...preview.entries,
+      { id: "e3", version: 1, factKind: "preference", layer: "profile", content: "结论先行。", path: "", sha256: "" },
+      { id: "e4", version: 1, factKind: "writing_style", layer: "profile", content: "引用写页码。", path: "", sha256: "" },
+      { id: "e5", version: 1, factKind: "expertise", layer: "knowledge", content: "做心血管药学。", path: "", sha256: "" },
+    ] };
+    share.openShareLink.mockResolvedValue({ preview: wide, link: { expiresAt: "", usesLeft: 1 } });
+    page(`/app/memory/shared/${"T".repeat(32)}`);
+    expect(await screen.findByRole("img", { name: "李主任的工作方式：方法 1 · 标准与偏好 2 · 背景 1" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "李主任的工作方式" })).toBeInTheDocument();
+  });
+
   it("taking it in writes a copy that is not in force, then offers a trial or enabling", async () => {
     share.openShareLink.mockResolvedValue({ preview, link: { expiresAt: "", usesLeft: 1 } });
     share.importShareLink.mockResolvedValue({ id: "cap-new", payload: { title: "李主任的工作方式" } });

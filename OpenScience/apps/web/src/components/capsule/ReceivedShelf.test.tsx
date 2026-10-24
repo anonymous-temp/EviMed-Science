@@ -15,6 +15,9 @@ const client = vi.hoisted(() => ({
 vi.mock("@/lib/memoryClient", () => client);
 const share = vi.hoisted(() => ({ listPendingDeliveries: vi.fn(), openDelivery: vi.fn(), importDelivery: vi.fn(), declineDelivery: vi.fn() }));
 vi.mock("@/lib/capsuleShareClient", () => share);
+// Deliveries between accounts exist only where the server has sharing on (`features.capsuleShare` of `/api/me`); on unless a test says otherwise.
+const sharing = vi.hoisted(() => ({ value: "on" as "on" | "off" | "error" }));
+vi.mock("@/lib/capsuleShareFeature", () => ({ useCapsuleShareFeature: () => sharing.value }));
 vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => "project-a" }));
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: () => "操作未完成，请重试。" }));
 vi.mock("@/lib/projects", () => {
@@ -50,7 +53,7 @@ function shelf() {
 }
 
 describe("收到的胶囊: trusted whole, one switch each way", () => {
-  beforeEach(() => { vi.clearAllMocks(); share.listPendingDeliveries.mockResolvedValue([]); });
+  beforeEach(() => { vi.clearAllMocks(); sharing.value = "on"; share.listPendingDeliveries.mockResolvedValue([]); });
   afterEach(cleanup);
 
   it("says what a pack brings, and nothing of the back office", async () => {
@@ -130,6 +133,22 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     shelf();
     expect(await screen.findByText("来自李主任 · 我做 Meta 分析的两条规矩")).toBeInTheDocument();
     expect(screen.getByText("9月27日更新：新增 2 条、移除 1 条")).toBeInTheDocument();
+  });
+
+  // 2026-10-23: where sharing is off the server answers 404 `capsule_share_not_enabled` to the list of deliveries, and the shelf showed
+  // 「暂时读不到待收下的分享。」 with 重试 for ever, on the import tab of every deployment that kept the default.
+  it("does not ask for deliveries where sharing is off or unknown, so no error is drawn for a thing that does not exist; the packs are still there", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+    for (const value of ["off", "error"] as const) {
+      sharing.value = value;
+      share.listPendingDeliveries.mockRejectedValue(new Error("capsule_share_not_enabled"));
+      const { container, unmount } = shelf();
+      expect(await screen.findByText("李主任的工作方式")).toBeInTheDocument();
+      expect(share.listPendingDeliveries).not.toHaveBeenCalled();
+      expect(container.textContent).not.toMatch(/暂时读不到待收下的分享/);
+      expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+      unmount();
+    }
   });
 
   it("is silent when nothing was received", async () => {

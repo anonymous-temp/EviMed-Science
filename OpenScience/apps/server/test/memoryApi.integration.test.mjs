@@ -278,7 +278,7 @@ test("a reset clears every kind the memory page shows — memories, learned meth
   await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [other.id]);
 });
 
-test("the page's new reads answer through the real app: handbooks to read and stop, what was learned when, a method's sources, the notes the researcher forgot", options, async (t) => {
+test("the page's new reads answer through the real app: handbooks to read and stop, a method's sources, the notes the researcher forgot", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
   const documents = app.capsuleService.documents;
   const learning = new LearningService({ documents });
@@ -308,9 +308,6 @@ test("the page's new reads answer through the real app: handbooks to read and st
   assert.equal((await read("/api/handbooks")).items.length, 0);
   assert.equal((await read("/api/handbooks?status=retired")).items.length, 1);
 
-  const learned = await read("/api/memory/learned?timeZone=Asia/Shanghai");
-  assert.deepEqual(learned.days.flatMap((entry) => entry.items.map((item) => [item.kind, item.what, item.title])), [["learned", "method", "引用标记对齐"]],
-    "the stopped handbook is not in the story, and no memory was written so the capsule has not begun");
   assert.deepEqual((await read(`/api/methods/${encodeURIComponent(method.id)}/sources`)).items, []);
   const mine = await read("/api/capsules/mine");
   assert.deepEqual([mine.entries.length, mine.forgotten.map((entry) => entry.payload.content)], [0, ["旧偏好"]]);

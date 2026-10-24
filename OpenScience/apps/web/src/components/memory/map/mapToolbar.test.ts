@@ -40,6 +40,17 @@ describe("the map's one row of controls", () => {
     expect(onNarrow.mock.calls.map(([patch]) => patch)).toEqual([{ topic: null }, { dimension: null }, { focus: null }]);
   });
 
+  it("draws the part a card of the overview opened the map on as a mark that lets go of it, in the overview's own word", () => {
+    const onNarrow = vi.fn();
+    const toolbar = build({ part: "method" }, { onNarrow });
+    expect(labels(toolbar)).toContain("toggle:只看：做法");
+    const mark = (toolbar.filters ?? []).find((filter) => filter.kind === "toggle" && filter.label === "只看：做法");
+    expect(mark).toMatchObject({ pressed: true });
+    if (mark?.kind === "toggle") mark.onChange(false);
+    expect(onNarrow).toHaveBeenCalledWith({ part: null });
+    expect(labels(build({}))).not.toContain("toggle:只看：做法");
+  });
+
   it("has no depth or source chain for a group of marks, which has no neighbours to reach and no sources of its own", () => {
     expect(labels(build({ focus: "cluster:preference" }, { focusLabel: "一组标记" }))).not.toContain("select:深度");
     expect(labels(build({ focus: "cluster:preference" }, { focusLabel: "一组标记" }))).not.toContain("toggle:来源链");

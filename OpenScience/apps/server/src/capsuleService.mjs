@@ -5,6 +5,7 @@ import { sharedFrom } from "./capsuleShareLabel.mjs";
 import { DOCUMENT_MEMORY_LAYER, documentEntryProjects } from "./derivedMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
+import { recordCapsuleRuntimeRefresh } from "./capsuleShareMetrics.mjs";
 
 /** How many entries one list of `mine` reads at most — a researcher's notes number in the hundreds; the bound is there so one account that has thousands cannot make a page read forever. */
 export const CAPSULE_MINE_LIMIT = 2000;
@@ -39,6 +40,9 @@ function provenance(value) {
 function activationKey(projectId) {
   return projectId == null ? "active-capsules:account" : `active-capsules:project:${productId(projectId, "projectId")}`;
 }
+
+/** The project a scan's model call is booked to when the caller names none: every account has it, and the spend is the account's own. */
+export const SCAN_METER_PROJECT = "default";
 
 /** How many capsules are in force together: the activation limit, and the window every reader of the lists looks through. */
 const ACTIVE_CAPSULE_LIMIT = 8;
@@ -88,12 +92,16 @@ function methodHeading(content) {
 
 export class CapsuleService {
   /** @param {import('./productStore.mjs').ProductDocuments} documents
-   *  @param {{indexing?:any,strictIndex?:boolean,scanner?:import('./capsuleScan.mjs').CapsuleScanner|null}} [options] */
-  constructor(documents, { indexing = null, strictIndex = false, scanner = null } = {}) {
+   *  @param {{indexing?:any,strictIndex?:boolean,scanner?:import('./capsuleScan.mjs').CapsuleScanner|null,
+   *    onActivationChanged?: ((change: { userId: string, projectId: string | null, capsuleId: string, change: "enabled" | "disabled" }) => Promise<unknown> | unknown) | null}} [options]
+   *  `onActivationChanged` is told that the capsules in force changed, so a runtime that mounted the old ones can take the new
+   *  (`RuntimeManager.refreshCapsuleMethods`): `projectId` is the project whose list changed, null for the account's, which is every project's. */
+  constructor(documents, { indexing = null, strictIndex = false, scanner = null, onActivationChanged = null } = {}) {
     this.documents = documents;
     this.indexing = indexing;
     /** The automatic scan a received pack passes before it takes effect. */
     this.scanner = scanner;
+    this.onActivationChanged = onActivationChanged;
     // A derived index is an optimisation, and the facts it ranks are all in
     // PostgreSQL anyway. When it is down, a recall should return what the
     // lexical search finds rather than fail — the same choice `memorySubstrate`
@@ -101,6 +109,38 @@ export class CapsuleService {
     // sets the strict switch.
     this.strictIndex = Boolean(strictIndex);
     this.lastIndexError = null;
+  }
+
+  /**
+   * Every capsule of an account of the kind `filter` names, page by page. A capsule is one per project besides the account's own
+   * and every pack received, so an account with a hundred projects has more than one page of them, and a read that took the first
+   * hundred dropped the rest without a word (2026-10-23 review S9: received packs vanished from the shelf).
+   * @param {string} userId @param {Record<string, any>} [filter]
+   * @returns {Promise<any[]>}
+   */
+  async #allCapsules(userId, filter = {}) {
+    /** @type {any[]} */
+    const capsules = [];
+    /** @type {string | null} */
+    let cursor = null;
+    for (let pages = 0; pages < 50; pages += 1) {
+      const page = await this.documents.list(userId, "capsule", { limit: 100, cursor, filter });
+      capsules.push(...page.items);
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+    return capsules;
+  }
+
+  /**
+   * Say that the capsules in force changed. A runtime that is up mounted the old ones when it launched, so it is told; the click
+   * that caused this has already worked and never fails for it.
+   * @param {string} userId @param {string | null} projectId @param {string} capsuleId @param {"enabled" | "disabled"} change
+   */
+  async #activationChanged(userId, projectId, capsuleId, change) {
+    if (!this.onActivationChanged) return;
+    try { await this.onActivationChanged({ userId, projectId, capsuleId, change }); recordCapsuleRuntimeRefresh("asked"); }
+    catch { recordCapsuleRuntimeRefresh("failed"); }
   }
 
   /** @param {string} userId @param {Record<string,any>} input */
@@ -182,7 +222,7 @@ export class CapsuleService {
    * @param {string} userId @param {{ limit?: number }} [options]
    */
   async mine(userId, { limit = CAPSULE_MINE_LIMIT } = {}) {
-    const own = (await this.documents.list(userId, "capsule", { limit: 100 })).items
+    const own = (await this.#allCapsules(userId))
       .filter((/** @type {any} */ capsule) => !capsule.payload.imported);
     const capsule = await this.ownCapsule(userId);
     /** @param {string} status */
@@ -321,16 +361,23 @@ export class CapsuleService {
     return { record, items };
   }
 
-  /** @param {string} userId @param {string} capsuleId @param {{ mode?: string, projectId?: string|null }} options */
-  async activate(userId, capsuleId, { mode: requested = "own", projectId = null } = {}) {
+  /**
+   * Put a capsule in force: the researcher's own first (their words come before anyone's), then the packs they enabled, the one
+   * enabled last ahead of the ones enabled before it — where two packs disagree the later one is read first (build spec §9.4 #6).
+   * Making a capsule one's own no longer turns every pack off: that was a side effect nothing asked for; `clearGuests` says it.
+   * @param {string} userId @param {string} capsuleId @param {{ mode?: string, projectId?: string|null, clearGuests?: boolean }} options
+   */
+  async activate(userId, capsuleId, { mode: requested = "own", projectId = null, clearGuests = false } = {}) {
     assertNotTakenDown(await this.get(userId, capsuleId));
     // `blend` is accepted and stored as what it always meant.
     const mode = capsuleActivationMode(requested);
     if (!mode) throw new HttpError(400, "capsule_payload_invalid", "Invalid activation mode.");
     for (let attempt = 0; attempt < 3; attempt++) {
       const current = await this.active(userId, projectId);
-      const items = mode === "own" ? [{ capsuleId, mode }]
-        : [...current.items.filter((x) => x.capsuleId !== capsuleId), { capsuleId, mode }];
+      const others = current.items.filter((x) => x.capsuleId !== capsuleId);
+      const items = mode === "own"
+        ? [{ capsuleId, mode }, ...(clearGuests === true ? others.filter((x) => x.mode === "own") : others)]
+        : [...others.filter((x) => x.mode === "own"), { capsuleId, mode }, ...others.filter((x) => x.mode !== "own")];
       if (items.length > 8) throw new HttpError(400, "capsule_activation_limit", "At most eight capsules may be active together.");
       try {
         return await this.documents.put(userId, "preferences", activationKey(projectId), { items },
@@ -349,8 +396,7 @@ export class CapsuleService {
    * @param {string} userId @param {{ projectId?: string | null }} [options]
    */
   async received(userId, { projectId = null } = {}) {
-    const packs = (await this.documents.list(userId, "capsule", { limit: 100 })).items
-      .filter((/** @type {any} */ capsule) => capsule.payload.imported === true);
+    const packs = await this.#allCapsules(userId, { imported: true });
     const account = new Set((await this.active(userId, null)).items.map((item) => String(item.capsuleId)));
     const project = new Set(projectId ? (await this.active(userId, projectId)).items.map((item) => String(item.capsuleId)) : []);
     const result = [];
@@ -414,9 +460,11 @@ export class CapsuleService {
     const live = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId } })).items
       .filter((/** @type {any} */ entry) => entry.payload.status !== "retired");
     const scanner = this.scanner ?? new CapsuleScanner({});
-    const result = await scanner.scan({ userId, projectId: projectId ?? "" },
+    // With no project in view the language check is metered to the account's own default project: an enable from somewhere that
+    // names none must not leave every entry `unscanned` — context, never mounted — until a later enable from a project.
+    const result = await scanner.scan({ userId, projectId: projectId || SCAN_METER_PROJECT },
       live.map((/** @type {any} */ entry) => ({ id: entry.id, factKind: entry.payload.factKind, content: entry.payload.content })),
-      { useModel: Boolean(projectId) });
+      { useModel: true });
     const kept = new Set(result.kept);
     const unchecked = new Set(result.unchecked ?? (result.model === "ok" ? [] : result.kept));
     const held = new Set(Array.isArray(result.held) ? result.held : []);
@@ -451,6 +499,7 @@ export class CapsuleService {
     await this.#scannedPack(userId, capsuleId, projectId);
     await this.activate(userId, capsuleId, { mode: "guest", projectId: onlyProject ? projectId : null });
     await this.#keep(userId, capsuleId, true);
+    await this.#activationChanged(userId, onlyProject ? projectId : null, capsuleId, "enabled");
     return (await this.received(userId, { projectId })).find((pack) => pack.id === capsuleId) ?? null;
   }
 
@@ -477,8 +526,8 @@ export class CapsuleService {
 
   /**
    * One click: the pack stops contributing anything — out of the account's
-   * list and every project's. Recall stops at once; a method it had mounted
-   * leaves the runtime at its next start.
+   * list and every project's. Recall stops at once, and a method it had mounted
+   * leaves the runtimes that are up before their next turn (`onActivationChanged`).
    * @param {string} userId @param {string} capsuleId
    */
   async disable(userId, capsuleId) {
@@ -511,6 +560,8 @@ export class CapsuleService {
       }
     }
     await this.#keep(userId, capsuleId, false);
+    // Every list the pack left is a scope whose runtimes mounted it: the account's list is every project's.
+    for (const list of lists) await this.#activationChanged(userId, list.projectId ?? null, capsuleId, "disabled");
     return { disabled: true, lists: lists.length };
   }
 

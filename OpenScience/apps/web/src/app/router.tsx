@@ -33,6 +33,7 @@ const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m)
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
 const MemoryMapPage = lazy(() => import("./routes/MemoryMapPage").then((m) => ({ default: m.MemoryMapPage })));
+const MemoryOverviewPage = lazy(() => import("./routes/MemoryOverviewPage").then((m) => ({ default: m.MemoryOverviewPage })));
 const SharedCapsulePage = lazy(() => import("./routes/SharedCapsulePage").then((m) => ({ default: m.SharedCapsulePage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
 const SimulatedWalletPage = lazy(() => import("./routes/SimulatedWalletPage").then((m) => ({ default: m.SimulatedWalletPage })));
@@ -139,6 +140,8 @@ export const routes: RouteObject[] = [
         { path: "memory", element: <MemoryHubPage /> },
         // 「记忆地图」: the explorable picture of the memory page's contents, a data page of its own (DESIGN.md 「页面结构」).
         { path: "memory/map", element: <MemoryMapPage /> },
+        // 「总览」: the capsule as six parts of one picture, where `/app/memory` lands and each card drills into the map from (DESIGN.md 「页面结构」).
+        { path: "memory/overview", element: <MemoryOverviewPage /> },
         // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
         { path: "memory/shared/:token", element: <SharedCapsulePage /> },
         { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },
@@ -166,7 +169,7 @@ export const routes: RouteObject[] = [
         // which is where a run's `.ipynb` deliverables still are.
         { path: "sources", element: <Navigate to="/app/files?tab=sources" replace /> },
         { path: "notebooks", element: <Navigate to="/app/files" replace /> },
-        { path: "capsules", element: <Navigate to="/app/memory?tab=capsules" replace /> },
+        { path: "capsules", element: <Navigate to="/app/memory/overview" replace /> },
         { path: "settings", element: <Navigate to="/app/account?tab=appearance" replace /> },
         // 「运维」: the operators' console, on its own page; `/app/account?tab=ops` was its address as a section of 设置 and lands here.
         { path: "ops", element: <OpsRoute /> },

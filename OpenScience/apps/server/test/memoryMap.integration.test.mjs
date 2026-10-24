@@ -150,6 +150,45 @@ test("the map reads an account's memories, what they rest on and how they change
   assert.equal(unauth.status, 401);
 });
 
+test("the notes of the account's own capsule are marks of the map and the overview's read answers what it counts, through the real routes", options, async (t) => {
+  const { app, base, headers, user, otherHeaders } = await fixture(t);
+  const memory = app.researchMemory;
+  await memory.upsertRecord(user.id, { ...fact({ scope: "user", scopeId: "", kind: "preference", key: "style.length", value: "short answers first", summary: "short answers first" }) }, proof);
+  const capsule = await app.capsuleService.ownCapsule(user.id, { create: true });
+  const note = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "writing_style", layer: "profile", content: "Cite page numbers." });
+  const gone = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "preference", layer: "profile", content: "A note forgotten." });
+  await app.capsuleService.updateEntry(user.id, capsule.id, gone.id, { status: "retired", expectedRevision: gone.revision });
+  const projectNote = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "project_fact", layer: "knowledge", content: "Adults only." });
+
+  // What the overview asks for: no lines and no lineages.
+  const { status, body } = await get(base, headers, "/api/memory/map?include=summary,facets,nodes,buckets,events");
+  assert.equal(status, 200);
+  const map = body.data;
+  assert.equal(map.engine, "postgres", "the page knows which kind of account this is");
+  assert.equal(map.edges, undefined);
+  assert.equal(map.lanes, undefined);
+  const marks = map.nodes.filter((entry) => entry.type === "memory");
+  assert.deepEqual(marks.map((entry) => entry.id).sort(), [`memory:entry:${note.id}`, `memory:entry:${projectNote.id}`, `memory:${(await memory.mapRecords(user.id)).find((record) => record.key === "style.length").id}`].sort(),
+    "a note is a mark of the memory kind; the one the researcher forgot is not drawn");
+  const noteMark = marks.find((entry) => entry.id === `memory:entry:${note.id}`);
+  assert.deepEqual(noteMark.open, { kind: "entry", id: note.id });
+  assert.equal(noteMark.subtype, "writing_style");
+  assert.equal(map.summary.memories, 3, "the headline counts the notes with the memories");
+  // What is about the person, by kind, counted before anything is folded: a project's kind is not.
+  assert.deepEqual(map.facets.aboutYou.map((kind) => [kind.id, kind.count]).sort(), [["preference", 1], ["writing_style", 1]]);
+  assert.ok(map.events.some((event) => event.ref === `memory:entry:${note.id}` && event.change === "created"), "a note is a gain on the growth strip");
+  assert.ok(map.buckets.series.every((day) => typeof day.document === "number"), "a day counts the documents added as well");
+  assert.deepEqual(map.facets.documentTypes, [], "no document in this account's knowledge base");
+  assert.equal(map.facets.dimensions.find((dimension) => dimension.id === "memory").axes.find((axis) => axis.id === "aspect:habit").count, 1, "a writing style is a habit in the radar");
+  assert.deepEqual(map.missing, []);
+  // Another account has none of it.
+  const theirs = (await get(base, otherHeaders, "/api/memory/map?include=summary,nodes")).body.data;
+  assert.deepEqual(theirs.nodes.filter((entry) => entry.type === "memory"), []);
+  // The two routes the overview replaced are not served.
+  assert.equal((await fetch(`${base}/api/memory/growth`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/memory/learned`, { headers })).status, 404);
+});
+
 test("a memory's links are read from the records that own them, and another account's record is a 404", options, async (t) => {
   const { app, base, headers, user, other, otherHeaders } = await fixture(t);
   const memory = app.researchMemory;

@@ -34,7 +34,7 @@ test("each trigger scenario comes out as the case says: the gate's repairs queue
     const run = ledgerRun(scenario, index);
     const jobs = { enqueue: async () => ({ id: "job" }) };
     const triggers = new LearningTriggers({
-      jobs, deliveryShare: scenario.shares.delivery, repairShare: scenario.shares.repair,
+      jobs, repairShare: scenario.shares.repair,
       agentRuns: { list: async () => [run], runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: scenario.run.inRunAttempts }] } }) },
     });
     const result = await triggers.afterRun(project, run, scenario.memoryCorrections ? { corrections: scenario.memoryCorrections } : null);

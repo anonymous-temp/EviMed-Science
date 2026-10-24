@@ -204,6 +204,7 @@ const WALK_TABLES = {
       {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-methods","route":"/app/memory?tab=methods","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory-overview","route":"/app/memory/overview","pattern":"/app/memory/overview","family":"memory","template":"T4","budget":"data","shapes":2,"rows":true},
       {"view":"memory-map","route":"/app/memory/map","pattern":"/app/memory/map","family":"memory","template":"T4","budget":"data","shapes":3,"rows":true},
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
@@ -2112,8 +2113,8 @@ export function pageProbe([kind, arg]) {
     };
   }
   if (kind === "memoryTabs") {
-    // The page's tab list is the band's (关于你 · 项目 · 做法 · 地图); the growth tab and its sentence went into the map in R19.
-    const names = ["关于你", "项目", "做法", "地图"];
+    // The page's tab list is the band's (总览 · 地图 · 关于你 · 项目 · 做法); the growth tab and its sentence went into the map in R19, and into the overview's first card after.
+    const names = ["总览", "地图", "关于你", "项目", "做法"];
     const tabs = all("[role='tab']").filter(visible).map((el) => {
       const text = words(el);
       const name = names.find((candidate) => text.startsWith(candidate)) ?? text;
@@ -2128,12 +2129,41 @@ export function pageProbe([kind, arg]) {
   }
   if (kind === "memoryMap") {
     const text = words(main);
+    // The sentence over the picture and the marks of the list under it, read as the page draws them: a mark's shape is its first aria-hidden
+    // character (`MarkGlyph`), amber when it needs a look; a replaced one says so in its line, a folded group has the hexagon.
+    const marksList = all("main ul[aria-label='标记']").find(visible);
+    const marks = marksList ? [...marksList.querySelectorAll(":scope > li")].map((li) => {
+      const glyph = li.querySelector("span[aria-hidden='true']");
+      return { glyph: glyph ? words(glyph) : "", warn: Boolean(glyph && String(glyph.className).includes("text-warn")), replaced: words(li).includes("已被后来的说法替代") };
+    }) : [];
     return {
+      headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
+      marks,
+      more: all("[data-show-more]").some(visible),
       views: all("[role='group'][aria-label='地图的视图'] button").filter(visible).map(words),
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
       thin: text.includes("再多聊几次，这里会长出你的地图"),
       empty: text.includes("还没有记住什么"),
+    };
+  }
+  if (kind === "memoryOverview") {
+    // The six cards as the page draws them, by the markers of `OverviewCard`: which part, in what state (loading, error, recipe or content), in what
+    // shape, the number in its heading and what it draws — the rows and the bars — so the walk can hold the sentence over the cards to them.
+    const trailingNumber = (el) => Number(/(\d+)\s*$/.exec(el.getAttribute("aria-label") ?? "")?.[1] ?? NaN);
+    return {
+      headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
+      tabs: all("[role='tablist'][aria-label='记忆'] [role='tab']").filter(visible).map(words),
+      canvases: all("[data-chart]").filter(visible).length,
+      cards: all("[data-overview-card]").filter(visible).map((el) => ({
+        part: el.getAttribute("data-overview-card"), state: el.getAttribute("data-state"), shape: el.getAttribute("data-shape"),
+        count: el.hasAttribute("data-count") ? Number(el.getAttribute("data-count")) : null,
+        memories: el.hasAttribute("data-memories") ? Number(el.getAttribute("data-memories")) : null,
+        rows: [...el.querySelectorAll("[data-overview-row]")].filter(visible).length,
+        bars: [...el.querySelectorAll("ul[aria-label] [role='img'][aria-label]")].filter(visible).map(trailingNumber),
+        more: Number(el.getAttribute("data-more") ?? 0),
+      })),
+      look: (() => { const section = document.querySelector("[data-overview-look]"); return section ? { count: Number(section.getAttribute("data-overview-look")), rows: section.querySelectorAll("[data-overview-row]").length } : null; })(),
     };
   }
   if (kind === "knowledgeGraph") {
@@ -2235,6 +2265,7 @@ export const PAGE_PROBES = {
   "memory-methods": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
   "memory-map": [["memoryMap", ["desktop", "phone"]]],
+  "memory-overview": [["memoryOverview", ["desktop", "phone"]]],
   "knowledge-graph": [["knowledgeGraph", ["desktop", "phone"]]],
   inbox: [["inboxSafety", ["desktop"]]],
   account: [["feishuRows", ["desktop"]]],
@@ -2280,6 +2311,111 @@ export function memoryMapFindings(name, read) {
     if (read.closed.dialog) failures.push(`${current}: the drawer did not close`);
     if (read.closed.address) failures.push(`${current}: the drawer closed and its mark is still in the address`);
   } else if (read.opened.dialog) failures.push(`${current}: the drawer has no 关闭 button to press`);
+  return { failures, notices };
+}
+
+/**
+ * The sentence over 记忆地图 against the list under it: the headline's numbers must be the rows the page draws, and a page that says it
+ * holds nothing has proved nothing. Pure, so the rule is tested without a browser.
+ *
+ * The sentence is 「EviMed 记住了你的 N 件事，其中 M 件…」 (N memories in force, M of them needing a look), or — when no memory is written — 「胶囊里有
+ * … ，还没有记下关于你的事」 / 「还没有记住什么」. The rows are the marks of the list: a memory is a ● or a ◆ (a replaced one says so in its line and
+ * is not counted, as the server does not), a mark that needs a look wears the amber. The two are compared only when the list is whole: a
+ * list with a 显示更多 left, or with a folded group (⬢) in it, holds more than its rows, and says so as a notice, not a pass.
+ *
+ * A headline of zero memories is **not observable**: nothing was there to compare, which is a different thing from agreeing.
+ * @param {string} current the report's `name@viewport`
+ * @param {{ headline?: string | null, marks?: Array<{ glyph: string, warn: boolean, replaced: boolean }>, more?: boolean }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function memoryMapHeadlineFindings(current, read) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (read.headline === undefined || read.marks === undefined) return { failures, notices };
+  if (!read.headline) {
+    notices.push(`${current}: not observable: the page has no headline, so its numbers were not compared with its rows`);
+    return { failures, notices };
+  }
+  const said = /记住了你的\s*(\d+)\s*件事/u.exec(read.headline);
+  const memories = said ? Number(said[1]) : 0;
+  const looks = said ? Number(/其中\s*(\d+)\s*件/u.exec(read.headline)?.[1] ?? 0) : 0;
+  const drawn = read.marks.filter((mark) => (mark.glyph === "●" || mark.glyph === "◆") && !mark.replaced);
+  if (memories === 0) {
+    if (drawn.length > 0) failures.push(`${current}: the headline holds no memory (“${read.headline}”) and the list draws ${drawn.length}`);
+    else notices.push(`${current}: not observable: the headline holds no memory, so its numbers were not compared with any row`);
+    return { failures, notices };
+  }
+  if (read.more || read.marks.some((mark) => mark.glyph === "⬢")) {
+    notices.push(`${current}: not compared: the list is longer or folded, so its rows are not the headline's ${memories} memories`);
+    return { failures, notices };
+  }
+  if (drawn.length !== memories) failures.push(`${current}: the headline says ${memories} memories and the list draws ${drawn.length}`);
+  const amber = drawn.filter((mark) => mark.warn).length;
+  if (amber !== looks) failures.push(`${current}: the headline says ${looks} need a look and the list marks ${amber}`);
+  return { failures, notices };
+}
+
+/** The parts of the overview, in the order its cards stand. */
+export const MEMORY_OVERVIEW_PARTS = Object.freeze(["growth", "you", "projects", "methods", "knowledge", "received"]);
+/** The tabs of 记忆胶囊, in the order its band shows them. */
+export const MEMORY_TABS = Object.freeze(["总览", "地图", "关于你", "项目", "做法"]);
+
+/**
+ * The overview, judged: its six cards in order and none still loading or silently failed; the sentence over them is the cards' numbers; each
+ * card draws as many things as its heading counts; the page has one canvas. A page that has nothing to compare is **not observable**, never a pass.
+ *
+ * The sentence names three counts — 「N 件关于你和项目的事」 (the 关于你 card's memories and the 项目 card's), 「N 种做法」 and 「N 份资料」 — and a
+ * card that counts something the sentence leaves out is as wrong as a sentence that counts what no card has. A card whose heading carries no
+ * number (a recipe, an error) counts as nothing; one in error is named, because a failed read is not a zero.
+ *
+ * What a card draws: a card of `rows` lists its things one by one, so its rows are its number (项目's table and 收到的 list are cut at eight, and
+ * say how many more there are); a card of `bars` or `types` ranks what it counts, so its bars add up to its number.
+ * @param {string} current the report's `name@viewport`
+ * @param {{ headline: string | null, tabs?: string[], canvases?: number, cards: Array<{ part: string, state: string, shape: string | null, count: number | null, memories: number | null, rows: number, bars: number[], more: number }>, look?: { count: number, rows: number } | null }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function memoryOverviewFindings(current, read) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  const order = read.cards.map((card) => card.part).join(",");
+  if (order !== MEMORY_OVERVIEW_PARTS.join(",")) failures.push(`${current}: the cards read “${read.cards.map((card) => card.part).join("、")}” (${MEMORY_OVERVIEW_PARTS.join("、")})`);
+  if (read.tabs && read.tabs.length > 0 && read.tabs.map((tab) => tab.replace(/\s*\d+$/, "")).join(",") !== MEMORY_TABS.join(",")) failures.push(`${current}: the tabs read “${read.tabs.join("、")}” (${MEMORY_TABS.join("、")})`);
+  if ((read.canvases ?? 0) > 1) failures.push(`${current}: ${read.canvases} canvases on the page (one: the growth strip; every other card is words and rows)`);
+  for (const card of read.cards) {
+    if (card.state === "loading") failures.push(`${current}: the ${card.part} card is still loading`);
+    if (card.state === "error") failures.push(`${current}: the ${card.part} card could not be read`);
+  }
+  const by = Object.fromEntries(read.cards.map((card) => [card.part, card]));
+  const counted = (part) => (by[part]?.state === "content" ? by[part].count ?? 0 : 0);
+  const unread = read.cards.some((card) => card.state === "error" || card.state === "loading");
+  const expected = { memories: counted("you") + (by.projects?.state === "content" ? by.projects.memories ?? 0 : 0), methods: counted("methods"), documents: counted("knowledge") };
+  const said = (pattern) => { const found = pattern.exec(read.headline ?? ""); return found ? Number(found[1]) : 0; };
+  const sentence = { memories: said(/(\d+)\s*件关于你和项目的事/u), methods: said(/(\d+)\s*种做法/u), documents: said(/(\d+)\s*份资料/u) };
+  if (!unread) {
+    if (!read.headline) {
+      if (expected.memories + expected.methods + expected.documents > 0) failures.push(`${current}: the cards count ${expected.memories} memories, ${expected.methods} methods and ${expected.documents} documents and the page has no sentence over them`);
+    } else {
+      for (const [name, word] of [["memories", "memories"], ["methods", "methods"], ["documents", "documents"]]) {
+        if (sentence[name] !== expected[name]) failures.push(`${current}: the sentence says ${sentence[name]} ${word} and the cards count ${expected[name]}`);
+      }
+    }
+  }
+  for (const card of read.cards) {
+    if (card.state !== "content" || card.count === null) continue;
+    if (card.shape === "rows") {
+      const drawn = card.rows + card.more;
+      if (drawn !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} and draws ${drawn}`);
+    } else if (card.shape === "table") {
+      if (card.rows + card.more !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} projects and draws ${card.rows + card.more}`);
+    } else if (card.shape === "bars" || card.shape === "types") {
+      const sum = card.bars.reduce((total, bar) => total + (Number.isFinite(bar) ? bar : 0), 0);
+      if (card.part !== "knowledge" || card.bars.length > 0) {
+        if (sum !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} and its bars add up to ${sum}`);
+      }
+    }
+  }
+  if (read.look && read.look.rows > 5) failures.push(`${current}: ${read.look.rows} rows of what needs a look (five, and the count)`);
+  if (read.cards.length > 0 && read.cards.every((card) => card.state === "recipe")) notices.push(`${current}: not observable: every card is a recipe, so the sentence and the cards were not compared`);
   return { failures, notices };
 }
 
@@ -2414,6 +2550,17 @@ export function probeFindings(name, viewportName, kind, r) {
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
+      {
+        const counted = memoryMapHeadlineFindings(current, r);
+        failures.push(...counted.failures);
+        notices.push(...counted.notices);
+      }
+      break;
+    }
+    case "memoryOverview": {
+      const judged = memoryOverviewFindings(current, r);
+      failures.push(...judged.failures);
+      notices.push(...judged.notices);
       break;
     }
     case "calculationHistory": {
@@ -3777,6 +3924,9 @@ async function main() {
           }
           if (routeLoad.retried) report.info.push(`${current}: visible read error retried once after an observed network change; initial error retained in routeLoad`);
           if (name === "calculation-history") await page.waitForFunction(calculationHistoryReady, undefined, { timeout: 30_000 });
+          // The overview's cards each read on their own: the map's document takes seconds on an account of many memory files, and a card still
+          // loading is not a page measured.
+          if (name === "memory-overview") await page.waitForFunction(overviewReady, undefined, { timeout: 30_000 }).catch(() => null);
           phase = "measurement";
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
             RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);
@@ -4302,6 +4452,12 @@ export const ADDRESS_CASES = [
   { page: "memory-map", route: "/app/memory/map", probe: "memory-map", act: [["chip", "地图的视图", "维度"]], fill: ["搜索记忆地图", "探针"], search: { view: "dims", q: "探针" }, state: { selected: "地图", view: "维度", query: "探针" } },
 ];
 
+/** Whether every card of the overview has finished reading (loaded, failed or empty), and the page has drawn its cards at all. Read in the page as source text. */
+export function overviewReady() {
+  const cards = [...document.querySelectorAll("[data-overview-card]")];
+  return cards.length > 0 && cards.every((el) => el.getAttribute("data-state") !== "loading");
+}
+
 /** Memory controls mount before data. An error is terminal but never empty or successful coverage.
  * @param {{ map: boolean, selected?: string, query?: string }} wanted
  */
@@ -4447,7 +4603,7 @@ async function walkAddressState(page, base) {
   const landingRoute = page.url();
   const landing = await page.evaluate(pageProbe, ["memoryTabs"]);
   reads["memory-landing"] = { route: landingRoute, ...landing };
-  if (!new URL(landingRoute).pathname.endsWith("/memory/map")) {
+  if (!/\/memory\/(?:map|overview)$/.test(new URL(landingRoute).pathname)) {
     failures.push(...probeFindings("memory-landing", "desktop", "memoryTabs", landing).failures);
   }
   await openRoute(page, base, "/app/memory?tab=self");
