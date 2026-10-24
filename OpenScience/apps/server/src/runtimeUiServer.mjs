@@ -510,7 +510,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         catch (error) { if (delegatedPolicies.get(frame.frameId) === existing) delegatedPolicies.delete(frame.frameId); throw error; }
       }
       const scoped = await existing.promise;
-      existing.expiresAt = claims.expiresAt;
+      existing.expiresAt = Math.max(existing.expiresAt, claims.expiresAt);
       if (delegatedPolicies.get(frame.frameId) !== existing) { scoped.dispose(); throw new HttpError(403, 'runtime_ui_frame_invalid', 'The shared frame was released.'); }
       return { user, session, ...resolved, claims, frame, scoped };
     }
@@ -1020,7 +1020,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     /** Called only after renewal proof, live login, CSRF and project access are validated. */
     refreshFrameBinding(renewed) {
       const delegated = delegatedPolicies.get(renewed.frameId);
-      if (delegated?.userId === renewed.claims.userId) delegated.expiresAt = renewed.expiresAt;
+      if (delegated?.userId === renewed.claims.userId) delegated.expiresAt = Math.max(delegated.expiresAt, renewed.expiresAt);
       let updated = 0;
       for (const connection of frameConnections.get(renewed.frameId) ?? []) {
         if (!["frameId", "userId", "projectId", "authSessionHash", "audience"].every((key) => connection.claims[key] === renewed.claims[key])) continue;

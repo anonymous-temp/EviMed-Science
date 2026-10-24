@@ -220,6 +220,30 @@ test('shared native question answers correlate to delivered carrier and stop aft
   assert.equal(answered, 1);
 });
 
+test('a still-valid older HTTP ticket cannot roll a renewed shared carrier expiry backward', { timeout: 5000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, { runtimeUiFrameTtlMs: 1000 }, {}, { shared });
+  const issuedAt = f.frame.claims.issuedAt;
+  let now = issuedAt + 100;
+  t.mock.method(Date, 'now', () => now);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const follow = id => open(id, 'session/follow', { request: { address: { kind: 'session', sessionId: 'shared-root' }, assistantStream: true } });
+  c.send(follow('before-renewal')); assert.equal((await c.next()).value.reached, 'session/follow');
+  now = issuedAt + 500;
+  const renewed = renewRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.cookie } }, user: f.user, session: f.session,
+    frameId: f.frame.frameId, renewalToken: f.frame.renewalToken, now });
+  assert.equal(f.ui.refreshFrameBinding(renewed), 1);
+  now = issuedAt + 600;
+  const oldRequest = await fetch(`${f.base}/__evimed_bootstrap.js`, { headers: { cookie: f.cookie } });
+  assert.equal(oldRequest.status, 200); await oldRequest.text();
+  now = issuedAt + 1100;
+  let closed = false; c.ws.once('close', () => { closed = true; });
+  c.send(follow('after-old-expiry'));
+  const response = await Promise.race([c.next(), once(c.ws, 'close').then(() => null)]);
+  assert.equal(closed, false, 'the renewed carrier must retain its existing policy and interactions');
+  assert.equal(response?.value?.reached, 'session/follow');
+});
+
 test('scoped response projections retain their original stream identity and native error/end ordering', { timeout: 5000 }, async t => {
   const projected = [], ended = [];
   const f = await fixture(t, {}, { projectItem: async (endpoint, payload, value) => {
