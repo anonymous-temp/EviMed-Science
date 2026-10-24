@@ -46,6 +46,7 @@ test('revision and pending-commit roots are filtered before paging and equal ses
   }
   const own = await f.overlay.recentRevisions(f.userId, { engineSession: 'dsh-root', limit: 1 });
   assert.equal(own[0].projectId, 'ordinary');
+  await assert.rejects(f.overlay.recentRevisions(f.userId, { engineSession: 'dsh-root', userRoot: null, limit: 1 }), error => error.code === 'memory_scope_denied');
   const a = await f.overlay.recentRevisions(f.userId, { engineSession: 'dsh-root', userRoot: f.a, limit: 1 });
   assert.equal(a[0].projectId, 'a');
   const pending = await f.overlay.pendingCommits(f.userId, { userRoot: f.a, limit: 1 });

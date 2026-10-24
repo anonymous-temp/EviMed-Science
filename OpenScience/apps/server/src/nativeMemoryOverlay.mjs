@@ -286,11 +286,12 @@ export class NativeMemoryOverlay {
   /** What changed by itself since a moment, newest first. A bare session retains
    * personal-engine semantics; project callers pass their registered root.
    * @param {string} userId @param {{ since?: string | null, engineSession?: string | null, actors?: string[], limit?: number, userRoot?: string | null }} [options] */
-  async recentRevisions(userId, { since = null, engineSession = null, actors = ["engine"], limit = 20, userRoot = engineSession ? userRootUri(userId) : null } = {}) {
+  async recentRevisions(userId, { since = null, engineSession = null, actors = ["engine"], limit = 20, userRoot = engineSession == null ? null : userRootUri(userId) } = {}) {
+    const root = engineSession != null || userRoot != null ? scopedRoot(userRoot) : null;
     const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions
       WHERE user_id=$1 AND ($2::timestamptz IS NULL OR changed_at > $2) AND ($3::text IS NULL OR engine_session = $3) AND actor = ANY($4::text[])
         AND undone_at IS NULL AND ($6::text IS NULL OR uri LIKE $6 || '/%')
-      ORDER BY id DESC LIMIT $5`, [owner(userId), since, engineSession, actors, Math.max(1, Math.min(100, Math.trunc(Number(limit)) || 20)), userRoot == null ? null : scopedRoot(userRoot)]);
+      ORDER BY id DESC LIMIT $5`, [owner(userId), since, engineSession, actors, Math.max(1, Math.min(100, Math.trunc(Number(limit)) || 20)), root]);
     return result.rows.map(publicRevision);
   }
 
