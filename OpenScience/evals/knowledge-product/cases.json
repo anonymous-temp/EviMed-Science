@@ -626,7 +626,13 @@
             [
               "Present totals in the local currency"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my expense reports, my standing reporting rule is \"Show local currency totals\".",
+            "sourceQuote": "For my expense reports, my standing reporting rule is \"Show local currency totals\".",
+            "statementSha256": "66dd0cad6514a8a49564bfe3bdf2d61ef679328ee34ad88d0010e7aee28b18be",
+            "sha256": "1c1a49448bf50ba5b180b01f7cf42b46e51775492101c6ee27a2fbde57e9c9f9"
+          }
         }
       ]
     },
@@ -663,7 +669,13 @@
             [
               "Put the owner before the deadline"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my handoff notes, my standing reporting rule is \"List owner before deadline\".",
+            "sourceQuote": "For my handoff notes, my standing reporting rule is \"List owner before deadline\".",
+            "statementSha256": "9c1296d1d4d1d0a7258e9ca480d46c2f62a6463798133d26bb81c101e6f46c59",
+            "sha256": "367563bd7298023fc970b6f1ffa74fff56acc48fd485e3a5896894032269d47f"
+          }
         }
       ]
     },
@@ -700,7 +712,13 @@
           ],
           "answerValues": [
             "Decision brief"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Cedar review\", always use the heading \"Decision brief\".",
+            "sourceQuote": "For my report series \"Cedar review\", always use the heading \"Decision brief\".",
+            "statementSha256": "b8ddb39fd2a7b73eece1c81edcec8f892ef012df3f5e631d57d3c0feebea0f22",
+            "sha256": "83e4af01081ba4607b4a544b78c6dbcd7a99b3e1bf0a110c508f87d1c8f786f2"
+          }
         }
       ]
     },
@@ -737,7 +755,13 @@
           ],
           "answerValues": [
             "Evidence summary"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Maple review\", always use the heading \"Evidence summary\".",
+            "sourceQuote": "For my report series \"Maple review\", always use the heading \"Evidence summary\".",
+            "statementSha256": "5c4875da038a28a7dbcc2f8994402c5191cae61397145d7aee1eca1bbb5c4980",
+            "sha256": "726c30a529b94ae2bfd073386f7ea69e97542f5f22164e1bb574ead7ec8e71c8"
+          }
         }
       ]
     },
@@ -774,7 +798,13 @@
           ],
           "answerValues": [
             "Working conclusion"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Willow review\", always use the heading \"Working conclusion\".",
+            "sourceQuote": "For my report series \"Willow review\", always use the heading \"Working conclusion\".",
+            "statementSha256": "4df19ad3aa44628c3d885a1f3198ee4fd36d406c6693980b88ca1ed048648034",
+            "sha256": "9601ead7377757a6953b22f1a43be6e571169a79dd4c04f72db09a625dbac6d4"
+          }
         }
       ]
     },
@@ -870,7 +900,13 @@
             [
               "Distinguish languages from regions"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my localization plans, my standing reporting rule is \"Separate language from region\".",
+            "sourceQuote": "For my localization plans, my standing reporting rule is \"Separate language from region\".",
+            "statementSha256": "9116ae0642331a67583969b35aba4c3bf40f8e6f9fba7a86fda1d3a910dc9e35",
+            "sha256": "dd79b62bfe827173b196a613591dba5debb6b962a574f7eeccb32d563df35ed6"
+          }
         }
       ]
     },
@@ -907,7 +943,13 @@
             [
               "Euros"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my forecast reports, my standing reporting rule is \"EUR\".",
+            "sourceQuote": "For my forecast reports, my standing reporting rule is \"EUR\".",
+            "statementSha256": "ff4855e0466a78ede48cb2402c4588f498c5d1d149016571fd15a34644599cf4",
+            "sha256": "82383b35dc889c323b4c8d90d4dd7784a57addfdcbf2a56bc327582c2a14e14a"
+          }
         }
       ]
     },
@@ -944,7 +986,13 @@
             [
               "List byte counts before percentages"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my storage reviews, my standing reporting rule is \"Show bytes before percentages\".",
+            "sourceQuote": "For my storage reviews, my standing reporting rule is \"Show bytes before percentages\".",
+            "statementSha256": "ce20da9be9578f57063cb605c522c39ec787f46a987696501d824b9a7214e96f",
+            "sha256": "4eaca49bfb39b598dfdc681df9265fa290d6b7c00198cfe74af5f1eb78df21e6"
+          }
         }
       ]
     },
@@ -983,7 +1031,13 @@
           ],
           "answerValues": [
             "Research note"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Birch review\", always use the heading \"Research note\".",
+            "sourceQuote": "For my report series \"Birch review\", always use the heading \"Research note\".",
+            "statementSha256": "993747bf6f3e994984ea1cae32d366b88bbc3cbf580d7d05eed39c3ed07531bb",
+            "sha256": "4ecf6d2b842cf853bed0f1272d149493e382448c4aa841bbd190eddc608591db"
+          }
         }
       ]
     },
@@ -1020,7 +1074,13 @@
           ],
           "answerValues": [
             "Practice context"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Alder review\", always use the heading \"Practice context\".",
+            "sourceQuote": "For my report series \"Alder review\", always use the heading \"Practice context\".",
+            "statementSha256": "3a77563c4bd234ad445e1de32e1263e741a046dd58a3e5d5a8b08861410e8f15",
+            "sha256": "8a5bfecdf7dffbd8ae9fcbd78d290bd6758e5d94bb129c9b25e7b1388619b82f"
+          }
         }
       ]
     },
@@ -1057,7 +1117,13 @@
           ],
           "answerValues": [
             "Scope reminder"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Aspen review\", always use the heading \"Scope reminder\".",
+            "sourceQuote": "For my report series \"Aspen review\", always use the heading \"Scope reminder\".",
+            "statementSha256": "0539151d8822a6fdf8b6cc99e54d63531f176767603745b3bc8556f0a2e1ee97",
+            "sha256": "10d7d161cf5b226c819fe39528c87b3662e1e1a4af0a574743aee936aad9efea"
+          }
         }
       ]
     },
@@ -1153,7 +1219,13 @@
             [
               "Organize changes by audience"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my release notes, my standing reporting rule is \"Group changes by audience\".",
+            "sourceQuote": "For my release notes, my standing reporting rule is \"Group changes by audience\".",
+            "statementSha256": "3158139708e4bebe59db4c8fb397e9a7afddf3561a6d3b3188c543c26db16838",
+            "sha256": "3f08220461c2732c40eaeb0242921d884ec5142d750d0e9c86df808b04b38dbd"
+          }
         }
       ]
     },
@@ -1190,7 +1262,13 @@
             [
               "Distinguish peak and average capacity"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my capacity reviews, my standing reporting rule is \"Separate peak from average\".",
+            "sourceQuote": "For my capacity reviews, my standing reporting rule is \"Separate peak from average\".",
+            "statementSha256": "f98c860714bdec7a7d85e5d7470f86fc302bfde1316befc571a1d411ff33c67e",
+            "sha256": "3ec7f48deccce70f90af3e7c0612d89a0f909d574c0bdf5aa45447b16610b8cc"
+          }
         }
       ]
     },
@@ -1227,7 +1305,13 @@
             [
               "Lead with actionable issues"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my review reports, my standing reporting rule is \"Put actionable issues first\".",
+            "sourceQuote": "For my review reports, my standing reporting rule is \"Put actionable issues first\".",
+            "statementSha256": "991c2e79cada50a0fcd7d52d8c2235477882839236023271ce7cae58bf8fe244",
+            "sha256": "c2d9b66bc684ce4b96eeb8b9652e35861294701e18cc4aef6e18abedd542f23e"
+          }
         }
       ]
     },
@@ -1264,7 +1348,13 @@
           ],
           "answerValues": [
             "Result overview"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Hazel review\", always use the heading \"Result overview\".",
+            "sourceQuote": "For my report series \"Hazel review\", always use the heading \"Result overview\".",
+            "statementSha256": "0e53d255b8624e80080fd00d174672f2ceff44044b41bab506fe6a333718441b",
+            "sha256": "a5d4110599641cf2b102d79f2196d588f78b0aeb93477dd23ceced38a6255011"
+          }
         }
       ]
     },
@@ -1303,7 +1393,13 @@
           ],
           "answerValues": [
             "Evidence boundary"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Elm review\", always use the heading \"Evidence boundary\".",
+            "sourceQuote": "For my report series \"Elm review\", always use the heading \"Evidence boundary\".",
+            "statementSha256": "fd8307cb38234a95c79589aab4e066b5c419ac682ac9eb1dd86c43fba30f4937",
+            "sha256": "fd25dce291f33f2cd9f6f90a4816fad35dfcd64ab7e401deb69d5ba222b7460e"
+          }
         }
       ]
     },
@@ -1340,7 +1436,13 @@
           ],
           "answerValues": [
             "Review summary"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Pine review\", always use the heading \"Review summary\".",
+            "sourceQuote": "For my report series \"Pine review\", always use the heading \"Review summary\".",
+            "statementSha256": "468e8c3cfd9f988ccc8b869d1f89cfcc981e0aae5772a665e50d5eb2cdcacc5e",
+            "sha256": "e5f8f56334234c0d3a068436d26cc5f2949d3008c9242a1d691f4d8e6ebd75d2"
+          }
         }
       ]
     },
@@ -2030,7 +2132,13 @@
           ],
           "answerValues": [
             "Decision context"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Fir review\", always use the heading \"Decision context\".",
+            "sourceQuote": "For my report series \"Fir review\", always use the heading \"Decision context\".",
+            "statementSha256": "cd09c5bccec128bab6b7cebaec1542cdbd1c219f4ee6cbd33a9a3a47f9d9be82",
+            "sha256": "05086c3e1bf0034a07157018ae027fc28c2917291a6d09bc4fbdf9d2a70b372e"
+          }
         }
       ]
     },
@@ -2119,7 +2227,13 @@
           ],
           "answerValues": [
             "Analysis note"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Spruce review\", always use the heading \"Analysis note\".",
+            "sourceQuote": "For my report series \"Spruce review\", always use the heading \"Analysis note\".",
+            "statementSha256": "93b978c96d20a720107528d23781453ab9c7c3f1c6c8abf5e9e6430e4e0ef9b7",
+            "sha256": "68a067be6869cc81687dab350a24825d3e37495667293f0ac5a8fd67143147c2"
+          }
         }
       ]
     },
@@ -2203,7 +2317,13 @@
           ],
           "answerValues": [
             "Study context"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Ash review\", always use the heading \"Study context\".",
+            "sourceQuote": "For my report series \"Ash review\", always use the heading \"Study context\".",
+            "statementSha256": "84f6616e1d393225c0857b058200a822f550e1fbca88da4354f9c7ca4dd44903",
+            "sha256": "21695171afe82498193f68cb77a529249e4328d71ce13b5f669bc92cd31f4d4d"
+          }
         }
       ]
     },
@@ -2428,7 +2548,13 @@
             [
               "Present absolute risks with relative effects"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my evidence briefs, my standing reporting rule is \"Show absolute risks alongside relative effects\".",
+            "sourceQuote": "For my evidence briefs, my standing reporting rule is \"Show absolute risks alongside relative effects\".",
+            "statementSha256": "b17e92f20bd2018cc0133f5926589c26db003bf61dd23a5cf1f2b2d8c30505e9",
+            "sha256": "42c69000b4ae963d45acc006b17db30a58c273f74693aaa43831e4b3c463ec16"
+          }
         }
       ]
     },
@@ -2467,7 +2593,13 @@
             [
               "Identify the type of interval"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my research summaries, my standing reporting rule is \"State the interval type\".",
+            "sourceQuote": "For my research summaries, my standing reporting rule is \"State the interval type\".",
+            "statementSha256": "dbb7287018f218b4e4d3ab39bd70b075de1c4e24aa3f3b00a59dadd5baa6ba11",
+            "sha256": "75d77a80be04621cf1bb664c32dac000a4e2451c8f4adba528a4cd9e339385ed"
+          }
         }
       ]
     },
@@ -2506,7 +2638,13 @@
             [
               "Show the reasons for exclusion"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my screening reports, my standing reporting rule is \"Keep exclusion reasons visible\".",
+            "sourceQuote": "For my screening reports, my standing reporting rule is \"Keep exclusion reasons visible\".",
+            "statementSha256": "b5e465657b39b072789c704fe586273649a0e0547dffa73b77b68cd6c534eaab",
+            "sha256": "b37dbdf89dc1085acdc6bd923e49759ccde629dd930e94d8e8e111e3f9e2e6fc"
+          }
         }
       ]
     },
@@ -2595,7 +2733,13 @@
           ],
           "answerValues": [
             "Interpretation guide"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Oak review\", always use the heading \"Interpretation guide\".",
+            "sourceQuote": "For my report series \"Oak review\", always use the heading \"Interpretation guide\".",
+            "statementSha256": "94d01d68f94b819110e06a23b4e2333809df43e520f33389e9cc8c82c3645084",
+            "sha256": "675671433c0c836f19a493d46abb0642913b2db5bf46ee9bea3c7063ff5d2a57"
+          }
         }
       ]
     },
@@ -2688,7 +2832,13 @@
           ],
           "answerValues": [
             "Evidence balance"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Beech review\", always use the heading \"Evidence balance\".",
+            "sourceQuote": "For my report series \"Beech review\", always use the heading \"Evidence balance\".",
+            "statementSha256": "26af76832d4fd193745edd9e2bc04a1aa110ba149d29860ae9afab2c90516048",
+            "sha256": "15e56f5cd7d8984b17dcf91bc2744e570ab09887a875efa6542061a2b78d9c95"
+          }
         }
       ]
     },
@@ -2774,7 +2924,13 @@
           ],
           "answerValues": [
             "Reporting note"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Larch review\", always use the heading \"Reporting note\".",
+            "sourceQuote": "For my report series \"Larch review\", always use the heading \"Reporting note\".",
+            "statementSha256": "ed5f5f4fa4d7cb84615a1c45775a4c9a51735422d44d564c65ad3824704dc3df",
+            "sha256": "f4f834d8397222d08be6fb03da531913b51823735f3e873011a85cfa4c5f394d"
+          }
         }
       ]
     },
@@ -2992,7 +3148,13 @@
             [
               "Distinguish primary and exploratory analyses"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my analysis plans, my standing reporting rule is \"Separate primary from exploratory analyses\".",
+            "sourceQuote": "For my analysis plans, my standing reporting rule is \"Separate primary from exploratory analyses\".",
+            "statementSha256": "4a6a5975fd14dbba50273a9335af9df9329c85a42dd2ae61a3aab2d7978d02c4",
+            "sha256": "88b1eee6ec302b67954eeee982172f1086dba43f5b69fa37b8a03ab794a96c28"
+          }
         }
       ]
     },
@@ -3031,7 +3193,13 @@
             [
               "Show missing data for each variable"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my dataset summaries, my standing reporting rule is \"Report missingness by variable\".",
+            "sourceQuote": "For my dataset summaries, my standing reporting rule is \"Report missingness by variable\".",
+            "statementSha256": "efdb69f3b5d03ab4b49547b9d756fb11485867f83362fdfc238d49b2a781303c",
+            "sha256": "3613ff1ce0258bd13bc5930cd4201a03a08e62b32f0b90ccd0e1152cd93e9868"
+          }
         }
       ]
     },
@@ -3070,7 +3238,13 @@
             [
               "Distinguish risk of bias from applicability"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my bias reports, my standing reporting rule is \"Separate study bias from applicability\".",
+            "sourceQuote": "For my bias reports, my standing reporting rule is \"Separate study bias from applicability\".",
+            "statementSha256": "d06f1971f779f88f56f4ee440deac675e4007418a38c1fbc85e9d8913aebcdcb",
+            "sha256": "72b9296a75e947311738cd3b92737d5e0cf9b742cced2fda4a888f90c98ee905"
+          }
         }
       ]
     },
@@ -3155,7 +3329,13 @@
           ],
           "answerValues": [
             "Limitations first"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Poplar review\", always use the heading \"Limitations first\".",
+            "sourceQuote": "For my report series \"Poplar review\", always use the heading \"Limitations first\".",
+            "statementSha256": "b58aa5430650da99285cd34246a7eb56562c6b989154ed7d1aee76a571caacc1",
+            "sha256": "c8bd209d87b8198991d254491a67d58adfc14575713387712f9bd5b1f6240238"
+          }
         }
       ]
     },
@@ -3251,7 +3431,13 @@
           ],
           "answerValues": [
             "Source summary"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Yew review\", always use the heading \"Source summary\".",
+            "sourceQuote": "For my report series \"Yew review\", always use the heading \"Source summary\".",
+            "statementSha256": "1184b60c75d9303e68ebe14b46516ced8ab6efd7b3d420951163b06be1b2cad8",
+            "sha256": "33c76eb7bf76206ca1537758960b2ca5a47637ae4d5104b2469efeafc5326ad0"
+          }
         }
       ]
     },
@@ -3338,7 +3524,13 @@
           ],
           "answerValues": [
             "Scope and limits"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Juniper review\", always use the heading \"Scope and limits\".",
+            "sourceQuote": "For my report series \"Juniper review\", always use the heading \"Scope and limits\".",
+            "statementSha256": "6c1b0fb7c9e5b3fe563b794e647d179ec56355ece9410059305fcf320348aac0",
+            "sha256": "89d42c6402c793cad9555ca6b3b2d2aa529d3f7a9a5089de641518a3c00f4a99"
+          }
         }
       ]
     },
@@ -3562,7 +3754,13 @@
             [
               "Report outcome-specific certainty"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my evidence tables, my standing reporting rule is \"State certainty for each outcome\".",
+            "sourceQuote": "For my evidence tables, my standing reporting rule is \"State certainty for each outcome\".",
+            "statementSha256": "11647faa96d337e84d93af48c53eee274e2df8c9b3d91cf9e41f5ed7d6e0914a",
+            "sha256": "585c234bc89bb8970903ab0ca34c9f0b8c589830746b7ad5ee747ab057f659a1"
+          }
         }
       ]
     },
@@ -3601,7 +3799,13 @@
             [
               "Document why the protocol was amended"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my protocol updates, my standing reporting rule is \"Record the reason for amendments\".",
+            "sourceQuote": "For my protocol updates, my standing reporting rule is \"Record the reason for amendments\".",
+            "statementSha256": "6602aaf5839ac77fae8750b08a29a6e7f20d076e8930a6a309a0c9b978bdc639",
+            "sha256": "e2e77ff299df9eb235bcf9fa0ba95957158a32ca0e690116bdb2443d68c8accb"
+          }
         }
       ]
     },
@@ -3640,7 +3844,13 @@
             [
               "Distinguish evidence from analyst assumptions"
             ]
-          ]
+          ],
+          "proposition": {
+            "text": "For my synthesis reports, my standing reporting rule is \"Separate evidence from analyst assumptions\".",
+            "sourceQuote": "For my synthesis reports, my standing reporting rule is \"Separate evidence from analyst assumptions\".",
+            "statementSha256": "5b36b1c98d5a37332d5b64385452ce43063de441fbbc565c94f63f603b21de0f",
+            "sha256": "69d19b0a3c2e5a74aeaecaad3870a967fd646ca2ab69c69a12616268e9abeb76"
+          }
         }
       ]
     },
@@ -3675,7 +3885,13 @@
           ],
           "answerValues": [
             "Uncertainty note"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Rowan review\", always use the heading \"Uncertainty note\".",
+            "sourceQuote": "For my report series \"Rowan review\", always use the heading \"Uncertainty note\".",
+            "statementSha256": "314f509529cdabb525544c2cb1b03683f2d1f52ba4d6b16e08066bf153a4239f",
+            "sha256": "12f92a34f29bf27787ed30f6f06c2c4f5030e7e6e68e9504cdcdaf826eeebcbd"
+          }
         }
       ]
     },
@@ -3710,7 +3926,13 @@
           ],
           "answerValues": [
             "Applicability note"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Linden review\", always use the heading \"Applicability note\".",
+            "sourceQuote": "For my report series \"Linden review\", always use the heading \"Applicability note\".",
+            "statementSha256": "3caeb40aa8a09b3a242096f5d993d64043682c9d3ff82c23073a9e1eb6d204d2",
+            "sha256": "1ce9fb7dfc20e52faf3d6dfb4400fc8ce2cbfcca3da6addb0b9413dc2e6a01b6"
+          }
         }
       ]
     },
@@ -3745,7 +3967,13 @@
           ],
           "answerValues": [
             "Pending evidence"
-          ]
+          ],
+          "proposition": {
+            "text": "For my report series \"Holly review\", always use the heading \"Pending evidence\".",
+            "sourceQuote": "For my report series \"Holly review\", always use the heading \"Pending evidence\".",
+            "statementSha256": "d6d2363d2624a3293c97d9c99cca1fac7497a687bf2c5e54769c76e2f688a2c2",
+            "sha256": "4db910253c7004af8375a99ba5580192c9adedfaae05061e4d79efd225d7fd89"
+          }
         }
       ]
     }

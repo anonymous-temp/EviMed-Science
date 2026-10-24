@@ -15,11 +15,30 @@ export async function freezeSeededMemory(call,{seedIds,requiredSeeds=[],judge,sl
    if(settings.learningPaused!==true||settings.recallPaused!==false)throw new Error('Native memory freeze was not applied');
    const verified=await call('GET','/api/memory/settings');
    if(verified.learningPaused!==true||verified.recallPaused!==false)throw new Error('Native memory freeze identity mismatch');
-   return {seedIds:[...seedIds],provenance,pending:0,records:profile.records.length,hash:memoryHash(profile),settings:verified};
+   const frozen=await call('GET','/api/memory/profile');
+   if(frozen.pending?.length||memoryHash(frozen)!==memoryHash(profile))throw Error('Frozen memory identity changed during semantic freeze');
+   return {mode:'semantic-authored-seed',seedIds:[...seedIds],provenance,pending:0,records:profile.records.length,hash:memoryHash(profile),settings:verified};
   }
   await sleep(500);
  }while(Date.now()<deadline);
  throw new Error('Native seeding incomplete; refusing to freeze pending work');
+}
+export async function freezeCanaryMemory(call,{seedIds,marker,sleep=ms=>new Promise(r=>setTimeout(r,ms)),timeoutMs=180000}={}){
+ if(!seedIds?.length||typeof marker!=='string'||!marker.trim())throw Error('Explicit canary identity and receipt required');
+ const deadline=Date.now()+timeoutMs;
+ do{
+  const profile=await call('GET','/api/memory/profile');
+  if(profile.engine!=='native')throw Error('Native canary profile required');
+  const matches=(profile.records??[]).filter(r=>String(r.value??'').includes(marker)&&/^viking:\/\/user\/[^/]+\/memories\//.test(r.document?.uri??r.uri??r.id??''));
+  if(profile.pending?.length===0&&matches.length){
+   await call('PUT','/api/memory/settings',{learningPaused:true,recallPaused:false});
+   const settings=await call('GET','/api/memory/settings'),after=await call('GET','/api/memory/profile');
+   if(settings.learningPaused!==true||settings.recallPaused!==false||after.pending?.length||memoryHash(after)!==memoryHash(profile))throw Error('Canary freeze identity changed');
+   return {mode:'canary-presence-only',semanticEligible:false,seedIds,marker,provenance:matches.map(r=>({uri:r.document?.uri??r.uri??r.id})),hash:memoryHash(profile),settings};
+  }
+  await sleep(500);
+ }while(Date.now()<deadline);
+ throw Error('Controlled native canary not ready');
 }
 export function fatalCollectionError(error){if(error?.cancellationUnconfirmed)return true;if(error?.cellDefect)return false;return /budget|wiring|listener|identity|auth|csrf|HTTP (401|403)|frozen memory/i.test(String(error?.message??error));}
 export async function collectIndependentCells(cells,execute,record){

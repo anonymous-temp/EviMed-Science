@@ -50,6 +50,7 @@ async function execute(c, binding, repetition, arm, out) {
   assertActiveRuntime(binding);
   const projectScope = binding.accounts[c.actor]?.projects[c.project];
   const scope = c.evaluation && projectScope?.contexts ? projectScope.contexts[contextId(c.evaluation)] : projectScope;
+  if(c.memorySeeds?.length&&scope?.memoryFreeze?.mode!=='semantic-authored-seed')throw Error('Main quality requires semantic authored seed freeze; canary mode is ineligible');
   if (!scope) throw new Error(`Missing real fixture scope ${arm}/${c.actor}/${c.project}`);
   const api = new Api(binding.base);
   const credentials = JSON.parse(await fs.readFile(scope.credentialsFile??binding.accounts[c.actor].credentialsFile, 'utf8'));

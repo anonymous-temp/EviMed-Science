@@ -35,17 +35,37 @@ export function coordinatorJudgeClient(sharedBudget,{model='deepseek-flash',prov
  return {async chat(input){
   await verifyLiveBudgetWiring(sharedBudget);
   const token=(await fs.readFile(sharedBudget.tokenFile,'utf8')).trim();
-  const response=await fetch(`${new URL(sharedBudget.coordinatorUrl).origin}/provider`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({scope:'judge',provider,request:{model,messages:input.messages,max_tokens:input.maxTokens??700,stream:false,temperature:0,thinking:{type:'disabled'},response_format:{type:'json_object'}}}),signal:AbortSignal.timeout(180000)});
+  const request={model,messages:input.messages,max_tokens:input.maxTokens??700,stream:false,temperature:0,thinking:{type:'disabled'},response_format:{type:'json_object'}};
+  const response=await fetch(`${new URL(sharedBudget.coordinatorUrl).origin}/provider`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({scope:'judge',provider,request}),signal:AbortSignal.timeout(180000)});
   if(!response.ok)throw new Error(`Shared budget judge admission/accounting failed: HTTP ${response.status}`);
   const result=await response.json(),u=result.usage;
   if(!u||!Number.isSafeInteger(u.prompt_tokens)||!Number.isSafeInteger(u.completion_tokens))throw new Error('Judge provider usage identity missing');
   if(response.headers.get('x-evimed-eval-accounted-cny')===null||response.headers.get('x-evimed-eval-budget-id')!==sharedBudget.sharedBudgetId||!Number.isFinite(Number(response.headers.get('x-evimed-eval-accounted-cny'))))throw new Error('Judge aggregate budget settlement identity missing');
-  return {message:result.choices?.[0]?.message??{},usage:{promptTokens:u.prompt_tokens,completionTokens:u.completion_tokens},cost:Number(response.headers.get('x-evimed-eval-accounted-cny'))};
+  return {message:result.choices?.[0]?.message??{},usage:{promptTokens:u.prompt_tokens,completionTokens:u.completion_tokens},cost:Number(response.headers.get('x-evimed-eval-accounted-cny')),wire:{request,response:result}};
  }};
 }
-export async function createSemanticJudge(sharedBudget,{model='deepseek-flash'}={}){
- const {judgeAnswer}=await import('../knowledge-pages/lib/judge.mjs');const llm=coordinatorJudgeClient(sharedBudget,{model});
- return ({question,reference,answer,caseId,component})=>judgeAnswer({llm,model,question:{question,reference},answer,label:'judge',meta:{caseId,component}});
+export const SEMANTIC_SEED_JUDGE=Object.freeze({model:'deepseek-v4-pro',provider:'deepseek-pro',protocol:'chat-completions',maximumResponses:2});
+export async function createSemanticJudge(sharedBudget){
+ return boundedSemanticJudge(coordinatorJudgeClient(sharedBudget,SEMANTIC_SEED_JUDGE));
+}
+export async function boundedSemanticJudge(llm){
+ const {judgeAnswer}=await import('../knowledge-pages/lib/judge.mjs');
+ return async ({question,reference,answer,caseId,component})=>{
+  const raw=[];const wrapped={chat:async request=>{
+   if(raw.length>=2)throw Object.assign(Error('Semantic judge response bound exceeded'),{code:'semantic_response_bound'});
+   const attempt={request,state:'pending',response:null,cost:null};raw.push(attempt);
+   try{const response=await llm.chat(request);attempt.response=response;attempt.cost=Number.isFinite(response.cost)?response.cost:null;attempt.state='response-received';if(attempt.cost===null)throw Error('Semantic judge accounted cost unknown');return response;}
+   catch(error){attempt.state=attempt.response?'response-received-accounting-unknown':'unknown-no-response';attempt.error={name:error.name,message:error.message};throw error;}
+  }};
+  let result;
+  try{
+   do{
+    result=await judgeAnswer({llm:wrapped,model:SEMANTIC_SEED_JUDGE.model,question:{question,reference},answer,label:'judge',meta:{caseId,component}});
+    if(result.ok&&!result.malformed)break;
+   }while(raw.length<2);
+  }catch(error){if(error.code!=='semantic_response_bound'){error.semanticRaw=raw;throw error;}result={ok:false,malformed:true,points:[],score:null};}
+  return {...result,cost:raw.reduce((n,r)=>n+(r.response.cost??0),0),tokens:{prompt:raw.reduce((n,r)=>n+(r.response.usage?.promptTokens??0),0),completion:raw.reduce((n,r)=>n+(r.response.usage?.completionTokens??0),0),calls:raw.length},raw,model:SEMANTIC_SEED_JUDGE.model,provider:SEMANTIC_SEED_JUDGE.provider};
+ };
 }
 export async function reviewDirectory(out,{benchmark,sharedBudget,model='deepseek-flash'}){
  const {judgeAnswer}=await import('../knowledge-pages/lib/judge.mjs');

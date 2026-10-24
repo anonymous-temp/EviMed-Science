@@ -19,6 +19,7 @@ test('main benchmark separates authored personal memory from documents and requi
 });
 test('freeze provenance requires every authored value in actual native memory, permits merged files and paraphrases',async()=>{
  const seeds=[{id:'one',kind:'user-authored',statement:'My standing heading is Decision brief.',requiredValues:['Decision brief']},{id:'two',kind:'user-authored',statement:'Use EUR for my forecasts.',requiredValues:['EUR'],valueVariants:[['euros']]}];
+ for(const seed of seeds)seed.proposition={text:seed.statement,sourceQuote:seed.statement,statementSha256:approvedBodyHash(seed.statement),sha256:approvedBodyHash(seed.statement)};
  const judge=async()=>({ok:true,score:1,points:[{verdict:'covered',contradicted:false}]});
  await assert.rejects(seedMemoryProof(seeds,{engine:'native',records:[{id:'unrelated',value:'something else'}]},{judge}),/native/);
  await assert.rejects(seedMemoryProof(seeds,{engine:'native',records:[{id:'fake',value:'Decision brief; EUR'}]},{judge}),/native/);

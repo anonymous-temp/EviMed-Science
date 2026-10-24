@@ -107,12 +107,36 @@ Current planned preparation per arm is 1,032 uploads, 687 knowledge sources and 
 (2,064 / 1,374 / 76 across both arms), plus the existing lifecycle work and answer turns. Main factual judgement now requires 243 calls per arm (180 base judgements plus 63 separate combined-memory judgements), 486 across both arms, plus the existing judge sanity checks, all under the same CNY50 coordinator.
 The zero-spend preflight records these counts; it does not predict model-call fan-out or certify cost.
 
-Freeze now semantically checks each submitted USER statement against an actual authenticated native-profile record using the same canonical key-point judge and shared coordinator. Full coverage (score 1, all points covered, no contradiction or malformed result) is required. Literal matches only order candidate selection; even a literal match is judged, so negation and reversed ordering cannot pass by word overlap. Each seed examines at most four candidates from at most 64 native records, each bounded to 32 KiB. Merged files and paraphrases can pass the semantic check. The receipt preserves the exact approved record value, its SHA256, native URI, user statement, judge points and accounted cost. An absent/malformed/error result is an inconclusive precondition, never a fabricated quality zero or pass.
+Freeze now semantically checks each reviewed substantive proposition against an actual authenticated native-profile record using the same canonical key-point judge and shared coordinator. Full coverage (score 1, all points covered, no contradiction or malformed result) is required. Literal matches only order candidate selection; even a literal match is judged, so negation and reversed ordering cannot pass by word overlap. Each seed examines at most four candidates from at most 64 native records, each bounded to 32 KiB. Merged files and paraphrases can pass the semantic check. The receipt preserves the exact approved record value, its SHA256, native URI, user statement, judge points and accounted cost. An absent/malformed/error result is an inconclusive precondition, never a fabricated quality zero or pass.
 
-This adds 38–152 bounded seed-representation judgements per arm (76–304 across both arms), in addition to 486 factual/component judgements and existing sanity/lifecycle work. These are real priced calls under the same CNY50 cap, not free assertions; the preflight reports the bounds. No paid seeding validation runs in this repository's unit tests.
+This adds 38–304 bounded seed-judge provider responses per arm (76–608 provider responses across both arms), in addition to 486 factual/component judgements and existing sanity/lifecycle work. These are real priced calls under the same CNY50 cap, not free assertions; the preflight reports the bounds. No paid seeding validation runs in this repository's unit tests.
 
 Retrieval proof associates each result's own URI with that same approved value, with whitespace normalization only. It cannot combine a correct URI on one result with text from a different/foreign result. A single-URI native read may supply the URI through its authenticated input when the returned body has no URI; a multi-URI return must identify each body independently. An unrelated record cannot qualify a seed.
 Collection retains real native search/read output or producer-owned OpenViking profile context;
 the required values must be exposed there and linked to the frozen inventory. Assistant text is not
 native context. Memory-only scoring requires this native evidence and does not manufacture document
 citations. No paid run should start until this revised manifest and all runtime identities are frozen.
+
+
+### Grounded propositions and separate functional canaries
+
+Every authored seed retains its original user statement unchanged and adds a reviewed proposition:
+the exact first sentence, with scope, ordering and qualifications intact. Only the separate request
+to remember it is excluded. The manifest stores that exact source quote, original-statement SHA256
+and proposition SHA256; validation refuses an ungrounded or tampered proposition. The proposition,
+not the save request, is the canonical semantic key point. Score1/no-contradiction remains required.
+
+The declared seed judge is the existing admitted deepseek-v4-pro / deepseek-pro Chat-completions
+route, with unchanged canonical C27 judge/parser/prompts. At most two provider responses are allowed
+per check for malformed structure only; a valid partial/missing rating is final. The wrapper retains
+exact model requests/responses, points and accounted cost. The preview includes the two-response
+bound: 76–608 provider responses across both arms (76–304 logical candidate checks), plus separate
+main answer/component and lifecycle work. The fixed pre-main calibration in
+`semantic-seed-calibration.json` includes positive paraphrase, negated/reversed/unrelated negatives,
+and a missing-scope control. Preparing it makes no provider calls and does not confer eligibility.
+
+Functional leakage/performance fixtures use `freezeCanaryMemory`: it proves only a controlled literal
+nonce in a native-URI record and stable paused-learning/active-recall state. Its explicit
+`canary-presence-only` receipt is not semantic eligibility. The main collector rejects that mode before
+question dispatch; semantic evidence validation also rejects it. No canary helper changes main question
+prompts, source contracts, user seed statements, thresholds, repetitions or the aggregate CNY50 cap.

@@ -7,6 +7,7 @@ export function validatePersonalContexts(b){
   const substrate=c.evaluation?.substrate;
   if(substrate==='knowledge'){if(c.memorySeeds?.length)throw Error('Knowledge-only case carries memory seeds');continue;}
   if(!c.memorySeeds?.length||c.memorySeeds.some(s=>s.kind!=='user-authored'||!s.statement?.trim()||!s.requiredValues?.length||s.requiredValues.some(v=>!normalized(s.statement).includes(normalized(v)))))throw Error('Personal memory requires authored user statements and grounded values');
+  c.memorySeeds.forEach(seedProposition);
   if(substrate==='memory'&&c.sources.length)throw Error('Memory-only case exposes relevant source files');
   if(substrate==='combined'&&((!c.sources.length&&!c.unanswerable)||!c.memoryDependency||!c.prompt.includes(c.memoryDependency.series)))throw Error('Combined case must require knowledge and saved personal context');
  }
@@ -22,6 +23,21 @@ export function contextMaterials(b,cases){
 export const MAX_SEED_CANDIDATES=4;
 export const approvedBodyHash=value=>createHash('sha256').update(String(value)).digest('hex');
 const bodyText=value=>String(value??'').replace(/\s+/g,' ').trim();
+export function seedProposition(seed){
+ const p=seed.proposition;
+ const stop=seed.statement.indexOf('. '),firstSentence=stop<0?seed.statement:seed.statement.slice(0,stop+1);
+ if(p?.sourceQuote!==firstSentence)throw Error('Reviewed proposition must retain the complete first sentence and scope');
+ const omitted=seed.statement.slice(firstSentence.length);
+ if(!['',' Please remember this as my working preference.',' Remember this standing reporting convention.'].includes(omitted))throw Error('Unreviewed substantive suffix cannot be omitted from seed proposition');
+ if(!p?.text||p.sourceQuote!==p.text||!seed.statement.includes(p.sourceQuote)||p.statementSha256!==approvedBodyHash(seed.statement)||p.sha256!==approvedBodyHash(p.text))throw Error('Reviewed seed proposition is not grounded in original statement');
+ return p.text;
+}
+function candidateScore(seed,proposition,value){
+ const ignored=new Set(['for','my','the','a','an','as','is','are','always','use','please','remember','this','in','to','of','it']);
+ const terms=new Set((normalized(proposition).match(/[\p{L}\p{N}]+/gu)??[]).filter(t=>!ignored.has(t)));
+ const words=new Set(normalized(value).match(/[\p{L}\p{N}]+/gu)??[]);
+ return (matchesSeed(seed,value)?10000:0)+[...terms].filter(term=>words.has(term)).length;
+}
 export async function seedMemoryProof(seeds,profile,{judge}={}){
  if(typeof judge!=='function')throw Error('Semantic seed judge is required');
  if(profile.engine!=='native')throw Error('Authenticated native memory profile is required');
@@ -33,13 +49,16 @@ export async function seedMemoryProof(seeds,profile,{judge}={}){
  if(native.some(r=>Buffer.byteLength(r.value)>32768))throw Error('Semantic seed proof body bound exceeded');
  const proofs=[];
  for(const seed of seeds){
-  const candidates=[...native].sort((a,b)=>Number(matchesSeed(seed,b.value))-Number(matchesSeed(seed,a.value))||String(a.uri).localeCompare(String(b.uri))).slice(0,MAX_SEED_CANDIDATES);
+  const proposition=seedProposition(seed);
+  const candidates=[...native].sort((a,b)=>candidateScore(seed,proposition,b.value)-candidateScore(seed,proposition,a.value)||String(a.uri).localeCompare(String(b.uri))).slice(0,MAX_SEED_CANDIDATES);
   const attempts=[];let accepted=null;
   for(const candidate of candidates){
-   const result=await judge({question:'Does this actual memory preserve the complete submitted user statement, including ordering, qualifications and negation?',reference:{keyPoints:[{id:'authored',text:seed.statement,support:[]}]},answer:candidate.value,caseId:seed.id,component:'seed-representation'});
-   if(!result?.ok||result.malformed||!Number.isFinite(result.score)||!Array.isArray(result.points)||!result.points.length)throw Error('Semantic seed judge inconclusive or malformed');
-   attempts.push({uri:candidate.uri,actualValue:candidate.value,bodySha256:approvedBodyHash(candidate.value),score:result.score,points:result.points,cost:result.cost??null,tokens:result.tokens??null});
-   if(result.score===1&&result.points.every(point=>point.verdict==='covered'&&point.contradicted!==true)){accepted={seedId:seed.id,uri:candidate.uri,recordId:candidate.record.id,approvedValue:candidate.value,bodySha256:approvedBodyHash(candidate.value),requiredValues:[...seed.requiredValues],userStatement:seed.statement,judge:attempts.at(-1),attempts};break;}
+   let result;
+   try{result=await judge({question:'Does this actual memory preserve the complete reviewed user proposition, including scope, ordering, qualifications and negation?',reference:{keyPoints:[{id:'authored',text:proposition,support:[]}]},answer:candidate.value,caseId:seed.id,component:'seed-representation'});}
+   catch(error){error.semanticSeedEvidence={seedId:seed.id,attempts,interrupted:{uri:candidate.uri,bodySha256:approvedBodyHash(candidate.value),raw:error.semanticRaw??[]}};throw error;}
+   attempts.push({uri:candidate.uri,actualValue:candidate.value,bodySha256:approvedBodyHash(candidate.value),result:result??null,score:result?.score??null,points:result?.points??null,raw:result?.raw??null,model:result?.model??null,provider:result?.provider??null,cost:result?.cost??null,tokens:result?.tokens??null});
+   if(!result?.ok||result.malformed||!Number.isFinite(result.score)||!Array.isArray(result.points)||!result.points.length){const error=new Error('Semantic seed judge inconclusive or malformed');error.semanticSeedEvidence={seedId:seed.id,attempts};throw error;}
+   if(result.score===1&&result.points.every(point=>point.verdict==='covered'&&point.contradicted!==true)){accepted={seedId:seed.id,uri:candidate.uri,recordId:candidate.record.id,approvedValue:candidate.value,bodySha256:approvedBodyHash(candidate.value),requiredValues:[...seed.requiredValues],userStatement:seed.statement,proposition:seed.proposition,judge:attempts.at(-1),attempts};break;}
   }
   if(!accepted){const error=new Error(`Required authored seed not semantically represented: ${seed.id}`);error.semanticSeedEvidence={seedId:seed.id,attempts,examinedCandidates:candidates.length,nativeRecords:native.length};throw error;}
   proofs.push(accepted);
@@ -51,7 +70,7 @@ export function preparationCounts(b){
  const sizes={small:24,medium:64,large:256};let uploads=0,knowledgeSources=0,memorySeeds=0;
  for(const cases of groups.values()){const {originals,seeds}=contextMaterials(b,cases),target=sizes[cases[0].evaluation.size];uploads+=target;knowledgeSources+=cases[0].evaluation.substrate==='memory'?0:target-originals.filter(s=>s.originalOnly).length;memorySeeds+=seeds.length;}
  const semanticJudgements=b.cases.filter(c=>c.stratum!=='lifecycle').length*3+b.cases.filter(c=>c.stratum!=='lifecycle'&&c.evaluation.substrate==='combined').length*3;
- return {perArm:{uploads,knowledgeSources,memorySeeds,semanticJudgements,semanticSeedJudgements:{minimum:memorySeeds,maximum:memorySeeds*MAX_SEED_CANDIDATES}},bothArms:{uploads:uploads*2,knowledgeSources:knowledgeSources*2,memorySeeds:memorySeeds*2,semanticJudgements:semanticJudgements*2,semanticSeedJudgements:{minimum:memorySeeds*2,maximum:memorySeeds*MAX_SEED_CANDIDATES*2}},sizeUnit:'project documents; personal memory seed volume reported separately'};
+ return {perArm:{uploads,knowledgeSources,memorySeeds,semanticJudgements,semanticSeedJudgements:{minimum:memorySeeds,maximum:memorySeeds*MAX_SEED_CANDIDATES*2}},bothArms:{uploads:uploads*2,knowledgeSources:knowledgeSources*2,memorySeeds:memorySeeds*2,semanticJudgements:semanticJudgements*2,semanticSeedJudgements:{minimum:memorySeeds*2,maximum:memorySeeds*MAX_SEED_CANDIDATES*4}},sizeUnit:'project documents; personal memory seed volume reported separately'};
 }
 
 export function collectNativeMemoryContext(lines){
@@ -80,6 +99,7 @@ function plainReadBody(value){
  return null;
 }
 export function personalRetrievalProof(c,e){
+ if(e.memoryFreeze?.mode==='canary-presence-only')throw Error('Canary-only freeze is not semantic proof');
  const provenance=e.memoryFreeze?.provenance??[];
  const tools=(e.retrieval??[]).filter(t=>/^mcp__openviking__(search|read)$/.test(t.name)&&['completed','success','succeeded'].includes(t.status)&&!t.error&&!t.output?.error&&!t.output?.isError&&!t.output?.code?.includes?.('unavailable'));
  return (c.memorySeeds??[]).map(seed=>{

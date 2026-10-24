@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomBytes,createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { checked } from './provision.mjs';
-import { freezeSeededMemory,fatalCollectionError } from './protocol.mjs';
+import { freezeCanaryMemory,fatalCollectionError } from './protocol.mjs';
 import { compileExport } from './compile_export.mjs';
 import { runNativeToolProbe,returnedFacts } from './native_probe.mjs';
 export const requiredNativeApis=Object.freeze(['/api/memory/settings','/api/memory/profile','/api/memory/remember','/api/knowledge-pages','/api/knowledge-pages/compile','/api/knowledge-pages/tree','/api/agent-keys','/api/agent-memory/v1/recall','/api/capsules/transfers/preview','/api/capsules/transfers/import','/api/agent-runs/'+'dispatch']);
@@ -42,7 +42,7 @@ async function controlReady(api,projectId,minimum){
 async function seedMemory(api,scope,marker){
  await checked(api,'PUT','/api/memory/settings',{learningPaused:false,recallPaused:false});
  const commit=await checked(api,'POST','/api/memory/remember',{projectId:scope.id,text:`For my personal notes, always use the exact heading "${marker}". Please remember this working preference.`});
- const freeze=await freezeSeededMemory((...args)=>checked(api,...args),{seedIds:[commit.pending?.id].filter(Boolean),requiredSeeds:[{id:marker,kind:'user-authored',statement:`For my personal notes, always use the exact heading "${marker}". Please remember this working preference.`,requiredValues:[marker]}],judge:await (await import('./automatic_judge.mjs')).createSemanticJudge(api.evalBudget.config)});
+ const freeze=await freezeCanaryMemory((...args)=>checked(api,...args),{seedIds:[commit.pending?.id].filter(Boolean),marker});
  const profile=await checked(api,'GET','/api/memory/profile');const records=profile.records.filter(r=>String(r.value??r.summary??'').includes(marker));
  if(!records.length)throw new NativeUnavailable('Actual native extraction completed without retaining the required canary');
  return {freeze,records};
