@@ -41,7 +41,15 @@ const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" 
 
 /** Whether a source record is a mirrored page of a compiled tree. @param {any} source */
 export function isCompiledPage(source) {
-  return sourceOriginOf({ connectorType: source?.payload?.connector?.type, path: source?.payload?.paths?.[0] }) === "wiki";
+  return (Array.isArray(source?.payload?.paths) ? source.payload.paths : [])
+    .some(file => sourceOriginOf({ path: file }) === "wiki");
+}
+
+/** The exact source rendition already used by sync, shared with generation receipts.
+ * @param {any} source @param {any} capture */
+export function sourceRendition(source, capture) {
+  return sourceIndexDocument({ original: source.payload.paths?.[0] ?? source.id, sha256: source.payload.fingerprint?.sha256 ?? "", extractor: capture.extractor ?? {},
+    text: capture.input.text, pageMap: capture.pageMap, metadata: capture.metadata });
 }
 
 /**
@@ -120,8 +128,7 @@ export class OpenVikingSourceSync {
     const capture = await this.sources.loadCapture(userId, source);
     if (!capture) return null;
     return {
-      text: sourceIndexDocument({ original: source.payload.paths?.[0] ?? source.id, sha256: source.payload.fingerprint?.sha256 ?? "", extractor: capture.extractor ?? {},
-        text: capture.input.text, pageMap: capture.pageMap, metadata: capture.metadata }),
+      text: sourceRendition(source, capture),
       sha: String(source.payload.analysis.textSha256),
     };
   }
