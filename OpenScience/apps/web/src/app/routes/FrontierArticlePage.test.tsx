@@ -180,8 +180,10 @@ describe("an X post with every block", () => {
     expect(within(rail).getAllByRole("button").slice(0, 3).map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作", "深入研究"]);
     expect(controls.length).toBeGreaterThan(3);
     // The rail is the column beside the page, from the back row down; the blocks follow in their order.
-    const blocks = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent);
-    expect(blocks).toEqual(["推荐理由", "标签"]);
+    const blocks = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
+      ?? (region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent));
+    // The actions are a section of their own, so ☆ and ⋯ belong to the article and not to a list in its text.
+    expect(blocks).toEqual(["文章操作", "推荐理由", "标签"]);
     expect(rail.parentElement!.firstElementChild).toContainElement(screen.getByRole("navigation", { name: "返回" }));
     // No bar at the window's bottom where the column is there.
     expect(screen.queryByRole("navigation", { name: "阅读工具" })).not.toBeInTheDocument();
