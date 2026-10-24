@@ -66,3 +66,14 @@ test('invalid transcript, running row, foreign row, revoked actor and ambiguous 
     assert.equal(imported, 0); assert.equal(refreshed, 0);
   }
 });
+
+test('content pins both manifest and the actual handed article in its deliverable folder', async () => {
+  const article = 'deliverables/native/articles/a.md';
+  const produced = { ...run, artifacts: [relative.replace('strategy.json', 'articles.json'), article] };
+  const f = fixture(), bytes = Buffer.from('# Original');
+  const version = { ...f.version, path: article, versionId: 'article', digest: digest(bytes) };
+  f.versions.splice(0, 1, version); f.results.raw = async () => ({ bytes });
+  const t = transcript(); t.messages[1].parts[0].input.file_path = `/workspace/${article}`;
+  const pinned = await pinGeoRunOutputs({ results: f.results, project, run: produced, context: { mode: 'content' }, transcript: t });
+  assert.equal(String(await pinned.readFile(project, produced, article)), String(bytes));
+});

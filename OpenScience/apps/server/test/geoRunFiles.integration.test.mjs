@@ -463,3 +463,18 @@ test('selected ordinary analysis remains a no-op even when it presents a report'
   const result = await importDelivery(control, { id: 'analysis', status: 'succeeded', presentedFiles: ['deliverables/analysis/report.md'] });
   assert.equal(result?.failed, undefined); assert.equal(await store.latestStrategy(geo.id), null);
 });
+
+for (const field of ['presentedFiles', 'artifacts', 'outputFiles']) test(`native content discovers ${field} and reads article bytes only from its preserved run`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const body = '# Preserved article\n';
+  const relative = 'deliverables/native-content/articles.json', article = 'deliverables/native-content/articles/a.md';
+  const immutable = new Map([[relative, JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'Preserved', safety: 'clear', channel: 'wechat_mp', audience: 'patient' }] })], [article, body]]);
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'content', runId: `content-${field}` }),
+    readRunFile: async (_project, actual, file) => { assert.equal(actual.id, `content-${field}`); if (!immutable.has(file)) throw new Error('missing preserved file'); return immutable.get(file); },
+    readFile: async () => { throw new Error('No mutable workspace bytes'); }, listInsightFolders: async () => [], listDeliverableFolders: async () => [] });
+  const result = await importDelivery(control, { id: `content-${field}`, sessionId: 'content-session', status: 'succeeded', [field]: [relative, article] });
+  assert.equal(result?.files?.registered, 1); assert.equal(result?.failed, undefined);
+  const saved = (await store.listArticles(geo.id))[0];
+  assert.equal(saved.runId, `content-${field}`); assert.equal(saved.path, article);
+  assert.equal(saved.contentSha256, createHash('sha256').update(body).digest('hex'));
+});
