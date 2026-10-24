@@ -116,7 +116,7 @@ export class GeoSignals {
       let sourceReview = null;
       if (row.payload.kind === 'source_changed' && run && this.sourceReviewForRun) {
         try { sourceReview = await this.sourceReviewForRun(project, row, run, targets); }
-        catch { sourceReview = { availability: 'unknown', records: [], issues: ['review_result_unavailable'] }; }
+        catch { sourceReview = { availability: 'unknown', selectedTargetKeys: context.payload.basis.focusRefs ?? targets.map(target => target.key), records: [], issues: ['review_result_unavailable'] }; }
       }
       attempts.push({ contextRef: context.id, sessionId: context.payload.sessionId, requestId: context.payload.requestId,
         runId: run?.id ?? null, submitted: context.payload.state === 'bound', createdAt: context.createdAt,

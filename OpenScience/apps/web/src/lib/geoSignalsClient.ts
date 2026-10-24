@@ -8,6 +8,7 @@ export type GeoSignalState = keyof typeof GEO_SIGNAL_STATE_LABELS_ZH;
 export interface GeoSourceReviewRecord {
   targetKey: string; outcome: 'unhandled' | 'no_change_needed' | 'update_proposed' | 'updated' | 'uncertain'; reason: string | null;
   warning?: string | null; runId?: string; sessionId?: string;
+  availability?: 'available' | 'unknown'; reportedOutcome?: string | null;
   after: { type: 'article' | 'finding' | 'claim'; id: string; version: string | number; digest?: string; path?: string; runId: string; sessionId: string } | null;
   artifact?: { versionId: string; path: string; digest: string; runId: string; sessionId: string };
 }

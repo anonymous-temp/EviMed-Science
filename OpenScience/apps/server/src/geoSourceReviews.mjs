@@ -48,16 +48,20 @@ export class GeoSourceReviews {
     const { context } = await this.bridge.scope({ id: project.userId }, project.id, signal.id, run.id);
     const selected = new Map(targets.filter(target => context.payload.basis.focusRefs.includes(target.key)).map(target => [target.key, target]));
     const records = new Map(), issues = [];
-    let cursor = null, read = 0;
+    let cursor = null, read = 0, unavailable = false;
     do {
-      const page = await this.results.list(project.userId, { projectId: project.projectId, runId: run.id, limit: 100, cursor });
+      let page;
+      try { page = await this.results.list(project.userId, { projectId: project.projectId, runId: run.id, limit: 100, cursor }); }
+      catch { issues.push('review_result_unavailable'); unavailable = true; break; }
       for (const file of page.items) {
         if (!/(^|\/)geo-value\.json$/.test(file.path ?? '') || file.producer?.kind === 'workspace'
           || file.producer?.runId !== run.id || file.producer?.sessionId !== run.sessionId) continue;
-        if (++read > 20) { issues.push('review_file_limit'); continue; }
-        if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > 262144) { issues.push('review_file_unavailable'); continue; }
-        const raw = await this.results.raw(project.userId, project.projectId, file.versionId);
-        if (raw.version.versionId !== file.versionId || raw.version.digest !== file.digest || raw.bytes.length > 262144) { issues.push('review_file_unavailable'); continue; }
+        if (++read > 20) { issues.push('review_file_limit'); unavailable = true; continue; }
+        if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > 262144) { issues.push('review_file_unavailable'); unavailable = true; continue; }
+        let raw;
+        try { raw = await this.results.raw(project.userId, project.projectId, file.versionId); }
+        catch { issues.push('review_result_unavailable'); unavailable = true; continue; }
+        if (raw.version.versionId !== file.versionId || raw.version.digest !== file.digest || raw.bytes.length > 262144) { issues.push('review_file_unavailable'); unavailable = true; continue; }
         let parsed;
         try { parsed = JSON.parse(raw.bytes.toString('utf8')); } catch { issues.push('review_file_invalid'); continue; }
         for (const change of list(parsed?.sourceChanges)) {
@@ -68,7 +72,9 @@ export class GeoSourceReviews {
           for (const item of review.targets) {
             const target = selected.get(item?.targetKey);
             if (!target || !outcomes.includes(item?.outcome) || typeof item.reason !== 'string' || !item.reason.trim() || item.reason.length > 4000) { issues.push('review_target_invalid'); continue; }
-            const after = item.outcome === 'updated' ? await this.successor(project, target, item.after, run) : null;
+            let after = null;
+            try { if (item.outcome === 'updated') after = await this.successor(project, target, item.after, run); }
+            catch { issues.push('review_successor_unavailable'); unavailable = true; }
             const record = { targetKey: target.key, outcome: item.outcome === 'updated' && !after ? 'update_proposed' : item.outcome,
               reason: item.reason.trim(), after, verification: 'reported_review',
               warning: item.outcome === 'updated' && !after ? 'successor_unconfirmed' : null,
@@ -83,17 +89,25 @@ export class GeoSourceReviews {
       }
       cursor = read > 20 ? null : page.nextCursor;
     } while (cursor);
-    return { records: [...records.values()], issues, availability: 'available' };
+    return { records: [...records.values()], selectedTargetKeys: [...selected.keys()], issues, availability: unavailable ? 'unknown' : 'available' };
   }
 }
 
 /** Prior work remains visible; an explicit later uncertainty supersedes only its exact target. */
 export function summarizeGeoSourceReviews(targets, attempts) {
   const latest = new Map();
-  for (const attempt of [...attempts].reverse()) for (const record of attempt.sourceReview?.records ?? []) latest.set(record.targetKey, record);
+  for (const attempt of [...attempts].reverse()) {
+    const review = attempt.sourceReview;
+    for (const record of review?.records ?? []) latest.set(record.targetKey, { ...record, availability: 'available' });
+    if (review?.availability === 'unknown') for (const key of review.selectedTargetKeys ?? attempt.focusRefs ?? targets.map(target => target.key)) {
+      const preserved = latest.get(key);
+      latest.set(key, { ...preserved, targetKey: key, reportedOutcome: preserved?.reportedOutcome ?? preserved?.outcome ?? null,
+        outcome: 'uncertain', availability: 'unknown', warning: 'review_result_unavailable' });
+    }
+  }
   const records = targets.map(target => ({ targetKey: target.key, outcome: 'unhandled', reason: null, after: null, ...latest.get(target.key) }));
   const count = outcome => records.filter(record => record.outcome === outcome).length;
-  const handled = count('no_change_needed') + count('updated'), unknown = attempts.some(attempt => attempt.sourceReview?.availability === 'unknown');
+  const handled = count('no_change_needed') + count('updated'), unknown = records.some(record => record.availability === 'unknown');
   return { state: unknown ? 'unknown' : targets.length === 0 ? 'unknown' : handled === targets.length ? 'handled' : handled ? 'partial' : 'unreviewed',
     total: targets.length, handled, remaining: targets.length - handled, updated: count('updated'), unchanged: count('no_change_needed'),
     proposed: count('update_proposed'), uncertain: count('uncertain'), unhandled: count('unhandled'),

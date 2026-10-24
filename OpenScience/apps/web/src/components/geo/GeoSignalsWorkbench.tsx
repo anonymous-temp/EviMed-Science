@@ -178,6 +178,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
             <span>{target.label || ({ finding: '研究发现', claim: '证据结论', article: '稿件' }[target.type])}{typeof target.version === 'number' ? ` · 版本 ${target.version}` : target.version ? ' · 已固定稿件版本' : ' · 版本未记录'}{target.relationship === 'possible_group_dependency' ? ' · 同组关联，影响仍待核查' : ''}</span>
           </label>
             {review && <p className="text-caption text-text-2">{reviewWords[review.outcome]}{review.reason ? `：${review.reason}` : ''}</p>}
+            {review?.availability === 'unknown' && <p className="text-caption text-text-3">部分核查结果暂时读不到，已保留可读的记录和版本；重新核查本项后可更新状态。</p>}
             {review?.artifact && <Link className="text-caption text-link hover:underline" to={geoSignalResultHref(geoId, signalId, review.artifact)}>查看这项核查的原始结果</Link>}
             {review?.after?.type === 'article' && review.after.path && typeof review.after.version === 'string' && <Link className="text-caption text-link hover:underline" to={geoSignalResultHref(geoId, signalId, { runId: review.after.runId, path: review.after.path, versionId: review.after.version })}>查看已关联的稿件版本</Link>}
           </div>; })}

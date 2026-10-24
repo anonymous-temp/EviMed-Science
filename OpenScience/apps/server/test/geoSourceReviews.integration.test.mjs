@@ -106,8 +106,31 @@ test('actual captured review bytes need an exact bound request and accepted targ
   await capture('deliverables/foreign/geo-value.json', JSON.stringify({ sourceChanges: [{ id: 'source', review: tampered }] }));
   assert.equal((await reader.forRun(project, signal, run, targets)).records.length, 4);
   const conflict = structuredClone(review); conflict.targets = [{ targetKey: 'unchanged', outcome: 'uncertain', reason: 'New contradictory review.' }];
-  await capture('deliverables/conflict/geo-value.json', JSON.stringify({ sourceChanges: [{ id: 'source', review: conflict }] }));
+  const conflictingFile = await capture('deliverables/conflict/geo-value.json', JSON.stringify({ sourceChanges: [{ id: 'source', review: conflict }] }));
   assert.equal((await reader.forRun(project, signal, run, targets)).records.find(row => row.targetKey === 'unchanged').warning, 'conflicting_review_results');
+  const actualRaw = results.raw.bind(results);
+  results.raw = async (...args) => { if (args[2] === conflictingFile.versionId) throw new Error('Temporary preserved byte failure'); return actualRaw(...args); };
+  const retained = await reader.forRun(project, signal, run, targets);
+  assert.equal(retained.availability, 'unknown'); assert.equal(retained.records.length, 4);
+  assert.equal(retained.records.find(record => record.targetKey === 'article').after.version, after.versionId);
+  assert.equal(retained.records.find(record => record.targetKey === 'article').artifact.versionId, file.versionId);
+  const blocked = await signals.detail(user, project.id, signal.id);
+  assert.equal(blocked.sourceReview.records.find(record => record.targetKey === 'article').artifact.versionId, file.versionId);
+  assert.equal(blocked.sourceReview.state, 'unknown');
+  const successorContext = await contexts.stage(user, project.id, { mode: 'signal', signalId: signal.id, expectedSignalRevision: 1,
+    requestKey: 'fresh-review', sessionId: run.sessionId, intent: 'review', focusRefs: targets.map(target => target.key), previousContextRef: staged.referenceId });
+  const successorRun = { ...run, id: 'fresh-review-run', kernelRequestIds: ['fresh-review-request'], startedAt: new Date().toISOString() };
+  const successorRequest = { sessionId: run.sessionId, requestId: successorRun.kernelRequestIds[0], content: [{ type: 'text', text: 'Recheck every preserved target.' }], geoPlanContext: { referenceId: successorContext.referenceId } };
+  await contexts.prepare(user, control, successorRequest); await store.transaction(() => contexts.bind(user, control, successorRequest)); runs.push(successorRun);
+  await capture('deliverables/fresh-review/geo-value.json', JSON.stringify({ sourceChanges: [{ id: 'source', review: {
+    signalId: signal.id, basisDigest: signal.payload.basisDigest, contextRef: successorContext.referenceId,
+    targets: targets.map(target => ({ targetKey: target.key, outcome: 'no_change_needed', reason: 'Re-reviewed this exact frozen version.' })),
+  } }] }), successorRun);
+  const recovered = await signals.detail(user, project.id, signal.id);
+  assert.equal(recovered.sourceReview.state, 'handled'); assert.equal(recovered.sourceReview.remaining, 0);
+  assert.equal(recovered.state, 'completed');
+  assert.equal(recovered.attempts.find(attempt => attempt.runId === run.id).sourceReview.availability, 'unknown');
+  results.raw = actualRaw;
 });
 
 test('coverage keeps unhandled and uncertain scope separate from completed attempts and useful prior work', () => {
@@ -118,4 +141,9 @@ test('coverage keeps unhandled and uncertain scope separate from completed attem
   assert.equal(result.handled, 1); assert.equal(result.remaining, 2); assert.equal(result.uncertain, 1); assert.equal(result.unhandled, 1);
   assert.equal(summarizeGeoSourceReviews([], []).state, 'unknown');
   assert.equal(summarizeGeoSourceReviews(targets, [{ sourceReview: { availability: 'unknown' } }, older]).state, 'unknown');
+  const unavailable = { sourceReview: { availability: 'unknown', selectedTargetKeys: ['one', 'two'], records: [{ targetKey: 'one', outcome: 'updated', artifact: { versionId: 'kept' } }] } };
+  const partial = summarizeGeoSourceReviews(targets, [{ sourceReview: { availability: 'available', records: [{ targetKey: 'one', outcome: 'no_change_needed' }] } }, unavailable]);
+  assert.equal(partial.state, 'unknown'); assert.equal(partial.handled, 1); assert.equal(partial.remaining, 2);
+  assert.equal(partial.records.find(record => record.targetKey === 'two').availability, 'unknown');
+  assert.equal(partial.records.find(record => record.targetKey === 'three').outcome, 'unhandled');
 });
