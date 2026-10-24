@@ -93,3 +93,13 @@ test('source prose exports use compact readable tables while exact source metada
  assert.equal(document.typedTable.rows.length,252);assert.ok(document.typedTable.rows.every(row=>JSON.parse(row.dimensions).originalUrls.length));
  for(const row of full.rows)assert.ok(document.canonicalMarkdown.includes(row.dimensions.sourceKey));
 });
+
+test('source categories reject row 20001 before histories or a trailing citation are evaluated',async()=>{
+ const {buildGeoSourceAnalysis}=await import('../src/geoAnalysisSources.mjs');
+ const rows=Array.from({length:19998},(_,n)=>observation(`limit-${n}`,[citation(`https://news.example/s?id=${n}`)]));
+ rows.push(observation('overflow',[19998,19999,20000].map(n=>citation(`https://news.example/s?id=${n}`))));
+ let tailVisited=false;rows.push({...observation('tail',[]),get citations(){tailVisited=true;throw Error('tail citation visited after cardinality was already excessive');}});
+ const selected={computed:{balance:{deduped:rows}},selection:{methodVersion:'limit'},get rounds(){throw Error('history constructed before the row limit was checked');}};
+ assert.throws(()=>buildGeoSourceAnalysis(selected,{viewId:'V18',sourceLevel:'page',topN:15}),error=>error.status===422&&error.code==='geo_read_filter_invalid');
+ assert.equal(tailVisited,false);
+});

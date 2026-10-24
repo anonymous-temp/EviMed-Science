@@ -127,3 +127,36 @@ test('D1 catalogue source 2001 keeps exact type, identity, detail action and rev
  await assert.rejects(service.analysis(user,project.id,{...exact}),error=>error.status===404);
  if(process.env.GEO_D1_RECEIPTS_DIR)await writeFile(`${process.env.GEO_D1_RECEIPTS_DIR}/catalogue-2001.json`,JSON.stringify({before:view,after:renamed},null,2));
 });
+
+test('D1 URL-derived source identity keeps partial and unjudged answers, original questions and pages identical across readers',opts,async()=>{
+ await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'d1-identity-control','Identity',1048576)",[user.id]);
+ const p=await store.createProject({userId:user.id,projectId:'d1-identity-control',engines:['deepseek'],coverageDays:90,product:{brandName:'Alpha'}});
+ await store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('d1-i-g',$1,$2,1,'P2','Identity')",[user.id,p.id]);
+ await store.query("INSERT INTO evimed_geo.sources(id,user_id,geo_project_id,domain,name,kind) VALUES('d1-i-source',$1,$2,'news.example','News','news')",[user.id,p.id]);
+ for(const round of ['d1-i-r1','d1-i-r2'])await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES($1,$2,$3,'baseline','done',1,'{deepseek}','2026-10-01','{\"mode\":\"web\"}')",[round,user.id,p.id]);
+ const variants=[['url-only',{url:'https://www.news.example/s?id=1'}],['contradomain',{url:'https://news.example/s?id=2',domain:'another.example'}],['partial',{url:'https://news.example/s?id=3',domain:'news.example'}],['unjudged',{url:'https://news.example/s?id=4',domain:'news.example'}],['unlinked',{domain:'news.example'}]];
+ for(const [name,link] of variants){
+  const id=`d1-i-${name}`;await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) VALUES($1,$2,$3,'d1-i-g',1,'P2',$4,true)",[id,user.id,p.id,`Question ${name}`]);
+  await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface,citations) VALUES($1,$2,$3,$4,$1,'deepseek',$5,'valid',$6,'{\"mode\":\"web\"}',$7::jsonb)",[id,user.id,p.id,['partial','unjudged'].includes(name)?'d1-i-r2':'d1-i-r1',name==='unjudged'?null:'2026-10-01',`Original answer ${name}`,JSON.stringify([link])]);
+  if(name!=='unjudged')await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,mentions_ours,statements,checks) VALUES($1,$2,$3,'2026-10-02',true,'[]','{\"judgementCoverage\":{\"status\":\"partial\"}}')",[id,user.id,p.id]);
+ }
+ const selection=(await readGeoSelection(store,p,{}, {history:true})).selection.reference;
+ const view=await service.analysis(user,p.id,{selectionRef:selection,viewId:'V18'}),row=view.rows[0],detail=await service.source(user,p.id,'d1-i-source',{selectionRef:selection}),summary=await service.sources(user,p.id,{selectionRef:selection});
+ assert.equal(view.rows.length,1);assert.equal(row.values.answers.value,4);assert.equal(row.values.pages.value,4);
+ assert.equal(detail.counts.cited,4);assert.equal(detail.pages.length,4);assert.equal(summary.summary.domains.find(source=>source.domain==='news.example').cited,4);assert.equal(summary.summary.urls.length,4);
+ assert.equal(detail.answers.find(answer=>answer.snapshotId==='d1-i-unjudged').question,'Question unjudged');
+ assert.equal(detail.answers.find(answer=>answer.snapshotId==='d1-i-unjudged').answerText,'Original answer unjudged');assert.equal(detail.answers.find(answer=>answer.snapshotId==='d1-i-unjudged').judgment,null);
+ const ref=row.values.answers.members,members=await service.analysisMembers(user,p.id,{selectionRef:ref.selectionRef,...ref.view,rowKey:ref.rowKey,columnKey:ref.columnKey,expectedDigest:ref.expectedDigest});
+ assert.deepEqual(members.items.map(item=>item.snapshotId).sort(),detail.answers.map(item=>item.snapshotId).sort());assert.equal(members.items.find(item=>item.snapshotId==='d1-i-unjudged').judgment,null);
+ assert.deepEqual(detail.history.map(item=>[item.roundId,item.cited]).sort(),[['d1-i-r1',2],['d1-i-r2',2]]);
+ const r1=await service.analysis(user,p.id,{round:'d1-i-r1',viewId:'V18'});assert.equal(r1.rows[0].values.answers.value,2);assert.equal((await service.source(user,p.id,'d1-i-source',{selectionRef:r1.selection.reference})).counts.cited,2);
+ await assert.rejects(service.source(user,project.id,'d1-i-source',{selectionRef:selection}),error=>error.status===404);
+ if(process.env.GEO_D1_RECEIPTS_DIR)await writeFile(`${process.env.GEO_D1_RECEIPTS_DIR}/canonical-readers.json`,JSON.stringify({view,detail,summary,members},null,2));
+});
+
+test('an unjudged source answer retains original question and raw answer independently of optional facts',opts,async()=>{
+ const p=await store.projectByControlProject(user.id,'d1-identity-control');
+ const view=await service.analysis(user,p.id,{round:'d1-i-r2',viewId:'V18'}),detail=await service.source(user,p.id,'d1-i-source',{selectionRef:view.selection.reference});
+ assert.equal(detail.counts.cited,2);const answer=detail.answers.find(item=>item.snapshotId==='d1-i-unjudged');
+ assert.equal(answer.question,'Question unjudged');assert.equal(answer.answerText,'Original answer unjudged');assert.equal(answer.judgment,null);
+});

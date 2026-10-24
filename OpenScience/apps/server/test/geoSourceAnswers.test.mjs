@@ -56,3 +56,11 @@ test('a source exposes page 251 in the default complete universe and paginates o
  assert.equal(pagesCited(input,'news.example',{limit:1,offset:250}).pages.length,1);
  assert.equal(pagesCited(input,'news.example',{limit:1}).pages[0].url,citations[250].url);
 });
+
+test('source tally and page identity follow the preserved URL, never absent or contradictory metadata',()=>{
+ const items=[answer('url-only',[{url:'https://www.news.example/s?id=1'}]),answer('contradomain',[{url:'https://news.example/s?id=2',domain:'another.example'}]),answer('unlinked',[{domain:'news.example'}])];
+ assert.equal(citedDomain(items[0].citations[0]),'news.example');assert.equal(citedDomain(items[1].citations[0]),'news.example');
+ assert.equal(citedDomain(items[2].citations[0]),'','a domain annotation without a usable URL remains unobservable');
+ assert.equal(countsOf(items,'news.example').cited,2);assert.equal(countsOf(items,'another.example').cited,0);
+ assert.equal(pagesCited(items,'news.example').total,2);
+});
