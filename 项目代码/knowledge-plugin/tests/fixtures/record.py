@@ -37,6 +37,7 @@ import asyncio
 import gzip
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -65,7 +66,7 @@ CONTACT_FILE = ROOT.parent.parent / ".evimed-local" / "secrets" / "unpaywall.ema
 EVIMED_KEY_FILE = ROOT.parent.parent / ".evimed-local" / "secrets" / "evimed.api-key"
 SELECTORS_FILE = ROOT.parent.parent / "outputs" / "2026-09-22-frontier-build" / "P2-selectors.json"
 REGISTRY_FILE = ROOT / "registry" / "sources.json"
-BROWSER_CDP = "http://127.0.0.1:9222"
+BROWSER_CDP = os.environ.get("KNOWLEDGE_PLUGIN_RECORD_CDP") or "http://127.0.0.1:9222"   # another port: that variable
 EVIMED_API_BASE = "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/"
 KEPT_HEADERS = ("content-type", "etag", "last-modified", "retry-after")
 GZIP_OVER = 48 * 1024
@@ -436,6 +437,8 @@ ADAPTER_CASES: dict[str, dict] = {
     "atom/arxiv-qbio-qm": {"source": "arxiv-qbio-qm", "budget": 1},
     # html-list
     "html-list/nhsa-notices": {"source": "nhsa-notices", "budget": 1},
+    "html-list/natcm-policy-interpretation": {"source": "natcm-policy-interpretation", "budget": 1},   # ct-src 2026-10-24
+    "html-list/ndcpa-regulations": {"source": "ndcpa-regulations", "budget": 1},                       # ct-src 2026-10-24
     "html-list/nhsa-consultations": {"source": "nhsa-consultations", "budget": 1},
     "html-list/nhsa-policy-interpretation": {"source": "nhsa-policy-interpretation", "budget": 1},
     "html-list/gov-cn-policy": {"source": "gov-cn-policy", "budget": 1},
@@ -463,6 +466,13 @@ ADAPTER_CASES: dict[str, dict] = {
     "browser-list/nmpa-label-revision-announcements": {"source": "nmpa-label-revision-announcements", "budget": 1},
     "browser-list/nmpa-other-drug-announcements": {"source": "nmpa-other-drug-announcements", "budget": 1},
     "browser-list/nmpa-innovative-approvals": {"source": "nmpa-innovative-approvals", "budget": 1},
+    # ct-src 2026-10-24: approval delivery notices, regulatory work (approvals), device recalls, consultations.
+    "browser-list/nmpa-drug-approval-delivery": {"source": "nmpa-drug-approval-delivery", "budget": 1},
+    "browser-list/nmpa-device-approval-delivery": {"source": "nmpa-device-approval-delivery", "budget": 1},
+    "browser-list/nmpa-drug-regulatory-work": {"source": "nmpa-drug-regulatory-work", "budget": 1},
+    "browser-list/nmpa-device-regulatory-work": {"source": "nmpa-device-regulatory-work", "budget": 1},
+    "browser-list/nmpa-device-recalls": {"source": "nmpa-device-recalls", "budget": 1},
+    "browser-list/nmpa-consultations": {"source": "nmpa-consultations", "budget": 1},
     "browser-list/cde-breakthrough-therapy": {
         "source": "cde-breakthrough-therapy", "budget": 1,
         "note": ("药审中心 refused this box from ~11:13Z on 2026-09-22 (403 WAF page); the stored fixture is the 11:11:15Z "

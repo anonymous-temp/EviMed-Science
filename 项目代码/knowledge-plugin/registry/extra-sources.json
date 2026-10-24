@@ -1,5 +1,5 @@
 {
- "_about": "Hand-kept runtime rows that are not in the probe registry (tools/build_registry.py appends them; enabled is decided by the same rule as every other row). The EviMed API scans of plan 12.2: request shapes as measured on 2026-09-22 (tools/evimed_api_freshness.py in the plan's assets): 20 ChiCTR terms, 30 guideline publisher groups. The key is injected by the fetcher from KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE. evimed-evidence (flywheel F09, 2026-10-05): the platform's own feed of what its evidence may offer the frontier, read like any other publisher's; its address is the deployment's (config.url_env, EVIMED_EVIDENCE_FEED_URL) and unset, the source loads disabled and nothing is polled. The ai-discovery-* rows (循证进化 breadth, 2026-10-10) are the sources the weekly self-research reads and the medical feed drops (config.discovery_only; the platform recognises the id prefix): three arXiv phrase rows over the core AI categories, the arXiv venue-accepted row, Hugging Face Daily Papers / model releases / blog, the Anthropic research mirror, the GitHub releases of 17 agent frameworks and the kernel's upstream (REST, not releases.atom: github.com's robots.txt disallows *.atom), PMLR volumes and the ACL Anthology's ingestion commits. The Hugging Face rows are relay (huggingface.co is unreachable from the Beijing host) and load disabled with relay_not_accepted until the Tokyo node has read them with the honest identity; every row was run once through `python -m knowledge_plugin.probe` on 2026-10-10 (registry/research/probe-ai-discovery-2026-10-10.jsonl), from the dev box, which is not a production vantage.",
+ "_about": "Hand-kept runtime rows that are not in the probe registry (tools/build_registry.py appends them; enabled is decided by the same rule as every other row). The EviMed API scans of plan 12.2: request shapes as measured on 2026-09-22 (tools/evimed_api_freshness.py in the plan's assets): 20 ChiCTR terms, 30 guideline publisher groups. The key is injected by the fetcher from KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE. evimed-evidence (flywheel F09, 2026-10-05): the platform's own feed of what its evidence may offer the frontier, read like any other publisher's; its address is the deployment's (config.url_env, EVIMED_EVIDENCE_FEED_URL) and unset, the source loads disabled and nothing is polled. The ai-discovery-* rows (循证进化 breadth, 2026-10-10) are the sources the weekly self-research reads and the medical feed drops (config.discovery_only; the platform recognises the id prefix): three arXiv phrase rows over the core AI categories, the arXiv venue-accepted row, Hugging Face Daily Papers / model releases / blog, the Anthropic research mirror, the GitHub releases of 17 agent frameworks and the kernel's upstream (REST, not releases.atom: github.com's robots.txt disallows *.atom), PMLR volumes and the ACL Anthology's ingestion commits. The Hugging Face rows are relay (huggingface.co is unreachable from the Beijing host) and load disabled with relay_not_accepted until the Tokyo node has read them with the honest identity; every row was run once through `python -m knowledge_plugin.probe` on 2026-10-10 (registry/research/probe-ai-discovery-2026-10-10.jsonl), from the dev box, which is not a production vantage. ct-src 2026-10-24: six NMPA lists read through the browser exit with the selectors every NMPA list shares (div.list ul li, a@title, a@href, span) — the daily delivery notices of drug and device approval documents (each notice's page is the day's table of approvals: 受理号, 药品名称, 申请人, 批准文号), the drug and device regulatory work columns (where 「批准…上市」 is announced), device recalls and consultations; recorded as browser-list replay cases under tests/fixtures/browser-list/.",
  "sources": [
   {
    "id": "evimed-chictr",
@@ -964,6 +964,198 @@
      "api.github.com"
     ],
     "discovery_only": true
+   }
+  },
+  {
+   "id": "nmpa-drug-approval-delivery",
+   "name": "国家药监局 药品批准证明文件与通知件送达信息",
+   "homepage": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsyp/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "category": "regulator-approval",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsyp/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-device-approval-delivery",
+   "name": "国家药监局 医疗器械批准证明文件与告知书送达信息",
+   "homepage": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsqx/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "category": "regulator-approval",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsqx/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-drug-regulatory-work",
+   "name": "国家药监局 药品监管工作（含批准上市）",
+   "homepage": "https://www.nmpa.gov.cn/yaopin/ypjgdt/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/yaopin/ypjgdt/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-device-regulatory-work",
+   "name": "国家药监局 医疗器械监管工作（含获批上市）",
+   "homepage": "https://www.nmpa.gov.cn/ylqx/ylqxjgdt/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/ylqx/ylqxjgdt/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-device-recalls",
+   "name": "国家药监局 医疗器械召回",
+   "homepage": "https://www.nmpa.gov.cn/xxgk/chpzhh/ylqxzhh/index.html",
+   "lane": "safety",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": true,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 21600,
+   "poll_ceiling_s": 86400,
+   "category": "device-safety",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/xxgk/chpzhh/ylqxzhh/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-consultations",
+   "name": "国家药监局 征求意见",
+   "homepage": "https://www.nmpa.gov.cn/xxgk/zhqyj/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 21600,
+   "poll_ceiling_s": 86400,
+   "category": "regulator-consultation",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/xxgk/zhqyj/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
    }
   }
  ]

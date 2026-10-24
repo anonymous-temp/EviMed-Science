@@ -6939,20 +6939,31 @@
    "authority": 5,
    "safety_feed": false,
    "owner_entity": "国家疾病预防控制局",
-   "launch_tier": "P2",
+   "launch_tier": "P1",
    "language": "zh",
    "region": "CN",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.ndcpa.gov.cn/jbkzzx/c100012/common/list.html",
     "max_pages": 1,
     "allowed_hosts": [
      "www.ndcpa.gov.cn"
-    ]
+    ],
+    "mode": "script-json",
+    "script_var": "itemObj",
+    "fields": {
+     "title": "aT",
+     "link": "aU.common",
+     "date": "aPd",
+     "summary": "saT",
+     "id": "id"
+    },
+    "link_base": "https://www.ndcpa.gov.cn/",
+    "max_items": 30
    }
   },
   {
@@ -7100,20 +7111,27 @@
    "authority": 5,
    "safety_feed": false,
    "owner_entity": "国家中医药管理局 NATCM",
-   "launch_tier": "P2",
+   "launch_tier": "P1",
    "language": "zh",
    "region": "CN",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "http://www.natcm.gov.cn/a/zcjd/",
     "max_pages": 1,
     "allowed_hosts": [
      "www.natcm.gov.cn"
-    ]
+    ],
+    "selectors": {
+     "item": "ul.lbbt li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
    }
   },
   {
@@ -23661,6 +23679,210 @@
      "api.github.com"
     ],
     "discovery_only": true
+   }
+  },
+  {
+   "id": "nmpa-drug-approval-delivery",
+   "name": "国家药监局 药品批准证明文件与通知件送达信息",
+   "homepage": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsyp/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator-approval",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsyp/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-device-approval-delivery",
+   "name": "国家药监局 医疗器械批准证明文件与告知书送达信息",
+   "homepage": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsqx/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator-approval",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/zwfw/zwfwpjfbzs/pjfbzsqx/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-drug-regulatory-work",
+   "name": "国家药监局 药品监管工作（含批准上市）",
+   "homepage": "https://www.nmpa.gov.cn/yaopin/ypjgdt/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/yaopin/ypjgdt/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-device-regulatory-work",
+   "name": "国家药监局 医疗器械监管工作（含获批上市）",
+   "homepage": "https://www.nmpa.gov.cn/ylqx/ylqxjgdt/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/ylqx/ylqxjgdt/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-device-recalls",
+   "name": "国家药监局 医疗器械召回",
+   "homepage": "https://www.nmpa.gov.cn/xxgk/chpzhh/ylqxzhh/index.html",
+   "lane": "safety",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": true,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 21600,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "device-safety",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/xxgk/chpzhh/ylqxzhh/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "nmpa-consultations",
+   "name": "国家药监局 征求意见",
+   "homepage": "https://www.nmpa.gov.cn/xxgk/zhqyj/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "browser-list",
+   "egress": "browser",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 21600,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator-consultation",
+   "config": {
+    "url": "https://www.nmpa.gov.cn/xxgk/zhqyj/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.nmpa.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list ul li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
    }
   }
  ],

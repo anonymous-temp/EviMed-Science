@@ -34,7 +34,7 @@ def test_the_committed_registry_is_a_fresh_deterministic_build():
 def test_every_row_validates(document):
     rows = load_registry(REGISTRY, {})
     # 722 before 2026-10-10; the single arXiv discovery query is replaced by the 28 ai-discovery rows (tests/adapters/test_ai_discovery.py)
-    assert len(rows) == len(document["sources"]) == 749
+    assert len(rows) == len(document["sources"]) == 755        # ct-src 2026-10-24: six NMPA lists
     assert sum(r.enabled for r in rows) >= 256
 
 
@@ -111,7 +111,9 @@ def test_the_plan_decisions_hold(document):
     # so it is mixed too; 20 pure safety feeds remain
     recalls = by_id["fda-recalls-safety-alerts"]
     assert recalls["safety_feed"] is False and recalls["lane"] == "mixed"
-    assert sum(1 for s in sources if s["safety_feed"]) == 20
+    # ct-src 2026-10-24: NMPA's device recall list is one more (every row of it is a recall notice)
+    assert by_id["nmpa-device-recalls"]["safety_feed"] is True and by_id["nmpa-device-recalls"]["lane"] == "safety"
+    assert sum(1 for s in sources if s["safety_feed"]) == 21
     assert by_id["evimed-chictr"]["config"]["url"].endswith("/ai-api/review/api/clinical-trial")   # v1: sponsor present
     for sid in ("natcm-notices", "most-tztg", "nmpa-gd-mirror", "csco-news", "gd-pharm-society-notifications", "cntcm-news",
                 "nhsa-policy-regulations", "cdr-adr-notices", "zhongguokexuebao", "chinacdc-notifiable-disease", "china-cdc-news"):
