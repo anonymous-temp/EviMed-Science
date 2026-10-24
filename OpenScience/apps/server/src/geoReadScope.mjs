@@ -298,7 +298,7 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
 /** Read under an already authorized project. The reference contains no authority and resolves only within that owner/project.
  * @param {import('./geoStore.mjs').GeoStore} store @param {any} project @param {any} [input]
  * @param {{ history?: boolean, historyLimit?: number, frozenRoundIds?: string[], persist?: boolean, subset?: { keys: string[], eligibleOnly: boolean } | null }} [options]
- * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any, subset: any}>}
+ * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any, subset: any, sourceObservationPlan: any}>}
  */
 export async function readGeoSelection(store, project, input = {}, options = {}) {
   return withGeoReadTransaction(store, async () => {
@@ -435,9 +435,25 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     owned: context?.owned ?? {}, arms: { pilot: groups.filter(([, control]) => !control).map(([id]) => String(id)),
       control: groups.filter(([id, control]) => control && !contaminated.includes(String(id))).map(([id]) => String(id)) } };
   const computed = computeGeoSelection(rows, metricOptions);
-  const jobs = (await store.query(`SELECT j.question_id, j.engine, j.round_id, j.status FROM evimed_geo.probe_jobs j
-    WHERE j.geo_project_id = $1 AND j.user_id = $2 AND j.round_id = ANY($3::text[])`, [project.id, project.userId, roundIds])).rows
-    .filter((job) => (!scope.engines.length || scope.engines.includes(job.engine)) && (!scope.questionVersion && !scope.groupIds.length && !scope.pools.length && !scope.clientTags.length || questionIds.has(String(job.question_id))));
+  const jobs = (await store.query(`SELECT j.id,j.question_id,j.engine,j.round_id,j.repeat_index,j.status,j.snapshot_id,
+      CASE WHEN s.id=ANY($7::text[]) AND s.probe_job_id=j.id AND s.round_id=j.round_id
+        AND s.question_id=j.question_id AND s.engine=j.engine THEN s.id ELSE NULL END AS admitted_snapshot_id
+    FROM evimed_geo.probe_jobs j JOIN evimed_geo.rounds r ON r.id=j.round_id AND r.geo_project_id=j.geo_project_id AND r.user_id=j.user_id
+    LEFT JOIN evimed_geo.snapshots s ON s.id=j.snapshot_id AND s.geo_project_id=j.geo_project_id AND s.user_id=j.user_id
+    WHERE j.geo_project_id=$1 AND j.user_id=$2 AND j.round_id=ANY($3::text[]) AND j.question_id=ANY($4::text[])
+      AND (cardinality($5::text[])=0 OR j.engine=ANY($5::text[]))
+      AND ($6::jsonb IS NULL OR jsonb_build_array(j.question_id,j.engine,coalesce(r.surface->>'mode','web'))
+        IN (SELECT value FROM jsonb_array_elements($6::jsonb)))
+    ORDER BY j.round_id,j.question_id,j.engine,j.repeat_index,j.id LIMIT ${GEO_SELECTION_MAX_ROWS + 1}`,
+  [project.id, project.userId, roundIds, [...questionIds], scope.engines, subset ? JSON.stringify(subset.keys.map(key => JSON.parse(key))) : null,
+    rows.map(row => row.snapshotId)])).rows;
+  if (jobs.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a narrower scope: more than ${GEO_SELECTION_MAX_ROWS} planned observations exceed the read limit.`, 422);
+  // Failed, skipped and queued jobs may have no snapshot. Source-history
+  // absence requires this actual planned cohort; a snapshot array is not proof
+  // of collection completeness. This current context has its own analysis digest.
+  const sourceObservationPlan = { schemaVersion: 1, jobs: jobs.map(job => ({ id: String(job.id), roundId: String(job.round_id),
+    questionId: String(job.question_id), engine: String(job.engine), repeatIndex: Number(job.repeat_index), status: String(job.status),
+    snapshotId: job.snapshot_id == null ? null : String(job.snapshot_id), admittedSnapshotId: job.admitted_snapshot_id == null ? null : String(job.admitted_snapshot_id) })) };
   const errorRevision = (await store.query(`SELECT md5(coalesce(string_agg(to_jsonb(e)::text, '' ORDER BY e.id), '')) AS digest
     FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.user_id = $2
     AND (e.first_snapshot_id = ANY($3::text[]) OR e.last_snapshot_id = ANY($3::text[]) OR e.closed_snapshot_id = ANY($3::text[]))`,
@@ -471,7 +487,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     comparability: { kind: "observational", causal: false, methodVersions: methods, questionVersions: versions, modes, samplingModes, samplingContracts, consumerModelVersion: "unknown" },
     coverage: geoSelectionCoverage(/** @type {any[]} */ (computed.balance.rows), versions.length === 1 ? versions[0] : null) };
   bindMemberReferences(computed, reference);
-  return { scope: scopeSaved, selection, rounds, rows, computed, metricOptions, questions: selectedQuestions, comparison, subset };
+  return { scope: scopeSaved, selection, rounds, rows, computed, metricOptions, questions: selectedQuestions, comparison, subset, sourceObservationPlan };
 }
 
 /** Observed comparisons use the same immutable question, engine and mode. Consumer model versions are disclosed, not invented.

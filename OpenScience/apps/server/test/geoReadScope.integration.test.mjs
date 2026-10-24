@@ -14,6 +14,40 @@ const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not c
 let database, store, measure, isolated, project, service;
 const user = { id: "scope-owner" };
 
+test('source observation plans retain missing jobs and prove exact admitted reciprocal snapshot links', options, async t => {
+  t.after(() => store.query("DELETE FROM evimed_geo.rounds WHERE id='source-plan-round' AND geo_project_id=$1 AND user_id=$2", [project.id, user.id]));
+  await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,surface)
+    VALUES('source-plan-round',$1,$2,'baseline','partial',1,'{deepseek,kimi}','{"mode":"web"}')`, [user.id, project.id]);
+  for (const [id, question, engine, repeat, status, snapshot] of [
+    ['plan-good', 'q1', 'deepseek', 0, 'done', 'plan-good-snapshot'],
+    ['plan-missing', 'q1', 'deepseek', 1, 'failed', null],
+    ['plan-wrong-link', 'q1', 'deepseek', 2, 'done', 'plan-wrong-snapshot'],
+    ['plan-other-question', 'q2', 'deepseek', 0, 'queued', null],
+    ['plan-other-engine', 'q1', 'kimi', 0, 'queued', null],
+  ]) await store.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,repeat_index,status,snapshot_id)
+    VALUES($1,$2,$3,'source-plan-round',$4,$5,$6,$7,$8)`, [id, user.id, project.id, question, engine, repeat, status, snapshot]);
+  for (const [id, job] of [['plan-good-snapshot', 'plan-good'], ['plan-wrong-snapshot', 'some-other-job']]) {
+    await measure.insertSnapshot({ id, userId: user.id, geoProjectId: project.id, roundId: 'source-plan-round', questionId: 'q1', engine: 'deepseek',
+      askedAt: new Date('2026-10-03T00:00:00Z'), status: 'valid', answerText: 'Preserved source observation', citations: [], surface: { mode: 'web' }, warnings: [], probeJobId: job });
+  }
+  const selected = await readGeoSelection(store, project, { round: 'source-plan-round', groupIds: ['g1'], engines: ['deepseek'] });
+  assert.equal(selected.sourceObservationPlan.schemaVersion, 1);
+  assert.deepEqual(selected.sourceObservationPlan.jobs.map(job => [job.id, job.repeatIndex, job.status, job.admittedSnapshotId]), [
+    ['plan-good', 0, 'done', 'plan-good-snapshot'], ['plan-missing', 1, 'failed', null], ['plan-wrong-link', 2, 'done', null],
+  ]);
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='queued' WHERE id='plan-missing'");
+  const reread = await readGeoSelection(store, project, { selectionRef: selected.selection.reference });
+  assert.equal(reread.selection.dataRevision, selected.selection.dataRevision, 'scheduled status does not rewrite the frozen answer selection');
+  assert.equal(reread.sourceObservationPlan.jobs[1].status, 'queued', 'source analysis receives current plan context for its own digest');
+  const subset = await readGeoSelection(store, project, { round: 'source-plan-round' }, { subset: { keys: [JSON.stringify(['q1', 'kimi', 'web'])], eligibleOnly: false } });
+  assert.deepEqual(subset.sourceObservationPlan.jobs.map(job => job.id), ['plan-other-engine']);
+  await store.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,repeat_index,status)
+    SELECT 'plan-bound-'||n,$1,$2,'source-plan-round','q2','kimi',n,'queued' FROM generate_series(1,20001) n`, [user.id, project.id]);
+  assert.equal((await readGeoSelection(store, project, { round: 'source-plan-round', groupIds: ['g1'], engines: ['deepseek'] })).sourceObservationPlan.jobs.length, 3,
+    'the plan bound applies after actual question/engine admission');
+  await assert.rejects(readGeoSelection(store, project, { round: 'source-plan-round', groupIds: ['g2'] }), error => error.status === 422 && /planned observations/.test(error.message));
+});
+
 before(async () => {
   if (!databaseUrl) return;
   isolated = await createGeoTestDatabase(databaseUrl, "geoscopes");
