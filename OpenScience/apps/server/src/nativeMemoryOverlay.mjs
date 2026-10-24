@@ -4,7 +4,7 @@ import {
   NATIVE_COMMIT_ORIGINS, NATIVE_REVISION_ACTORS, NATIVE_REVISION_CHANGES, NATIVE_TEXT_LIMIT, migrateNativeMemory,
 } from "./nativeMemoryPersistence.mjs";
 import { HttpError } from "./security.mjs";
-import { userRootUri } from './openVikingLayout.mjs';
+import { OPENVIKING_MEMORY_TYPES, userRootUri } from './openVikingLayout.mjs';
 
 /**
  * The overlay store of the native memory engine (`nativeMemoryPersistence.mjs` says what it holds and why).
@@ -62,6 +62,14 @@ function scopedRoot(value) {
     throw new HttpError(403, 'memory_scope_denied', 'A canonical native memory root is required.');
   }
   return value;
+}
+
+/** Rejections share the existing table but never cross native namespaces. */
+export function nativeMemoryRejectionType(memoryType, namespaceId = null) {
+  if (!OPENVIKING_MEMORY_TYPES.includes(memoryType) || namespaceId !== null && !/^gp-[a-f0-9]{24}$/.test(namespaceId)) {
+    throw new HttpError(403, 'memory_scope_denied', 'The memory rejection scope is invalid.');
+  }
+  return namespaceId === null ? memoryType : `${namespaceId}:${memoryType}`;
 }
 
 /** @param {any} row */
