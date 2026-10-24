@@ -359,8 +359,8 @@ export class MemoryIndexing {
    *  read from the canonical row, so the worst a stale index can do is name a
    *  fact that is then dropped.
    * @param {string} userId @param {string} accountCreatedAt @param {{capsuleId:string,mode:string}[]} selections
-   * @param {string} query @param {number} limit @param {string|null} projectId */
-  async recall(userId, accountCreatedAt, selections, query, limit, projectId = null) {
+   * @param {string} query @param {number} limit */
+  async recall(userId, accountCreatedAt, selections, query, limit) {
     const current = await this.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]);
     if (current.rows[0]?.generation !== accountCreatedAt) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
     if (!selections.length) return [];
@@ -392,18 +392,16 @@ export class MemoryIndexing {
     if (!candidates.length) return [];
     candidates.sort((a, b) => b.score - a.score || a.scopeRank - b.scopeRank || a.rank - b.rank);
     const ids = candidates.map((candidate) => candidate.factId);
-    const activationIds = ["active-capsules:account", ...(projectId ? [`active-capsules:project:${projectId}`] : [])];
+    // The capsules in force are the account's one list; which project may read an entry is the caller's to decide, from the row's `project_id`.
     const preferences = await this.database.query(`SELECT id,payload FROM evimed_product.documents
-      WHERE user_id=$1 AND kind='preferences' AND id=ANY($2::text[]) AND deleted_at IS NULL`, [userId, activationIds]);
-    const localId = projectId ? `active-capsules:project:${projectId}` : "active-capsules:account";
-    const orderedPreferences = [...preferences.rows].sort((a, b) => (a.id === localId ? -1 : b.id === localId ? 1 : 0));
+      WHERE user_id=$1 AND kind='preferences' AND id='active-capsules:account' AND deleted_at IS NULL`, [userId]);
     const active = new Map();
-    for (const preference of orderedPreferences) {
+    for (const preference of preferences.rows) {
       for (const item of preference.payload.items ?? []) {
         if (!active.has(item.capsuleId)) active.set(item.capsuleId, item.mode);
       }
     }
-    const canonical = await this.database.query(`SELECT id,revision,payload,created_at FROM evimed_product.documents
+    const canonical = await this.database.query(`SELECT id,revision,payload,created_at,project_id FROM evimed_product.documents
       WHERE user_id=$1 AND kind='fact' AND id=ANY($2::text[]) AND deleted_at IS NULL`, [userId, ids]);
     const byId = new Map(canonical.rows.map((row) => [row.id, row]));
     const eligible = [];

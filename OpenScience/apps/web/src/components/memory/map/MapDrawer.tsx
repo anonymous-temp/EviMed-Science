@@ -14,7 +14,7 @@ import { MethodDrawer } from "@/components/memory/PracticeDrawer";
  * then is said so in a sentence rather than shown as an empty drawer.
  *
  * `open` is the address's own key: `record:<id>`, `entry:<id>` or `method:<id>`, the same keys the memory page uses. An `entry` is a note of
- * the researcher's own capsule (the 「项目笔记」 a conversation wrote): the page reads the capsule's notes when it opens, and `FactDrawer` edits,
+ * the researcher's own capsule (what a conversation noted, labelled with its project): the page reads the capsule's notes when it opens, and `FactDrawer` edits,
  * forgets and undoes it through the capsule's own routes, as it does on the memory page.
  */
 export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord, canOpenRecord }: {

@@ -187,10 +187,8 @@ export interface ReceivedCapsule {
   description: string;
   issuerTrust: "verified" | "unverified" | string;
   importedAt: string | null;
-  /** In force account-wide or for this project. */
+  /** In force for the account, so in every project. */
   enabled: boolean;
-  /** Where it is in force: every project, or only the one the shell is in. */
-  enabledIn?: "account" | "project" | null;
   /** Approved entries by kind. */
   counts: Record<string, number>;
   /** The first few methods, in their own words. */
@@ -213,9 +211,9 @@ export function fetchReceivedCapsules() {
   return productRequest<ReceivedCapsule[]>("/capsules/received");
 }
 
-/** One click in, as a reference: in every project, or with `projectId` in that one only. */
-export function enableReceivedCapsule(id: string, projectId?: string) {
-  return productRequest<ReceivedCapsule | null>(`/capsules/${encodeURIComponent(id)}/enable`, "POST", projectId ? { projectId } : {});
+/** One click in, as a reference: for the account, so in every project. */
+export function enableReceivedCapsule(id: string) {
+  return productRequest<ReceivedCapsule | null>(`/capsules/${encodeURIComponent(id)}/enable`, "POST", {});
 }
 
 /** One click out: the pack stops contributing anything. */

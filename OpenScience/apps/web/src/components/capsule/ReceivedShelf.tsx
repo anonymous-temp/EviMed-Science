@@ -8,7 +8,6 @@ import {
 } from "@/lib/memoryClient";
 import { formatDay } from "@/lib/format";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
-import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
@@ -121,11 +120,11 @@ export function ReceivedShelf() {
 /**
  * 「收到的胶囊」, inside 分享与导入: what other people shared, trusted as a
  * whole pack — no entry to approve one by one. A row is the pack, what it
- * brings, and a switch that puts it in force account-wide as a reference
- * (methods and standards, never an identity); 「试用一次」 — a conversation of
- * its own that writes nothing into memory — and 「只在…启用」, in force in the
- * project the shell is in and nowhere else (build spec §9.4 #6), are in its
- * 「⋯」. The switch reads "in force here": account-wide, or in this project.
+ * brings, and a switch that puts it in force for the account as a reference
+ * (methods and standards, never an identity), in every project; 「试用一次」 — a
+ * conversation of its own that writes nothing into memory — is in its 「⋯」. A
+ * pack is never enabled for one project alone: a person has one capsule
+ * (2026-10-24).
  *
  * Said only what the pack is and who sent it (owner ruling 2026-10-10). When it
  * was received, whether a signature checked out, how far the scan got and what
@@ -136,7 +135,6 @@ function ReceivedPacks() {
   const navigate = useNavigate();
   const { data, failed, reload } = useCapsuleData(fetchReceivedCapsules);
   const [busy, setBusy] = useState<string | null>(null);
-  const project = useProjectStore((state) => state.projects.find((item) => item.id === state.currentId) ?? null);
 
   const act = async (key: string, operation: () => Promise<void>) => {
     setBusy(key);
@@ -153,12 +151,6 @@ function ReceivedPacks() {
   const enable = (pack: ReceivedCapsule) => act(`enable:${pack.id}`, async () => {
     await enableReceivedCapsule(pack.id);
     toast.success(`已启用“${pack.title}”`, {
-      action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
-    });
-  });
-  const enableHere = (pack: ReceivedCapsule, target: { id: string; name: string }) => act(`enable:${pack.id}`, async () => {
-    await enableReceivedCapsule(pack.id, target.id);
-    toast.success(`已在“${target.name}”启用“${pack.title}”`, {
       action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
     });
   });
@@ -196,7 +188,6 @@ function ReceivedPacks() {
                   <p>{[
                     pack.card?.author ? fromSender(pack.card.author) : null,
                     pack.card?.summary || contents(pack),
-                    pack.enabledIn === "project" && project ? `只在“${project.name}”启用` : null,
                   ].filter(Boolean).join(" · ")}</p>
                   {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
                   {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
@@ -212,9 +203,6 @@ function ReceivedPacks() {
               )}
               menu={pack.takenDown ? undefined : <Menu label="更多" items={[
                 { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
-                ...(project && !pack.enabled
-                  ? [{ label: `只在“${project.name}”启用`, disabled: busy !== null, onSelect: () => void enableHere(pack, project) }]
-                  : []),
               ]} />}
             />
           );

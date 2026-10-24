@@ -180,7 +180,7 @@ test("understanding a document writes its summary and key claims into the resear
     assert.deepEqual({ facts: result.facts, methods: result.methods, added: result.added, kept: result.kept, retired: result.retired },
       { facts: 2, methods: 0, added: 2, kept: 0, retired: 0 });
     assert.equal(result.capsuleTitle, "我的记忆胶囊");
-    const active = await app.capsuleService.active(user.id, null);
+    const active = await app.capsuleService.active(user.id);
     assert.deepEqual(active.items.map((item) => [item.capsuleId, item.mode]).sort(),
       [[result.capsuleId, "own"], [reference.id, "guest"]].sort());
 

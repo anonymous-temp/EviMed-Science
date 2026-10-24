@@ -32,14 +32,14 @@ const nativeStore = () => ({
 async function world() {
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
-  // The project's notes, as a run writes them: approved at once, in a capsule that is in force in the project.
+  // The project's notes, as a run writes them: approved at once, entries of the one capsule labelled with the project.
   const note = await service.note(USER, PROJECT, { factKind: "preference", content: "引用一律用 AMA 格式，页码写全" });
   const profileNote = await service.note(USER, PROJECT, { factKind: "profile", content: "心内科临床药师，做真实世界研究" });
   // A pack someone else wrote, enabled as a reference.
   const pack = await service.create(USER, { title: "王老师的队列研究做法" });
   await service.addEntry(USER, pack.id, { factKind: "method_preference", layer: "methods", content: "队列研究先写目标试验，再写分析计划", origin: "explicit" });
   await service.addEntry(USER, pack.id, { factKind: "profile", layer: "profile", content: "王老师，流行病学教授", origin: "explicit" });
-  await service.activate(USER, pack.id, { mode: "guest", projectId: PROJECT });
+  await service.activate(USER, pack.id, { mode: "guest" });
   return { documents, service, note, profileNote, pack };
 }
 
@@ -63,9 +63,9 @@ test("a search of a native conversation finds the notes and the packs in force, 
   assert.match(text, /\[method_preference · 参考胶囊《王老师的队列研究做法》\] 队列研究先写目标试验/);
 
   // The pack is disabled: nothing of it is found, and what was the person's own stays.
-  const active = await service.active(USER, PROJECT);
-  await documents.put(USER, "preferences", `active-capsules:project:${PROJECT}`, { items: active.items.filter((item) => item.capsuleId !== pack.id) },
-    { expectedRevision: active.record.revision, projectId: PROJECT });
+  const active = await service.active(USER);
+  await documents.put(USER, "preferences", "active-capsules:account", { items: active.items.filter((item) => item.capsuleId !== pack.id) },
+    { expectedRevision: active.record.revision });
   assert.equal(capsuleSearchText(await search(service, "队列研究")), null, "nothing of a pack that is not in force");
   assert.match(capsuleSearchText(await search(service, "引用")) ?? "", /AMA/);
 

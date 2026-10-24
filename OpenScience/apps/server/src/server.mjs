@@ -202,7 +202,7 @@ import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
 import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
 import { MemoryRerank } from "./memoryRerank.mjs";
-import { OpenVikingClient } from "./openVikingClient.mjs";
+import { OpenVikingClient, capsuleMemoryRoot } from "./openVikingClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
@@ -224,6 +224,7 @@ import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
 import { MemoryIndexWithdrawals } from "./memoryIndexWithdrawals.mjs";
 import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
+import { foldAllIntoOneCapsule } from "./capsuleOneCapsule.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { configurePasswordKdfGate } from "./capsuleContainer.mjs";
@@ -1652,9 +1653,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const capsuleService = productDocuments
     ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner,
       // Enabling or disabling a pack reaches the runtimes that are up (the methods they mounted at launch change before the next
-      // turn, no restart). `projectId` null is the account's list: every project's runtime. Asked at request time: the manager is
-      // composed further down, and a manager that does not have the refresh (package `mount`'s `refreshCapsuleMethods`) answers nothing.
-      onActivationChanged: ({ userId, projectId }) => /** @type {any} */ (runtimeManager).refreshCapsuleMethods?.({ userId, projectId }) })
+      // turn, no restart). The list is the account's, so no project is named: every project's runtime of the account. Asked at request
+      // time: the manager is composed further down, and a manager that does not have the refresh (package `mount`'s `refreshCapsuleMethods`)
+      // answers nothing.
+      onActivationChanged: ({ userId }) => /** @type {any} */ (runtimeManager).refreshCapsuleMethods?.({ userId }) })
     : null;
   // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
@@ -5161,7 +5163,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       createNativeMemorySource({ readMemories: (request) => nativeMemory.mapMemories(request.user.id) }),
       createDocumentsSource({ sources: sourceService, researchMemory }),
       createMethodsSource({ learning: learningService }),
-      // The notes of the account's own capsule (the 「项目笔记」 a conversation wrote), memories to the person, for both engines.
+      // The notes in the account's own capsule (what a conversation noted, each labelled with its project), memories to the person, for both engines.
       createCapsuleNotesSource({ capsules: capsuleService }),
       // The compiled graph and wiki of the project the map is drawn for, read from the ledger's mirror (knowledgePageService.fetchProducts).
       createKnowledgeGraphSource({ fetchProducts: (request) => (knowledgePages ? knowledgePages.fetchProducts(request) : Promise.resolve(null)) }),
@@ -8488,6 +8490,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   };
 
   let evidenceReownRun = false;
+  let capsuleFoldRun = false;
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
@@ -8514,6 +8517,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (frontier && productDatabase && !evidenceReownRun) {
         evidenceReownRun = true;
         void reownOperatorImportedZones(productDatabase, { operatorUsers: config.operatorUsers }).catch((/** @type {any} */ error) => process.stderr.write(`evidence re-own failed: ${error?.code ?? error?.name ?? "error"}\n`));
+      }
+      // The per-project notes capsules and per-project lists of packs an earlier release made become the person's one capsule, once at start
+      // (idempotent; `capsuleOneCapsule.mjs`): the index is told to forget the emptied capsules' copies through the withdrawal ledger. Said on
+      // stderr, one line per account; a failure is said too and costs the start nothing.
+      if (capsuleService && productDatabase && !capsuleFoldRun) {
+        capsuleFoldRun = true;
+        const withdrawIndex = memoryIndexing && memoryWithdrawals ? async (/** @type {string} */ userId, /** @type {string[]} */ capsuleIds) => {
+          const generation = await memoryIndexing.accountGeneration(userId);
+          if (!generation) return;
+          await memoryWithdrawals.migrate();
+          await productDatabase.transaction((/** @type {any} */ client) => memoryWithdrawals.enqueue(client, userId,
+            capsuleIds.map((capsuleId) => capsuleMemoryRoot(userId, { accountCreatedAt: generation, capsuleId }))));
+          void memoryIndexWorker?.drainWithdrawals();
+        } : null;
+        void foldAllIntoOneCapsule({ database: productDatabase, capsules: capsuleService, withdrawIndex, log: (line) => process.stderr.write(`${line}\n`) })
+          .catch((/** @type {any} */ error) => process.stderr.write(`capsule one-capsule failed: ${error?.code ?? error?.name ?? "error"}\n`));
       }
       evidenceProgramme?.worker?.start();
       review?.worker.start();
