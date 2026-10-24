@@ -1873,3 +1873,19 @@ test("maintenance rejects cold native frame GET and WebSocket starts while warm 
   assert.equal(creations, 1);
   assert.equal(admissions, 3, 'warm GET and WebSocket reads do not request creation admission');
 });
+
+test('a queued normal terminal cannot transfer its stream id to a new endpoint', { timeout: 5000 }, async t => {
+  let enter, release;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => { enter(); await barrier; return { forward: true, value }; } });
+  t.after(() => release());
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('same-id', 'session/page')); await entered;
+  const peer = [...f.peers][0];
+  peer.send(JSON.stringify({ type: 'end', streamId: 'same-id' })); await delay(20);
+  const closed = once(c.ws, 'close'); c.send(open('same-id', 'session/modelCatalog'));
+  assert.equal((await closed)[0], 1008);
+  assert.equal(f.received.filter(item => item.type === 'open').length, 1);
+  release();
+});

@@ -295,8 +295,9 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       if (projectItem && operation.terminalError && frame.type !== 'end') { shutdown(1008, 'runtime_ui_frame_invalid'); return; }
       if (frame.type === "end" || frame.type === "error") {
         if (projectItem && !operation.finished) retiring.add(operation);
+        if (projectItem) rememberClosed(frame.streamId, operation.cancelled);
         if (projectItem && frame.type === 'error') {
-          operation.terminalError = true; rememberClosed(frame.streamId, false);
+          operation.terminalError = true;
         }
         streams.delete(frame.streamId);
         // A valid terminal response proves acceptance or an explicit refusal;
