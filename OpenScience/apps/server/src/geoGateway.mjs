@@ -53,7 +53,7 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze([...new Set([...GEO_ANALYSIS_FIELDS, ...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "url", "key", "limit", "offset", "member"])]);
+const readFilterFields = Object.freeze([...new Set([...GEO_ANALYSIS_FIELDS, ...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "targetKey", "url", "key", "limit", "offset", "member"])]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
 const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid"]);
 
@@ -132,6 +132,11 @@ function readRequest(body) {
   for (const name of ["strategyVersion", "planContextRef", "url"]) if (raw[name] != null) filter[name] = raw[name];
   if (raw.strategyVersion != null && (!Number.isSafeInteger(raw.strategyVersion) || raw.strategyVersion < 1)) throw gatewayError(400, "geo_read_filter_invalid", "strategyVersion must be positive.");
   if (raw.planContextRef != null && !/^gpc_[a-f0-9]{64}$/.test(raw.planContextRef)) throw gatewayError(400, "geo_read_filter_invalid", "Invalid plan context.");
+  if (raw.targetKey != null) {
+    if (body.what !== "signal" || typeof raw.targetKey !== "string" || !raw.targetKey || raw.targetKey.length > 160) throw gatewayError(400, "geo_read_filter_invalid", "Choose an exact preserved signal target.");
+    filter.targetKey = raw.targetKey;
+  }
+  if (body.what === "signal" && (!raw.planContextRef || Object.keys(raw).some(key => !["planContextRef", "targetKey", "limit", "offset"].includes(key)))) throw gatewayError(400, "geo_read_filter_invalid", "Read only the bound signal input.");
   if (raw.version != null) {
     if (!Number.isSafeInteger(raw.version) || raw.version < 1) throw gatewayError(400, "geo_read_filter_invalid", "version must be a positive integer.");
     filter.version = raw.version;

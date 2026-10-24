@@ -115,6 +115,18 @@ class GeoToolDefinitionTests(unittest.TestCase):
 
 
 class GeoReadTests(_GatewayCase):
+    def test_signal_material_pages_keep_the_bound_context_and_exact_target(self):
+        selected = {"planContextRef": "gpc_" + "a" * 64, "targetKey": "target_exact", "limit": 1, "offset": 2}
+        _Gateway.answers["read"] = (200, {"data": {"items": [{"part": 2, "text": "Preserved material"}], "total": 4, "more": True, "nextOffset": 3}})
+        result = self.server.call_tool("geo_read", {"what": "signal", "filter": selected})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "signal", "filter": selected})
+        self.assertTrue(any("filter.offset=3" in action for action in result["next_actions"]))
+        count = len(_Gateway.seen)
+        result = self.server.call_tool("geo_read", {"what": "signal", "filter": {**selected, "targetKey": "x" * 161}})
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(_Gateway.seen), count)
+
     def test_metric_matrix_and_round_descriptors_survive_the_native_tool_boundary(self):
         _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
         for selector in [

@@ -376,6 +376,8 @@ export class GeoService {
     /** @type {ReturnType<typeof import("./geoDiagnosisReview.mjs").createGeoDiagnosisReview> | null} */
     this.diagnosisReview = null;
     this.social = social;
+    /** @type {import('./geoSignalInputs.mjs').GeoSignalInputs | null} */
+    this.signalInputs = null;
     this.cards = cards;
     this.now = now;
     this.distributionView = new GeoDistributionView({ store });
@@ -2377,7 +2379,13 @@ export class GeoService {
    * @param {Record<string, any>} filter
    */
   async runtimeRead(project, what, filter = {}) {
-    if (what === "analysis") return this.analysisOf(project, filter);
+    switch (what) {
+      case "signal":
+        if (!this.signalInputs) throw new HttpError(503, "geo_unavailable", "Signal inputs are unavailable.");
+        return this.signalInputs.read(project, filter);
+      case "analysis":
+        return this.analysisOf(project, filter);
+    }
     if (["project", "questions", "diagnosis", "metrics", "snapshots", "errors", "sources", "monitoring", "clusters", "targets"].includes(what)
       && !geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.runtimeRead(project, what, filter));
     this.counters.reads += 1;

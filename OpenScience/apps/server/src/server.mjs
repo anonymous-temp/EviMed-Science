@@ -358,6 +358,8 @@ import { GeoPlanContext } from "./geoPlanContext.mjs";
 import { GeoSignals } from "./geoSignals.mjs";
 import { GeoSignalDiscovery } from "./geoSignalDiscovery.mjs";
 import { GeoSignalResults } from "./geoSignalResults.mjs";
+import { GeoSourceReviews } from "./geoSourceReviews.mjs";
+import { GeoSignalInputs } from "./geoSignalInputs.mjs";
 import { GeoArticleResults } from "./geoArticleResults.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
@@ -2670,6 +2672,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (resultProvenance) geo.signalResults = new GeoSignalResults({ signals: geo.signals, contexts: geoPlanContexts, results: resultProvenance,
       programmeRuns: async project => programmeRunsOf(await store.requireProject({ id: project.userId }, project.projectId)),
       controlProject: project => store.requireProject({ id: project.userId }, project.projectId) });
+    if (geo.signalResults && resultProvenance) {
+      const reviews = new GeoSourceReviews({ bridge: geo.signalResults, results: resultProvenance, store: geo.store });
+      geo.signals.sourceReviewForRun = (project, signal, run, targets) => reviews.forRun(project, signal, run, targets);
+    }
+    geo.service.signalInputs = new GeoSignalInputs({ contexts: geoPlanContexts, service: geo.service, store: geo.store, articles: geoArticleResults });
   }
   const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
@@ -6059,7 +6066,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
       effectiveRouteReason: effective?.reason ?? null,
       ...(selected ? { geoContextRef: selected.referenceId } : {}),
-      ...(selected?.mode === "analysis" && effective?.agentId === OPEN_DOMAIN_ANSWER_AGENT_ID ? { geoAnalysisRead: { referenceId: selected.referenceId } } : {}),
+      ...(["analysis", "signal"].includes(selected?.mode) && effective?.agentId === OPEN_DOMAIN_ANSWER_AGENT_ID
+        ? { geoInputRead: { referenceId: selected.referenceId, what: selected.mode } } : {}),
       estimatedMinutes: runEstimate(effective?.agentId ? registry.get(effective.agentId) : null),
     };
   }

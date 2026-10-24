@@ -3,6 +3,7 @@ import { GEO_SIGNAL_KINDS, GEO_SIGNAL_DISPOSITIONS, GEO_SIGNAL_STATES, GEO_SIGNA
 import { canonicalJson } from './geoStore.mjs';
 import { HttpError } from './security.mjs';
 import { packGeoSignalTargets, readGeoSignalTargets } from './geoSignalTargets.mjs';
+import { summarizeGeoSourceReviews } from './geoSourceReviews.mjs';
 
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const fail = (code, message, status = 409) => new HttpError(status, code, message);
@@ -32,9 +33,10 @@ export function geoSignalErrorOutcome(error, basis) {
  * Producers supply the immutable event basis; public routes accept only selection and disposition.
  */
 export class GeoSignals {
-  constructor({ documents, store, service, runs, resultForRun, notify = null, now = () => new Date() }) {
+  constructor({ documents, store, service, runs, resultForRun, sourceReviewForRun = null, notify = null, now = () => new Date() }) {
     this.documents = documents; this.store = store; this.service = service; this.runs = runs;
     this.resultForRun = resultForRun; this.notify = notify; this.now = now;
+    this.sourceReviewForRun = sourceReviewForRun;
   }
 
   async record(project, event) {
@@ -99,6 +101,7 @@ export class GeoSignals {
     const contexts = execution.contexts.filter(context => context.payload.basis?.signal?.id === row.id
       && context.payload.basis.signal.basisDigest === row.payload.basisDigest);
     const attempts = [];
+    const targets = row.payload.kind === 'source_changed' ? await readGeoSignalTargets(this.documents, project, row) : [];
     for (const context of contexts) {
       const candidates = execution.runs.filter(run => run.sessionId === context.payload.sessionId
         && run.kernelRequestIds?.includes(context.payload.requestId));
@@ -110,10 +113,15 @@ export class GeoSignals {
           result = await execution.results.get(run.id);
         } catch { available = false; }
       }
+      let sourceReview = null;
+      if (row.payload.kind === 'source_changed' && run && this.sourceReviewForRun) {
+        try { sourceReview = await this.sourceReviewForRun(project, row, run, targets); }
+        catch { sourceReview = { availability: 'unknown', records: [], issues: ['review_result_unavailable'] }; }
+      }
       attempts.push({ contextRef: context.id, sessionId: context.payload.sessionId, requestId: context.payload.requestId,
         runId: run?.id ?? null, submitted: context.payload.state === 'bound', createdAt: context.createdAt,
         startedAt: run?.startedAt ?? null, finishedAt: run?.finishedAt ?? null, status: run?.status ?? null,
-        result, ...geoSignalLifecycle({ context: context.payload, run, resultPresent: Boolean(result?.present), lookupAvailable: available }) });
+        result, sourceReview, ...geoSignalLifecycle({ context: context.payload, run, resultPresent: Boolean(result?.present), lookupAvailable: available }) });
     }
     attempts.sort((a, b) => String(b.startedAt ?? b.createdAt).localeCompare(String(a.startedAt ?? a.createdAt)) || b.contextRef.localeCompare(a.contextRef));
     // Opening another unsent draft must not hide the accepted attempt still running.
@@ -121,7 +129,12 @@ export class GeoSignals {
     const lifecycle = current ? { state: row.payload.disposition === 'ignored' ? 'ignored' : current.state,
       executionState: current.executionState, availability: current.availability, reason: current.reason }
       : geoSignalLifecycle({ disposition: row.payload.disposition, lookupAvailable: execution.available });
-    const businessOutcome = await this.businessOutcome(project, row);
+    const sourceReview = row.payload.kind === 'source_changed' ? summarizeGeoSourceReviews(targets, attempts) : null;
+    const businessOutcome = sourceReview ? { state: sourceReview.state, verification: sourceReview.verification,
+      total: sourceReview.total, handled: sourceReview.handled, remaining: sourceReview.remaining } : await this.businessOutcome(project, row);
+    if (sourceReview && lifecycle.state === 'completed' && sourceReview.state !== 'handled') {
+      lifecycle.state = 'pending'; lifecycle.reason = 'source_scope_remaining';
+    }
     if (row.payload.kind === 'order_anomaly' && businessOutcome.observation !== 'unknown') {
       lifecycle.executionState = businessOutcome.observation === 'historical_episode' || ['cancelled', 'refunded', 'published', 'verified', 'settled'].includes(businessOutcome.state) ? 'completed' : 'failed_recoverable';
       lifecycle.state = row.payload.disposition === 'ignored' ? 'ignored' : lifecycle.executionState;
@@ -135,7 +148,7 @@ export class GeoSignals {
       createdAt: row.createdAt, observedAt: row.payload.observedAt, detectedAt: row.payload.detectedAt, disposition: row.payload.disposition,
       ...lifecycle, businessOutcome, actionable: ['pending', 'failed_recoverable'].includes(lifecycle.state) && !['closed', 'withdrawn'].includes(businessOutcome.state)
         && !(row.payload.kind === 'error_observed' && businessOutcome.state === 'unknown'),
-      currentAttempt: current, attempts };
+      sourceReview, currentAttempt: current, attempts };
   }
 
   async businessOutcome(project, row) {

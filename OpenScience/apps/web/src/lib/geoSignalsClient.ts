@@ -5,6 +5,16 @@ import type { ResultVersion } from './resultProvenance';
 
 export type GeoSignalKind = keyof typeof GEO_SIGNAL_STEPS;
 export type GeoSignalState = keyof typeof GEO_SIGNAL_STATE_LABELS_ZH;
+export interface GeoSourceReviewRecord {
+  targetKey: string; outcome: 'unhandled' | 'no_change_needed' | 'update_proposed' | 'updated' | 'uncertain'; reason: string | null;
+  warning?: string | null; runId?: string; sessionId?: string;
+  after: { type: 'article' | 'finding' | 'claim'; id: string; version: string | number; digest?: string; path?: string; runId: string; sessionId: string } | null;
+  artifact?: { versionId: string; path: string; digest: string; runId: string; sessionId: string };
+}
+export interface GeoSourceReviewSummary {
+  state: string; total: number; handled: number; remaining: number; updated: number; unchanged: number; proposed: number; uncertain: number; unhandled: number;
+  verification: 'reported_review'; records: GeoSourceReviewRecord[]; issues: string[];
+}
 export interface GeoSignalAttempt {
   contextRef: string; sessionId: string; requestId: string | null; runId: string | null; submitted: boolean;
   createdAt: string; startedAt: string | null; finishedAt: string | null; status: string | null;
@@ -16,6 +26,7 @@ export interface GeoSignal {
   createdAt: string; observedAt: string | null; detectedAt: string; disposition: 'active' | 'ignored';
   state: GeoSignalState; executionState: GeoSignalState; availability: 'available' | 'unknown'; reason: string | null;
   businessOutcome: { state: string; observation?: string }; actionable: boolean;
+  sourceReview?: GeoSourceReviewSummary | null;
   currentAttempt: GeoSignalAttempt | null; attempts: GeoSignalAttempt[];
 }
 export interface GeoSignalTarget { key: string; type: 'finding' | 'claim' | 'article'; id: string; label?: string | null; version: string | number | null; digest: string | null; relationship: string }

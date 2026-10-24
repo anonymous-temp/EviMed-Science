@@ -193,11 +193,19 @@ export function toolPolicy(call, state) {
 /** A request-local analysis read never becomes access to a different or current GEO view.
  * @param {any} args @param {string} referenceId */
 export function selectedGeoAnalysisReadAllowed(args, referenceId) {
+  return selectedGeoInputReadAllowed(args, { referenceId, what: 'analysis' })
+}
+/** A closed request-local signal or analysis projection never admits another GEO view.
+ * @param {any} args @param {{referenceId:string,what:string}} scope */
+export function selectedGeoInputReadAllowed(args, scope) {
+  const referenceId = scope?.referenceId
   if (!/^gpc_[a-f0-9]{64}$/.test(referenceId) || !args || typeof args !== 'object' || Array.isArray(args)
-    || Object.keys(args).some(key => !['what', 'filter'].includes(key)) || args.what !== 'analysis') return false
+    || !['analysis', 'signal'].includes(scope.what)
+    || Object.keys(args).some(key => !['what', 'filter'].includes(key)) || args.what !== scope.what) return false
   const filter = args.filter
   return Boolean(filter && typeof filter === 'object' && !Array.isArray(filter)
-    && Object.keys(filter).every(key => ['planContextRef', 'limit', 'offset'].includes(key)) && filter.planContextRef === referenceId
+    && Object.keys(filter).every(key => ['planContextRef', 'limit', 'offset', ...(scope.what === 'signal' ? ['targetKey'] : [])].includes(key)) && filter.planContextRef === referenceId
+    && (filter.targetKey === undefined || typeof filter.targetKey === 'string' && filter.targetKey.length > 0 && filter.targetKey.length <= 160)
     && (filter.limit === undefined || Number.isSafeInteger(filter.limit) && filter.limit >= 1 && filter.limit <= 50)
     && (filter.offset === undefined || Number.isSafeInteger(filter.offset) && filter.offset >= 0))
 }

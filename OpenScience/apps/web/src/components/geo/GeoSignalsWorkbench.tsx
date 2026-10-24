@@ -19,7 +19,8 @@ import { useGeoDestinationPath } from './useGeoPath';
 import { engineName } from './geoText';
 
 const kinds: Record<GeoSignal['kind'], string> = { error_observed: '医学说法待核查', source_changed: '资料变化', citation_observed: '新增引用页面', group_changed: '问题群变化', order_anomaly: '投放异常' };
-const outcomes: Record<string, string> = { open: '问题仍待处理', acting: '已开展处理', awaiting_remeasure: '等待后续观察', closed: '后续观察支持已消失', withdrawn: '原判断已撤回', unreviewed: '受影响版本仍需核查', observed: '已观察到', unknown: '当前业务结果未确认', cancelled: '订单已取消', refunded: '订单已退款', published: '已发布', verified: '已核验发布', settled: '已结算', problem: '订单需要处理', rejected: '订单被拒绝', lost: '订单未能追回' };
+const outcomes: Record<string, string> = { open: '问题仍待处理', acting: '已开展处理', awaiting_remeasure: '等待后续观察', closed: '后续观察支持已消失', withdrawn: '原判断已撤回', unreviewed: '受影响版本仍需核查', partial: '部分版本仍待处理', handled: '本次版本均有核查结果', observed: '已观察到', unknown: '当前业务结果未确认', cancelled: '订单已取消', refunded: '订单已退款', published: '已发布', verified: '已核验发布', settled: '已结算', problem: '订单需要处理', rejected: '订单被拒绝', lost: '订单未能追回' };
+const reviewWords = { unhandled: '尚未核查', no_change_needed: '核查认为无需修改', update_proposed: '已提出修改，更新未确认', updated: '已关联更新版本', uncertain: '仍待核实' };
 const time = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) : '时间未记录';
 const stateWord = (row: GeoSignal) => `${GEO_SIGNAL_STATE_LABELS_ZH[row.state]}${row.state === 'ignored' && row.executionState === 'processing' ? ' · AI 仍在处理' : ''}`;
 const cleanSignal = (path: string) => { const url = new URL(path, 'https://evimed.invalid'); url.searchParams.delete('signal'); url.searchParams.delete('signals'); return `${url.pathname}${url.search}${url.hash}`; };
@@ -117,6 +118,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
   if (!signal && error) return <LoadError message={error} onRetry={() => setRound(value => value + 1)} />;
   if (!signal) return <p role="status" className="py-2 text-ui text-text-3">正在读取这条发现…</p>;
   const targets = signal.targets ?? signal.basis.targets ?? [];
+  const reviews = new Map((signal.sourceReview?.records ?? []).map(record => [record.targetKey, record]));
   const focus = selected ?? (targets.length <= 100 ? targets.map(target => target.key) : []);
   const attempt = signal.currentAttempt;
   const active = attempt?.submitted && ['started', 'processing'].includes(attempt.executionState);
@@ -167,13 +169,18 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
       {signal.basis.url && /^https?:\/\//.test(signal.basis.url) && <a className="text-ui text-link hover:underline" href={signal.basis.url} target="_blank" rel="noopener noreferrer">打开被引用页面</a>}
       {signal.kind === 'source_changed' && <>
         <p className="text-ui text-text-2">下列关联是发现变化时记录的版本。新稿完成后，仍需分别核查这些结论及其适用条件。</p>
+        {signal.sourceReview && <p className="text-ui text-text-2">已有核查结果 {signal.sourceReview.handled} / {signal.sourceReview.total} 项，关联更新 {signal.sourceReview.updated} 项，无需修改 {signal.sourceReview.unchanged} 项，仍需处理 {signal.sourceReview.remaining} 项。以下为本次 AI 核查记录，可打开结果查看依据。</p>}
         {targets.length === 0 ? <Note action={<Link className="text-link hover:underline" to={cleanSignal(destination(geoId, { tab: 'evidence' }))}>查看相关资料</Link>}>尚未建立具体受影响版本的关联，可以在对话中核查。</Note> : <div className="flex flex-col gap-2">
           <p className="text-caption text-text-3">已选 {focus.length} / {targets.length} 项，每次最多 100 项。</p>
-          {targets.map(target => <label key={target.key} className="flex items-start gap-2 text-ui text-text">
+          {targets.map(target => { const review = reviews.get(target.key); return <div key={target.key} className="flex flex-col gap-1"><label className="flex items-start gap-2 text-ui text-text">
             <input type="checkbox" checked={focus.includes(target.key)} disabled={busy || !canEdit || !focus.includes(target.key) && focus.length >= 100}
               onChange={event => setSelected(event.target.checked ? [...focus, target.key] : focus.filter(key => key !== target.key))} />
             <span>{target.label || ({ finding: '研究发现', claim: '证据结论', article: '稿件' }[target.type])}{typeof target.version === 'number' ? ` · 版本 ${target.version}` : target.version ? ' · 已固定稿件版本' : ' · 版本未记录'}{target.relationship === 'possible_group_dependency' ? ' · 同组关联，影响仍待核查' : ''}</span>
-          </label>)}
+          </label>
+            {review && <p className="text-caption text-text-2">{reviewWords[review.outcome]}{review.reason ? `：${review.reason}` : ''}</p>}
+            {review?.artifact && <Link className="text-caption text-link hover:underline" to={geoSignalResultHref(geoId, signalId, review.artifact)}>查看这项核查的原始结果</Link>}
+            {review?.after?.type === 'article' && review.after.path && typeof review.after.version === 'string' && <Link className="text-caption text-link hover:underline" to={geoSignalResultHref(geoId, signalId, { runId: review.after.runId, path: review.after.path, versionId: review.after.version })}>查看已关联的稿件版本</Link>}
+          </div>; })}
         </div>}
       </>}
       <div className="flex flex-wrap items-center gap-2">

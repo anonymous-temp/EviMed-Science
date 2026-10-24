@@ -82,6 +82,17 @@ async function serve(t, handler) {
 
 const on = { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [], geoSocialTimeoutMs: 2_000 };
 
+test('signal material reads require the bound context and reject current-data selectors', async t => {
+  const { geo, calls } = geoDouble(on), { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  const filter = { planContextRef: 'gpc_' + 'a'.repeat(64), targetKey: 'target_exact', offset: 2, limit: 1 };
+  assert.equal((await post('read', { what: 'signal', filter })).status, 200);
+  assert.deepEqual(calls.at(-1), ['read', 'geo_1', 'signal', filter]);
+  for (const body of [{ what: 'signal' }, { what: 'signal', filter: { ...filter, round: 'latest' } },
+    { what: 'signal', filter: { ...filter, targetKey: '' } }, { what: 'claims', filter }, { what: 'analysis', filter }]) {
+    assert.equal((await post('read', body)).status, 400);
+  }
+});
+
 test('selected analysis descriptors pass intact and cannot leak into another read or frozen input', async t => {
   const { geo, calls } = geoDouble(on);
   const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));

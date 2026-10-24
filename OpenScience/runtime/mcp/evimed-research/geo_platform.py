@@ -45,6 +45,7 @@ import public_sources
 # and holds these copies equal to the domain's.
 READ_WHATS = (
     "analysis",
+    "signal",
     "diagnosis_progress",
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
     "strategy", "targets", "articles", "orders", "owned_links", "monitoring", "cards", "value", "research",
@@ -86,11 +87,12 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read 循证 GEO pages/answers with counts and unknowns. "
-                "Filters share inclusive dates (Asia/Shanghai), engines, questionVersion, groups and pools. "
+                "循证 GEO pages: counts and unknowns. "
+                "Filters: inclusive dates (Asia/Shanghai), engines, questionVersion, groups, pools. "
                 "Reuse selectionRef and members.metric for exact snapshots. Comparisons are observational. "
-                "analysis reads tables or exact rowKey/columnKey members with units. planContextRef pages frozen input. "
-                "Actions give lean rows; filter.key or groupId reads one whole. version reads a prior value basis."
+                "analysis gives exact tables/members. planContextRef pages frozen input. "
+                "signal reads bound inputs; targetKey pages 4000-character material parts. "
+                "Actions give lean rows; filter.key or groupId reads one whole. version reads old value."
             ),
             "inputSchema": {
                 "type": "object",
@@ -124,6 +126,7 @@ def tool_definitions():
                             "columnKey": {"type": "string", "maxLength": 160},
                             "expectedDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                             "planContextRef": {"type": "string", "pattern": "^gpc_[a-f0-9]{64}$"},
+                            "targetKey": {"type": "string", "maxLength": 160},
                             "strategyVersion": {"type": "integer", "minimum": 1},
                             "url": {"type": "string", "maxLength": 2000},
                             "sourceId": ID,

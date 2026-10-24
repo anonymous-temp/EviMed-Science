@@ -3716,6 +3716,31 @@ test('forged native context cannot grant tools and a current managed dispatch wi
 });
 
 
+test('selected source review grants only its bound signal input and clears before a later ordinary turn', async () => {
+  const f = await nativePolicyFixture({ registered: ['mcp__evimed__geo_read', 'mcp__evimed__geo_write', 'bash'], capabilities: [] });
+  const ref = 'gpc_' + 'a'.repeat(64);
+  const message = (/** @type {string} */ id) => ({ role: 'user', source: { kind: 'user', rpcId: id }, content: [{ type: 'text', text: id }] });
+  f.ctx.provide('evimedNativeRoute', async (/** @type {string} */ _session, /** @type {any[]} */ inputs) => inputs.map(input => ({ ...input, digest: 'd'.repeat(64), route: {
+    effectiveAgentId: 'open-domain-answer', geoContextRef: ref, geoInputRead: { referenceId: ref, what: 'signal' },
+  } })));
+  f.start(); await f.step(1, { inputs: [message('review')] });
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
+  assert.notEqual((await f.execute('mcp__evimed__geo_read', { what: 'signal', filter: { planContextRef: ref, targetKey: 'target_exact', offset: 2, limit: 1 } })).error?.code, 'DENIED');
+  for (const args of [
+    { what: 'signal', filter: { planContextRef: ref, selectionRef: 'latest' } },
+    { what: 'analysis', filter: { planContextRef: ref } }, { what: 'claims' },
+    { what: 'signal', filter: { planContextRef: 'gpc_' + 'b'.repeat(64) } },
+    { what: 'signal', filter: { planContextRef: ref, targetKey: '' } },
+    { what: 'signal', filter: { planContextRef: ref, offset: -1 } },
+  ]) assert.equal((await f.execute('mcp__evimed__geo_read', args)).error?.code, 'DENIED');
+  f.ctx.provide('evimedNativeRoute', async () => { throw new Error('No lookup during same-turn steering'); });
+  await f.step(1, { inputs: [message('explain')] });
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  await f.step(2, { inputs: [message('unrelated')] });
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+});
+
 test('selected ordinary GEO analysis grants only its frozen read on the first payload and retains it within the turn', async () => {
   const { MCP_TOOL_NAMES } = await import('@evimed/domain');
   const f = await nativePolicyFixture({registered:[...MCP_TOOL_NAMES,'bash','read'],capabilities:[{id:'geo-insight',skills:[],tools:['mcp__evimed__geo_read','mcp__evimed__geo_write'],produces:[]}]});

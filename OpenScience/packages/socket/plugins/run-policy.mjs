@@ -126,7 +126,7 @@ import {
   stepPolicy,
   submissionVerdict,
   toolPolicy,
-  selectedGeoAnalysisReadAllowed,
+  selectedGeoInputReadAllowed,
   unmetDependencies,
   NATIVE_CHILD_TOOL_DENY,
   CANCELLED_JOB_STOP_WAIT_MS,
@@ -778,10 +778,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
               changed = applyRootNarrowing(agent, []) || changed
               entry.nativeGeoContextRef = /^gpc_[a-f0-9]{64}$/.test(selected.route.geoContextRef ?? '') ? selected.route.geoContextRef : null
               entry.nativeGeoAnalysisRead = null
-              const read = selected.route.geoAnalysisRead
+              const generalized = selected.route.geoInputRead
+              const legacy = selected.route.geoAnalysisRead
+              const read = generalized ?? (legacy && typeof legacy === 'object' && Object.keys(legacy).length === 1 ? { referenceId: legacy.referenceId, what: 'analysis' } : null)
               if (!entry.nativeManagedDispatch && capabilityId === 'open-domain-answer' && entry.nativeGeoContextRef
-                && read && typeof read === 'object' && Object.keys(read).length === 1 && read.referenceId === entry.nativeGeoContextRef) {
-                entry.nativeGeoAnalysisRead = read.referenceId
+                && read && typeof read === 'object' && Object.keys(read).length === 2 && ['analysis', 'signal'].includes(read.what)
+                && read.referenceId === entry.nativeGeoContextRef && (!generalized || !legacy)) {
+                entry.nativeGeoAnalysisRead = { referenceId: read.referenceId, what: read.what }
                 changed = applyRootNarrowing(agent, [`${MCP_TOOL_PREFIX}geo_read`]) || changed
               }
             }
@@ -1218,8 +1221,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => onToolPolicy(ctx, (call) => {
     const { entry } = ownedSessionState(call.sessionId)
     if (call.sessionId === entry.sessionId && entry.nativeGeoAnalysisRead && !entry.nativeManagedDispatch && !entry.nativeCapability
-      && call.name === `${MCP_TOOL_PREFIX}geo_read` && !selectedGeoAnalysisReadAllowed(call.args, entry.nativeGeoAnalysisRead)) {
-      return { allow: false, code: 'geo_read_filter_invalid', reason: '请读取本次已选择的分析，使用绑定的 planContextRef 和分页参数。' }
+      && call.name === `${MCP_TOOL_PREFIX}geo_read` && !selectedGeoInputReadAllowed(call.args, entry.nativeGeoAnalysisRead)) {
+      return { allow: false, code: 'geo_read_filter_invalid', reason: '请读取本次已选择的内容，使用绑定的 planContextRef 和分页参数。' }
     }
     let writers = writersByRun.get(entry.runId)
     if (!writers) {
