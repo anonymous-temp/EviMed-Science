@@ -243,14 +243,13 @@ describe("an X post with every block", () => {
     expect(screen.queryByText("译文尚不完整")).not.toBeInTheDocument();
   });
 
-  it("opens a long text at its first paragraphs, and the rest in place", async () => {
+  it("shows a post whole, however long: the post is the item (ct-write W6)", async () => {
     const paragraph = "这是很长的一段正文。".repeat(40);
     client.fetchFrontierItem.mockResolvedValue(detail(rawXPost({ body: { zh: Array.from({ length: 12 }, (_, index) => `段落${index + 1}：${paragraph}`).join("\n\n"), original: null, zhKind: "translation", complete: true } })));
     show("/app/frontier/items/x-post-0001");
     await screen.findByText(/^段落1：/);
-    expect(screen.queryByText(/^段落12：/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "展开全文" }));
     expect(screen.getByText(/^段落12：/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
   });
 
   it("is the other report of a selected occurrence: one line to the selected one, and no 推荐理由", async () => {
@@ -285,7 +284,7 @@ describe("an open-access paper with its whole text", () => {
 
   it("sets the 导读 as the lead, a size above the text, and then the 解读, both before the text", async () => {
     show("/app/frontier/items/oa-paper-1");
-    const text = await screen.findByRole("region", { name: "正文 · AI 翻译" });
+    const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
     const lead = screen.getByRole("region", { name: "AI 导读" });
     const insight = screen.getByRole("region", { name: "AI 解读" });
     // One paragraph each, the 导读 a step above the text: 18 / 20 where the text is 16 / 18 (below and from 1280 px), all at 1.8.
@@ -330,24 +329,28 @@ describe("an open-access paper with its whole text", () => {
 
   it("sets the full text's sections as headings, in Chinese and in the original", async () => {
     show("/app/frontier/items/oa-paper-1");
-    const text = await screen.findByRole("region", { name: "正文 · AI 翻译" });
+    const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
+    // A paper's full text is folded to its preview under the 导读 and 要点 (ct-write W6): its first section, then 展开全文.
+    expect(within(text).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["引言"]);
+    await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
     expect(within(text).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["引言", "方法", "结果", "讨论"]);
     expect(text).not.toHaveTextContent("##");
-    await userEvent.click(within(screen.getByRole("group", { name: "正文语言" })).getByRole("button", { name: "原文" }));
-    const original = screen.getByRole("region", { name: "正文 · 原文" });
+    await userEvent.click(within(screen.getByRole("group", { name: "全文语言" })).getByRole("button", { name: "原文" }));
+    const original = screen.getByRole("region", { name: "全文 · 原文" });
     expect(within(original).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["Introduction", "Methods", "Results", "Discussion"]);
     expect(within(original).getByRole("heading", { name: "Methods" }).closest("[lang]")).toHaveAttribute("lang", "en");
   });
 
-  it("folds a long full text whole sections at a time: a heading is never the last line before 展开全文", async () => {
+  it("folds a long full text to its first section's opening: a heading is never the last line before 展开全文", async () => {
     const section = (index: number) => `## 第 ${index} 节\n\n${"这是一段很长的正文。".repeat(30)}`;
     client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper({ body: { zh: Array.from({ length: 12 }, (_, index) => section(index + 1)).join("\n\n"),
       original: null, zhKind: "original-zh", complete: true, source: "body" } })));
     show("/app/frontier/items/oa-paper-1");
-    const text = await screen.findByRole("region", { name: "正文" });
+    const text = await screen.findByRole("region", { name: "全文" });
     const prose = text.querySelector("[data-prose]")!;
     expect(prose.lastElementChild!.tagName).toBe("P");
-    expect(within(text).queryByRole("heading", { name: "第 12 节" })).not.toBeInTheDocument();
+    expect(prose.lastElementChild).toHaveClass("line-clamp-4");
+    expect(within(text).queryByRole("heading", { name: "第 2 节" })).not.toBeInTheDocument();
     await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
     expect(within(text).getByRole("heading", { name: "第 12 节" })).toBeInTheDocument();
   });
@@ -359,6 +362,9 @@ describe("a paper whose text is its structured abstract", () => {
   it("names the text 摘要 and sets each paragraph's own heading in 600, in Chinese and in the original", async () => {
     show("/app/frontier/items/abstract-1");
     const text = await screen.findByRole("region", { name: "摘要 · AI 翻译" });
+    // Folded to its first paragraph under the 导读 and 要点 (ct-write W6), the rest a press away.
+    expect([...text.querySelectorAll("[data-prose] p > span")].map((head) => head.textContent)).toEqual(["背景："]);
+    await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
     const heads = [...text.querySelectorAll("[data-prose] p > span")];
     expect(heads.map((head) => [head.textContent, head.className])).toEqual([["背景：", "font-semibold"], ["方法：", "font-semibold"], ["结果：", "font-semibold"]]);
     // The colon inside a sentence (「95% CI：」) is not a heading's.
@@ -382,6 +388,7 @@ describe("a paper whose text is its structured abstract", () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1" }), abstract: "Background: original.\n\nMethods: a trial.", abstractZh: "背景：原文。\n\n方法：一项试验。" });
     show();
     const text = await screen.findByRole("region", { name: "摘要 · AI 翻译" });
+    await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
     expect([...text.querySelectorAll("[data-prose] p > span")].map((head) => head.textContent)).toEqual(["背景：", "方法："]);
   });
 });
@@ -565,7 +572,7 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
     wide();
     client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper({ body: { zh: "## 方法\n\n一。\n\n## 结果\n\n二。", original: null, zhKind: "original-zh", complete: true, source: "body" } })));
     show("/app/frontier/items/oa-paper-1");
-    await screen.findByRole("heading", { level: 3, name: "结果" });
+    await screen.findByRole("heading", { level: 3, name: "方法" });
     expect(screen.queryByRole("navigation", { name: "本文目录" })).not.toBeInTheDocument();
     expect(document.querySelector("[data-outline]")).toBeNull();
   });
@@ -573,7 +580,7 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
   it("folds the contents above the text on a narrow screen", async () => {
     client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper()));
     show("/app/frontier/items/oa-paper-1");
-    const text = await screen.findByRole("region", { name: "正文 · AI 翻译" });
+    const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
     const outline = document.querySelector("[data-outline]") as HTMLElement;
     expect(outline).toHaveTextContent("目录 · 4 节");
     expect(outline.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

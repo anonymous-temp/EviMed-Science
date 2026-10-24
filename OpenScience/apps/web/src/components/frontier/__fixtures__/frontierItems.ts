@@ -163,3 +163,108 @@ export function rawStructuredAbstract(overrides: Record<string, unknown> = {}): 
     ...overrides,
   });
 }
+
+/**
+ * Items of each genre as their reader reads them (ct-write 2026-10-24): what the server sends for a paper, a 公众号 reading, a policy,
+ * a short industry report, a long news report and a safety alert — each with its genre, its 导读 and its 「AI 要点」.
+ */
+export function rawBriefedPaper(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return rawStructuredAbstract({
+    id: "briefed-paper-1", genre: "paper", genreLabel: "研究论文",
+    lead: "口服 PCSK9 抑制剂使高危患者主要心血管事件风险降低 18%（风险比 0.82），这项 12000 例的双盲试验中不良事件与安慰剂相当。",
+    brief: {
+      genre: "paper",
+      points: [
+        { key: "question", label: "研究问题", text: "口服 PCSK9 抑制剂能否降低高危患者的主要心血管事件。" },
+        { key: "design", label: "设计与对象", text: "双盲、安慰剂对照随机试验，12000 例患者。" },
+        { key: "results", label: "主要结果", items: ["主要终点事件 7.2% 对 8.8%（风险比 0.82；95% CI：0.75–0.90）。", "LDL-C 平均下降 52%。"] },
+      ],
+      quote: { key: "conclusion", label: "作者结论", text: "Oral PCSK9 inhibition reduced the risk of major cardiovascular events.", zh: "口服 PCSK9 抑制降低了主要心血管事件的风险。" },
+    },
+    ...overrides,
+  });
+}
+
+export function rawWechatCommentary(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const paragraph = "这篇解读回顾了两项试验的设计和背景治疗的差别，并讨论了复合终点事件数较少时风险比的解读。".repeat(4);
+  return rawChineseNews({
+    id: "wx-commentary-1", genre: "commentary", genreLabel: "解读评论",
+    title: "IgA 肾病新药两篇 NEJM 同日发表", titleRaw: "IgA 肾病新药两篇 NEJM 同日发表", titleZh: "IgA 肾病新药两篇 NEJM 同日发表",
+    lane: "evidence", laneLabel: "临床证据",
+    source: { id: "wx-nejm-front", name: "NEJM医学前沿", homepage: null, platformProduced: false },
+    url: "https://mp.weixin.qq.com/s/example", channel: "wechat", platform: "wechat",
+    author: { name: "NEJM医学前沿", handle: null, url: null, role: "organisation" },
+    lead: "两项 IgA 肾病 3 期试验显示，atacicept 与 sibeprenlimab 均延缓了 eGFR 下降；解读认为两者非头对头比较，尚不能判断孰优孰劣。",
+    body: { zh: Array.from({ length: 6 }, (_, index) => `第 ${index + 1} 段。${paragraph}`).join("\n\n"), original: null, zhKind: "original-zh", complete: true, source: "body" },
+    brief: {
+      genre: "commentary",
+      points: [
+        { key: "subject", label: "解读的研究", text: "NEJM 同日发表的 ORIGIN 3 与 VISIONARY 两项 3 期试验。" },
+        { key: "analysis", label: "解读要点", items: ["疗效证据从蛋白尿下降延伸到肾功能保护。", "两项试验非头对头比较，背景治疗不同。"] },
+      ],
+      quote: { key: "remark", label: "原文观点", text: "现有结果能够支持两种治疗策略均具有临床价值。" },
+      about: { publicId: "nejm-origin3", title: "Atacicept in IgA Nephropathy" },
+    },
+    media: [],
+    ...overrides,
+  });
+}
+
+export function rawPolicy(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return rawChineseNews({
+    id: "policy-1", genre: "policy", genreLabel: "政策法规",
+    title: "国家医保局：新技术可在临床研究阶段申报价格预立项", titleRaw: "国家医保局：新技术可在临床研究阶段申报价格预立项", titleZh: "国家医保局：新技术可在临床研究阶段申报价格预立项",
+    source: { id: "nhsa", name: "国家医疗保障局", homepage: "https://www.nhsa.gov.cn", platformProduced: false },
+    url: "https://www.nhsa.gov.cn/art/1.html", channel: "regulator", platform: "web", sourceType: "regulator", author: null,
+    lead: "国家医保局允许新技术在获准进入临床研究时即申报医疗服务价格预立项，只需 1 家三级医院牵头直接向省级医保部门申报。",
+    body: { zh: "一、为什么要开展价格预立项？\n\n为支持医疗技术创新，……\n\n二、谁可以申报？\n\n只需 1 家三级医院牵头直接向省级医保部门申报。", original: null, zhKind: "original-zh", complete: true, source: "body" },
+    brief: { genre: "policy", points: [
+      { key: "document", label: "发文机关与文号", text: "国家医疗保障局，医保发〔2026〕23号。" },
+      { key: "audience", label: "适用对象", text: "开展新技术临床研究的三级医院。" },
+    ] },
+    media: [],
+    ...overrides,
+  });
+}
+
+export function rawIndustryShort(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return rawChineseNews({
+    id: "industry-1", genre: "industry", genreLabel: "行业动态",
+    title: "12.75 亿美元首付！吉利德买断瀚辰星泰环肽", titleRaw: "12.75 亿美元首付！吉利德买断瀚辰星泰环肽", titleZh: "12.75 亿美元首付！吉利德买断瀚辰星泰环肽",
+    source: { id: "wx-yaoshidai", name: "药时代", homepage: null, platformProduced: false }, url: "https://news.example.com/deal",
+    lead: "吉利德以 12.75 亿美元现金首付款收购瀚辰星泰的口服 IL-23R 抑制剂项目，核心资产 HCXT-2001 处于 I 期。",
+    body: { zh: "吉利德科学宣布以 12.75 亿美元现金首付款收购瀚辰星泰的口服 IL-23R 抑制剂项目。\n\n交易预计 2026 年第四季度完成。", original: null, zhKind: "original-zh", complete: true, source: "body" },
+    brief: { genre: "industry", points: [
+      { key: "event", label: "事件", text: "吉利德收购瀚辰星泰的口服 IL-23R 抑制剂项目，获得全球权益。" },
+      { key: "terms", label: "交易条款", text: "现金首付款 12.75 亿美元，预计 2026 年第四季度完成。" },
+    ] },
+    media: [],
+    ...overrides,
+  });
+}
+
+export function rawNewsLong(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const paragraph = "研究人员在小细胞肺癌中发现了一种干细胞样状态，它与化学免疫治疗后的不良预后相关。".repeat(6);
+  return rawChineseNews({
+    id: "news-long-1", genre: "news", genreLabel: "医学新闻",
+    body: { zh: Array.from({ length: 8 }, (_, index) => `第 ${index + 1} 段。${paragraph}`).join("\n\n"), original: null, zhKind: "original-zh", complete: true, source: "body" },
+    ...overrides,
+  });
+}
+
+export function rawSafetyAlert(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return rawChineseNews({
+    id: "safety-1", genre: "safety", genreLabel: "安全警示", safetyAlert: true, score: null, scoreBand: null,
+    title: "FDA 将 Philips Lumify 超声系统召回定为最严重级别", titleRaw: "Philips Lumify Diagnostic Ultrasound System Correction", titleZh: "FDA 将 Philips Lumify 超声系统召回定为最严重级别",
+    lang: "en", lane: "safety", laneLabel: "药物安全", sourceType: "regulator", evidenceType: "safety-notice", evidenceTypeLabel: "安全通告",
+    source: { id: "fda-medwatch", name: "FDA", homepage: "https://www.fda.gov", platformProduced: false }, url: "https://www.fda.gov/recall/1", author: null,
+    lead: "FDA 将 Philips Lumify 诊断超声系统的软件问题定为最严重级别的召回，要求更新使用说明；已报告 8 例严重伤害和 4 例死亡。",
+    body: { zh: "本次召回涉及更新设备使用说明，不涉及将设备移除。", original: "This recall involves updating instructions for use, not removing devices.", zhKind: "translation", complete: true, source: "body" },
+    brief: { genre: "safety", points: [
+      { key: "action", label: "监管措施", text: "FDA 将召回定为最严重级别，要求更新使用说明。" },
+      { key: "professionals", label: "医务人员须知", items: ["仅在有 Wi-Fi 或蜂窝信号的区域使用。", "随时备好备用超声设备。"] },
+    ], quote: { key: "warning", label: "警示原文", text: "Use of affected devices may cause serious injuries or death.", zh: "使用受影响的设备可能导致严重伤害或死亡。" } },
+    media: [],
+    ...overrides,
+  });
+}

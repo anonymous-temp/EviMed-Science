@@ -68,12 +68,13 @@ export function evidenceTag(item: Pick<FrontierItem, "evidenceType" | "evidenceT
 export const CARD_MAX_TAGS = 3;
 
 /**
- * The eyebrow tag of a card: the evidence type of a paper (「RCT」), else the item's lane (「审批监管」) — one word for what it is.
- * None for a safety alert, which says 「安全警示」 first already.
+ * The eyebrow tag of a card: what the item is — its genre (「行业动态」「政策法规」「会议报道」, ct-write 2026-10-24) — and for a paper its
+ * design (「RCT」), which says more than 「研究论文」. None for a safety alert, which says 「安全警示」 first already.
  */
-export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel">): string | null {
+export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel" | "genre" | "genreLabel">): string | null {
   if (item.safetyAlert) return null;
-  return evidenceTag(item) ?? (item.laneLabel || null);
+  if (item.genre === "paper") return evidenceTag(item) ?? item.genreLabel;
+  return item.genreLabel || evidenceTag(item) || item.laneLabel || null;
 }
 
 /** 「AI 评分」: one name everywhere — the card's pill, the reader's 推荐理由, a screen reader. */

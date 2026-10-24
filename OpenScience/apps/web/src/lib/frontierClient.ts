@@ -37,6 +37,8 @@
 import {
   FRONTIER_EVIDENCE_TYPE_LABELS_ZH,
   FRONTIER_EVIDENCE_TYPES as EVIDENCE_TYPE_KEYS,
+  FRONTIER_GENRE_LABELS_ZH,
+  FRONTIER_GENRES,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANE_LABELS_ZH,
   FRONTIER_LANES as LANE_KEYS,
@@ -44,6 +46,7 @@ import {
   FRONTIER_SPECIALTIES as SPECIALTY_KEYS,
   FRONTIER_SPECIALTY_GROUPS as SPECIALTY_GROUP_TABLE,
   FRONTIER_SPECIALTY_LABELS_ZH,
+  frontierGenreFallback,
   frontierSpecialtyKey,
 } from "@evimed/domain";
 import { WebApiError, webApiBase, webErrorMessage } from "./apiClient";
@@ -175,9 +178,19 @@ export function parseFrontierEditorDiagnostics(value: unknown): FrontierEditorDi
     fields: { title_zh: codes(fields?.title_zh), summary_zh: codes(fields?.summary_zh) } };
 }
 
+/** What an item is as a reader names it (研究论文, 政策法规, 行业动态 …; `@evimed/domain` `FRONTIER_GENRES`). */
+export type FrontierGenre = typeof FRONTIER_GENRES[number];
+
 /** One published item, as `GET /api/frontier/items` returns it (build spec B.6). */
 export interface FrontierItem {
   id: string;
+  /**
+   * What the item is (ct-write 2026-10-24): the server's genre, which decides how its reader lays it out; from a server that sends
+   * none, code's own answer from the item's fields (`frontierGenreFallback`). Never null.
+   */
+  genre: FrontierGenre;
+  /** The genre in the reader's words (「研究论文」). */
+  genreLabel: string;
   /** What the card leads with: the Chinese title, else the original. */
   title: string;
   titleRaw: string;
@@ -318,6 +331,26 @@ export interface FrontierInsight {
   refs: FrontierInsightRef[];
 }
 
+/** One typed field of 「AI 要点」: its label (per genre: 研究问题, 发文机关与文号 …) and a sentence, or a few one-sentence items. */
+export interface FrontierBriefPoint {
+  key: string;
+  label: string;
+  text: string | null;
+  items: string[];
+}
+
+/**
+ * 「AI 要点」 (contract B `brief`): the item's facts as the fields its genre is read by, under the one-paragraph 导读. `quote` is a
+ * run of the source's own words (the authors' conclusion, a recommendation with its grade, the label's warning) with its Chinese
+ * where the source is not Chinese; `about` is the report a commentary reads, opening as its own article.
+ */
+export interface FrontierBrief {
+  genre: FrontierGenre;
+  points: FrontierBriefPoint[];
+  quote: { label: string; text: string; zh: string | null } | null;
+  about: { publicId: string; title: string } | null;
+}
+
 /** The post an X post quotes, or the source a WeChat repost names. */
 export interface FrontierQuoted {
   author: { name: string; handle: string | null };
@@ -360,6 +393,8 @@ export interface FrontierItemDetail extends FrontierItem {
   abstractZh: string | null;
   /** 「AI 导读」: one paragraph of three to five sentences, answer first. The list's `summary` where the server sends no `lead`. */
   lead: string | null;
+  /** 「AI 要点」, for a selected, near-line or safety item whose source supported its fields; null otherwise. */
+  brief: FrontierBrief | null;
   /** 「AI 解读」, where the server wrote one; null for most items. */
   insight: FrontierInsight | null;
   body: FrontierBody | null;
@@ -923,8 +958,13 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     return name && link ? [{ sourceId: text(mention?.sourceId) ?? "", sourceName: name, url: link }] : [];
   }).slice(0, 5);
   const score = typeof raw.score === "number" && Number.isFinite(raw.score) && raw.score >= 0 && raw.score <= 100 ? Math.round(raw.score) : null;
+  const flags = labelled(raw.flags, FLAG_LABELS);
+  const genre = orNull(raw.genre, FRONTIER_GENRES) ?? frontierGenreFallback({ platform: text(raw.platform), channel: text(raw.channel),
+    sourceType: text(raw.sourceType), evidenceType: text(raw.evidenceType), flags: flags.map((flag) => flag.key), safetyAlert: raw.safetyAlert === true, lane });
   return {
     id,
+    genre,
+    genreLabel: text(raw.genreLabel) ?? FRONTIER_GENRE_LABELS_ZH[genre],
     title: text(raw.title) ?? titleZh ?? titleRaw,
     titleRaw,
     titleZh,
@@ -939,7 +979,7 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     evidenceTypeLabel: text(raw.evidenceTypeLabel),
     evidenceBasis: orNull(raw.evidenceBasis, ["pubmed-types", "registry", "model"] as const),
     specialties: parseSpecialties(raw.specialties),
-    flags: labelled(raw.flags, FLAG_LABELS),
+    flags,
     entities: {
       drugs: strings(entities?.drugs, 20),
       trials: strings(entities?.trials, 20),
@@ -1014,6 +1054,39 @@ function parseInsight(value: unknown): FrontierInsight | null {
   return { text: body.slice(0, INSIGHT_MAX), refs };
 }
 
+/** What one 要点 field holds at most: a sentence, a few items (a roundup lists more), and a quotation. */
+const BRIEF_TEXT_MAX = 400;
+const BRIEF_ITEMS_MAX = 6;
+const BRIEF_QUOTE_MAX = 600;
+
+/**
+ * 「AI 要点」, field by field: a point without its key, its label or any words is dropped, and so is the whole brief when nothing is
+ * left; a quotation without its words is no quotation.
+ */
+export function parseFrontierBrief(value: unknown): FrontierBrief | null {
+  const raw = record(value);
+  const genre = orNull(raw?.genre, FRONTIER_GENRES);
+  if (!raw || !genre) return null;
+  const points = (Array.isArray(raw.points) ? raw.points : []).flatMap((entry): FrontierBriefPoint[] => {
+    const point = record(entry);
+    const key = text(point?.key);
+    const label = text(point?.label);
+    const words = text(point?.text)?.trim().slice(0, BRIEF_TEXT_MAX) || null;
+    const items = strings(point?.items, BRIEF_ITEMS_MAX).map((item) => item.slice(0, BRIEF_TEXT_MAX));
+    return key && label && (words || items.length) ? [{ key, label, text: words, items: words ? [] : items }] : [];
+  });
+  const quote = record(raw.quote);
+  const quoted = text(quote?.text)?.trim();
+  const about = record(raw.about);
+  const brief: FrontierBrief = {
+    genre,
+    points,
+    quote: quoted && text(quote?.label) ? { label: text(quote?.label)!, text: quoted.slice(0, BRIEF_QUOTE_MAX), zh: text(quote?.zh)?.trim().slice(0, BRIEF_QUOTE_MAX) || null } : null,
+    about: about && text(about.publicId) && text(about.title) ? { publicId: text(about.publicId)!, title: text(about.title)! } : null,
+  };
+  return brief.points.length || brief.quote ? brief : null;
+}
+
 /** A count the source showed, or null where it showed none. */
 const tally = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null);
 
@@ -1041,6 +1114,7 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
     abstract: text(raw.abstract),
     abstractZh: text(raw.abstractZh),
     lead: text(raw.lead) ?? item.summary,
+    brief: parseFrontierBrief(raw.brief),
     insight: parseInsight(raw.insight),
     body: zh || original ? {
       zh,

@@ -78,9 +78,12 @@ describe("what a card carries", () => {
     expect(evidenceTag(frontierItem({ evidenceType: "press-release", evidenceTypeLabel: "企业新闻稿", flags: [{ key: "press-release", label: "企业新闻稿·数据未发表" }] }))).toBeNull();
   });
 
-  it("has one eyebrow: a paper's evidence type, else its lane, and none on a safety alert, which says 安全警示 first", () => {
+  it("has one eyebrow: a paper's evidence type, else its genre, and none on a safety alert, which says 安全警示 first", () => {
     expect(cardEyebrow(frontierItem())).toBe("RCT");
-    expect(cardEyebrow(frontierItem({ evidenceType: null, evidenceTypeLabel: null, lane: "regulatory", laneLabel: "审批监管" }))).toBe("审批监管");
+    expect(cardEyebrow(frontierItem({ evidenceType: null, evidenceTypeLabel: null }))).toBe("研究论文");
+    expect(cardEyebrow(frontierItem({ evidenceType: null, evidenceTypeLabel: null, lane: "regulatory", laneLabel: "审批监管", genre: "policy", genreLabel: "政策法规" }))).toBe("政策法规");
+    // An older server sends no genre: code's own answer from the item's fields (a company's release is industry news).
+    expect(cardEyebrow(frontierItem({ sourceType: "company", evidenceType: "press-release", evidenceTypeLabel: "企业新闻稿" }))).toBe("行业动态");
     expect(cardEyebrow(frontierItem({ safetyAlert: true, evidenceType: "safety-notice", evidenceTypeLabel: "安全通告" }))).toBeNull();
   });
 

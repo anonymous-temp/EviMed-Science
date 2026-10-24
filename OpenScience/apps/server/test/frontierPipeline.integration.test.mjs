@@ -173,8 +173,8 @@ const marker = (title, name) => new RegExp(`\\[${name}:([a-z0-9-]+)\\]`).exec(ti
  * covering several stories).
  */
 function fakeEditor(provider = { balanceSpent: false }) {
-  /** @type {{ screen: string[][], edit: string[] }} */
-  const calls = { screen: [], edit: [] };
+  /** @type {{ screen: string[][], edit: string[], genreFixed: Array<string | null> }} */
+  const calls = { screen: [], edit: [], genreFixed: [] };
   return {
     owner, available: true, calls, provider,
     /** @param {any[]} batch */
@@ -198,6 +198,7 @@ function fakeEditor(provider = { balanceSpent: false }) {
     /** @param {any} item */
     async edit(item) {
       calls.edit.push(item.titleRaw);
+      calls.genreFixed.push(item.genreFixed ?? null);
       if (item.titleRaw.includes("[edit-throws]")) throw Object.assign(new Error("boom"), { code: "frontier_test_boom" });
       const modelInput = buildModelInput(item);
       const base = { modelInput, modelInputSha256: sha256(modelInput), attempts: 1, issues: [], numbers: null, error: null,
@@ -210,6 +211,7 @@ function fakeEditor(provider = { balanceSpent: false }) {
       const relevance = Math.min(20, share - impact - novelty);
       const lane = marker(item.titleRaw, "lane");
       return { ...base, verification: "passed", output: {
+        genre: marker(item.titleRaw, "genre"),
         titleZh: item.isChinese ? item.titleRaw : `中文：${item.titleRaw.slice(0, 20)}`,
         summaryZh: `导读：${item.abstract ? "有摘要" : "无摘要"}。`, reasonZh: "值得一看。",
         lane: lane && item.allowedLanes.includes(lane) ? lane : item.allowedLanes[0],
@@ -1288,4 +1290,36 @@ test("a text that changes is settled again, and the translation made from the ol
   assert.equal(texts.body_text, whole);
   assert.notDeepEqual(texts.reader_tidy, settled, "the old verdict was for the old text");
   assert.deepEqual([texts.body_zh, texts.body_zh_kind, texts.body_zh_source, texts.body_zh_at, texts.body_complete], [null, null, null, null, null]);
+});
+
+test("ct-write: the edit's genre is stored — the model's where code is not sure of its own, code's otherwise — and told to the edit when code is sure", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock });
+  const approval = await deliver({ source_id: "m-cn", title: "国家药监局批准一款新药上市 [genre:approval]", summary: "国".repeat(120) });
+  const safety = await deliver({ source_id: "r-medwatch", title: "Drug Safety Communication: a recall [genre:news]", summary: "S".repeat(120) });
+  const company = await deliver({ source_id: "c-novo", title: "Novo Nordisk announces a licensing deal", summary: "N".repeat(120) });
+  const preprint = await deliver({ source_id: "p-medrxiv", title: "A cohort of something [genre:paper]", summary: "P".repeat(120) });
+  const digest = await deliver({ source_id: "m-stat", title: "Morning rounds: three stories [digest] [genre:news]", summary: "D".repeat(220) });
+  for (const id of [approval, safety, company, preprint, digest]) {
+    plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} });
+  }
+  await pipeline.processBatch();
+  await pipeline.processBatch();
+  const genreOf = async (/** @type {{ id: number }} */ delivered) => {
+    const row = await item(Number((await entry(delivered.id)).item_id));
+    return [row.genre, row.genre_basis, row.reason_version !== null];
+  };
+  assert.deepEqual(await genreOf(approval), ["approval", "model", true], "a 公众号-like medium's approval is the model's to name");
+  assert.deepEqual(await genreOf(safety), ["safety", "code", true], "a safety feed's notice stays a safety alert whatever the model says");
+  assert.deepEqual(await genreOf(company), ["industry", "code", true], "no genre from the model: code's own answer");
+  assert.deepEqual(await genreOf(preprint), ["preprint", "code", true]);
+  assert.deepEqual(await genreOf(digest), ["roundup", "code", true]);
+  // The edit is told the genres code is sure of before it — a safety feed's notice, a preprint, a digest — and no other.
+  const fixed = Object.fromEntries(editor.calls.edit.map((title, index) => [title.replace(/ \[.*$/, ""), editor.calls.genreFixed[index]]));
+  assert.equal(fixed["Drug Safety Communication: a recall"], "safety");
+  assert.equal(fixed["A cohort of something"], "preprint");
+  assert.equal(fixed["Morning rounds: three stories"], "roundup");
+  assert.equal(fixed["国家药监局批准一款新药上市"], null);
+  assert.equal(fixed["Novo Nordisk announces a licensing deal"], null);
 });

@@ -4,13 +4,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { verifyParagraph } from "../src/frontierEditor.mjs";
 import { buildInsightInput, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight, verifyInsight } from "../src/frontierInsight.mjs";
-import { FRONTIER_LEAD_LIMITS, buildLeadInput, frontierWriteLead, verifyLead } from "../src/frontierLead.mjs";
+import { FRONTIER_LEAD_GUIDES, FRONTIER_LEAD_INSTRUCTIONS, FRONTIER_LEAD_LIMITS, buildLeadInput, frontierLeadInstructions, frontierLeadLimit, frontierWriteLead,
+  verifyLead } from "../src/frontierLead.mjs";
+import { FRONTIER_GENRES } from "@evimed/domain";
 import { frontierFullTextParagraphs, frontierGluedShare } from "../src/frontierReaderTidy.mjs";
 
 const SOURCE = ["B-Well 1 和 B-Well 2 两项 III 期试验合并数据显示，基线 HBsAg≤3000 IU/ml 人群功能性治愈率 19%（233/1220），安慰剂组 0%（0/614），",
   "两项研究 p 均<0.001。最常见的不良事件为注射部位红斑、局部疼痛和一过性肝酶升高。Bepirovirsen 已在中国申报上市。"].join("");
 const input = buildLeadInput({ sourceName: "丁香园肿瘤时间", date: "2026-10-21", titleRaw: "全球首创乙肝功能性治愈疗法获 FDA 批准上市",
   text: SOURCE, kind: "body" });
+// The same source with more of the article after it: a 导读 of three sentences is within what it supports.
+const LONGER = `${SOURCE}${"该研究的其余部分讨论了长期随访和停药后的持久性，以及与现有核苷类药物联用的方式。".repeat(4)}`;
+const longInput = buildLeadInput({ sourceName: "丁香园肿瘤时间", date: "2026-10-21", titleRaw: "全球首创乙肝功能性治愈疗法获 FDA 批准上市",
+  text: LONGER, kind: "body" });
 
 test("the 导读 is shown its source, date, title and the reader text, the head of a long one", () => {
   assert.match(input, /^来源：丁香园肿瘤时间\n日期：2026-10-21\n标题：全球首创/);
@@ -22,12 +28,12 @@ test("the 导读 is shown its source, date, title and the reader text, the head 
 
 test("the 导读's checks: one paragraph in Chinese, within the length, every number in the source; an empty answer is no 导读", () => {
   const good = "FDA 批准 GSK 的反义寡核苷酸 Bepirovirsen 与核苷（酸）类似物联用治疗慢性乙肝。B-Well 1 和 B-Well 2 合并数据显示，基线 HBsAg≤3000 IU/ml 人群功能性治愈率 19%（233/1220），安慰剂组 0%（0/614）。最常见不良事件为注射部位红斑、局部疼痛和一过性肝酶升高；该药已在中国申报上市。";
-  assert.deepEqual(verifyLead({ lead_zh: good }, input).issues, []);
-  assert.equal(verifyLead({ lead_zh: good }, input).output.lead_zh, good);
-  assert.ok(verifyLead({ lead_zh: good.replace("19%", "27%") }, input).issues.some((issue) => issue.includes("27%")), "a number not in the source");
-  assert.ok(verifyLead({ lead_zh: `${good}\n第二段。` }, input).issues.some((issue) => issue.includes("一段话")));
+  assert.deepEqual(verifyLead({ lead_zh: good }, longInput).issues, []);
+  assert.equal(verifyLead({ lead_zh: good }, longInput).output.lead_zh, good);
+  assert.ok(verifyLead({ lead_zh: good.replace("19%", "27%") }, longInput).issues.some((issue) => issue.includes("27%")), "a number not in the source");
+  assert.ok(verifyLead({ lead_zh: `${good}\n第二段。` }, longInput).issues.some((issue) => issue.includes("一段话")));
   assert.ok(verifyLead({ lead_zh: "- 决定：FDA 批准。\n- 依据：B-Well。" }, input).issues.length > 0, "points and headings are not a paragraph");
-  assert.ok(verifyLead({ lead_zh: "字".repeat(FRONTIER_LEAD_LIMITS.chars + 1) }, input).issues.some((issue) => issue.includes("太长")));
+  assert.ok(verifyLead({ lead_zh: "字".repeat(FRONTIER_LEAD_LIMITS.chars + 1) }, longInput).issues.some((issue) => issue.includes("太长")));
   assert.ok(verifyLead({ lead_zh: "The FDA approved bepirovirsen for chronic hepatitis B in adults." }, input).issues.some((issue) => issue.includes("中文")));
   assert.deepEqual(verifyLead({ lead_zh: "" }, input), { output: { lead_zh: null }, issues: [], numbers: { missing: [], checked: 0, unitMismatches: [] } });
   assert.ok(verifyLead(null, input).issues.length > 0);
@@ -46,7 +52,48 @@ test("one 导读 through the editor's metered call and its one rewrite", async (
   const result = await frontierWriteLead(editor, { sourceName: "丁香园肿瘤时间", titleRaw: "T", text: SOURCE, kind: "body" });
   assert.equal(result.verification, "passed");
   assert.match(String(result.lead), /19%/);
-  assert.match(calls[0].instructions, /一段话，三到五句/);
+  assert.match(calls[0].instructions, /一段话，不分点/);
+  assert.equal(calls[0].instructions, FRONTIER_LEAD_INSTRUCTIONS, "an item of no known genre is written by the shared rules alone");
+});
+
+test("the 导读 is written by its genre: the shared rules first (the cached prefix), then one paragraph for the genre (ct-write W2)", async () => {
+  for (const genre of FRONTIER_GENRES) {
+    const instructions = frontierLeadInstructions(genre);
+    assert.ok(instructions.startsWith(FRONTIER_LEAD_INSTRUCTIONS), genre);
+    assert.ok(instructions.endsWith(FRONTIER_LEAD_GUIDES[genre]), genre);
+  }
+  assert.match(frontierLeadInstructions("social"), /一两句话/);
+  assert.match(frontierLeadInstructions("approval"), /CHMP 的积极意见不等于批准/);
+  assert.match(frontierLeadInstructions("paper", { briefed: true }), /另有「要点」/);
+  assert.doesNotMatch(frontierLeadInstructions("paper"), /另有「要点」/);
+  /** @type {any[]} */
+  const calls = [];
+  const editor = { async writeJson(/** @type {string} */ instructions) { calls.push(instructions); return { verification: "passed", output: { lead_zh: null }, error: null }; } };
+  await frontierWriteLead(editor, { sourceName: "S", titleRaw: "T", text: SOURCE, kind: "body", genre: "approval", briefed: true });
+  assert.equal(calls[0], frontierLeadInstructions("approval", { briefed: true }));
+});
+
+test("a 导读 is as long as its source supports: a one-line post gets a sentence or two, and above 要点 at most 160 characters", () => {
+  // A 268-character X post supports about 80 Chinese characters; a long abstract the full 380.
+  assert.equal(frontierLeadLimit("a".repeat(268)), FRONTIER_LEAD_LIMITS.min);
+  assert.equal(frontierLeadLimit("a".repeat(5_000)), FRONTIER_LEAD_LIMITS.chars);
+  assert.equal(frontierLeadLimit("字".repeat(200)), 200);
+  const post = "Among adults initiating HIV treatment, doravirine, lamivudine and tenofovir was noninferior to dolutegravir for 48-week viral suppression, with less weight gain.";
+  const postInput = buildLeadInput({ sourceName: "JAMA", titleRaw: "JAMA post", text: post, kind: "body", post: true });
+  const padded = "在开始 HIV 治疗的成人中，多拉韦林三联方案在 48 周病毒抑制上不劣于多替拉韦方案，且体重增加更少。这条帖子没有给出样本量、置信区间和不良事件的具体数字，也没有说明研究的设计和随访时间，读者需要阅读原文才能判断其可靠性。";
+  const fitted = verifyLead({ lead_zh: padded }, postInput);
+  assert.deepEqual(fitted.issues, []);
+  assert.equal(fitted.output.lead_zh, "在开始 HIV 治疗的成人中，多拉韦林三联方案在 48 周病毒抑制上不劣于多替拉韦方案，且体重增加更少。", "the sentences past what the post supports are cut");
+  const long = "口服 PCSK9 抑制剂使主要心血管事件风险降低。".repeat(12);
+  const longSource = buildLeadInput({ sourceName: "S", titleRaw: "T", text: "字".repeat(4_000), kind: "abstract" });
+  assert.ok([...String(verifyLead({ lead_zh: long }, longSource, { briefed: true }).output.lead_zh)].length <= FRONTIER_LEAD_LIMITS.briefed);
+  assert.ok([...String(verifyLead({ lead_zh: long }, longSource).output.lead_zh)].length > FRONTIER_LEAD_LIMITS.briefed);
+});
+
+test("a 导读's numbers are checked against the title and the text, not the date line the platform wrote (D-06)", () => {
+  const dated = buildLeadInput({ sourceName: "来源 2026", date: "2026-10-21", titleRaw: "FDA 批准新药", text: `${"FDA 批准一款新药用于成人慢性乙肝。".repeat(6)}`, kind: "body" });
+  assert.ok(verifyLead({ lead_zh: "FDA 于 2026 年 10 月 21 日批准一款新药用于成人慢性乙肝。" }, dated).issues.some((issue) => issue.includes("2026")));
+  assert.deepEqual(verifyLead({ lead_zh: "FDA 批准一款新药用于成人慢性乙肝。" }, dated).issues, []);
 });
 
 /** @type {import("../src/frontierInsight.mjs").FrontierInsightRef[]} */

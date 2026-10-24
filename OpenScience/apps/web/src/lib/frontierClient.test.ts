@@ -683,3 +683,28 @@ describe("the tag tree", () => {
     expect(requested().at(-1)).toEqual({ url: "/api/frontier/ops/tags/changes/7/undo", method: "POST" });
   });
 });
+
+describe("an item's genre and 「AI 要点」 (ct-write 2026-10-24)", () => {
+  it("reads the server's genre, and code's own answer where a server sends none", async () => {
+    const { parseFrontierItem } = await import("./frontierClient");
+    const base = { id: "g1", titleRaw: "T", url: "https://example.com/1", source: { name: "S" }, timelineAt: "2026-10-24T00:00:00.000Z" };
+    expect(parseFrontierItem({ ...base, genre: "policy", genreLabel: "政策法规" })).toMatchObject({ genre: "policy", genreLabel: "政策法规" });
+    expect(parseFrontierItem({ ...base, genre: "made-up" })).toMatchObject({ genre: "news", genreLabel: "医学新闻" });
+    expect(parseFrontierItem({ ...base, platform: "x" })).toMatchObject({ genre: "social", genreLabel: "社交动态" });
+    expect(parseFrontierItem({ ...base, sourceType: "journal" })).toMatchObject({ genre: "paper", genreLabel: "研究论文" });
+  });
+
+  it("reads a brief field by field and drops what has no words", async () => {
+    const { parseFrontierBrief } = await import("./frontierClient");
+    expect(parseFrontierBrief(null)).toBeNull();
+    expect(parseFrontierBrief({ genre: "paper", points: [{ key: "design", label: "设计" }] })).toBeNull();
+    expect(parseFrontierBrief({ genre: "made-up", points: [{ key: "a", label: "A", text: "x" }] })).toBeNull();
+    expect(parseFrontierBrief({ genre: "paper", points: [{ key: "design", label: "设计与对象", text: "随机试验。" }, { key: "results", label: "主要结果", items: ["一", 2, ""] }],
+      quote: { label: "作者结论", text: "It works.", zh: "有效。" }, about: { publicId: "p1", title: "Original" } })).toEqual({
+      genre: "paper",
+      points: [{ key: "design", label: "设计与对象", text: "随机试验。", items: [] }, { key: "results", label: "主要结果", text: null, items: ["一"] }],
+      quote: { label: "作者结论", text: "It works.", zh: "有效。" },
+      about: { publicId: "p1", title: "Original" },
+    });
+  });
+});

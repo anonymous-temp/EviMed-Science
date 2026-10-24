@@ -1,0 +1,4763 @@
+{
+ "at": "2026-10-24T17:13:19.518Z",
+ "model": "deepseek-flash",
+ "versions": {
+  "editor": "frontier-editor-1.21ca1c1abf2a",
+  "lead": "frontier-lead-2.de8b597a9e3e",
+  "brief": "frontier-brief-1.f51715f053df",
+  "reason": "frontier-reason-1.3cf74397b404"
+ },
+ "usage": {
+  "calls": 163,
+  "cacheHit": 359276,
+  "cacheMiss": 111585,
+  "output": 43611,
+  "cny": 0.586
+ },
+ "summary": {
+  "all": {
+   "before": {
+    "cases": 48,
+    "reasonFormula": 23,
+    "reasonEmpty": 10,
+    "withAbsences": 4,
+    "absencePhrases": 8,
+    "numbersMissing": 17,
+    "leadOverLimit": 6,
+    "leadCharsMean": 296,
+    "briefCoverageMean": null,
+    "quotesVerbatim": null
+   },
+   "after": {
+    "cases": 48,
+    "reasonFormula": 0,
+    "reasonEmpty": 5,
+    "withAbsences": 1,
+    "absencePhrases": 1,
+    "numbersMissing": 0,
+    "leadOverLimit": 2,
+    "leadCharsMean": 172,
+    "briefCoverageMean": 0.78,
+    "quotesVerbatim": "25/25"
+   },
+   "genreAccepted": "48/48",
+   "errors": 0,
+   "briefDropped": {
+    "number": 7,
+    "length": 8,
+    "verbatim": 3,
+    "language": 1
+   }
+  },
+  "byGenre": {
+   "paper": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 3,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 7,
+     "leadOverLimit": 1,
+     "leadCharsMean": 297,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 1,
+     "leadCharsMean": 174,
+     "briefCoverageMean": 0.82,
+     "quotesVerbatim": "4/4"
+    },
+    "genreAccepted": 4
+   },
+   "preprint": {
+    "before": {
+     "cases": 3,
+     "reasonFormula": 0,
+     "reasonEmpty": 2,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 345,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 3,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 200,
+     "briefCoverageMean": 0.89,
+     "quotesVerbatim": "3/3"
+    },
+    "genreAccepted": 3
+   },
+   "guideline": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 2,
+     "reasonEmpty": 1,
+     "withAbsences": 1,
+     "absencePhrases": 4,
+     "numbersMissing": 0,
+     "leadOverLimit": 1,
+     "leadCharsMean": 222,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 162,
+     "briefCoverageMean": 0.85,
+     "quotesVerbatim": "3/3"
+    },
+    "genreAccepted": 4
+   },
+   "policy": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 1,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 257,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 1,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 134,
+     "briefCoverageMean": 0.6,
+     "quotesVerbatim": "1/1"
+    },
+    "genreAccepted": 4
+   },
+   "approval": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 4,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 296,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 169,
+     "briefCoverageMean": 0.75,
+     "quotesVerbatim": "2/2"
+    },
+    "genreAccepted": 4
+   },
+   "safety": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 1,
+     "reasonEmpty": 1,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 322,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 201,
+     "briefCoverageMean": 0.89,
+     "quotesVerbatim": "3/3"
+    },
+    "genreAccepted": 4
+   },
+   "industry": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 2,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 4,
+     "leadOverLimit": 0,
+     "leadCharsMean": 344,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 181,
+     "briefCoverageMean": 0.83,
+     "quotesVerbatim": "0/0"
+    },
+    "genreAccepted": 4
+   },
+   "conference": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 4,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 341,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 166,
+     "briefCoverageMean": 0.89,
+     "quotesVerbatim": "3/3"
+    },
+    "genreAccepted": 4
+   },
+   "trial": {
+    "before": {
+     "cases": 3,
+     "reasonFormula": 2,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 2,
+     "leadOverLimit": 1,
+     "leadCharsMean": 279,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 3,
+     "reasonFormula": 0,
+     "reasonEmpty": 1,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 176,
+     "briefCoverageMean": 0.66,
+     "quotesVerbatim": "0/0"
+    },
+    "genreAccepted": 3
+   },
+   "commentary": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 4,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 361,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 213,
+     "briefCoverageMean": 1,
+     "quotesVerbatim": "4/4"
+    },
+    "genreAccepted": 4
+   },
+   "news": {
+    "before": {
+     "cases": 4,
+     "reasonFormula": 1,
+     "reasonEmpty": 2,
+     "withAbsences": 1,
+     "absencePhrases": 1,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 368,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 4,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 1,
+     "absencePhrases": 1,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 205,
+     "briefCoverageMean": 0.83,
+     "quotesVerbatim": "2/2"
+    },
+    "genreAccepted": 4
+   },
+   "social": {
+    "before": {
+     "cases": 3,
+     "reasonFormula": 1,
+     "reasonEmpty": 0,
+     "withAbsences": 1,
+     "absencePhrases": 2,
+     "numbersMissing": 0,
+     "leadOverLimit": 3,
+     "leadCharsMean": 160,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 3,
+     "reasonFormula": 0,
+     "reasonEmpty": 0,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 1,
+     "leadCharsMean": 109,
+     "briefCoverageMean": 0,
+     "quotesVerbatim": "0/0"
+    },
+    "genreAccepted": 3
+   },
+   "roundup": {
+    "before": {
+     "cases": 3,
+     "reasonFormula": 1,
+     "reasonEmpty": 1,
+     "withAbsences": 1,
+     "absencePhrases": 1,
+     "numbersMissing": 4,
+     "leadOverLimit": 0,
+     "leadCharsMean": 218,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null
+    },
+    "after": {
+     "cases": 3,
+     "reasonFormula": 0,
+     "reasonEmpty": 3,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 127,
+     "briefCoverageMean": 1,
+     "quotesVerbatim": "0/0"
+    },
+    "genreAccepted": 3
+   }
+  }
+ },
+ "results": [
+  {
+   "id": "paper-519fe6559cbbf042",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "该2期试验在高瘤负荷转移性激素初治前列腺癌患者中评估他拉唑帕利联合恩扎卢胺对比恩扎卢胺单药。联合组12个月PSA<0.2应答率为73%，达到预设疗效阈值，但未在未筛选生物标志物人群中确立优于单药的额外临床获益，且毒性增加。",
+    "reason": null,
+    "lead": "在高瘤负荷转移性激素初治前列腺癌（mHNPC）患者中，恩扎卢胺联合他拉唑帕利达到主要终点：随机分组后12个月确认的PSA<0.2 ng/ml应答率为73.0%（27/37，95%CI 55.9–86.2），超过预设40%的疗效阈值（P<0.001）；对照组恩扎卢胺单药为64.7%（11/17，95%CI 38.3–85.8），两组事后比较无显著差异（P=0.54）。该研究为随机2期ZZ-FIRST试验，54例患者先接受2个周期恩扎卢胺导入后按1:2随机分为联合组37例和单药组17例，中位随访3.6年。联合组≥3级不良事件发生率为68%，单药组为35%，以贫血为主（41%）；联合组还发生2例治疗相关致死性髓系肿瘤，患者存在潜在基因组易感性。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "model",
+    "modelGenre": "paper",
+    "summary": "在高瘤负荷转移性激素初治前列腺癌患者中，他拉唑帕利联合恩扎卢胺组12个月PSA<0.2 ng/ml应答率为73%（95%CI 56–86%），达到预设疗效阈值（P<0.001）；对照组为64.7%（95%CI 38–86%，组间探索性比较P=0.54）。联合组≥3级不良事件发生率为68%，对照组为35%，以贫血为主（41%）；联合组发生2例治疗相关致死性髓系肿瘤，患者均存在潜在基因组易感性。",
+    "reason": "生物标志物未筛选人群中联合方案未显示优于恩扎卢胺单药的明确额外获益且毒性增加，提示PARP抑制剂联合AR通路抑制的前列腺癌一线应用需以HRR状态等标志物界定获益人群。",
+    "lead": "在高瘤负荷转移性激素初治前列腺癌（mHNPC）患者中，恩扎卢胺联合他拉唑帕利达到主要终点：联合组12个月PSA<0.2 ng/ml应答率为73%（95%CI 56–86%），超过预设疗效阈值（P<0.001）；对照组为64.7%（95%CI 38–86%，组间探索性比较P=0.54）。这项2期随机试验纳入54例开始ADT的患者，先接受2个周期恩扎卢胺导入，再按1:2随机分配至恩扎卢胺单药（n=17）或联合他拉唑帕利（n=37）。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "在缺乏HRR基因改变的肿瘤中，PARP抑制剂联合AR通路抑制能否在高瘤负荷转移性激素初治前列腺癌中带来额外获益。"
+      },
+      {
+       "key": "design",
+       "label": "设计与对象",
+       "text": "随机2期试验，54例高瘤负荷mHNPC患者先接受2周期恩扎卢胺导入，再按1:2随机分为恩扎卢胺组（n=17）和恩扎卢胺联合talazoparib组（n=37）。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "联合组12个月PSA<0.2应答率为73%（95%CI 56–86%），超过预设疗效阈值（P<0.001）。",
+        "对照组PSA<0.2应答率为64.7%（95%CI 38–86%），两组探索性比较P=0.54。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "联合组≥3级不良事件发生率为68%，对照组为35%，以贫血为主（41%）；联合组发生2例治疗相关致死性髓系肿瘤，患者存在潜在基因组易感性。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "该研究为生物标志物未选择人群，未证实联合治疗较恩扎卢胺单药有明确额外临床获益。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Overall, talazoparib plus enzalutamide demonstrated clinical activity in patients with high-volume mHNPC but did not establish clear additional clinical benefit over enzalutamide alone in this biomarker-unselected population, while being associated with increased toxicity.",
+      "zh": "总体而言，talazoparib联合恩扎卢胺在高瘤负荷mHNPC患者中显示出临床活性，但在这一未按生物标志物选择的人群中，未能确立较恩扎卢胺单药明确的额外临床获益，同时毒性增加。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 323,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 111,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 33,
+     "numbersMissing": [
+      "lead:27/37",
+      "lead:55.9",
+      "lead:86.2",
+      "lead:40%",
+      "lead:38.3",
+      "lead:85.8",
+      "lead:3.6"
+     ],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 216,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 197,
+     "reasonChars": 83,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 62,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 6,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "paper-2953d334549de2da",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 2058,
+   "textSource": "abstract",
+   "before": {
+    "summary": "该 3 期试验安全性人群分析显示，在抗血小板治疗基础上加用 asundexian，大出血、大出血或临床相关非大出血及任何出血均未显著增加，但下消化道出血更常见。提示需关注该药的消化道出血风险。",
+    "reason": null,
+    "lead": "在非心源性缺血性卒中或高危 TIA 患者中，抗血小板治疗基础上加用 asundexian 未显著增加大出血、大出血或临床相关非大出血（CRNM）及任何出血，但下消化道出血更多见。该分析基于 OCEANIC-STROKE 安全性人群，asundexian 组 6124 例、安慰剂组 6130 例，按 ISTH 标准分类并在治疗期间分析。大出血发生率分别为 1.9%（117 例）与 1.7%（107 例），csHR 1.10（95% CI 0.85–1.44）；大出血或 CRNM 为 5.5% 与 5.0%，csHR 1.12（0.96–1.30）；任何出血为 12.5% 与 12.3%，csHR 1.02（0.93–1.13）。症状性颅内出血为 0.7% 与 0.6%。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "model",
+    "modelGenre": "paper",
+    "summary": "OCEANIC-STROKE试验安全性人群中，非心源性缺血性卒中或高危TIA患者接受asundexian或安慰剂治疗，大出血发生率分别为1.9%和1.7%（csHR 1.10，95% CI 0.85–1.44），大出血或临床相关非大出血为5.5%和5.0%（csHR 1.12，95% CI 0.96–1.30），差异均无统计学意义。",
+    "reason": "在抗血小板基础上加用asundexian不显著增加大出血，但下消化道出血风险升高，处方时对既往消化道出血或肠道病变患者需权衡并随访便血。",
+    "lead": "在非心源性缺血性卒中或高危TIA患者中，抗血小板治疗基础上加用asundexian未显著增加大出血、大出血或临床相关非大出血（CRNM）及任何出血，但下消化道出血更多见。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "在非心源性缺血性卒中或高危TIA患者中，asundexian联合抗血小板治疗的出血类别、部位及关键亚组特征如何。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "大出血：asundexian组117例（1.9%），安慰剂组107例（1.7%），csHR 1.10（95% CI 0.85–1.44），P=0.46。",
+        "大出血或CRNM出血：339例（5.5%）对307例（5.0%），csHR 1.12（95% CI 0.96–1.30），P=0.16。",
+        "任何出血：763例（12.5%）对752例（12.3%），csHR 1.02（95% CI 0.93–1.13），P=0.65。",
+        "任何胃肠道出血：186例（3.0%）对147例（2.4%），csHR 1.28（95% CI 1.03–1.59）。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "症状性颅内出血41例（0.7%）对36例（0.6%）；任何操作相关出血和任何黏膜出血无显著差异。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "原文未写明局限。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Asundexian added to antiplatelet therapy reduced ischemic stroke without significantly increasing major, major or CRNM, or any bleeding. Lower gastrointestinal bleeding was more frequent with asundexian, whereas treatment effects on major and major or CRNM bleeding were consistent across prespecified subgroups.",
+      "zh": "在抗血小板治疗基础上加用asundexian减少了缺血性卒中，且未显著增加大出血、大出血或CRNM出血或任何出血。asundexian组下消化道出血更常见，而大出血及大出血或CRNM出血的治疗效应在各预设亚组中一致。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "design",
+      "reason": "number"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 338,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 96,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 23,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 85,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 167,
+     "reasonChars": 68,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 51,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "paper-a22fbba07fefbe41",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 2050,
+   "textSource": "abstract",
+   "before": {
+    "summary": "该系统评价纳入14项随机试验、4192例经影像筛选的发病超4.5小时或醒后/不明发病时间卒中患者。静脉溶栓提高90天极佳功能结局与功能独立，但症状性颅内出血风险升高，90天死亡率无显著差异。",
+    "reason": null,
+    "lead": "在影像筛选下，对发病超过4.5小时或醒后、不明发病时间的急性缺血性卒中患者，静脉溶栓仍能改善功能结局且不增加90天死亡。该结论来自一项更新系统评价与Meta分析，纳入14项随机试验、4192例患者，比较阿替普酶或替奈普酶与最佳药物治疗。溶栓组90天极佳功能结局（mRS 0–1）风险比为1.22（95% CI 1.16–1.29），功能独立（mRS 0–2）风险比为1.12（95% CI 1.06–1.18），阿替普酶和替奈普酶均贡献了上述获益。症状性颅内出血风险升高（RR 2.58，95% CI 1.58–4.22），90天死亡风险无显著差异（RR 1.15，95% CI 0.97–1.35）。作者认为，这支持以组织窗而非严格时间窗来指导急性缺血性卒中的溶栓决策。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "model",
+    "modelGenre": "paper",
+    "summary": "纳入14项随机试验、4192例经影像筛选的急性缺血性卒中患者，发病4.5小时后或醒后/不明发病时间的静脉溶栓（阿替普酶或替奈普酶）使90天极佳功能结局（mRS 0–1）比例提高（RR 1.22，95% CI 1.16–1.29），功能独立（mRS 0–2）亦改善（RR 1.12，95% CI 1.06–1.18）。",
+    "reason": "醒后卒中或发病时间不明患者的溶栓决策可依据影像筛选而非固定时间窗，同时需把症状性颅内出血风险升高纳入知情沟通。",
+    "lead": "在影像筛选的发病超过4.5小时或醒后/不明时间卒中的患者中，静脉溶栓（阿替普酶或替奈普酶）较最佳药物治疗提高了90天极佳功能结局（mRS 0–1，RR 1.22，95% CI 1.16–1.29）和功能独立（mRS 0–2，RR 1.12，95% CI 1.06–1.18）。这项系统评价与Meta分析纳入14项随机试验、共4192例受试者，两种溶栓药均对上述获益有贡献。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "影像筛选的急性缺血性卒中患者，在发病4.5小时后接受静脉溶栓是否有效且安全？"
+      },
+      {
+       "key": "design",
+       "label": "设计与对象",
+       "text": "系统评价与Meta分析，纳入14项随机试验、4192例患者，比较静脉溶栓（阿替普酶或替奈普酶）与最佳药物治疗，随访90天。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "90天极佳功能结局（mRS 0–1）比例提高，RR 1.22（95% CI 1.16–1.29）。",
+        "功能独立（mRS 0–2）比例提高，RR 1.12（95% CI 1.06–1.18）。",
+        "阿替普酶和替奈普酶均对上述获益有贡献。",
+        "90天死亡率无显著差异，RR 1.15（95% CI 0.97–1.35）。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "症状性颅内出血风险升高，RR 2.58（95% CI 1.58–4.22）。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "In patients selected using advanced imaging, intravenous thrombolysis performed after 4.5 hours improves functional outcomes without increasing mortality, supporting a tissue-based rather than strictly time-based approach to treating acute ischemic stroke.",
+      "zh": "在经先进影像筛选的患者中，4.5小时后进行静脉溶栓可改善功能结局且不增加死亡率，支持以组织为基础而非严格以时间为基础的治疗急性缺血性卒中的方法。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 336,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 95,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 31,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 186,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 158,
+     "reasonChars": 55,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 60,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "paper-a3b13490c8ce49e1",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 514,
+   "textSource": "abstract",
+   "before": {
+    "summary": "读者来信回应Robertson等的观点文章，认为腺苷可能通过降低兴奋性毒性，在足月围产期窒息后发挥神经保护作用，并提及Peter Marro等的研究及胎仔缺氧动物模型中腺苷代谢相关酶发育的研究作为支持。",
+    "reason": "围绕新生儿缺氧缺血性脑病用药安全，提示临床在权衡咖啡因使用与腺苷神经保护机制时需更谨慎评估。",
+    "lead": "这封致编辑信针对 Robertson 等人关于缺氧缺血性脑病的 Viewpoint 文章提出，足月围产期窒息后不应使用咖啡因。作者回顾，早前有实验室工作提示腺苷可能通过降低兴奋性毒性在围产期窒息后发挥神经保护作用，Peter Marro 等人的研究支持这一观点；此前还有动物胎缺氧模型研究了腺苷代谢相关酶的胎儿发育，强调腺苷对胎儿脑的重要性。信中没有给出新的临床数据或安全性结果。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "model",
+    "modelGenre": "commentary",
+    "summary": "这封致编辑的信针对Robertson等发表的Viewpoint提出，围产期窒息后腺苷可能通过降低兴奋性毒性发挥神经保护作用，因此不支持在缺氧缺血性脑病中使用咖啡因。信中引用了Peter Marro等的研究，以及既往在胎仔缺氧动物模型中观察腺苷代谢相关酶胎儿发育的工作。",
+    "reason": "新生儿科医生在处理足月窒息后脑病时，常会考虑用甲基黄嘌呤类药物；这封信提示咖啡因可能削弱腺苷的神经保护作用，因此用药决策前值得核对这条机制层面的反对意见。",
+    "lead": "针对Robertson等人在JAMA儿科学发表的关于足月儿缺氧缺血性脑病不应使用咖啡因的观点文章，这篇读者来信表示高度认同，并补充了腺苷在围产期窒息后神经保护中可能的作用依据：来信者提到，其同事早前基于实验室工作就强调，腺苷可能通过降低兴奋性毒性在足月围产期窒息后发挥神经保护作用，Peter Marro等人的研究支持这一看法；此前还有研究在胎儿缺氧动物模型中考察了腺苷代谢相关酶的胎儿发育，强调腺苷对胎儿脑的重要性。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的对象",
+       "text": "Robertson 等发表于 JAMA Pediatrics 的 Viewpoint 文章，讨论足月围产期窒息后咖啡因的使用。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "Peter Marro 等的研究支持腺苷在足月围产期窒息后具有神经保护作用的观点。",
+        "既往在胎儿缺氧动物模型中研究过腺苷代谢相关酶的胎儿发育，强调腺苷对胎脑的重要性。"
+       ]
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "In the mid-1990s, a colleague stressed to me based on work in her laboratory that adenosine might be important for neuroprotection following perinatal asphyxia at term by decreasing excitotoxicity."
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "repaired",
+    "briefDropped": [
+     {
+      "key": "analysis",
+      "reason": "number"
+     },
+     {
+      "key": "quote.zh",
+      "reason": "number"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 190,
+     "leadLimit": 129,
+     "leadOverLimit": true,
+     "summaryChars": 101,
+     "reasonChars": 46,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 0,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 209,
+     "leadLimit": 129,
+     "leadOverLimit": true,
+     "summaryChars": 134,
+     "reasonChars": 77,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 0,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 3,
+     "briefCoverage": 0.6,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "preprint-51bf22054a9315d1",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "一项回顾性分析纳入50例子宫内膜癌术后阴道复发患者，评估CT引导近距离放疗的疗效。中位随访44.8个月，3年局部控制率为85.6%，总生存率为87.1%，无病生存率为46.0%；HR-CTV D90≥67.3 Gy者3年局部控制率为100%，低于该剂量者为64.2%。远处转移仍是主要失败部位。",
+    "reason": "对子宫内膜癌术后阴道复发患者行CT引导近距离放疗时，可参考HR-CTV D90与局部控制的剂量关系，用于评估靶区剂量覆盖是否充分。",
+    "lead": "日本一项单中心回顾性研究纳入2014年1月至2024年6月接受CT引导近距离放疗的50例子宫内膜癌术后阴道复发患者，评估其疗效与晚期毒性。全组中位随访44.8个月，3年局部控制率、区域无复发生存率、无远处转移生存率、无病生存率和总生存率分别为85.6%、82.9%、65.1%、46.0%和87.1%；30例患者接受了中位总剂量50 Gy的外照射放疗，高危临床靶区（HR-CTV）中位总剂量（EQD2）为70.5 Gy。单因素分析显示HR-CTV D90是局部控制的显著预后因素（p=0.009），D90≥67.3 Gy者3年局部控制率为100%，低于该阈值者为64.2%；多因素分析中肿瘤可显影性和术后风险分层是无远处转移生存的显著预后因素。作者结论为CT引导近距离放疗可获得较好的局部控制，但远处转移仍是主要失败部位。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": "preprint",
+    "summary": "这项回顾性分析纳入50例子宫内膜癌术后阴道复发患者，评估CT引导近距离放疗的疗效，中位随访44.8个月，3年局部控制率为85.6%，3年总生存率为87.1%，3年无病生存率为46.0%。HR-CTV D90≥67.3 Gy者的3年局部控制率为100%，低于该剂量者为64.2%；远处转移仍是主要失败部位。",
+    "reason": "对于既往未接受盆腔放疗的子宫内膜癌术后阴道复发患者，HR-CTV D90与局部控制的剂量关系可作为制定近距离放疗靶区剂量时的参考。",
+    "lead": "这项尚未经同行评议的预印本回顾性分析显示，CT引导近距离放疗对子宫内膜癌术后阴道复发有较好的局部控制，但远处转移仍是主要失败部位。研究纳入2014年1月至2024年6月接受CT引导近距离放疗的50例患者，中位随访44.8个月，3年局部控制率、无区域复发生存率、无远处转移生存率、无病生存率和总生存率分别为85.6%、82.9%、65.1%、46.0%和87.1%。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "CT引导近距离放疗对子宫内膜癌术后阴道复发的治疗效果如何？"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "回顾性分析2014年1月至2024年6月单中心接受至少1次CT引导BT的子宫内膜癌术后阴道复发患者，共50例。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "3年局部控制率、区域无复发生存率、远处无转移生存率、无病生存率和总生存率分别为85.6%、82.9%、65.1%、46.0%和87.1%。",
+        "单因素分析中HR-CTV D90是局部控制的显著预后因素（p = 0.009）。",
+        "HR-CTV D90 ≥ 67.3 Gy组3年局部控制率显著高于< 67.3 Gy组（100% vs. 64.2%）。",
+        "多因素分析中肿瘤可显影性和术后风险分级是DMFS的显著预后因素（p < 0.011和p = 0.033）。"
+       ]
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "远处转移仍是主要失败部位。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "CT-guided BT provides favorable local control in patients with vaginal recurrence after endometrial cancer surgery. However, distant metastases remain a major site of failure.",
+      "zh": "CT引导近距离放疗对子宫内膜癌术后阴道复发患者提供了良好的局部控制。然而，远处转移仍是主要的失败部位。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 361,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 147,
+     "reasonChars": 65,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 30,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 182,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 152,
+     "reasonChars": 65,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 44,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "preprint-22c8fe7b807a0ac4",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 8285,
+   "textSource": "body",
+   "before": {
+    "summary": "Y-MIND 将友谊长椅青少年版改编后由非专业教师咨询员在加纳 6 所高中实施，67 名 15 至 18 岁中重度抑郁青少年随机接受常规强化照护或联合 Y-MIND。治疗质量 94.8%、胜任度 86.6%，Y-MIND 组抑郁症状严重度较低，但研究并非为验证疗效而设计。",
+    "reason": null,
+    "lead": "在加纳纳夫龙戈6所高中开展的可行性整群随机试验Y-MIND显示，由非专业教师-辅导员向15–18岁中重度抑郁（PHQ-9总分>9）青少年提供简短心理治疗可行且可接受。研究2024年7–8月入组67人，按1:2随机分为常规强化照护联合Y-MIND组43人和单纯常规强化照护组24人，5个月主要结局评估完成率95.5%（64人）。青少年对干预可行性的评分为4.3（0.5），治疗质量评分94.8%（95%CI 93.0–96.6），治疗胜任力86.6%（95%CI 81.2–92.2）。Y-MIND组抑郁症状严重程度低于对照组，多数参与者在第5个月随访时达到症状缓解，但研究并非为确证疗效而设计，作者认为应推进至充分把握度的试验以评估临床效果、成本效果及在低收入和中等收入国家常规学校环境中的可扩展性。试验注册号NCT06740084。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": "preprint",
+    "summary": "Y-MIND 研究在加纳 6 所高中招募 15–18 岁、PHQ-9 总分 > 9 的青少年，按 1:2 随机分配至常规强化照护联合 Y-MIND 或单纯常规照护，共 67 人（43 人对 24 人），64 人（95.5%）完成 5 个月评估。青少年对可行性的评分为 4.3（0.5），治疗质量 94.8%（95% CI 93.0–96.6），胜任度 86.6%（95% CI 81.2–92.2）。",
+    "reason": "非专业教师在校内提供简短心理治疗这一任务转移模式，为青少年抑郁治疗资源匮乏地区提供了可行性数据，但样本仅 67 人且未设计检验疗效，尚不足以改变处方或转诊决策。",
+    "lead": "这项尚未经同行评议的预印本可行性整群随机试验显示，在加纳Navrongo的6所高中，由非专业教师辅导员向15–18岁、PHQ-9总分>9的中重度抑郁青少年提供改编自Friendship Bench的Y-MIND简短心理治疗，具有可行性且可接受。研究于2024年7月至8月入组67人，按1:2随机分为EUC联合Y-MIND组43人和单纯EUC组24人，64人（95.5%）完成5个月主要结局评估。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "评估由非专业教师辅导员提供的简短心理治疗（Y-MIND）在加纳高中实施是否可行。"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "可行性整群随机对照试验，在加纳Navrongo的6所高中招募15–18岁、PHQ-9总分>9的疑似中重度抑郁学生，学校按1:2随机分配至常规强化照护（EUC）或EUC联合Y-MIND。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "共入组并分配67人，EUC联合Y-MIND组43人（64%），EUC组24人（36%）。",
+        "64人（95.5%）完成5个月主要结局评估，两组分别为41人（95.3%）和23人（95.8%）。",
+        "青少年对Y-MIND实施可行性的平均评分为4.3（0.5）。",
+        "治疗质量评分为94.8%（95% CI: 93.0–96.6），治疗胜任力为86.6%（95% CI: 81.2–92.2）。"
+       ]
+      },
+      {
+       "key": "funding",
+       "label": "资助与利益冲突",
+       "text": "作者声明无利益冲突；由National Institutes of Health Research资助（NIHR133384）。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "研究未设计用于确定有效性。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "While preliminary findings indicate potential improvements in depressive symptoms, the study was not designed to establish effectiveness.",
+      "zh": "尽管初步发现提示抑郁症状可能改善，但本研究并非为确定有效性而设计。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 367,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 136,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 197,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 200,
+     "reasonChars": 80,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 67,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 6,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "preprint-83dfe9d6fac56159",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 7195,
+   "textSource": "body",
+   "before": {
+    "summary": "研究对2005至2019年间分离自人、动物宿主和环境水样的443株ST474空肠弯曲菌进行全基因组测序，识别出6个亚群，其宿主关联、持续性和重组模式各异。Clade E与单一禽类供应商相关，占人类病例的34.5%；Clade F在人类病例高峰后从Clade E演化而来。",
+    "reason": null,
+    "lead": "新西兰2005至2019年收集人、动物宿主和环境水体来源的空肠弯曲菌ST474分离株443株进行全基因组测序，并结合2018/9年病例对照研究分离株作基因组比较，识别出6个宿主关联、持续性和重组模式各异的亚群。Clade E在流行初期与单一禽类供应商相关，占人病例的34.5%；人病例高峰后由Clade E演化出Clade F，同样与禽类相关，其出现伴随整合元件CJIE5丢失、获得多个可能来自不同祖先谱系的重组片段以及甲硫氨酸生物合成操纵子metAB丢失。Clades A-D在14年监测期内于人病例中检出频率低，且与多种宿主相关。该研究提示水平基因转移在病原体演化及适应新生态位中起作用，并可能影响公共卫生。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": "preprint",
+    "summary": "新西兰一项预印本研究对2005至2019年人、动物宿主和环境水体来源的443株空肠弯曲菌ST474分离株做全基因组测序，识别出6个亚群。Clade E在流行初期与单一禽类供应商相关，占人感染病例的34.5%；Clade F在病例高峰后由Clade E演化而来，伴随CJIE5整合元件丢失、多个重组片段获得及metAB操纵子丢失。Clade A-D在14年监测期内于人感染中低频检出，与多种宿主相关。",
+    "reason": "做食源性疾病和细菌基因组监测的团队可留意这种从单一禽类供应链扩散、再经同源重组适应新生态位的演化路径，作为菌株溯源和耐药/毒力基因分析的参照。",
+    "lead": "一项尚未经同行评议的预印本对新西兰2005至2019年收集的443株禽源空肠弯曲菌ST474分离株进行全基因组测序，发现该谱系可分为6个亚群，其宿主关联、持续性和重组模式各不相同。Clade E在流行初期与单一禽类供应商相关，占人感染病例的34.5%；Clade F在人感染病例高峰后由Clade E演化而来，同样与禽类相关，其出现伴随整合元件CJIE5丢失、获得多个可能来自不同祖先谱系的重组片段以及甲硫氨酸生物合成操纵子metAB丢失。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "新西兰禽源空肠弯曲菌ST474谱系如何演化并持续存在，其出现和分化的驱动因素是什么。"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "对2005至2019年采集的人、动物宿主和环境水体ST474分离株进行全基因组测序，N=443；纳入2018/9年病例对照研究的分离株作基因组比较。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "鉴定出6个ST474亚群（clade），在宿主关联、持续性、同源重组模式和移动遗传元件组成上存在差异。",
+        "Clade E在流行初期与单一禽类供应商相关，占人病例的34.5%。",
+        "Clade F在人病例高峰后由衰退的Clade E演化而来，同样与禽类相关。",
+        "Clade F出现伴随整合元件CJIE5丢失、获得多个重组片段及metAB操纵子丢失。"
+       ]
+      },
+      {
+       "key": "funding",
+       "label": "资助与利益冲突",
+       "text": "由Biotechnology and Biological Sciences Research Council资助（BB/X011011/1、BB/V018221/1）；作者声明无竞争利益。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "This longitudinal study sheds light on the evolutionary processes that result in strain emergence and differentiation, highlighting the role of horizontal gene transfer in the evolution and adaptation of this pathogen to new niches, and the subsequent impact on public health.",
+      "zh": "这项纵向研究揭示了导致菌株出现和分化的演化过程，突出水平基因转移在该病原体演化及适应新生态位中的作用，以及随之而来的公共卫生影响。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 306,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 135,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 220,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 199,
+     "reasonChars": 71,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 19,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "guideline-2275abf68e0a9ea1",
+   "expectGenre": "guideline",
+   "genreAccepted": true,
+   "textChars": 5056,
+   "textSource": "body",
+   "before": {
+    "summary": "美国临床肿瘤学会发布2026.1.0版晚期胆道癌动态指南，对液体活检与系统治疗给出推荐。指南建议诊断时任何分期均优先采用基于组织的广谱DNA和RNA NGS检测明确可靶向标志物，仅在组织活检不可及时用血浆液体活检；pMMR/MSS患者一线推荐免疫检查点抑制剂联合化疗，dMMR/MSI-H患者可选帕博利珠单抗单药，一线进展且无明确标志物者推荐FOLFOX联合积极症状控制或单纯积极症状控制。",
+    "reason": "可据此梳理晚期胆道癌的分子检测顺序与一线、二线用药路径，在组织标本不足时判断液体活检的适用位置，并为免疫联合化疗与FOLFOX的选择提供依据。",
+    "lead": "ASCO发布2026.1.0版晚期胆道癌动态指南，对液体活检与系统治疗作出推荐。专家组系统综述相关研究后建议，诊断时任何分期均优先采用基于组织的广谱DNA和RNA NGS检测以明确可靶向生物标志物，仅在组织活检不可及时才推荐血浆液体活检。治疗方面，pMMR/MSS晚期BTC一线推荐免疫检查点抑制剂联合化疗，不适合ICI者指南列出替代方案；dMMR/MSI-H者可选择帕博利珠单抗单药。一线进展且无明确生物标志物者，推荐FOLFOX联合积极症状控制或单纯积极症状控制，不适合奥沙利铂化疗者的方案亦在指南中列出。"
+   },
+   "after": {
+    "genre": "guideline",
+    "genreBasis": "model",
+    "modelGenre": "guideline",
+    "summary": "美国临床肿瘤学会发布2026.1.0版晚期胆道癌动态指南，对液体活检与系统治疗提出推荐。专家组建议诊断时任何分期均首选基于组织的广谱DNA和RNA NGS检测明确可靶向标志物，仅在组织活检不可及时用血浆液体活检；pMMR/MSS晚期BTC一线推荐免疫检查点抑制剂联合化疗，dMMR/MSI-H可选帕博利珠单抗单药，一线进展且无明确标志物者推荐FOLFOX联合积极症状控制或单纯积极症状控制。",
+    "reason": "晚期胆道癌一线是否加免疫、何时用液体活检替代组织检测，这份指南给出了可直接落到处方和送检单上的分层推荐。",
+    "lead": "美国临床肿瘤学会（ASCO）发布2026.1.0版晚期胆道癌动态指南，对液体活检与系统治疗作出推荐：诊断时任何分期均推荐基于组织的广谱DNA和RNA NGS检测以明确可靶向生物标志物，仅在组织活检不可及时才推荐血浆液体活检。治疗方面，pMMR/MSS晚期胆道癌一线推荐免疫检查点抑制剂联合化疗，不适合ICI者指南另列替代方案；dMMR/MSI-H者可选择帕博利珠单抗单药。",
+    "brief": {
+     "genre": "guideline",
+     "points": [
+      {
+       "key": "issuer",
+       "label": "制定机构与版本",
+       "text": "美国临床肿瘤学会（ASCO）动态指南，2026.1.0版，发表于JOURNAL OF CLINICAL ONCOLOGY。"
+      },
+      {
+       "key": "population",
+       "label": "适用人群",
+       "text": "晚期胆道癌（BTC）患者的液体活检及系统治疗。"
+      },
+      {
+       "key": "changes",
+       "label": "主要更新",
+       "items": [
+        "诊断时任何分期均推荐基于组织的广谱DNA和RNA NGS检测，以明确可靶向生物标志物。",
+        "仅在组织活检不可及时推荐血浆液体活检。",
+        "pMIMR/MSS晚期BTC一线推荐免疫检查点抑制剂联合化疗；不适合ICI者列出替代方案。",
+        "dMIMR/MSI-H晚期BTC可选帕博利珠单抗单药；一线进展且无明确生物标志物者推荐FOLFOX联合积极症状控制或单纯积极症状控制。"
+       ]
+      },
+      {
+       "key": "basis",
+       "label": "依据",
+       "text": "专家组系统综述相关研究后提出上述推荐。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 255,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 195,
+     "reasonChars": 71,
+     "reasonFormula": "可据此",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 2,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 186,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 195,
+     "reasonChars": 52,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 3,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 4,
+     "briefCoverage": 0.8,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "guideline-cf2dd89b4350e22c",
+   "expectGenre": "guideline",
+   "genreAccepted": true,
+   "textChars": 3541,
+   "textSource": "body",
+   "before": {
+    "summary": "欧洲心脏病学会（ESC）与欧洲肾脏协会（ERA）于2026-08-28联合发布《2026 ESC/ERA心血管疾病和慢性肾脏病管理指南》，这是首部针对心血管疾病与慢性肾脏病联合管理的指南。该指南以STAMP管理方法为临床路径，将慢性肾脏病筛查嵌入心血管实践，并涵盖慢性肾脏病合并心血管疾病的诊断和治疗推荐意见；这篇解读围绕STAMP管理方法及关键推荐意见展开。",
+    "reason": "可借这份解读了解首部心血管与肾脏联合管理指南的STAMP路径，为心内科门诊把慢性肾脏病筛查纳入心血管随访提供参考框架。",
+    "lead": "欧洲心脏病学会（ESC）与欧洲肾脏协会（ERA）于2026年8月28日联合发布《2026 ESC/ERA心血管疾病和慢性肾脏病管理指南》，这是首部针对心血管疾病（CVD）与慢性肾脏病（CKD）联合管理的指南。该指南以STAMP管理方法为临床路径，将CKD筛查嵌入心血管实践，并涵盖CKD合并CVD的诊断和治疗推荐意见。同期发表的要点解读围绕STAMP管理方法及关键推荐意见展开，旨在为我国心血管与肾脏领域的临床实践提供参考。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "model",
+    "modelGenre": "commentary",
+    "summary": "2026-08-28，欧洲心脏病学会与欧洲肾脏协会联合发布首部心血管疾病与慢性肾脏病联合管理指南，以STAMP管理方法为临床路径，将CKD筛查嵌入心血管实践，并涵盖CKD合并CVD的诊断和治疗推荐意见。这篇解读围绕STAMP管理方法与关键推荐意见展开。",
+    "reason": "心血管与肾内科医生可据此了解首部CVD与CKD联合管理指南的STAMP路径，判断门诊CKD筛查与联合用药顺序是否需要调整。",
+    "lead": "欧洲心脏病学会（ESC）与欧洲肾脏协会（ERA）于2026-08-28联合发布《2026 ESC/ERA心血管疾病和慢性肾脏病管理指南》，这是首部针对心血管疾病（CVD）与慢性肾脏病（CKD）联合管理的指南，以STAMP管理方法为临床路径，将CKD筛查嵌入心血管实践，并涵盖CKD合并CVD的诊断和治疗推荐意见。这篇解读围绕该指南的CKD STAMP管理方法与关键推荐意见展开，作者希望以此为我国心血管与肾脏领域的临床实践提供参考。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的对象",
+       "text": "《2026 ESC/ERA心血管疾病和慢性肾脏病管理指南》，由欧洲心脏病学会（ESC）与欧洲肾脏协会（ERA）于2026-08-28联合发布，是首部针对CVD与CKD联合管理的指南。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "该指南以STAMP管理方法为临床路径，将CKD筛查嵌入心血管实践，并涵盖CKD合并CVD的诊断和治疗推荐意见。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "解读围绕CKD STAMP管理方法及关键推荐意见展开。",
+        "解读旨在为我国心血管与肾脏领域的临床实践提供参考。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为该解读可为我国心血管与肾脏领域临床实践提供参考。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "本文主要围绕《2026管理指南》中CKD STAMP管理方法及关键推荐意见进行解读，以期为我国心血管与肾脏领域的临床实践提供参考。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 212,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 180,
+     "reasonChars": 59,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 8,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 216,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 126,
+     "reasonChars": 61,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 11,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "guideline-d1e8f9a2b80cfa8a",
+   "expectGenre": "guideline",
+   "genreAccepted": true,
+   "textChars": 1703,
+   "textSource": "abstract",
+   "before": {
+    "summary": "法国13位专家依据GRADE与Delphi方法制定PICU内新生儿及18岁以下儿童非术后室上性心动过速管理指南，共提出21条建议，其中5条适用GRADE分级，16条为专家意见，全部建议获强烈认可。",
+    "reason": null,
+    "lead": "13名法语儿科重症与急诊专家（GFRUP成员）在2024至2025年间通过远程和面对面会议，制定了儿童非术后室上性心动过速（SVT）管理指南，共提出21条建议，覆盖流行病学与PICU收治标准、辅助检查、非特异性心律管理和特异性心律管理4个方面。专家组检索了MEDLINE（经PubMed）、Cochrane和Embase的英法文献，按GRADE方法评价证据，其中5条建议可应用GRADE分级，其余16条以专家意见形式给出，全部建议均经Delphi法投票并获得强烈认可。该指南针对的是入住儿科重症监护病房的新生儿及18岁以下儿童，为这一人群的SVT临床决策提供了具体推荐。"
+   },
+   "after": {
+    "genre": "guideline",
+    "genreBasis": "model",
+    "modelGenre": "guideline",
+    "summary": "法语国家儿科重症与急诊协作组（GFRUP）13名专家制定新生儿及18岁以下儿童非术后室上性心动过速（SVT）的PICU管理指南，共提出21条推荐，覆盖流行病学与PICU收治标准、辅助检查、非特异性心律管理和特异性心律管理4个方面。其中5条采用GRADE方法，16条为专家意见，全部推荐经Delphi法投票获得强一致通过。",
+    "reason": "儿童SVT在PICU的收治指征、辅助检查和抗心律失常选择长期缺少统一推荐，这21条按GRADE分级并标注专家意见比例，可直接对照科室现有流程逐条核对。",
+    "lead": "法语国家儿科重症与急诊协作组（GFRUP）的13名专家于2024至2025年制定并发布儿童非术后室上性心动过速（SVT）的PICU管理指南，共提出21条推荐，覆盖流行病学与PICU收治标准、辅助检查、非特异性心律管理和特异性心律管理4个方面。其中5条推荐采用GRADE方法分级，其余16条以专家意见形式给出，全部推荐均经Delphi法投票并获得专家一致强支持。",
+    "brief": {
+     "genre": "guideline",
+     "points": [
+      {
+       "key": "issuer",
+       "label": "制定机构与版本",
+       "text": "由法语区儿科重症与急诊组（GFRUP）的13名专家于2024至2025年制定。"
+      },
+      {
+       "key": "population",
+       "label": "适用人群",
+       "text": "针对非术后室上性心动过速（SVT）且入住儿科重症监护病房（PICU）的新生儿及18岁以下儿童。"
+      },
+      {
+       "key": "changes",
+       "label": "主要更新",
+       "items": [
+        "共提出21条推荐，其中5条适用GRADE方法，16条为专家意见。",
+        "全部推荐均获强烈认可。",
+        "覆盖流行病学与PICU收治标准、辅助检查、非特异性心律管理、特异性心律管理4个方面。"
+       ]
+      },
+      {
+       "key": "basis",
+       "label": "依据",
+       "text": "通过PubMed、Cochrane和Embase检索 MEDLINE 收录的英文和法文文献，按GRADE方法分级，不适用时给出专家意见，并经Delphi法投票。"
+      }
+     ],
+     "quote": {
+      "key": "recommendation",
+      "label": "推荐意见",
+      "text": "The group proposes 21 recommendations. The GRADE methodology could be applied for five of them, and an expert opinion was given for the remaining 16.",
+      "zh": "该专家组提出21条推荐。其中5条可应用GRADE方法，其余16条给出专家意见。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 285,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 98,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 13,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 180,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 160,
+     "reasonChars": 75,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 25,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "guideline-d3de62a2c3ed4a56",
+   "expectGenre": "guideline",
+   "genreAccepted": true,
+   "textChars": 182,
+   "textSource": "abstract",
+   "before": {
+    "summary": "JAMA 刊出临床指南概要，汇总美国感染病学会（IDSA）2025 年成人复杂性尿路感染治疗与管理指南。原文仅提供该概要的题录信息，未列出具体推荐意见、用药方案或证据等级。",
+    "reason": "可据此定位 IDSA 2025 复杂性尿路感染指南，为成人复杂性尿路感染的抗菌药物选择与疗程管理提供权威依据。",
+    "lead": "美国感染病学会（IDSA）2025 年成人复杂性尿路感染治疗与管理指南已发布，JAMA 刊出该指南的概要解读。概要围绕成人复杂性尿路感染的治疗与管理给出推荐，面向临床处理这类感染时的用药与处置决策。原文仅说明概要所总结的指南主题，未列出具体推荐内容、证据等级或适用条件。"
+   },
+   "after": {
+    "genre": "guideline",
+    "genreBasis": "model",
+    "modelGenre": "guideline",
+    "summary": "JAMA 刊出临床指南概要，汇总美国感染病学会（IDSA）2025 年成人复杂性尿路感染治疗与管理指南。概要围绕成人复杂性尿路感染的抗菌治疗与管理给出推荐。",
+    "reason": "复杂性尿路感染的经验性用药和疗程在国内常凭习惯决定，这份概要可作为对照 IDSA 推荐、核对本院处方与病原学送检流程的参照。",
+    "lead": "美国感染病学会（IDSA）2025 年复杂性尿路感染指南已发布，JAMA 的这篇临床指南概要对其成人治疗与管理推荐做了系统梳理。",
+    "brief": {
+     "genre": "guideline",
+     "points": [
+      {
+       "key": "issuer",
+       "label": "制定机构与版本",
+       "text": "美国感染病学会（IDSA）2025 年指南，由 JAMA 临床指南概要栏目进行总结。"
+      },
+      {
+       "key": "population",
+       "label": "适用人群",
+       "text": "成人复杂性尿路感染的治疗与管理。"
+      }
+     ],
+     "quote": {
+      "key": "recommendation",
+      "label": "推荐意见",
+      "text": "This Clinical Guidelines Synopsis summarizes the 2025 Infectious Diseases Society of America guidelines on treatment and management of complicated urinary tract infections in adults.",
+      "zh": "本临床指南概要总结了美国感染病学会 2025 年关于成人复杂性尿路感染治疗与管理的指南。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 135,
+     "leadLimit": 80,
+     "leadOverLimit": true,
+     "summaryChars": 86,
+     "reasonChars": 55,
+     "reasonFormula": "可据此",
+     "reasonEmpty": false,
+     "absences": [
+      "未列出",
+      "原文仅",
+      "未列出",
+      "原文仅"
+     ],
+     "numbersChecked": 3,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 64,
+     "leadLimit": 80,
+     "leadOverLimit": false,
+     "summaryChars": 78,
+     "reasonChars": 62,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 4,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 3,
+     "briefCoverage": 0.6,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "policy-d2aeb24ad17bb31e",
+   "expectGenre": "policy",
+   "genreAccepted": true,
+   "textChars": 6060,
+   "textSource": "body",
+   "before": {
+    "summary": "香港特区政府宣布，社区药房计划（社区）将于10月底在东部、油尖旺、沙田和元朗4个区启动患者配对安排，共设20家指定药房，为参加基层医疗共同治理网络的家庭医生及医院管理局家庭医学诊所的患者提供配药、药物补充和用药辅导。共同治理网络筛查及治疗阶段的咨询共付额于11月1日起按机制年度调整，治疗阶段收费不高于政府建议水平150元的服务点占60%以上（773个），中位数维持150元。",
+    "reason": "了解社区药房参与慢病用药配送与用药辅导的运作方式，以及共付额年度调整机制对患者取药选择和费用负担的影响，可供基层慢病用药管理参考。",
+    "lead": "香港公布社区药房计划（CPP）患者配对安排，首阶段在东部、油尖旺、沙田和元朗4区各选5间社区药房，共20间，为参加共护网络的家庭医生及医院管理局家庭医学诊所的指定患者提供配药、药物补充及用药辅导服务，后续分阶段扩展至全港18区，明年第四季度覆盖全港。共护网络年度共付额调整方面，治疗阶段现有参与服务点中82.5%维持现有共付额不变，28个下调（降幅中位数100元），其余189个上调，其中近90%加幅在50元及以下，整体加幅3.7%；收费在政府建议水平150元及以下的服务点仍占60%以上（773个），中位数维持150元。筛查阶段绝大多数服务点（超过97%）按政府建议水平收费。截至今年10月7日，超过300 000名市民参加共护网络，其中约70 000人完成心血管疾病风险因素筛查和/或慢性乙型肝炎筛查后确诊并进入治疗阶段。新收费表11月1日生效。"
+   },
+   "after": {
+    "genre": "policy",
+    "genreBasis": "model",
+    "modelGenre": "policy",
+    "summary": null,
+    "reason": null,
+    "lead": "香港医务卫生局公布，「社区药房计划（社区）」首阶段将在东区、油尖旺、沙田及元朗4区各选5间社区药房，共20间，为参加「慢病共治计划」的家庭医生及医管局家庭医学诊所病人提供配对配药或覆配服务，病人配对后可在自选药房取药并获得用药辅导；计划其后分阶段扩展，目标于明年第四季覆盖全港18区。",
+    "brief": {
+     "genre": "policy",
+     "points": [
+      {
+       "key": "audience",
+       "label": "适用对象",
+       "text": "CPP（Community）首阶段在4区试点，对象为参加共护网的指定家庭医生、医院管理局家庭医学诊所，以及获邀参加的合资格病人；共护网共付额调整适用于参加者及其家庭医生服务点。"
+      },
+      {
+       "key": "changes",
+       "label": "核心内容",
+       "items": [
+        "CPP（Community）首阶段在4区试点，为共护网指定家庭医生及医管局家庭医学诊所的病人与社区药房配对。",
+        "配对成功后，病人可在自选药房取药或续配药物，并由药剂师提供用药辅导及药物与健康建议。",
+        "共护网参加者使用社区药房时，按社区药物名册安排收取药物共付额；医管局病人的药费仍按医管局现行收费表。",
+        "共护网家庭医生可自行厘定筛查阶段及治疗阶段的诊金共付额，并每年按既定机制调整一次。"
+       ]
+      },
+      {
+       "key": "numbers",
+       "label": "关键数字",
+       "items": [
+        "首阶段在4区各选5间社区药房，共20间指定药房。",
+        "治疗阶段共付额调整后，收费不高于政府建议水平150元的服务点占逾60%（773个），中位数维持150元。",
+        "28个服务点减费（减幅中位数100元），其余189个加费，其中近90%加幅在50元或以下；整体加幅3.7%。",
+        "筛查阶段逾97%服务点按政府建议共付额收费；心血管病风险因素筛查及慢性乙肝筛查分别有28个和20个服务点收费低于建议水平。"
+       ]
+      },
+      {
+       "key": "timeline",
+       "label": "时间节点",
+       "text": "共护网筛查及治疗阶段诊金共付额新收费由11月1日起生效，网页搜寻家庭医生资料同日更新；CPP（Community）计划于明年第四季度扩展至全港18区。"
+      }
+     ],
+     "quote": {
+      "key": "provision",
+      "label": "原文规定",
+      "text": "The first phase of the programme will be piloted at four districts, namely Eastern, Yau Tsim Mong, Sha Tin and Yuen Long, with five community pharmacies conveniently located near residential areas and shopping malls selected in each district (list set out in Annex).",
+      "zh": "计划首阶段将在4个地区试点，即东区、油尖旺、沙田和元朗，每区选出5间邻近住宅区和商场的社区药房（名单载于附件）。"
+     }
+    },
+    "editVerification": "title-only",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "document",
+      "reason": "length"
+     },
+     {
+      "key": "numbers",
+      "reason": "number"
+     },
+     {
+      "key": "numbers",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 375,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 188,
+     "reasonChars": 65,
+     "reasonFormula": "了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 34,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 142,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 29,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "policy-93bf1983548d9730",
+   "expectGenre": "policy",
+   "genreAccepted": true,
+   "textChars": 2922,
+   "textSource": "body",
+   "before": {
+    "summary": "国家药品监督管理局药品审评中心组织起草了《重组腺相关病毒产品质量研究和质量标准问答文件（征求意见稿）》，并公开征求意见。该文件用于规范和指导重组腺相关病毒（rAAV）产品的药学研究，衔接现有系列指导原则，进一步明确关键质量研究和质量标准的技术要求。",
+    "reason": "从事基因治疗产品研发或药学审评的读者可据此了解rAAV产品关键质量研究与质量标准的技术要求方向，为在研产品的质量体系搭建和申报资料准备提供参照。",
+    "lead": "国家药品监督管理局药品审评中心（CDE）于2026年10月10日发布《重组腺相关病毒产品质量研究和质量标准问答文件（征求意见稿）》，公开征求意见。该文件针对重组腺相关病毒（rAAV）产品的药学研究，旨在衔接现有系列指导原则，进一步明确关键质量研究和质量标准的技术要求，为rAAV产品的药学研发与申报提供规范指导。文件随通知附有征求意见稿正文、起草说明及意见反馈表，供业界下载并提交反馈。"
+   },
+   "after": {
+    "genre": "policy",
+    "genreBasis": "model",
+    "modelGenre": "policy",
+    "summary": "国家药品监督管理局药品审评中心组织起草《重组腺相关病毒产品质量研究和质量标准问答文件（征求意见稿）》，并公开征求意见。该文件旨在规范和指导重组腺相关病毒（rAAV）产品药学研究，衔接现有系列指导原则，进一步明确关键质量研究和质量标准技术要求。",
+    "reason": "做rAAV基因治疗产品研发与药学申报的团队，需要按这份问答文件核对关键质量研究和质量标准的提交口径。",
+    "lead": "国家药品监督管理局药品审评中心于2026-10-10发布《重组腺相关病毒产品质量研究和质量标准问答文件（征求意见稿）》，面向社会公开征求意见。该文件针对重组腺相关病毒（rAAV）产品的药学研究，衔接现有系列指导原则，进一步明确关键质量研究和质量标准的技术要求，并随通知提供意见反馈表及起草说明。",
+    "brief": {
+     "genre": "policy",
+     "points": [
+      {
+       "key": "document",
+       "label": "发文机关与文号",
+       "text": "国家药品监督管理局药品审评中心（CDE）起草《重组腺相关病毒产品质量研究和质量标准问答文件（征求意见稿）》并公开征求意见，发布日期2026-10-10。"
+      },
+      {
+       "key": "audience",
+       "label": "适用对象",
+       "text": "重组腺相关病毒（rAAV）产品，用于规范其药学研究。"
+      },
+      {
+       "key": "changes",
+       "label": "核心内容",
+       "items": [
+        "起草问答文件，以规范和指导rAAV产品药学研究。",
+        "衔接现有系列指导原则。",
+        "进一步明确关键质量研究和质量标准技术要求。",
+        "公开征求对征求意见稿的意见，并附意见反馈表。"
+       ]
+      },
+      {
+       "key": "timeline",
+       "label": "时间节点",
+       "text": "发布日期为2026-10-10。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 193,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 124,
+     "reasonChars": 72,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 3,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 147,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 121,
+     "reasonChars": 50,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 9,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 4,
+     "briefCoverage": 0.67,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "policy-0c06debbda0d0588",
+   "expectGenre": "policy",
+   "genreAccepted": true,
+   "textChars": 3745,
+   "textSource": "body",
+   "before": {
+    "summary": "国家药品监督管理局药品审评中心组织制定的《斑秃治疗药物临床试验技术指导原则》经国家药品监督管理局审查同意后发布，自发布之日起施行，旨在为斑秃治疗药物的科学研发与评价提供可供参考的技术标准。",
+    "reason": "关注斑秃在研药物或参与相关临床试验的医生与研究者，可据此了解国内监管机构对斑秃药物研发与评价所要求的技术标准。",
+    "lead": "国家药品监督管理局药品审评中心（CDE）于2026年10月20日发布《斑秃治疗药物临床试验技术指导原则》，经国家药品监督管理局审查同意，自发布之日起施行。该指导原则旨在为斑秃治疗药物的科学研发与评价提供可供参考的技术标准。此前CDE已于2026年6月24日就该指导原则公开征求意见。对开展斑秃药物临床开发的国内企业和研究者而言，这一技术标准将直接影响后续临床试验设计与注册申报。"
+   },
+   "after": {
+    "genre": "guideline",
+    "genreBasis": "model",
+    "modelGenre": "guideline",
+    "summary": "国家药品监督管理局药品审评中心组织制定《斑秃治疗药物临床试验技术指导原则》，经国家药品监督管理局审查同意后发布，自发布之日起施行，为斑秃治疗药物的研发与评价提供可参考的技术标准。",
+    "reason": "开展斑秃药物临床研究的团队需要按这份指导原则调整试验设计和终点选择，否则注册申报资料可能不符合审评要求。",
+    "lead": "国家药品监督管理局药品审评中心（CDE）组织制定的《斑秃治疗药物临床试验技术指导原则》经国家药品监督管理局审查同意后发布，自2026-10-20发布之日起施行，用于指导斑秃治疗药物的科学研发与评价、提供可供参考的技术标准。该指导原则此前曾以征求意见稿形式公开征求意见。",
+    "brief": {
+     "genre": "guideline",
+     "points": [
+      {
+       "key": "issuer",
+       "label": "制定机构与版本",
+       "text": "国家药品监督管理局药品审评中心（CDE）制定，2026-10-20发布，自发布之日起施行。"
+      },
+      {
+       "key": "population",
+       "label": "适用人群",
+       "text": "斑秃治疗药物的研发与评价，为相关临床试验提供技术标准。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 189,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 94,
+     "reasonChars": 55,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 6,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 134,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 89,
+     "reasonChars": 52,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 6,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 2,
+     "briefCoverage": 0.4,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "policy-50f2973a6b3da30c",
+   "expectGenre": "policy",
+   "genreAccepted": true,
+   "textChars": 684,
+   "textSource": "body",
+   "before": {
+    "summary": "国家药监局对胃苏泡腾片、阿胶当归颗粒、口炎胶囊、感冒欣喷雾剂、四子健脾口服液、罗汉茶化浊颗粒和蒲公英胶囊的处方药与非处方药转换进行公示，公示期为2026.10.12至2026.11.12。公示同时列出各品种的规格，如胃苏泡腾片每片重2.3克（相当于饮片8克）、蒲公英胶囊每粒装0.5克（含原药材3.2克）。",
+    "reason": "关注这批中成药由处方药转为非处方药后，药师可提前梳理对应品种的适应人群与用药交代要点，临床医生在门诊开方时也可据此判断患者自行选购的合理性。",
+    "lead": "国家药监局公示将胃苏泡腾片、阿胶当归颗粒、口炎胶囊、感冒欣喷雾剂、四子健脾口服液、罗汉茶化浊颗粒和蒲公英胶囊由处方药转换为非处方药，公示期为2026.10.12到2026.11.12。公示列出了各品种的规格，包括胃苏泡腾片每片重2.3克（相当于饮片8克）、阿胶当归颗粒每袋装5克、口炎胶囊每粒装0.5克、感冒欣喷雾剂每瓶装10毫升、四子健脾口服液每支装20毫升、罗汉茶化浊颗粒每袋装3克、蒲公英胶囊每粒装0.5克（含原药材3.2克）。公示期内可在处方药与非处方药转换公示栏目查看详情。转换完成后，这些品种将可按非处方药管理，患者可自行购买使用。"
+   },
+   "after": {
+    "genre": "policy",
+    "genreBasis": "model",
+    "modelGenre": "policy",
+    "summary": "国家药品不良反应监测中心公示胃苏泡腾片、阿胶当归颗粒、口炎胶囊、感冒欣喷雾剂、四子健脾口服液、罗汉茶化浊颗粒和蒲公英胶囊由处方药转换为非处方药，公示期为 2026.10.12 到 2026.11.12。公示同时列出各品种的规格，例如胃苏泡腾片每片重 2.3 克（相当于饮片 8 克）、蒲公英胶囊每粒装 0.5 克（含原药材 3.2 克）。",
+    "reason": "这些中成药若转为非处方药，药店可直接售予患者，处方审核与用药交代的环节随之前移，药师需提前熟悉其适应症与用法用量。",
+    "lead": "国家药品不良反应监测中心对胃苏泡腾片、阿胶当归颗粒、口炎胶囊、感冒欣喷雾剂、四子健脾口服液、罗汉茶化浊颗粒和蒲公英胶囊的处方药转非处方药进行公示，公示期为2026.10.12到2026.11.12，各品种规格已在公示中列明。",
+    "brief": {
+     "genre": "policy",
+     "points": [
+      {
+       "key": "audience",
+       "label": "适用对象",
+       "text": "胃苏泡腾片、阿胶当归颗粒、口炎胶囊、感冒欣喷雾剂、四子健脾口服液、罗汉茶化浊颗粒和蒲公英胶囊。"
+      },
+      {
+       "key": "changes",
+       "label": "核心内容",
+       "items": [
+        "公示期内可在处方药与非处方药（OTC）转换公示栏目查看详情。"
+       ]
+      },
+      {
+       "key": "timeline",
+       "label": "时间节点",
+       "text": "公示期为2026.10.12至2026.11.12。"
+      }
+     ]
+    },
+    "editVerification": "repaired",
+    "leadVerification": "repaired",
+    "briefDropped": [
+     {
+      "key": "document",
+      "reason": "number"
+     },
+     {
+      "key": "changes",
+      "reason": "number"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 272,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 153,
+     "reasonChars": 70,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 17,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 112,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 169,
+     "reasonChars": 57,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 10,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 3,
+     "briefCoverage": 0.5,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "approval-1c90dce573d23f7a",
+   "expectGenre": "approval",
+   "genreAccepted": true,
+   "textChars": 933,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "美国食品药品监督管理局将普拉替尼由加速批准转为常规批准，用于经FDA批准检测发现RET融合阳性的转移性非小细胞肺癌成人患者。转为常规批准的依据是ARROW试验中额外123例患者及25个月额外随访的疗效持久性数据。在237例患者中，初治患者ORR为78%（95% CI：68, 85），中位DOR为13.4个月；既往接受含铂化疗者的ORR为63%（95% CI：54, 71），中位DOR为38.8个月。",
+    "reason": "可帮助了解RET融合阳性非小细胞肺癌靶向治疗的监管依据与疗效持久性数据，为分子检测后治疗选择及用药监测提供参考。",
+    "lead": "FDA于2023年8月9日将普拉替尼（Gavreto，基因泰克）用于成人转移性RET融合阳性非小细胞肺癌的加速批准转为常规批准，适用人群为经FDA批准的检测方法检出RET融合的患者。此次转正依据ARROW试验（NCT03037385）中新增123例患者及25个月额外随访的疗效持久性数据，该试验为多中心、开放标签、多队列研究，共纳入237例局部晚期或转移性RET融合阳性NSCLC患者。由盲态独立审查委员会评估的主要终点显示，107例初治患者客观缓解率为78%（95% CI：68，85），中位缓解持续时间13.4个月（95% CI：9.4，23.1）；130例既往接受铂类化疗患者的客观缓解率为63%（95% CI：54，71），中位缓解持续时间38.8个月（95% CI：14.8，不可估计）。"
+   },
+   "after": {
+    "genre": "approval",
+    "genreBasis": "model",
+    "modelGenre": "approval",
+    "summary": "美国FDA于2023年8月9日将普拉替尼（Gavreto）用于RET融合阳性转移性非小细胞肺癌的加速批准转为常规批准，依据是另外123例患者的数据及额外25个月随访。在237例患者中，107例初治患者ORR为78%（95% CI：68，85），中位DOR为13.4个月；130例经含铂化疗患者ORR为63%（95% CI：54，71），中位DOR为38.8个月。",
+    "reason": "RET融合阳性NSCLC的靶向治疗由加速批准转为常规批准，初治与经治人群的缓解率和缓解持续时间数据可用于评估用药时机与疗程预期。",
+    "lead": "美国FDA于2023年8月9日将普拉替尼（Gavreto，Genentech, Inc.）用于RET融合阳性转移性非小细胞肺癌成人患者的适应证由加速批准转为常规批准，适用于经FDA批准的检测方法检出RET融合的患者。此次转正基于ARROW试验中共237例患者的数据，其中初治患者107例，盲态独立审查委员会判定的客观缓解率为78%（95% CI：68，85），中位缓解持续时间13.4个月。",
+    "brief": {
+     "genre": "approval",
+     "points": [
+      {
+       "key": "decision",
+       "label": "批准事项",
+       "text": "2023年8月9日，FDA对普拉替尼（Gavreto，Genentech, Inc.）给予常规批准，用于RET融合阳性的转移性非小细胞肺癌成人患者。"
+      },
+      {
+       "key": "evidence",
+       "label": "关键研究",
+       "text": "基于ARROW试验（NCT03037385），共237例患者；初治107例ORR 78%（95% CI：68，85），中位DOR 13.4个月（95% CI：9.4，23.1）。"
+      },
+      {
+       "key": "dose",
+       "label": "用法用量",
+       "text": "推荐剂量400 mg口服，每日一次，空腹服用（服药前至少2小时及服药后至少1小时内不进食）。"
+      },
+      {
+       "key": "conditions",
+       "label": "附加条件",
+       "text": "此前基于114例患者的ORR和DOR获加速批准，此次转为常规批准基于另外123例患者数据及额外25个月随访；本申请获得突破性疗法认定和孤儿药认定。"
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "最常见不良反应（≥25%）为肌肉骨骼疼痛、便秘、高血压、腹泻、疲乏、水肿、发热和咳嗽。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "quote",
+      "reason": "verbatim"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 349,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 201,
+     "reasonChars": 56,
+     "reasonFormula": "可帮助",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 36,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 195,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 181,
+     "reasonChars": 64,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 48,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "approval-d72f8b1342d71077",
+   "expectGenre": "approval",
+   "genreAccepted": true,
+   "textChars": 227,
+   "textSource": "body",
+   "before": {
+    "summary": "国家药品监督管理局批准佳曦控股有限公司申报的巴托利单抗注射液（商品名：恩力达）上市，与常规治疗药物联合用于治疗抗乙酰胆碱受体（AChR）抗体阳性的成人全身型重症肌无力（gMG）患者。该品种的上市为相关患者提供了新的治疗选择。",
+    "reason": "可据此了解抗AChR抗体阳性成人全身型重症肌无力新增的联合治疗选项，在处方与患者沟通中关注适用人群的抗体状态和成人限定范围。",
+    "lead": "国家药监局批准巴托利单抗注射液（商品名：恩力达）上市，与常规治疗药物联合，用于抗乙酰胆碱受体（AChR）抗体阳性的成人全身型重症肌无力（gMG）患者。该品种由佳曦控股有限公司申报，此次获批为这类患者提供了新的治疗选择。"
+   },
+   "after": {
+    "genre": "approval",
+    "genreBasis": "model",
+    "modelGenre": "approval",
+    "summary": "国家药监局批准佳曦控股有限公司申报的巴托利单抗注射液（商品名：恩力达）上市，与常规治疗药物联合用于治疗抗乙酰胆碱受体（AChR）抗体阳性的成人全身型重症肌无力（gMG）患者。该品种的上市为相关患者提供了新的治疗选择。",
+    "reason": "AChR抗体阳性的成人全身型重症肌无力患者在常规治疗之外多了一个联合用药选择，处方前需确认抗体状态和成人适应人群。",
+    "lead": "国家药品监督管理局批准佳曦控股有限公司申报的巴托利单抗注射液（商品名：恩力达）上市，与常规治疗药物联合，用于抗乙酰胆碱受体（AChR）抗体阳性的成人全身型重症肌无力（gMG）患者，为这类患者增加了一种治疗选择。",
+    "brief": {
+     "genre": "approval",
+     "points": [
+      {
+       "key": "decision",
+       "label": "批准事项",
+       "text": "国家药品监督管理局批准佳曦控股有限公司申报的巴托利单抗注射液（商品名：恩力达）上市。"
+      }
+     ],
+     "quote": {
+      "key": "indication",
+      "label": "适应症原文",
+      "text": "与常规治疗药物联合用于治疗抗乙酰胆碱受体（AChR）抗体阳性的成人全身型重症肌无力（gMG）患者。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 109,
+     "leadLimit": 152,
+     "leadOverLimit": false,
+     "summaryChars": 112,
+     "reasonChars": 62,
+     "reasonFormula": "可据此",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 0,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 105,
+     "leadLimit": 152,
+     "leadOverLimit": false,
+     "summaryChars": 108,
+     "reasonChars": 57,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 0,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 2,
+     "briefCoverage": 0.33,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "approval-258a402ce6ea749a",
+   "expectGenre": "approval",
+   "genreAccepted": true,
+   "textChars": 7204,
+   "textSource": "body",
+   "before": {
+    "summary": "欧洲药品管理局EPAR显示，舒格利单抗（Cejemly）已在欧盟获批治疗成人非小细胞肺癌：用于EGFR、ALK、ROS1或RET突变阴性的转移性患者，与铂类化疗联用；也用于经铂类化疗联合放疗后未进展、不可手术的III期患者，限PD-L1表达且EGFR、ALK或ROS1突变阴性者。转移性患者的中位无进展生存期为9个月，安慰剂组为5个月，总生存期约为25个月对17个月。",
+    "reason": "可帮助了解舒格利单抗在欧盟获批的适应人群与PD-L1表达限制，为评估国内肺癌免疫治疗适应证和用药监测提供参考。",
+    "lead": "欧洲药品管理局（EMA）在Cejemly（舒格利单抗）的欧洲公共评估报告（EPAR）中确认，该药获批用于两类成人非小细胞肺癌（NSCLC）：一是联合铂类化疗，一线治疗无EGFR、ALK、ROS1或RET基因变异的转移性NSCLC；二是单药治疗不可切除的III期NSCLC，条件是肿瘤PD-L1表达≥1%、无EGFR、ALK或ROS1变异，且在接受铂类放化疗后疾病未进展。依据来自两项主要研究：在479例转移性NSCLC患者中，Cejemly组疾病恶化前的生存期为9个月，安慰剂组为5个月，总生存期分别约为25个月和17个月；在381例局部晚期不可切除NSCLC患者中，两组分别为10.6个月和6.2个月，但总生存无显著差异。Cejemly每3周静脉输注60分钟，常见不良反应包括贫血、肝酶升高、皮疹、高脂血症、高血糖及甲状腺功能异常等免疫相关事件。"
+   },
+   "after": {
+    "genre": "approval",
+    "genreBasis": "model",
+    "modelGenre": "approval",
+    "summary": "欧洲药品管理局批准Cejemly（活性成分舒格利单抗）在欧盟上市，用于成人非小细胞肺癌：联合铂类化疗用于无EGFR、ALK、ROS1或RET突变的转移性患者；单药用于经铂类放化疗后未进展、不可手术的III期且PD-L1表达达标、无EGFR、ALK或ROS1突变的患者。转移性人群至疾病恶化平均9个月、总生存约25个月，对照组分别为5个月和约17个月；局部晚期不可手术人群至恶化平均10.6个月对6.2个月，总生存无显著差异。",
+    "reason": "舒格利单抗已在国内获批，这条欧盟评估报告明确了其两项肺癌适应证的基因与PD-L1门槛，可用于核对国内处方人群与用药顺序是否一致。",
+    "lead": "欧盟委员会于2024年7月24日授予Cejemly（sugemalimab，舒格利单抗）全欧盟有效的上市许可，用于成人非小细胞肺癌（NSCLC）：一是联合铂类化疗治疗无EGFR、ALK、ROS1或RET基因突变的转移性NSCLC；二是用于经铂类化疗联合放疗后未进展、不可手术的III期NSCLC，且限PD-L1表达、无EGFR、ALK或ROS1突变者。",
+    "brief": {
+     "genre": "approval",
+     "points": [
+      {
+       "key": "decision",
+       "label": "批准事项",
+       "text": "欧盟委员会于2024年7月24日授予Cejemly（sugemalimab，舒格利单抗）全欧盟有效的上市许可。"
+      },
+      {
+       "key": "evidence",
+       "label": "关键研究",
+       "text": "转移性NSCLC研究纳入479例成人，Cejemly组至疾病恶化平均9个月，安慰剂组5个月；总生存约25个月对17个月。；局部晚期不可切除NSCLC研究纳入381例成人，Cejemly组至疾病恶化平均10.6个月，安慰剂组6.2个月。"
+      },
+      {
+       "key": "dose",
+       "label": "用法用量",
+       "text": "每3周静脉输注1次，每次持续60分钟，持续用药至失效。"
+      },
+      {
+       "key": "conditions",
+       "label": "附加条件",
+       "text": "局部晚期NSCLC仅限肿瘤表达PD-L1者使用；上市许可持有人将提供患者卡，提示免疫相关副作用及就医时机。"
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "最常见副作用（可能超过1/10）包括贫血、肝酶升高、皮疹、高脂血症、高血糖、低钠血症、低钾血症、甲状腺功能减退或亢进、蛋白尿、腹痛、乏力、关节痛、感觉减退、低钙血症。；常见免疫系统相关副作用，多数经适当治疗或中断、停止用药后缓解。"
+      }
+     ],
+     "quote": {
+      "key": "indication",
+      "label": "适应症原文",
+      "text": "Cejemly is a cancer medicine used in adults to treat a lung cancer called non-small cell lung cancer (NSCLC).",
+      "zh": "Cejemly是一种用于成人治疗非小细胞肺癌（NSCLC）的癌症药物。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 374,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 184,
+     "reasonChars": 55,
+     "reasonFormula": "可帮助",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 18,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 176,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 212,
+     "reasonChars": 64,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 25,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 6,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "approval-062016c2e1690153",
+   "expectGenre": "approval",
+   "genreAccepted": true,
+   "textChars": 10632,
+   "textSource": "body",
+   "before": {
+    "summary": "葛兰素史克宣布，美国食品药品监督管理局已批准Hibsago（bepirovirsen）联合核苷（酸）类似物逆转录酶抑制剂，用于治疗无肝硬化、HBV DNA已抑制且HBsAg≤3000 IU/ml的成人慢性乙肝。批准基于B-Well III期试验，汇总数据显示6个月治疗的总体人群功能性治愈率为19%（233/1,220），安慰剂组为0/614；HBsAg≤1000 IU/ml亚组为26%（200/768）。",
+    "reason": "可了解首个反义寡核苷酸类乙肝新药的作用机制、适用人群界定与HBsAg定量检测在筛选中的角色，为评估国内后续申报及患者分层提供参照。",
+    "lead": "美国FDA批准bepirovirsen（商品名Hibsago）联合核苷（酸）类似物逆转录酶抑制剂（NrtI）治疗慢性乙肝，适用人群为无肝硬化、已接受NrtI治疗至少6个月、HBV DNA已抑制且HBsAg≤3000 IU/ml的成人患者。该药是首个反义寡核苷酸（ASO）类药物，此次获批基于B-Well 1和B-Well 2两项III期试验的汇总数据：6个月疗程的功能性治愈率为19%（233/1220），安慰剂组为0/614；在HBsAg≤1000 IU/ml亚组中，功能性治愈率为26%（200/768），安慰剂组为0/393。安全性方面，最常见的不良事件为注射部位红斑、局部疼痛和一过性肝酶升高。该药已在美国和日本获批，并已在中国获得突破性疗法和优先审评认定，GSK正在推进多个地区的注册申报。"
+   },
+   "after": {
+    "genre": "approval",
+    "genreBasis": "model",
+    "modelGenre": "approval",
+    "summary": "美国FDA批准Hibsago（bepirovirsen）联合核苷（酸）类似物逆转录酶抑制剂，用于治疗无肝硬化、已接受NrtI治疗至少6个月、HBV DNA已抑制且HBsAg≤3000 IU/ml的成人慢性乙肝。批准基于B-Well III期试验，汇总数据显示6个月治疗的总体人群功能性治愈率为19%（233/1,220），安慰剂组为0/614；HBsAg≤1000 IU/ml亚组为26%（200/768）。",
+    "reason": "HBsAg≤3000 IU/ml且DNA已抑制的无肝硬化患者，在核苷类药物基础上多了一个6个月有限疗程、可自我注射的选择，但需先做定量表面抗原检测筛选。",
+    "lead": "美国 FDA 通过优先审评和突破性疗法认定批准了 GSK 的 Hibsago（bepirovirsen），用于联合核苷（酸）类似物逆转录酶抑制剂（NrtI）治疗成人慢性乙肝：患者须无肝硬化、已接受 NrtI 治疗至少 6 个月、HBV DNA 已抑制，且经 FDA 授权检测确认 HBsAg≤3000 IU/ml。bepirovirsen 是首个反义寡核苷酸类药物，疗程 6 个月，首剂后可自行给药。",
+    "brief": {
+     "genre": "approval",
+     "points": [
+      {
+       "key": "decision",
+       "label": "批准事项",
+       "text": "美国FDA批准Hibsago（bepirovirsen）联合核苷（酸）类似物逆转录酶抑制剂（NrtI）治疗慢性乙肝，该药由GSK研发。"
+      },
+      {
+       "key": "evidence",
+       "label": "关键研究",
+       "text": "B-Well 1和B-Well 2两项III期随机双盲安慰剂对照试验显示，在HBsAg≤3000 IU/ml人群中，bepirovirsen组的功能性治愈率为19%（233/1220），安慰剂组为0%（0/614）。"
+      },
+      {
+       "key": "dose",
+       "label": "用法用量",
+       "text": "疗程为6个月，首次给药后可选择自行给药。"
+      },
+      {
+       "key": "conditions",
+       "label": "附加条件",
+       "text": "该药获FDA优先审评和突破性疗法认定；GSK正推进多个地区的注册申报。"
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "最常见的不良事件为注射部位红斑、局部疼痛和肝酶血液水平一过性升高。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "quote",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 350,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 204,
+     "reasonChars": 65,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 20,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 200,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 204,
+     "reasonChars": 76,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 22,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "safety-c7cdfc69324b7e09",
+   "expectGenre": "safety",
+   "genreAccepted": true,
+   "textChars": 9609,
+   "textSource": "body",
+   "before": {
+    "summary": "英国药品和保健品监管局宣布对所有服用抗抑郁药的患者实施新的安全措施，改进自杀想法和行为及持续性性功能障碍风险的沟通方式，包括在患者信息说明书中新增加框警告、患者卡和支持性安全（辅助）说明书，并将「SSRI后性功能障碍（PSSD）」一词加入部分抗抑郁药的说明书。",
+    "reason": null,
+    "lead": "英国MHRA宣布对所有服用抗抑郁药的患者实施新的安全措施，以改善自杀念头和行为风险以及持续性性功能障碍风险的沟通。这些措施源于人用药品委员会（CHM）专家工作组对2019年以来文献及患者和家属意见的审查，包括在患者信息 leaflets（PIL）中加入新的加框警告、推出数字或硬拷贝患者卡、在部分抗抑郁药PIL中新增“PSSD”术语，并将于2027年提供配套安全（辅助）说明书。MHRA建议医务人员在起始或调整剂量时及下次复诊时与患者讨论自杀念头和行为风险，以及部分抗抑郁药相关的性功能障碍风险（停药后可能持续），并遵循相关NICE指南定期监测。涉及药物包括西酞普兰、艾司西酞普兰、度洛西汀、氟伏沙明、氟西汀、帕罗西汀、舍曲林、文拉法辛、阿米替林和去甲替林。MHRA同时协调NICE指南、BNF及NHS指南的更新。"
+   },
+   "after": {
+    "genre": "safety",
+    "genreBasis": "code",
+    "modelGenre": "safety",
+    "summary": "英国MHRA完成对抗抑郁药患者信息传单（PIL）告知充分性的专项审查后，对全部使用抗抑郁药的患者实施新的安全措施：在PIL中加入新的加框警告，新增患者卡和支持性安全（辅助）说明书，并在部分抗抑郁药的PIL中加入“SSRI后性功能障碍（PSSD）”这一术语。MHRA建议医务人员在起始用药、调整剂量或复诊时与患者讨论自杀想法与行为风险，以及性功能障碍可能在停药后持续存在的风险，并遵循相关NICE指南定期监测。",
+    "reason": "正在处方抗抑郁药或进行用药交代的医生和药师，需要把自杀风险与停药后仍可能持续的性功能障碍纳入起始用药和调量时的常规沟通，并留意2027年将发放的辅助说明书。",
+    "lead": "英国MHRA宣布对所有抗抑郁药实施新的安全措施，以改善自杀念头和行为风险以及持续性性功能障碍风险的患者告知，具体包括在患者信息说明书中新增黑框警告、新增患者卡和配套安全（辅助）说明书，并将“PSSD”（post SSRI sexual dysfunction）一词加入部分抗抑郁药的患者信息说明书。这些措施源于人用药品委员会（CHM）专家工作组对2019年以来文献及患者和家属意见的审查，CHM于2025年9月审议了建议。",
+    "brief": {
+     "genre": "safety",
+     "points": [
+      {
+       "key": "action",
+       "label": "监管措施",
+       "text": "MHRA对全部抗抑郁药实施新安全措施：患者信息说明书加入黑框警告，新增患者卡和辅助安全性说明书，部分药品说明书加入PSSD术语。"
+      },
+      {
+       "key": "risk",
+       "label": "风险",
+       "text": "抗抑郁药相关自杀想法与行为风险，以及性功能障碍可能在停药后持续存在。"
+      },
+      {
+       "key": "products",
+       "label": "涉及产品与人群",
+       "text": "涉及全部抗抑郁药；受影响人群为所有服用抗抑郁药的患者。"
+      },
+      {
+       "key": "professionals",
+       "label": "医务人员须知",
+       "items": [
+        "开始用药、调整剂量或下次复诊时，与患者讨论自杀想法与行为风险。",
+        "告知患者用药早期或剂量变动后出现新的或加重的自杀意念须紧急就医。",
+        "与患者讨论部分抗抑郁药相关且停药后可能持续的性功能障碍，即PSSD。",
+        "遵循相关NICE指南并在开始治疗后定期监测患者。"
+       ]
+      },
+      {
+       "key": "patients",
+       "label": "患者须知",
+       "items": [
+        "出现新的或加重的自杀想法，尤其起始或调整剂量时，应立即寻求紧急医疗帮助。",
+        "部分抗抑郁药可能导致性功能障碍，停药后仍可能持续，有疑虑应联系医务人员。",
+        "不要未与医务人员沟通就自行停药。",
+        "阅读患者卡和患者信息说明书，2027年还将收到辅助安全性说明书。"
+       ]
+      },
+      {
+       "key": "evidence",
+       "label": "依据",
+       "text": "CHM专家工作组于2024年5月至2025年7月开会，建议于2025年9月由CHM审议；参考2019年以来发表的文献。"
+      }
+     ],
+     "quote": {
+      "key": "warning",
+      "label": "警示原文",
+      "text": "New safety measures are now being implemented for all patients taking antidepressant medications.",
+      "zh": "现正对所有服用抗抑郁药的患者实施新的安全措施。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 357,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 130,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 2,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 211,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 204,
+     "reasonChars": 78,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 7,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "safety-ba1221b2a60af4a4",
+   "expectGenre": "safety",
+   "genreAccepted": true,
+   "textChars": 2277,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "美国食品药品监督管理局将 Philips Lumify 诊断超声系统的召回列为最严重级别，原因是软件可能无法识别已注册的探头，并会在无预警的情况下要求重新注册，导致扫描功能中断。截至 2026 年 9 月 29 日，Philips 已报告 8 例严重伤害和 4 例死亡。Philips 建议仅在 Wi-Fi 或蜂窝信号可及的区域使用该设备，并备好备用超声设备；该公司正在开发软件更新。",
+    "reason": "了解床旁超声在信号受限环境下可能中断扫描并延误诊疗，有助于急诊、院前和移动医疗场景提前配置备用设备并调整使用流程。",
+    "lead": "FDA 将 Philips Lumify 诊断超声系统的软件问题定为最严重级别的 I 类召回，要求更新使用说明，但不涉及设备下架或停用。截至 2026 年 9 月 29 日，Philips 已报告与该问题相关的 8 例严重伤害和 4 例死亡。问题在于 Lumify 的 Android 或 iOS 应用可能无法识别已注册的探头，在床旁使用前无预警地要求重新注册，而注册需要 Wi-Fi 或蜂窝信号，完成前无法扫描；救护车、航空器或野外等院外场景信号受限，风险更高，已有院前无法扫描、延误救治的报告。此外，探头 USB 线与平板或手机的连接可能断开或不稳定。Philips 正开发软件更新并评估连接问题，已建议仅在信号可及区域使用，或随时备好备用超声设备。"
+   },
+   "after": {
+    "genre": "safety",
+    "genreBasis": "code",
+    "modelGenre": "safety",
+    "summary": "FDA将Philips Ultrasound对Lumify诊断超声系统的使用说明更新定为I级召回。软件问题可使已注册换能器在床旁使用前无预警要求重新注册，注册需Wi-Fi或蜂窝信号，信号受限时扫描被阻断；换能器USB线缆连接也可能断开。截至2026年9月29日，Philips已报告相关8例严重伤害和4例死亡。",
+    "reason": "在院前、救护车或信号受限场所使用Lumify的医生和超声技师，需按更新说明备好备用超声设备，并知晓换能器可能无预警要求重新注册而阻断扫描。",
+    "lead": "美国FDA将Philips Ultrasound对Lumify诊断超声系统的召回定为I级，即最严重级别；原因是软件问题可能使Android或iOS端Lumify应用无法识别已注册的换能器，并在床旁使用前无预警要求重新注册，而注册需要Wi-Fi或蜂窝信号，在信号不足时扫描功能会被阻断。截至2026年9月29日，Philips已报告与该问题相关的8例严重伤害和4例死亡，院前环境中已发生因意外重新注册而无法扫描、延误救治的事件。",
+    "brief": {
+     "genre": "safety",
+     "points": [
+      {
+       "key": "action",
+       "label": "监管措施",
+       "text": "FDA将本次召回定为I级（最严重级别）；召回仅涉及更新设备使用说明，不涉及将设备从使用或销售场所移除。"
+      },
+      {
+       "key": "risk",
+       "label": "风险",
+       "text": "软件问题可致Lumify应用无法识别已注册换能器、无预警要求重新注册，注册完成前扫描功能被阻止；换能器USB线缆连接可能断开或不稳定，导致功能丧失或救治延误，可致严重伤害或死亡。"
+      },
+      {
+       "key": "products",
+       "label": "涉及产品与人群",
+       "text": "涉及Lumify诊断超声系统iOS 2.X、5.0、5.1.2、5.1.3及Android 1.X、3.X、4.X、5.1、5.1.1版本；院外使用（救护车、飞机、现场环境）风险更高。"
+      },
+      {
+       "key": "professionals",
+       "label": "医务人员须知",
+       "items": [
+        "除非可立即获得备用超声设备，否则仅在Wi-Fi/蜂窝信号易于获取的区域使用Lumify。",
+        "始终备有备用超声设备和/或检查手段以供诊疗使用。",
+        "将Philips信函传达给该设备的所有使用者，使其了解产品问题及相关危害。",
+        "将Philips通知张贴在受影响设备附近以便查阅。"
+       ]
+      },
+      {
+       "key": "evidence",
+       "label": "依据",
+       "text": "截至2026年9月29日，Philips已报告与该问题相关的8例严重伤害和4例死亡；院前事件发生在Wi-Fi或蜂窝信号接入范围之外。"
+      }
+     ],
+     "quote": {
+      "key": "warning",
+      "label": "警示原文",
+      "text": "若您继续在不遵循更新后说明的情况下使用该设备，可能导致严重伤害或死亡。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 327,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 192,
+     "reasonChars": 57,
+     "reasonFormula": "了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 10,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 213,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 155,
+     "reasonChars": 69,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 24,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 6,
+     "briefCoverage": 0.86,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "safety-8c2fb5ee4617e43c",
+   "expectGenre": "safety",
+   "genreAccepted": true,
+   "textChars": 1962,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "Par Health 在美国全国范围召回 22 批阿加曲班注射液 250 mg/2.5 mL（100 mg/mL），召回级别为医院/使用者级，原因是部分批次检出纤维素、聚苯乙烯、聚对苯二甲酸乙二醇酯、胶塞材料及可能的不锈钢等颗粒物。这些颗粒物可能造成肺栓塞、其他血管闭塞或静脉壁炎症等危及生命的后果；截至公告发布，Par Health 尚未收到相关不良事件报告。",
+    "reason": "医院药房和药师可据此核对涉事 NDC 与批号，立即停用并退回库存；同时提醒临床在肝素诱导的血小板减少症患者使用该药时留意颗粒物相关风险。",
+    "lead": "Par Health 在美国全国范围召回 22 个批次的阿加曲班注射液 250 mg/2.5 mL（100 mg/mL），召回范围到医院或使用者层级，原因是部分批次中检出颗粒物，成分为纤维素、聚苯乙烯、聚对苯二甲酸乙二醇酯、胶塞材料，并可能含不锈钢。该产品为直接凝血酶抑制剂，用于成人肝素诱导的血小板减少症（HIT）患者血栓的预防或治疗，以及因 HIT 或存在 HIT 风险而接受经皮冠状动脉介入治疗成人的抗凝。若含颗粒物的药液被输入体内，可能造成肺栓塞、其他血管闭塞（可致组织坏死和器官损伤）及静脉壁炎症继而形成血栓等危及生命的后果；截至公告日，Par Health 未收到相关不良事件报告。"
+   },
+   "after": {
+    "genre": "safety",
+    "genreBasis": "code",
+    "modelGenre": "safety",
+    "summary": "Par Health 在美国全国范围召回22个批次的阿加曲班注射液 250 mg/2.5 mL（100 mg/mL），召回至医院/使用者层级，原因是部分批次检出纤维素、聚苯乙烯、聚对苯二甲酸乙二醇酯、胶塞材料及可能的不锈钢等颗粒物。使用含颗粒物的该产品有合理可能造成肺栓塞、其他血管闭塞和/或静脉壁炎症等危及生命的不良后果；公司尚未收到相关不良事件报告。",
+    "reason": "正在使用阿加曲班注射液的医院药房和临床科室需核对涉事批号与有效期，立即停用并退回库存，同时评估已用药患者是否出现栓塞或血管闭塞表现。",
+    "lead": "Par Health 在美国全国范围召回 22 个批次的阿加曲班注射液 250 mg/2.5 mL（100 mg/mL），召回至医院/使用者层级，原因是部分批次检出颗粒物，经鉴定为纤维素、聚苯乙烯、聚对苯二甲酸乙二醇酯、胶塞材料以及可能的不锈钢。使用含颗粒物的该产品有合理可能造成危及生命的后果，包括肺栓塞、其他血管闭塞和静脉壁炎症；公司迄今未收到相关不良事件报告。",
+    "brief": {
+     "genre": "safety",
+     "points": [
+      {
+       "key": "action",
+       "label": "监管措施",
+       "text": "Par Health 在美国全国召回22个批次的阿加曲班注射液，召回至医院/使用者层级，并安排退回所有现有库存。"
+      },
+      {
+       "key": "risk",
+       "label": "风险",
+       "text": "部分批次检出颗粒物，成分为纤维素、聚苯乙烯、聚对苯二甲酸乙二醇酯、胶塞材料及可能的不锈钢；使用后可能危及生命，包括肺栓塞、其他血管闭塞和/或静脉壁炎症。"
+      },
+      {
+       "key": "products",
+       "label": "涉及产品与人群",
+       "text": "阿加曲班注射液 250 mg/2.5 mL（100 mg/mL），NDC 42023-182-01 和 42023-182-89，共22个批号，有效期10/2026至09/2027。"
+      },
+      {
+       "key": "professionals",
+       "label": "医务人员须知",
+       "items": [
+        "持有被召回产品的批发分销商和医院药房应立即停止使用并停止分销。",
+        "如已进一步分销被召回产品，应通知客户或任何可能收到产品的其他地点。",
+        "使用中出现不良反应或质量问题，可向 FDA MedWatch 报告。"
+       ]
+      },
+      {
+       "key": "evidence",
+       "label": "依据",
+       "text": "迄今 Par Health 未收到与本次召回相关的不良事件报告。"
+      }
+     ]
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "quote",
+      "reason": "verbatim"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 297,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 181,
+     "reasonChars": 68,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 8,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 183,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 177,
+     "reasonChars": 66,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 21,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 5,
+     "briefCoverage": 0.71,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "safety-4bfbdec9b4ab8869",
+   "expectGenre": "safety",
+   "genreAccepted": true,
+   "textChars": 658,
+   "textSource": "body",
+   "before": {
+    "summary": "国家药品监督管理局根据药品不良反应评估结果，决定对降脂灵制剂（片、分散片、颗粒）和乳块消口服制剂（片、颗粒、胶囊、软胶囊、丸、口服液和糖浆）说明书中的【警示语】、【不良反应】、【禁忌】和【注意事项】进行统一修订。上市许可持有人须于2027年1月18日前报省级药品监督管理部门备案，并在备案后9个月内更换已出厂药品的说明书及标签或以其他适当形式告知患者。",
+    "reason": "涉及两类中成药多个剂型的说明书安全性修订，临床医师和药师可据此核对在用处方，在备案前按新修订内容做获益风险分析并调整患者用药交代。",
+    "lead": "国家药监局根据药品不良反应评估结果，决定对降脂灵制剂（片、分散片、颗粒）和乳块消口服制剂（片、颗粒、胶囊、软胶囊、丸、口服液和糖浆）的说明书进行统一修订，涉及【警示语】【不良反应】【禁忌】【注意事项】等项。所有上述药品的上市许可持有人须按附件要求修订说明书，于2027年1月18日前报省级药品监督管理部门备案；修订涉及标签的一并修订，备案之日起生产的药品不得继续使用原说明书，并须在备案后9个月内更换已出厂药品的说明书及标签或以其他适当形式告知患者。持有人还应对新增不良反应的发生机制开展深入研究，做好用药安全宣传培训。临床医师、药师应根据新修订说明书进行充分的获益/风险分析后选择用药，患者使用处方药须严格遵医嘱。"
+   },
+   "after": {
+    "genre": "policy",
+    "genreBasis": "model",
+    "modelGenre": "policy",
+    "summary": "国家药监局根据药品不良反应评估结果，对降脂灵制剂（片、分散片、颗粒）和乳块消口服制剂（片、颗粒、胶囊、软胶囊、丸、口服液和糖浆）的【警示语】【不良反应】【禁忌】【注意事项】等统一修订。上市许可持有人须于2027年1月18日前报省级药监部门备案，备案后9个月内更换已出厂说明书及标签或告知患者。",
+    "reason": "处方含降脂灵或乳块消口服制剂时，需按新说明书重新核对禁忌与注意事项，并在备案节点前完成院内目录和用药交代的更新。",
+    "lead": "国家药监局要求所有降脂灵制剂（片、分散片、颗粒）和乳块消口服制剂（片、颗粒、胶囊、软胶囊、丸、口服液、糖浆）的上市许可持有人统一修订说明书中的【警示语】【不良反应】【禁忌】【注意事项】，依据药品不良反应评估结果，于2027年1月18日前报省级药品监督管理部门备案；涉及标签的一并修订，备案之日起生产的药品不得继续使用原说明书，持有人应在备案后9个月内更换已出厂说明书标签或以其他方式告知患者。",
+    "brief": {
+     "genre": "policy",
+     "points": [
+      {
+       "key": "document",
+       "label": "发文机关与文号",
+       "text": "国家药监局发布《关于修订降脂灵制剂和乳块消口服制剂说明书的公告》，文号2026年第102号。"
+      },
+      {
+       "key": "audience",
+       "label": "适用对象",
+       "text": "降脂灵制剂（片、分散片、颗粒）和乳块消口服制剂（片、颗粒、胶囊、软胶囊、丸、口服液和糖浆）的上市许可持有人。"
+      },
+      {
+       "key": "changes",
+       "label": "核心内容",
+       "items": [
+        "统一修订降脂灵制剂和乳块消口服制剂说明书中的【警示语】、【不良反应】、【禁忌】和【注意事项】。",
+        "上市许可持有人按附件要求修订说明书，并报省级药品监督管理部门备案。",
+        "涉及标签的应一并修订，说明书及标签其他内容应与原批准内容一致。",
+        "备案后9个月内更换已出厂药品的说明书及标签，或以其他适当形式告知患者更新信息。"
+       ]
+      },
+      {
+       "key": "numbers",
+       "label": "关键数字",
+       "items": [
+        "药品上市许可持有人应在备案后9个月内更换已出厂的说明书及标签。"
+       ]
+      },
+      {
+       "key": "timeline",
+       "label": "时间节点",
+       "text": "2027年1月18日前报省级药品监督管理部门备案；备案之日起生产的药品不得继续使用原说明书。"
+      }
+     ],
+     "quote": {
+      "key": "provision",
+      "label": "原文规定",
+      "text": "在备案之日起生产的药品，不得继续使用原药品说明书。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 308,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 176,
+     "reasonChars": 65,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 9,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 196,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 146,
+     "reasonChars": 56,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 15,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 6,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "industry-bab02f4a34870bc5",
+   "expectGenre": "industry",
+   "genreAccepted": true,
+   "textChars": 843,
+   "textSource": "body",
+   "before": {
+    "summary": "吉利德科学宣布与瀚辰星泰达成最终协议，拟以12.75亿美元现金首付款收购其口服IL-23R抑制剂项目，核心资产为处于I期临床的HCXT-2001，交易预计2026年第四季度完成，吉利德获得全球权益。HCXT-2001属口服大环肽路线，尚无已发表临床数据。同靶点口服IL-23R拮抗剂icotrokinra已于2026年3月获美国FDA批准用于中重度斑块状银屑病。",
+    "reason": "可了解IL-23受体通路口服小分子与多肽的研发竞争格局，为银屑病、银屑病关节炎及炎症性肠病未来用药选择和患者沟通储备靶点与给药方案信息。",
+    "lead": "吉利德科学宣布以12.75亿美元现金首付款收购瀚辰星泰的口服IL-23R抑制剂项目，核心资产为处于I期临床的HCXT-2001，交易预计2026年第四季度完成，吉利德获得全球权益。与常见的对外授权不同，这次是直接买断项目；HCXT-2001仍处早期测试、尚无已发表临床数据，这一预付款金额因此引人注目。该药属口服大环肽路线，试图兼顾小分子的口服便利性与抗体级别的蛋白结合力，并延长半衰期。收购发生在吉利德口服IBD在研药emvistegrast公布积极中期结果之后，可为其IBD组合再添一员。同靶点上，强生与Protagonist联合开发的icotrokinra已于2026年3月获FDA批准用于中重度斑块状银屑病，每日一次口服；国内翰森制药HS-20118在Ib期银屑病研究中展现每周一次口服给药潜力，海思科也在布局同靶点口服肽管线。"
+   },
+   "after": {
+    "genre": "industry",
+    "genreBasis": "model",
+    "modelGenre": "industry",
+    "summary": "吉利德科学宣布与瀚辰星泰达成最终协议，拟以12.75亿美元现金首付款收购其口服IL-23R抑制剂项目，核心资产为处于I期临床的HCXT-2001，交易预计2026年第四季度完成，吉利德获得全球权益。HCXT-2001属口服大环肽路线，尚无已发表临床数据。",
+    "reason": "口服IL-23R赛道已有产品获FDA批准，这笔买断显示跨国药企对早期口服大环肽资产的定价，做IBD管线立项和出海估值时可对照。",
+    "lead": "吉利德科学宣布以12.75亿美元现金首付款收购瀚辰星泰的口服IL-23R抑制剂项目，核心资产为处于I期临床的HCXT-2001，交易预计2026年第四季度完成，吉利德获得全球权益。与常见的授权许可不同，这次是直接买断项目；HCXT-2001尚无已发表临床数据，仍处早期测试阶段。该药走口服大环肽路线，试图兼顾小分子口服便利性与抗体级结合力，并延长半衰期。",
+    "brief": {
+     "genre": "industry",
+     "points": [
+      {
+       "key": "event",
+       "label": "事件",
+       "text": "吉利德科学宣布与瀚辰星泰达成最终协议，拟以现金首付款收购其口服IL-23R抑制剂项目，获得全球权益。"
+      },
+      {
+       "key": "terms",
+       "label": "交易条款",
+       "text": "现金首付款12.75亿美元，交易预计2026年第四季度完成。"
+      },
+      {
+       "key": "asset",
+       "label": "资产与阶段",
+       "text": "核心资产HCXT-2001为口服大环肽，靶向IL-23R，处于I期临床，拟用于炎症性肠病等免疫介导性炎症疾病。"
+      },
+      {
+       "key": "benchmark",
+       "label": "对标",
+       "text": "强生与Protagonist联合开发的icotrokinra已于2026年3月获FDA批准用于中重度斑块状银屑病，每日一次口服。"
+      },
+      {
+       "key": "next",
+       "label": "下一步",
+       "text": "交易预计2026年第四季度完成。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 368,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 181,
+     "reasonChars": 68,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 10,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 177,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 127,
+     "reasonChars": 63,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 13,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "industry-c5205817defea7d2",
+   "expectGenre": "industry",
+   "genreAccepted": true,
+   "textChars": 8973,
+   "textSource": "body",
+   "before": {
+    "summary": "瑞典私募股权公司 EQT 旗下实体同意以 108 亿欧元（约 121 亿美元）现金收购 Qiagen，交易完成后这家生命科学工具与诊断产品供应商将转为私有。每股 46.50 欧元的报价较前一日收盘价溢价 8.6%，较 7 月 8 日收盘价溢价 40.3%；交易企业价值包含约 11 亿美元净债务。Qiagen 因本次收购计划暂停了本年度业绩指引。",
+    "reason": "关注诊断与生命科学工具供应链的读者，可据此了解 Qiagen 私有化后其结核检测等产品线的投入与供应策略可能发生的变化。",
+    "lead": "瑞典私募股权公司 EQT 旗下实体已同意以 108 亿欧元（约 121 亿美元）现金收购 Qiagen，并将其私有化。交易对价为每股 46.50 欧元（51.88 美元），较 Qiagen 周三收盘价溢价 8.6%，较 7 月 8 日 XETRA 收盘价溢价 40.3%；108 亿欧元的企业价值包含约 11 亿美元净债务。Qiagen 监事会与管理董事会经战略评估后认为，私有化能让公司在长期投资上更灵活，同时为股东带来确定现金价值；交易预计 2027 年中完成，最低接受门槛为 50% 流通股本加 1 股，并需通过并购审查和外资准入审批。Qiagen 因本次收购已暂停本年度业绩指引；若交割延迟，股东可能获得每股最高 0.47 美元的 interim dividend（中期股息），且该股息不从要约价中扣除。"
+   },
+   "after": {
+    "genre": "industry",
+    "genreBasis": "model",
+    "modelGenre": "industry",
+    "summary": "瑞典私募股权公司 EQT 旗下实体同意以 108 亿欧元（约 121 亿美元）现金收购生命科学工具与诊断企业 Qiagen，交易完成后 Qiagen 将转为私有。每股 46.50 欧元的报价较前一交易日收盘价溢价 8.6%，较 7 月 8 日收盘价溢价 40.3%；企业价值包含约 11 亿美元净债务。Qiagen 因该收购计划暂停本年度业绩指引。",
+    "reason": "Qiagen 的 QuantiFERON 结核检测试剂盒需求下滑已影响其业绩，私有化后长期投入方向可能变化，使用其分子诊断与样本前处理平台的实验室需留意产品线和服务策略的调整。",
+    "lead": "瑞典私募股权公司 EQT 旗下实体同意以 108 亿欧元（约 121 亿美元）现金收购 Qiagen，并将其私有化。每股 46.50 美元的要约价较 Qiagen 周三收盘价溢价 8.6%，较 7 月 8 日 XETRA 收盘价溢价 40.3%；交易企业价值包含约 11 亿美元净债务。Qiagen 监事会与管理董事会经战略评估后一致认为，私有化能让公司在长期投资上更灵活，并为股东提供确定现金价值。",
+    "brief": {
+     "genre": "industry",
+     "points": [
+      {
+       "key": "event",
+       "label": "事件",
+       "text": "瑞典私募股权公司 EQT 旗下实体 EQT Private Equity 同意以全现金收购 Qiagen，并将其私有化。"
+      },
+      {
+       "key": "terms",
+       "label": "交易条款",
+       "text": "交易对价为 108 亿欧元（约 121 亿美元）现金，每股 46.50 欧元（51.88 美元）；企业价值包含约 11 亿美元净债务。"
+      },
+      {
+       "key": "asset",
+       "label": "资产与阶段",
+       "text": "Qiagen 为全球生命科学工具、诊断和工作流程解决方案提供商；EQT 计划长期持有。"
+      },
+      {
+       "key": "benchmark",
+       "label": "对标",
+       "text": "报价较 Qiagen 周三收盘价溢价 8.6%，较 7 月 8 日 XETRA 收盘价溢价 40.3%，较 3 个月成交量加权平均价溢价 46.9%。"
+      },
+      {
+       "key": "next",
+       "label": "下一步",
+       "text": "Qiagen 因本次收购计划暂停本年度全年业绩指引。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 356,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 173,
+     "reasonChars": 60,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 22,
+     "numbersMissing": [
+      "lead:2027",
+      "lead:0.47"
+     ],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 200,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 174,
+     "reasonChars": 88,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 27,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "industry-e2c5d7c6800a2a52",
+   "expectGenre": "industry",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "艾伯维公布3期INTREPID研究顶线结果：在成人及青少年中重度化脓性汗腺炎患者中，lutikizumab（IL-1α/IL-1β双靶点拮抗剂）第16周HiSCR75应答率为31.4%，安慰剂组为23.4%（p≤0.001），并达到8项排序次要终点。第8周NRS3疼痛应答率为26.2%对15.0%，前16周疾病发作比例为18.4%对28.1%。安全性方面，不良事件发生率与安慰剂相近，未发现新的安全性问题。",
+    "reason": "化脓性汗腺炎现有治疗手段有限，该3期顶线数据提示同时抑制IL-1α与IL-1β可能改善皮损、疼痛与发作频率，可供皮肤科与风湿免疫科医生评估未来生物制剂选择时参考。",
+    "lead": "艾伯维公布3期INTREPID研究阳性顶线结果：在成人及青少年中重度化脓性汗腺炎（HS）患者中，IL-1α/IL-1β双变量域拮抗剂lutikizumab（ABT-981）第16周HiSCR75应答率显著高于安慰剂（31.4% vs 23.4%，p≤0.001），并达到8项排序次要终点。研究在全球随机入组1400例患者，按1:1接受皮下注射lutikizumab或安慰剂。第8周HS相关皮肤疼痛NRS3应答率为26.2% vs 15.0%（p<0.0001），NRS30为36.0% vs 22.8%（p<0.0001）；前16周HS发作比例为18.4% vs 28.1%（p<0.0001）。"
+   },
+   "after": {
+    "genre": "industry",
+    "genreBasis": "model",
+    "modelGenre": "industry",
+    "summary": "艾伯维公布3期INTREPID研究顶线结果，lutikizumab（IL-1α/1β双靶点拮抗剂）在成人及青少年中重度化脓性汗腺炎患者中第16周HiSCR75应答率31.4%，安慰剂组23.4%（p≤0.001），并达到8项排序次要终点。第8周皮肤疼痛NRS3应答率26.2%对15.0%，前16周疾病发作比例18.4%对28.1%（均p<0.0001）；不良事件发生率与安慰剂相近，未发现新的安全性问题。",
+    "reason": "中重度化脓性汗腺炎现有治疗选择有限，IL-1α/1β双靶点这一机制的首个3期阳性结果，提示生物制剂赛道可能新增一个不同作用靶点，值得关注后续申报与长期安全性数据。",
+    "lead": "艾伯维公布3期INTREPID研究顶线结果：在成人及青少年中重度化脓性汗腺炎（HS）患者中，IL-1α/IL-1β双靶点拮抗剂lutikizumab在第16周达到主要终点HiSCR75，应答率31.4%，安慰剂为23.4%（p≤0.001），并达到8项排序次要终点。第8周HS相关皮肤疼痛NRS3应答率为26.2%，安慰剂为15.0%（p<0.0001）；前16周HS发作患者比例为18.4%，安慰剂为28.1%（p<0.0001）。",
+    "brief": {
+     "genre": "industry",
+     "points": [
+      {
+       "key": "event",
+       "label": "事件",
+       "text": "艾伯维公布Lutikizumab治疗中重度化脓性汗腺炎的3期INTREPID研究顶线阳性结果，研究达到主要终点和8个排序次要终点。"
+      },
+      {
+       "key": "asset",
+       "label": "资产与阶段",
+       "text": "Lutikizumab是一种在研双可变域IL-1α/IL-1β拮抗剂，用于成人和青少年中重度化脓性汗腺炎，处于3期阶段。"
+      },
+      {
+       "key": "data",
+       "label": "关键数据",
+       "text": "第16周HiSCR75应答率为31.4%，安慰剂组为23.4%（p≤0.001）。；第8周NRS3达标率为26.2%，安慰剂组为15.0%（p<0.0001）；NRS30达标率为36.0%，安慰剂组为22.8%（p<0.0001）。。"
+      },
+      {
+       "key": "benchmark",
+       "label": "对标",
+       "text": "INTREPID是首个以第16周HiSCR75为主要终点、在成人和青少年HS患者中显示统计学显著应答的3期研究。"
+      },
+      {
+       "key": "next",
+       "label": "下一步",
+       "text": "36周盲态延长期数据预计2027年公布，并将用于支持Lutikizumab治疗化脓性汗腺炎于同年下半年提交监管申请。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 298,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 204,
+     "reasonChars": 81,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 33,
+     "numbersMissing": [
+      "lead:1400"
+     ],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 217,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 203,
+     "reasonChars": 81,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 48,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "industry-f75b2cae055e759e",
+   "expectGenre": "industry",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "雅培2026年第三季度报告销售额增长14.5%，可比销售额增长7.0%，GAAP摊薄每股收益0.53美元，调整后摊薄每股收益1.42美元。公司将全年调整后摊薄每股收益指引区间收紧至5.50至5.55美元，并预计全年可比销售额增长约6.0%。同期公司披露多款产品获批，包括用于同步监测葡萄糖与酮体的Libre Duo生物可穿戴传感器。",
+    "reason": "可了解糖尿病酮症监测新器械与房颤消融、左心耳封堵等器械的监管进展，为关注相关技术落地及患者管理方式变化提供参考。",
+    "lead": "雅培公布2026年第三季度业绩：报告口径销售额增长14.5%，可比口径增长7.0%，GAAP摊薄每股收益0.53美元，调整后摊薄每股收益1.42美元；公司将全年调整后摊薄每股收益指引区间收窄至5.50至5.55美元，并维持该区间中值不变，同时预计全年可比销售额增长约6.0%。增长主要来自诊断业务，其报告口径增长46.7%、可比口径增长6.4%，其中癌症诊断可比增长13.8%，主要受Cologuard带动；医疗器械可比增长7.8%，营养品可比增长4.9%，成熟药品可比增长8.4%。产品方面，8月FDA批准Libre Duo双葡萄糖-酮体生物传感器，这是全球首个此类产品；Amulet 360左心耳封堵器获得CE认证；9月FDA批准TactiFlex Duo消融导管，该导管可同时释放脉冲电场和射频能量。"
+   },
+   "after": {
+    "genre": "industry",
+    "genreBasis": "model",
+    "modelGenre": "industry",
+    "summary": "雅培2026年第三季度报告销售额增长14.5%，可比销售额增长7.0%，GAAP摊薄每股收益0.53美元，调整后摊薄每股收益1.42美元。公司预计全年可比销售额增长约6.0%，并将全年调整后摊薄每股收益指引区间收窄至5.50至5.55美元。",
+    "reason": "雅培的糖尿病与房颤器械管线进展，反映连续血糖监测、左心耳封堵和双能量消融的竞争格局变化。",
+    "lead": "雅培公布2026年第三季度业绩：报告口径销售额增长14.5%，可比口径增长7.0%，GAAP摊薄每股收益0.53美元，调整后摊薄每股收益1.42美元；公司重申全年调整后每股收益指引区间中点，并将区间收窄至5.50至5.55美元，预计全年可比销售额增长约6.0%。",
+    "brief": {
+     "genre": "industry",
+     "points": [
+      {
+       "key": "event",
+       "label": "事件",
+       "text": "雅培公布截至2026年9月30日的第三季度业绩，并重申全年每股收益指引。"
+      },
+      {
+       "key": "terms",
+       "label": "交易条款",
+       "text": "全年2026调整后稀释每股收益指引区间收窄至5.50至5.55美元，并重申该区间中点。"
+      },
+      {
+       "key": "asset",
+       "label": "资产与阶段",
+       "text": "8月FDA批准Libre Duo双血糖酮体生物可穿戴传感器；8月Amulet 360左心耳封堵器获CE认证；9月FDA批准TactiFlex Duo消融导管；9月推出SimpleScreen CRC结直肠癌血液筛查检测。"
+      },
+      {
+       "key": "benchmark",
+       "label": "对标",
+       "text": "公司预计2026全年可比销售额增长约6.0%。"
+      },
+      {
+       "key": "next",
+       "label": "下一步",
+       "text": "公司预计2026全年可比销售额增长约6.0%，并收窄全年调整后每股收益指引区间。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "data",
+      "reason": "number"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 353,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 166,
+     "reasonChars": 56,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 27,
+     "numbersMissing": [
+      "lead:13.8%"
+     ],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 131,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 120,
+     "reasonChars": 44,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 34,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "conference-d46b8c90610518cb",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 2557,
+   "textSource": "body",
+   "before": {
+    "summary": "中国医学科学院肿瘤医院樊英教授在2026年ESMO年会报告III期HORIZON-Breast06研究，瑞康曲妥珠单抗（SHR-A1811）治疗HER2低表达晚期乳腺癌，总体人群中位PFS为16.4个月，化疗组为6.8个月（HR 0.27，95%CI 0.21~0.34），两个共同主要终点均达成。OS数据尚不成熟，为描述性分析；瑞康曲妥珠单抗组≥3级治疗相关不良事件发生率为84.1%，间质性肺病报告7例（2.5%）。",
+    "reason": "可了解HER2低表达晚期乳腺癌中ADC对比化疗的PFS获益与血液学毒性、间质性肺病监测要点，为后续用药选择和安全性随访提供参考。",
+    "lead": "中国医学科学院肿瘤医院樊英教授在2026年ESMO年会报告III期HORIZON-Breast06研究，国产HER2 ADC瑞康曲妥珠单抗（SHR-A1811）头对头击败化疗，用于HER2低表达晚期乳腺癌，结果同步发表于JAMA。研究随机入组551例转移阶段既往化疗不超过1线的患者，瑞康曲妥珠单抗组277例、化疗组274例，中位随访18.0个月。总体人群中位PFS为16.4个月对6.8个月，疾病进展或死亡风险降低73%（HR 0.27，95%CI 0.21~0.34，P<0.001）；化疗初治人群为16.6个月对6.8个月（HR 0.25），两个共同主要终点均达成，HR阳性与HR阴性亚组获益一致。总体人群客观缓解率为75.5%对41.2%。OS数据尚不成熟，12个月OS率为90.6%对81.4%（HR 0.67）。"
+   },
+   "after": {
+    "genre": "conference",
+    "genreBasis": "model",
+    "modelGenre": "conference",
+    "summary": "中国医学科学院肿瘤医院樊英教授在2026年ESMO年会报告III期HORIZON-Breast06研究，瑞康曲妥珠单抗（SHR-A1811）治疗HER2低表达晚期乳腺癌，总体人群中位PFS为16.4个月，化疗组为6.8个月（HR 0.27，95%CI 0.21~0.34），两个共同主要终点均达成。化疗初治人群中位PFS为16.6个月对6.8个月（HR 0.25，95%CI 0.19~0.33）；OS数据尚不成熟。",
+    "reason": "HER2低表达乳腺癌患者化疗后线方案怎么选，这项头对头III期结果直接相关，也提示要提前评估血液学毒性和ILD监测。",
+    "lead": "2026年ESMO年会上，中国医学科学院肿瘤医院樊英教授报告了III期HORIZON-Breast06研究（突破性摘要LBA13），瑞康曲妥珠单抗（SHR-A1811）头对头对比化疗用于HER2低表达晚期乳腺癌，两个共同主要终点均达成，结果同步发表于JAMA。",
+    "brief": {
+     "genre": "conference",
+     "points": [
+      {
+       "key": "meeting",
+       "label": "会议与摘要号",
+       "text": "2026年ESMO年会早期与晚期乳腺癌专场，突破性摘要LBA13，HORIZON-Breast06研究，由中国医学科学院肿瘤医院樊英教授汇报。"
+      },
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "III期随机对照研究，551例HER2低表达转移性乳腺癌患者按1:1随机接受瑞康曲妥珠单抗6.4 mg/kg每3周一次或研究者选择化疗；双共同主要终点为BICR评估的初治及总体人群PFS。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "化疗初治人群：中位PFS 16.6个月 vs 6.8个月，HR 0.25（95%CI 0.19~0.33），P<0.001。",
+        "总体人群：中位PFS 16.4个月 vs 6.8个月，HR 0.27（95%CI 0.21~0.34），P<0.001，两个共同主要终点均达成。",
+        "化疗经治人群：中位PFS 13.9个月 vs 5.6个月，HR 0.32（95%CI 0.19~0.54）。",
+        "总体人群ORR 75.5% vs 41.2%；OS数据尚不成熟，总体人群12个月OS率90.6% vs 81.4%，HR 0.67（95%CI 0.48~0.94）。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "≥3级TRAE发生率84.1% vs 67.9%；瑞康曲妥珠单抗组ILD 7例（2.5%）。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "OS数据尚不成熟，目前为描述性分析，已观察到143例OS事件，计划后续进行中期与最终分析。"
+      },
+      {
+       "key": "publication",
+       "label": "发表情况",
+       "text": "结果同步发表于JAMA。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "研究者结论",
+      "text": "与化疗相比，瑞康曲妥珠单抗在PFS上显示出优效性；在HR阴性、HR阳性等预设亚组中，PFS获益保持一致；安全性可控，ILD发生率低。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 362,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 210,
+     "reasonChars": 64,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 36,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 130,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 208,
+     "reasonChars": 58,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 58,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 7,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "conference-8912a69dbbc47347",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 1870,
+   "textSource": "body",
+   "before": {
+    "summary": "中山大学肿瘤防治中心王树森教授在2026年ESMO年会报告随机III期APEX-Breast01研究结果：双表位HER2靶向抗体偶联药物TQB2102对比研究者选择化疗，在HR+/HER2低表达复发或转移性乳腺癌患者中中位PFS为16.4个月对5.5个月，HR 0.29（P<0.0001），全部HER2低表达人群结果一致。TQB2102组≥3级治疗相关不良事件发生率为69.1%，化疗组为42.4%，以中性粒细胞减少和白细胞降低为主。",
+    "reason": "可了解HER2低表达晚期乳腺癌后线ADC对比化疗的疗效与血液学毒性谱，为后续治疗选择、中性粒细胞监测和间质性肺病识别提供参考。",
+    "lead": "中山大学肿瘤防治中心王树森教授在2026年ESMO年会报告随机III期APEX-Breast01研究（LBA27）结果：双表位HER2靶向ADC TQB2102用于既往未接受过晚期化疗的HER2低表达复发或转移性乳腺癌，HR+人群（主要终点）中位PFS为16.4个月，研究者选择化疗（卡培他滨、紫杉醇或白蛋白紫杉醇）为5.5个月，HR 0.29（P<0.0001），疾病进展风险下降71%。截至2026年5月31日共随机543例（TQB2102组269例、化疗组274例），HR+患者461例（84.9%，其中91.3%既往用过CDK4/6抑制剂）；全部HER2低表达人群PFS结果与主要终点一致（16.4个月 vs 5.5个月，HR 0.29）。"
+   },
+   "after": {
+    "genre": "conference",
+    "genreBasis": "model",
+    "modelGenre": "conference",
+    "summary": "2026 ESMO年会上，中山大学肿瘤防治中心王树森教授报告随机Ⅲ期APEX-Breast01研究结果：在既往未接受晚期化疗的HER2低表达复发或转移性乳腺癌患者中，TQB2102较研究者选择化疗显著延长无进展生存期。HR+/HER2低表达人群（主要终点）中位PFS为16.4个月对5.5个月，HR 0.29（P<0.0001）；全部HER2低表达人群结果一致。",
+    "reason": "HER2低表达晚期乳腺癌后线长期依赖化疗，这一Ⅲ期阳性结果提示ADC在HR+与HR-人群获益一致，会直接影响后线方案选择与ADC线序前移的试验设计。",
+    "lead": "2026年ESMO年会上，中山大学肿瘤防治中心王树森教授报告了随机III期APEX-Breast01研究（LBA27）结果：在既往未接受过晚期化疗的HER2低表达复发或转移性乳腺癌患者中，双表位HER2靶向ADC TQB2102较研究者选择化疗显著延长无进展生存期，HR+/HER2低表达人群主要终点中位PFS为16.4个月对5.5个月（HR 0.29，P<0.0001），全部HER2低表达人群结果一致。",
+    "brief": {
+     "genre": "conference",
+     "points": [
+      {
+       "key": "meeting",
+       "label": "会议与摘要号",
+       "text": "2026年欧洲肿瘤内科学会年会（ESMO），摘要号LBA27，研究APEX-Breast01，由中山大学肿瘤防治中心王树森教授报告。"
+      },
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "随机、对照III期确证性研究，纳入既往未接受过晚期化疗的HER2低表达复发或转移性乳腺癌患者，共543例按1:1随机分组（TQB2102组269例、TPC组274例）。主要终点为BIRC评估的HR+/HER2低表达患者PFS。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "HR+/HER2低表达人群：TQB2102组中位PFS 16.4个月 vs 化疗组5.5个月，HR 0.29（P<0.0001）。",
+        "全部HER2低表达人群：中位PFS 16.4个月 vs 5.5个月，HR 0.29（P<0.0001）。",
+        "ORR：HR+人群66.7% vs 31.3%，全部HER2低表达人群68.8% vs 31.0%，HR-人群80.5% vs 29.3%。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "≥3级TRAE发生率69.1% vs 42.4%；最常见≥3级TRAE为中性粒细胞减少（30.1% vs 23.3%）和白细胞降低（21.6% vs 14.0%）；因TRAE停药两组均为1.5%（各4例）。"
+      },
+      {
+       "key": "publication",
+       "label": "发表情况",
+       "text": "同步发表于2026 ESMO，参考文献为Shusen Wang, et al. 2026 ESMO。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "研究者结论",
+      "text": "该研究数据表明，TQB2102有望成为既往未化疗的HER2低表达晚期乳腺癌后线治疗的新选择，HR+与HR-人群一致获益进一步拓宽了适用人群。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 324,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 218,
+     "reasonChars": 63,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 27,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 203,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 181,
+     "reasonChars": 74,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 45,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 6,
+     "briefCoverage": 0.86,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "conference-b481bb334038ed86",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "IDEAYA与Servier在ESMO 2026公布darovasertib治疗转移性和原发性葡萄膜黑色素瘤的3项试验数据。OptimUM-01中，初治患者（n=13）中位无进展生存期7.4个月、中位总生存期27.1个月；经tebentafusp治疗后患者（n=15）中位无进展生存期5.7个月、中位总生存期12.1个月。OptimUM-09显示，新辅助治疗患者中超过80%出现肿瘤缩小，57%实现保眼。",
+    "reason": "可了解GNAQ/11突变葡萄膜黑色素瘤中darovasertib联合克唑替尼的单臂试验数据及其与历史基准的比较方式，为关注这一罕见肿瘤的靶向治疗进展提供参考。",
+    "lead": "darovasertib联合克唑替尼在葡萄膜黑色素瘤的3项临床试验数据在ESMO 2026公布，覆盖转移性和原发灶新辅助治疗两个场景。OptimUM-01的2期扩展数据显示，在101例HLA-A*02:01阳性转移性患者中，初治患者（13例）中位PFS为7.4个月、中位OS为27.1个月，既往仅接受tebentafusp的2线患者（15例）中位PFS为5.7个月、中位OS为12.1个月；总体ORR为22.1%，常见治疗相关不良事件为腹泻（82%）、恶心（76%）、外周水肿（70%）和呕吐（57%），因不良事件停药者9例（8.9%）。OptimUM-02的亚组分析显示，在HLA-A*02:01阴性初治患者中，该联合方案相比研究者选择治疗在多个临床相关亚组中ORR和PFS改善一致。"
+   },
+   "after": {
+    "genre": "conference",
+    "genreBasis": "model",
+    "modelGenre": "conference",
+    "summary": "IDEAYA 与 Servier 在 ESMO 2026 公布 darovasertib 联合 crizotinib 治疗转移性葡萄膜黑色素瘤及新辅助治疗原发葡萄膜黑色素瘤的三项试验数据。OptimUM-01 中，初治患者（n=13）中位 PFS 为 7.4 个月、中位 OS 为 27.1 个月，既往接受 tebentafusp 治疗的二线患者（n=15）中位 PFS 为 5.7 个月、中位 OS 为 12.1 个月。",
+    "reason": "对 HLA-A*02:01 阴性、缺乏局部治疗的转移性葡萄膜黑色素瘤患者，这些单臂数据提示联合方案值得在正式试验中验证；新辅助保眼率则提示可评估术前用药的可行性。",
+    "lead": "ESMO 2026 大会上公布的 OptimUM-01 与 OptimUM-02 数据显示，darovasertib 联合 crizotinib 在转移性葡萄膜黑色素瘤中可带来临床获益，且不受 HLA-A*02:01 状态或治疗线数影响。",
+    "brief": {
+     "genre": "conference",
+     "points": [
+      {
+       "key": "meeting",
+       "label": "会议与摘要号",
+       "text": "ESMO 2026大会（2026年10月23–27日，西班牙马德里）发布3项研究：OptimUM-01、OptimUM-02、OptimUM-09。"
+      },
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "OptimUM-01为1/2期单臂、多中心、开放标签剂量递增与扩展研究，评估darovasertib联合crizotinib。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "OptimUM-01初治患者（n=13）中位PFS 7.4个月（95% CI 3.6–19.6），中位OS 27.1个月（95% CI 8.94–NE）。",
+        "OptimUM-01既往tebentafusp治疗（2L，n=15）中位PFS 5.7个月，中位OS 12.1个月。",
+        "OptimUM-01总体（N=101）ORR 22.1%（19/86，95% CI 13.9–32.3），中位PFS 5.4个月，中位OS 13.4个月。",
+        "OptimUM-09新辅助darovasertib使>80%原发葡萄膜黑色素瘤患者肿瘤缩小，保眼率57%。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "OptimUM-01最常见治疗相关不良事件为腹泻（82%）、恶心（76%）、外周水肿（70%）、呕吐（57%）；9例（8.9%）因相关不良事件终止治疗。"
+      },
+      {
+       "key": "publication",
+       "label": "发表情况",
+       "text": "OptimUM-02此前于2026年ASCO报告阳性结果。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "研究者结论",
+      "text": "In the metastatic setting we believe the data from OptimUM-01 and OptimUM-02 offer strong and consistent evidence for the potential of darovasertib to address the needs of a broad patient population, irrespective of HLA-allele status.",
+      "zh": "在转移性疾病中，我们相信OptimUM-01和OptimUM-02的数据提供了有力且一致的证据，表明darovasertib有潜力满足广泛患者群体的需求，无论其HLA等位基因状态如何。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 343,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 202,
+     "reasonChars": 79,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 34,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 119,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 211,
+     "reasonChars": 81,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 49,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 6,
+     "briefCoverage": 0.86,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "conference-49f4c1407a90c299",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 5441,
+   "textSource": "body",
+   "before": {
+    "summary": "2026年ESMO大会将公布默克两款靶向药物在腱鞘巨细胞瘤（TGCT）和硬纤维瘤（DT）领域的5项研究。Ⅲ期MANEUVER研究2年分析显示，匹米替尼治疗不可切除、有症状TGCT的客观缓解率（RECIST v1.1）为76.2%（95% CI 63.8–86.0），中位缓解持续时间尚未达到，关节活动度、僵硬、疼痛和躯体功能改善持续至2年，安全性与既往分析一致。",
+    "reason": "可了解匹米替尼在TGCT的2年疗效与安全性数据，以及尼罗司他因不良事件减量后疗效稳定的剂量管理思路，为罕见软组织肿瘤的长期用药监测与患者沟通提供参考。",
+    "lead": "2026年ESMO大会将公布匹米替尼与尼罗司他共5项肉瘤领域研究，其中Ⅲ期MANEUVER研究2年分析显示，匹米替尼治疗不可切除、有症状TGCT的客观缓解率（RECIST v1.1）在第1年至第2年间为76.2%，按肿瘤体积评分由74.6%升至77.8%，中位缓解持续时间尚未达到，关节活动度、僵硬、疼痛和躯体功能等患者相关结局的早期改善持续至2年并进一步改善，安全性与既往分析一致。该研究94例患者按2:1随机分配，中位治疗时长22.5个月，中位剂量强度85%。同期EQ-5D-5L分析显示，匹米替尼组生活质量改善维持至第49周。硬纤维瘤方面，DeFi研究事后分析中42%患者因不良事件由150 mg每日两次减量至100 mg每日两次，减量后疗效指标相近、安全性改善。"
+   },
+   "after": {
+    "genre": "conference",
+    "genreBasis": "model",
+    "modelGenre": "conference",
+    "summary": "2026 ESMO大会将公布默克两款靶向药在腱鞘巨细胞瘤（TGCT）与硬纤维瘤（DT）领域的5项研究。MANEUVER研究2年分析显示，匹米替尼治疗不可切除、有症状TGCT的客观缓解率在第1年至第2年间为76.2%（95% CI 63.8–86.0），中位缓解持续时间未达到，关节活动度、僵硬、疼痛与躯体功能改善持续至2年。",
+    "reason": "TGCT与DT均缺乏长期系统治疗证据，这批2年随访与剂量减量数据提示减量后疗效可维持，为不能耐受标准剂量的患者调整方案提供依据。",
+    "lead": "2026年ESMO大会将公布匹米替尼Ⅲ期MANEUVER研究2年随访结果：94例不可切除、有症状TGCT患者按2:1随机接受匹米替尼50 mg每日一次或安慰剂，第1年至第2年RECIST v1.1的ORR为76.2%，按肿瘤体积评分ORR由74.6%升至77.8%，中位缓解持续时间未达到，关节活动度、僵硬、疼痛与躯体功能改善持续至2年，安全性与既往一致。同期EQ-5D-5L分析显示，匹米替尼组生活质量改善维持至第49周。",
+    "brief": {
+     "genre": "conference",
+     "points": [
+      {
+       "key": "meeting",
+       "label": "会议与摘要号",
+       "text": "2026年ESMO大会（10月23日至27日，马德里）；MANEUVER研究2年分析摘要3747P，壁报，报告人Hans Gelderblom；EQ-5D-5L分析3756P，报告人Albiruni Ryan Abdul Razak。"
+      },
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "MANEUVER（NCT05804045）：94例不可切除、有症状TGCT患者按2:1随机接受匹米替尼50 mg每日一次或安慰剂，24周双盲期后进入24周开放标签期及延长期，数据截至2026年3月1日。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "第97周较基线平均变化（SD）：ROM +19.6%（27.9）、僵硬−3.9（1.9）、疼痛−3.1（2.1）、躯体功能+7.4（7.0）。",
+        "EQ-5D-5L：第49周效用值改善英国+0.154、加拿大+0.098、中国+0.157；安慰剂组第25周仅+0.037~+0.058。",
+        "DeFi事后分析：69例中29例（42%）减量至100 mg BID；减量者与未减量者2年EFS为75% vs 79%，ORR为48% vs 38%。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "MANEUVER 2年数据：中位剂量强度85%，第1年至第2年分别发生1例因TEAE减量和1例停药，累积发生率分别为27%和7.9%，安全性与既往分析一致。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "真实世界研究为西班牙单中心回顾性观察，尼罗司他组仅8例；网状Meta分析为间接比较，缺乏直接对比证据。"
+      },
+      {
+       "key": "publication",
+       "label": "发表情况",
+       "text": "2026年ESMO大会常规研究摘要已于10月19日在官网公布。"
+      }
+     ]
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "results",
+      "reason": "length"
+     },
+     {
+      "key": "quote",
+      "reason": "verbatim"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 335,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 181,
+     "reasonChars": 75,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 212,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 162,
+     "reasonChars": 64,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 77,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 6,
+     "briefCoverage": 0.86,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "trial-a3a8cf72a8d6bf9f",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 1683,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "一项单中心随机双盲安慰剂对照试验在80例65至80岁单侧股骨粗隆间骨折行PFNA内固定的患者中，比较入院后即行超声引导下髂筋膜间隙阻滞使用脂质体布比卡因133 mg稀释至40 mL与等量生理盐水的效果，主要终点为入院当晚Leeds睡眠评价问卷评分。两组均接受相同的多模式基础镇痛、标准化腰麻及舒芬太尼PCIA；按每组40例、合并标准差52分计算，可检出约34分的组间差异（80%把握度，双侧α=0.05），并预留10%脱落。",
+    "reason": "可了解以睡眠质量作为区域阻滞主要终点的设计思路，以及盲法评估感觉阻滞、密封信封分配隐藏和标准化多模式镇痛的具体做法，为围术期疼痛与谵妄相关研究提供参考。",
+    "lead": "一项单中心随机双盲安慰剂对照试验计划纳入80例65-80岁、ASA II-III级、拟在椎管内麻醉下接受单侧股骨粗隆间骨折闭合复位PFNA内固定的患者，按1:1随机分组，评估入院后即刻超声引导下髂筋膜间隙阻滞（FICB）使用脂质体布比卡因133 mg对围术期睡眠质量的影响。干预组以生理盐水稀释至40 mL行髂上FICB，对照组以相同技术注射40 mL生理盐水；两组均接受相同的多模式基线镇痛、标准化腰麻、术中右美托咪定输注及术后舒芬太尼PCIA。主要终点为入院当晚（干预后第1夜）的LSEQ评分，次要终点包括手术当晚及术后第2夜的LSEQ评分、腕戴活动记录仪客观睡眠参数、焦虑评分、术后疼痛评分、围术期舒芬太尼用量、补救镇痛、术后谵妄发生率、首次下床时间、术后住院时长及不良事件。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": "trial",
+    "summary": "这项前瞻性、随机、安慰剂对照、双盲、单中心试验计划纳入 80 例 65-80 岁、拟在椎管内麻醉下接受单侧股骨粗隆间骨折闭合复位及 PFNA 固定的患者，按 1:1 随机接受超声引导下髂筋膜间隙阻滞，干预组用脂质体布比卡因 133 mg 稀释至 40 mL，对照组用 40 mL 生理盐水。主要结局为入院当晚的利兹睡眠评估问卷评分，每组计划 40 例，以 80% 把握度检测约 34 分的组间差异。",
+    "reason": "老年髋部骨折患者术前疼痛与睡眠管理缺少高质量证据，该试验用客观活动追踪与谵妄评估作次要终点，可观察区域阻滞能否在术前即介入并影响术后转归。",
+    "lead": "这项由研究者在中国单中心登记的前瞻性、随机、安慰剂对照、双盲试验，计划纳入80例65-80岁、ASA II-III级、拟在椎管内麻醉下接受单侧股骨粗隆间骨折闭合复位及PFNA固定的患者，按1:1随机接受超声引导下髂筋膜间隙阻滞，干预组注射稀释至40 mL的脂质体布比卡因133 mg，对照组注射等量生理盐水，两组均接受相同的多模式基础镇痛、标准化蛛网膜下腔麻醉及术后舒芬太尼PCIA。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "前瞻性、随机、安慰剂对照、双盲、单中心试验，按1:1随机分为两组。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "80例年龄65-80岁、ASA分级II-III、拟在椎管内麻醉下行单侧股骨粗隆间骨折闭合复位及PFNA固定的患者。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "干预组（Z组）超声引导下髂筋膜间隙阻滞，脂质体布比卡因133 mg以生理盐水稀释至40 mL；对照组（D组）同法给予40 mL生理盐水。"
+      },
+      {
+       "key": "endpoint",
+       "label": "主要终点",
+       "text": "主要终点为入院当晚（干预后第1晚）的利兹睡眠评估问卷（LSEQ）评分。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "每组计划样本量40例，按80%把握度、双侧alpha=0.05检测约34分的组间差异，并考虑10%脱落率。"
+      }
+     ]
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 341,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 212,
+     "reasonChars": 76,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 23,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 192,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 199,
+     "reasonChars": 69,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 34,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 5,
+     "briefCoverage": 0.71,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "trial-34d55a775c67ac07",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 280,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "一项前瞻性临床注册研究已完成，共入组258例接受经导管主动脉瓣置换（TAVR）的患者，评估MANTA血管闭合器在大口径股动脉穿刺闭合中的安全性与临床结局。研究聚焦按说明书使用、患者选择合适且血管入路规范的标准诊疗场景，目前仅登记为已完成状态，未见结果数据。",
+    "reason": "关注TAVR术后股动脉大口径穿刺闭合的医生，可留意该注册研究后续公布的安全性与临床结局数据，用于评估按说明书使用MANTA闭合器的适用人群与入路条件。",
+    "lead": "一项前瞻性临床注册研究发布了MANTA血管闭合器在经导管主动脉瓣置换（TAVR）常规诊疗中应用的结果。该研究旨在收集按说明书使用MANTA、经规范患者筛选和血管入路评估的TAVR患者股动脉大孔径穿刺点闭合的真实世界结局数据。MANTA在美国和加拿大获批用于10-20F器械或鞘（外径12-25F）血管内操作后股动脉穿刺点闭合以减少止血时间，在以色列14F和18F器械分别对应10-14F和15-18F器械或鞘。此次为结果登记发布，具体终点数据需查阅完整结果。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": "trial",
+    "summary": "这项前瞻性临床注册研究在标准治疗 TAVR 手术中按标签使用 MANTA 血管闭合器闭合股动脉穿刺点，考察并收集当代大孔径闭合的结局数据。研究结果已登记公布，具体结局数值未在节选内容中列出。",
+    "reason": null,
+    "lead": "一项在美国和加拿大开展的前瞻性临床注册研究公布了 MANTA 血管闭合器在 TAVR 大孔径股动脉穿刺点闭合中的结局数据，考察按标签使用（含适当患者选择与正确血管穿刺）条件下的当代实际表现。该器械在上述地区适用于血管内导管术中使用 10-20F 器械或鞘管（外径 12-25F）后闭合股动脉穿刺点并缩短止血时间。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "前瞻性临床注册研究，评估标准治疗 TAVR 手术中按标签使用 MANTA 血管闭合器的大孔径闭合结局。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "纳入接受标准治疗（SOC）TAVR 手术、按标签使用 MANTA 器械的患者。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "按标签使用 MANTA® 血管闭合器闭合股动脉穿刺点，包括适当的患者选择和正确的血管穿刺。"
+      },
+      {
+       "key": "sponsor",
+       "label": "申办方与地点",
+       "text": "研究在美国和加拿大开展；MANTA 在美国和加拿大适用于血管内导管术中使用 10-20F 器械或鞘管（外径 12-25F）后闭合股动脉穿刺点。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "已登记结果。"
+      }
+     ]
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 229,
+     "leadLimit": 195,
+     "leadOverLimit": true,
+     "summaryChars": 128,
+     "reasonChars": 75,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 5,
+     "numbersMissing": [
+      "summary:258"
+     ],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 156,
+     "leadLimit": 195,
+     "leadOverLimit": false,
+     "summaryChars": 95,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 4,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 5,
+     "briefCoverage": 0.71,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "trial-8fa7c07e994bba75",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 776,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "巴西单中心前瞻性研究评估针灸联合优化常规药物治疗与单用优化常规药物治疗对慢性肾脏病成人慢性疼痛的疗效，入组110例，患者接受保守治疗、腹膜透析或血液透析。因部分参与者在分配前表达针灸偏好并被直接分入针灸组，实际分配并非完全随机；针灸计划每周1次、约4个月共16次，至少完成10次方纳入疗效评价。",
+    "reason": "可了解在透析与保守治疗肾病人群中开展针灸辅助镇痛研究的实际分配偏倚来源，以及疗程完成度如何界定，为设计非药物镇痛试验提供参考。",
+    "lead": "一项单中心前瞻性研究评估了在优化常规药物治疗基础上加用个体化针灸，对接受保守治疗或肾脏替代治疗的成人慢性肾病患者慢性疼痛的疗效。针灸组每周治疗1次、约4个月，计划16次、至少10次纳入疗效评价；对照组仅用优化药物治疗并每月随访约4个月。原方案拟用计算机生成序列按1:1随机分组，但招募中部分符合条件者在分组前表达了针灸偏好并拒绝可能被分到单纯药物组，这些受试者未按随机序列直接进入针灸组，实际分配并非完全随机。方案原纳入保守治疗或腹膜透析患者，2025年9月25日获批的修订新增血液透析患者，首例血透患者于2025年9月29日入组。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": "trial",
+    "summary": "这项单中心前瞻性试验评估针刺联合优化常规药物治疗与单用优化常规药物对慢性肾脏病成人慢性疼痛的疗效，针刺组计划每周1次、共16次、约4个月，最少10次纳入疗效评价。实际分配并非完全随机：部分受试者在分配前表达针刺偏好并拒绝单用常规药物，被直接分入针刺组。方案修正案于2025年9月25日获批，将血液透析患者纳入，首例血液透析受试者于2025年9月29日入组。",
+    "reason": "针刺在透析与保守治疗人群中常被问及能否镇痛，该试验的随机化受损与最小针刺次数设定，是解读其结果和设计非药物干预试验时要先看清的两点。",
+    "lead": "这项单中心前瞻性试验在保守治疗或肾脏替代治疗的慢性肾脏病成人慢性疼痛患者中，比较个体化针刺联合优化常规药物治疗与单用优化常规药物治疗，针刺每周1次、计划16次（至少10次方纳入疗效评价），对照为优化常规药物、随访约4个月。原方案为计算机生成序列的1:1简单随机，但招募中部分符合条件者在分配前表达针刺偏好并拒绝单用药物，被直接分入针刺组，实际分配并非完全随机。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "原方案为计算机生成序列的简单1:1随机化；实际分配中部分受试者因治疗偏好被直接分入针刺组，分配并非完全随机。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "纳入接受保守治疗或肾脏替代治疗的慢性肾脏病成人慢性疼痛患者；原方案纳入保守治疗或腹膜透析患者，2025年9月25日修正案增加血液透析患者。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "干预组在优化常规药物治疗基础上加个体化针刺，每周1次、约4个月，计划16次、至少10次方纳入疗效评价；对照组单用优化常规药物治疗，每月随访约4个月。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "首例血液透析受试者于2025年9月29日入组，即修正案获批之后。"
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 266,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 147,
+     "reasonChars": 63,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 18,
+     "numbersMissing": [
+      "summary:110"
+     ],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 180,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 178,
+     "reasonChars": 66,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 29,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 4,
+     "briefCoverage": 0.57,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "commentary-c383671aa88293cf",
+   "expectGenre": "commentary",
+   "genreAccepted": true,
+   "textChars": 11414,
+   "textSource": "body",
+   "before": {
+    "summary": "DESTINY-Breast09研究显示，德曲妥珠单抗联合帕妥珠单抗一线治疗HER2阳性晚期乳腺癌的中位PFS为40.7个月，THP方案为26.9个月（HR 0.56，P<0.00001），疾病进展或死亡风险降低44%。2026年8月，该联合方案获国家药品监督管理局批准用于一线治疗不可切除或转移性HER2阳性成人乳腺癌。",
+    "reason": "可据此了解HER2阳性晚期乳腺癌一线治疗从THP转向ADC联合方案的循证依据，并关注ILD与左心室功能障碍的定期监测和分层处理。",
+    "lead": "德曲妥珠单抗（T-DXd）联合帕妥珠单抗一线治疗HER2阳性晚期乳腺癌的III期DB09研究显示，中位PFS达40.7个月，对照组THP方案为26.9个月，疾病进展或死亡风险降低44%（HR 0.56，P<0.00001），该方案已于2026年8月获NMPA批准用于一线治疗不可切除或转移性HER2阳性成人乳腺癌。研究入组1157例既往未接受晚期阶段化疗或抗HER2治疗的患者，24个月PFS率为70.1%对52.1%，OS数据尚不成熟但呈积极趋势；确认ORR为85.1%对78.6%，CR率15.1%对8.5%。安全性方面，T-DXd+P组中位治疗21.7个月，≥3级药物相关不良事件发生率54.9%对52.4%，因不良事件停药比例20.7%对28.3%，任何级别ILD发生率12.1%，多为1-2级。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "model",
+    "modelGenre": "commentary",
+    "summary": "DESTINY-Breast09研究显示，德曲妥珠单抗联合帕妥珠单抗（T-DXd+P）一线治疗HER2阳性晚期乳腺癌，中位PFS达40.7个月，对照组THP方案为26.9个月（HR 0.56，P<0.00001），24个月PFS率分别为70.1%与52.1%；确认ORR为85.1%对78.6%，CR率15.1%对8.5%。2026年8月该方案获NMPA批准用于一线治疗不可切除或转移性HER2阳性成人乳腺癌。",
+    "reason": "HER2阳性晚期乳腺癌一线是否把ADC提到THP之前，要看PFS获益能否兑现为长期生存、ILD监测能否跟上，这篇解读把DB09的缓解深度与用药顺序讲透了。",
+    "lead": "DESTINY-Breast09研究显示，德曲妥珠单抗（T-DXd）联合帕妥珠单抗一线治疗HER2阳性晚期乳腺癌，中位PFS达40.7个月，对照组THP方案为26.9个月（HR 0.56），疾病进展或死亡风险降低44%，确认ORR为85.1%对78.6%，CR率15.1%对8.5%；基于该结果，T-DXd+P方案已于2026年8月获NMPA批准用于该人群一线治疗。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的对象",
+       "text": "DESTINY-Breast09（DB09）研究，全球多中心随机III期临床试验，评估T-DXd联合帕妥珠单抗对比THP方案一线治疗HER2阳性晚期乳腺癌。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "T-DXd+P组中位PFS 40.7个月，THP组26.9个月（HR 0.56，P<0.00001），24个月PFS率70.1% vs 52.1%；确认ORR 85.1% vs 78.6%，CR率15.1% vs 8.5%。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "CLEOPATRA研究入组时（新）辅助抗HER2治疗尚未普及，仅约10%接受过曲妥珠单抗，未纳入脑转移患者，与当前实践存在差异。",
+        "真实世界研究显示约25%-30%的HER2阳性晚期乳腺癌患者一线进展后未能接受二线治疗。",
+        "DB09中T-DXd+P组≥3级药物相关不良事件54.9% vs 52.4%，因不良事件停药20.7% vs 28.3%。",
+        "T-DXd+P组任何级别ILD发生率12.1%，多为1-2级，中位发生时间210.5天。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为T-DXd+P方案的获益难以通过留待二线实现等效替代，好药先用、把握一线治疗窗口，才能让更多患者获得深度缓解与长期生存获益。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "简而言之，T-DXd+P方案的获益难以通过留待二线实现等效替代。好药先用，把握一线治疗窗口，才能让更多患者获得这一方案所带来的深度缓解与长期生存获益。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 352,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 161,
+     "reasonChars": 64,
+     "reasonFormula": "可据此",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 31,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 183,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 205,
+     "reasonChars": 77,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 46,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "commentary-521274e4422952ec",
+   "expectGenre": "commentary",
+   "genreAccepted": true,
+   "textChars": 5540,
+   "textSource": "body",
+   "before": {
+    "summary": "两项IgA肾病3期试验最终分析在NEJM同步发表，atacicept与sibeprenlimab均在约2年观察中延缓eGFR下降。ORIGIN 3中atacicept组eGFR年变化斜率为−0.60、安慰剂组为−5.60 mL/min/1.73 m²/年，组间差异5.00（95% CI 3.55～6.45）；VISIONARY中sibeprenlimab组为0.3、安慰剂组为−4.2，组间差异4.5（95% CI 3.6～5.4）。",
+    "reason": "可了解BAFF/APRIL通路靶向药以eGFR斜率和复合肾脏终点评价疗效的设计，以及复合终点事件数少时HR解释的局限，为解读同类IgA肾病新药数据提供参照。",
+    "lead": "两项IgA肾病3期试验的最终分析显示，同时抑制BAFF和APRIL的atacicept与选择性抑制APRIL的sibeprenlimab均在约2年观察期内延缓了肾功能下降，结果在NEJM在线发表，北京大学第一医院张宏为两篇论文共同作者。ORIGIN 3纳入428例患者，atacicept组104周eGFR年变化斜率为−0.60、安慰剂组为−5.60 mL/min/1.73 m²/年，组间差异5.00（95% CI 3.55～6.45）；复合肾脏终点发生11例（5.1%）对38例（17.8%），HR 0.24。VISIONARY纳入510例患者，sibeprenlimab组eGFR年变化斜率为0.3、安慰剂组为−4.2 mL/min/1.73 m²/年，组间差异4.5（95% CI 3.6～5.4）。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "model",
+    "modelGenre": "commentary",
+    "summary": "ASN Kidney Week 2026 公布的两项 IgA 肾病 3 期试验最终分析同日在 NEJM 发表：atacicept 使 104 周 eGFR 年变化斜率由 −5.60 减缓至 −0.60 mL/min/1.73 m²/年（组间差异 5.00，95% CI 3.55～6.45）；sibeprenlimab 24 个月为 0.3 对 −4.2 mL/min/1.73 m²/年（组间差异 4.5，95% CI 3.6～5.4）。",
+    "reason": "IgA 肾病靶向治疗证据从降蛋白尿延伸到约 2 年的 eGFR 保护，处方时如何权衡两类机制、如何向患者解释复合终点事件数偏少带来的不确定性，这篇解读给出了可直接引用的数据边界。",
+    "lead": "两项IgA肾病3期试验的最终分析显示，同时抑制BAFF和APRIL的atacicept与选择性抑制APRIL的sibeprenlimab在约2年观察期内均显著延缓肾功能下降：ORIGIN 3中atacicept组eGFR年变化斜率为−0.60、安慰剂组为−5.60 mL/min/1.73 m²/年，VISIONARY中sibeprenlimab组为0.3、安慰剂组为−4.2 mL/min/1.73 m²/年，组间差异分别为5.00和4.5 mL/min/1.73 m²/年。这篇解读指出，疗效证据已从蛋白尿下降延伸至肾功能保护，但复合终点事件数少、两项试验非头对头设计，作者认为现有结果支持两种策略均有临床价值，尚不能判断孰优孰劣。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的对象",
+       "text": "2026年ASN肾脏周公布、NEJM同步在线发表的两项IgA肾病3期试验最终疗效分析：ORIGIN 3（atacicept）与VISIONARY（sibeprenlimab）；北京大学第一医院张宏教授为两篇论文共同作者。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "ORIGIN 3：104周eGFR年变化斜率atacicept组−0.60、安慰剂组−5.60 mL/min/1.73 m²/年，复合肾脏终点HR 0.24。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "疗效证据从蛋白尿下降延伸至肾功能保护，对照组每年eGFR下降约4～6 mL/min/1.73 m²，治疗组总体接近稳定。",
+        "复合终点主要由肾功能下降达预设阈值的事件构成，而非透析或肾移植等终末期肾脏事件。",
+        "VISIONARY治疗组仅1例复合终点事件，HR估计存在不确定性，不宜解读为终末期肾衰竭风险降低97.1%。",
+        "两项试验非头对头比较，患者特征、背景治疗（SGLT2抑制剂比例约61%对约45%）、终点定义与统计方法不同，不能判断孰优孰劣。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为两种治疗策略均具临床价值，但尚不能据此比较BAFF/APRIL双重抑制与APRIL选择性抑制；长期安全性、停药后疗效持续性及更广泛人群中的应用效果仍待研究。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "因此，现有结果能够支持两种治疗策略均具有临床价值，但尚不能据此判断BAFF/APRIL双重抑制优于或劣于APRIL选择性抑制。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 354,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 218,
+     "reasonChars": 78,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 48,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 318,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 220,
+     "reasonChars": 89,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 64,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "commentary-90a9b0a07c6256c0",
+   "expectGenre": "commentary",
+   "genreAccepted": true,
+   "textChars": 4601,
+   "textSource": "body",
+   "before": {
+    "summary": "上海市第十人民医院陈海冰教授团队牵头的一项12周单中心开放标签随机对照研究发表于《Diabetes Care》，在同等热量限制下比较限制碳水化合物饮食、DASH饮食与低嘌呤均衡饮食对超重/肥胖合并高尿酸血症男性的效果。102名受试者第12周平均减重8.47kg（下降9.3%），三组尿酸平均下降0.89、0.79与0.50mg/dL，整体差异无统计学意义（P=0.48）。",
+    "reason": "可为超重合并高尿酸血症患者制定饮食处方时提供依据，减重启动前2周需提示尿酸反跳与痛风发作风险，并权衡嘌呤计数对长期依从性的影响。",
+    "lead": "陈海冰教授团队在《Diabetes Care》发表的一项单中心、开放标签随机对照试验显示，在同等热量限制下，限制碳水化合物饮食（CRD）、DASH饮食与低嘌呤均衡饮食（LPBD）对超重/肥胖合并高尿酸血症男性的降尿酸效果无显著差异。该研究纳入102名18~65岁、BMI≥25kg/m²的高尿酸血症男性，随机分为3组，干预12周；三组平均减重8.47kg（较基线下降9.3%），校正后尿酸平均下降分别为0.89、0.79与0.50mg/dL（P=0.48）。高频毛细血管血尿酸监测发现，三组均在第1周出现尿酸一过性升高0.87~1.49mg/dL，痛风发作在0~2周达高峰，提示减重启动期是发作高风险窗口。DASH组中位依从性94.6%最高，瘦体重丢失少于CRD组（1.37kg vs 2.62kg，P=0.02）。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "model",
+    "modelGenre": "commentary",
+    "summary": "上海市第十人民医院陈海冰团队在《Diabetes Care》发表随机对照研究，102 名超重/肥胖合并高尿酸血症男性在同等热量限制下分别接受限制碳水化合物饮食、DASH 饮食或低嘌呤均衡饮食 12 周，三组尿酸平均下降 0.89、0.79 与 0.50 mg/dL，差异无统计学意义（P=0.48）。高频监测发现三组第 1 周血尿酸一过性升高 0.87～1.49 mg/dL，痛风发作在 0～2 周达高峰。",
+    "reason": "给超重合并高尿酸血症患者开饮食处方时，重点从计算嘌呤转向保证依从性、保留瘦体重，并在减重第 1～2 周预警尿酸反跳与痛风发作。",
+    "lead": "陈海冰教授团队在《Diabetes Care》发表的随机对照研究纳入102名超重/肥胖合并高尿酸血症男性，在同等热量限制下比较限制碳水化合物饮食、DASH饮食与低嘌呤均衡饮食12周，三组平均减重8.47kg（下降9.3%），尿酸平均下降0.89、0.79与0.50mg/dL，组间无统计学差异，提示减重本身是降尿酸的主要驱动力。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的对象",
+       "text": "上海市第十人民医院陈海冰教授团队牵头的一项随机对照研究，发表于《Diabetes Care》，对比限制碳水化合物饮食（CRD）、DASH饮食与低嘌呤均衡饮食（LPBD）对超重/肥胖合并高尿酸血症男性的影响。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "102名男性受试者随机分为3组，12周平均绝对减重8.47kg（下降9.3%），组间无显著差异；CRD、DASH、LPBD组尿酸平均下降0.89、0.79、0.50mg/dL，整体差异无统计学意义（P=0.48）。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "三组均在第1周出现血尿酸一过性升高0.87～1.49mg/dL，痛风发作在0～2周达高峰，与尿酸升高时间重合。",
+        "LPBD组实际嘌呤摄入最低，但依从性低于DASH组，因不依从退出人数更多（LPBD组6名，CRD与DASH组各2名）。",
+        "依从性每提高10%，尿酸多下降0.18mg/dL（95%CI:−0.32～−0.03，P=0.02）。",
+        "DASH组中位依从性94.6%，高于CRD组90.5%和LPBD组89.3%（P<0.001）；DASH组瘦体重丢失少于CRD组（1.37kg vs 2.62kg，P=0.02）。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "陈海冰教授认为减重本身才是降尿酸的主要驱动力，严格计算嘌呤摄入未带来额外获益；建议减重初期放慢速度、保证饮水、避开诱因，高风险患者经评估可预防性使用抗炎药物，DASH饮食可作为优先选择，并强调药物与生活方式干预互补而非替代。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "减重本身才是降尿酸的主要驱动力。严格计算每日嘌呤摄入并没有带来额外的降尿酸获益，反而增加了饮食执行负担。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 358,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 186,
+     "reasonChars": 64,
+     "reasonFormula": "可为",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 36,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 164,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 203,
+     "reasonChars": 63,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 55,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "commentary-2872f60a2716e522",
+   "expectGenre": "commentary",
+   "genreAccepted": true,
+   "textChars": 3691,
+   "textSource": "body",
+   "before": {
+    "summary": "一项发表于 The Oncologist 的研究在 1000 例 II-IV 期胃癌患者中，采用与注册临床试验一致的免疫组化方法（43-14A 克隆，≥75% 肿瘤细胞中-强膜染色为阳性）描绘 CLDN18.2 表达图谱，总体阳性率为 34.4%。CLDN18.2 表达与肿瘤位置、组织学类型相关，与 HER2 阳性呈负相关（17.9% 对 35.6%），与 PD-L1（CPS≥5）、EBV 阳性及 FGFR2b 阳性呈正相关。",
+    "reason": "可据此了解胃癌 CLDN18.2 标准化检测的阳性判定标准与共表达格局，为病理送检选择和 CLDN18.2 靶向联合免疫治疗的方案设计提供参考。",
+    "lead": "一项纳入1000例II-IV期胃癌的韩国队列研究显示，按与注册临床试验一致的IHC方法（43-14A克隆，≥75%肿瘤细胞中-强膜染色为阳性）判定，CLDN18.2总体阳性率为34.4%，与全球III期试验报告的约38.4%接近；II、III、IV期阳性率分别为37.3%、32.6%和29.8%，各期差异无统计学意义。表达与肿瘤位置相关，胃中、上三分之一阳性率约37.8%和45.4%，高于下三分之一28.0%；胃粘液腺癌仅2.8%，伴淋巴间质的胃癌达90.9%，EBV相关胃癌为71.9%。CLDN18.2与HER2阳性呈负相关（HER2阳性者17.9% vs 阴性者35.6%），与PD-L1（CPS≥5）、EBV及FGFR2b阳性正相关；344例阳性患者中143例（41.6%）为单一阳性，144例（41.9%）合并PD-L1（CPS≥5）共表达。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "model",
+    "modelGenre": "commentary",
+    "summary": "一项发表于The Oncologist的研究在1000例II-IV期胃癌中采用与注册试验一致的IHC方法（43-14A克隆，≥75%肿瘤细胞中-强膜染色为阳性）检测CLDN18.2，总体阳性率34.4%，与全球III期试验约38.4%接近。CLDN18.2阳性与HER2阳性呈负相关（17.9%对35.6%），与PD-L1（CPS≥5）、EBV及FGFR2b阳性呈正相关；Kaplan-Meier分析未发现其与总生存期或无病生存期显著相关。",
+    "reason": "胃癌常规标本是否加做CLDN18.2检测、粘液腺癌可否免检、与PD-L1共表达者如何设计联合方案，这篇真实世界图谱给出了可操作的筛选依据。",
+    "lead": "一项纳入1000例II-IV期胃癌的研究，采用与注册临床试验一致的IHC方法（43-14A克隆，≥75%肿瘤细胞中-强膜染色判为阳性）描绘CLDN18.2表达图谱，总体阳性率为34.4%，与全球III期试验报告的约38.4%接近。阳性率在胃中、上三分之一（约37.8%和45.4%）高于下三分之一（28.0%），在伴淋巴间质的胃癌中高达90.9%、胃粘液腺癌中仅2.8%。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的对象",
+       "text": "发表于 The Oncologist 的一项研究，基于1000例II-IV期胃癌患者，采用与临床试验一致的IHC方法（43-14A克隆，≥75%肿瘤细胞中-强膜染色为阳性）评估CLDN18.2表达。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "总体CLDN18.2阳性率为34.4%；II、III、IV期分别为37.3%、32.6%、29.8%。胃中、上三分之一阳性率约37.8%和45.4%，高于下三分之一28.0%；粘液腺癌仅2.8%，伴淋巴间质胃癌达90.9%。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "阳性率34.4%与全球III期试验约38.4%高度一致，不同于既往文献14%-88%的波动范围。",
+        "各分期均存在相当比例阳性患者，提示靶向治疗获益人群可能延伸至辅助或新辅助场景。",
+        "CLDN18.2与HER2表达负相关，两类靶向治疗人群 largely 不重叠，可视为独立治疗选择。",
+        "CLDN18.2与PD-L1共表达常见，提示与免疫检查点抑制剂联合值得进一步探索，疗效尚待临床研究验证。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为应支持在胃癌常规活检或手术标本中开展CLDN18.2标准化检测以筛选获益人群，并据共表达图谱设计联合方案；同时指出研究存在单一人群来源、缺少原发灶与转移灶表达比较等局限。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "首先，它支持在胃癌患者的常规活检或手术标本中进行CLDN18.2的标准化检测，以筛选潜在获益人群；其次，它为设计合理的联合治疗方案提供了理论依据，特别是针对CLDN18.2和PD-L1共表达人群；最后，HER2与CLDN18.2的互斥性为HER2阴性患者的后续治疗选择指明了清晰的方向。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 378,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 215,
+     "reasonChars": 72,
+     "reasonFormula": "可据此",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 186,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 220,
+     "reasonChars": 69,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 39,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "news-a44435bc1e54358f",
+   "expectGenre": "news",
+   "genreAccepted": true,
+   "textChars": 4745,
+   "textSource": "body",
+   "before": {
+    "summary": "III 期 MINT 试验开放标签延长期 1 年结果在 AANEM 年会上报告，伊奈利珠单抗在乙酰胆碱受体（AChR）或肌肉特异性激酶（MuSK）抗体阳性全身型重症肌无力患者中的获益得以维持，安全性和耐受性也保持稳定。延长期为可选、最长 3 年，此次为 1 年随访的中期分析；患者报告的 MG-ADL 与医生评估的 QMG 评分均持续改善，原安慰剂组交叉后也出现一致改善，但研究未针对这些细节设把握度。",
+    "reason": "可帮助了解抗 CD19 B 细胞清除疗法在全身型重症肌无力中的长期应答与耐受性数据，为抗体阳性患者的治疗选择和随访监测提供参考。",
+    "lead": "Ⅲ期 MINT 试验开放标签延长期 1 年结果显示，伊奈利珠单抗（Uplizna）对乙酰胆碱受体（AChR）或肌肉特异性激酶（MuSK）抗体阳性的全身型重症肌无力患者的疗效持续，安全性和耐受性也维持。MINT 为安慰剂对照试验，AChR 组随机对照期 52 周、MuSK 组 26 周，分别入组 190 例和 48 例；第 26 周 MG-ADL 评分变化的主要终点在合并人群中达成，并据此获 FDA 批准用于上述两类抗体阳性患者。开放标签延长期最长 3 年，此次为 1 年随访的中期分析：患者报告的 MG-ADL 与医生评估的 QMG 评分均持续改善，原安慰剂组交叉至活性药物后也出现一致的临床改善，且均为预设分析。研究者称，起始伊奈利珠单抗后随访时间越长，观察到的获益越大，但研究并未针对这些细节设计统计效能。延长期安全性、耐受性维持良好。"
+   },
+   "after": {
+    "genre": "conference",
+    "genreBasis": "model",
+    "modelGenre": "conference",
+    "summary": "III期MINT试验开放标签扩展的1年中期分析显示，伊奈利珠单抗在AChR或MuSK抗体阳性全身型重症肌无力患者中的获益持续，安全性和耐受性也维持。患者报告的MG-ADL与医生评估的QMG评分均显示应答持久，原安慰剂组交叉后同样出现一致改善；研究者称用药后随访时间越长，改善幅度似有增大，但试验并未针对这一细节设计统计效能。",
+    "reason": "这款抗CD19 B细胞清除药已获FDA批准用于AChR和MuSK抗体阳性全身型重症肌无力，1年扩展数据关系到长期维持治疗与安全性监测的信心。",
+    "lead": "Ⅲ期MINT试验开放标签延长期1年结果在美国神经肌肉与电诊断医学协会年会上公布，伊奈利珠单抗（Uplizna）在AChR或MuSK抗体阳性全身型重症肌无力患者中的获益持续存在，安全性和耐受性也维持良好。MINT为安慰剂对照试验，AChR组随机对照期52周、MuSK组26周，分别入组190例和48例患者；第26周MG-ADL评分变化的主要终点在合并人群中达成，该结果支持该药于2025年12月获FDA批准用于这两类抗体阳性患者。",
+    "brief": {
+     "genre": "conference",
+     "points": [
+      {
+       "key": "meeting",
+       "label": "会议与摘要号",
+       "text": "美国神经肌肉与电诊断医学协会年会；III期MINT试验开放标签扩展1年结果；汇报人Richard Nowak。"
+      },
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "III期安慰剂对照试验；随机对照期AChR组52周、MuSK组26周；AChR抗体患者190例，MuSK抗体患者48例；主要终点为第26周MG-ADL评分变化。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "第26周MG-ADL评分变化的主要终点在合并研究人群中达到，部分关键次要终点也达到。",
+        "开放标签扩展1年时，MG-ADL与QMG评分持续改善，应答具有持久性。",
+        "原安慰剂组交叉至活性药物的患者，两项量表也显示一致的临床改善。",
+        "开放标签扩展为可选、最长3年，本次报告为1年随访的期中分析。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "开放标签扩展期间安全性和耐受性维持，原文未给出两组不良事件数值对比。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "开放标签扩展1年数据为期中分析；研究未针对随时间变化的部分细节设置统计效能。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "研究者结论",
+      "text": "So in sum, the open-label extension demonstrates that patients continue to have benefit, number one. And number two, it also appears that the longer the patients are post-initiating inebilizumab, there are greater benefits observed over time.",
+      "zh": "总之，开放标签扩展显示患者持续获益，这是第一点。第二点，患者使用伊奈利珠单抗后的时间越长，随时间观察到的获益似乎越大。"
+     }
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 372,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 201,
+     "reasonChars": 64,
+     "reasonFormula": "可帮助",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 13,
+     "numbersMissing": [],
+     "briefFields": 4,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 214,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 162,
+     "reasonChars": 70,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [
+      "未给出"
+     ],
+     "numbersChecked": 27,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 6,
+     "briefCoverage": 0.86,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "news-ea3c43601274431f",
+   "expectGenre": "news",
+   "genreAccepted": true,
+   "textChars": 6631,
+   "textSource": "body",
+   "before": {
+    "summary": "研究通过染色质可及性分析发现小细胞肺癌的一种干细胞样调控状态SCLC-SL，该状态患者接受化疗免疫治疗后中位总生存为7.41个月，低于免疫活跃型的15.9个月和神经内分泌型的12.6个月，且在校正肝转移、脑转移和LDH升高后仍显著。这提示该状态可能成为预后标志物和潜在治疗靶点。",
+    "reason": null,
+    "lead": "美国西北大学医学院团队在小细胞肺癌中鉴定出一种此前未被识别的干细胞样染色质调控状态SCLC-SL，该状态与化疗免疫治疗后显著更差的生存相关。研究用ATAC-seq分析患者来源异种移植瘤的染色质可及性，以区分肿瘤自身信号与基质信号，再整合多个队列800余例肿瘤的基因表达谱，划分出神经内分泌、免疫活跃和干细胞样3种主要调控状态。在分析的临床试验队列中，SCLC-SL型患者中位总生存为7.41个月，免疫活跃型为15.9个月，神经内分泌型为12.6个月；校正肝转移、脑转移和LDH升高后关联仍显著。SCLC-SL肿瘤低分化、代谢可塑、免疫信号减弱，缺氧、氧化代谢和应激反应相关过程活跃，且配对治疗前后样本显示治疗后干细胞样特征富集，提示其与治疗耐药相关。作者提出该特征或可用于识别高危患者并导向替代策略的临床试验，尚需前瞻性验证。"
+   },
+   "after": {
+    "genre": "news",
+    "genreBasis": "model",
+    "modelGenre": "news",
+    "summary": "美国西北大学医学院的研究团队在小细胞肺癌中识别出一种干细胞样调控状态SCLC-SL，该状态与化疗免疫治疗后预后极差相关。在一个临床试验队列中，SCLC-SL型患者的中位总生存期为7.41个月，免疫活跃型为15.9个月，神经内分泌型为12.6个月；校正肝转移、脑转移和LDH升高后，这一关联仍然显著。研究还发现，治疗后干细胞样特征富集，提示肿瘤可在不同调控状态间转换。",
+    "reason": "小细胞肺癌一线化疗免疫治疗后仍缺乏可靠的分子分层工具，这一染色质可及性定义的SCLC-SL状态若获前瞻性验证，可能改变高危患者的识别与临床试验入组策略。",
+    "lead": "一项发表于 Cell Reports Medicine 的研究通过 ATAC-seq 分析小细胞肺癌染色质可及性，识别出此前未被认识的干细胞样调控状态 SCLC-SL，该状态与化疗免疫治疗后更差生存相关。在分析的临床试验队列中，SCLC-SL 型患者中位总生存为 7.41 个月，免疫活跃型为 15.9 个月，神经内分泌型为 12.6 个月，校正肝转移、脑转移和 LDH 升高后关联仍显著。",
+    "brief": {
+     "genre": "news",
+     "points": [
+      {
+       "key": "finding",
+       "label": "主要发现",
+       "text": "在小细胞肺癌中识别出一种干细胞样调控状态SCLC-SL，该类肿瘤患者接受化疗免疫治疗后结局显著更差；该关联在校正肝转移、脑转移和LDH升高后仍显著。"
+      },
+      {
+       "key": "design",
+       "label": "研究设计",
+       "text": "分析患者来源异种移植瘤的染色质可及性（ATAC-seq），并与多个队列800余例肿瘤的基因表达谱整合；在临床试验队列中比较不同亚型患者的生存。"
+      },
+      {
+       "key": "facts",
+       "label": "关键数字",
+       "items": [
+        "SCLC-SL型患者中位总生存期为7.41个月。",
+        "免疫活跃亚型中位总生存期为15.9个月。",
+        "神经内分泌亚型中位总生存期为12.6个月。",
+        "整合分析的肿瘤基因表达谱来自800余例、多个患者队列。"
+       ]
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "source",
+      "reason": "language"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 363,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 139,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 8,
+     "numbersMissing": [],
+     "briefFields": 4,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 195,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 183,
+     "reasonChars": 76,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 11,
+     "numbersMissing": [],
+     "briefFields": 4,
+     "briefPresent": 3,
+     "briefCoverage": 0.75,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "news-77bda968f169fdf4",
+   "expectGenre": "news",
+   "genreAccepted": true,
+   "textChars": 2419,
+   "textSource": "body",
+   "before": {
+    "summary": "一项多中心随机开放标签试验显示，在接受每周3次维持性血液透析、透析前血钾5.5至<6.5 mEq/L的门诊患者中，加用环硅酸锆钠（SZC）并配合标准化营养咨询8周后，与单纯营养咨询相比，饮食钾限制相关生活质量改善更明显，透析前血钾下降也更有效。纳入183例的主分析中，SZC组无患者需补救治疗，对照组92例中有25例需要；探索性分析见水果摄入增加而总膳食钾摄入未增加，未报告严重治疗相关不良事件或死亡。",
+    "reason": "对透析高钾患者，可借鉴其以饮食限制相关生活质量和补救治疗为终点的设计，在处方钾结合剂时同步评估营养负担与血钾监测。",
+    "lead": "日本横滨市立大学研究生院医学研究科的Hiromichi Wakui等报告，在接受每周3次维持性血液透析、透析前血钾5.5至<6.5 mEq/L的门诊患者中，加用钾结合剂环硅酸锆钠（SZC）并配合标准化营养咨询8周，比单用营养咨询更能改善与限钾饮食相关的生活质量，也更有效降低透析前血钾。这项多中心、随机、开放标签、平行组试验的主要分析纳入183例患者；8周内SZC组无患者需要补救治疗，对照组92例中有25例需要。探索性分析显示，患者水果摄入增加而总膳食钾摄入未增加，肾脏病相关生活质量多个领域改善，未发生与治疗相关的严重不良事件或死亡。研究者强调，个体化膳食评估、定期血钾监测和关注整体营养质量仍不可少；当单纯限钾饮食负担较重时，钾结合治疗可作为更以患者为中心的管理选择。该结果将在ASN Kidney Week 2026（10月22日至25日）公布。"
+   },
+   "after": {
+    "genre": "conference",
+    "genreBasis": "model",
+    "modelGenre": "conference",
+    "summary": "多中心随机开放标签试验 Y-QOL 纳入 183 例每周 3 次维持性血液透析、透析前血钾 5.5 至 <6.5 mEq/L 的门诊患者，在标准化营养咨询基础上加用环硅酸锆钠 8 周，饮食限钾相关生活质量改善优于单纯营养咨询，透析前血钾下降更明显。SZC 组无患者需补救治疗，对照组 92 例中 25 例需要；探索性分析见水果摄入增加而总膳食钾摄入未增加，未发生治疗相关严重不良事件或死亡。",
+    "reason": "对限钾饮食负担重、血钾控制不佳的透析患者，这项结果提示加用钾结合剂可能同时减轻饮食负担并改善血钾，但样本量有限且为开放标签设计，需等完整数据再评估是否调整限钾策略。",
+    "lead": "随机对照试验 Y-QOL 研究显示，在接受维持性血液透析的高钾血症患者中，加用钾结合剂环硅酸锆钠（SZC）并配合标准化营养咨询8周后，与单纯营养咨询相比，患者在饮食钾限制相关生活质量上的改善更大，透析前血钾下降也更明显；该结果将在 ASN Kidney Week 2026（10月22–25日）公布。研究为多中心、随机、开放标签、平行组设计，纳入透析前血钾5.5至<6.5 mEq/L、每周透析3次的门诊患者，主分析共183例。",
+    "brief": {
+     "genre": "conference",
+     "points": [
+      {
+       "key": "meeting",
+       "label": "会议与摘要号",
+       "text": "ASN Kidney Week 2026（10月22–25日）发布；研究名Y-QOL研究；通讯作者为横滨市立大学医学研究生院的Hiromichi Wakui。"
+      },
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "多中心、随机、开放标签、平行组试验；纳入每周3次维持性血液透析、透析前血钾5.5至<6.5 mEq/L的门诊患者，分SZC联合标准化营养咨询组与单纯营养咨询组，干预8周；主分析纳入183例。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "SZC联合标准化营养咨询组在饮食钾限制相关生活质量上的改善优于单纯营养咨询组。",
+        "SZC降低透析前血清钾的效果更好。",
+        "8周内SZC组无患者需要补救治疗，对照组92例中25例需要。",
+        "探索性分析见水果摄入增加而总膳食钾摄入未增加，肾病相关生活质量多个方面改善。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "无严重治疗相关不良事件或死亡。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "研究者结论",
+      "text": "Hyperkalemia treatment should be judged not only by whether the potassium level falls, but also by whether treatment makes daily life less burdensome for patients.",
+      "zh": "高钾血症治疗的评判不应只看血钾是否下降，还应看治疗是否减轻了患者日常生活的负担。"
+     }
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "publication",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 377,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 201,
+     "reasonChars": 57,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [
+      "未报告"
+     ],
+     "numbersChecked": 19,
+     "numbersMissing": [],
+     "briefFields": 4,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 214,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 195,
+     "reasonChars": 82,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 28,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 5,
+     "briefCoverage": 0.71,
+     "quoteVerbatim": true
+    }
+   }
+  },
+  {
+   "id": "news-907d090c9d047165",
+   "expectGenre": "news",
+   "genreAccepted": true,
+   "textChars": 5863,
+   "textSource": "body",
+   "before": {
+    "summary": "这是2期LUNAR试验的更新分析，92例寡复发激素敏感性前列腺癌患者随机接受SBRT单用或177Lu-PNT2002联合SBRT，中位随访31.9个月。联合组进展或需加用激素治疗的风险降低62%，24个月时33%对12%无可检测病灶。",
+    "reason": null,
+    "lead": "在2期LUNAR试验的更新分析中，对寡复发激素敏感性前列腺癌患者，在立体定向体部放疗（SBRT）前加用2个周期177Lu-PNT2002，可使疾病进展或需加用激素治疗的风险较单用SBRT降低62%。该试验纳入92例经PSMA PET/CT确认有1至5个可放疗病灶的复发性前列腺癌男性，随机接受单用SBRT或177Lu-PNT2002后SBRT，中位随访31.9个月。24个月时，联合组33%的患者无可检测病灶，单用SBRT组为12%；联合组出现超过5个新病灶者3例、去势抵抗性前列腺癌1例，单用SBRT组分别为9例和7例，但作者指出这些探索性分析事件数少，需更大规模研究验证。延长随访未观察到新的安全性信号，治疗相关严重不良反应仍少见。研究者认为，这支持在病程更早期、肿瘤负荷较小时进一步评估PSMA靶向放射性配体治疗。"
+   },
+   "after": {
+    "genre": "news",
+    "genreBasis": "model",
+    "modelGenre": "news",
+    "summary": "UCLA团队在2期LUNAR试验的更新分析中报告，92例寡复发激素敏感性前列腺癌患者随机接受SBRT单用或2周期177Lu-PNT2002后接SBRT，中位随访31.9个月，联合组进展或需加用激素治疗的风险降低62%；24个月时联合组33%无可检测病灶，单用组12%。探索性分析中联合组出现超过5个新病灶者3例、去势抵抗1例，单用组分别为9例和7例，事件数少，需更大研究确认。",
+    "reason": "对寡复发前列腺癌患者，结果提示在SBRT前加用PSMA靶向放射性药物可能同时处理可见与微小病灶，为推迟激素治疗提供依据，但探索性终点事件少，暂不足以改变现行治疗顺序。",
+    "lead": "在2期LUNAR试验的更新分析中，对寡复发激素敏感性前列腺癌患者，在SBRT前加用2个周期177Lu-PNT2002，使疾病进展或需要额外激素治疗的风险较单用SBRT降低62%；24个月时，联合组33%的患者检测不到病灶，单用SBRT组为12%。该分析纳入92例经PSMA PET/CT发现1至5个病灶的患者，随机接受单用SBRT或177Lu-PNT2002后SBRT，中位随访31.9个月。",
+    "brief": {
+     "genre": "news",
+     "points": [
+      {
+       "key": "finding",
+       "label": "主要发现",
+       "text": "在SBRT基础上加用177Lu-PNT2002，进展或需额外激素治疗的风险较单用SBRT降低62%；24个月时33%的患者无可检测病灶，单用SBRT组为12%。"
+      },
+      {
+       "key": "source",
+       "label": "出处",
+       "text": "发表于期刊 European Urology，由UCLA Health Jonsson综合癌症中心研究者牵头。"
+      },
+      {
+       "key": "design",
+       "label": "研究设计",
+       "text": "2期LUNAR试验的更新分析，纳入92例寡复发激素敏感性前列腺癌男性，随机接受单用SBRT或2周期177Lu-PNT2002后SBRT，中位随访31.9个月。"
+      },
+      {
+       "key": "facts",
+       "label": "关键数字",
+       "items": [
+        "进展或需额外激素治疗的风险在联合组降低62%。",
+        "24个月时联合组33%无可检测病灶，单用SBRT组12%。",
+        "联合组3例出现超过5个新病灶，单用SBRT组9例。",
+        "联合组1例发生去势抵抗性前列腺癌，单用SBRT组7例。"
+       ]
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 360,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 117,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 22,
+     "numbersMissing": [],
+     "briefFields": 4,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 196,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 188,
+     "reasonChars": 83,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 40,
+     "numbersMissing": [],
+     "briefFields": 4,
+     "briefPresent": 4,
+     "briefCoverage": 1,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "social-671ce11cbff3d869",
+   "expectGenre": "social",
+   "genreAccepted": true,
+   "textChars": 431,
+   "textSource": "body",
+   "before": {
+    "summary": "LATE-MT试验在OCIN 2026会议上公布结果：卒中后24至72小时仍有可挽救组织的患者中，取栓组90天躯体功能优于单纯药物治疗，但脑出血和死亡更常见。",
+    "reason": "对超时间窗缺血性卒中患者，取栓的获益与出血、死亡风险并存，可为个体化筛选可挽救组织、权衡手术利弊提供依据。",
+    "lead": "LATE-MT试验在OCIN 2026会议上公布，对于卒中后24至72小时仍有可挽救组织的患者，取栓治疗90天身体功能优于单纯药物治疗，但脑出血和死亡更常见。该结果提示这一超时间窗人群取栓的获益与风险并存，需权衡功能改善与出血、死亡风险增加。同期NEJM配发社论，讨论缺血性卒中取栓证据与适应证的扩展。"
+   },
+   "after": {
+    "genre": "social",
+    "genreBasis": "code",
+    "modelGenre": "social",
+    "summary": "LATE-MT试验在OCIN 2026会议上公布：卒中后24至72小时仍有可挽救组织的患者，90天时取栓组身体功能优于单纯药物治疗，但取栓组脑出血和死亡更常见。",
+    "reason": "晚时间窗取栓的获益与风险同时放大，正在评估超时间窗血管内治疗的患者选择与家属沟通需要把出血和死亡信号纳入权衡。",
+    "lead": "NEJM 在 X 上发布消息称，OCIN 2026 会议上公布的 LATE-MT 试验结果显示，在卒中后 24 至 72 小时仍有可挽救组织的患者中，取栓组 90 天身体功能优于单纯药物治疗，但取栓组的脑出血和死亡更常见。",
+    "brief": null,
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 151,
+     "leadLimit": 112,
+     "leadOverLimit": true,
+     "summaryChars": 79,
+     "reasonChars": 53,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 8,
+     "numbersMissing": [],
+     "briefFields": 0,
+     "briefPresent": 0,
+     "briefCoverage": null,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 111,
+     "leadLimit": 112,
+     "leadOverLimit": false,
+     "summaryChars": 80,
+     "reasonChars": 55,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 8,
+     "numbersMissing": [],
+     "briefFields": 0,
+     "briefPresent": 0,
+     "briefCoverage": null,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "social-77a9c405cb2bf3c4",
+   "expectGenre": "social",
+   "genreAccepted": true,
+   "textChars": 375,
+   "textSource": "body",
+   "before": {
+    "summary": "在初始接受HIV治疗的成人中，多拉韦林、拉米夫定与替诺福韦二吡呋酯联合方案的48周病毒抑制效果不劣于多替拉韦、恩曲他滨与丙酚替诺福韦联合方案，且体重增加更少，提示该方案可能适用于有治疗相关体重变化风险的患者。",
+    "reason": "对存在治疗相关体重增加风险的HIV初治患者，可据此在启动抗病毒治疗时权衡含多拉韦林方案与含多替拉韦方案在病毒抑制和体重影响上的差异。",
+    "lead": "在初治HIV成人中，多拉韦林联合拉米夫定与富马酸替诺福韦二吡呋酯的三联方案，在48周病毒抑制方面不劣于多替拉韦联合恩曲他滨与丙酚替诺福韦方案。该方案还与更少的体重增加相关，提示其可能成为存在治疗相关体重变化风险患者的一种选择。"
+   },
+   "after": {
+    "genre": "social",
+    "genreBasis": "code",
+    "modelGenre": "social",
+    "summary": "在开始HIV治疗的成人中，多拉韦林+拉米夫定+富马酸替诺福韦二吡呋酯方案48周病毒抑制不劣于多替拉韦+恩曲他滨+丙酚替诺福韦方案，且与较少的体重增加相关，提示对存在治疗相关体重变化风险的患者可能是一个选择。",
+    "reason": "正在为初治HIV患者选方案时，这条提示多拉韦林三联在病毒抑制上不劣于整合酶方案，且增重更少，对代谢风险人群的处方权衡有直接参考价值。",
+    "lead": "JAMA 在 X 上发布的一项研究显示，在开始接受 HIV 治疗的成人中，多拉韦林、拉米夫定与富马酸替诺福韦二吡呋酯三联方案在 48 周病毒抑制方面不劣于多替拉韦、恩曲他滨与丙酚替诺福韦方案，并且与较少的体重增加相关，提示该方案可能适合有治疗相关体重变化风险的患者。",
+    "brief": null,
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 113,
+     "leadLimit": 98,
+     "leadOverLimit": true,
+     "summaryChars": 104,
+     "reasonChars": 66,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 2,
+     "numbersMissing": [],
+     "briefFields": 0,
+     "briefPresent": 0,
+     "briefCoverage": null,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 133,
+     "leadLimit": 98,
+     "leadOverLimit": true,
+     "summaryChars": 103,
+     "reasonChars": 66,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 2,
+     "numbersMissing": [],
+     "briefFields": 0,
+     "briefPresent": 0,
+     "briefCoverage": null,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "social-fc827170b2d3334e",
+   "expectGenre": "social",
+   "genreAccepted": true,
+   "textChars": 351,
+   "textSource": "body",
+   "before": {
+    "summary": "尼日利亚宣布该国首例埃博拉邦迪布焦型病毒病病例，成为受此次疫情影响的第5个国家；该疫情已致数千人死亡。这是尼日利亚12年来首次出现埃博拉病例。",
+    "reason": "了解邦迪布焦型埃博拉的新发疫区分布，可为接诊有相关地区旅行史的不明原因发热患者时的隔离与上报流程提供参考。",
+    "lead": "尼日利亚报告该国首例埃博拉邦迪布焦型病毒病病例，成为此次已致数千人死亡的疫情中第5个受影响国家，也是尼日利亚12年来首次出现埃博拉病例。消息由《英国医学杂志》（The BMJ）在社交平台发布，未给出病例的发现时间、感染来源、患者救治情况，也未说明密切接触者追踪和防控措施。邦迪布焦型是埃博拉病毒的一种型别，此次疫情已波及多国。对国内临床和疾控人员而言，需关注从疫区国家入境人员的发热和出血症状筛查，以及相关检测试剂的型别覆盖情况。"
+   },
+   "after": {
+    "genre": "social",
+    "genreBasis": "code",
+    "modelGenre": "social",
+    "summary": "尼日利亚宣布该国出现首例埃博拉邦迪布焦型病毒病病例，成为受此次疫情影响的第5个国家；该疫情已致数千人死亡。这是尼日利亚12年来首例埃博拉病例。",
+    "reason": "邦迪布焦型埃博拉此前主要在乌干达报告，此次跨越多国传播提示输入性风险范围扩大，口岸筛查与早期识别流程需要覆盖这一亚型。",
+    "lead": "The BMJ 在 X 发帖称，尼日利亚报告了该国首例埃博拉邦迪布焦型（Bundibugyo）病毒病病例，成为受此次疫情影响的第 5 个国家，该疫情已造成数千人死亡。",
+    "brief": null,
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 215,
+     "leadLimit": 94,
+     "leadOverLimit": true,
+     "summaryChars": 71,
+     "reasonChars": 53,
+     "reasonFormula": "了解",
+     "reasonEmpty": false,
+     "absences": [
+      "未说明",
+      "未给出"
+     ],
+     "numbersChecked": 4,
+     "numbersMissing": [],
+     "briefFields": 0,
+     "briefPresent": 0,
+     "briefCoverage": null,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 83,
+     "leadLimit": 94,
+     "leadOverLimit": false,
+     "summaryChars": 71,
+     "reasonChars": 59,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 3,
+     "numbersMissing": [],
+     "briefFields": 0,
+     "briefPresent": 0,
+     "briefCoverage": null,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "roundup-8d34f2ec2f61a26d",
+   "expectGenre": "roundup",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "这是每周医学播客对近期头条的讨论，涉及瘦型代谢功能障碍相关脂肪性肝病、早期脓毒性休克管理策略、绝经激素治疗与血栓栓塞风险、血液癌症筛查。",
+    "reason": null,
+    "lead": "一项纳入1000例急诊就诊的早期脓毒性休克成人患者的研究，比较了限制性补液联合早期升压药与较大补液量、延迟升压药两种策略，主要终点为存活且出院在外的中位天数，但播客未给出该结果。同一期节目还介绍了丹麦全国登记研究，纳入9800余例静脉血栓栓塞、18000余例缺血性卒中和近12000例心肌梗死女性，发现绝经期激素治疗总体血栓风险升高幅度有限，且主要与口服雌二醇相关，经皮治疗未见血栓发生率升高，但经皮联合周期性治疗与心肌梗死风险升高相关。另有一项纳入71000余名50至77岁无癌人群的NHS-Galleri随机对照试验显示，多癌种血液早筛未降低III期或IV期癌症的发生率。"
+   },
+   "after": {
+    "genre": "roundup",
+    "genreBasis": "code",
+    "modelGenre": "roundup",
+    "summary": "本期播客汇总4项医学话题：早期脓毒性休克的最佳管理策略，主要结局为第90天存活且出院，两种策略效果相当；丹麦全国健康登记数据显示，口服雌激素与静脉血栓栓塞、缺血性卒中及心肌梗死风险升高相关；此外还讨论了血液多癌种筛查的影响与瘦型代谢功能障碍相关脂肪性肝病。",
+    "reason": null,
+    "lead": "丹麦全国健康登记数据显示，使用绝经激素治疗的女性静脉血栓栓塞、缺血性卒中和心肌梗死风险升高，其中口服雌激素与风险增加相关。另一项纳入41个国家、逾18000例活检确诊MASLD的回顾性观察研究显示，约6-7%为瘦型MASLD，其2型糖尿病发生率更低、纤维化程度更轻，但总体死亡率与肥胖合并2型糖尿病者相近，且死亡率与纤维化程度相关，肝脏弹性成像在瘦型MASLD中的判断比FIB-4更精确。",
+    "brief": {
+     "genre": "roundup",
+     "points": [
+      {
+       "key": "stories",
+       "label": "各条消息",
+       "items": [
+        "上述研究提示，对瘦型MASLD患者，肝脏弹性成像在判断纤维化上比FIB-4常规评分更精确。",
+        "丹麦基于全国健康登记的研究纳入9800余名静脉血栓栓塞、18000余名缺血性卒中及近12000名心肌梗死女性，均为激素治疗使用者，并与从未使用者匹配。",
+        "播客还讨论了多癌种血液检测对晚期癌症诊断的影响，以及瘦型代谢功能障碍相关脂肪性肝病（MASLD）的临床特征。"
+       ]
+      }
+     ]
+    },
+    "editVerification": "repaired",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "stories",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 288,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 68,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [
+      "未给出"
+     ],
+     "numbersChecked": 8,
+     "numbersMissing": [
+      "lead:1000",
+      "lead:71000",
+      "lead:50",
+      "lead:77"
+     ],
+     "briefFields": 1,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 194,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 128,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 1,
+     "briefPresent": 1,
+     "briefCoverage": 1,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "roundup-1f4e280aa3b5d228",
+   "expectGenre": "roundup",
+   "genreAccepted": true,
+   "textChars": 5390,
+   "textSource": "body",
+   "before": {
+    "summary": "8月份中国批准10款新药、美国9款、欧盟1款，其中我国药企自主研发的8款为全球首次获批，包括替恩戈替尼片、富马酸立康可泮胶囊、安弗利奇塔单抗注射液、甲磺酸氘申艾替尼片、酒石酸凡瑞格拉替尼片、纬利妥米单抗注射液、莱康奇塔单抗注射液和小儿通便颗粒。替恩戈替尼片基于单臂Ⅱ期研究获批，客观缓解率28.0%；立康可泮Ⅲ期研究中血红蛋白较基线升高≥2g/dL的应答率为95%，对照组为55.6%。",
+    "reason": "可了解国内新获批胆管癌FGFR抑制剂、PNH补体因子B抑制剂及痛风IL-1β单抗的获批依据与关键疗效数据，为相关患者用药选择和临床试验设计提供参考。",
+    "lead": "8月份中国批准10款新药上市，其中8款为我国药企自主研发的全球范围内首次获批新药，包括替恩戈替尼片（FGFR 2融合或重排胆管癌，Ⅱ期研究客观缓解率28.0%）、富马酸立康可泮胶囊（PNH，第18至24周血红蛋白较基线升高≥2g/dL应答率95%，对照组55.6%）、安弗利奇塔单抗注射液（痛风性关节炎急性发作，12周内复发风险降低77%）、甲磺酸氘申艾替尼片（EGFR突变伴中枢神经系统转移非小细胞肺癌一线，颅内客观缓解率95.5%对奥希替尼79.6%）、酒石酸凡瑞格拉替尼片（FGFR 2融合或重排肝内胆管癌，客观缓解率42.5%）、纬利妥米单抗注射液（BCMA×CD3双抗，复发或难治性多发性骨髓瘤客观缓解率79.1%）等；另2款为盐酸伊可白滞素片和注射用菲泽妥单抗。同期美国批准9款新药，欧盟批准1款Trofinetide。"
+   },
+   "after": {
+    "genre": "roundup",
+    "genreBasis": "code",
+    "modelGenre": "roundup",
+    "summary": "8月份中国批准10款新药上市，美国批准9款，欧盟批准1款；中国批准的10款中有8款为我国药企自主研发、全球范围内首次获批上市。其中替恩戈替尼片用于FGFR2融合或重排的晚期胆管癌，Ⅱ期研究客观缓解率28.0%；富马酸立康可泮胶囊治疗阵发性睡眠性血红蛋白尿症，Ⅲ期第18至24周血红蛋白较基线升高≥2g/dL的应答率为95%，对照组为55.6%。",
+    "reason": null,
+    "lead": "8月份中国批准10款新药上市，其中8款为我国药企自主研发的全球范围内首次获批新药，包括济川药业的小儿通便颗粒、药捷安康的替恩戈替尼片、恒瑞医药旗下盛迪医药的富马酸立康可泮胶囊、三生国健的安弗利奇塔单抗注射液、浙江同源康的甲磺酸氘申艾替尼片、和记黄埔的酒石酸凡瑞格拉替尼片、智翔金泰的纬利妥米单抗注射液和丽珠单抗的莱康奇塔单抗注射液；另2款为盐酸伊可白滞素片和注射用菲泽妥单抗。",
+    "brief": {
+     "genre": "roundup",
+     "points": [
+      {
+       "key": "stories",
+       "label": "各条消息",
+       "items": [
+        "济川药业的小儿通便颗粒获批，为《中药注册管理专门规定》发布后首个主治为证候的中药创新药。",
+        "药捷安康的替恩戈替尼片（捷恩泰）获批用于FGFR2融合或重排的晚期胆管癌，Ⅱ期FIRST-08研究客观缓解率28.0%。",
+        "盛迪医药的富马酸立康可泮胶囊（恒优达）获批治疗PNH，Ⅲ期第18至24周血红蛋白应答率95%。",
+        "三生国健的安弗利奇塔单抗注射液（益赛那）获批用于痛风性关节炎急性发作，Ⅲ期12周复发风险降低77%。",
+        "浙江同源康的甲磺酸氘申艾替尼片（卡达沙）获批EGFR突变伴中枢神经系统转移NSCLC一线治疗，颅内客观缓解率95.5%。",
+        "和记黄埔的酒石酸凡瑞格拉替尼片（爱领达）获批FGFR2融合或重排肝内胆管癌，客观缓解率42.5%。"
+       ]
+      }
+     ]
+    },
+    "editVerification": "passed",
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "stories",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 366,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 193,
+     "reasonChars": 74,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [],
+     "briefFields": 1,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 188,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 172,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 29,
+     "numbersMissing": [],
+     "briefFields": 1,
+     "briefPresent": 1,
+     "briefCoverage": 1,
+     "quoteVerbatim": null
+    }
+   }
+  },
+  {
+   "id": "roundup-d76445b7741af34e",
+   "expectGenre": "roundup",
+   "genreAccepted": true,
+   "textChars": 3134,
+   "textSource": "body",
+   "before": {
+    "summary": "英国药品和保健品监管局汇总了2025年1月27日至31日发布的现场安全通告，涉及B. Braun无菌容器系统、BioMérieux胃肠道检测试剂盒、Hamilton Medical新生儿呼吸机、Intuitive Surgical达芬奇X和Xi器械缆线故障、Medtronic Pipeline Vantage栓塞装置、Philips Allura和Azurion介入X射线系统等。",
+    "reason": "可对照清单核查本院在用的呼吸机、达芬奇器械、介入X射线系统等是否涉及相关现场安全通告，并据此落实厂商要求的处置与随访。",
+    "lead": null
+   },
+   "after": {
+    "genre": "roundup",
+    "genreBasis": "code",
+    "modelGenre": "roundup",
+    "summary": null,
+    "reason": null,
+    "lead": null,
+    "brief": {
+     "genre": "roundup",
+     "points": [
+      {
+       "key": "stories",
+       "label": "各条消息",
+       "items": [
+        "B. Braun 发布 AESCULAP Aicon 无菌容器系统现场安全通告，2025年1月27日，MHRA 参考号 34566597。",
+        "BioMérieux 发布 BIOFIRE FILMARRAY 胃肠道检测板现场安全通告，2025年2月3日，型号 RFIT-ASY-0116、RFIT-ASY-0104。",
+        "Draeger 发布 Infinity Central Station（MS26800）VG3.0 及以下版本与 Edifier 扬声器（MS34036）现场安全通告，2024年12月。",
+        "Hamilton Medical 发布带新生儿选件的 HAMILTON-C2/C3 呼吸机现场安全通告，2025年1月22日。",
+        "Intersurgical 发布可复用麻醉呼吸回路现场安全通告，2025年1月30日，涉及多种 Uniflow 同轴呼吸系统。"
+       ]
+      }
+     ]
+    },
+    "editVerification": "title-only",
+    "leadVerification": "dropped",
+    "briefDropped": [
+     {
+      "key": "stories",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 0,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 191,
+     "reasonChars": 59,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 4,
+     "numbersMissing": [],
+     "briefFields": 1,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null
+    },
+    "after": {
+     "leadChars": 0,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 15,
+     "numbersMissing": [],
+     "briefFields": 1,
+     "briefPresent": 1,
+     "briefCoverage": 1,
+     "quoteVerbatim": null
+    }
+   }
+  }
+ ]
+}

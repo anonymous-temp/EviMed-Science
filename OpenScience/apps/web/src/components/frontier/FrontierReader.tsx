@@ -6,6 +6,7 @@ import {
   fetchFrontierAbstractZh,
   frontierErrorMessage,
   type FrontierBody,
+  type FrontierBrief,
   type FrontierInsight,
   type FrontierInsightRef,
   type FrontierItem,
@@ -170,7 +171,9 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
   const at = item.publishedAt ?? item.timelineAt;
   const when = item.publishedAt ? publishedLabel(item) : `收录于 ${dateClock(item.timelineAt)}`;
   const since = sinceText(at);
-  const evidence = evidenceTag(item);
+  const evidence = bylineEvidence(item);
+  // What the item is (ct-write 2026-10-24): its genre, except a safety alert's, which 「安全警示」 says already.
+  const genre = item.safetyAlert && item.genre === "safety" ? null : item.genreLabel;
   const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
   const parts = [
     <span key="name" className="text-text">{name}</span>,
@@ -192,9 +195,22 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
         </span>
       ))}
       {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
+      {genre && <Tag>{genre}</Tag>}
       {evidence && <Tag>{evidence}</Tag>}
     </div>
   );
+}
+
+/** Evidence types the genre's label already says: a guideline's, a regulator's decision, a safety notice, a company's release. */
+const GENRE_SAYS_EVIDENCE: ReadonlySet<string> = new Set(["guideline", "regulatory-decision", "safety-notice", "press-release"]);
+
+/**
+ * The byline's evidence tag beside the genre: a study's design (「RCT」「队列与病例对照」), never one the genre already names, and none
+ * for a roundup, whose stories each have their own.
+ */
+export function bylineEvidence(item: FrontierItem): string | null {
+  if (item.genre === "roundup") return null;
+  return item.evidenceType && GENRE_SAYS_EVIDENCE.has(item.evidenceType) ? null : evidenceTag(item);
 }
 
 /** The name of a block the model wrote (「AI 导读」, 「AI 解读」): in the accent, where every other block names itself in grey. */
@@ -213,6 +229,55 @@ export function ReaderLead({ text, className }: { text: string; className?: stri
 }
 
 const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
+
+/**
+ * 「AI 要点」 (ct-write 2026-10-24): under the 导读, the item's facts as the fields its genre is read by — a paper's 研究问题, 设计与对象,
+ * 主要结果, 安全性, 局限; a policy's 发文机关与文号, 核心内容, 适用对象, 时间节点; a deal's 事件, 交易与金额, 资产与阶段 — one label and its
+ * sentence (or its few items) per row, the label in the block-label grey and the words at the reading size. The source's own words
+ * (作者结论, 推荐意见, 警示原文 …) close it as a quotation, the original as written and its Chinese under it; a reading of another report
+ * opens with 「解读的研究」, which is that report's article.
+ */
+export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; item: FrontierItemDetail; className?: string }) {
+  const origin = useFrontierOrigin();
+  const location = useLocation();
+  const state = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: item.title } };
+  const quoteLang = brief.quote && brief.quote.zh && item.lang !== "und" ? item.lang : undefined;
+  // The report a reading reads, as its own article, with the reading's own words about it under the link: one row, not two.
+  const subject = brief.about ? brief.points.find((point) => point.key === "subject") ?? null : null;
+  const points = subject ? brief.points.filter((point) => point !== subject) : brief.points;
+  return (
+    <Block label="AI 要点" labelClassName={AI_LABEL} className={className}>
+      <dl data-prose="" className="max-w-measure-body xl:max-w-read">
+        {brief.about && (
+          <div className="grid gap-x-4 gap-y-0.5 border-b border-faint py-2.5 first:pt-0 sm:grid-cols-[6rem_1fr]">
+            <dt className="text-caption text-text-3 sm:pt-1">解读的研究</dt>
+            <dd className="min-w-0 break-words text-reading text-text">
+              <Link to={articlePath(brief.about.publicId)} state={state} className="rounded text-link hover:underline">《{brief.about.title}》</Link>
+              {subject?.text && <p className="mt-1 text-text-2">{subject.text}</p>}
+            </dd>
+          </div>
+        )}
+        {points.map((point) => (
+          <div key={point.key} className="grid gap-x-4 gap-y-0.5 border-b border-faint py-2.5 first:pt-0 last:border-b-0 sm:grid-cols-[6rem_1fr]">
+            <dt className="text-caption text-text-3 sm:pt-1">{point.label}</dt>
+            <dd className="min-w-0 break-words text-reading text-text">
+              {point.text ?? (point.items.length === 1 ? point.items[0] : (
+                <ul className="list-disc space-y-1 pl-5">{point.items.map((entry, index) => <li key={index}>{entry}</li>)}</ul>
+              ))}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {brief.quote && (
+        <figure className="mt-4 max-w-measure-body border-l-2 border-border pl-4 xl:max-w-read">
+          <figcaption className="text-caption text-text-3">{brief.quote.label}</figcaption>
+          <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
+          {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
+        </figure>
+      )}
+    </Block>
+  );
+}
 
 /** A piece of the 解读's paragraph: its own words, or a report it cites. */
 export type InsightPart = string | FrontierInsightRef;
@@ -282,6 +347,32 @@ export function ReaderInsight({ insight, item, className }: { insight: FrontierI
 /** A long text shows this much until the reader asks for the rest: a page of six windows needs contents, and plain text has none. */
 const FOLD_AT = 3_000;
 const FOLDED_LENGTH = 1_800;
+/** A text folded to its preview shows its first paragraph, cut at four lines when it is longer than this. */
+const PREVIEW_CHARS = 160;
+/** A news-like text shorter than this (in the language shown) is open: folding it would hide less than its preview shows. */
+export const SHORT_BODY_CHARS = 1_500;
+
+/**
+ * How a text is folded: `open` whole; `preview` its first paragraph (four lines) and 「展开全文」 — the body under a 导读 and 要点 that
+ * already say what it says; `auto` whole up to three thousand characters, its first part beyond.
+ */
+export type ReaderFold = "open" | "preview" | "auto";
+
+/**
+ * How an item's text is shown, by its genre (ct-write W6, the owner on 2026-10-24: 「摘要原封不动搬的，然后还有翻译的，还有原文」 — the
+ * body is shown once, under what was written about it): a paper's abstract (「摘要」) or open-access full text (「全文」) folded to its
+ * preview; a 公众号 article folded with 「阅读原文」; a policy, a guideline, a trial record and a reading folded; a post whole; news,
+ * an industry report, an approval, a safety notice and a congress report whole while short, folded past `SHORT_BODY_CHARS`.
+ */
+export function readerBodyPresentation(item: Pick<FrontierItem, "genre" | "platform">, body: FrontierBody): { kind: "正文" | "摘要" | "全文"; fold: ReaderFold; readOriginal: boolean } {
+  const research = item.genre === "paper" || item.genre === "preprint";
+  const kind = body.source === "abstract" ? "摘要" : research && body.source === "body" ? "全文" : "正文";
+  if (item.platform === "wechat") return { kind, fold: "preview", readOriginal: true };
+  if (isSocialItem(item)) return { kind: "正文", fold: "open", readOriginal: false };
+  if (research || ["policy", "guideline", "trial", "commentary"].includes(item.genre)) return { kind, fold: "preview", readOriginal: false };
+  const shown = (body.zh ?? body.original ?? "").length;
+  return { kind, fold: shown < SHORT_BODY_CHARS ? "open" : "preview", readOriginal: false };
+}
 
 /**
  * One block of a text as the reader sets it: a section heading of a full text; a paragraph — an abstract's with its own heading run in
@@ -422,8 +513,8 @@ export function readerOutline(text: FrontierBody, language: ReaderLanguage, idPr
  * are set as such, and a bare address is a short link. A text over three thousand characters opens at its first paragraphs, and
  * 「展开全文」 shows the rest in place (`open` / `onOpen` when the page's contents must open it).
  */
-export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idPrefix, open: openProp, onOpen, className }: {
-  kind: "正文" | "摘要";
+export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idPrefix, open: openProp, onOpen, fold = "auto", readOriginal, className }: {
+  kind: "正文" | "摘要" | "全文";
   text: FrontierBody;
   /** The original's language (`lang` on its paragraphs); `und` is not said. */
   lang: string;
@@ -435,6 +526,10 @@ export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idP
   idPrefix?: string;
   open?: boolean;
   onOpen?: () => void;
+  /** How it is folded until the reader opens it (`readerBodyPresentation`). */
+  fold?: ReaderFold;
+  /** 「阅读原文 ↗」 in the block's row: the address of the article (a 公众号's). */
+  readOriginal?: string;
   className?: string;
 }) {
   const [openState, setOpenState] = useState(false);
@@ -445,12 +540,29 @@ export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idP
   const label = translated ? `${kind} · AI 翻译` : showing === "original" && !originalIsChinese && text.zhKind !== "original-zh" ? `${kind} · 原文` : kind;
   const all = readerParagraphs(shown, { abstract: kind === "摘要", ownUrl });
   let visible = all;
-  if (!open && shown.length > FOLD_AT) {
+  let clamped = false;
+  if (!open && fold === "preview") {
+    // The first paragraph (with the heading over it), cut at four lines.
+    const first = all.findIndex((part) => part.kind !== "heading" && part.kind !== "source");
+    visible = all.slice(0, first < 0 ? 1 : first + 1);
+    clamped = blockLength(visible[visible.length - 1] ?? { kind: "quote", text: "" }) > PREVIEW_CHARS;
+  } else if (!open && fold === "auto" && shown.length > FOLD_AT) {
     let length = 0;
     visible = all.filter((part) => { const keep = length < FOLDED_LENGTH; length += blockLength(part); return keep; });
     // A section is folded whole: its heading is never the last line before 展开全文.
     while (visible.length > 1 && visible[visible.length - 1].kind === "heading") visible = visible.slice(0, -1);
   }
+  const folded = visible.length < all.length || clamped;
+  const languages = switchable ? (
+    <Toolbar label="语言" filters={[{
+      kind: "chips", label: `${kind}语言`, pinned: true, value: showing,
+      options: [{ value: "zh", label: "中文" }, { value: "original", label: "原文" }],
+      onChange: (next) => onLanguage(next === "original" ? "original" : "zh"),
+    }]} />
+  ) : null;
+  const original = readOriginal ? (
+    <a href={readOriginal} {...EXTERNAL} className={cn(INLINE_ACTION, "-mr-1.5 px-1.5 text-link")}>阅读原文<span aria-hidden="true"> ↗</span></a>
+  ) : null;
   const textLang = showing === "original" && lang !== "und" ? lang : undefined;
   let headings = 0;
   return (
@@ -458,13 +570,7 @@ export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idP
       ruled
       label={label}
       className={className}
-      aside={switchable ? (
-        <Toolbar label="语言" filters={[{
-          kind: "chips", label: `${kind}语言`, pinned: true, value: showing,
-          options: [{ value: "zh", label: "中文" }, { value: "original", label: "原文" }],
-          onChange: (next) => onLanguage(next === "original" ? "original" : "zh"),
-        }]} />
-      ) : undefined}
+      aside={languages || original ? <div className="flex items-center gap-3">{languages}{original}</div> : undefined}
     >
       {translated && !text.complete && text.original && (
         <Note className="mb-4" action={<Button variant="text" size="sm" onClick={() => onLanguage("original")}>看原文</Button>}>译文尚不完整</Note>
@@ -492,10 +598,11 @@ export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idP
               </p>
             );
           }
-          return <p key={index} className="whitespace-pre-line break-words">{part.runIn && <span className="font-semibold">{part.runIn}</span>}<Linked text={part.text} /></p>;
+          const cut = clamped && index === visible.length - 1;
+          return <p key={index} className={cn("whitespace-pre-line break-words", cut && "line-clamp-4")}>{part.runIn && <span className="font-semibold">{part.runIn}</span>}<Linked text={part.text} /></p>;
         })}
       </div>
-      {visible.length < all.length && (
+      {folded && (
         <Button variant="secondary" size="sm" className="mt-4" onClick={() => { setOpenState(true); onOpen?.(); }}>展开全文</Button>
       )}
     </Block>
@@ -509,10 +616,12 @@ type AbstractState = { kind: "loading" } | { kind: "ready"; zh: string | null; o
  * everyone (plan §10.3.6) — beside the original. Where the Chinese cannot be written (the budget, a failed number check, a server
  * that does not offer it) the original stands alone under its own name; where there is no abstract at all there is no block.
  */
-export function ReaderAbstract({ item, language, onLanguage, className }: {
+export function ReaderAbstract({ item, language, onLanguage, fold = "preview", className }: {
   item: FrontierItemDetail;
   language: ReaderLanguage;
   onLanguage: (language: ReaderLanguage) => void;
+  /** Under a 导读 and 要点 the abstract is folded to its preview. */
+  fold?: ReaderFold;
   className?: string;
 }) {
   const ask = !item.abstractZh && abstractOffered(item);
@@ -555,7 +664,7 @@ export function ReaderAbstract({ item, language, onLanguage, className }: {
   const text: FrontierBody = chinese && !state.zh
     ? { zh: state.original, original: null, zhKind: "original-zh", complete: true, source: "abstract" }
     : { zh: state.zh, original: state.original, zhKind: state.zh ? (chinese ? "original-zh" : "translation") : null, complete: true, source: "abstract" };
-  return <ReaderText kind="摘要" text={text} lang={item.lang} language={language} onLanguage={onLanguage} className={className} />;
+  return <ReaderText kind="摘要" text={text} lang={item.lang} language={language} onLanguage={onLanguage} fold={fold} className={className} />;
 }
 
 /**
@@ -877,7 +986,7 @@ export function ReaderBar({ item, more, onStar, onResearch }: {
           <MessageSquareText size={20} aria-hidden="true" />深入研究
         </button>
         <a href={item.url} {...EXTERNAL} className={BAR_TOOL}>
-          <ArrowUpRight size={20} aria-hidden="true" />{isSocialItem(item) ? "查看原帖" : "打开原文"}
+          <ArrowUpRight size={20} aria-hidden="true" />{originalLinkLabel(item) === "打开原文" ? "打开原文" : "查看原帖"}
         </a>
         <Menu label="更多操作" items={more}>
           <button type="button" className={BAR_TOOL}><MoreHorizontal size={20} aria-hidden="true" />更多</button>
