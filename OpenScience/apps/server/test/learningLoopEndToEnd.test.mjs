@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, methodContribution, promotionVerdict, retirementProposal } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, promotionVerdict, retirementProposal } from "@evimed/domain";
 
 import { selectLearnedMethods } from "../src/learnedMethodMount.mjs";
 import { LearningService, methodRecordFrom } from "../src/learningService.mjs";
@@ -281,7 +281,7 @@ test("a run that reads a method and delegates nothing keeps it out of the idle p
   assert.deepEqual(document.payload.learning.counts,
     { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 1 });
   assert.deepEqual(document.payload.learning.observations, [], "no verdict, so no attribution");
-  assert.equal(methodContribution(document.payload.learning), null, "and no movement in the success rate");
+  assert.equal(document.payload.learning.counts.loaded, 0, "and no movement in what a delivery's verdict is counted against");
 
   // The point of the counter: with a validated replacement in the library, the
   // nightly job would otherwise propose this for retirement as unused, because

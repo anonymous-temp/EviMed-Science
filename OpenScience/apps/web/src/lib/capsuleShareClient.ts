@@ -35,11 +35,11 @@ export interface PendingDelivery { id: string; state: DeliveryState; createdAt: 
 
 const enc = encodeURIComponent;
 
-export const deliverCapsule = (capsuleId: string, input: { recipients: string[]; scopes?: string[]; card?: CapsuleCard }) =>
+export const deliverCapsule = (capsuleId: string, input: { recipients: string[]; scopes?: string[]; card?: CapsuleCard; excludeEntryIds?: string[] }) =>
   productRequest<DeliveryAnswer>(`/capsules/${enc(capsuleId)}/deliveries`, "POST", input);
 export const listSentDeliveries = (capsuleId: string) => productRequest<SentDelivery[]>(`/capsules/${enc(capsuleId)}/deliveries`);
 
-export const createShareLink = (capsuleId: string, input: { scopes?: string[]; maxUses?: number; ttlDays?: number; card?: CapsuleCard } = {}) =>
+export const createShareLink = (capsuleId: string, input: { scopes?: string[]; maxUses?: number; ttlDays?: number; card?: CapsuleCard; excludeEntryIds?: string[] } = {}) =>
   productRequest<CreatedShareLink & { snapshot: CapsuleExportSnapshot }>(`/capsules/${enc(capsuleId)}/links`, "POST", input);
 export const listShareLinks = (capsuleId: string) => productRequest<ShareLink[]>(`/capsules/${enc(capsuleId)}/links`);
 export const revokeShareLink = (capsuleId: string, linkId: string) => productRequest<ShareLink>(`/capsules/${enc(capsuleId)}/links/${enc(linkId)}`, "DELETE", {});

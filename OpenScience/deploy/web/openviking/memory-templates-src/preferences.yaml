@@ -1,21 +1,39 @@
 memory_type: preferences
 description: |
   __LANGUAGE__
-  User preference memory: how the user wants work done, as a standing choice.
-  Keep what the user states as a rule for future work, in a user-role message: methods and
-  statistics they always use, reporting standards, evidence grading, structure and format
-  of documents, citation style, language and tone of the output, tools, software and
-  libraries they name as their own ("我检索一律用 PubMed 和 Embase", "测试都用 Vitest"),
-  conventions of their team. Signals: 以后、一律、默认、固定做法、我们组都、always, by default.
-  A tool or database the user names as theirs is their vocabulary and is kept by name.
+  User preference memory: how this person wants work done and what they use, as a standing
+  choice. Write it in the first conversation it is said, asked for or confirmed; do not wait
+  for a second one.
+  Keep, one topic per file:
+  - What the user says is a rule for future work, in any wording ("以后", "一律", "默认",
+    "我们组都", "always" are examples of how people say it, not a list to match): methods and
+    statistics they always use, reporting standards, evidence grading, structure and format
+    of documents, citation style, language and tone of the output, conventions of their team.
+  - What they ask to have changed after a first draft, scoped to the kind of thing it was said
+    about ("周报太长，压到 200 字、三条" is a preference about 周报, never about all answers).
+  - Deliverable defaults: language, format, structure, length, tone, citation style, units, and
+    how much to ask first versus just do.
+  - Tools, software, libraries, databases, templates and naming conventions they name as
+    theirs ("我检索一律用 PubMed 和 Embase", "测试都用 Vitest", "我们用飞书和 WPS",
+    "文件名用 YYYYMMDD_序号"), and limits of their environment that they state ("公司网络打不开 X",
+    "只有 WPS，没有 Office"). A tool or database the user names as theirs is their vocabulary
+    and is kept by name.
+  - Ordinary standing habits and interests they state for everyday help (a diet preference,
+    how they get around), without the sensitive reason.
+  Each line says what it applies to, in the user's words (for whom, which document, which
+  language: "给门诊患者写的科普材料一律用初中生读得懂的话", not "材料用通俗的话").
   Each preference file is about one specific topic; do not mix unrelated topics, and do not
   split one topic over several files. When the user changes a preference, update the
   existing file so that it states only the current choice.
-  Not a preference: a condition that scopes one request ("这次只看亚洲人群的 RCT，不要图表"),
-  a mood, a question, a fact about a project (-> PROJECT_CONTEXT), and something the user
-  said the assistant got wrong (-> CORRECTIONS).
+  Not a preference: a condition that scopes one request ("这次只看亚洲人群的 RCT，不要图表")
+  unless they say it is how they always want it, a mood, a question, a stance on a contested
+  question, a fact about a project (-> PROJECT_CONTEXT), something the user said the assistant
+  got wrong or an approach they confirmed (-> CORRECTIONS), and a trait guessed from what
+  they asked for.
 
   __NEVER_KEEP__
+
+  __DECIDE__
 directory: "viking://user/{{ user_space }}/memories/preferences"
 filename_template: "{{ user|lower }}/{{ topic|lower }}.md"
 enabled: true

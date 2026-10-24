@@ -9,7 +9,7 @@
 // recall); `learning` paused = nothing is written (notes). A 「试用一次」 conversation is paused for both, for itself.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -132,7 +132,9 @@ test("a launch under a recall pause mounts no learned and no capsule method, and
       assert.equal(paused.count, 0, JSON.stringify(state));
       assert.deepEqual(paused.learned, []);
       assert.deepEqual(paused.capsule, []);
-      assert.equal(existsSync(f.methodsDir), false, "the earlier launch's files are gone: a stale SKILL.md is a rule the researcher turned off");
+      // The directory itself stays (a bind mount of it must reach a later refresh); what is in it is the selection of nothing.
+      assert.deepEqual(await readdir(f.methodsDir), ["_selection.json"], "the earlier launch's files are gone: a stale SKILL.md is a rule the researcher turned off");
+      assert.deepEqual(JSON.parse(await readFile(path.join(f.methodsDir, "_selection.json"), "utf8")).methods, [], "and the plugin is told there is nothing to carry");
       assert.deepEqual(learning.asked, [], "a paused account's library is not even read");
       // Reopened for the next arm of the loop.
       manager.memoryPause = pauseOf({}).read;

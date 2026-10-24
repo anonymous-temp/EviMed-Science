@@ -26,6 +26,11 @@
  *    what its doctors choose from, and the key that asks already reads the
  *    institution's memory by leaving the header off.
  *
+ * Which engine keeps the account's memory decides where the research-memory half is read (2026-10-23): for an account on the
+ * native engine it is the engine's own files, through the store the memory page uses (`nativeRecallSource`), and never the
+ * PostgreSQL copies a switched account keeps for the fallback window — which were stale or empty, and which the in-runtime recall
+ * has never read for such an account (`capsuleGateway.mjs`).
+ *
  * Reading a method here counts nothing. A counter write per recall is a
  * revision per recall on the method's document — the churn the memory audit
  * found (77 revisions, 2 bodies) — and a count the CDSS cannot see cannot be
@@ -52,6 +57,43 @@ export const AGENT_RECALL_METHOD_MODES = Object.freeze(["all", "own", "capsules"
 
 /** The capsule half's own ceiling (`CapsuleService.recall`). */
 const CAPSULE_RECALL_MAX_LIMIT = 30;
+
+/** The longest one native memory's text is in a recall: a file is the whole of one topic, and an answer is a few lines. */
+const NATIVE_RECALL_CHARS = 2_000;
+/** The most native memories one recall reads before the union with the capsule's facts is cut to `limit`. */
+const NATIVE_RECALL_READ = 50;
+
+/**
+ * The research-memory half of a recall for an account on the native engine, in the shape `recallAcrossMemory` takes a
+ * substrate in: what the memory page's search finds (the words over every memory's text, joined with the engine's own semantic
+ * search), the account's memories and this project's, never a sensitive one, as the structured records the legacy half returns.
+ * A native memory has no validity interval, so `asOf` has nothing to apply to.
+ * @param {{ search: (userId: string, query: string) => Promise<{ items: any[] }> }} nativeMemory
+ */
+export function nativeRecallSource(nativeMemory) {
+  return {
+    recallEnabled: true,
+    /** @param {string} userId @param {string} query @param {{ projectId?: string | null }} [scope] */
+    async recall(userId, query, { projectId = null } = {}) {
+      const found = await nativeMemory.search(userId, query);
+      return (found.items ?? [])
+        .filter((record) => record.sensitive !== true && record.status === "active"
+          && (record.scope === "user" || (record.scope === "project" && projectId != null && record.scopeId === projectId)))
+        .slice(0, NATIVE_RECALL_READ)
+        .map((record) => ({
+          id: String(record.id),
+          memoryType: "native",
+          kind: record.kind,
+          scope: record.scope,
+          content: [...String(record.value ?? "").replace(/<!-- MEMORY_FIELDS[\s\S]*?-->/g, "").trim()].slice(0, NATIVE_RECALL_CHARS).join(""),
+          updatedAt: record.updatedAt ?? null,
+          confidence: record.confidence ?? null,
+          importance: record.importance ?? null,
+          origin: record.origin,
+        }));
+    },
+  };
+}
 
 /** @param {string} text */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");

@@ -22,6 +22,9 @@ const KEEPER_OUTCOMES = Object.freeze(["counted", "account_too_new", "too_few_ru
 const KDF_REFUSALS = Object.freeze(["account_busy", "queue_full", "waited_out", "params_unsupported"]);
 const SNAPSHOT_FILES = Object.freeze(["orphan", "revoked", "temporary", "discarded", "failed"]);
 const ACCOUNT_CLEANUP = Object.freeze(["completed", "rolled_back", "failed"]);
+// A pack enabled or disabled while a runtime is up: the runtimes were asked to take the new set (`asked`), or the ask failed and the
+// click stood (`failed`) — the next launch mounts the right set either way.
+const RUNTIME_REFRESH = Object.freeze(["asked", "failed"]);
 
 /** @param {readonly string[]} labels */
 const table = (labels) => new Map(labels.map((label) => [label, 0]));
@@ -41,6 +44,7 @@ const keepers = table(KEEPER_OUTCOMES);
 const kdfRefusals = table(KDF_REFUSALS);
 const snapshotFiles = table(SNAPSHOT_FILES);
 const accountCleanup = table(ACCOUNT_CLEANUP);
+const runtimeRefresh = table(RUNTIME_REFRESH);
 
 /** A pack handed to others. @param {string} channel */
 export function recordShared(channel) { bump(shared, channel); }
@@ -67,10 +71,12 @@ export function recordKdfRefused(reason) { bump(kdfRefusals, reason); }
 export function recordSnapshotFile(event, count = 1) { bump(snapshotFiles, event, Math.max(0, Math.trunc(count) || 0)); }
 /** How one account's capsule cleanup after a deletion attempt ended. @param {string} outcome */
 export function recordAccountCleanup(outcome) { bump(accountCleanup, outcome); }
+/** Running runtimes asked to take the capsules now in force, or that could not be asked. @param {string} outcome */
+export function recordCapsuleRuntimeRefresh(outcome) { bump(runtimeRefresh, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetCapsuleShareMetrics() {
-  for (const map of [shared, imported, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning, keepers, kdfRefusals, snapshotFiles, accountCleanup]) {
+  for (const map of [shared, imported, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning, keepers, kdfRefusals, snapshotFiles, accountCleanup, runtimeRefresh]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -119,5 +125,7 @@ export function capsuleStewardshipMetricFamilies() {
       help: "Snapshot files taken off the disk, by why: no snapshot record names them, their snapshot was revoked, they were a crashed write's leftover, or a revoke discarded them; and the ones that could not be removed." },
     { name: "open_science_capsule_account_cleanup_total", type: "counter", series: series(accountCleanup, "outcome"),
       help: "Capsule cleanup after an account's deletion attempt, by how it ended: finished, rolled back (the account stayed and its capsules were released), or failed and retried later." },
+    { name: "open_science_capsule_runtime_refresh_total", type: "counter", series: series(runtimeRefresh, "outcome"),
+      help: "Enabling or disabling a received pack, as it reached the running runtimes: asked to take the new set of capsule methods, or the ask failed and the next launch carries it." },
   ];
 }

@@ -685,7 +685,7 @@ export async function pruneRunTranscripts(project, options = {}) {
  * pathological run cannot fill the model's context with its own loop. What is
  * dropped is counted, because an excerpt that silently lost the decisive
  * message produces a confident method about something that did not happen.
- * @param {any[]} messages
+ * @param {readonly any[]} messages
  * @param {{ sessionId?: string, fromSeq?: number, toSeq?: number, limit?: number }} range
  * @returns {{ messages: any[], dropped: { sensitive: number, bounded: number } }}
  */

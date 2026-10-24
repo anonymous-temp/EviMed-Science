@@ -63,6 +63,7 @@ function instantMs(value) {
 /** The source of a record, from the basis its own evidence and revisions give.
  * @param {any} record */
 function recordSource(record) {
+  if (record?.engine === "native" && ["explicit", "manual"].includes(record.origin)) return "self";
   const basis = record?.provenance?.basis;
   if (["stated", "confirmed", "edited"].includes(basis)) return "self";
   if (basis === "inferred") return "inferred";
@@ -180,7 +181,7 @@ function habitRow(document, nowMs, basis) {
 export async function memoryBoard({ researchMemory, nativeMemory = null, learning = null, capsules = null, observations = null, projectId = null, now = () => new Date() }, user) {
   const nowMs = now().getTime();
   if (!user) {
-    return { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] };
+    return { engine: "legacy", switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] };
   }
   const settings = await researchMemory.settings(user.id);
   const native = typeof researchMemory.memoryEngine === "function" && await researchMemory.memoryEngine(user.id) === "native";
@@ -189,7 +190,7 @@ export async function memoryBoard({ researchMemory, nativeMemory = null, learnin
   const all = [...await recordStore.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100 }),
     ...(native ? await researchMemory.listRecords(user.id, { statuses: ["pending"], pageSize: 100 }) : [])]
     .filter((/** @type {any} */ record) => record.kind !== "run_summary" && (!projectId || (record.scope === "project" && record.scopeId === projectId)));
-  const usage = await researchMemory.recordUsage(user.id, all.map((/** @type {any} */ record) => record.id)).catch(() => ({}));
+  const usage = native ? {} : await researchMemory.recordUsage(user.id, all.map((/** @type {any} */ record) => record.id)).catch(() => ({}));
   /** @type {Map<string, any[]>} */
   const replacedBy = new Map();
   for (const record of all) {
@@ -276,6 +277,34 @@ function positive(value, name) {
   return number;
 }
 
+async function nativeRecordAction(native, user, recordId, action, body) {
+  if (action === "undo") {
+    const input = bodyOf(body, ["expectedVersion"]);
+    const result = await native.undo(user.id, recordId, { expectedVersion: positive(input.expectedVersion, "expectedVersion") });
+    return { record: result.record, event: `memory.record.undo.${result.undone}` };
+  }
+  if (action === "restore") {
+    throw new HttpError(400, "memory_engine_unsupported", "On the native memory engine a forgotten memory is brought back with undo, naming the version the forget answered with.");
+  }
+  const input = bodyOf(body, action === "edit" ? ["expectedVersion", "summary", "value"] : ["expectedVersion"]);
+  const expectedVersion = positive(input.expectedVersion, "expectedVersion");
+  if (action === "confirm") {
+    throw new HttpError(409, "memory_not_pending", "Nothing waits for confirmation on the native memory engine: a memory is in force when it is written.");
+  }
+  if (action === "forget") {
+    return { record: await native.update(user.id, recordId, { status: "archived", expectedVersion }), event: "memory.record.forget" };
+  }
+  if (action === "edit") {
+    if (input.value === undefined && input.summary === undefined) throw new HttpError(400, "agent_memory_payload_invalid", "Edit the summary, the value, or both.");
+    // A memory file has the text and nothing else: a summary alone has no place in it, and is refused by name.
+    if (input.value === undefined) throw new HttpError(400, "memory_engine_unsupported", "A memory on the native engine has its text and no separate summary: edit the value.");
+    const text = typeof input.value === "string" ? input.value.trim() : "";
+    if (!text || text.length > 100_000) throw new HttpError(400, "agent_memory_payload_invalid", "value is empty or too long.");
+    return { record: await native.update(user.id, recordId, { value: text, expectedVersion }), event: "memory.record.edit" };
+  }
+  throw new HttpError(404, "not_found", "No such memory action.");
+}
+
 /**
  * One act on one record: `confirm`, `edit`, `forget`, `restore` or `undo`.
  *
@@ -293,15 +322,8 @@ export async function recordAction({ researchMemory, nativeMemory = null, feedba
       throw new HttpError(404, "memory_not_found", "No such pending memory candidate.");
     }
   }
-  if (nativeRecord && action !== "confirm") {
-    const input = bodyOf(body, action === "edit" ? ["expectedVersion", "summary", "value"] : ["expectedVersion"]);
-    const expectedVersion = positive(input.expectedVersion, "expectedVersion");
-    if (action === "restore") throw new HttpError(400, "memory_engine_unsupported", "Restore native memory through its undo action.");
-    if (action === "undo") return { record: (await nativeMemory.undo(user.id, recordId, { expectedVersion })).record, event: "memory.record.undo" };
-    if (action === "edit" && input.value === undefined) throw new HttpError(400, "memory_engine_unsupported", "Edit the native memory value.");
-    const record = await nativeMemory.update(user.id, recordId, { expectedVersion, ...(action === "forget" ? { status: "archived" } : { value: input.value }) });
-    return { record, event: `memory.record.${action}` };
-  }
+  if (nativeRecord) return nativeRecordAction(nativeMemory, user, recordId, action, body);
+
   const projectId = "default";
   const remember = async (/** @type {() => Promise<any>} */ operation) => {
     if (!feedbackEvents) return;

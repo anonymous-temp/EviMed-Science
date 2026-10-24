@@ -1,16 +1,21 @@
 memory_type: follow_ups
 description: |
   __LANGUAGE__
-  Follow-ups: something the user said they still have to do, are waiting for, or asked to be
-  reminded of, that does NOT belong to one project's card ("下个月要交年度总结，到时提醒我",
-  "等法务回复后再定合同模板"). An open item of one particular project is a line under
-  阶段 in that project's PROJECT_CONTEXT card and is not written here as well.
+  Follow-ups: something the user said they still have to do or are waiting on, with no date
+  attached, that does NOT belong to one project's card ("等法务回复后再定合同模板"). An open
+  item of one particular project is a line under 阶段 in that project's PROJECT_CONTEXT card and
+  is not written here as well.
+  A request to be reminded at a time, or to repeat a task on a schedule ("下个月要交年度总结，
+  到时提醒我", "每个工作日早上 9 点给我…"), is a scheduled task, not a memory: do not write it here.
+  A memory file never fires.
   Only what the user stated as theirs in a user-role message. Never a next step, a
   suggestion or a list the assistant produced; never what the assistant is waiting for.
   One file per subject. When the user says an item is done or dropped, remove it; delete
   the file when nothing in it is open.
 
   __NEVER_KEEP__
+
+  __DECIDE__
 directory: "viking://user/{{ user_space }}/memories/follow_ups"
 filename_template: "{{ topic|lower }}.md"
 enabled: true
@@ -35,6 +40,6 @@ fields:
   - name: content
     type: string
     description: |
-      Markdown bullets, one per open item: what is open, what it waits on, and a date only
-      when the user gave one.
+      Markdown bullets, one per open item: what is open and what it waits on. Never a reminder
+      or a schedule.
     merge_op: patch

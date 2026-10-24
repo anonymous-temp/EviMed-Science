@@ -24,6 +24,11 @@ const RETIRED_TABLES = Object.freeze(["memory_record", "memo"]);
  * had been compacted away, left it where the conversation already held it, had none to give, or was told not to by a pause.
  */
 export const RESIDENT_PROFILE_OUTCOMES = Object.freeze(["first", "changed", "compacted", "unchanged", "empty", "paused", "native"]);
+/**
+ * What a dispatch did with the project's card for the resident block (2026-10-23): handed one, found it said nothing, could not read it,
+ * or gave up waiting for it (the conversation goes on without the card in the last two).
+ */
+export const RESIDENT_CARD_OUTCOMES = Object.freeze(["read", "empty", "unread", "timeout"]);
 /** What the recall tool answered: items found, nothing above the relevance floor, or why it read nothing (a pause, a trial, the deployment switch). */
 export const RECALL_TOOL_OUTCOMES = Object.freeze(["hit", "empty", "paused", "trial", "disabled"]);
 /**
@@ -44,6 +49,7 @@ const methodRetirements = table(METHOD_RETIREMENTS);
 const retiredTables = table(RETIRED_TABLES);
 const residentProfile = table(RESIDENT_PROFILE_OUTCOMES);
 const residentOmitted = table(["records"]);
+const residentCard = table(RESIDENT_CARD_OUTCOMES);
 const recallTool = table(RECALL_TOOL_OUTCOMES);
 const recallToolItems = table(["items"]);
 const extractionEmpty = table(EXTRACTION_EMPTY_CAUSES);
@@ -63,6 +69,8 @@ export function recordRetiredTableRows(name, count) { bump(retiredTables, name, 
 
 /** What one dispatch did with the resident profile. @param {string} outcome */
 export function recordResidentProfile(outcome) { bump(residentProfile, outcome); }
+/** What a dispatch did with the project's card. @param {string} outcome */
+export function recordResidentCard(outcome) { bump(residentCard, outcome); }
 /** Records the profile's cap left off a block. @param {number} count */
 export function recordResidentOmitted(count) { bump(residentOmitted, "records", count); }
 /** One answer of the recall tool, and the items it carried. @param {string} outcome @param {number} [items] */
@@ -74,7 +82,7 @@ export function recordInferenceUpgraded() { bump(inferenceUpgraded, "records"); 
 
 /** The test hook: counters are process state. */
 export function resetMemoryMetrics() {
-  for (const map of [beforeReset, resetRemoved, methodRetirements, retiredTables, residentProfile, residentOmitted, recallTool, recallToolItems, extractionEmpty, inferenceUpgraded]) {
+  for (const map of [beforeReset, resetRemoved, methodRetirements, retiredTables, residentProfile, residentOmitted, residentCard, recallTool, recallToolItems, extractionEmpty, inferenceUpgraded]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -97,6 +105,8 @@ export function memoryMetricFamilies() {
       help: "Rows of the retired usememos tables removed with an erased account, by table." },
     { name: "open_science_memory_resident_profile_total", type: "counter", series: series(residentProfile, "outcome"),
       help: "What dispatches did with the resident profile: handed it to a conversation that had none (first), whose copy had changed (changed) or had been compacted away (compacted); left it where the conversation already held it (unchanged); had none to give (empty); were told not to by a pause; or left it to the native engine's memory plugin (native)." },
+    { name: "open_science_memory_resident_card_total", type: "counter", series: series(residentCard, "outcome"),
+      help: "What dispatches did with the project's card for the resident profile: handed one (read), found it said nothing (empty), could not read it (unread) or gave up waiting (timeout, `OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS`); the conversation goes on without the card in the last two." },
     { name: "open_science_memory_resident_profile_omitted_total", type: "counter", series: series(residentOmitted, "what"),
       help: "Records of the resident profile left off a block by its record or token cap; the line beside the profile says they can be looked up." },
     { name: "open_science_memory_recall_tool_total", type: "counter", series: series(recallTool, "outcome"),

@@ -1,6 +1,6 @@
 import type { NotePart } from "@/components/ui/Note";
 import { kindTitle } from "@/lib/memoryGroups";
-import type { MapEdge, MapNode, MapReason, MemoryMap } from "@/lib/memoryMapClient";
+import type { MapEdge, MapNode, MapPart, MapReason, MapTopic, MemoryMap } from "@/lib/memoryMapClient";
 import type { MapSelection } from "./useMapSelection";
 
 /**
@@ -13,6 +13,22 @@ import type { MapSelection } from "./useMapSelection";
 
 /** The marks that are structure, not things the platform remembers: they are drawn, and never listed. */
 export const STRUCTURE: ReadonlySet<string> = new Set(["you", "project"]);
+
+/** The kinds of memory the memory page files under a project (`recordGroup`); every other kind is about the person. */
+const PROJECT_KINDS: ReadonlySet<string> = new Set(["project_fact", "analysis", "decision", "follow_up", "run_summary"]);
+
+/** A mark of a memory — or a cluster that folds some — whichever store it came from. */
+function isMemoryMark(node: Pick<MapNode, "type" | "memberType">): boolean {
+  return node.type === "memory" || (node.type === "cluster" && node.memberType === "memory");
+}
+
+/**
+ * Whether a memory is about the person (the memory page's 关于你) and not a project's: it sits in no project and is not of a project's
+ * kind. A cluster that folds memories answers for the memories it folds, which are all of one kind and one project.
+ */
+export function isAboutYou(node: Pick<MapNode, "type" | "memberType" | "subtype" | "projectId">): boolean {
+  return isMemoryMark(node) && !node.projectId && !PROJECT_KINDS.has(String(node.subtype));
+}
 
 /** What a mark that needs a second look says, in the reader's words. */
 export const REASON_TEXT: Readonly<Record<MapReason, string>> = {
@@ -47,29 +63,46 @@ function matches(text: string, query: string): boolean {
  * documents they rest on, what they replaced) stays with them. A mark nothing narrowed memory ties to — a method, an entity — is
  * there while nothing narrows and is gone while something does. A search does not remove anything from the picture, it names hits
  * (`hits`) for the picture to light up; the list under it shows the hits alone.
+ *
+ * A `part` is the one narrowing that is not only about memories: it is how a card of the overview opens the map on what it counted —
+ * `you` and `project` the memories about the person and a project's (with the projects and the documents they sit in), `method` the learned
+ * methods, `knowledge` the documents, pages, entities and works. What a part holds is chosen here, from the marks in hand, so the map
+ * reads no more than the overview did.
  */
-export function narrowMap(doc: Pick<MemoryMap, "nodes" | "edges" | "facets">, selection: Pick<MapSelection, "topic" | "kind" | "dimension" | "look" | "q">): NarrowedMap {
+export function narrowMap(doc: Pick<MemoryMap, "nodes" | "edges" | "facets">, selection: Pick<MapSelection, "topic" | "kind" | "dimension" | "look" | "q"> & { part?: MapPart | null }): NarrowedMap {
   const axis = selection.dimension ? doc.facets.dimensions.flatMap((dimension) => dimension.axes).find((entry) => entry.id === selection.dimension) : undefined;
   const kinds = axis?.kinds ? new Set(axis.kinds) : null;
-  const narrowed = Boolean(selection.topic || selection.kind || kinds || selection.look);
+  const part = selection.part ?? null;
+  const derived = selection.topic ? derivedMembers(doc.nodes, selection.topic) : null;
+  const narrowed = Boolean(selection.topic || selection.kind || kinds || selection.look || part);
   let nodes = doc.nodes;
   let edges = doc.edges;
   if (narrowed) {
+    // A part of the capsule is what a card of the overview opens: the memories about the person, a project's memories and documents, the
+    // learned methods, or what is known. Only the first two are memories; the others are chosen below and keep no memory.
+    const keepsMemory = part === null || part === "you" || part === "project";
     const keep = (node: MapNode) => (
-      (!selection.topic || (node.topics ?? []).includes(selection.topic))
+      (!selection.topic || (derived ? derived.has(node.id) : (node.topics ?? []).includes(selection.topic)))
       && (!selection.kind || node.subtype === selection.kind)
       && (!kinds || kinds.has(String(node.subtype)))
       && (!selection.look || node.state === "check")
+      && (part !== "you" || isAboutYou(node))
+      && (part !== "project" || !isAboutYou(node))
     );
-    const memories = new Set(doc.nodes.filter((node) => node.type === "memory" && keep(node)).map((node) => node.id));
-    const tied = new Set<string>(memories);
+    const memories = keepsMemory ? new Set(doc.nodes.filter((node) => node.type === "memory" && keep(node)).map((node) => node.id)) : new Set<string>();
+    const chosen = new Set<string>(memories);
+    // What else the part holds, whatever memory there is: the methods, what is known, and a project's documents.
+    if (part === "method") for (const node of doc.nodes) if (node.type === "method") chosen.add(node.id);
+    if (part === "knowledge") for (const node of doc.nodes) if (["document", "page", "entity", "reference"].includes(node.type)) chosen.add(node.id);
+    if (part === "project") for (const node of doc.nodes) if (node.type === "document" && node.projectId) chosen.add(node.id);
+    const tied = new Set<string>(chosen);
     for (const edge of doc.edges) {
       if (edge.type === "belongs-to") continue;
       if (memories.has(edge.from)) tied.add(edge.to);
       if (memories.has(edge.to)) tied.add(edge.from);
     }
     for (const edge of doc.edges) {
-      if (edge.type === "belongs-to" && memories.has(edge.from)) tied.add(edge.to);
+      if (edge.type === "belongs-to" && chosen.has(edge.from)) tied.add(edge.to);
     }
     nodes = doc.nodes.filter((node) => tied.has(node.id));
     const kept = new Set(nodes.map((node) => node.id));
@@ -78,6 +111,52 @@ export function narrowMap(doc: Pick<MemoryMap, "nodes" | "edges" | "facets">, se
   const query = selection.q.trim();
   const hits = query ? new Set(nodes.filter((node) => !STRUCTURE.has(node.type) && matches(`${node.label} ${node.description ?? ""}`, query)).map((node) => node.id)) : new Set<string>();
   return { nodes, edges, hits, narrowed };
+}
+
+/** The id of a topic the page made itself (`derivedTopics`), which names its kind (`derived:kind:偏好`) or its project (`derived:project:<id>`). */
+export const DERIVED_TOPIC = "derived:";
+
+/**
+ * The topics of an account the model has not grouped — fewer memories than it takes (`OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES`) — made from
+ * what the memories already say: a topic for each kind of memory, in the memory page's own word for it, and one for each project that has
+ * some. A memory is in its kind and in its project, as the model's topics let it be in up to three. No model is asked and nothing is stored:
+ * the researcher's sparse real records stay visible (owner ruling of 2026-10-19) instead of an empty card, and the topics are gone as
+ * soon as the model's grouping exists (the page prefers it). `derived` is what tells the view that these are not editable.
+ *
+ * @param projectName the name of a project, or null when the account no longer has it
+ */
+export function derivedTopics(doc: Pick<MemoryMap, "nodes">, projectName: (id: string) => string | null, now: Date = new Date()): MapTopic[] {
+  const groups = new Map<string, { label: string; members: MapNode[] }>();
+  const add = (id: string, label: string, node: MapNode) => {
+    const held = groups.get(id) ?? { label, members: [] };
+    held.members.push(node);
+    groups.set(id, held);
+  };
+  for (const node of doc.nodes) {
+    if (node.type !== "memory" || node.state === "replaced") continue;
+    add(`${DERIVED_TOPIC}kind:${kindTitle(String(node.subtype ?? ""))}`, kindTitle(String(node.subtype ?? "")), node);
+    if (node.projectId) add(`${DERIVED_TOPIC}project:${node.projectId}`, projectName(node.projectId) ?? "其他项目", node);
+  }
+  const day = 86_400_000;
+  const recent = (node: MapNode, from: number, to: number) => {
+    const age = now.getTime() - Date.parse(node.at ?? "");
+    return Number.isFinite(age) && age >= from * day && age < to * day;
+  };
+  return [...groups.entries()].map(([id, group]): MapTopic => ({
+    id, label: group.label, weight: group.members.length,
+    // The memories begun in the last 30 days less those of the 30 before, as the model's topics count it.
+    trend: group.members.filter((node) => recent(node, 0, 30)).length - group.members.filter((node) => recent(node, 30, 60)).length,
+    members: group.members.map((node) => node.id), derived: true,
+  })).sort((left, right) => right.weight - left.weight || left.id.localeCompare(right.id));
+}
+
+/** The memories of a topic the page made, or null for a topic the model made (its members are marked on the nodes). */
+function derivedMembers(nodes: readonly MapNode[], topic: string): Set<string> | null {
+  if (!topic.startsWith(DERIVED_TOPIC)) return null;
+  const [, kind, ...rest] = topic.split(":");
+  const value = rest.join(":");
+  return new Set(nodes.filter((node) => node.type === "memory" && node.state !== "replaced"
+    && (kind === "project" ? node.projectId === value : kindTitle(String(node.subtype ?? "")) === value)).map((node) => node.id));
 }
 
 export interface HeadlinePart {
@@ -92,8 +171,13 @@ export interface HeadlinePart {
  * otherwise by their count; the number is a button.
  */
 export function headline(doc: Pick<MemoryMap, "summary" | "nodes">): HeadlinePart[] {
-  const { memories, needsLook } = doc.summary;
-  if (memories === 0) return [{ text: "还没有记住什么。" }];
+  const { memories, needsLook, documents, methods } = doc.summary;
+  if (memories === 0) {
+    // What the page draws is not nothing because no memory was written: a graph of documents under 「还没有记住什么」 was the one sentence
+    // of the landing, and it said the opposite of the picture. The sentence says what is there, and that no memory is yet.
+    const holds = [documents > 0 ? `${documents} 份资料` : "", methods > 0 ? `${methods} 种做法` : ""].filter(Boolean);
+    return [{ text: holds.length > 0 ? `胶囊里有 ${holds.join("、")}，还没有记下关于你的事。` : "还没有记住什么。" }];
+  }
   const sources = doc.nodes.filter((node) => node.type === "memory" && node.state === "check" && String(node.reason ?? "").startsWith("source-")).length;
   const base = `EviMed 记住了你的 ${memories} 件事`;
   if (needsLook === 0) return [{ text: `${base}。` }];

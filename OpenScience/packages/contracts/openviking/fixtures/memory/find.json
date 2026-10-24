@@ -1,6 +1,6 @@
 {
   "note": "search/find scoped to one directory.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/search/find",
@@ -24,17 +24,9 @@
       "memories": [
         {
           "context_type": "memory",
-          "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
-          "level": 2,
-          "score": 0.842710018157959,
-          "abstract": "偏好 / 报告呈现\n\n用户偏好用表格呈现证据强度，不要大段散文。",
-          "tags": []
-        },
-        {
-          "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec3.md",
           "level": 2,
-          "score": 0.7957417964935303,
+          "score": 0.7958158254623413,
           "abstract": "偏好 / 报告语言\n\n报告一律用中文撰写。",
           "tags": []
         },
@@ -42,8 +34,16 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec2.md",
           "level": 2,
-          "score": 0.6617832779884338,
+          "score": 0.6617963314056396,
           "abstract": "偏好 / 检索范围\n\n检索默认限定近五年的英文与中文文献。",
+          "tags": []
+        },
+        {
+          "context_type": "memory",
+          "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
+          "level": 2,
+          "score": 0.6097908020019531,
+          "abstract": "第二次 create。",
           "tags": []
         }
       ],

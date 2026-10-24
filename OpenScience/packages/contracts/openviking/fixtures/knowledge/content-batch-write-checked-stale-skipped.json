@@ -1,0 +1,17 @@
+{
+  "status": "ok",
+  "result": {
+    "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+    "created": [],
+    "updated": [],
+    "unchanged": [],
+    "queue_status": null,
+    "conflicts": [
+      {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+        "code": "CONFLICT",
+        "message": "Content revision changed: viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md"
+      }
+    ]
+  }
+}

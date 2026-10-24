@@ -32,6 +32,7 @@ function open() {
       <Routes>
         <Route path="/app/account" element={<AccountSection />} />
         <Route path="/login" element={<p>登录页</p>} />
+        <Route path="/app/memory" element={<p>记忆胶囊页</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -67,6 +68,20 @@ describe("账户", () => {
     for (const gone of [/每个账号的数据彼此独立/, /数据独立/, /刷新账户/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
     // Feishu is bound under 通知, in the one row that also switches its push.
     expect(screen.queryByText("飞书")).not.toBeInTheDocument();
+  });
+
+  it("says in plain words what memory keeps and does not, where to change it, and that it trains nothing", async () => {
+    const user = userEvent.setup();
+    open();
+    const group = (await screen.findByRole("heading", { name: "记忆" })).closest("section")!;
+    for (const label of ["会记什么", "不会记什么"]) expect(within(group).getByText(label)).toBeInTheDocument();
+    expect(within(group).getByText(/你说过、确认过、纠正过的做法和背景，以及项目的情况/)).toBeInTheDocument();
+    expect(within(group).getByText(/密码、证件号和银行卡号，别人的身份信息，文档和网页里的内容；健康等敏感信息，除非你说“记住”/)).toBeInTheDocument();
+    expect(within(group).getByText(/记忆只用来帮你工作，不会用来训练模型/)).toBeInTheDocument();
+    // It promises no retention period: nothing here says how long a memory lasts.
+    expect(within(group).queryByText(/天|个月|年|保留|过期/)).not.toBeInTheDocument();
+    await user.click(within(group).getByRole("button", { name: "打开记忆胶囊" }));
+    expect(await screen.findByText("记忆胶囊页")).toBeInTheDocument();
   });
 
   it("changes the password in place under its row", async () => {

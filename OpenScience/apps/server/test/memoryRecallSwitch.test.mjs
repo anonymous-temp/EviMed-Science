@@ -159,8 +159,10 @@ class MemoryDocuments {
   constructor() { this.rows = new Map(); }
   key(userId, kind, id) { return `${userId}/${kind}/${id}`; }
   async get(userId, kind, id) { return this.rows.get(this.key(userId, kind, id)) ?? null; }
-  async list(userId, kind, { filter = {}, limit = 50 } = {}) {
+  async list(userId, kind, { filter = {}, limit = 50, projectId = undefined } = {}) {
+    // `projectId` as the real store reads it: absent reads every row, null the rows of no project, a name that project's.
     const items = [...this.rows.values()].filter((row) => row.userId === userId && row.kind === kind
+      && (projectId === undefined || (row.projectId ?? null) === projectId)
       && Object.entries(filter).every(([key, value]) => row.payload[key] === value)).slice(0, limit);
     return { items, nextCursor: null };
   }
@@ -188,8 +190,8 @@ async function capsuleFixture() {
 
 test("the profile reads approved person entries from the researcher's own capsules only", async () => {
   const { documents, capsules, own, guest } = await capsuleFixture();
-  await capsules.activate("u1", own.id, { mode: "own", projectId: "p1" });
-  await capsules.activate("u1", guest.id, { mode: "guest", projectId: "p1" });
+  await capsules.activate("u1", own.id, { mode: "own" });
+  await capsules.activate("u1", guest.id, { mode: "guest" });
   const facts = await capsules.profileFacts("u1", "p1", CAPSULE_PROFILE_FACT_KINDS);
   assert.deepEqual(facts.map((fact) => fact.content).sort(), ["心内科临床药师", "结论先行"],
     "a candidate is not approved, a method is a skill, and a guest's identity is not the researcher's");
@@ -198,12 +200,12 @@ test("the profile reads approved person entries from the researcher's own capsul
   // already uses for "not the researcher's own".
   const imported = await documents.put("u1", "capsule", "imported-1", { title: "导入的包", imported: true, activationMode: "own" }, { expectedRevision: 0 });
   await capsules.addEntry("u1", imported.id, { factKind: "profile", layer: "profile", content: "别人的身份" });
-  await capsules.activate("u1", imported.id, { mode: "own", projectId: "p2" });
-  assert.deepEqual(await capsules.profileFacts("u1", "p2", CAPSULE_PROFILE_FACT_KINDS), []);
+  await capsules.activate("u1", imported.id, { mode: "own" });
+  assert.deepEqual((await capsules.profileFacts("u1", "p2", CAPSULE_PROFILE_FACT_KINDS)).map((fact) => fact.content).sort(), ["心内科临床药师", "结论先行"]);
 
-  // The account-wide activation reaches every project.
-  await capsules.activate("u1", own.id, { mode: "own" });
+  // The one list reaches every project.
   assert.equal((await capsules.profileFacts("u1", "p3", CAPSULE_PROFILE_FACT_KINDS)).length, 2);
+  assert.equal((await capsules.profileFacts("u1", null, CAPSULE_PROFILE_FACT_KINDS)).length, 2);
   await assert.rejects(capsules.profileFacts("u1", "p3", ["not-a-kind"]), { code: "capsule_payload_invalid" });
 });
 

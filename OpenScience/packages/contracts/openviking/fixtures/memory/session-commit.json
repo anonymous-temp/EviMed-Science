@@ -1,6 +1,6 @@
 {
   "note": "Commit: phase 1 answers at once with a task id.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001/commit",
@@ -21,7 +21,7 @@
     "result": {
       "session_id": "dsh-session_fixture0000000000000000000000000001",
       "status": "accepted",
-      "task_id": "ad580014-9ba0-4c8b-993e-e6a232f57ab6",
+      "task_id": "bbc322c7-85ae-48c7-b7b5-a4c1dd0a3ae9",
       "archive_uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_001",
       "archived": true,
       "effective_enable_working_memory": false,

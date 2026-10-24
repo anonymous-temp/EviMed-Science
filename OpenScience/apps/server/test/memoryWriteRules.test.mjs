@@ -196,8 +196,50 @@ test("an inference stays an inference, whatever the model calls it, and describe
     { scope: "user", kind: "preference", key: "preference.tables", value: "先给表格，正文后面再看", summary: "先给表格", origin: "explicit" },
   ]).recordRun(project(), run(), [message("u1", "先给我表格，正文后面再看。")]);
   assert.equal(result.extracted, 2, result.rejectionReasons.join(" | "));
-  assert.equal(result.rejectionReasons.filter((reason) => /must be something the person stated \(origin explicit\), not an inference/.test(reason)).length, 3);
+  assert.equal(result.rejectionReasons.filter((reason) => /must be something the person stated or confirmed \(origin explicit\), not an inference/.test(reason)).length, 3);
   const stored = [...store.records.values()].filter((record) => record.kind !== "run_summary");
   assert.deepEqual(stored.map((record) => [record.kind, record.origin]).sort(), [["preference", "explicit"], ["project_fact", "inferred"]]);
   assert.ok(stored.find((record) => record.kind === "project_fact").confidence < 1, "the platform's own observation is never the researcher's word");
+});
+
+test("what the person confirmed or reshaped in a reply of their own is kept; one request that merely implies something is not (2026-10-23)", async () => {
+  // Confirmed and corrected are the second tier of what memory keeps: the reply is the person's own message, so the line is theirs.
+  // The assistant's proposal beside it is only what they replied to; the implied tier (a request suggesting something about them)
+  // arrives as an inference and is refused by the check above.
+  const conversation = [
+    message("u0", "把这个季度的项目复盘整理成一份报告。"),
+    message("a1", "报告我用三栏表（背景 / 方法 / 结论）呈现。", "assistant"),
+    message("u1", "好，就按这个三栏表来，其他材料也这样。"),
+  ];
+  const sourceOf = (sources, id) => sources.find((source) => source.sourceRef.endsWith(`/messages/${id}`));
+  const confirming = (candidate) => new MemoryIntelligence(config, new StoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [{
+        importance: 0.7, sensitive: false, ...candidate,
+        sourceRef: sourceOf(sources, candidate.cites ?? "u1").sourceRef, evidenceQuote: candidate.quote ?? "好，就按这个三栏表来，其他材料也这样",
+      }] }) } }] });
+    },
+  });
+  const rule = { scope: "user", kind: "preference", key: "preference.report_three_columns", value: "报告和其他材料按“背景 / 方法 / 结论”三栏表呈现", summary: "报告用三栏表" };
+
+  const store = new StoreDouble();
+  const kept = await new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [{ importance: 0.7, sensitive: false, ...rule, origin: "explicit",
+        sourceRef: sourceOf(sources, "u1").sourceRef, evidenceQuote: "好，就按这个三栏表来，其他材料也这样" }] }) } }] });
+    },
+  }).recordRun(project(), run(), conversation);
+  assert.equal(kept.extracted, 1, kept.rejectionReasons.join(" | "));
+  assert.deepEqual([...store.records.values()].filter((record) => record.kind === "preference").map((record) => [record.key, record.origin]), [["preference.report_three_columns", "explicit"]]);
+
+  const implied = await confirming({ ...rule, origin: "inferred" }).recordRun(project(), run(), conversation);
+  assert.equal(implied.extracted, 0);
+  assert.match(implied.rejectionReasons.join(" "), /must be something the person stated or confirmed/);
+
+  // The proposal it replied to is the assistant's, whatever the model labels it.
+  const proposed = await confirming({ ...rule, origin: "explicit", cites: "a1", quote: "报告我用三栏表" }).recordRun(project(), run(), conversation);
+  assert.equal(proposed.extracted, 0);
+  assert.match(proposed.rejectionReasons.join(" "), /must cite a message the person wrote/);
 });

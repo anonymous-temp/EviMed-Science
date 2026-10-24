@@ -1,19 +1,26 @@
-// An OpenViking that holds files in memory and answers the Resources and Compile routes the way v0.5.0 does — the
+// An OpenViking that holds files in memory and answers the Resources and Compile routes the way v0.5.1.1 does — the
 // envelopes, the status codes and the quirks the client was written against (`fs/ls` paging with `has_more` beside
-// `result`, `create` refusing a file that exists, a finished compile reporting every file as updated, a task that is
-// gone answering 404). A compile does what the test tells it to: `compile` is called with the request and the store,
-// and whatever it writes into the target is what the "engine" produced.
+// `result`, `create` an alias of `replace`, `replace` creating a file that is not there, `batch-write` with a hash
+// precondition (409 `Content revision changed`, or `path_busy` while a directory is processed), a finished compile
+// reporting every file as updated, a task that is gone answering 404, a compile's tokens in `meta.pipeline.tokens`). A
+// compile does what the test tells it to: `compile` is called with the request and the store, and whatever it writes
+// into the target is what the "engine" produced.
 //
 // It is a double with real bounds (a listing is paged at the limit it was asked for), because a double that ignores a
 // limit hides the paging bug the real server would show.
+
+import { createHash } from "node:crypto";
+
+/** @param {Buffer | string} bytes */
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 /** @typedef {{ content: Buffer, tags: string[], modTime: string }} StubFile */
 
 /**
  * @param {{ compile?: (request: { from: string[], to: string, skill: string, instruction: string | null, user: string }, engine: ReturnType<typeof createOpenVikingStub>) => void | Promise<void>,
- *   compileUsage?: { input_tokens: number, output_tokens: number, total_tokens: number } }} [options]
+ *   compileUsage?: { input: number, output: number, cached: number } }} [options]
  */
-export function createOpenVikingStub({ compile = () => {}, compileUsage = { input_tokens: 60_000, output_tokens: 5_000, total_tokens: 65_000 } } = {}) {
+export function createOpenVikingStub({ compile = () => {}, compileUsage = { input: 60_000, output: 5_000, cached: 0 } } = {}) {
   /** @type {Map<string, StubFile>} keyed by uri */
   const files = new Map();
   /** @type {Map<string, any>} */
@@ -25,6 +32,8 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
   let clock = Date.parse("2026-10-13T00:00:00Z");
   let down = false;
   let taskSeq = 0;
+  /** Directories a write is refused in as busy (`path_busy`), the way the engine's are while a write is processed. @type {Set<string>} */
+  const busy = new Set();
   /** How many polls a task stays running before it ends. */
   let pollsToFinish = 1;
 
@@ -50,6 +59,8 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
     list(root) { return under(root); },
     setDown(/** @type {boolean} */ value) { down = value; },
     setPollsToFinish(/** @type {number} */ value) { pollsToFinish = value; },
+    /** Make writes under one directory answer `path_busy` (or not). @param {string} root @param {boolean} [value] */
+    setBusy(root, value = true) { if (value) busy.add(root); else busy.delete(root); },
 
     /** The `fetch` the client is given. @param {string | URL} input @param {RequestInit} [init] */
     async fetch(input, init = {}) {
@@ -62,17 +73,40 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
       const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
       requests.push({ method, path: url.pathname, user, body, query, headers });
       const path = url.pathname;
-      if (path === "/health") return json(200, { status: "ok", healthy: true, version: "v0.5.0", auth_mode: "trusted" });
+      if (path === "/health") return json(200, { status: "ok", healthy: true, version: "v0.5.1.1", auth_mode: "trusted" });
       if (headers["x-api-key"] !== "stub-key") return fail(401, "UNAUTHENTICATED", "Invalid API key");
       const uri = String(body?.uri ?? query.uri ?? "");
       if (uri && !allowed(uri, user)) return fail(403, "PERMISSION_DENIED", "Access denied");
 
       if (path === "/api/v1/content/write" && method === "POST") {
-        if (body.mode === "create" && files.has(uri)) return fail(409, "ALREADY_EXISTS", `File already exists: ${uri}`);
+        // `create` is an alias of `replace` from v0.5.1 (no 409 on an existing file), and `replace` creates a file that is not there.
         if (body.mode === "create" && !/\.(?:md|txt|json|yaml|yml|toml|py|js|ts)$/.test(uri)) return fail(400, "INVALID_ARGUMENT", "create allows only text extensions");
         const previous = files.get(uri);
         files.set(uri, { content: Buffer.from(String(body.content), "utf8"), tags: Array.isArray(body.tags) ? body.tags : previous?.tags ?? [], modTime: stamp() });
         return ok({ uri, mode: body.mode, written_bytes: Buffer.byteLength(String(body.content)), content_updated: true });
+      }
+      if (path === "/api/v1/content/batch-write" && method === "POST") {
+        const root = String(body.root_uri ?? "");
+        if (!root || !allowed(root, user)) return fail(403, "PERMISSION_DENIED", "Access denied");
+        if (busy.has(root)) return json(409, { status: "error", result: null, error: { code: "CONFLICT", message: `resource is busy and cannot be written now: ${root}`, details: { resource: root, uri: root, conflict_type: "path_busy", retryable: true } } });
+        /** @type {string[]} */ const created = [];
+        /** @type {string[]} */ const updated = [];
+        /** @type {Array<{ uri: string, code: string, message: string }>} */ const conflicts = [];
+        for (const operation of body.operations ?? []) {
+          const target = String(operation.uri);
+          const held = files.get(target);
+          const wanted = operation.expected_sha256;
+          const refusal = wanted && !held ? `Expected content no longer exists: ${target}`
+            : wanted && sha256(held?.content ?? "") !== wanted ? `Content revision changed: ${target}` : null;
+          if (refusal) {
+            if (!body.skip_conflicts) return json(409, { status: "error", result: null, error: { code: "CONFLICT", message: refusal, details: {} } });
+            conflicts.push({ uri: target, code: "CONFLICT", message: refusal });
+            continue;
+          }
+          (held ? updated : created).push(target);
+          files.set(target, { content: Buffer.from(String(operation.content ?? ""), "utf8"), tags: held?.tags ?? [], modTime: stamp() });
+        }
+        return ok({ root_uri: root, created, updated, unchanged: [], queue_status: null, semantic_status: "complete", vector_status: "complete", ...(conflicts.length ? { conflicts } : {}) });
       }
       if (path === "/api/v1/content/set_tags" && method === "POST") {
         const file = files.get(uri);
@@ -192,8 +226,8 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
         await compile({ from: task.request.from, to: task.request.to, skill: task.request.skill, instruction: task.request.instruction ?? null, user: task.user }, engine);
         const after = under(task.request.to);
         // As measured: every file of the target is "updated", whether its bytes changed or not.
-        task.result = { from: task.request.from, to: task.request.to, skill: task.request.skill, created: after.filter((uri) => !before.has(uri)), updated: after, unchanged: [],
-          page_count: after.filter((uri) => uri.endsWith(".md")).length, link_count: 0, warnings: [] };
+        task.result = { from: task.request.from, to: task.request.to, skill: task.request.skill, okf_version: "0.1", created: after.filter((uri) => !before.has(uri)), updated: after, unchanged: [],
+          conflicts: [], page_count: after.filter((uri) => uri.endsWith(".md")).length, link_count: 0, link_report: {}, warnings: [] };
         task.usage = compileUsage;
         task.status = "completed"; task.stage = "completed";
       } catch (error) {
@@ -204,7 +238,7 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
     /** @param {any} task */
     taskView(task) {
       return { task_id: task.id, task_type: "compile", status: task.status, stage: task.stage, processing_seconds: task.polls * 5, result: task.result, error: task.error,
-        meta: { request: task.request, ...(task.usage ? { token_usage: task.usage } : {}) } };
+        meta: { request: task.request, ...(task.usage ? { pipeline: { errors: [], tokens: task.usage } } : {}) } };
     },
 
     /** Forget a task, as the engine does a day after it ended. @param {string} id */

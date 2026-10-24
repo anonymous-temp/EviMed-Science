@@ -2,7 +2,8 @@
   "status": "ok",
   "result": {
     "uri": "viking://user/u-68dc43da763fbe7a5b3d6564/memories/evimed/user/note/rec4.md",
-    "estimated_deleted_count": 0
+    "estimated_deleted_count": 0,
+    "task_id": "d653ec6b-585c-48e5-a84a-3ad646d0807a"
   },
   "error": null,
   "telemetry": null,

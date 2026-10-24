@@ -52,6 +52,7 @@
     { "view": "memory", "route": "/app/memory?tab=self", "pattern": "/app/memory", "family": "memory", "template": "T1", "shapes": 2, "rows": true },
     { "view": "memory-project", "route": "/app/memory?tab=project", "pattern": "/app/memory", "family": "memory", "template": "T1", "shapes": 2, "rows": true },
     { "view": "memory-methods", "route": "/app/memory?tab=methods", "pattern": "/app/memory", "family": "memory", "template": "T1", "shapes": 2, "rows": true },
+    { "view": "memory-overview", "route": "/app/memory/overview", "pattern": "/app/memory/overview", "family": "memory", "template": "T4", "budget": "data", "shapes": 2, "rows": true },
     { "view": "memory-map", "route": "/app/memory/map", "pattern": "/app/memory/map", "family": "memory", "template": "T4", "budget": "data", "shapes": 3, "rows": true },
     { "view": "memory-shared-missing", "route": "/app/memory/shared/impeccable-audit-missing", "pattern": "/app/memory/shared/:token", "family": "memory-record", "template": "screen", "rows": false },
     { "view": "autopilot", "route": "/app/autopilot", "pattern": "/app/autopilot/:taskId?", "family": "autopilot", "template": "T2", "shapes": 2, "rows": true },

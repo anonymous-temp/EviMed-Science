@@ -53,10 +53,12 @@ function failed(error: unknown) {
  * address the conversation opens at — so 「来源对话」 is a link back to the place
  * the memory was said, and not a claim the page cannot honour.
  */
-export function memorySource(record: WebStructuredMemory): { sessionId: string; at: string | null } | null {
+export function memorySource(record: WebStructuredMemory): { sessionId: string; at: string | null; projectId?: string } | null {
   for (const item of record.evidence) {
     const sessionId = /^sessions\/([^/]+)\//.exec(item.sourceRef ?? "")?.[1];
-    if (sessionId) return { sessionId, at: item.observedAt ?? record.createdAt };
+    // The project is named when the control plane knows it: a profile line of the native engine is the person's, whatever project
+    // its conversation was held in, and the link must open it there.
+    if (sessionId) return { sessionId, at: item.observedAt ?? record.createdAt, ...(item.projectId ? { projectId: item.projectId } : {}) };
   }
   return null;
 }
@@ -231,6 +233,14 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     if (result.undone === "removed") onClose();
   }, productErrorMessage);
 
+  // A note an outside agent proposed (the agent-memory API's `/note`) waits for the researcher like a pending memory does: the same
+  // tag, 确认 to take it, 不要 to put it away (retired, so 已忘记的内容 can bring it back).
+  const candidate = entry?.payload.status === "candidate";
+  const confirmEntry = () => run(async () => {
+    if (!entry) return;
+    await updateCapsuleEntry(capsuleId, entry.id, { status: "approved", expectedRevision: entry.revision });
+    toast.success("已确认");
+  }, productErrorMessage);
   const since = formatDay(record?.createdAt ?? entry?.createdAt ?? null);
   const former = record?.status === "superseded";
   const pending = record?.status === "pending";
@@ -303,11 +313,13 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {record && <ValidityBar span={validitySpan(record)} />}
 
-          {(pending || badges.length > 0) && (
+          {(pending || candidate || badges.length > 0) && (
             <div className="flex flex-wrap items-center gap-2">
-              {pending && <Tag>待确认</Tag>}
+              {(pending || candidate) && <Tag>待确认</Tag>}
               {badges.map((badge) => <Tag key={badge}>{badge}</Tag>)}
               {pending && <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>}
+              {candidate && <Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmEntry()}>确认</Button>}
+              {candidate && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void forgetEntry()}>不要</Button>}
             </div>
           )}
 
@@ -337,14 +349,15 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {record && (record.evidence.length > 0 || source || materials.length > 0) && (
             <DrawerSection label="出处">
-              {record.evidence.slice(-3).reverse().map((evidence) => (
+              {/* A memory of the native engine names its conversation and keeps no quotation: only what was quoted is quoted. */}
+              {record.evidence.filter((evidence) => evidence.quote).slice(-3).reverse().map((evidence) => (
                 <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
                   <p className="text-ui text-text-2">“{memoryExcerpt(evidence.quote, 200)}”</p>
                   {evidence.observedAt && <p className="text-caption text-text-3">{when(evidence.observedAt)}</p>}
                 </div>
               ))}
               {source && (
-                <ConversationLink projectId={record.scope === "project" ? record.scopeId : null} sessionId={source.sessionId}>
+                <ConversationLink projectId={record.scope === "project" ? record.scopeId : source.projectId ?? null} sessionId={source.sessionId}>
                   {conversations?.[source.sessionId] ? `来源对话：《${memoryExcerpt(conversations[source.sessionId], 40)}》` : "来源对话"}
                   {formatDay(source.at) ? `（${formatDay(source.at)}）` : ""}
                 </ConversationLink>

@@ -15,7 +15,10 @@ import { HttpError } from "./security.mjs";
  *    module has no call for it on purpose.
  *  - **A type is the first path segment**, not the `memory_type=` tag: a pack restore loses every tag and a reindex
  *    cannot put that one back. The project template writes into `projects/`, which is the one segment that is not
- *    its type's name (`MEMORY_TYPE_OF_SEGMENT`).
+ *    its type's name (`MEMORY_TYPE_OF_SEGMENT`), and the corrections template writes into `preferences/corrections/`
+ *    (since 2026-10-23: the unmodified plugin lists `preferences/` recursively at a session's start, and nothing else of
+ *    ours, so that is the one way a correction gets in front of the model) — `CORRECTIONS_UNDER_PREFERENCES`. A file under
+ *    the older `corrections/` is still a correction and is still read; the engine no longer updates it.
  *  - **`content/write mode=create` makes a file the engine does not own**: no type, no tags, and a later extraction
  *    reads it and never updates it. A new memory goes in as a session with one message and a commit (`remember`).
  *  - **A settings PATCH replaces the type allowlist it does not restate**: `{ self: { enabled: false } }` alone
@@ -45,6 +48,9 @@ export const MEMORY_SEGMENT_OF_TYPE = Object.freeze({
   project_facts: "project_facts",
 });
 
+/** Where the corrections template writes since 2026-10-23, beneath the preferences' own directory. */
+export const CORRECTIONS_UNDER_PREFERENCES = "preferences/corrections";
+
 /** The reverse: which type a file under `memories/` is, by its first path segment. */
 export const MEMORY_TYPE_OF_SEGMENT = Object.freeze(Object.fromEntries(
   Object.entries(MEMORY_SEGMENT_OF_TYPE).map(([type, segment]) => [segment, type])));
@@ -71,7 +77,8 @@ export function nativeMemoryFile(uri, root) {
   if (!relPath.endsWith(".md") || SCAFFOLD_FILE.test(relPath) || relPath.split("/").some((segment) => segment.startsWith("."))) return null;
   const segment = relPath.split("/")[0];
   if (segment === DERIVED_INDEX_SEGMENT) return null;
-  const type = MEMORY_TYPE_OF_SEGMENT[segment];
+  // The one type that is not its first segment's: a correction lives under the preferences directory.
+  const type = relPath.startsWith(`${CORRECTIONS_UNDER_PREFERENCES}/`) ? "corrections" : MEMORY_TYPE_OF_SEGMENT[segment];
   if (!type) return null;
   // The profile is one file at the root; every other type is a directory of files.
   if (type === "profile" ? relPath !== "profile.md" : !relPath.includes("/")) return null;

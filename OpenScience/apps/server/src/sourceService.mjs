@@ -651,6 +651,7 @@ export class SourceService {
       const predecessors = members.filter(row => row.id !== sourceId && sourcePublicationBindings(row)[familyId].current);
       for (const id of [...new Set([sourceId, ...predecessors.map(row => row.id)])].sort()) await this.lockSourceMutation(userId, id);
       let exact = await this.documents.get(userId, "source", sourceId, { includeDeleted: true });
+      if (exact && exact.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
       const tombstone = exact?.deletedAt ? exact : null;
       const wasExisting = Boolean(exact && !tombstone);
       const bindings = exact && !tombstone ? sourcePublicationBindings(exact) : {};

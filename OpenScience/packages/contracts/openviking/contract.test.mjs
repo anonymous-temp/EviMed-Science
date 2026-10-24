@@ -24,7 +24,7 @@ const findFixture = await readJson("./fixtures/find.json");
 const unauthenticatedFixture = await readJson("./fixtures/find-unauthenticated.json");
 const pinnedImage = `${versions.openviking.image}:${versions.openviking.imageTag}`;
 
-/** The platform user the top-level fixtures were recorded as (`live/ovbase/record-client-fixtures.mjs`). */
+/** The platform user the top-level fixtures were recorded as (`record.mjs`). */
 const RECORDED_USER = "usr_contract_fixture_v050";
 
 /** Serve the recorded responses over real HTTP, and record what was asked. */
@@ -206,10 +206,10 @@ test("a derived record costs an embedding and no model call, with a language mod
   assert.match(String(provenance.configuration.vlm), /deepseek-flash/);
   assert.equal(provenance.configuration["memory.extraction_enabled"], true);
   await withServer({ "/api/v1/content/write": { body: written } }, async ({ port, seen }) => {
-    await client(port).write(RECORDED_USER, written.result.uri, "偏好 / 报告呈现", { wait: true, timeoutSeconds: 20 });
+    await client(port).write(RECORDED_USER, written.result.uri, "偏好 / 报告呈现", { wait: true });
     const recorded = provenance.recordedExchanges.find((exchange) => exchange.file === "content-write.json");
-    // Preserve the original recording: its optional wait timeout was valid on
-    // the baseline, but newer engines remove it. Only the HTTP transport owns it now.
+    // The recording was taken on v0.5.0, whose body still carried `timeout`; v0.5.1.1 refuses that field
+    // (`extra="forbid"`), so the client no longer sends it and the rest of the body is what was recorded.
     assert.deepEqual(Object.keys(seen[0].body).sort(), Object.keys(recorded.requestBody).filter((key) => key !== "timeout").sort());
     assert.equal(Object.hasOwn(seen[0].body, "timeout"), false);
     assert.equal(seen[0].body.mode, "replace");
@@ -233,14 +233,25 @@ test("a delete says whether there was anything to delete, at this version with a
   });
 });
 
+/**
+ * What this lab could not record again at the pinned release, and where it was recorded: an extraction whose model call is
+ * refused needs a model gateway that refuses it, and the lab's is not this repository's to switch. They still say what the
+ * engine did at v0.5.0; the extraction's failure path is read from the task's own status and `error`, which v0.5.1 kept.
+ */
+const STILL_AT_0_5_0 = Object.freeze({
+  "task-failed.json": "ghcr.io/volcengine/openviking:v0.5.0",
+  "archive-failed-marker-read.json": "ghcr.io/volcengine/openviking:v0.5.0",
+});
+
 test("the two recorded sets are whole, name the pinned image and carry no credential", async () => {
   const memoryIndex = await readJson("./fixtures/memory/_index.json");
-  const memoryFiles = (await readdir(new URL("./fixtures/memory/", import.meta.url))).filter((name) => name.endsWith(".json") && !["_index.json", "provenance.json"].includes(name));
+  const memoryFiles = (await readdir(new URL("./fixtures/memory/", import.meta.url))).filter((name) => name.endsWith(".json") && !["_index.json", "provenance.json", "_recorded.json"].includes(name));
   const listed = (Array.isArray(memoryIndex) ? memoryIndex : memoryIndex.fixtures ?? Object.values(memoryIndex)).map((entry) => entry.file ?? entry);
   assert.deepEqual([...listed].sort(), [...memoryFiles].sort(), "the memory index and the directory disagree");
+  assert.deepEqual(memoryFiles.filter((name) => name in STILL_AT_0_5_0).sort(), Object.keys(STILL_AT_0_5_0).sort(), "a recording that is allowed to stay at v0.5.0 is gone, or another one stayed");
   for (const name of memoryFiles) {
     const fixture = await readJson(`./fixtures/memory/${name}`);
-    assert.equal(fixture.recordedFrom, pinnedImage, `${name} was recorded off another image`);
+    assert.equal(fixture.recordedFrom, STILL_AT_0_5_0[name] ?? pinnedImage, `${name} was recorded off another image`);
     assert.ok(Number.isInteger(fixture.status) && fixture.request?.path, `${name} is not an exchange`);
     const key = fixture.request.headers?.["X-API-Key"];
     assert.ok(key === undefined || key === "recorded-against-a-real-server", `${name} carries a credential`);
@@ -275,4 +286,79 @@ test("the recorded engine is the one the layout and the pin describe", async () 
   }
   const submitted = await readJson("./fixtures/knowledge/compile-submit.json");
   assert.match(String(submitted.result?.task_id ?? ""), /^cmp_[0-9a-f]{64}$/);
+});
+
+test("replace creates a file that is not there and create overwrites one that is: neither answers 404 or 409", async () => {
+  // v0.5.1: `create` is an alias of `replace`, and `replace` creates (parents included). The v0.5.0 pin kept a create-then-replace
+  // pair and a 404 fallback because it could not rely on either; both are deleted.
+  const created = await readJson("./fixtures/knowledge/content-write-replace-missing.json");
+  assert.equal(created.result.mode, "replace");
+  assert.equal(created.result.content_updated, true);
+  const provenanceOf = (await readJson("./fixtures/knowledge/provenance.json")).fixtures;
+  assert.equal(provenanceOf["content-write-replace-missing"].status, 200);
+  assert.equal(provenanceOf["content-write-create-exists"].status, 200, "create on an existing file was a 409 until v0.5.1");
+  const overwrote = await readJson("./fixtures/knowledge/content-write-create-exists.json");
+  assert.equal(overwrote.result.mode, "create");
+  assert.equal(overwrote.result.content_updated, true);
+  assert.equal((await readJson("./fixtures/memory/content-write-create-conflict.json")).status, 200);
+});
+
+test("a write that names the hash of the file it replaces is a checked write: written, refused when the page changed or is gone, listed when skipped, refused while the directory is busy", async () => {
+  const recorded = (await readJson("./fixtures/knowledge/provenance.json")).fixtures;
+  const read = (name) => readJson(`./fixtures/knowledge/${name}.json`);
+  const operation = recorded["content-batch-write-checked"].request_body.operations[0];
+  assert.equal(operation.mode, "replace");
+  // The hash is the sha256 of the bytes `content/download` returns for the page: what a mirror has in hand.
+  const downloaded = await readFile(new URL("./fixtures/knowledge/content-download-page.bin", import.meta.url));
+  assert.equal(createHash("sha256").update(downloaded).digest("hex"), operation.expected_sha256);
+  assert.equal(recorded["content-batch-write-checked"].request_body.root_uri, operation.uri.slice(0, operation.uri.lastIndexOf("/")), "the root is the page's own directory");
+
+  const written = await read("content-batch-write-checked");
+  assert.deepEqual([recorded["content-batch-write-checked"].status, written.result.updated, written.result.created], [200, [operation.uri], []]);
+  assert.equal(written.result.semantic_status, "complete", "wait: true answers when the summary and the vector are done");
+
+  const stale = await read("content-batch-write-checked-stale");
+  assert.deepEqual([recorded["content-batch-write-checked-stale"].status, stale.error.code], [409, "CONFLICT"]);
+  assert.match(stale.error.message, /Content revision changed/);
+  assert.equal(stale.error.details.conflict_type, undefined, "a changed page is not the busy refusal");
+
+  const skipped = await read("content-batch-write-checked-stale-skipped");
+  assert.equal(recorded["content-batch-write-checked-stale-skipped"].status, 200);
+  assert.deepEqual(skipped.result.updated, []);
+  assert.deepEqual(skipped.result.conflicts.map((conflict) => [conflict.uri, conflict.code]), [[operation.uri, "CONFLICT"]]);
+
+  const missing = await read("content-batch-write-checked-missing");
+  assert.deepEqual([recorded["content-batch-write-checked-missing"].status, missing.error.code], [409, "CONFLICT"]);
+  assert.match(missing.error.message, /Expected content no longer exists/);
+
+  // While the previous write's summary and vector are processed, the next write to the same directory is refused as busy.
+  const first = await read("content-batch-write-checked-busy-first");
+  assert.equal(first.result.semantic_status, "queued");
+  assert.ok(first.result.task_id);
+  const busy = await read("content-batch-write-checked-busy");
+  assert.deepEqual([recorded["content-batch-write-checked-busy"].status, busy.error.code, busy.error.details.conflict_type, busy.error.details.retryable], [409, "CONFLICT", "path_busy", true]);
+});
+
+test("a compile reports its tokens under meta.pipeline.tokens, and the request is the one the control plane builds", async () => {
+  // v0.5.0 put them under `meta.token_usage` as input_tokens / output_tokens / total_tokens; reading that on v0.5.1.1 finds nothing, and
+  // an account's knowledge caps would never move (`compileTask` in openVikingResources.mjs reads the new place).
+  const completed = (await readJson("./fixtures/knowledge/tasks-get-completed.json")).result;
+  assert.equal(completed.meta.token_usage, undefined);
+  for (const field of ["input", "output", "cached"]) assert.ok(Number.isInteger(completed.meta.pipeline.tokens[field]) && completed.meta.pipeline.tokens[field] >= 0, field);
+  assert.ok(completed.meta.pipeline.tokens.input > 0);
+  assert.deepEqual(completed.meta.pipeline.errors, []);
+  assert.ok(Array.isArray(completed.result.conflicts) && Array.isArray(completed.result.warnings));
+  const provenanceOf = (await readJson("./fixtures/knowledge/provenance.json")).fixtures;
+  const request = provenanceOf["compile-submit"].request_body;
+  assert.deepEqual(Object.keys(request).sort(), ["from", "skill", "to"], "a compile is submitted with no args and no other field");
+  assert.match(provenanceOf["compile-submit"].request_headers["Idempotency-Key"], /^[A-Za-z0-9_-]{16,128}$/);
+});
+
+test("a recorded memory consolidation is read into the task the native worker settles", async () => {
+  const { memoryConsolidationTask } = await import("../../../apps/server/src/openVikingResources.mjs");
+  const fixture = await readJson("./fixtures/memory/consolidation-task.json");
+  const task = memoryConsolidationTask(fixture.response.result);
+  assert.equal(task.status, "completed");
+  assert.equal(task.terminal, true);
+  assert.deepEqual([task.result.adds, task.result.updates, task.result.deletes, task.result.errors], [[], [], [], []]);
 });

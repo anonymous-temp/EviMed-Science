@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { FactDrawer } from "./FactDrawer";
+import { FactDrawer, memorySource } from "./FactDrawer";
 import { factItems } from "./memoryItems";
 import { nativeFile, nativeProfile, nativeProfileLine } from "./__fixtures__/memoryProfiles";
 
@@ -82,6 +82,33 @@ describe("a memory kept as a file, opened from its row", () => {
     const [, options] = toasts.success.mock.calls[0];
     options.action.onClick();
     await waitFor(() => expect(client.undoMemoryRecord).toHaveBeenCalledWith(file.id, 99));
+  });
+
+  it("names the conversation a memory came out of, without a quotation the engine never kept", () => {
+    const file = nativeFile("回答结构", "- 先给结论。", { evidence: [
+      { sourceType: "conversation", sourceRef: "sessions/session_ab12/commits/archive_001", quote: "", observedAt: "2026-10-12T02:00:00Z", weight: 1, fingerprint: "revision:7", projectId: "prj_7" },
+    ], evidenceCount: 1 });
+    show(file, { conversations: { session_ab12: "三期临床试验方案" } });
+    const drawer = screen.getByRole("dialog");
+    expect(within(drawer).getByRole("button", { name: /^来源对话：《三期临床试验方案》（\d+月\d+日）$/ })).toBeInTheDocument();
+    expect(within(drawer).queryByText("“”")).not.toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/commits|archive_|session_ab12|revision/);
+    // A conversation the control plane could not name is still the link back to it.
+    cleanup();
+    show(file);
+    expect(screen.getByRole("button", { name: /^来源对话（/ })).toBeInTheDocument();
+    // And a memory with no conversation has no such line.
+    cleanup();
+    show(nativeFile("回答结构", "- 先给结论。"));
+    expect(screen.queryByRole("button", { name: /^来源对话/ })).not.toBeInTheDocument();
+  });
+
+  it("opens the conversation in the project it was held in, even for a memory that belongs to no project", () => {
+    const file = nativeFile("回答结构", "- 先给结论。", { evidence: [
+      { sourceType: "conversation", sourceRef: "sessions/session_ab12/commits/archive_001", quote: "", observedAt: "2026-10-12T02:00:00Z", weight: 1, fingerprint: "revision:7", projectId: "prj_7" },
+    ], evidenceCount: 1 });
+    expect(memorySource(file)).toEqual({ sessionId: "session_ab12", at: "2026-10-12T02:00:00Z", projectId: "prj_7" });
+    expect(memorySource(nativeFile("回答结构", "- 先给结论。"))).toBeNull();
   });
 
   it("shows nothing of the engine: no address, no file name, no kind of account", () => {

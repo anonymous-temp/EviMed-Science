@@ -68,7 +68,7 @@ describe("every address people already have still arrives", () => {
     ["/settings", "/app/account?tab=appearance"],
     ["/app/sources", "/app/files?tab=sources"],
     ["/app/notebooks", "/app/files"],
-    ["/app/capsules", "/app/memory?tab=capsules"],
+    ["/app/capsules", "/app/memory/overview"],
     ["/app/settings", "/app/account?tab=appearance"],
     // 运维 left 设置 for a page of its own (`AccountPage` sends the section's old address, `?tab=ops`, there: its own test).
     ["/app/ops", "/app/ops"],

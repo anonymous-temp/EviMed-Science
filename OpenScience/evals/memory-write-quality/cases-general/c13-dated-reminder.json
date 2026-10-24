@@ -1,0 +1,32 @@
+{
+  "id": "c13-dated-reminder",
+  "class": "work-order-dated-reminder",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C13); every name, number and identifier is invented",
+  "expected": "Nothing is filed as a follow-up: a reminder at a date is the scheduler's, and a memory file never fires.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "下个月要交年度总结，到时提醒我。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，我可以帮你设一个定时提醒。需要我设在下个月哪一天、几点？"
+      }
+    ]
+  },
+  "expect": {
+    "noRecordOfKinds": [
+      "follow_up"
+    ]
+  }
+}

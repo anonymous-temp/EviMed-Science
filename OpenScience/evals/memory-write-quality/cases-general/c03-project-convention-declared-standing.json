@@ -1,0 +1,36 @@
+{
+  "id": "c03-project-convention-declared-standing",
+  "class": "work-order-project-convention",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C03); every name, number and identifier is invented",
+  "expected": "A convention the person sets for this repository is kept on the project's card (under its constraints) or as a preference naming the repository: test files are not edited without asking.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "orders-service",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "这个仓库里测试文件一律不要动，要改先问我。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，之后不会改动测试文件，需要改时先问您。"
+      }
+    ]
+  },
+  "expect": {
+    "requireAnyKind": [
+      "project_fact",
+      "preference"
+    ],
+    "requireTextContains": [
+      "测试"
+    ]
+  }
+}

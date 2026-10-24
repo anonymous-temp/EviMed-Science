@@ -12,12 +12,6 @@
   "wiki": 13,
   "kg": 53
  },
- "pageLimit": 100,
- "engineLimit": 128,
- "limited": {
-  "kg": false,
-  "wiki": false
- },
  "stale": 3,
  "userEdited": 1,
  "quotations": {

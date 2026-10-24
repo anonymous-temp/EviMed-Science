@@ -1,6 +1,6 @@
 {
   "note": "Session metadata: pending_tokens is what the plugin compares with its commit threshold.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001",
@@ -16,8 +16,8 @@
     "status": "ok",
     "result": {
       "session_id": "dsh-session_fixture0000000000000000000000000001",
-      "created_at": "2026-10-13T00:17:42.111Z",
-      "updated_at": "2026-10-13T00:17:42.174Z",
+      "created_at": "2026-10-23T05:37:57.205Z",
+      "updated_at": "2026-10-23T05:37:57.868Z",
       "created_by_account_id": "evimed",
       "created_by_user_id": "fx-user-a",
       "message_count": 2,
@@ -50,8 +50,9 @@
         "keep_recent_count": 0,
         "min_commit_interval_seconds": 0
       },
-      "last_message_at": "2026-10-13T00:17:42.169Z",
+      "last_message_at": "2026-10-23T05:37:57.866Z",
       "last_auto_commit_at": "",
+      "last_idle_commit_accepted_at": "",
       "total_message_count": 2,
       "uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001",
       "user": {

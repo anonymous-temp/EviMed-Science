@@ -421,6 +421,30 @@ describe("a note of the researcher's own capsule, opened from its row", () => {
     await waitFor(() => expect(client.undoCapsuleEntry).toHaveBeenCalledWith("cap_1", expect.objectContaining({ id: "entry_1", revision: 2 })));
   });
 
+  it("shows a note an outside agent proposed as waiting for confirmation: 确认 takes it, 不要 puts it away with an undo, and a note in force has neither", async () => {
+    const proposed = (): FactItem => note({ payload: { capsuleId: "cap_1", factKind: "preference", layer: "profile", content: "报告先给结论。", status: "candidate", origin: "inferred", provenance: [] } });
+    product.updateCapsuleEntry.mockResolvedValue({});
+    const first = open(proposed());
+    const drawer = screen.getByRole("dialog", { name: "偏好" });
+    expect(within(drawer).getByText("待确认")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/外部|代理|agent|推断|提议/i);
+    await userEvent.click(within(drawer).getByRole("button", { name: "确认" }));
+    await waitFor(() => expect(product.updateCapsuleEntry).toHaveBeenCalledWith("cap_1", "entry_1", { status: "approved", expectedRevision: 1 }));
+    await waitFor(() => expect(first.onChanged).toHaveBeenCalled());
+    expect(toasts.success).toHaveBeenCalledWith("已确认");
+    cleanup();
+    client.retireCapsuleEntry.mockResolvedValue({ id: "entry_1", revision: 2 });
+    const second = open(proposed());
+    await userEvent.click(screen.getByRole("button", { name: "不要" }));
+    await waitFor(() => expect(client.retireCapsuleEntry).toHaveBeenCalledWith("cap_1", "entry_1", 1));
+    expect(second.onClose).toHaveBeenCalled();
+    expect(toasts.success.mock.calls.at(-1)![1].action.label, "restorable from 已忘记的内容 and by the toast").toBe("撤销");
+    cleanup();
+    open(note());
+    expect(screen.queryByText("待确认")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "不要" })).not.toBeInTheDocument();
+  });
+
   it("offers to undo the last change only once it has had one", async () => {
     client.undoCapsuleEntry.mockResolvedValue({ undone: "restored", entry: {} });
     open(note({ revision: 3 }));

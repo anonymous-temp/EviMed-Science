@@ -1,3 +1,4 @@
+import {verifyNativePeers} from './native_peer_identity.mjs';
 // Evaluation-only aggregate budget. Uncertain calls keep their full reservation; no budget is silently released.
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -155,6 +156,7 @@ export async function verifyLiveBudgetWiring(config,{fetchImpl=fetch,nativeVerif
   for(const scope of REQUIRED_PROVIDER_SCOPES){const p=status.wiring?.[scope];if(!p?.providerBoundary||!p.processId||!p.processStart||processStartedAt(p.processId)!==p.processStart||p.budgetId!==status.id)throw new Error(`Unverified provider wiring: ${scope}`);}
   for(const scope of ['baseline','candidate'])try{process.kill(status.wiring[scope].processId,0);}catch{throw new Error('Instrumented control-plane process is not alive');}
   if(nativeVerifier===verifyNativeConfiguration)verifyGatewayListeners(config.instrumentedGatewayOrigins??[],status.wiring);
+  if(config.nativePeers!==undefined)status.nativePeers=verifyNativePeers({...config,peerWebProcessIds:Object.fromEntries(['baseline','candidate'].map(arm=>[arm,status.wiring[arm].processId]))},{verifyConfig:nativeVerifier,listenerOwners:loopbackListenerOwners});
   return status;
 }
 

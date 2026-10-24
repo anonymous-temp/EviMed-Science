@@ -1,0 +1,57 @@
+{
+  "id": "c17-recall-echo",
+  "class": "refuse-recall-echo",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C17); every name, number and identifier is invented",
+  "expected": "The assistant restating a preference it was handed changes nothing: the memory the first conversation wrote is byte for byte the same afterwards.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "seed": {
+      "messages": [
+        {
+          "id": "u1",
+          "role": "user",
+          "text": "Meta 分析一律用随机效应模型。"
+        },
+        {
+          "id": "a1",
+          "role": "assistant",
+          "text": "好的，之后的 Meta 分析都会用随机效应模型。"
+        }
+      ]
+    },
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "帮我对这三项 RCT 的主要终点做合并分析。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "按您的偏好，这次用随机效应模型。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "好，继续。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "合并结果：随机效应模型下合并 HR 为 0.82（95% CI 0.71–0.95），异质性 I² 为 31%。"
+      }
+    ]
+  },
+  "expect": {
+    "seedKeeps": [
+      "随机效应"
+    ],
+    "unchangedSinceSeed": true
+  }
+}

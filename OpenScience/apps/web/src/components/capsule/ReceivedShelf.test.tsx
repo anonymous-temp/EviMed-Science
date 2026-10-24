@@ -15,12 +15,11 @@ const client = vi.hoisted(() => ({
 vi.mock("@/lib/memoryClient", () => client);
 const share = vi.hoisted(() => ({ listPendingDeliveries: vi.fn(), openDelivery: vi.fn(), importDelivery: vi.fn(), declineDelivery: vi.fn() }));
 vi.mock("@/lib/capsuleShareClient", () => share);
+// Deliveries between accounts exist only where the server has sharing on (`features.capsuleShare` of `/api/me`); on unless a test says otherwise.
+const sharing = vi.hoisted(() => ({ value: "on" as "on" | "off" | "error" }));
+vi.mock("@/lib/capsuleShareFeature", () => ({ useCapsuleShareFeature: () => sharing.value }));
 vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => "project-a" }));
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: () => "操作未完成，请重试。" }));
-vi.mock("@/lib/projects", () => {
-  const state = { currentId: "project-a", projects: [{ id: "project-a", name: "阿司匹林研究" }, { id: "project-b", name: "别的项目" }] };
-  return { useProjectStore: (select: (value: typeof state) => unknown) => select(state) };
-});
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
@@ -50,7 +49,7 @@ function shelf() {
 }
 
 describe("收到的胶囊: trusted whole, one switch each way", () => {
-  beforeEach(() => { vi.clearAllMocks(); share.listPendingDeliveries.mockResolvedValue([]); });
+  beforeEach(() => { vi.clearAllMocks(); sharing.value = "on"; share.listPendingDeliveries.mockResolvedValue([]); });
   afterEach(cleanup);
 
   it("says what a pack brings, and nothing of the back office", async () => {
@@ -91,21 +90,19 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(client.disableCapsule).toHaveBeenCalledWith("pack-1");
   });
 
-  // Build spec §9.4 #6: 「启用范围可选账号或某个项目」.
-  it("puts a pack in force in the project the shell is in only, from the row's 「⋯」, and says where it is in force", async () => {
-    client.fetchReceivedCapsules.mockResolvedValueOnce([structuredClone(pack)])
-      .mockResolvedValue([{ ...structuredClone(pack), enabled: true, enabledIn: "project" }]);
-    client.enableReceivedCapsule.mockResolvedValue({ ...pack, enabled: true, enabledIn: "project" });
-    shelf();
+  // 2026-10-24: a person has one capsule, and a pack is in force for the account. It could be put in force for one project alone until then.
+  it("offers no way to put a pack in force for one project: the switch is the account's, and the row's 「⋯」 holds only the trial", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+    client.enableReceivedCapsule.mockResolvedValue({ ...pack, enabled: true });
+    const { container } = shelf();
     await userEvent.click(await screen.findByRole("button", { name: "更多" }));
-    await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "只在“阿司匹林研究”启用" }));
-    await waitFor(() => expect(client.enableReceivedCapsule).toHaveBeenCalledWith("pack-1", "project-a"));
-    expect(toasts.success.mock.calls.at(-1)![0]).toBe("已在“阿司匹林研究”启用“李主任的工作方式”");
-    expect(await screen.findByText(/只在“阿司匹林研究”启用/)).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toHaveAttribute("aria-checked", "true");
-    // In force already: the menu offers no second way in.
-    await userEvent.click(screen.getByRole("button", { name: "更多" }));
-    expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /只在/ })).toBeNull();
+    const items = within(await screen.findByRole("menu")).getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["试用一次"]);
+    expect(container.textContent).not.toMatch(/只在/);
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(await screen.findByRole("switch", { name: "启用“李主任的工作方式”" }));
+    expect(client.enableReceivedCapsule).toHaveBeenCalledTimes(1);
+    expect(client.enableReceivedCapsule.mock.calls[0]).toEqual(["pack-1"]);
   });
 
   it("「试用一次」, in the row's 「⋯」, marks a new conversation as the trial, then opens it under that id", async () => {
@@ -130,6 +127,22 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     shelf();
     expect(await screen.findByText("来自李主任 · 我做 Meta 分析的两条规矩")).toBeInTheDocument();
     expect(screen.getByText("9月27日更新：新增 2 条、移除 1 条")).toBeInTheDocument();
+  });
+
+  // 2026-10-23: where sharing is off the server answers 404 `capsule_share_not_enabled` to the list of deliveries, and the shelf showed
+  // 「暂时读不到待收下的分享。」 with 重试 for ever, on the import tab of every deployment that kept the default.
+  it("does not ask for deliveries where sharing is off or unknown, so no error is drawn for a thing that does not exist; the packs are still there", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+    for (const value of ["off", "error"] as const) {
+      sharing.value = value;
+      share.listPendingDeliveries.mockRejectedValue(new Error("capsule_share_not_enabled"));
+      const { container, unmount } = shelf();
+      expect(await screen.findByText("李主任的工作方式")).toBeInTheDocument();
+      expect(share.listPendingDeliveries).not.toHaveBeenCalled();
+      expect(container.textContent).not.toMatch(/暂时读不到待收下的分享/);
+      expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+      unmount();
+    }
   });
 
   it("is silent when nothing was received", async () => {

@@ -39,6 +39,7 @@
  * @module memoryMapSources/nativeMemory
  */
 
+import { recencyWeight } from "./common.mjs";
 import { MAP_RECORD_LIMIT, recordsContribution } from "./records.mjs";
 
 /**
@@ -58,8 +59,10 @@ export function createNativeMemorySource({ readMemories = null } = {}) {
       const held = await /** @type {NonNullable<typeof readMemories>} */ (readMemories)(request);
       const records = (held?.records ?? []).slice(0, MAP_RECORD_LIMIT)
         .filter((record) => !request.projectId || (record.scope === "project" && record.scopeId === request.projectId));
+      // A file of the engine has no importance and no use counter of its own (every one reads 0.5 and none is counted), so a mark's size
+      // says what the engine can: how recently the file was written.
       return recordsContribution(records, { sources: held?.sources ?? [], conflicts: held?.conflicts ?? [], usage: held?.usage ?? {} },
-        { now: request.now, timeZone: request.timeZone });
+        { now: request.now, timeZone: request.timeZone, weigh: (record) => recencyWeight(record.updatedAt ?? record.createdAt ?? null, request.now) });
     },
   };
 }

@@ -1,0 +1,15 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {verifyNativePeers} from '../native_peer_identity.mjs';
+test('legacy remains optional',()=>assert.equal(verifyNativePeers({}),null));
+test('requires both exact arms',()=>assert.throws(()=>verifyNativePeers({nativePeers:{}})));
+test('rejects incomplete identities',()=>assert.throws(()=>verifyNativePeers({nativePeers:{baseline:{},candidate:{}}})));
+import {createHash} from 'node:crypto';
+function fixture(){
+ const bytes=Buffer.from(JSON.stringify({embedding:{dense:{api_base:'http://127.0.0.1:33687/scope/openviking/embedding/v1'}},vlm:{api_base:'http://127.0.0.1:3000/v1'},bot:{agents:{api_base:'http://127.0.0.1:3000/v1'}}}));
+ const peers=Object.fromEntries(['baseline','candidate'].map((arm,n)=>[arm,{containerId:String(n+1).repeat(64),imageId:'sha256:'+'a'.repeat(64),version:n?'0.5.1.1':'0.5.0',versionPinFile:'/pins/'+arm,versionPinSha256:'pin-'+arm,approvedImage:'repo@sha256:'+'a'.repeat(64),nativeProcessId:n+100,startTicks:'12',nativeConfigFile:'/config/'+arm,containerConfigPath:'/ov.conf',configSha256:createHash('sha256').update(bytes).digest('hex'),dataDir:'/data/'+arm,containerDataPath:'/data',webGatewayOrigin:'http://127.0.0.1:3000'}]));
+ const config={nativePeers:peers,nativeProcessId:100,nativeConfigFile:'/config/baseline',coordinatorUrl:'http://127.0.0.1:33687',peerWebProcessIds:{baseline:1,candidate:2}};
+ const deps={readPeer:p=>({versionPinSha256:p.versionPinSha256,approvedVersion:p.version,approvedImage:p.approvedImage,pid:p.nativeProcessId,startTicks:'12',configBytes:bytes,mountedConfigBytes:bytes,dataPath:p.dataDir,imageMetadata:{Id:p.imageId,RepoDigests:[p.approvedImage]},image:{Id:p.containerId,State:{Running:true},Image:p.imageId,Config:{Labels:{'org.opencontainers.image.version':p.version}},Mounts:[{Source:p.dataDir,Destination:'/data'}]}}),verifyConfig:()=>true,listenerOwners:()=>[1,2]};return {config,deps};
+}
+test('both actual pinned engines retain baseline and shared attribution',()=>{const {config,deps}=fixture();assert.equal(verifyNativePeers(config,deps).candidate.version,'0.5.1.1');});
+for(const [name,change] of Object.entries({container:a=>a.image.Id='9'.repeat(64),metadata:a=>a.imageMetadata.Id='sha256:'+'b'.repeat(64),digest:a=>a.imageMetadata.RepoDigests=[],pid:a=>a.pid++,start:a=>a.startTicks='13',image:a=>a.image.Image='sha256:'+'b'.repeat(64),version:a=>a.approvedVersion='wrong',config:a=>a.mountedConfigBytes=Buffer.from('{}'),data:a=>a.dataPath='/other'}))test('rejects '+name+' drift',()=>{const {config,deps}=fixture();const read=deps.readPeer;deps.readPeer=p=>{const a=read(p);change(a);return a;};assert.throws(()=>verifyNativePeers(config,deps));});
+test('rejects shared data, foreign ownership and remote endpoint',()=>{for(const mutate of [c=>c.nativePeers.candidate.dataDir=c.nativePeers.baseline.dataDir,c=>c.peerWebProcessIds.candidate=9,c=>c.nativePeers.candidate.webGatewayOrigin='https://example.com']){const {config,deps}=fixture();mutate(config);assert.throws(()=>verifyNativePeers(config,deps));}});

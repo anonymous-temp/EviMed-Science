@@ -1,0 +1,35 @@
+{
+  "id": "c07-role-inside-a-brief",
+  "class": "work-order-role-in-a-brief",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C07); every name, number and identifier is invented",
+  "expected": "What the person's company does is kept as background (a glucose-meter company, sales material for channel partners); the six pages and the price decision belong to this one request.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我们公司做血糖仪的，给渠道商做 6 页销售 PPT，价格先别放。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，我按“产品卖点 / 临床价值 / 渠道支持”做 6 页销售 PPT，先不放价格。"
+      }
+    ]
+  },
+  "expect": {
+    "requireTextContains": [
+      "血糖仪"
+    ],
+    "noTextContains": [
+      "价格"
+    ]
+  }
+}

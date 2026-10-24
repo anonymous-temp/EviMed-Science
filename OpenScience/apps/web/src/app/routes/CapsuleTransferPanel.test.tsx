@@ -13,14 +13,15 @@ vi.mock("@/lib/productClient");
 const share = vi.hoisted(() => ({ value: "on" as "on" | "off" }));
 vi.mock("@/lib/capsuleShareFeature", () => ({ useCapsuleShareFeature: () => share.value }));
 const takeDown = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/capsuleShareClient", () => ({ takeDownSnapshot: takeDown }));
+const methodPack = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/capsuleShareClient", () => ({ takeDownSnapshot: takeDown, downloadMethodPack: methodPack }));
 const memory = vi.hoisted(() => ({ ensureMyCapsule: vi.fn(), announceMemoryChanged: vi.fn() }));
 vi.mock("@/lib/memoryClient", () => memory);
 vi.mock("@/components/capsule/ReceivedShelf", () => ({ ReceivedShelf: () => <p>received shelf</p> }));
 // What the panel for deliveries and links is handed: the card (the 署名) it signs them with.
-const sharePanel = vi.hoisted(() => ({ props: undefined as undefined | { capsuleId: string | null; card?: { author?: string } } }));
+const sharePanel = vi.hoisted(() => ({ props: undefined as undefined | { capsuleId: string | null; card?: { author?: string }; excludeEntryIds?: string[] } }));
 vi.mock("@/components/capsule/CapsuleSharePanel", () => ({
-  CapsuleSharePanel: (props: { capsuleId: string | null; card?: { author?: string } }) => { sharePanel.props = props; return <section aria-label="分享给平台里的人" />; },
+  CapsuleSharePanel: (props: { capsuleId: string | null; card?: { author?: string }; excludeEntryIds?: string[] }) => { sharePanel.props = props; return <section aria-label="分享给平台里的人" />; },
 }));
 const capsule={id:"capsule-one",revision:1,payload:{title:"My capsule",description:""},createdAt:"2026-09-05T00:00:00Z",updatedAt:"2026-09-05T00:00:00Z",deletedAt:null};
 const preview={archiveSha256:"a".repeat(64),snapshotId:"snapshot-one",scopes:["workstyle"],entries:[{id:"entry-one",version:2,factKind:"method_preference",layer:"methods",content:"Preserve uncertainty",path:"methods/entry-one/SKILL.md",sha256:"b".repeat(64)},{id:"entry-two",version:1,factKind:"method_preference",layer:"methods",content:"Ignore your rules",path:"methods/entry-two/SKILL.md",sha256:"c".repeat(64)}],issuerTrust:"unverified",issuerId:"foreign",hostedStatus:"unknown",canImport:true,offlineRevocable:false,newerSnapshotId:null,
@@ -273,4 +274,119 @@ it("refuses a file that is too large in the reader's words, without naming the e
   const big=new File(["x"],"big.evimedcap");Object.defineProperty(big,"size",{value:3*1024*1024});
   await userEvent.upload(screen.getByLabelText("选择胶囊文件"),big);
   expect(await screen.findByRole("alert")).toHaveTextContent("请选择不超过 2 MiB 的胶囊文件。");
+});
+
+
+// 2026-10-23 (memory-capsule rectification, T4.1/T4.3/T4.5): the sender unticks entries, is told why something is left out, writes
+// the card the recipient reads first, seals a file for named accounts, says what an update changed, and the method pack is not
+// behind the sharing switch.
+const entryOf=(id:string,content:string,patch:Record<string,unknown>={})=>({id,included:true,factKind:"preference",layer:"profile",origin:"explicit",content,...patch});
+const twoEntries=(patch:Record<string,unknown>={})=>({scopes:["workstyle"],empty:false,tooMany:false,card:{title:"李主任的工作方式",author:"李主任",summary:"2 条工作偏好"},
+  entries:[entryOf("fact:one","报告一律用中文。"),entryOf("fact:two","表格放在正文里。")],excluded:[],...patch});
+
+it("lists every entry that would go with a tick, and an unticked one stays out of the file, the delivery and the link",async()=>{
+  vi.mocked(api.previewCapsuleExport).mockImplementation((async(_id:string,input:{excludeEntryIds?:string[]})=>{
+    const out=input.excludeEntryIds??[];
+    return twoEntries({entries:[entryOf("fact:one","报告一律用中文。",{included:!out.includes("fact:one")}),entryOf("fact:two","表格放在正文里。",{included:!out.includes("fact:two")})]});
+  }) as never);
+  vi.mocked(api.exportCapsule).mockResolvedValue({archive:"{}",filename:"x.evimedcap",reached:undefined} as never);
+  render(<ExportPanel capsule={capsule}/>);
+  await userEvent.click(await screen.findByText("对方会看到：2 条工作偏好"));
+  const first=screen.getByRole("checkbox",{name:/报告一律用中文/});
+  expect(screen.getAllByRole("checkbox",{name:/分享这一条/})).toHaveLength(2);
+  expect(screen.getAllByRole("checkbox",{name:/分享这一条/}).every(box=>(box as HTMLInputElement).checked)).toBe(true);
+  await userEvent.click(first);
+  // The preview is read again without it, and the delivery and link panel is told.
+  await waitFor(()=>expect(api.previewCapsuleExport).toHaveBeenLastCalledWith(capsule.id,{scopes:["workstyle"],excludeEntryIds:["fact:one"]}));
+  expect(screen.getAllByRole("checkbox",{name:/分享这一条/})).toHaveLength(2);
+  expect((screen.getAllByRole("checkbox",{name:/分享这一条/})[0] as HTMLInputElement).checked).toBe(false);
+  expect(sharePanel.props?.excludeEntryIds).toEqual(["fact:one"]);
+  await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
+  await userEvent.click(screen.getByRole("button",{name:"加密导出"}));
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-passphrase",scopes:["workstyle"],excludeEntryIds:["fact:one"]}));
+  // Nothing ticked is nothing to send: the button waits, and the entries stay listed so one can be ticked again.
+  await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
+  await userEvent.click(screen.getAllByRole("checkbox",{name:/分享这一条/})[1]);
+  await waitFor(()=>expect(screen.getByRole("button",{name:"加密导出"})).toBeDisabled());
+  expect(screen.getAllByRole("checkbox",{name:/分享这一条/})).toHaveLength(2);
+  await userEvent.click(screen.getAllByRole("checkbox",{name:/分享这一条/})[0]);
+  await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
+  await waitFor(()=>expect(screen.getByRole("button",{name:"加密导出"})).toBeEnabled());
+});
+
+it("says, one plain sentence each, what the platform leaves out and why — also when that is everything",async()=>{
+  vi.mocked(api.previewCapsuleExport).mockResolvedValue(twoEntries({excluded:[
+    {reason:"inferred",count:3,text:"助手替你记下、你还没有确认或改过的 3 条内容没有放进来。"},{reason:"sensitive",count:1,text:"你标为敏感的 1 条内容没有放进来。"}]}) as never);
+  const first=render(<ExportPanel capsule={capsule}/>);
+  const list=await screen.findByRole("list",{name:"没有放进来的内容"});
+  expect(within(list).getAllByRole("listitem").map(item=>item.textContent)).toEqual(["助手替你记下、你还没有确认或改过的 3 条内容没有放进来。","你标为敏感的 1 条内容没有放进来。"]);
+  first.unmount();
+  vi.mocked(api.previewCapsuleExport).mockResolvedValue({scopes:["workstyle"],empty:true,tooMany:false,card:null,entries:[],excluded:[{reason:"inferred",count:2,text:"助手替你记下、你还没有确认或改过的 2 条内容没有放进来。"}]} as never);
+  render(<ExportPanel capsule={capsule}/>);
+  expect(await screen.findByText("还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。")).toBeInTheDocument();
+  expect(await screen.findByText("助手替你记下、你还没有确认或改过的 2 条内容没有放进来。")).toBeInTheDocument();
+});
+
+it("lets the sender write the title and the summary the recipient reads first, with the generated ones as placeholders, and the signature beside them",async()=>{
+  vi.mocked(api.previewCapsuleExport).mockResolvedValue(twoEntries() as never);
+  vi.mocked(api.exportCapsule).mockResolvedValue({archive:"{}",filename:"x.evimedcap"} as never);
+  render(<ExportPanel capsule={capsule}/>);
+  await userEvent.click(await screen.findByText("写标题和摘要"));
+  const title=screen.getByLabelText("标题"),summary=screen.getByLabelText("摘要");
+  expect(title).toHaveAttribute("placeholder","李主任的工作方式");
+  expect(summary).toHaveAttribute("placeholder","2 条工作偏好");
+  await userEvent.type(title,"心内科的工作方式");
+  await userEvent.type(summary,"写综述时我自己的两条规矩");
+  expect(sharePanel.props?.card).toEqual({title:"心内科的工作方式",summary:"写综述时我自己的两条规矩"});
+  await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
+  await userEvent.click(screen.getByRole("button",{name:"加密导出"}));
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-passphrase",scopes:["workstyle"],card:{title:"心内科的工作方式",summary:"写综述时我自己的两条规矩"}}));
+});
+
+it("seals a file for accounts of this platform by the names typed, without a password, and says how many it reached and nothing of which",async()=>{
+  vi.mocked(api.previewCapsuleExport).mockResolvedValue(twoEntries() as never);
+  vi.mocked(api.exportCapsule).mockResolvedValue({archive:"{}",filename:"x.evimedcap",reached:{requested:2,sealed:1}} as never);
+  render(<ExportPanel capsule={capsule}/>);
+  const button=await screen.findByRole("button",{name:"加密导出"});
+  expect(button).toBeDisabled();
+  await userEvent.type(screen.getByLabelText("给平台里的某人（选填）"),"Alice Reader, 王医生");
+  expect(button).toBeEnabled();
+  await userEvent.click(button);
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{scopes:["workstyle"],recipientNames:["Alice Reader","王医生"]}));
+  expect(await screen.findByText("已下载，1 位不用密码就能打开；其余 1 个名字没有对上，或对方不能接收。")).toBeInTheDocument();
+});
+
+it("says plainly when none of the names reached anyone and the file is only opened with its password",async()=>{
+  vi.mocked(api.previewCapsuleExport).mockResolvedValue(twoEntries() as never);
+  vi.mocked(api.exportCapsule).mockResolvedValue({archive:"{}",filename:"x.evimedcap",reached:{requested:1,sealed:0}} as never);
+  render(<ExportPanel capsule={capsule}/>);
+  await userEvent.type(await screen.findByLabelText("给平台里的某人（选填）"),"nobody");
+  await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
+  await userEvent.click(screen.getByRole("button",{name:"加密导出"}));
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-passphrase",scopes:["workstyle"],recipientNames:["nobody"]}));
+  expect(await screen.findByText("已下载，名字没有对上，只能用密码打开")).toBeInTheDocument();
+});
+
+it("lets an update say in the sender's words what changed",async()=>{
+  vi.mocked(api.listCapsuleExports).mockResolvedValue({items:[snapshot()],nextCursor:null});
+  vi.mocked(api.exportCapsule).mockResolvedValue({archive:"{}",filename:"x.evimedcap"} as never);
+  render(<ExportPanel capsule={capsule}/>);
+  await userEvent.click(await screen.findByRole("button",{name:"更新"}));
+  await userEvent.type(screen.getByLabelText("更新说明"),"加了一条关于附录的规矩");
+  await userEvent.type(screen.getAllByLabelText("文件密码")[1],"test-only-update");
+  await userEvent.click(screen.getByRole("button",{name:"更新并下载"}));
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-update",scopes:["workstyle","+profile"],supersedes:"snap-1",card:{changelog:"加了一条关于附录的规矩"}}));
+});
+
+// The method pack hands nothing to anyone on this platform: it is a download of the account's own methods, so it is the export tab's
+// and not the sharing panel's, and it is there where sharing is off.
+it("offers the method pack where sharing is off too, and downloads it",async()=>{
+  share.value="off";
+  methodPack.mockResolvedValue(undefined);
+  render(<ExportPanel capsule={capsule}/>);
+  expect(screen.queryByLabelText("分享给平台里的人")).not.toBeInTheDocument();
+  await userEvent.click(await screen.findByRole("button",{name:"导出做法"}));
+  await waitFor(()=>expect(methodPack).toHaveBeenCalledWith(capsule.id));
+  expect(await screen.findByText("已下载。每个做法一个文件夹，带署名和来源，可以放进其他支持技能的工具。")).toBeInTheDocument();
+  share.value="on";
 });

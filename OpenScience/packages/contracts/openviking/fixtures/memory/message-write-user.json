@@ -1,6 +1,6 @@
 {
   "note": "A user message as the plugin sends it: parts with one text part, created_at.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001/messages",

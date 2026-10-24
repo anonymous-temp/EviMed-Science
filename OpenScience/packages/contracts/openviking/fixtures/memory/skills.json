@@ -1,6 +1,6 @@
 {
-  "note": "The skill catalogue the plugin reads at start (empty here).",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "note": "The skill catalogue the plugin reads at start.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/skills",
@@ -19,8 +19,29 @@
         "viking://user/fx-user-a/skills",
         "viking://agent/skills"
       ],
-      "skills": [],
-      "total": 0
+      "skills": [
+        {
+          "type": "skill",
+          "name": "knowledge-graph",
+          "uri": "viking://agent/skills/knowledge-graph",
+          "root_uri": "viking://agent/skills/knowledge-graph",
+          "skill_md_uri": "viking://agent/skills/knowledge-graph/SKILL.md",
+          "description": "Compile documents, notes, web content, transcripts, research materials, or code repositories into an evidence-grounded, visualization-ready knowledge graph with semantically typed entity nodes, statement-level provenance, and typed relationship edges. Use with ov compile to create or incrementally refresh `entities/*.md` node artifacts and a root `relations.jsonl` edge file for people, organizations, groups, animals, places, products, projects, systems, services, modules, datasets, standards, documents, events, and other identifiable things.",
+          "tags": [],
+          "allowed_tools": []
+        },
+        {
+          "type": "skill",
+          "name": "llm-wiki",
+          "uri": "viking://agent/skills/llm-wiki",
+          "root_uri": "viking://agent/skills/llm-wiki",
+          "skill_md_uri": "viking://agent/skills/llm-wiki/SKILL.md",
+          "description": "Compile heterogeneous knowledge sources—including documents, notes, web content, transcripts, research materials, and code repositories—into a Karpathy-style, evidence-grounded LLM Wiki with a maintained index; default entity and concept pages; and selective method, comparison, analysis, or instruction-requested summary pages. Use with ov compile to create or incrementally refresh knowledge that is easy for people and agents to retrieve, navigate, and reuse.",
+          "tags": [],
+          "allowed_tools": []
+        }
+      ],
+      "total": 2
     },
     "error": null,
     "telemetry": null,

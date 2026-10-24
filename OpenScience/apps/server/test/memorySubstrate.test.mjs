@@ -717,7 +717,7 @@ test("a record's own write reaches the index, without waiting for an operator", 
   assert.equal(index.calls.write[0].uri, memoryUri(USER, {
     scope: "user", scopeId: "", kind: "preference", recordId: "rec1",
   }));
-  assert.deepEqual(index.calls.write[0].options, { wait: true, timeoutSeconds: 5 });
+  assert.deepEqual(index.calls.write[0].options, { wait: true });
   assert.deepEqual(jobs.finished[0].result, { status: "indexed", recordId: "rec1", version: 4 });
 });
 
@@ -813,7 +813,7 @@ test("a rebuild publishes what may be recalled and skips what may not", async ()
   // An operator's rebuild reports that the index is current. A write that
   // returned before its vector existed would make that report false for a
   // window nobody can measure, so the wait is part of the contract.
-  assert.deepEqual(index.calls.write[0].options, { wait: true, timeoutSeconds: 5 });
+  assert.deepEqual(index.calls.write[0].options, { wait: true });
 });
 
 // `wait: true` buys that report at the price of the likeliest failure in the

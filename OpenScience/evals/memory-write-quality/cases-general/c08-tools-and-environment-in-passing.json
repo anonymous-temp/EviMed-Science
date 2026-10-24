@@ -1,0 +1,32 @@
+{
+  "id": "c08-tools-and-environment-in-passing",
+  "class": "work-order-tools-in-passing",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C08); every name, number and identifier is invented",
+  "expected": "The tools and limits the person named in passing are kept: the team works in Feishu docs, spreadsheets are opened in WPS, avoid new functions; the schedule itself is not.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我们用飞书文档协作，表格都是 WPS 打开的，别用太新的函数。帮我做个下周排班表。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，下周排班表已按周一到周日做好，只用了 WPS 都支持的基础函数。"
+      }
+    ]
+  },
+  "expect": {
+    "requireTextContains": [
+      "WPS"
+    ]
+  }
+}

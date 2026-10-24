@@ -309,15 +309,25 @@ test("an archive that carries anything but the declared text entries is refused 
       passwordWrap: container.passwordWrap.toString("base64"), payload: Object.fromEntries(Object.entries(container.payload).map(([name, bytes]) => [name, bytes.toString("base64")])) });
   };
   const preview = (extra) => archive(extra).then((text) => transfers.preview(alice, { archive: text, password: "test-only-share-passphrase" }));
-  // Entries the container's own share scope would let through, and the share still refuses: an executable under a method, a file
-  // that is not one of the five a pack is made of, a method's extra file, a tool definition kept as JSON.
+  // Entries the container's own share scope would let through, and the share still refuses: an executable under a method and a
+  // method's extra file.
   const method = randomUUID();
   for (const extra of [
     [{ path: `methods/${method}/scripts/a.py`, mime: "text/x-python", content: "print(1)", layer: "methods" }],
     [{ path: `methods/${method}/notes.md`, mime: "text/markdown", content: "a second file in a method", layer: "methods" }],
-    [{ path: "exemplars/attachment.md", mime: "text/markdown", content: "an attachment named like text", layer: "methods" }],
-    [{ path: "lessons.jsonl", mime: "application/x-ndjson", content: "{\"tool\":\"search\"}\n", layer: "methods" }],
   ]) await assert.rejects(preview(extra), { code: "capsule_share_not_text_only" }, extra[0].path);
+  // A file that is not one of the five a pack is made of, and a tool definition kept as JSON. The container no longer lets a sender
+  // declare these paths at all (its table holds exactly the files a share is made of), so they are declared in a hand-made manifest:
+  // the share's own check reads the manifest and the payload's names first, and still refuses them by name before any key is derived.
+  for (const [path, mime, content] of [["exemplars/attachment.md", "text/markdown", "an attachment named like text"], ["lessons.jsonl", "application/x-ndjson", "{\"tool\":\"search\"}\n"]]) {
+    const envelope = JSON.parse(await archive([]));
+    envelope.manifest.entries.push({ path, mime, layer: "methods", bytes: content.length, sha256: "0".repeat(64) });
+    envelope.payload[path] = Buffer.from(content).toString("base64");
+    await assert.rejects(transfers.preview(alice, { archive: JSON.stringify(envelope), password: "test-only-share-passphrase" }), { code: "capsule_share_not_text_only" }, path);
+    await assert.rejects(packCapsule({ capsuleId: snapshotId, version: 1, createdAt: new Date().toISOString(),
+      issuer: { userId: identity.issuerId, signingKeyId: identity.signing.keyId, signingPrivateKey: identity.signing.privateKey },
+      scope: ["workstyle"], layers: ["methods"], password: "test-only-share-passphrase", entries: [{ path, mime, content, layer: "methods" }] }), { code: "capsule_scope_violation" }, `${path} cannot be packed`);
+  }
   const clean = await archive([]);
   // Not hosted by anyone here, so nothing could be imported from it — but it is read, which is the point: no refusal by name.
   const read = await transfers.preview(alice, { archive: clean, password: "test-only-share-passphrase" });
@@ -522,16 +532,17 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   const triggersAt = (offset) => new LearningTriggers({ jobs: { enqueue: async (_user, _kind, payload) => queued.push(payload) }, agentRuns: { list: async () => [], runWorkflowProjection: async () => null },
     audit: async (event, detail) => audited.push([event, detail.code]),
     guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY }) });
-  const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled }));
+  // A correction typed into the run is what queues a lesson since 2026-10-23 (the sampled `delivered` lesson is gone); the guest mark rides on it.
+  const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled, corrections: 1 }));
   const early = await triggersAt(0).afterRun(project, { ...guestA });
   await triggersAt(0).afterRun(project, { ...guestB });
-  assert.deepEqual(early.queued, ["delivered"], "the run still learns for its own account");
+  assert.deepEqual(early.queued, ["correction"], "the run still learns for its own account");
   assert.equal(early.guestInfluence, "uncorroborated", JSON.stringify(audited));
   assert.equal(queued[0].guestInfluence.uncorroborated, true);
   assert.ok(await documents.get(alice, "preferences", `guest-run:${guestA.id}`), "the run is marked");
   const late = await triggersAt(15).afterRun(project, { ...vouchedA });
   await triggersAt(15).afterRun(project, { ...vouchedB });
-  assert.deepEqual(late.queued, ["delivered"]);
+  assert.deepEqual(late.queued, ["correction"]);
   assert.equal(late.guestInfluence, undefined, "another account has kept this snapshot for the period: the run is as any run");
   assert.equal(await documents.get(alice, "preferences", `guest-run:${vouchedA.id}`), null);
   assert.equal(queued.at(-1).guestInfluence, undefined);

@@ -6,6 +6,7 @@ import { after, before, test } from "node:test";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { projectCard as projectCardOf } from "../src/projectOverview.mjs";
 import { ResidentProfiles } from "../src/residentProfile.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -190,6 +191,48 @@ test("a real store drives the whole decision: first, unchanged, changed, compact
     // The researcher's pause is read from the real settings.
     await store.updateSettings(user, { recallPaused: true });
     assert.deepEqual([(await profiles.forDispatch(user, scope)).text, (await profiles.forDispatch(user, scope)).reason], ["", "paused"]);
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [user]);
+  }
+});
+
+test("inside a project a person is in, the real store's card leads the profile: the slots written under their keys, this project's alone, handed once", options, async () => {
+  const user = `resident_card_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Resident card','development')", [user]);
+  try {
+    const write = (/** @type {Record<string, any>} */ overrides) => store.upsertRecord(user, record({ scope: "project", scopeId: "prj_card", kind: "project_fact", ...overrides }));
+    await write({ key: "project.field", value: "心血管流行病学", summary: "心血管流行病学" });
+    await write({ key: "project.goal", value: "比较两类降糖药的心衰住院风险", summary: "比较两类降糖药的心衰住院风险" });
+    await write({ key: "project.constraints", value: "周五前出初稿，引用用 AMA 格式", summary: "周五前出初稿" });
+    await write({ key: "project.design", kind: "decision", value: "采用主动对照新用药者设计", summary: "采用主动对照新用药者设计" });
+    // What is not the card: another project's slot, a sensitive one, a replaced one, a fact under a key of nobody's.
+    await write({ scopeId: "prj_other", key: "project.goal", value: "另一个项目的目标", summary: "另一个项目的目标" });
+    await write({ key: "project.stage", value: "不该出现的敏感一条", summary: "敏感", sensitive: true });
+    await write({ key: "project.subject", status: "superseded", value: "已被替换", summary: "已被替换" });
+    await write({ key: "project.invented_by_a_model", value: "模型自己起的键", summary: "模型自己起的键" });
+    await store.upsertRecord(user, record({ key: "pref.card", value: "结论先行", summary: "结论先行" }));
+
+    // What `server.mjs` hands the dispatch: the legacy card is the memory page's own reader over the account's project facts and decisions.
+    const projectCard = async (/** @type {string} */ userId, /** @type {string} */ projectId) =>
+      projectCardOf(await store.listAllRecords(userId, { scopes: ["project"], kinds: ["project_fact", "decision"], statuses: ["active"], scopeId: projectId }));
+    const profiles = new ResidentProfiles({ config: {}, store, projectCard });
+    const scope = { projectId: "prj_card", sessionId: "ses_card", attended: true };
+    const first = await profiles.forDispatch(user, scope);
+    assert.equal(first.reason, "first");
+    assert.deepEqual(first.memories[0].id, "card:prj_card");
+    assert.equal(first.memories[0].content, "领域：心血管流行病学\n目标：比较两类降糖药的心衰住院风险\n约束：周五前出初稿，引用用 AMA 格式\n设计：采用主动对照新用药者设计");
+    assert.match(first.text, /结论先行/, "the person's own profile follows the card");
+    assert.doesNotMatch(first.text, /另一个项目|敏感|已被替换|模型自己起的键/);
+    await first.delivered();
+    assert.equal((await profiles.forDispatch(user, scope)).due, false, "once per conversation");
+    // A turn nobody is in, and the catch-all project, are handed no card.
+    assert.doesNotMatch((await profiles.forDispatch(user, { projectId: "prj_card", sessionId: "ses_auto" })).text, /领域/);
+    assert.doesNotMatch((await profiles.forDispatch(user, { projectId: "default", sessionId: "ses_default", attended: true })).text, /领域/);
+    // The card moves on: the conversation is handed the block again.
+    await write({ key: "project.stage", value: "数据清洗完成，进入分析", summary: "数据清洗完成", sensitive: false });
+    const moved = await profiles.forDispatch(user, scope);
+    assert.deepEqual([moved.due, moved.reason], [true, "changed"]);
+    assert.match(moved.text, /阶段：数据清洗完成，进入分析/);
   } finally {
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [user]);
   }

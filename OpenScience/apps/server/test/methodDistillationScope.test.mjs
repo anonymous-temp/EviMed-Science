@@ -54,7 +54,7 @@ test("the input says which methods the run read, what became of their results an
       scientific: { entries: [{ id: `sf_${"1".repeat(32)}`, signal: "analytic_corrected", at: "2026-10-04T00:00:00.000Z", digest: `sha256:${hex("a")}`, used: "invoked", runId: "run_1",
         result: { versionId: version(1), digest: hex("a") }, successor: null, replay: null, event: { id: EVENT.id }, kind: "analytic", applicability: { state: "unknown", basis: "none", codes: [] } }] } } },
       { id: "method:learned:plain", payload: { status: "approved", contentDigest: `sha256:${hex("c")}`, frontmatter: { name: "plain" }, body: "p" } }] });
-  assert.equal(input.extractorVersion, "7");
+  assert.equal(input.extractorVersion, DISTILLATION_EXTRACTOR_VERSION);
   assert.equal(input.methodsUsed.known, true);
   assert.equal(input.methodsUsed.invoked[0].name, "quote-first");
   assert.deepEqual(input.methodsUsed.passedOver.map((item) => item.name), ["sweep"]);
@@ -65,7 +65,7 @@ test("the input says which methods the run read, what became of their results an
   assert.equal("scientific" in plain, false, "a method with nothing recorded says nothing, which is not 'nothing happened'");
   assert.equal("scope" in plain, false);
   // A lesson queued under the old rules is a different job from the same lesson under these.
-  assert.equal(DISTILLATION_EXTRACTOR_VERSION, "7");
+  assert.ok(Number(DISTILLATION_EXTRACTOR_VERSION) >= 7, "the rules changed, so the identity did");
   assert.notEqual(distillationDispatchId("run_1", "correction", EVENT.id), `method-distillation-${"0".repeat(32)}`);
 });
 

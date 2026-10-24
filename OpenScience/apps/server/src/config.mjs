@@ -703,10 +703,12 @@ function evidenceFlywheelSettings(overrides) {
  * the discipline of the frontier's: passed value-less by compose, and a value outside its range stops the process at
  * start with the variable's name.
  *
- * - Every line has its own switch, and each is off until an operator turns it on (2026-10-06): `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` for sharing a
- *   capsule with other accounts (deliveries, links, take-downs, the Agent Skills method pack: off, those routes answer 404
- *   `capsule_share_not_enabled`, nothing of them is composed or read, and the share panel is hidden through `features.capsuleShare`), and
- *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED` for subscribing a project to an evidence zone, which also needs the frontier on.
+ * - Every line has its own switch. Sharing is on (owner ruling 2026-10-10, "memory-capsule sharing stays on"; the default was false until
+ *   2026-10-23, which contradicted it): `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` for sharing a capsule with other accounts (deliveries, links,
+ *   take-downs: off, those routes answer 404 `capsule_share_not_enabled`, nothing of them is composed or read, and the share panel is
+ *   hidden through `features.capsuleShare`). The API-only stack pins it off (`docker-compose.api-only.yml`: it has no people to share
+ *   between), and the Agent Skills method pack and the encrypted file export are not behind it. The zone subscription is still off until an
+ *   operator turns it on, `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`, which also needs the frontier on.
  * - A share link lives `OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS` days (30) and is used at most
  *   `OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES` times (20): both are the default and the ceiling an owner may ask for, because
  *   a link that never ends is a pack nobody can take back without remembering it exists.
@@ -743,7 +745,7 @@ function memorySharingSettings(overrides, frontierEnabled) {
     return number;
   };
   return {
-    capsuleShareEnabled: overrides.capsuleShareEnabled ?? boolEnv("OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", false),
+    capsuleShareEnabled: overrides.capsuleShareEnabled ?? boolEnv("OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", true),
     capsuleShareLinkTtlDays: integer("capsuleShareLinkTtlDays", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS", 30, 1, 365),
     capsuleShareLinkMaxUses: integer("capsuleShareLinkMaxUses", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", 20, 1, 1000),
     capsuleShareCorroborationMinAccounts: integer("capsuleShareCorroborationMinAccounts", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", 3, 1, 100),
@@ -2726,6 +2728,11 @@ export function loadConfig(overrides = {}) {
     memoryProfileMaxRecords: Number(
       overrides.memoryProfileMaxRecords ?? process.env.OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS ?? 24,
     ),
+    // How long a dispatch waits to read the project's card for the block it hands a conversation (`residentProfile.mjs`): the card of a
+    // native account is the engine's own file, and an engine that hangs would otherwise hold every message of a conversation in a
+    // named project for its whole deadline. Past this the conversation goes on without the card
+    // (`open_science_memory_resident_card_total{outcome="timeout"}`), and the next message asks again.
+    memoryResidentCardTimeoutMs: boundedInteger(overrides.memoryResidentCardTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS, 1_500, 100, 30_000, "OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS"),
     // How many items the recall tool answers with when the model does not say, and the most it may ask for. The tool is the
     // one path to episodic and project memory, and an answer is read by the model whole: five, eight at most, each above the
     // relevance floor below.
@@ -2752,6 +2759,20 @@ export function loadConfig(overrides = {}) {
     // given up (the engine never retries one; each replay is one extraction call, backed off from one minute).
     nativeMemoryScanMs: boundedInteger(overrides.nativeMemoryScanMs ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS, 60_000, 5_000, 3_600_000, "OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS"),
     nativeMemoryReplayAttempts: boundedInteger(overrides.nativeMemoryReplayAttempts ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS, 5, 0, 20, "OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS"),
+    // The consolidation of a native account's memories (`nativeMemoryConsolidation.mjs`, 重读旧记忆 on the native engine): OpenViking's own
+    // `compile --skill memory` over the account's memories, at most once an interval (days) per account and only after its files changed.
+    // On by default since the lab probe of 2026-10-24 (v0.5.1.1: the request accepted, the task completed in 8 s, its result read as the
+    // fixture `packages/contracts/openviking/fixtures/memory/consolidation-task.json`, and nothing changed where nothing was duplicated).
+    // Each run is model calls of the engine's, through the gateway as `memory-extraction` on the OpenViking module's daily budget
+    // (`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`); every change it makes is a revision the memory page can undo.
+    nativeMemoryConsolidationEnabled: overrides.nativeMemoryConsolidationEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED", true),
+    nativeMemoryConsolidationIntervalDays: boundedInteger(overrides.nativeMemoryConsolidationIntervalDays ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS, 7, 1, 90, "OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS"),
+    // The judge of a reworded repeat (`nativeMemoryRejections.mjs`): a line the engine writes that is near one the person removed is put
+    // to one model call a commit (thinking off, memory-extraction, charged to the account), and a line the judge cannot say anything
+    // of — unreachable, not the one answer shape, or the account's day spent — is kept. The day's calls per account are the bound
+    // (`open_science_native_memory_rejection_judge_total`); off, only a verbatim repeat and a line that contains a removed one are met.
+    nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
+    nativeMemoryRejectionJudgeDailyCalls: boundedInteger(overrides.nativeMemoryRejectionJudgeDailyCalls ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS, 40, 0, 10_000, "OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS"),
     // The turn committer (`nativeTurnCommit.mjs`): the plugin commits a conversation only at a token threshold no ordinary
     // conversation reaches and when its session is disposed (hours away while the runtime lives), so the control plane
     // commits the engine session itself after an attended turn. Each limit protects a resource and has a counter
@@ -3107,10 +3128,6 @@ export function loadConfig(overrides = {}) {
     // ran at all.
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
-    // The share of finished deliveries that queue a distillation (owner decision 8, 2026-10-10; review L-15). Every successful run with artifacts used to cost a
-    // distillation run, and "no change" is the common answer. The share is chosen by a hash of the run id (`runSampling.mjs`), so a run is in or out for good;
-    // corrections and routines are explicit signals and are not sampled. 1 is every delivery, as before; 0 distils none from a clean delivery.
-    learningDistillSampleShare: shareSetting(overrides, "learningDistillSampleShare", "OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE", 0.33),
     // How many answered runs may carry a learned method's card without one of them opening the method before it is stopped, with the
     // count written on it as the reason (owner ruling of 2026-10-12, live audit §4: eight cards in a run on average, one run in fifty
     // opening any). The card costs prompt room in every research run, and the harm test cannot see a method nobody opens. Restoring a
@@ -3120,7 +3137,8 @@ export function loadConfig(overrides = {}) {
     // researcher's research methods from their corrections and edits, not how to pass the delivery gate). Since 2026-09-17 a verdict of the
     // gate withholds nothing, so what a run repaired inside its turn is the platform's own bookkeeping, and 21 of the 28 lessons the loop
     // had read by 2026-10-12 were of that kind, filed as account handbooks that 14 of 17 platform candidates then failed on length.
-    // Chosen by a hash of the run id like the delivery sample, independent of it; 1 restores every repaired delivery.
+    // Chosen by a hash of the run id (`runSampling.mjs`); 1 restores every repaired delivery. (The share of clean deliveries that queued a lesson, a third, was removed
+    // on 2026-10-23: what it read is the settled run and the routine over three of them, `learningEvidence.mjs`.)
     learningRepairDistillShare: shareSetting(overrides, "learningRepairDistillShare", "OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE", 0),
     // Who sees the operations page.
     //

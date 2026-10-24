@@ -97,13 +97,13 @@ test("the lessons are queued from the terminal hook by themselves, after the mem
     "a deployment without a memory store still learns from its runs");
   // The first occurrence of this guard belongs to the inbox; the one that keeps the platform's own projects out of memory and
   // lessons is the last, below the transcript branch.
-  const internalGuard = hook.lastIndexOf("if (internalFor(project.userId, project.id)) return;");
+  const internalGuard = hook.lastIndexOf("if (internalFor(project.userId, project.id)) {");
   assert.ok(internalGuard > 0 && internalGuard < noMemory,
     "any run in an internal project (an evaluation harness's among them) never queues a lesson or seeds memory");
   // A conversation that read a clinical source is checked like any other (the reply check is a notice that holds nothing back,
   // B1-reply) and seeds neither memory nor lessons: its guard sits below the reply check and above both.
   const replyCheck = hook.indexOf("review.service.considerReply(");
-  const clinicalGuard = hook.indexOf("if (!reusableClinicalContext) return;", replyCheck);
+  const clinicalGuard = hook.indexOf("if (!reusableClinicalContext) {", replyCheck);
   assert.ok(replyCheck > internalGuard && clinicalGuard > replyCheck && clinicalGuard < noMemory && clinicalGuard < afterMemory,
     "a clinical conversation's reply is checked, and the same conversation never queues a lesson or seeds memory");
 });
@@ -168,8 +168,11 @@ test("the projection the feed attributes against is the run's own, not whatever 
   // Attribution names deliverables. A projection belonging to a different run
   // holds different deliverable ids, and the failure would not be an error —
   // it would be confident credit assigned to the wrong work.
+  // What is read is the run's own (`runWorkflowProjection` scopes it to the run); with none, only what the control plane itself gave the
+  // conversation counts, and its deliverables are not invented.
   assert.match(serverSource, /await agentRuns\.runWorkflowProjection\(project, run\)/);
-  assert.match(serverSource, /if \(!projection\) return;/);
+  assert.match(serverSource, /if \(!read && !given\.length\) return;/);
+  assert.match(serverSource, /const projection = \{ \.\.\.\(read \?\? \{\}\),/);
 });
 
 test("the evaluation corpus has a producer, and the control plane is not it", async () => {
@@ -254,7 +257,7 @@ test("the learning loop is on by default, and every spend it can reach is still 
   assert.match(config, /learningDailyLimitCny: Number\(overrides\.learningDailyLimitCny/, "a lesson per delivery needs a daily ceiling");
   assert.match(config, /learningWeeklyLimitCny: Number\(overrides\.learningWeeklyLimitCny/);
   const triggers = await readFile(new URL("../src/learningTriggers.mjs", import.meta.url), "utf8");
-  assert.match(triggers, /if \(ledgerRun\.transcript\?\.completeness !== "complete"\) return \[\];/,
+  assert.match(triggers, /if \(ledgerRun\.transcript\?\.completeness !== "complete"\) return "transcript_incomplete";/,
     "a lesson from a partial transcript would be paid for and then refused by the promotion rule");
 });
 
@@ -326,19 +329,18 @@ test("a stop reads the bounded run it releases, and the counters reach the metri
   assert.match(serverSource, /readCorrections: researchMemory\.configured/);
 });
 
-test("a routine is counted across the researcher's own projects, and its peers are read where they ran", () => {
-  // E7 (2026-09-28): the family was one project's ledger, so a researcher who
-  // kept one question per project never reached a routine. The rules are
-  // tested in learningTriggers.test.mjs against the ledgers this hands them;
-  // this asserts the composition root hands them the account's projects, and
-  // only the account's own.
+test("a routine's peers are read where they ran, and the evidence a routine is counted from is fed by the runs it is told of", () => {
+  // The family is the feedback ledger's clean settled runs of one scope (learningEvidence.mjs), each with the project its transcript is in; the
+  // rules are tested in learningTriggers.test.mjs and learningEvidence.test.mjs. This asserts the composition root hands the parts what they read.
   const triggers = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
   assert.ok(triggers.length > 0, "the trigger construction is gone; this test now checks nothing");
-  assert.match(triggers, /projects: async \(userId\) => \{\s*const user = await store\.userById\(userId\);/);
-  assert.match(triggers, /for \(const entry of await store\.listProjects\(user\)\) \{\s*if \(entry\.archivedAt \|\| internalFor\(user\.id, entry\.id\)\) continue;\s*own\.push\(await store\.requireProject\(user, entry\.id\)\);/);
+  assert.match(triggers, /evidence: learningEvidence, onRefused: \(reason\) => learningMetrics\.observeTriggerRefused\(reason\)/);
   assert.match(triggers, /routinePeriodDays: config\.transcriptRetentionDays/, "a peer is never older than the transcript an induction reads");
   const distillation = serverSource.slice(serverSource.indexOf("const distillation = new MethodDistillationRuns({"), serverSource.indexOf("const consolidation = new MethodConsolidation({"));
   assert.match(distillation, /resolveProject: async \(userId, projectId\) => \{\s*const user = await store\.userById\(userId\);\s*return user \? store\.requireProject\(user, projectId\) : null;/);
+  assert.match(distillation, /similarity: methodSimilarity,/, "the related methods are the nearest by meaning");
+  assert.match(distillation, /resolveRun: async \(peerProject, runId\)/, "a peer is digested from its own ledger record");
+  assert.match(serverSource, /learningWorker = new LearningWorker\(\{\s*jobs: productJobs, distillation, consolidation, evidence: learningEvidence,/);
 });
 
 test("what later became of a result has its producers: a correction and a recalculation reach the join, and a lesson is told what the run read", () => {
@@ -364,17 +366,60 @@ test("the platform handbook path is handed the independent-family harm check and
   assert.match(call, /audit: \(event, detail\) => securityAudit\(config, event, "recorded", detail\),/);
 });
 
-test("the composition root hands the lesson queue the configured delivery share and a counter for what the sample leaves out", () => {
-  // Constructed with neither, every delivery would queue a lesson at the default of one and nothing would count the others (review L-15).
-  const call = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
-  assert.match(call, /deliveryShare: config\.learningDistillSampleShare, onDeliverySample: \(distilled\) => learningMetrics\.observeDeliverySample\(distilled\),/);
+test("a new turn of a conversation is read once as the answer to the run before it, beside the adoption and never in front of it", () => {
+  // Constructed is not fed: the follow-up judgement exists only if the adoption of a native turn calls it, and a call that waited would hold the turn.
+  assert.match(serverSource, /void learningEvidence\?\.onNewTurn\(full, \{ sessionId, text, requestId: input\?\.requestIds\?\.\[0\] \?\? "" \}\)\.catch\(\(\) => null\);/);
+  const call = serverSource.slice(serverSource.indexOf("learningEvidence = new LearningEvidence({"), serverSource.indexOf("learningTriggers = new LearningTriggers({"));
+  assert.match(call, /judge: new FollowUpJudge\(config, \{ usageLedger,/);
+  assert.match(call, /methodsOpened: methodFeedback \? async \(project, run\) => \(await methodFeedback\.usedBy\(project, run\)\)\.methods\.map/);
+  assert.match(call, /report: \(reason\) => learningMetrics\.observeEvidenceFailure\(reason\)/);
+  // The loop's own evidence is not a researcher-feedback signal of the evolution module.
+  assert.match(serverSource, /event\.trigger === "learning-evidence"\) return;/);
+});
+
+test("the gates that turn a finished run away before the loop is asked are counted too, by their reason", () => {
+  // A refusal nobody counts looks like a loop with nothing to learn (2026-10-12 to 10-23, eleven days of it). The run-finished hook returns before
+  // `afterRun` for the platform's own projects, its own capabilities and a conversation that read clinical context; each says which, on the counter.
+  for (const reason of ["internal_project", "internal_agent", "clinical_context"]) {
+    assert.match(serverSource, new RegExp(`\\{ learningMetrics\\.observeTriggerRefused\\("${reason}"\\); return; \\}`), reason);
+  }
 });
 
 test("the 2026-10-12 learning levers reach the parts that read them: the unused-method stop, its denominator, and the repair sample", () => {
   // Constructed with the option is not fed: `recordCarried` is the only writer of the count the stop reads, and a
   // `MethodConsolidation` built without the limit would fall back to the domain's default and ignore the deployment's.
   const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
-  assert.match(record, /if \(derived\.answered\) \{\s*for \(const methodId of derived\.carried\) \{\s*await learningService\.recordCarried\(project\.userId, methodId\)/);
+  assert.match(record, /if \(derived\.answered\) \{[^]*?for \(const \{ id: methodId, reason \} of derived\.carriedBy\) \{\s*await learningService\.recordCarried\(project\.userId, methodId, reason \?\? undefined\)/,
+    "a card is counted by why it was there: the exposure slot's is not a load the method is stopped for");
   assert.match(serverSource, /unusedAfterLoads: config\.learningUnusedRetireLoads, onRetirement: \(code\) => learningMetrics\.observeRetirement\(code\)/);
   assert.match(serverSource, /repairShare: config\.learningRepairDistillShare, onRepairSample: \(distilled\) => learningMetrics\.observeRepairSample\(distilled\)/);
+});
+
+test("the loop's counters are kept for a conversation that read a clinical source too: they carry no text, so the early return does not come before them", () => {
+  // 2026-10-23: `recordMethodUse` sat after `if (!reusableClinicalContext) return;`, so every study conversation left no counter and no
+  // `carried`, and a method the study's work used daily read as idle.
+  const block = serverSource.slice(serverSource.indexOf("const reusableClinicalContext = "), serverSource.indexOf("// The platform's own projects (an evaluation harness's among them) must not"));
+  const counted = block.indexOf("await recordMethodUse({ project, run, sessions });");
+  const refused = block.indexOf("if (!reusableClinicalContext) return;");
+  assert.ok(counted > 0 && refused > 0, "both are in the transcript branch");
+  assert.ok(counted < refused, "the counters come first");
+  assert.equal(block.split("await recordMethodUse({ project, run, sessions });").length - 1, 1, "and once");
+});
+
+test("a method that changed or was stopped, and a conversation that is about to begin, reach the runtime that is up", () => {
+  assert.match(serverSource, /learningService\.onMountChange = \(userId\) => runtimeManager\.refreshCapsuleMethods\(\{ userId \}\)/);
+  assert.match(serverSource, /runtimeManager\.methodSimilarity = methodSimilarity;/, "the mount ranks the library by the consolidation's own reading of close");
+  const native = serverSource.slice(serverSource.indexOf("preparePrompt: nativeHandbookContext || learningService"), serverSource.indexOf("authorizeMutation: maintenanceService"));
+  assert.match(native, /request\?\.mode !== "steer"/, "a steer is the same conversation");
+  assert.match(native, /runtimeManager\.refreshCapsuleMethods\(\{ userId: project\.userId, projectId: project\.id, sessionId: String\(request\?\.sessionId \?\? ""\),\s*query: nativeInputText\(request\?\.content\)/);
+  assert.match(native, /scopeId: runScopeOf\(envelope\.route\.effectiveAgentId, OPEN_DOMAIN_ANSWER_AGENT_ID\)/, "the scope is the route the first message was given");
+  assert.match(native, /if \(failed\) throw failed\.error;/, "a supplement that could not be prepared is still told, after the methods were");
+});
+
+test("a conversation that planned and delegated nothing is counted against what the control plane gave it, not skipped for want of a receipt", () => {
+  // 2026-10-23: `readRunStateProjection` scopes a native turn's projection through its workflow proof, which a turn that called none of
+  // the plan tools does not have, so `recordMethodUse` returned at once for the answer line and its methods were never carried or read.
+  const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
+  assert.match(record, /const given = run\.sessionId \? runtimeManager\.methodsGivenTo\(project, String\(run\.sessionId\)\) : \[\];\s*if \(!read && !given\.length\) return;/);
+  assert.match(record, /Array\.isArray\(read\?\.mountedMethods\) && read\.mountedMethods\.length \? read\.mountedMethods/, "the runtime's own receipt is preferred");
 });

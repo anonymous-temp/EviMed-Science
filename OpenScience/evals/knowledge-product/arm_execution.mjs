@@ -1,3 +1,4 @@
+import {canonicalNativePeers} from './native_peer_identity.mjs';
 // Sequential execution preserves the same paired experiment when both full runtime images do not fit.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -12,7 +13,7 @@ export function selectedArms(argv) {
  return [argv[index+1]];
 }
 export function experimentIdentity(bindings,benchmarkSha256) {
- return {benchmarkSha256,sharedBudgetId:bindings.sharedBudget.sharedBudgetId,coordinatorUrl:bindings.sharedBudget.coordinatorUrl,arms:Object.fromEntries(['baseline','candidate'].map(arm=>{
+ return {benchmarkSha256,...(bindings.sharedBudget.nativePeers?{nativePeers:canonicalNativePeers(bindings.sharedBudget.nativePeers),embeddingAttribution:'shared openviking bucket'}:{}),sharedBudgetId:bindings.sharedBudget.sharedBudgetId,coordinatorUrl:bindings.sharedBudget.coordinatorUrl,arms:Object.fromEntries(['baseline','candidate'].map(arm=>{
   const b=bindings[arm];if(!b.runtimeEvidence?.runtimeImageId)throw new Error(`${arm}: immutable planned runtimeImageId is required, even before its image is staged`);
   return [arm,{base:b.base,dataDir:b.dataDir,databaseBindingsFile:b.databaseBindingsFile??null,...b.runtimeEvidence}];
  }))};

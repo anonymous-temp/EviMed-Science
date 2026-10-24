@@ -1335,6 +1335,17 @@ function methodAssignmentErrors(value) {
     if (skills.length < minimum) errors.push(`ASSIGNMENT ${label} names ${skills.length} method(s) in SKILLS; ${type || 'a relation'} holds between at least ${minimum}.`)
     if (new Set(skills).size !== skills.length) errors.push(`ASSIGNMENT ${label} names the same method twice in SKILLS.`)
     if (!nonEmptyText(entry.REASON)) errors.push(`ASSIGNMENT ${label} has no REASON, so the builder would be acting on an assertion.`)
+    // Two of the six relations have a direction, and a group assignment carries none of its own: `subset` names the wider method
+    // and `supersedes` the one that replaces the other, each one of the methods in SKILLS. Without it the library could record
+    // neither (it skipped both), and "replaced by a later method" could never stop anything.
+    if (type === 'subset') {
+      if (!nonEmptyText(entry.WIDER)) errors.push(`ASSIGNMENT ${label} is subset and names no WIDER method: say which one of SKILLS does everything the other does and adds its own.`)
+      else if (!skills.includes(entry.WIDER)) errors.push(`ASSIGNMENT ${label} names WIDER ${JSON.stringify(entry.WIDER)}, which is not one of its SKILLS.`)
+    }
+    if (type === 'supersedes') {
+      if (!nonEmptyText(entry.REPLACES)) errors.push(`ASSIGNMENT ${label} is supersedes and names no REPLACES method: say which one of SKILLS replaces the other.`)
+      else if (!skills.includes(entry.REPLACES)) errors.push(`ASSIGNMENT ${label} names REPLACES ${JSON.stringify(entry.REPLACES)}, which is not one of its SKILLS.`)
+    }
   }
   return errors
 }
@@ -1361,6 +1372,8 @@ function methodBuildErrors(value) {
       errors.push(`revision of ${label} names assignment ${JSON.stringify(revision.assignment ?? null)}, which this build does not carry. The analyser's assignment is authoritative and has to be echoed back unchanged.`)
     } else if (relationOf.get(assignment) === 'conflicts_with') {
       errors.push(`assignment ${assignment} is conflicts_with, so neither method may be rewritten until the researcher decides which is right.`)
+    } else if (relationOf.get(assignment) === 'supersedes') {
+      errors.push(`assignment ${assignment} is supersedes, so neither method is rewritten: the library records the replacement and stops the replaced method itself once nothing uses it.`)
     }
     if (!nonEmptyText(revision.name)) errors.push('each revision names the method it produces or retires.')
     const operation = String(revision.operation ?? '')

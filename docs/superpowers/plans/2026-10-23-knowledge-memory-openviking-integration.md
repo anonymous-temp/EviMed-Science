@@ -16,7 +16,18 @@
 
 ---
 
-## Execution checkpoint — 2026-10-23
+## Integration reconciliation — 2026-10-24
+
+The parallel memory-capsule iteration reached production on main `8d3d980fc`. This approved knowledge iteration must include it before release. Candidate `44849f8d75002238b4330bad530a10c36afe8238` passed its complete PUSH workflow `40078293906`, but that result is historical qualification of those bytes, not qualification of the subsequent merge or permission to replace newer production code.
+
+- The final candidate uses the adopted OpenViking 0.5.1.1 pin, without the obsolete identity shim or platform page cap. Checked wiki writes, engine hashes, partial Compile outcomes and the bounded index-only retry remain intact alongside this plan's source/publication guards.
+- One capsule belongs to each account; projects label its entries and received packs activate account-wide. J20 checks authorized account-wide reuse and cross-account exclusion instead of imposing obsolete per-project activation.
+- Memory keeps only the person's stated, confirmed or corrected information and named-work constraints. Documents, tools and assistant output do not become personal preferences. Automated evaluation does not teach the learning loop.
+- W08 still includes the explicitly approved pending-native-episode and confirmation flow. The parallel rectification's I9 permits either an explicit unsupported response or engine submission; it does not prohibit this plan's stricter, confirmed submission. Preserve the durable admission, idempotency, pause, revocation and restart cases while incorporating its native read/edit/forget/undo adapter. Never replace implemented admission with an unsupported result merely to make a merge easier.
+- The frozen baseline, original C corpus, failed observations and original shared CNY50 ledger remain unchanged. New candidate evidence must name its actual engine, image and configuration; earlier 0.5.0 checks do not establish 0.5.1.1 behavior.
+- New merged-image qualification, native user journeys, load/restore evidence, bounded quality measurements and Tencent production acceptance remain unfinished. The research-date version statements and checkpoint below describe their recorded date, not current production.
+
+## Historical execution checkpoint — 2026-10-23
 
 The owner approved execution. Baseline is `01e965e99a1118439557210b7ab28b9b7e7338a9`; production still serves that baseline until the release ledger records a verified switch. Implementation runs in the attached `platform-followups` worktree. The primary checkout and unrelated peer-review artifacts are preserved.
 

@@ -61,7 +61,7 @@ async function method(capsuleId, content) {
 test("an account with nothing to share hears it as a state, and its export is a named refusal", options, async () => {
   const capsule = await capsules.create(empty, { title: "我的记忆胶囊" });
   const preview = await transfers.exportPreview(empty, capsule.id, {});
-  assert.deepEqual(preview, { scopes: ["workstyle"], empty: true, tooMany: false, card: null, entries: [] });
+  assert.deepEqual(preview, { scopes: ["workstyle"], empty: true, tooMany: false, card: null, entries: [], excluded: [] });
   await assert.rejects(transfers.export(empty, capsule.id, { password }), { status: 409, code: "capsule_export_empty" });
 });
 

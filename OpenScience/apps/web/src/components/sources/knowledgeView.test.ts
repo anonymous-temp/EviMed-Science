@@ -38,13 +38,6 @@ describe("statusLine", () => {
     expect(statusLine(status({ ...lone, readable: 0, state: "below_threshold" }), NOW)).toBeNull();
   });
 
-  it("says the page limit as one sentence with no number in it", () => {
-    const line = statusLine(status({ state: "page_limit" }), NOW)!;
-    expect(line.text).toMatch(/^页数已到上限，不再整理新的内容/u);
-    expect(line.text).not.toMatch(/100|128/u);
-    expect(line).toMatchObject({ canCompile: false, attention: true });
-  });
-
   it("says the engine is unavailable without naming it, and keeps the pages readable", () => {
     const line = statusLine(status({ state: "engine_unavailable", engine: { ok: false, code: "engine_down" } }), NOW)!;
     expect(line.text).toBe("知识引擎暂不可用，已有的页面仍可阅读，恢复后会继续整理");

@@ -23,8 +23,8 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const service = {
     recall: async (userId, input) => { calls.push({ action: "recall", userId, input }); return { items: structuredClone(recallItems), contextOnly: true }; },
     note: async (userId, projectId, input) => { calls.push({ action: "note", userId, projectId, input }); return { id: "note-1", payload: { status: noteStatus, capsuleId: "notes-capsule" } }; },
-    // Whether the capsule a note landed in is read by this project (`CapsuleService.inForce`).
-    inForce: async (userId, projectId, capsuleId) => { calls.push({ action: "inForce", userId, projectId, capsuleId }); return noteInForce; },
+    // Whether the capsule a note landed in is read (`CapsuleService.inForce`): the account's one list, in every project.
+    inForce: async (userId, capsuleId) => { calls.push({ action: "inForce", userId, capsuleId }); return noteInForce; },
   };
   let exists = true;
   let authorize;
@@ -448,8 +448,8 @@ test("a note answers takesEffect from what the service says is in force, and say
   const taken = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
   assert.equal(taken.takesEffect, true);
   assert.equal(taken.notice, undefined);
-  assert.deepEqual(f.calls.filter((call) => call.action === "inForce"), [{ action: "inForce", userId: "owner", projectId: "project-one", capsuleId: "notes-capsule" }],
-    "the account and the project come from the credential; the capsule is the one the note landed in");
+  assert.deepEqual(f.calls.filter((call) => call.action === "inForce"), [{ action: "inForce", userId: "owner", capsuleId: "notes-capsule" }],
+    "the account comes from the credential; the capsule is the one the note landed in");
 
   const unread = await fixture(t, { noteInForce: false });
   const kept = await (await unread.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();

@@ -1,9 +1,10 @@
 {
-  "recorded_from": "ghcr.io/volcengine/openviking:v0.5.0",
-  "recorded_at": "2026-10-12T23:55:38Z",
+  "recorded_from": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recorded_at": "2026-10-23T05:50:23Z",
   "auth_mode": "trusted (X-API-Key root + X-OpenViking-Account: evimed + X-OpenViking-User)",
   "account": "evimed",
   "user": "u-0f1e2d3c4b5a69788796a5b4",
+  "recorder": "packages/contracts/openviking/record.mjs",
   "fixtures": {
     "fs-mkdir": {
       "file": "fs-mkdir.json",
@@ -48,8 +49,45 @@
         "wait": true,
         "processing_mode": "vectors_only"
       },
-      "status": 409,
-      "note": "create on an existing file"
+      "status": 200,
+      "note": "create on an existing file (an alias of replace from v0.5.1: it overwrites, no 409; the file is put back below)"
+    },
+    "content-write-replace-restores": {
+      "file": "content-write-replace-restores.json",
+      "method": "POST",
+      "path": "/api/v1/content/write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
+        "content": "# Alpha 协议\n\nSource: alpha.md\nSHA-256: 0000\nExtractor: local-read 1.0 (text)\n\n<!-- page 1 -->\nAlpha 协议是一个用于设备间时间同步的轻量协议，由 Lumen 工作组在 2021 年发布。它使用 UDP 端口 4123，默认同步周期为 64 秒。\n\n<!-- page 2 -->\nAlpha 协议的参考实现叫做 alphad，用 Rust 编写。\n",
+        "mode": "replace",
+        "wait": true,
+        "processing_mode": "vectors_only",
+        "tags": [
+          "src=src_00000000000000000000000000000001",
+          "doctype=other"
+        ],
+        "tag_mode": "replace"
+      },
+      "status": 200,
+      "note": "replace puts the source back after the create above overwrote it; on a file that is missing it creates it (measured in this run: content-write-replace-missing)"
+    },
+    "content-write-replace-missing": {
+      "file": "content-write-replace-missing.json",
+      "method": "POST",
+      "path": "/api/v1/content/write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/replace-created.md",
+        "content": "replace on a file that is not there\n",
+        "mode": "replace",
+        "wait": true,
+        "processing_mode": "vectors_only"
+      },
+      "status": 200,
+      "note": "replace on a file that does not exist creates it, parents included (v0.5.1.1; the v0.5.0 answer is not recorded)"
     },
     "content-batch-write": {
       "file": "content-batch-write.json",
@@ -156,6 +194,162 @@
       "status": 400,
       "note": "create allows only .md .txt .json .yaml .yml .toml .py .js .ts"
     },
+    "content-write-page-seed": {
+      "file": "content-write-page-seed.json",
+      "method": "POST",
+      "path": "/api/v1/content/write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+        "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第一版。\n",
+        "mode": "replace",
+        "wait": true
+      },
+      "status": 200,
+      "note": "a page of a compiled tree, written in the default mode (summary and vector follow)"
+    },
+    "content-download-page": {
+      "file": "content-download-page.bin",
+      "method": "GET",
+      "path": "/api/v1/content/download?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fwiki-write-back%2Fpage.md",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200,
+      "note": "the stored bytes: their sha256 is the hash a write-back names",
+      "binary": {
+        "bytes": 72,
+        "sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
+      }
+    },
+    "content-batch-write-checked": {
+      "file": "content-batch-write-checked.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第二版。\n",
+            "mode": "replace",
+            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
+          }
+        ]
+      },
+      "status": 200,
+      "note": "a write-back that names the hash of the page it replaces: written"
+    },
+    "content-batch-write-checked-stale": {
+      "file": "content-batch-write-checked-stale.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第三版。\n",
+            "mode": "replace",
+            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
+          }
+        ]
+      },
+      "status": 409,
+      "note": "the same hash after the page changed: 409 CONFLICT 'Content revision changed', nothing written"
+    },
+    "content-batch-write-checked-stale-skipped": {
+      "file": "content-batch-write-checked-stale-skipped.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": true,
+        "skip_conflicts": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第三版。\n",
+            "mode": "replace",
+            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
+          }
+        ]
+      },
+      "status": 200,
+      "note": "with skip_conflicts the same refusal is a 200 whose result lists the conflicts"
+    },
+    "content-batch-write-checked-missing": {
+      "file": "content-batch-write-checked-missing.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/gone.md",
+            "content": "x\n",
+            "mode": "replace",
+            "expected_sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+          }
+        ]
+      },
+      "status": 409,
+      "note": "a hash for a file that is not there: 409 CONFLICT 'Expected content no longer exists'"
+    },
+    "content-batch-write-checked-busy-first": {
+      "file": "content-batch-write-checked-busy-first.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": false,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第四版。\n",
+            "mode": "replace",
+            "expected_sha256": "dcfa6d2ee7728354a1514182cb35d1ae5fc1c1b8750d7e6c3de5dfb787a8276f"
+          }
+        ]
+      },
+      "status": 200,
+      "note": "wait false: answers at once with a task id while the summary and vector are processed"
+    },
+    "content-batch-write-checked-busy": {
+      "file": "content-batch-write-checked-busy.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": false,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第五版。\n",
+            "mode": "replace",
+            "expected_sha256": "8a1a545316a0374556ec9a3349880619b3d9256d750e0a668b5c476187bfbe8f"
+          }
+        ]
+      },
+      "status": 409,
+      "note": "a second write to the same directory while the first is processed: 409 CONFLICT, conflict_type path_busy, retryable"
+    },
     "resources-temp-upload": {
       "file": "resources-temp-upload.json",
       "method": "POST",
@@ -172,7 +366,7 @@
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": {
-        "temp_file_id": "upload_66e68766598542be862d427e229837e2.md",
+        "temp_file_id": "upload_dd4cf872781b4414be9a3062377ea8d4.md",
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
         "wait": true,
         "args": {
@@ -436,6 +630,27 @@
       },
       "status": 202
     },
+    "tasks-get-pending": {
+      "file": "tasks-get-pending.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}?include_events=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    },
+    "tasks-get-running": {
+      "file": "tasks-get-running.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}?include_events=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    },
+    "tasks-get-completed": {
+      "file": "tasks-get-completed.json",
+      "method": "GET",
+      "path": "/api/v1/tasks/{task_id}?include_events=true",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "status": 200
+    },
     "compile-submit-replayed": {
       "file": "compile-submit-replayed.json",
       "method": "POST",
@@ -481,31 +696,10 @@
       "request_body": null,
       "status": 200
     },
-    "tasks-get-pending": {
-      "file": "tasks-get-pending.json",
-      "method": "GET",
-      "path": "/api/v1/tasks/{task_id}?include_events=true",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "status": 200
-    },
-    "tasks-get-running": {
-      "file": "tasks-get-running.json",
-      "method": "GET",
-      "path": "/api/v1/tasks/{task_id}?include_events=true",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "status": 200
-    },
-    "tasks-get-completed": {
-      "file": "tasks-get-completed.json",
-      "method": "GET",
-      "path": "/api/v1/tasks/{task_id}?include_events=true",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "status": 200
-    },
     "tasks-get-without-events": {
       "file": "tasks-get-without-events.json",
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+      "path": "/api/v1/tasks/cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -533,7 +727,7 @@
     "tasks-get-other-user": {
       "file": "tasks-get-other-user.json",
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+      "path": "/api/v1/tasks/cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
       "as_user": "u-aa11bb22cc33dd44ee55ff66",
       "request_headers": {},
       "request_body": null,
@@ -581,13 +775,31 @@
       "status": 200,
       "note": "which pages cite one source: the reverse index the product needs"
     },
+    "fs-tree-kg": {
+      "file": "fs-tree-kg.json",
+      "method": "GET",
+      "path": "/api/v1/fs/tree?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fkg&node_limit=200&level_limit=4",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
+    "content-read-kg-relations": {
+      "file": "content-read-kg-relations.json",
+      "method": "GET",
+      "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Fu-0f1e2d3c4b5a69788796a5b4%2Fresources%2Fp%2Fp-3c2b1a0998877665%2Fkg%2Frelations.jsonl",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": null,
+      "status": 200
+    },
     "compile-submit-to-cancel": {
       "file": "compile-submit-to-cancel.json",
       "method": "POST",
       "path": "/api/v1/compile",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {
-        "Idempotency-Key": "evimed-kb-fixture-000000000002"
+        "Idempotency-Key": "evimed-kb-fixture-0000000000c1"
       },
       "request_body": {
         "from": [
@@ -601,7 +813,7 @@
     "tasks-cancel": {
       "file": "tasks-cancel.json",
       "method": "POST",
-      "path": "/api/v1/tasks/cmp_dcb642d3d6f7f745ed8bd944d26ca10e08de6e18a8238a044b4131dfa8e001a8/cancel",
+      "path": "/api/v1/tasks/cmp_11929cbe580980eb169a23f762fb79a3da180b4a087656141813281ab2de0a12/cancel",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -617,7 +829,7 @@
     "tasks-cancel-terminal": {
       "file": "tasks-cancel-terminal.json",
       "method": "POST",
-      "path": "/api/v1/tasks/cmp_dcb642d3d6f7f745ed8bd944d26ca10e08de6e18a8238a044b4131dfa8e001a8/cancel",
+      "path": "/api/v1/tasks/cmp_11929cbe580980eb169a23f762fb79a3da180b4a087656141813281ab2de0a12/cancel",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -642,21 +854,6 @@
       "request_body": null,
       "status": 200,
       "note": "deleting again"
-    },
-    "fs-tree-kg": {
-      "file": "fs-tree-kg.json",
-      "method": "GET",
-      "path": "/api/v1/fs/tree?uri=<project>/kg&node_limit=200&level_limit=4",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "status": 200,
-      "note": "the tree a knowledge-graph compile wrote (recorded on the final configuration)"
-    },
-    "content-read-kg-relations": {
-      "file": "content-read-kg-relations.json",
-      "method": "GET",
-      "path": "/api/v1/content/read?uri=<project>/kg/relations.jsonl",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "status": 200
     }
   }
 }

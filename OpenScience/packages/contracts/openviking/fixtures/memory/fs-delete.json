@@ -1,6 +1,6 @@
 {
   "note": "DELETE fs of one file: the vector goes first, then the file.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "DELETE",
     "path": "/api/v1/fs?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fevimed%2Fuser%2Fpreference%2Frec3.md",
@@ -16,7 +16,8 @@
     "status": "ok",
     "result": {
       "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec3.md",
-      "estimated_deleted_count": 1
+      "estimated_deleted_count": 1,
+      "task_id": "b634cfc1-c43b-4cb5-aa5a-ebe64d1de229"
     },
     "error": null,
     "telemetry": null,

@@ -1,6 +1,6 @@
 {
   "note": "Commit with no new message.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "POST",
     "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001/commit",

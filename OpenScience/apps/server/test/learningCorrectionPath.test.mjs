@@ -59,12 +59,12 @@ test("what the researcher corrected is recorded by the extractor, queued as a co
   const [recorded] = memoryResult.corrections;
   assert.equal(recorded.key, "correction.include_rcts_only");
 
-  // 2. The trigger queues it — with every delivery sample at nothing, so only an explicit signal can get through — and carries the record's id.
+  // 2. The trigger queues it — with the repair sample at nothing, so only an explicit signal can get through — and carries the record's id.
   /** @type {any[]} */ const queue = [];
   const jobs = { enqueue: async (userId, kind, payload, options) => { queue.push({ userId, kind, payload, key: options.idempotencyKey, projectId: options.projectId }); return { id: `job_${queue.length}` }; } };
-  const triggers = new LearningTriggers({ jobs, agentRuns: { list: async () => [finishedRun], runWorkflowProjection: async () => null }, deliveryShare: 0, repairShare: 0 });
+  const triggers = new LearningTriggers({ jobs, agentRuns: { list: async () => [finishedRun], runWorkflowProjection: async () => null }, repairShare: 0 });
   const queued = await triggers.afterRun(project, finishedRun, memoryResult);
-  assert.deepEqual(queued, { queued: ["correction"], skipped: null, sampledOut: ["delivered"] });
+  assert.deepEqual(queued, { queued: ["correction"], skipped: null });
   assert.deepEqual(queue.map((job) => [job.kind, job.payload.trigger, job.key]), [["distill", "correction", "distill:run_corrected:correction"]]);
   assert.deepEqual(queue[0].payload.corrections, [{ recordId: recorded.recordId, key: "correction.include_rcts_only" }], "the record by id; its words stay in the memory store");
 
@@ -91,7 +91,7 @@ test("a correction is a lesson whether or not the run delivered, and a run with 
   /** @type {any[]} */ const queue = [];
   const jobs = { enqueue: async (_userId, _kind, payload) => { queue.push(payload.trigger); return { id: "job" }; } };
   const failed = { ...finishedRun, id: "run_failed", status: "failed", artifacts: [] };
-  const triggers = (/** @type {any} */ run) => new LearningTriggers({ jobs, agentRuns: { list: async () => [run], runWorkflowProjection: async () => null }, deliveryShare: 0 });
+  const triggers = (/** @type {any} */ run) => new LearningTriggers({ jobs, agentRuns: { list: async () => [run], runWorkflowProjection: async () => null } });
   const heard = { corrections: [{ recordId: "record_1", key: "correction.include_rcts_only", scope: "user" }] };
   assert.deepEqual(await triggers(failed).afterRun(project, failed, heard), { queued: ["correction"], skipped: null });
   const quiet = { ...finishedRun, id: "run_quiet", artifacts: [] };
@@ -99,5 +99,5 @@ test("a correction is a lesson whether or not the run delivered, and a run with 
   assert.deepEqual(queue, ["correction"]);
   // And the one gate it does pass: a conversation the loop could not read whole teaches nothing.
   const unread = { ...finishedRun, id: "run_unread", transcript: { completeness: "partial" } };
-  assert.deepEqual(await triggers(unread).afterRun(project, unread, heard), { queued: [], skipped: null });
+  assert.deepEqual(await triggers(unread).afterRun(project, unread, heard), { queued: [], skipped: "transcript_incomplete" });
 });

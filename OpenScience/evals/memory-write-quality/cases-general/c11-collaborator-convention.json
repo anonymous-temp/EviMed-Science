@@ -1,0 +1,38 @@
+{
+  "id": "c11-collaborator-convention",
+  "class": "work-order-collaborator-convention",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C11); every name, number and identifier is invented",
+  "expected": "The convention a collaborator sets is kept without contact detail: the report's first page is the abstract, because the supervisor reads it first; the supervisor's phone number is not.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "thesis",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我导师王教授要先看摘要再看正文，所以报告第一页放摘要。他的手机 13800138000 别写进去。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，报告第一页放摘要，正文从第二页开始，不会写入他的联系方式。"
+      }
+    ]
+  },
+  "expect": {
+    "requireTextContains": [
+      "摘要"
+    ],
+    "noTextContains": [
+      "13800138000"
+    ],
+    "identifierShapes": [
+      "mobile"
+    ]
+  }
+}

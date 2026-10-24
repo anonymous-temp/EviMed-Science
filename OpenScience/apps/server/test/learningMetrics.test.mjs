@@ -32,6 +32,15 @@ function ledger({ usageFails = false } = {}) {
           { trigger: "something-new", status: "succeeded", n: 1, operation: "publish" },
         ] };
       }
+      if (sql.includes("FROM evimed_product.feedback_events") && sql.includes("GROUP BY 1,2")) {
+        return { rows: [
+          { evidence: "follow-up", verdict: "correction", n: 4 }, { evidence: "follow-up", verdict: "accept", n: 6 }, { evidence: "silent", verdict: "none", n: 9 },
+          { evidence: "steer", verdict: "correction", n: 2 }, { evidence: "something-new", verdict: "none", n: 1 },
+        ] };
+      }
+      if (sql.includes("FROM evimed_product.feedback_events")) {
+        return { rows: [{ user_id: "user_with_a_long_internal_id", last_at: "2026-10-22T10:00:00.000Z" }] };
+      }
       if (sql.includes("FROM evimed_usage.model_requests")) {
         if (usageFails) throw Object.assign(new Error("relation does not exist"), { code: "42P01" });
         // An uncertain call counts at the ledger's bounded estimate, as the
@@ -50,13 +59,18 @@ test("the durable counts come from the ledger in closed vocabularies, across eve
   const database = ledger();
   const counts = await learningLedgerCounts(database, { now: new Date("2026-09-27T00:00:00.000Z") });
   assert.deepEqual(counts.methods, { candidate: 0, approved: 2, retired: 1 });
-  assert.deepEqual(counts.uses, { loaded: 9, invoked: 3, succeeded: 8, read: 1, carried: 41 });
+  assert.deepEqual(counts.uses, { loaded: 9, invoked: 3, succeeded: 8, read: 1, carried: 41, explored: 0, appliedCorrected: 0, appliedClean: 0 });
   assert.equal(counts.handbookCandidates, 2, "the reviewer's lessons are counted apart from the researcher's methods");
   assert.equal(counts.lessons.delivered.queued, 1);
   assert.equal(counts.lessons.delivered.succeeded, 3);
   assert.equal(counts.lessons.other.succeeded, 1, "a trigger nobody named is `other`, never a new label");
   assert.deepEqual(counts.results, { create: 0, amend: 1, merge: 0, no_change: 3, handbook: 2, other: 1 });
   assert.deepEqual(counts.spend, { settled: 1.25, open: 0.5 });
+  assert.deepEqual(counts.evidence, { "follow-up": { correction: 4, accept: 6 }, silent: { none: 9 }, steer: { correction: 2 }, other: { none: 1 } },
+    "what researchers did to runs, by kind and verdict, in closed vocabularies");
+  assert.equal(counts.evidenceLastAt.length, 1);
+  assert.match(counts.evidenceLastAt[0].account, /^[a-f0-9]{12}$/, "an account is a hash, never its id");
+  assert.equal(counts.evidenceLastAt[0].at, Date.parse("2026-10-22T10:00:00.000Z") / 1000);
   assert.ok(database.queries.every((query) => query.values.includes(null)), "no account named is every account");
 
   const scoped = ledger();
@@ -85,16 +99,21 @@ test("launches and runs count what they carried, and the families expose all of 
   counters.observeMount({ methods: 0, bytes: 0 });
   counters.observeRun({ loaded: 2, invoked: 1 });
   counters.observeRun({ loaded: 0, invoked: 0 });
-  counters.observeDeliverySample(true);
-  counters.observeDeliverySample(false);
-  counters.observeDeliverySample(false);
+  counters.observeTriggerRefused("paused");
+  counters.observeTriggerRefused("paused");
+  counters.observeTriggerRefused("not_researcher_work");
+  counters.observeTriggerRefused("a gate nobody named");
+  counters.observeEvidenceFailure("quote_not_found");
+  counters.observeEvidenceFailure("judge_failed");
+  counters.observeEvidenceFailure("judge_failed");
+  counters.observeEvidenceQuotes(3, 1);
   counters.observeRepairSample(false);
   counters.observeRepairSample(false);
   counters.observeRepairSample(true);
   counters.observeRetirement("never_opened");
   counters.observeRetirement("never_opened");
   counters.observeRetirement("harm");
-  counters.observeRetirement("superseded");
+  counters.observeRetirement("a branch nobody named");
   const counts = await learningLedgerCounts(ledger());
   const families = learningMetricFamilies(true, counts, counters);
   const byName = new Map(families.map((family) => [family.name, family]));
@@ -103,20 +122,31 @@ test("launches and runs count what they carried, and the families expose all of 
     "open_science_learning_handbook_candidates", "open_science_learning_method_uses", "open_science_learning_distill_jobs",
     "open_science_learning_distill_results", "open_science_learning_spend_cny", "open_science_learning_mounts_total",
     "open_science_learning_mounted_methods_total", "open_science_learning_mounted_bytes_total",
-    "open_science_learning_runs_with_methods_total", "open_science_learning_run_methods_total", "open_science_learning_delivery_lessons_total",
+    "open_science_learning_runs_with_methods_total", "open_science_learning_run_methods_total",
     "open_science_learning_repair_lessons_total", "open_science_learning_method_retirements_total",
+    "open_science_learning_consolidate_noop_total", "open_science_learning_relations_total",
+    "open_science_learning_trigger_refused_total", "open_science_learning_evidence_failed_total", "open_science_learning_evidence_quotes_total",
+    "open_science_learning_lessons_total", "open_science_learning_evidence_total", "open_science_learning_evidence_last_at",
   ]) assert.ok(byName.has(name), `${name} is exposed`);
   assert.deepEqual(byName.get("open_science_learning_repair_lessons_total")?.series, [
     { value: 1, labels: { outcome: "distilled" } }, { value: 2, labels: { outcome: "sampled_out" } },
   ], "the repaired deliveries the loop no longer reads are a number, not a silence");
   assert.deepEqual(byName.get("open_science_learning_method_retirements_total")?.series, [
     { value: 0, labels: { code: "incident" } }, { value: 1, labels: { code: "harm" } }, { value: 0, labels: { code: "scientific_regression" } },
-    { value: 2, labels: { code: "never_opened" } }, { value: 1, labels: { code: "other" } },
+    { value: 2, labels: { code: "never_opened" } }, { value: 0, labels: { code: "superseded" } }, { value: 0, labels: { code: "unproven_merge_expired" } },
+    { value: 0, labels: { code: "library_cap" } }, { value: 1, labels: { code: "other" } },
   ], "a method stopped for never being opened is counted apart from the ones the harm test stopped");
   assert.equal(byName.get("open_science_learning_method_uses")?.series.find((sample) => sample.labels?.kind === "carried")?.value, 41);
-  assert.deepEqual(byName.get("open_science_learning_delivery_lessons_total")?.series, [
-    { value: 1, labels: { outcome: "distilled" } }, { value: 2, labels: { outcome: "sampled_out" } },
-  ], "a delivery the sample left out is a number, not a silence");
+  assert.equal(byName.has("open_science_learning_delivery_lessons_total"), false, "the sample of clean deliveries is gone (2026-10-23)");
+  const series = (/** @type {string} */ name) => Object.fromEntries((byName.get(name)?.series ?? []).map((sample) => [Object.values(sample.labels ?? {}).join("/"), sample.value]));
+  assert.deepEqual(Object.entries(series("open_science_learning_trigger_refused_total")).filter(([, value]) => value > 0), [["not_researcher_work", 1], ["paused", 2], ["other", 1]],
+    "a gate that turned runs away is a number per reason, and a reason nobody named is `other`");
+  assert.deepEqual(Object.entries(series("open_science_learning_evidence_failed_total")).filter(([, value]) => value > 0), [["judge_failed", 2], ["quote_not_found", 1]]);
+  assert.deepEqual(series("open_science_learning_evidence_quotes_total"), { kept: 3, dropped: 1 });
+  assert.deepEqual(series("open_science_learning_lessons_total"), { repair_accepted: 3, delivered: 4, correction: 1, other: 1 }, "lessons queued, by trigger, from the ledger");
+  assert.deepEqual(series("open_science_learning_evidence_total"), { "follow_up/correction": 4, "follow_up/accept": 6, "silent/none": 9, "steer/correction": 2, "other/none": 1 });
+  assert.equal(byName.get("open_science_learning_evidence_last_at")?.series.length, 1);
+  assert.ok(!JSON.stringify(byName.get("open_science_learning_evidence_last_at")).includes("user_with_a_long_internal_id"));
   assert.deepEqual(byName.get("open_science_learning_mounts_total")?.series.map((sample) => sample.value), [1, 1]);
   assert.equal(byName.get("open_science_learning_mounted_bytes_total")?.series[0].value, 1_500);
   assert.deepEqual(byName.get("open_science_learning_run_methods_total")?.series.map((sample) => sample.value), [2, 1]);

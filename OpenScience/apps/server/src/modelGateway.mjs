@@ -251,8 +251,11 @@ function gatewayError(status, code, message) {
  * @returns {string | null}
  */
 function spendLimitRefusalMessage(error) {
-  // The service caller's own refusals (`openVikingModelCaller.mjs`) are written for the log the engine keeps them in.
+  // The service caller's own refusals (`openVikingModelCaller.mjs`) are written for the log the engine keeps them in:
+  // the owner lookup's `openviking_model_*` codes, and the spent day's 402 under the code the engine's classifier
+  // reads as exhausted quota (`insufficient_quota`) rather than as an unknown error to retry.
   if (typeof error?.code === "string" && error.code.startsWith("openviking_model_") && typeof error.message === "string") return error.message;
+  if (error?.status === 402 && error?.code === "insufficient_quota" && typeof error.message === "string") return error.message;
   if (error?.status !== 402 || error?.code !== "usage_budget_exceeded") return null;
   return error?.details?.window === "run"
     ? "The spending limit of this run refused the model call; nothing was sent to the provider."

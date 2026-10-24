@@ -1,11 +1,11 @@
 {
   "status": "ok",
   "result": {
-    "task_id": "cmp_dcb642d3d6f7f745ed8bd944d26ca10e08de6e18a8238a044b4131dfa8e001a8",
+    "task_id": "cmp_11929cbe580980eb169a23f762fb79a3da180b4a087656141813281ab2de0a12",
     "task_type": "compile",
     "status": "pending",
-    "created_at": 1791849461.5133889,
-    "updated_at": 1791849461.5145931,
+    "created_at": 1792734579.1621351,
+    "updated_at": 1792734579.1636348,
     "processing_seconds": null,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
@@ -20,8 +20,8 @@
     "stage": "queued",
     "result": null,
     "error": null,
-    "created_at_iso": "2026-10-12T23:57:41.513389+00:00",
-    "updated_at_iso": "2026-10-12T23:57:41.514593+00:00"
+    "created_at_iso": "2026-10-23T05:49:39.162135+00:00",
+    "updated_at_iso": "2026-10-23T05:49:39.163635+00:00"
   },
   "error": null,
   "telemetry": null,
