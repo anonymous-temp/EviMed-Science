@@ -196,6 +196,12 @@ node evals/memory-write-quality/run_native_eval.mjs --url http://127.0.0.1:19330
 | Run | Engine and model | Decidable cases | Pass | Need reading |
 |---|---|---|---|---|
 | `results/2026-10-13-native-v0.5.0.json` | OpenViking v0.5.0, DeepSeek Flash, thinking off, no output-language override (as the production configuration renders it), the templates as shipped (project card: 领域 line and 目标 / 范围或对象 / 材料与数据 / 已定事项 / 阶段 / 约束, 研究要素 only for a described study; English labels, named exactly, for an English conversation) | 41 (the 40 decidable cases + the bare run of the platform-brief case, which also runs tagged) | **41** | 3 (`hollow-summary`, `one-off-bookkeeping`, `pending-state-and-inventory`: language judgement, printed beside their `judge` question) |
+| `results/2026-10-23-native-v0.5.1.1-shipped-templates.json` | OpenViking **v0.5.1.1**, the 2026-10-13 templates, the 41-case corpus | 41 | **41** | 3 |
+| `results/2026-10-23-native-v0.5.1.1-new-corpus-shipped-templates.json` | v0.5.1.1, the 2026-10-13 templates, the corpus with the 27 cases of 2026-10-23 (work orders, everyday context, explicit-only, injection, recall echo) | 67 | 60 — the keep side of work orders fails as predicted (c01, c07, c09, c10, c12, c13) and the pasted CV is kept (c19) | 3 |
+| `results/2026-10-23-native-v0.5.1.1-rewritten-templates.json` | v0.5.1.1, the rewritten never/decide blocks and templates of 2026-10-23 (after one tuning round: request conditions, health told to get help, a pasted CV and the assistant applying a memory write nothing; one deliverable is no project) | 67 | **67** | 3 |
+| `results/2026-10-23-native-v0.5.1.1-rewritten-templates-repeat3.json` | the same, the sixteen cases closest to the line, three samples each | 51 | 47 — `c09` kept 两人份 as the household's (no longer judged), `c07` once wrote a project card for one deck (the card rule was tightened after it; three more samples then wrote no card, one of them also no profile line) | 0 |
+| `results/2026-10-23-native-v0.5.1.1-final-templates.json` + `results/2026-10-24-native-v0.5.1.1-final-recheck.json` | v0.5.1.1, the templates as shipped on 2026-10-24 (after the request-condition, third-party-health and stated-inside-a-request rounds) | 67 | 65 — the two misses (a project card without its deadline line, one engine error) passed three of three on recheck | 3 |
+| `results/2026-10-23-legacy-rewritten-prompt.json` | the legacy extractor (DeepSeek Flash) with the rewritten shared text, the corpus's legacy arm | 64 | 61 — `c07` and `x01` then passed three of three after the stated-inside-a-request example; `project-card-slots` passed on the first run | 3 |
 
 One sample per case at temperature 0. A change to a template is tried by running this and reading the failures; the lab run
 that chose the first wording (`lab/memory/RESULTS.md` §E-4, 33 of 33) was the same set on the earlier project-card headings. Two
@@ -204,3 +210,43 @@ whatever the templates say (the check that caught it is `g11-english-engineer-pr
 `阶段` sections need to say that a date or a budget is a limit and not a choice or a stage — the card cases of 2026-10-13 failed
 until they did. A case that passed once and failed once (`project-card-slots`: the comparator folded into the exposure line) is a
 sampling variance the template now closes; it passed three of three afterwards.
+
+## The work-order corpus (2026-10-23)
+
+The 41 cases above passed on the native engine while the owner's account held no memory file after ten days of work: every
+keep case was a person introducing themselves or stating a rule, and the corpus never asked the engine to keep the durable
+part of an ordinary task conversation. `cases-general/` now also holds the 25 cases of research G §6 (C01–C24, the last in two
+variants), the upgrade case and one cross-key conflict case, all synthetic (the phone number is a public test number).
+
+| Group | Cases | What is asked |
+|---|---|---|
+| keep: work orders and everyday help | C01 form reshaping after a draft, C03 a convention declared for a named project, C04 a rule adopted from a proposal, C06 an approach confirmed by name, C07 role inside a brief, C08 tools in passing, C09 everyday context, C10 the fact without the reason, C11 a collaborator's convention | the durable part is written, the one-request part is not |
+| refuse | C02 a bare imperative, C05 a bare approval, C12 a recurring task, C13 a dated reminder, C14 a child's details, C15 hard-never even when asked, C16 a link-prefilled recommendation, C18 an offer not taken up, C19 a pasted CV, C20 a stance, C21 a single-request implication, C22 a choice shown twice (E3 is not built: owner decision 3), C23 a tool result narrated, C24a/b the platform's and the kernel's tags | nothing is written (or nothing of the named kind) |
+| state to start from | C17 the recall echo (byte-identical), U01 the upgrade (only AMA remains), C22 | `replay.seed`: a conversation the engine itself turns into the memory the case starts from |
+| legacy only | X01 a later statement contradicts a stored one under another key | the extractor names the stored key as `conflictsWith` (it never fired on production) |
+
+A case may be for one arm only (`arms`), and asks only checks code can decide (`caseShape.mjs`): the older ones plus
+`requireAnyKind` (a form complaint may land as a preference or a correction), `seedKeeps` and `unchangedSinceSeed`,
+`droppedAtTheDoor` (platform text posing as the person's words) and `requireConflictWith`. A reading is a `judge` question.
+
+```bash
+# offline, no engine and no model: shapes, the identifier shapes a case relies on, the messages the door must drop
+node evals/memory-write-quality/run_native_eval.mjs --offline
+node evals/memory-write-quality/run_write_quality_eval.mjs --offline
+# live, native arm: the baseline on the templates as shipped first, then after a change; three samples of every case
+node evals/memory-write-quality/run_native_eval.mjs --url http://127.0.0.1:19330 --key-file <engine root key file> \
+  --repeat 3 --out evals/memory-write-quality/results/$(date +%F)-native-baseline.json
+node evals/memory-write-quality/run_native_eval.mjs --url ... --key-file ... --only c01,c06,c17 --repeat 3     # only the failures again
+# live, legacy arm (the platform's own extractor, the same shared text)
+OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE=<key file> node evals/memory-write-quality/run_write_quality_eval.mjs --repeat 3 \
+  --out evals/memory-write-quality/results/$(date +%F)-legacy.json
+```
+
+A change to the shared text (`packages/domain/src/memoryNeverKept.mjs`) is rendered into the eight templates with
+`node deploy/web/openviking/memory-templates-src/build.mjs`. The shipped text states the never-kept block in every type
+(about two thirds of all template text, as before). If the baseline shows the engine still keeping too little, the lab variant
+says it once, in the profile, with a short reminder in the other seven (research G variant B, about 30% less text):
+`node deploy/web/openviking/memory-templates-src/build.mjs --variant short-never --out <dir>`, mounted on the lab engine
+instead of the deployed directory; it is never rendered over the deployed one. The lab engine must mount the rendered directory. Corrections are
+written under `preferences/corrections/` since this change (the plugin lists `preferences/` at a session's start), and the
+runner counts both places as the `correction` kind.

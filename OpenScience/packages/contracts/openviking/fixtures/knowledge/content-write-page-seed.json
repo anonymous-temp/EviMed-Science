@@ -1,0 +1,27 @@
+{
+  "status": "ok",
+  "result": {
+    "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+    "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+    "context_type": "resource",
+    "mode": "replace",
+    "written_bytes": 72,
+    "content_updated": true,
+    "semantic_status": "complete",
+    "vector_status": "complete",
+    "queue_status": {
+      "Semantic": {
+        "processed": 2,
+        "requeue_count": 37,
+        "error_count": 0,
+        "errors": []
+      },
+      "Embedding": {
+        "processed": 3,
+        "requeue_count": 0,
+        "error_count": 0,
+        "errors": []
+      }
+    }
+  }
+}

@@ -5,7 +5,7 @@
       "items": [
         {
           "seq": 1,
-          "recorded_at": "2026-10-12T23:56:40.115840+00:00",
+          "recorded_at": "2026-10-23T05:47:12.547913+00:00",
           "kind": "created",
           "status": "pending",
           "stage": null,
@@ -14,7 +14,7 @@
         },
         {
           "seq": 2,
-          "recorded_at": "2026-10-12T23:56:40.116382+00:00",
+          "recorded_at": "2026-10-23T05:47:12.548821+00:00",
           "kind": "stage_changed",
           "status": "pending",
           "stage": "queued",
@@ -25,11 +25,11 @@
       "dropped_count": 0,
       "started_mid_task": false
     },
-    "task_id": "cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+    "task_id": "cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
     "task_type": "compile",
     "status": "pending",
-    "created_at": 1791849400.1156456,
-    "updated_at": 1791849400.1163769,
+    "created_at": 1792734432.5474696,
+    "updated_at": 1792734432.5488167,
     "processing_seconds": null,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
@@ -44,8 +44,8 @@
     "stage": "queued",
     "result": null,
     "error": null,
-    "created_at_iso": "2026-10-12T23:56:40.115646+00:00",
-    "updated_at_iso": "2026-10-12T23:56:40.116377+00:00"
+    "created_at_iso": "2026-10-23T05:47:12.547470+00:00",
+    "updated_at_iso": "2026-10-23T05:47:12.548817+00:00"
   },
   "error": null,
   "telemetry": null,

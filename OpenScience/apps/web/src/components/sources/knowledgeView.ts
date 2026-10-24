@@ -58,8 +58,6 @@ export function statusLine(status: KnowledgeStatus | null, now: Date = new Date(
     }
     case "idle":
       return { text: "资料已就绪，随时可以整理成知识页", busy: false, canCompile: true, attention: false };
-    case "page_limit":
-      return { text: `页数已到上限，不再整理新的内容；已有的${counts ? ` ${counts}` : "页面"}仍可阅读`, busy: false, canCompile: false, attention: true };
     case "engine_unavailable":
       return { text: `知识引擎暂不可用，已有的页面仍可阅读，恢复后会继续整理`, busy: false, canCompile: true, attention: true };
     case "failed":

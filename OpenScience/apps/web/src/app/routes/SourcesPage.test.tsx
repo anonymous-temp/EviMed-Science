@@ -482,14 +482,8 @@ describe("知识库", () => {
       expect(strip.closest("[data-activity='strip']")).toHaveTextContent("已有 13 页，53 个实体");
     });
 
-    it("draws one dot beside the title when the page limit is reached, with the sentence and nothing to press; a failed round offers 重新整理 from the dot", async () => {
+    it("a failed round offers 重新整理 from the dot beside the title", async () => {
       context.features = { knowledgePages: true };
-      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "page_limit" });
-      renderPage();
-      const dot = await screen.findByRole("img", { name: /页数已到上限，不再整理新的内容/u });
-      expect(dot.closest("[data-page-header]")).not.toBeNull();
-      expect(screen.queryByRole("button", { name: /重新整理/ })).toBeNull();
-      cleanup();
       mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "failed" });
       mocks.requestKnowledgeCompile.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
       renderPage();

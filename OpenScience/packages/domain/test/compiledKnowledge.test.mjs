@@ -9,7 +9,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import {
-  KNOWLEDGE_PAGE_SUBMIT_LIMIT, applyKnowledgePageEdits, checkPageQuotations, diffKnowledgePageEdit, isKnowledgeMirrorPath, isTypedKnowledgePage,
+  applyKnowledgePageEdits, checkPageQuotations, diffKnowledgePageEdit, isKnowledgeMirrorPath, isTypedKnowledgePage,
   knowledgeGraphToGraph, knowledgeMirrorPath, knowledgeMirrorPathOf, knowledgePageUnits, knowledgeSourceIdOfUri, okfMarkdownLinks,
   readKnowledgePage, splitOkfFrontmatter, wikiPagesToGraph,
 } from '../index.mjs'
@@ -147,8 +147,8 @@ test('a real wiki: every page is a node with a type and a title, the index reach
   const linked = new Set(graph.links.flatMap((link) => [link.source, link.target]))
   assert.ok(graph.nodes.every((node) => linked.has(node.id)), 'a page no link reaches')
   assert.deepEqual(graph.unresolved, [])
-  // Every typed page counts against the engine's limit, and this tree is well short of where the platform stops.
-  assert.ok(files.filter((file) => isTypedKnowledgePage(file.path, file.content)).length < KNOWLEDGE_PAGE_SUBMIT_LIMIT)
+  // Every file of a compiled tree that has a type is a page; the index and the entity files are.
+  assert.ok(files.filter((file) => isTypedKnowledgePage(file.path, file.content)).length > 0)
 })
 
 test('a real wiki: the quotation each source link carries is checked against the document it names', () => {

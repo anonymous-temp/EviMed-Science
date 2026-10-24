@@ -1,6 +1,6 @@
 {
   "note": "The account's register (trimmed by the limit parameter if the server honours it).",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/admin/accounts/evimed/users?limit=3",
@@ -16,15 +16,15 @@
     "status": "ok",
     "result": [
       {
-        "user_id": "lab_python_gen_engineer",
+        "user_id": "evimed-engine",
         "role": "user"
       },
       {
-        "user_id": "lab_python_gen_lawyer",
+        "user_id": "fx-user-a",
         "role": "user"
       },
       {
-        "user_id": "lab_python_gen_pm",
+        "user_id": "fx-user-b",
         "role": "user"
       }
     ],

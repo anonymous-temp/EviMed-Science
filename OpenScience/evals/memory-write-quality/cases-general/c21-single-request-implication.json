@@ -1,0 +1,35 @@
+{
+  "id": "c21-single-request-implication",
+  "class": "refuse-single-request-implication",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C21); every name, number and identifier is invented",
+  "expected": "Nothing is written: one request for a connection-pool example is not a statement that the person is a Python developer.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "给我一个 psycopg 连接池的例子。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "下面是一个使用 psycopg_pool 的最小示例：\n```python\nfrom psycopg_pool import ConnectionPool\npool = ConnectionPool(conninfo=DSN, min_size=1, max_size=5)\nwith pool.connection() as conn:\n    conn.execute('select 1')\n```"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "谢谢。"
+      }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}

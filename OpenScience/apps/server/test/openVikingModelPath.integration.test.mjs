@@ -126,7 +126,7 @@ test("a day whose budget is spent refuses the next call with 402 and books nothi
   await app.store.database.query("DELETE FROM evimed_usage.model_requests WHERE user_id=$1 AND project_id=$2", [PLATFORM_PUBLISHER_USER_ID, OPENVIKING_PROJECT_ID]).catch(() => {});
   const refused = await call(serviceKey);
   assert.equal(refused.status, 402);
-  assert.equal((await refused.json()).error.code, "openviking_model_budget_exhausted");
+  assert.equal((await refused.json()).error.code, "insufficient_quota");
   assert.deepEqual(await rows(), [], "a refused call left a row behind");
   const ready = (await (await fetch(`${base}/api/ready`)).json()).data.checks.memoryIndex;
   assert.deepEqual(ready.modelPath.refused, { "memory-extraction": 1, knowledge: 0 });

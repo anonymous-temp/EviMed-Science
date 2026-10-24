@@ -146,16 +146,16 @@ test("the conversation's forget tool is the page's own deletion: the file leaves
   assert.deepEqual(await app.nativeMemory.forget({ id: user.id }, { id: "p1" }, `viking://user/${engineUser}/memories/preferences/none.md`), { removed: false });
 });
 
-test("the timeline of a native account is derived from the files' revisions, with the same events as another store's", options, async (t) => {
+test("the map's events of a native account are derived from the files' revisions, with the same events as another store's", options, async (t) => {
   const { base, headers, seed } = await fixture(t);
   const uri = seed("preferences/format.md", "Short answers.", { type: "preferences" });
   const record = (await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.find((item) => item.uri === uri);
   const edited = await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, { method: "PATCH", headers,
     body: JSON.stringify({ value: "Short answers, then detail.", expectedVersion: record.version }) });
   assert.equal(edited.status, 200);
-  const timeline = (await (await fetch(`${base}/api/memory/timeline`, { headers })).json()).data;
-  const memory = timeline.items.filter((item) => item.type === "memory");
-  assert.ok(memory.length >= 1, JSON.stringify(timeline.items.map((item) => item.type)));
-  assert.ok(memory.some((item) => item.change === "updated" && /Short answers/.test(item.before) && /then detail/.test(item.after)), JSON.stringify(memory));
-  assert.ok(timeline.density.some((day) => day.memory >= 1));
+  const map = (await (await fetch(`${base}/api/memory/map?include=events,buckets`, { headers })).json()).data;
+  const memory = map.events.filter((event) => event.type === "memory");
+  assert.ok(memory.length >= 1, JSON.stringify(map.events.map((event) => event.type)));
+  assert.ok(memory.some((event) => event.change === "updated" && /then detail/.test(event.text)), JSON.stringify(memory));
+  assert.ok(map.buckets.series.some((day) => day.memory >= 1), JSON.stringify(map.buckets));
 });

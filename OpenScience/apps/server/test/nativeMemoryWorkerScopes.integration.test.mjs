@@ -69,6 +69,12 @@ test('failed extraction replay and completion retain the original namespace and 
   const f = await fixture(t); f.fail(true);
   const oldA = await f.archive(f.a), oldB = await f.archive(f.b);
   await f.worker.scanArchives(f.owner.id); f.fail(false);
+  // PostgreSQL rounds failure timestamps to milliseconds. An immediate wall
+  // clock poll can be one millisecond early; replay at the ledger's due instant.
+  const due = (await f.accounts.database.query(`SELECT max(next_attempt_at) AS due FROM evimed_memory.native_commits
+    WHERE user_id=$1 AND archive_uri=ANY($2::text[])`, [f.owner.id, [oldA, oldB]])).rows[0].due;
+  assert.ok(due instanceof Date && Number.isFinite(due.getTime()));
+  f.worker.now = () => new Date(due);
   assert.equal(await f.worker.processCommits({ userId: f.owner.id }), 2);
   for (const [context, original] of [[f.a, oldA], [f.b, oldB]]) {
     const old = await f.overlay.commit(f.owner.id, original);
@@ -95,6 +101,63 @@ test('project rejection keys do not erase equal facts in another namespace or cl
   assert.equal(await f.a.sessions.read(f.owner.id, f.file(f.a)), text);
   assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, `${f.a.namespaceId}:project_facts`)).size, 0);
   assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, 'project_facts')).size, 1);
+});
+
+test('semantic rejections and the person restating them use only the accepted archive namespace', options, async t => {
+  const removed = 'Uses concise project abstracts', reworded = 'Uses brief project abstracts';
+  const f = await fixture(t, { type: 'project_facts', after: reworded }), user = f.owner.id;
+  for (const context of [f.personal, f.a]) await f.overlay.reject(user, context === f.personal ? 'project_facts' : `${context.namespaceId}:project_facts`, f.file(context), [removed]);
+  const judged = [];
+  f.worker.rejectionJudge = { same: async request => {
+    judged.push(request);
+    return { same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set(request.said.includes('A researcher chose this again.') ? [0] : []) };
+  } };
+  for (const context of [f.a, f.b]) await f.archive(context);
+  await f.worker.scanArchives(user); await f.worker.processCommits({ userId: user });
+  assert.equal(await f.a.sessions.read(user, f.file(f.a)), null);
+  assert.equal(await f.b.sessions.read(user, f.file(f.b)), reworded);
+  assert.equal(judged.length, 1); assert.equal(judged[0].projectId, f.a.projectId);
+  await f.overlay.unreject(user, `${f.a.namespaceId}:project_facts`, [reworded]);
+  await f.archive(f.a, 'A researcher chose this again.');
+  await f.worker.scanArchives(user); await f.worker.processCommits({ userId: user });
+  assert.equal(await f.a.sessions.read(user, f.file(f.a)), reworded);
+  assert.equal((await f.overlay.rejectedFingerprints(user, `${f.a.namespaceId}:project_facts`)).size, 0);
+  assert.equal((await f.overlay.rejectedFingerprints(user, 'project_facts')).size, 1);
+  for (const request of f.stub.sent('GET', '/api/v1/content/read')) assert.ok(request.query.uri.startsWith(`viking://user/${request.user}/`));
+});
+
+test('consolidation validates the whole result before reading and retains namespace-qualified rejections', options, async t => {
+  const f = await fixture(t, { type: 'project_facts' }), user = f.owner.id;
+  const text = 'The project retains concise summaries';
+  const own = f.stub.seedMemory(f.personal.namespaceId, 'project_facts/own.md', text);
+  const a = f.stub.seedMemory(f.a.namespaceId, 'project_facts/a.md', text);
+  const b = f.stub.seedMemory(f.b.namespaceId, 'project_facts/b.md', text);
+  const before = f.stub.requests.length;
+  await assert.rejects(f.worker.ingestConsolidation(user, { taskId: 'foreign', adds: [own, a] }), error => error.code === 'memory_scope_denied');
+  await assert.rejects(f.worker.ingestConsolidation(user, { taskId: 'mixed', adds: [a, b] }, { context: f.a }), error => error.code === 'memory_scope_denied');
+  assert.equal(f.stub.requests.length, before, 'even a valid first entry was not read');
+  await f.overlay.reject(user, `${f.a.namespaceId}:project_facts`, a, [text]);
+  assert.deepEqual(await f.worker.ingestConsolidation(user, { taskId: 'scoped', adds: [a] }, { context: f.a }), { added: 1, updated: 0, deleted: 0 });
+  assert.equal(await f.a.sessions.read(user, a), null);
+  assert.equal(await f.b.sessions.read(user, b), text);
+  assert.deepEqual(await f.worker.ingestConsolidation(user, { taskId: 'owned', adds: [own] }), { added: 1, updated: 0, deleted: 0 });
+  assert.equal(await f.personal.sessions.read(user, own), text);
+});
+
+test('an extraction completing after reset cleans only its own validated namespace', options, async t => {
+  const f = await fixture(t), user = f.owner.id;
+  const archive = await f.archive(f.a);
+  f.stub.files.set(`${archive}/messages.jsonl`, JSON.stringify({ role: 'user', content: 'Old statement', created_at: '2026-01-01T00:00:00Z' }));
+  f.worker.researchMemory.resetInstant = async () => '2026-01-02T00:00:00Z';
+  const personal = f.stub.seedMemory(f.personal.namespaceId, 'entities/fact.md', 'Personal fact');
+  const b = f.stub.seedMemory(f.b.namespaceId, 'entities/fact.md', 'B fact');
+  await f.worker.scanArchives(user);
+  assert.equal(await f.worker.processCommits({ userId: user }), 1);
+  assert.equal(await f.a.sessions.read(user, f.file(f.a)), null);
+  assert.equal(await f.personal.sessions.read(user, personal), 'Personal fact');
+  assert.equal(await f.b.sessions.read(user, b), 'B fact');
+  assert.equal((await f.overlay.commit(user, archive)).extraction.beforeReset, 1);
+  for (const request of f.stub.sent('GET', '/api/v1/content/read')) assert.ok(request.query.uri.startsWith(`viking://user/${request.user}/`));
 });
 
 test('source labels use the file namespace and a failed write can be retried without losing the source change', options, async t => {

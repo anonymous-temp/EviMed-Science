@@ -1,0 +1,60 @@
+{
+  "note": "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>, skill: memory, instruction}) read back: three conversations' files, nothing duplicated, so adds/updates/deletes are empty and the files were byte-identical afterwards (lab, 2026-10-24).",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tasks/0f1e10fa-39c5-42b2-b79b-8c86f3219dd8",
+    "headers": {
+      "X-API-Key": "recorded-against-a-real-server",
+      "X-OpenViking-Account": "evimed",
+      "X-OpenViking-User": "fx-consolidation"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "response": {
+    "status": "ok",
+    "result": {
+      "task_id": "0f1e10fa-39c5-42b2-b79b-8c86f3219dd8",
+      "task_type": "compile",
+      "status": "completed",
+      "created_at": 1792825673.2819743,
+      "updated_at": 1792825681.5259871,
+      "processing_seconds": 8.240258693695068,
+      "resource_id": "viking://user/u-6df855e1454c25b2f592221b/memories",
+      "meta": {
+        "request": {
+          "to": "viking://user/u-6df855e1454c25b2f592221b/memories",
+          "skill": "memory",
+          "memory_type": null,
+          "peer_id": null,
+          "instruction": "Merge only clear duplicates; keep every fact."
+        }
+      },
+      "stage": "completed",
+      "result": {
+        "to": "viking://user/u-6df855e1454c25b2f592221b/memories",
+        "skill": "memory",
+        "trace_id": "",
+        "memory_type": null,
+        "memory_types": [
+          "preferences",
+          "profile"
+        ],
+        "adds": [],
+        "updates": [],
+        "deletes": [],
+        "total_adds": 0,
+        "total_updates": 0,
+        "total_deletes": 0,
+        "errors": []
+      },
+      "error": null,
+      "created_at_iso": "2026-10-24T07:07:53.281974+00:00",
+      "updated_at_iso": "2026-10-24T07:08:01.525987+00:00"
+    },
+    "error": null,
+    "telemetry": null,
+    "profile": null
+  }
+}

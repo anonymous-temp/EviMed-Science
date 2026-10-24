@@ -1,6 +1,6 @@
 {
   "note": "Settings of a trusted user nobody registered yet: the admin routes do not know it.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-d/settings",

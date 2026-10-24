@@ -1,9 +1,9 @@
 {
   "note": "Its task: what the extraction did with self memory disabled.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
-    "path": "/api/v1/tasks/aab22c49-2fa1-46b4-acf5-b610613ef91e",
+    "path": "/api/v1/tasks/10362945-22f5-4a18-a1fc-ac8f5e51cc36",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
@@ -15,18 +15,18 @@
   "response": {
     "status": "ok",
     "result": {
-      "task_id": "aab22c49-2fa1-46b4-acf5-b610613ef91e",
+      "task_id": "10362945-22f5-4a18-a1fc-ac8f5e51cc36",
       "task_type": "session_commit",
       "status": "completed",
-      "created_at": 1791850781.6050546,
-      "updated_at": 1791850781.798453,
-      "processing_seconds": 0.015705491008702666,
+      "created_at": 1792733918.6656811,
+      "updated_at": 1792733919.5276818,
+      "processing_seconds": 0.02955794334411621,
       "resource_id": "dsh-session_fixture0000000000000000000000000001",
       "meta": {},
       "stage": "completed",
       "result": {
         "session_id": "dsh-session_fixture0000000000000000000000000001",
-        "archive_uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_006",
+        "archive_uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_003",
         "memories_extracted": {},
         "session_skills_extracted": 0,
         "session_skill_uris": [],
@@ -52,25 +52,25 @@
         "agent_memory_skip_reason": "agent_evolution_disabled",
         "token_usage": {
           "llm": {
-            "prompt_tokens": 44068,
-            "completion_tokens": 256,
-            "total_tokens": 44324,
-            "cached_tokens": 41472,
+            "prompt_tokens": 40646,
+            "completion_tokens": 151,
+            "total_tokens": 40797,
+            "cached_tokens": 39808,
             "reasoning_tokens": 0
           },
           "embedding": {
-            "total_tokens": 441
+            "total_tokens": 108
           },
           "total": {
-            "total_tokens": 44765,
-            "cached_tokens": 41472,
+            "total_tokens": 40905,
+            "cached_tokens": 39808,
             "reasoning_tokens": 0
           }
         }
       },
       "error": null,
-      "created_at_iso": "2026-10-13T00:19:41.605055+00:00",
-      "updated_at_iso": "2026-10-13T00:19:41.798453+00:00"
+      "created_at_iso": "2026-10-23T05:38:38.665681+00:00",
+      "updated_at_iso": "2026-10-23T05:38:39.527682+00:00"
     },
     "error": null,
     "telemetry": null,

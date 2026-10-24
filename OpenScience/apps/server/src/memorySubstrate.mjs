@@ -89,11 +89,6 @@ const SWEEP_ACCOUNTS = 5;
 /** A record id as the store mints them; a leaf named otherwise is not ours. */
 const RECORD_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
-/** How long one rebuild write may wait for the index to finish embedding it.
- *  The same bound the capsule index uses, for the same reason: an upstream that
- *  has not answered in five seconds is not about to. */
-const WRITE_WAIT_SECONDS = 5;
-
 /** The usual constant from the reciprocal-rank-fusion literature: large enough
  *  that the first few ranks sit close together, small enough that a long tail
  *  still decays. */
@@ -542,7 +537,7 @@ export class MemorySubstrate {
     // before the vector exists reports work that has not finished, and here
     // that report is what marks the job done.
     await this.openViking.write(job.userId, recordUri(job.userId, record), content,
-      { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+      { wait: true });
     return this.jobs.finish(job.userId, job.id, job.leaseToken,
       { status: "indexed", recordId, version: record.version });
   }
@@ -590,7 +585,7 @@ export class MemorySubstrate {
         // reports having rebuilt the index, and a write that returns before the
         // vector exists makes that report false for a while nobody can measure.
         await this.openViking.write(userId, recordUri(userId, record), content,
-          { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+          { wait: true });
         written += 1;
       } catch (error) {
         failed += 1;

@@ -57,12 +57,14 @@ async function fixture(t, extra = {}) {
   return { app, base, headers, user };
 }
 
-test("the memory page reads its status, its rows and its search, and the note routes are gone", options, async (t) => {
+test("the memory page reads its rows and its search, and the note, status and timeline routes are gone", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
 
-  const status = await (await fetch(`${base}/api/memory/status`, { headers })).json();
-  assert.deepEqual(status.data, { configured: true, connected: true, code: null, structured: true },
-    "the status page reads these four fields; a store on the database answers all four");
+  // `GET /api/memory/status` (no page read it since the 记忆 page lost its status line) and `GET /api/memory/timeline` (none since the
+  // 成长 tab went; the overview's growth card and the map's time view are the map's own document) are not routes any more.
+  for (const path of ["/api/memory/status", "/api/memory/timeline"]) {
+    assert.equal((await fetch(`${base}${path}`, { headers })).status, 404, `GET ${path} is not a route any more`);
+  }
 
   // 「你写下的笔记」 and its three routes went with `evimed_memory.notes` on
   // 2026-09-20: a composer for exactly what the extractor already writes.
@@ -278,7 +280,7 @@ test("a reset clears every kind the memory page shows — memories, learned meth
   await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [other.id]);
 });
 
-test("the page's new reads answer through the real app: handbooks to read and stop, what was learned when, a method's sources, the notes the researcher forgot", options, async (t) => {
+test("the page's new reads answer through the real app: handbooks to read and stop, a method's sources, the notes the researcher forgot", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
   const documents = app.capsuleService.documents;
   const learning = new LearningService({ documents });
@@ -308,9 +310,6 @@ test("the page's new reads answer through the real app: handbooks to read and st
   assert.equal((await read("/api/handbooks")).items.length, 0);
   assert.equal((await read("/api/handbooks?status=retired")).items.length, 1);
 
-  const learned = await read("/api/memory/learned?timeZone=Asia/Shanghai");
-  assert.deepEqual(learned.days.flatMap((entry) => entry.items.map((item) => [item.kind, item.what, item.title])), [["learned", "method", "引用标记对齐"]],
-    "the stopped handbook is not in the story, and no memory was written so the capsule has not begun");
   assert.deepEqual((await read(`/api/methods/${encodeURIComponent(method.id)}/sources`)).items, []);
   const mine = await read("/api/capsules/mine");
   assert.deepEqual([mine.entries.length, mine.forgotten.map((entry) => entry.payload.content)], [0, ["旧偏好"]]);

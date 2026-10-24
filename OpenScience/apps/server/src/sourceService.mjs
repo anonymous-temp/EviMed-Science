@@ -662,8 +662,10 @@ export class SourceService {
     } catch (error) {
       if (!isConflict(error)) throw error;
       exact = await this.documents.get(userId, "source", sourceId);
-      if (!exact) throw error;
-      return { source: exact, duplicate: true, job: null };
+      if (exact) return { source: exact, duplicate: true, job: null };
+      // The id is the digest of the bytes, so bytes a retired version had (a knowledge page brought back to an earlier text,
+      // a file put back after it was removed) meet that version's row, deleted: it is brought back as this registration.
+      exact = await this.reviveRetired(userId, sourceId, projectId, payload, error);
     }
     const job = await this.enqueue(exact, userId);
     // The newest version this one follows: what rests on an older one was told when that one was replaced.
@@ -679,6 +681,19 @@ export class SourceService {
       catch (error) { this.report(typeof error?.code === "string" ? error.code : "source_replacement_unrecorded"); }
     }
     return registered;
+  }
+
+  /**
+   * A registration whose bytes are a retired source's: restore that row and write this registration over it, a revision of
+   * its own, so history keeps both. Anything else that answered the insert with a conflict is the conflict it was.
+   * @param {string} userId @param {string} sourceId @param {string} projectId @param {Record<string, any>} payload @param {unknown} conflict
+   */
+  async reviveRetired(userId, sourceId, projectId, payload, conflict) {
+    const retired = await this.documents.get(userId, "source", sourceId, { includeDeleted: true });
+    if (!retired?.deletedAt) throw conflict;
+    if (retired.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
+    const restored = await this.documents.restore(userId, "source", sourceId, retired.revision);
+    return this.documents.put(userId, "source", sourceId, payload, { expectedRevision: restored.revision, projectId });
   }
 
   /**

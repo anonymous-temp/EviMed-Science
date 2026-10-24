@@ -116,14 +116,27 @@ per-project workspace + JSONL provenance.
 - **Reuse upstream with the narrowest adapter.** Before building a piece, find the one that already does it
   (a DSH row or plugin, an official skill, a mature library, OpenViking's native engine); a mismatch with a
   boundary we drew is an adapter, a shim or a template with a stated date of deletion, not a rebuild.
-- **OpenViking is an engine, not only an index** (v0.5.0, `packages/contracts/openviking/README.md` is the
-  division of labour). An account's memory is on one of two engines: `legacy` (PostgreSQL records, OpenViking
+- **OpenViking is an engine, not only an index** (v0.5.1.1, `packages/contracts/openviking/README.md` is the
+  division of labour; the identity shim of v0.5.0 is deleted, and a write-back to a knowledge page is a checked write). An account's memory is on one of two engines: `legacy` (PostgreSQL records, OpenViking
   only their derived recall index) or `native` (the engine extracts, merges and recalls; the runtime's official
   plugin reaches it through a loopback bridge and the control plane's memory gateway; PostgreSQL keeps a thin
   overlay). The knowledge base pushes every readable document to the engine as a Resource, and the official
   `llm-wiki` and `knowledge-graph` skills compile the wiki and the graph, mirrored back into the product
   ledger; quotation checks on them are ✓ / ⚠ labels, not a condition. The engine's model calls go through our
   model gateway; the runtime holds no key; the volume is backed up.
+- **Memory keeps what the person stated, confirmed or corrected** — and the constraints they gave for a named piece of
+  work — and never what a document, a tool, a web page, the platform or the assistant said. The two shared blocks of
+  `packages/domain/src/memoryNeverKept.mjs` (what is never kept, how to decide) are the one place the policy is written; a
+  change to them is replayed on `evals/memory-write-quality` (every case, a failing one three times) and the never side
+  only gets better. A native memory has no expiry date and nothing promises one. The legacy engine is on a deletion plan
+  (root `AGENTS.md`, owner decisions 2026-10-23).
+- **A person has one capsule**; a project is a label on its entries, a received pack is enabled for the whole account, and a
+  native account reaches its capsule through the memory gateway's `search` and a profile block, never a second recall
+  tool. A capsule is context, never permission (below).
+- **The learning loop learns only from the researcher's own work.** A script or eval that starts a run marks it
+  `automated` (`apps/server/test/automatedDrivers.test.mjs` holds the list); evidence is the person's own words, checked
+  as a substring of what they wrote; nothing is withheld from a run on purpose to measure a method; a method takes
+  effect at once and every automatic stop or change is restorable in one click and carries its reason.
 - Keep the artifact schema and workflow templates stable and versioned.
 
 ## Frontend conventions (design system)

@@ -119,7 +119,7 @@ function documentRow(kind, id, payload) {
  */
 function capsuleFixtureRows() {
   return [
-    documentRow("preferences", `active-capsules:project:${PROJECT_ID}`, { items: [{ capsuleId: "capsule-a", mode: "own" }] }),
+    documentRow("preferences", "active-capsules:account", { items: [{ capsuleId: "capsule-a", mode: "own" }] }),
     documentRow("capsule", "capsule-a", { title: "Work style", description: "", activationMode: "own", imported: false }),
     documentRow("fact", "approved-method", {
       capsuleId: "capsule-a", factKind: "method_preference", layer: "methods",
@@ -1864,8 +1864,9 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
 
   const off = await composedApp(t);
   // `openList` is false here because this composition configures no OpenList
-  // (openListReadiness.test.mjs covers the probe that turns it on).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: false, zoneSubscription: false, evidenceCommunity: false, geo: false, vcr: false, memoryMap: true, openList: false });
+  // (openListReadiness.test.mjs covers the probe that turns it on); `capsuleShare` is true because sharing is on unless turned off
+  // (2026-10-23).
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: true, zoneSubscription: false, evidenceCommunity: false, geo: false, vcr: false, memoryMap: true, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
@@ -1924,15 +1925,15 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "valueUpkeep", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "signalDiscovery", "signalResults", "signals", "social", "store", "valueUpkeep", "worker"]);
   assert.equal(typeof app.geo.articleExists, "function");
-  // Every slot is filled: the worker with all twelve loops wired (measurement,
-  // orchestration, market) and the value profiles' upkeep, the orchestrator,
+  // Every slot is filled: the worker's registered measurement, orchestration,
+  // market, signal and value-upkeep loops, the orchestrator,
   // the exporter and the market's user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups", "questionBank", "valueUpkeep"], "the question bank's loop is in the table and is not wired while its lever is off");
+    "verify", "reconcile", "topups", "questionBank", "valueUpkeep", "signals"], "the question bank's loop is in the table and is not wired while its lever is off");
   assert.equal(status.loops.valueUpkeep.wired, true, "the value profiles' upkeep is composed with the module (G10c, G10e)");
   assert.equal(typeof app.geo.valueUpkeep.tick, "function");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");

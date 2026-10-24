@@ -34,7 +34,9 @@
  *     node evals/memory-write-quality/run_write_quality_eval.mjs --out evals/memory-write-quality/results/$(date +%F).json
  *
  * `--offline` runs only what needs no model: the corpus shape and the
- * pre-model checks. The live run uses the server's own configuration loader,
+ * pre-model checks. The general corpus (`cases-general/`, the work-order cases of 2026-10-23 among them) is validated here too and
+ * replayed for the cases that are for this arm (`arms`); a case with a `replay.seed` first holds that conversation, and what a
+ * check reads is what the case's own conversation wrote or changed. The live run uses the server's own configuration loader,
  * so the model, base URL and key are the ones production would use; the key
  * is never written to the results.
  */
@@ -42,6 +44,8 @@ import { readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { generalCaseIssues, runsOnArm } from "./caseShape.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../..");
@@ -148,15 +152,21 @@ export function replayMessages(item) {
 
 /**
  * The verdicts code can reach about what one replay wrote.
- * @param {any} item @param {any[]} written the records the extractor stored, run summary excluded
+ * @param {any} item @param {any[]} written the records the extractor stored, run summary excluded (after a seed: the ones the case's
+ *   own conversation wrote or changed)
+ * @param {{ inForce?: any[], conflicts?: { key: string, otherKey: string }[], seed?: { kept: any[], unchanged: boolean } }} [extras]
+ *   `inForce`: every record in force after a case with a seed; `conflicts`: the disagreements the extractor named;
+ *   `seed`: what the seed conversation stored, and whether the case's own left it as it was.
  * @returns {{ check: string, passed: boolean, detail: string }[]}
  */
-export function decidedVerdicts(item, written) {
+export function decidedVerdicts(item, written, extras = /** @type {{ inForce?: any[], conflicts?: { key: string, otherKey: string }[], seed?: { kept: any[], unchanged: boolean } }} */ ({})) {
   const expect = item.expect ?? {};
   const verdicts = [];
   if (Array.isArray(expect.noTextContains)) {
+    // After a seed, what must not be there is looked for in everything in force, the seed's own records included.
+    const searched = extras.inForce ?? written;
     for (const needle of expect.noTextContains) {
-      const carriers = written.filter((record) => `${record.value}\n${record.summary}`.includes(needle));
+      const carriers = searched.filter((record) => `${record.value}\n${record.summary}`.includes(needle));
       verdicts.push({ check: `no record carries ${needle}`, passed: carriers.length === 0, detail: carriers.map((record) => record.key).join(", ") });
     }
   }
@@ -168,6 +178,25 @@ export function decidedVerdicts(item, written) {
   if (Number.isInteger(expect.atMostRecords)) {
     verdicts.push({ check: `at most ${expect.atMostRecords} record(s)`, passed: written.length <= expect.atMostRecords,
       detail: written.map((record) => record.key).join(", ") });
+  }
+  if (Number.isInteger(expect.atLeastRecords)) {
+    verdicts.push({ check: `at least ${expect.atLeastRecords} record(s)`, passed: written.length >= expect.atLeastRecords, detail: `${written.length} written` });
+  }
+  if (Array.isArray(expect.requireAnyKind)) {
+    const found = written.filter((record) => expect.requireAnyKind.includes(record.kind));
+    verdicts.push({ check: `at least one ${expect.requireAnyKind.join("/")} record`, passed: found.length > 0, detail: written.map((record) => `${record.kind}:${record.key}`).join(", ") });
+  }
+  if (Array.isArray(expect.requireConflictWith)) {
+    for (const key of expect.requireConflictWith) {
+      const named = (extras.conflicts ?? []).filter((conflict) => conflict.otherKey === key);
+      verdicts.push({ check: `a statement is marked as disagreeing with ${key}`, passed: named.length > 0, detail: named.map((conflict) => conflict.key).join(", ") || written.map((record) => record.key).join(", ") });
+    }
+  }
+  if (extras.seed) {
+    for (const needle of expect.seedKeeps ?? []) {
+      verdicts.push({ check: `the seed stored ${needle}`, passed: extras.seed.kept.some((record) => `${record.value}\n${record.summary}`.includes(needle)), detail: extras.seed.kept.map((record) => record.key).join(", ") });
+    }
+    if (expect.unchangedSinceSeed === true) verdicts.push({ check: "the case's conversation left what the seed wrote as it was", passed: extras.seed.unchanged && written.length === 0, detail: written.map((record) => record.key).join(", ") });
   }
   // The other direction: something that must be kept was kept. A kind is counted, never read for what it says.
   if (expect.requireKinds && typeof expect.requireKinds === "object") {
@@ -237,11 +266,13 @@ export function shapeVerdicts(item, { identifierShapesIn }) {
 }
 
 /** An in-memory store with the extractor's read/write surface. */
-class ReplayStore {
+export class ReplayStore {
   constructor(existing = []) {
     this.configured = false;
     /** @type {Map<string, any>} */
     this.records = new Map();
+    /** The disagreements the extractor named: the key it wrote and the stored key it disagrees with. @type {{ key: string, otherKey: string }[]} */
+    this.conflicts = [];
     for (const record of existing) this.#put({ ...record, value: record.value ?? record.key, summary: record.summary ?? "", status: "active", origin: "system" });
   }
   #put(record) {
@@ -252,6 +283,32 @@ class ReplayStore {
   async listRecords() { return [...this.records.values()]; }
   async upsertRecord(_userId, input) { return this.#put(input); }
   async getRecord() { throw Object.assign(new Error("not found"), { code: "memory_not_found" }); }
+  async markConflict(_userId, id, otherId) { this.conflicts.push({ key: String(id), otherKey: String(otherId) }); }
+  /** What the store holds now, by record: the value and whether it is in force. */
+  snapshot() {
+    return new Map([...this.records.entries()].filter(([, record]) => record.kind !== "run_summary")
+      .map(([key, record]) => [key, `${record.status}\u0000${record.value}`]));
+  }
+}
+
+/** The records a conversation wrote or changed, between two snapshots of one store. @param {ReplayStore} store @param {Map<string, string>} before */
+function changedSince(store, before) {
+  const now = store.snapshot();
+  return [...store.records.entries()].filter(([key, record]) => record.kind !== "run_summary" && now.get(key) !== before.get(key))
+    .map(([, record]) => ({ kind: record.kind, scope: record.scope, key: record.key, summary: record.summary, value: record.value }));
+}
+
+/**
+ * The pre-model check of the platform-tag cases: a message that wears a platform tag (or the kernel's) never becomes a source.
+ * @param {any} item @param {{ conversationMemorySources: Function }} tools
+ */
+export function doorVerdicts(item, { conversationMemorySources }) {
+  const dropped = item.expect?.droppedAtTheDoor;
+  if (!Array.isArray(dropped)) return [];
+  const { sources } = conversationMemorySources(replayMessages(item), "eval-session");
+  return dropped.map((/** @type {string} */ id) => ({
+    check: `message ${id} is not a source of memory`, passed: !sources.some((/** @type {any} */ source) => String(source.sourceRef).endsWith(`/messages/${id}`)), detail: "",
+  }));
 }
 
 async function main() {
@@ -259,8 +316,12 @@ async function main() {
   const offline = argv.includes("--offline");
   const outIndex = argv.indexOf("--out");
   const out = outIndex >= 0 ? argv[outIndex + 1] : "";
+  const repeatIndex = argv.indexOf("--repeat");
+  const repeat = repeatIndex >= 0 ? Number(argv[repeatIndex + 1]) : 1;
+  if (!Number.isInteger(repeat) || repeat < 1 || repeat > 10) throw new Error("--repeat is a whole number from 1 to 10");
   const cases = await loadCases();
-  const shape = cases.flatMap(caseIssues);
+  const general = await loadCases(path.join(here, "cases-general"));
+  const shape = [...cases.flatMap(caseIssues), ...general.flatMap(generalCaseIssues)];
   const missing = REQUIRED_CLASSES.filter((name) => !cases.some((item) => item.class === name));
   if (shape.length || missing.length) {
     process.stderr.write(`${[...shape, ...missing.map((name) => `no case of class ${name}`)].join("\n")}\n`);
@@ -272,32 +333,57 @@ async function main() {
   const results = [];
   /** The model the live replay ran on, so a result names what was measured. */
   let model = null;
-  for (const item of cases) {
-    const verdicts = [
+  // The incident cases, then the general corpus's cases that are for this arm. The rest of the general corpus is validated above and
+  // belongs to the native arm.
+  const all = [...cases.map((item) => ({ item, general: false })), ...general.map((item) => ({ item, general: true }))];
+  for (const { item, general: isGeneral } of all) {
+    // A general case that is for the other arm is shape-checked only; its offline checks (shapes, the door) still run.
+    const live = !offline && item.class !== "platform-brief-as-user-words" && (!isGeneral || runsOnArm(item, "legacy"));
+    const offlineVerdicts = [
       ...briefVerdicts(item, { conversationMemorySources, tags: PLATFORM_CONTEXT_TAGS }),
       ...shapeVerdicts(item, { identifierShapesIn }),
+      ...doorVerdicts(item, { conversationMemorySources }),
     ];
-    /** @type {any[] | null} */
-    let written = null;
-    if (!offline && item.class !== "platform-brief-as-user-words") {
-      const { loadConfig } = await import(pathToFileURL(path.join(serverSrc, "config.mjs")).href);
-      const config = loadConfig({ memoryExtractionEnabled: true });
-      if (!config.deepseekApiKey) throw new Error("no DeepSeek key: set OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE, or run --offline");
-      model = config.memoryExtractionModel || config.deepseekModel || null;
-      const store = new ReplayStore(item.replay.existingKeys ?? []);
-      const before = new Set(store.records.keys());
-      await new MemoryIntelligence(config, store).recordRun({ id: item.replay.projectId, userId: "eval-write-quality" },
-        { id: `run_${item.id}`, sessionId: "eval-session", status: "succeeded", finishedAt: new Date().toISOString() },
-        replayMessages(item));
-      written = [...store.records.entries()].filter(([key, record]) => !before.has(key) && record.kind !== "run_summary")
-        .map(([, record]) => ({ kind: record.kind, scope: record.scope, key: record.key, summary: record.summary, value: record.value }));
-      verdicts.push(...decidedVerdicts(item, written));
+    // Offline, a general case with nothing to check without a model has nothing to report.
+    if (isGeneral && !live && !offlineVerdicts.length) continue;
+    for (let sample = 0; sample < (live ? repeat : 1); sample += 1) {
+      const verdicts = [...offlineVerdicts];
+      /** @type {any[] | null} */
+      let written = null;
+      if (live) {
+        const { loadConfig } = await import(pathToFileURL(path.join(serverSrc, "config.mjs")).href);
+        const config = loadConfig({ memoryExtractionEnabled: true });
+        if (!config.deepseekApiKey) throw new Error("no DeepSeek key: set OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE, or run --offline");
+        model = config.memoryExtractionModel || config.deepseekModel || null;
+        const store = new ReplayStore(item.replay.existingKeys ?? []);
+        const intelligence = new MemoryIntelligence(config, store);
+        const project = { id: item.replay.projectId, userId: "eval-write-quality" };
+        const stamp = () => new Date().toISOString();
+        const plain = (/** @type {any} */ record) => ({ kind: record.kind, scope: record.scope, key: record.key, summary: record.summary, value: record.value });
+        /** @type {{ kept: any[], unchanged: boolean } | undefined} */
+        let seed;
+        if (item.replay.seed?.messages?.length) {
+          // The memory the case starts from is written by the extractor itself, in a conversation of its own.
+          await intelligence.recordRun(project, { id: `run_${item.id}_seed`, sessionId: "eval-seed-session", status: "succeeded", finishedAt: stamp() },
+            replayMessages({ replay: item.replay.seed }));
+          seed = { kept: [...store.records.values()].filter((record) => record.kind !== "run_summary").map(plain), unchanged: true };
+        }
+        const beforeSnapshot = store.snapshot();
+        const before = new Set(store.records.keys());
+        await intelligence.recordRun(project, { id: `run_${item.id}`, sessionId: "eval-session", status: "succeeded", finishedAt: stamp() }, replayMessages(item));
+        // Without a seed: the records the replay made new. With one: what the case's own conversation wrote or changed.
+        written = seed ? changedSince(store, beforeSnapshot)
+          : [...store.records.entries()].filter(([key, record]) => !before.has(key) && record.kind !== "run_summary").map(([, record]) => plain(record));
+        if (seed) seed.unchanged = written.length === 0;
+        const inForce = seed ? [...store.records.values()].filter((record) => record.kind !== "run_summary" && record.status === "active").map(plain) : undefined;
+        verdicts.push(...decidedVerdicts(item, written, { ...(inForce ? { inForce } : {}), conflicts: store.conflicts, ...(seed ? { seed } : {}) }));
+      }
+      results.push({
+        id: repeat > 1 && live ? `${item.id}#${sample + 1}` : item.id, class: item.class,
+        verdict: !item.decidable ? "needs-judgement" : verdicts.length === 0 ? "not-run" : verdicts.every((entry) => entry.passed) ? "passed" : "failed",
+        verdicts, ...(written ? { written } : {}), ...(item.judge ? { judge: item.judge } : {}),
+      });
     }
-    results.push({
-      id: item.id, class: item.class,
-      verdict: !item.decidable ? "needs-judgement" : verdicts.length === 0 ? "not-run" : verdicts.every((entry) => entry.passed) ? "passed" : "failed",
-      verdicts, ...(written ? { written } : {}), ...(item.judge ? { judge: item.judge } : {}),
-    });
   }
   const report = { ranAt: new Date().toISOString(), offline, model, cases: results };
   const text = `${JSON.stringify(report, null, 2)}\n`;

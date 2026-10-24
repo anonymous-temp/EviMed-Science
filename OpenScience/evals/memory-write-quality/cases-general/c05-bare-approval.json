@@ -1,0 +1,40 @@
+{
+  "id": "c05-bare-approval",
+  "class": "work-order-bare-approval",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C05); every name, number and identifier is invented",
+  "expected": "Nothing is written: 「不错，谢谢」 approves a result and names no approach.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "帮我把三个方案的优缺点整理成表格。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "下表按“方案 / 优点 / 缺点”三栏整理：\n| 方案 | 优点 | 缺点 |\n|---|---|---|\n| A | 成本低 | 周期长 |\n| B | 周期短 | 成本高 |\n| C | 风险小 | 扩展性差 |"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "不错，谢谢。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "不客气。"
+      }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}

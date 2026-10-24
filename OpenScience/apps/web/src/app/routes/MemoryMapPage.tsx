@@ -6,6 +6,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { Button } from "@/components/ui/Button";
 import { Note } from "@/components/ui/Note";
+import { AskMenu } from "@/components/memory/AskMenu";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
 import { ActivityView } from "@/components/memory/map/ActivityView";
 import { DimsView } from "@/components/memory/map/DimsView";
@@ -13,13 +14,15 @@ import { GraphView } from "@/components/memory/map/GraphView";
 import { MapDrawer } from "@/components/memory/map/MapDrawer";
 import { mapToolbar } from "@/components/memory/map/mapToolbar";
 import { MemoryFrame } from "@/components/memory/MemoryFrame";
+import { MemoryHeaderActions } from "@/components/memory/MemoryHeaderActions";
 import { MarkList, type MarkLine } from "@/components/memory/map/MarkList";
 import { TimeView } from "@/components/memory/map/TimeView";
 import { TopicsView } from "@/components/memory/map/TopicsView";
-import { headline, headlineParts, isThin, markRows, narrowMap, STRUCTURE } from "@/components/memory/map/mapModel";
+import { derivedTopics, headline, headlineParts, isThin, markRows, narrowMap, STRUCTURE } from "@/components/memory/map/mapModel";
 import { useMapSelection } from "@/components/memory/map/useMapSelection";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
-import { projectScopeGroups } from "@/components/memory/memoryItems";
+import { OTHER_PROJECT, projectScopeGroups } from "@/components/memory/memoryItems";
+import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { useProjectChoices } from "@/components/memory/useProjectChoices";
 import { webErrorMessage } from "@/lib/apiClient";
 import { formatDay } from "@/lib/format";
@@ -38,6 +41,15 @@ const CHANGE_WORDS: Record<string, string> = {
   created: "记下", updated: "改动", superseded: "被后来的说法替代", archived: "忘记", restored: "恢复", confirmed: "确认", status: "状态变化",
   learned: "学会", approved: "开始生效", retired: "停用",
 };
+
+/** 「就这个提问」 for the marks a question can be about: a memory, a learned method, a document. */
+function askFor(node: MapNode, title: string) {
+  const projectId = node.projectId && node.projectId !== OTHER_PROJECT ? node.projectId : null;
+  if (node.type === "memory") return <AskMenu kind="memory" text={title} projectId={projectId} />;
+  if (node.type === "method") return <AskMenu kind="method" text={title} />;
+  if (node.type === "document") return <AskMenu kind="document" text={title} projectId={projectId} />;
+  return undefined;
+}
 
 /** An event of the time and activity views as a line of the list under them. */
 function eventLine(event: MapEvent, node: MapNode | undefined, open: (node: MapNode) => void): MarkLine {
@@ -70,6 +82,8 @@ export function MemoryMapPage() {
   const navigate = useNavigate();
   const { selection, search, setView, narrow, clear, drawer } = useMapSelection();
   const { doc, status, failed, loading, grouping, reload } = useMemoryMap({ projectId: selection.project, range: selection.range, focus: selection.focus, depth: selection.depth });
+  // 「刚记住了 … 撤销」: the landing is a visit to the capsule like any tab's.
+  useMemoryWritePrompt();
   const projects = useProjectStore((state) => state.projects);
   const labels = useProjectLabels();
   const projectName = useCallback((id: string | null) => (id ? labels.get(id) ?? projects.find((project) => project.id === id)?.name ?? null : null), [labels, projects]);
@@ -83,6 +97,7 @@ export function MemoryMapPage() {
   /** What pressing a mark does: the record's drawer, a page of its own, or — for a mark that is a group — narrow the map to it. */
   const openNode = useCallback((node: MapNode) => {
     if (node.open?.kind === "record") drawer.open(`record:${node.open.id}`);
+    else if (node.open?.kind === "entry") drawer.open(`entry:${node.open.id}`);
     else if (node.open?.kind === "method") drawer.open(`method:${node.open.id}`);
     else if (node.open?.kind === "page") navigate(node.open.href);
     else if (node.type === "entity" || node.type === "page") {
@@ -110,7 +125,11 @@ export function MemoryMapPage() {
   }, [reload]);
   const focusNode = useCallback((node: MapNode) => { if (!STRUCTURE.has(node.type)) narrow({ focus: node.id }); }, [narrow]);
 
-  const topicName = selection.topic ? doc?.facets.topics.find((topic) => topic.id === selection.topic)?.label ?? null : null;
+  // The model's topics once it has grouped; before that — and below the number of memories it takes — the kinds and projects the memories
+  // already name, so a small capsule has topics to read instead of an empty card.
+  const madeTopics = useMemo(() => (doc ? derivedTopics(doc, (id) => projectName(id)) : []), [doc, projectName]);
+  const topics = doc && doc.facets.topics.length > 0 ? doc.facets.topics : madeTopics;
+  const topicName = selection.topic ? [...(doc?.facets.topics ?? []), ...madeTopics].find((topic) => topic.id === selection.topic)?.label ?? null : null;
   const aspectName = selection.dimension ? doc?.facets.dimensions.flatMap((dimension) => dimension.axes).find((axis) => axis.id === selection.dimension)?.label ?? null : null;
   const focusLabel = selection.focus ? byId.get(selection.focus)?.label ?? (selection.focus.startsWith("cluster:") ? "一组标记" : "这个标记") : null;
 
@@ -136,6 +155,7 @@ export function MemoryMapPage() {
       id: row.id, title: row.title, kind: row.kind, note: row.note, node: row.node,
       to: row.open?.kind === "page" ? row.open.href : undefined,
       onOpen: row.open?.kind === "page" ? undefined : () => open(row.node),
+      menu: askFor(row.node, row.title),
     }));
   }, [doc, narrowed, selection.view, selection.q, byId, openNode]);
 
@@ -167,7 +187,7 @@ export function MemoryMapPage() {
     if (selection.view === "topics") {
       return (
         <TopicsView
-          topics={doc.facets.topics} selected={selection.topic} grouping={grouping} status={doc.status.topics}
+          topics={topics} selected={selection.topic} grouping={grouping} status={doc.status.topics}
           onChoose={(topic) => narrow({ topic })} onChanged={reload}
         />
       );
@@ -187,6 +207,14 @@ export function MemoryMapPage() {
       tab="map" map documentTitle="记忆地图"
       scope={choices.length > 0 ? { label: "项目", groups: projectScopeGroups(choices), value: selection.project, onChange: (project) => narrow({ project }), allLabel: "全部项目" } : undefined}
       toolbar={toolbar}
+      actions={(
+        <MemoryHeaderActions
+          native={doc?.engine === "native"}
+          // 「本项目」 is the project the map is narrowed to; with every project shown it is the shell's own.
+          projectId={selection.project === OTHER_PROJECT ? null : selection.project ?? undefined}
+          onChanged={reload}
+        />
+      )}
       headline={sentence ? { parts: sentence, id: "memory-map-headline" } : undefined}
     >
       {failed && !doc && <LoadError message="暂时读不到记忆地图。" onRetry={reload} />}

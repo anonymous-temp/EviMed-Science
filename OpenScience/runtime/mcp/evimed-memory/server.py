@@ -15,6 +15,10 @@ first turn. Recall and note are what an agent does with memory. Listing records
 and posting an episode are operator and integration actions, and they have an
 HTTP endpoint that a person or a script calls directly.
 
+ONE PERSON OR ANOTHER. With an integration key (`subjects: true`) a call may name the person it is for, as `subject` (or the process's
+`EVIMED_MEMORY_SUBJECT`), sent as `X-Subject`; every read and write is then that person's memory and nobody else's. The adapter sends it
+and asks nothing about it: whether the key may, and whether it is an identifier, are the service's to refuse.
+
 CREDENTIAL. An account API key, read from `EVIMED_MEMORY_API_KEY_FILE` (a file,
 so the key is not in a process listing or an MCP config a user shares) or, for a
 local profile, `EVIMED_MEMORY_API_KEY`. With neither, the tools report that the
@@ -35,7 +39,28 @@ PROTOCOL_VERSION = "2024-11-05"
 MAX_FRAME_BYTES = 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 20
 
-FACT_KINDS = ("preference", "stance", "project_fact", "method", "constraint", "background")
+# The control plane's own closed vocabulary (`CAPSULE_FACT_KINDS` in `@evimed/domain`), copied because this file runs outside the
+# repository's runtime. A copy drifts the first time the vocabulary moves, and did: three of the six words it carried here
+# (method, constraint, background) were never kinds, so a recall asking for one answered 400. `apps/server/test/agentMemoryMcp.test.mjs`
+# holds this tuple equal to the domain's, in order.
+FACT_KINDS = (
+    "profile", "preference", "behavior", "project_fact", "analysis", "decision", "correction", "follow_up",
+    "stance", "expertise", "method_preference", "writing_style", "tooling", "tension",
+)
+
+# What `recall` may be asked to return of methods (做法), and how many capsules it may name: the API's own bounds.
+METHOD_MODES = ("all", "own", "capsules", "none")
+MAX_CAPSULE_IDS = 8
+
+# The person a request is for, when the key is an integration key (`X-Subject`): the integrator's opaque identifier of one doctor
+# behind it. The pattern is the API's own; the adapter checks nothing else about it, and the service refuses a key that may not name one.
+SUBJECT_PROPERTY = {
+    "type": "string", "minLength": 1, "maxLength": 128,
+    "description": (
+        "Integration keys only: the opaque identifier of the person this call is for (the integrator's own id for one doctor, "
+        "set by the host application and never chosen from the conversation). Absent, the call is for the key's own account."
+    ),
+}
 
 TOOLS = [
     {
@@ -56,10 +81,20 @@ TOOLS = [
             "required": ["query"],
             "properties": {
                 "query": {"type": "string", "minLength": 1, "maxLength": 2000},
-                "factKinds": {"type": "array", "maxItems": 6, "items": {"type": "string", "enum": list(FACT_KINDS)}},
+                "factKinds": {"type": "array", "maxItems": len(FACT_KINDS), "items": {"type": "string", "enum": list(FACT_KINDS)}},
                 "since": {"type": "string", "maxLength": 40},
                 "asOf": {"type": "string", "maxLength": 40, "description": "The time the question is about, as an ISO date; now when omitted."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                "capsuleIds": {
+                    "type": "array", "minItems": 1, "maxItems": MAX_CAPSULE_IDS, "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 200},
+                    "description": "Read these capsules instead of the ones in force: one school or one way of working at a time, for a side-by-side comparison.",
+                },
+                "methods": {
+                    "type": "string", "enum": list(METHOD_MODES),
+                    "description": "Which methods (做法) come back with the memory: the account's own, the capsules', both (default) or none.",
+                },
+                "subject": SUBJECT_PROPERTY,
             },
         },
     },
@@ -78,6 +113,7 @@ TOOLS = [
             "properties": {
                 "factKind": {"type": "string", "enum": list(FACT_KINDS)},
                 "content": {"type": "string", "minLength": 1, "maxLength": 8000},
+                "subject": SUBJECT_PROPERTY,
             },
         },
     },
@@ -124,7 +160,16 @@ def _envelope(ok, code=None, data=None, issues=None):
     return value
 
 
-def _call(action, body, opener=None):
+def _subject(arguments):
+    """The person a call is for: the call's own `subject`, else the process's `EVIMED_MEMORY_SUBJECT` default, else none."""
+    value = arguments.get("subject") if isinstance(arguments, dict) else None
+    if value is None or not str(value).strip():
+        value = os.environ.get("EVIMED_MEMORY_SUBJECT", "")
+    value = str(value).strip()
+    return value or None
+
+
+def _call(action, body, opener=None, subject=None):
     base = _base_url()
     key = _api_key()
     if not base:
@@ -142,6 +187,8 @@ def _call(action, body, opener=None):
             "authorization": "Bearer %s" % key,
             "content-type": "application/json",
             "accept": "application/json",
+            # Sent as given: the service decides whether this key may name a subject and whether the identifier is one.
+            **({"x-subject": subject} if subject else {}),
         },
         method="POST",
     )
@@ -175,15 +222,15 @@ def _call(action, body, opener=None):
 def call_tool(name, arguments, opener=None):
     if name == "memory_recall":
         body = {"query": arguments["query"]}
-        for field in ("factKinds", "since", "asOf", "limit"):
+        for field in ("factKinds", "since", "asOf", "limit", "capsuleIds", "methods"):
             if arguments.get(field) is not None:
                 body[field] = arguments[field]
-        return _call("recall", body, opener)
+        return _call("recall", body, opener, _subject(arguments))
     if name == "memory_note":
         # `origin` is not sent and is not a parameter. The control plane records
         # every external note as inferred; sending a claim about it here would
         # be a claim the service is right to ignore.
-        return _call("note", {"factKind": arguments["factKind"], "content": arguments["content"]}, opener)
+        return _call("note", {"factKind": arguments["factKind"], "content": arguments["content"]}, opener, _subject(arguments))
     return _envelope(False, "unknown_tool", issues=[{"severity": "required", "message": "No such tool: %s." % name}])
 
 

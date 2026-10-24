@@ -17,6 +17,13 @@
  * because the reader is another product's page, and a second copy of that
  * vocabulary there would be the one that drifts.
  *
+ * For an account on the native engine (2026-10-23) every read and act below goes to the engine's own store (`nativeMemory`, the
+ * one the memory page uses), never to the PostgreSQL rows a switched account keeps for the fallback window: the dashboard lists
+ * the engine's memories, a forget really removes the file from the engine (with the page's undo and the rejection that keeps it
+ * from being written back), an edit is a compare-and-swap on the file. What the engine does not have is said by name:
+ * nothing waits for confirmation (`memory_not_pending`), a summary has no place in a file, a forgotten file is brought back
+ * by `undo` and not by `restore` (`memory_engine_unsupported`), and the dashboard's usage counts are empty.
+ *
  * The acts are the workbench's own acts, with the workbench's semantics:
  * confirming a proposal makes it the person's own statement, editing makes it
  * theirs, forgetting archives it (restorable), undo saves the previous state
@@ -60,6 +67,8 @@ function instantMs(value) {
 /** The source of a record, from the basis its own evidence and revisions give.
  * @param {any} record */
 function recordSource(record) {
+  // The engine's templates keep only what the person stated, confirmed or corrected: a native memory is theirs.
+  if (record?.engine === "native") return "self";
   const basis = record?.provenance?.basis;
   if (["stated", "confirmed", "edited"].includes(basis)) return "self";
   if (basis === "inferred") return "inferred";
@@ -171,18 +180,22 @@ function habitRow(document, nowMs, basis) {
  *
  * @param {{ researchMemory: any, learning?: any, capsules?: any,
  *   observations?: { basis: (userId: string) => Promise<Map<string, any>>, neverLearned: (userId: string) => Promise<any[]> } | null,
- *   now?: () => Date }} services
+ *   native?: any | null, now?: () => Date }} services `native`: the native store, for an account whose memory the engine keeps
  * @param {{ id: string } | null} user null: a subject with no memory yet — an empty dashboard
  */
-export async function memoryBoard({ researchMemory, learning = null, capsules = null, observations = null, now = () => new Date() }, user) {
+export async function memoryBoard({ researchMemory, learning = null, capsules = null, observations = null, native = null, now = () => new Date() }, user) {
   const nowMs = now().getTime();
+  const engine = native ? "native" : "legacy";
   if (!user) {
-    return { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] };
+    return { engine, switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] };
   }
   const settings = await researchMemory.settings(user.id);
-  const all = (await researchMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100 }))
+  const all = (native
+    ? (await native.records(user.id)).slice(0, 100)
+    : await researchMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100 }))
     .filter((/** @type {any} */ record) => record.kind !== "run_summary");
-  const usage = await researchMemory.recordUsage(user.id, all.map((/** @type {any} */ record) => record.id)).catch(() => ({}));
+  // The engine keeps no count of use: an empty answer, not a zero it has measured.
+  const usage = native ? {} : await researchMemory.recordUsage(user.id, all.map((/** @type {any} */ record) => record.id)).catch(() => ({}));
   /** @type {Map<string, any[]>} */
   const replacedBy = new Map();
   for (const record of all) {
@@ -216,7 +229,7 @@ export async function memoryBoard({ researchMemory, learning = null, capsules = 
   // 「最近变化」: what changed by itself, newest first, each with the act that
   // takes it back.
   const since = new Date(nowMs - BOARD_RECENT_DAYS * DAY_MS).toISOString();
-  const recordChanges = (await researchMemory.recentChanges(user.id, { since, limit: 20 })).map((/** @type {any} */ change) => ({
+  const recordChanges = (await (native ? native.changes(user.id, { since, limit: 20 }) : researchMemory.recentChanges(user.id, { since, limit: 20 }))).map((/** @type {any} */ change) => ({
     type: "record", recordId: change.id, kind: change.kind, change: change.change, summary: change.summary, at: change.changedAt,
     undo: { action: "undo", path: `records/${encodeURIComponent(change.id)}/undo`, expectedVersion: change.version },
   }));
@@ -237,6 +250,7 @@ export async function memoryBoard({ researchMemory, learning = null, capsules = 
   });
 
   return {
+    engine,
     switches: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused },
     records: all.filter((/** @type {any} */ record) => record.status === "active").map(row),
     pending,
@@ -264,13 +278,49 @@ function positive(value, name) {
 }
 
 /**
+ * One act on one record of an account on the native engine, through the store the memory page uses. A record is a file (or a line
+ * of the profile): an edit replaces its text under a compare-and-swap, a forget removes it from the engine and keeps the text only
+ * for the undo, and the version an undo names is the one the forget's answer carries.
+ * @param {any} native @param {{ id: string }} user @param {string} recordId @param {string} action @param {any} body
+ * @returns {Promise<{ record: any, event: string }>}
+ */
+async function nativeRecordAction(native, user, recordId, action, body) {
+  if (action === "undo") {
+    const input = bodyOf(body, ["expectedVersion"]);
+    const result = await native.undo(user.id, recordId, { expectedVersion: positive(input.expectedVersion, "expectedVersion") });
+    return { record: result.record, event: `memory.record.undo.${result.undone}` };
+  }
+  if (action === "restore") {
+    throw new HttpError(400, "memory_engine_unsupported", "On the native memory engine a forgotten memory is brought back with undo, naming the version the forget answered with.");
+  }
+  const input = bodyOf(body, action === "edit" ? ["expectedVersion", "summary", "value"] : ["expectedVersion"]);
+  const expectedVersion = positive(input.expectedVersion, "expectedVersion");
+  if (action === "confirm") {
+    throw new HttpError(409, "memory_not_pending", "Nothing waits for confirmation on the native memory engine: a memory is in force when it is written.");
+  }
+  if (action === "forget") {
+    return { record: await native.update(user.id, recordId, { status: "archived", expectedVersion }), event: "memory.record.forget" };
+  }
+  if (action === "edit") {
+    if (input.value === undefined && input.summary === undefined) throw new HttpError(400, "agent_memory_payload_invalid", "Edit the summary, the value, or both.");
+    // A memory file has the text and nothing else: a summary alone has no place in it, and is refused by name.
+    if (input.value === undefined) throw new HttpError(400, "memory_engine_unsupported", "A memory on the native engine has its text and no separate summary: edit the value.");
+    const text = typeof input.value === "string" ? input.value.trim() : "";
+    if (!text || text.length > 100_000) throw new HttpError(400, "agent_memory_payload_invalid", "value is empty or too long.");
+    return { record: await native.update(user.id, recordId, { value: text, expectedVersion }), event: "memory.record.edit" };
+  }
+  throw new HttpError(404, "not_found", "No such memory action.");
+}
+
+/**
  * One act on one record: `confirm`, `edit`, `forget`, `restore` or `undo`.
  *
- * @param {{ researchMemory: any, feedbackEvents?: any }} services
+ * @param {{ researchMemory: any, feedbackEvents?: any, native?: any | null }} services `native`: the native store, for an account whose memory the engine keeps
  * @param {{ id: string }} user @param {string} recordId @param {string} action @param {any} body
  * @returns {Promise<{ record: any, event: string }>}
  */
-export async function recordAction({ researchMemory, feedbackEvents = null }, user, recordId, action, body) {
+export async function recordAction({ researchMemory, feedbackEvents = null, native = null }, user, recordId, action, body) {
+  if (native) return nativeRecordAction(native, user, recordId, action, body);
   const projectId = "default";
   const remember = async (/** @type {() => Promise<any>} */ operation) => {
     if (!feedbackEvents) return;

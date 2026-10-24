@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
 import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
-import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
+import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -33,7 +33,23 @@ import { HttpError } from "./security.mjs";
  * @module nativeMemoryStore
  */
 
-/** The legacy kind the page labels a native type by; `nativeType` carries the engine's own. */
+/**
+ * What names the conversations a memory came out of: for each `{ projectId, sessionId }` (a platform conversation and the project
+ * it was held in), its title, or `null` when the conversation was deleted. A conversation it cannot say anything about is absent.
+ * @typedef {{ projectId: string, sessionId: string, namespaceId?: string | null, projectCreatedAt?: string | null }} NativeConversationReference
+ * @typedef {(userId: string, refs: NativeConversationReference[]) => Promise<Record<string, string | null>>} ConversationTitles
+ */
+
+/** One identity through resolver, cache and evidence: public project names and
+ * session ids can be reused, while a registered namespace names one incarnation.
+ * @param {NativeConversationReference} ref
+ */
+export function nativeConversationTitleKey(ref) {
+  return JSON.stringify([ref.projectId, ref.namespaceId ?? null, ref.projectCreatedAt ?? null, ref.sessionId]);
+}
+
+/** The legacy kind the page labels a native type by; `nativeType` carries the engine's own. A file's type is where it lives
+ *  (`nativeMemoryFile`): the corrections template writes under `preferences/corrections/`, and that is `corrections` here. */
 export const LEGACY_KIND_OF_TYPE = Object.freeze({
   profile: "profile",
   preferences: "preference",
@@ -130,6 +146,45 @@ function engineFailure(error) {
  *    account's bodies, so the page that has just edited a memory reads it back as it is.
  */
 const BODIES_PER_ACCOUNT = 400;
+
+/**
+ * The conversations a memory came out of, as the evidence the page's drawer already reads (`memorySource` takes the first one
+ * for 「来源对话」): one per platform conversation whose commit the engine wrote the file in, oldest first — so the first is where
+ * it began. The overlay holds what is needed and nothing more: each revision names the engine session (`dsh-<conversation>`) and
+ * the archive of the commit; the ledger names the project. A session the platform did not derive (a migration, a replay, the
+ * page's own 「记住这一条」) is no conversation and is left out. There is no quotation: the engine keeps none, and none is made up.
+ *
+ * For one line of the profile (`line`), only the commit that brought that line counts, found by what the revision's text did to it
+ * — so a conversation that merely touched the file is not named as the source of every line in it, and a line already there when
+ * the oldest revision the overlay still holds was written names nothing rather than a guess.
+ * @param {any[]} history a file's revisions, oldest first @param {Map<string, string>} sessionProjects by engine session
+ * @param {{ line?: string | null }} [options]
+ */
+function conversationEvidence(history, sessionProjects, { line = null } = {}) {
+  const print = line === null ? null : lineFingerprint(line);
+  const printsOf = (/** @type {unknown} */ text) => new Set(memoryLines(text ?? "").map(lineFingerprint));
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @type {any[]} */
+  const evidence = [];
+  for (const revision of history) {
+    if (revision.actor !== "engine" || (revision.change !== "added" && revision.change !== "updated") || !revision.engineSession) continue;
+    const conversationId = platformSessionOf(revision.engineSession);
+    if (!conversationId || seen.has(conversationId)) continue;
+    if (print !== null && !(printsOf(revision.after).has(print) && !printsOf(revision.before).has(print))) continue;
+    seen.add(conversationId);
+    const archive = parseArchiveUri(revision.archiveUri);
+    const projectId = archive?.userRoot.startsWith('viking://user/gp-')
+      ? sessionProjects.get(`${archive.userRoot}\u0000${revision.engineSession}`) ?? null
+      : sessionProjects.get(revision.engineSession) ?? revision.projectId ?? null;
+    evidence.push({
+      sourceType: "conversation", sourceRef: `sessions/${conversationId}/commits/${String(revision.archiveUri ?? "").split("/").at(-1) || "archive"}`,
+      quote: "", observedAt: revision.changedAt ?? null, weight: 1, fingerprint: `revision:${revision.id}`, conversationId, ...(projectId ? { projectId } : {}),
+    });
+    if (evidence.length >= 8) break;
+  }
+  return evidence;
+}
 const BODY_ACCOUNTS = 100;
 const MAX_NATIVE_PACK_BYTES = 128 * 1024 * 1024;
 
@@ -143,13 +198,14 @@ export class NativeMemoryStore {
 
   /**
    * @param {{ sessions: import("./openVikingSessions.mjs").OpenVikingSessions, overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
-   *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null, now?: () => Date }} dependencies
+   *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null, now?: () => Date, conversationTitles?: ConversationTitles | null }} dependencies
    */
-  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date() }) {
+  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null }) {
     this.sessions = sessions;
     this.overlay = overlay;
     this.memoryContexts = memoryContexts;
     this.now = now;
+    this.conversationTitles = conversationTitles;
   }
 
   get configured() {
@@ -274,28 +330,135 @@ export class NativeMemoryStore {
     const held = files ?? await this.files(userId, { context });
     const revisions = await this.overlay.revisionsOfMany(userId, held.map((file) => file.uri));
     const sources = await this.overlay.sources(userId, held.map((file) => file.uri));
+    // The conversations the engine wrote these files in: its revisions name the engine session, the ledger names the project.
+    const sessionProjects = await this.#sessionProjects(userId, revisions);
     /** @type {any[]} */
     const records = [];
     for (const file of held) {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
-      const base = this.#fileRecord(file, history, changed);
+      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects));
       if (file.type !== "profile") { records.push(base); continue; }
       // The profile is one document; its lines are the items the page lists.
       for (const line of statements(file.body)) {
         const asOf = AS_OF.exec(line)?.[1] ?? null;
+        // A line's own conversation is the one whose commit brought it, not every conversation that touched the file.
+        const evidence = conversationEvidence(history, sessionProjects, { line });
         records.push({
           ...base, id: `${base.id}_${lineFingerprint(line).slice(0, 12)}`, key: `profile.md#${lineFingerprint(line).slice(0, 12)}`,
           value: line.replace(AS_OF, "").trim(), summary: "", lastConfirmedAt: asOf ? `${asOf}T00:00:00.000Z` : base.lastConfirmedAt,
-          document: { id: base.id, uri: file.uri }, revisions: [],
+          document: { id: base.id, uri: file.uri }, revisions: [], evidence, evidenceCount: evidence.length,
         });
       }
     }
     return records.sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   }
 
-  /** @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state */
-  #fileRecord(file, history, changed) {
+  /**
+   * The project each engine session named by these revisions was held in, for the sessions a platform conversation wrote.
+   * A ledger that cannot answer names none: the evidence then carries no project and the link opens in the project in view.
+   * @param {string} userId @param {Map<string, any[]>} revisions
+   * @returns {Promise<Map<string, string>>}
+   */
+  async #sessionProjects(userId, revisions) {
+    const names = new Set();
+    for (const list of revisions.values()) for (const revision of list) if (revision.engineSession && platformSessionOf(revision.engineSession)) names.add(revision.engineSession);
+    const projects = names.size ? await this.overlay.sessionProjects(userId, [...names]).catch(() => new Map()) : new Map();
+    if (this.memoryContexts) for (const [uri, list] of revisions) {
+      const context = await this.#fileContext(userId, uri);
+      if (context.kind !== 'geo-project') continue;
+      for (const revision of list) {
+        const archive = parseArchiveUri(revision.archiveUri);
+        if (archive?.userRoot === context.userRoot && !archive.rest && archive.archiveUri === revision.archiveUri && archive.session === revision.engineSession) {
+          projects.set(`${context.userRoot}\u0000${revision.engineSession}`, context.projectId);
+        }
+      }
+    }
+    return projects;
+  }
+
+  /**
+   * What the conversations of the records on a page were about, by conversation id, and which of them are gone. Absent
+   * resolver, absent titles: the page then says 「来源对话」 and nothing more. A conversation the person deleted is dropped from
+   * the evidence of the records it names — a link to nothing is not provenance.
+   * @param {string} userId @param {any[]} records
+   * @returns {Promise<{ titles: Record<string, string>, records: any[] }>}
+   */
+  async #withConversationTitles(userId, records) {
+    /** @type {Map<string, NativeConversationReference>} */
+    const refs = new Map();
+    /** @type {Map<string, Set<string>>} */
+    const scopes = new Map();
+    const contexts = this.memoryContexts ? await this.#contexts(userId) : [];
+    const enriched = records.map(record => ({ ...record, evidence: (record.evidence ?? []).map(item => {
+      if (item.sourceType !== 'conversation' || !item.conversationId) return item;
+      const context = contexts.find(view => String(record.uri ?? '').startsWith(`${view.userRoot}/`));
+      const ref = { projectId: item.projectId ?? '', sessionId: item.conversationId,
+        ...(context?.kind === 'geo-project' ? { namespaceId: context.namespaceId, projectCreatedAt: context.policy?.projectCreatedAt ?? null } : {}) };
+      const key = nativeConversationTitleKey(ref);
+      const identities = scopes.get(ref.sessionId) ?? new Set();
+      identities.add(key); scopes.set(ref.sessionId, identities);
+      if (item.projectId) refs.set(key, ref);
+      return { ...item, conversationTitleKey: key };
+    }) }));
+    // Count the complete query, not just a later batch of cache misses. A bare
+    // legacy answer cannot distinguish two scopes with the same session id.
+    const identities = new Map([...scopes].map(([id, keys]) => [id, keys.size]));
+    if (!refs.size || typeof this.conversationTitles !== "function") return { titles: {}, records: enriched };
+    /** @type {Record<string, string | null>} */
+    let named = {};
+    try { named = await this.#titlesCached(userId, [...refs.values()], identities); } catch { return { titles: {}, records: enriched }; }
+    /** @type {Record<string, string>} */
+    const titles = {};
+    for (const [key, title] of Object.entries(named)) {
+      if (typeof title !== 'string' || !title) continue;
+      const ref = refs.get(key);
+      if (ref) {
+        titles[key] = title;
+        if (identities.get(ref.sessionId) === 1) titles[ref.sessionId] = title;
+      }
+    }
+    const gone = new Set(Object.entries(named).filter(([, title]) => title === null).map(([key]) => key));
+    if (!gone.size) return { titles, records: enriched };
+    return { titles, records: enriched.map((record) => {
+      const evidence = (record.evidence ?? []).filter((/** @type {any} */ item) => !(item.sourceType === "conversation" && gone.has(item.conversationTitleKey)));
+      return evidence.length === (record.evidence ?? []).length ? record : { ...record, evidence, evidenceCount: evidence.length };
+    }) };
+  }
+
+  /** @type {Map<string, { at: number, value: string | null }>} the resolver's answers for a minute: the ledger it reads is a file per project */
+  #titleCache = new Map();
+
+  /** @param {string} userId @param {NativeConversationReference[]} refs @param {Map<string, number>} identities @returns {Promise<Record<string, string | null>>} */
+  async #titlesCached(userId, refs, identities) {
+    const now = this.now().getTime();
+    /** @type {Record<string, string | null>} */
+    const out = {};
+    const missing = [];
+    for (const ref of refs) {
+      const key = nativeConversationTitleKey(ref);
+      const held = this.#titleCache.get(`${userId}\u0000${key}`);
+      if (!held || now - held.at >= 60_000) { missing.push(ref); continue; }
+      if (held.value !== "") out[key] = held.value;
+    }
+    if (missing.length) {
+      const answered = await /** @type {ConversationTitles} */ (this.conversationTitles)(userId, missing);
+      for (const ref of missing) {
+        const key = nativeConversationTitleKey(ref);
+        // "": the resolver had nothing to say of this conversation (remembered, so that the ledger is not read again for it).
+        const response = Object.hasOwn(answered, key) ? answered[key]
+          : identities.get(ref.sessionId) === 1 && Object.hasOwn(answered, ref.sessionId) ? answered[ref.sessionId] : '';
+        const value = response === null || typeof response === 'string' ? response : '';
+        if (this.#titleCache.size > 2_000) this.#titleCache.clear();
+        this.#titleCache.set(`${userId}\u0000${key}`, { at: now, value });
+        if (value !== "") out[key] = value;
+      }
+    }
+    return out;
+  }
+
+  /** @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state @param {any[]} [evidence] the conversations that wrote it */
+  #fileRecord(file, history, changed, evidence = []) {
     const first = history[0] ?? null;
     const last = history.at(-1) ?? null;
     const updatedAt = last?.changedAt ?? file.modTime ?? null;
@@ -314,7 +477,7 @@ export class NativeMemoryStore {
       confidence: 1,
       importance: 0.5,
       sensitive: file.sensitive,
-      evidenceCount: 0,
+      evidenceCount: evidence.length,
       version: versionOfHash(file.hash),
       createdAt: first?.changedAt ?? file.modTime ?? null,
       updatedAt,
@@ -323,7 +486,7 @@ export class NativeMemoryStore {
       supersededBy: null,
       invalidSince: null,
       validFrom: null,
-      evidence: [],
+      evidence,
       // What the file said before each change, oldest first, as the page's 「以前的版本」 reads them.
       revisions: history.filter((revision) => revision.before !== null).map((revision, index) => ({
         version: index + 1, value: String(revision.before ?? ""), summary: "", status: "active", changedAt: revision.changedAt,
@@ -346,7 +509,9 @@ export class NativeMemoryStore {
     const files = await this.files(userId);
     const document = files.find((file) => nativeFileId(file.uri) === id);
     if (!document) throw new HttpError(404, "memory_not_found", "Memory not found.");
-    return this.#fileRecord(document, [], []);
+    // The document names every conversation that wrote it, as a file does (its lines each name their own).
+    const history = (await this.overlay.revisionsOf(userId, document.uri, { limit: 32 })).slice().reverse();
+    return this.#fileRecord(document, [], [], conversationEvidence(history, await this.#sessionProjects(userId, new Map([[document.uri, history]]))));
   }
 
   /** The file a record id names, read now, with the line a profile-line id names. @param {string} userId @param {string} id */
@@ -370,14 +535,18 @@ export class NativeMemoryStore {
    * @param {string} userId @param {{ holder?: { id: string, name: string } }} [options]
    */
   async profile(userId, { holder = undefined } = {}) {
-    const records = await this.records(userId);
+    const files = await this.files(userId);
+    const { titles, records: active } = await this.#withConversationTitles(userId, await this.records(userId, { files }));
+    // What the person forgot rides in the same list as `status: "archived"`, as it does on the other engine: the page's 「已忘记的内容」
+    // reads it from there, and every other reader leaves an archived memory out.
+    const records = [...active, ...await this.forgotten(userId, { files }).catch(() => [])];
     /** @type {Record<string, any[]>} */
     const groups = {};
     for (const kind of new Set(Object.values(LEGACY_KIND_OF_TYPE))) groups[kind] = [];
     for (const record of records) (groups[record.kind] ??= []).push(record);
     return {
-      ...(holder ? { holder } : {}), records, groups, activeCount: records.length, pendingCount: 0, episodeCount: 0,
-      conversations: {}, usage: {}, engine: "native", pending: await this.pending(userId),
+      ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: 0, episodeCount: 0,
+      conversations: titles, usage: {}, engine: "native", pending: await this.pending(userId),
     };
   }
 
@@ -410,7 +579,7 @@ export class NativeMemoryStore {
    */
   async search(userId, query) {
     const text = String(query ?? "").trim();
-    const records = await this.records(userId);
+    const records = (await this.#withConversationTitles(userId, await this.records(userId))).records;
     const lower = text.toLowerCase();
     const items = text ? records.filter((record) => `${record.summary}\n${record.value}`.toLowerCase().includes(lower)) : records;
     const seen = new Set(items.map((record) => record.id));
@@ -430,7 +599,7 @@ export class NativeMemoryStore {
         }
       }
     }
-    return { items, query: text, semantic, conversations: {}, usage: {} };
+    return { items, query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
   }
 
   /**
@@ -522,8 +691,8 @@ export class NativeMemoryStore {
     if (since && !Number.isFinite(Date.parse(since))) throw new HttpError(400, "memory_payload_invalid", "since is invalid.");
     if (sessionId && !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new HttpError(400, "memory_payload_invalid", "sessionId is invalid.");
     const context = projectId ? await this.#projectContext(userId, projectId) : null;
-    const revisions = await this.overlay.recentRevisions(userId, { since, engineSession: sessionId ? `dsh-${sessionId}` : null,
-      ...(context?.kind === 'geo-project' ? { userRoot: context.userRoot } : {}), actors: ["engine"], limit: 50 });
+    const revisions = (await this.overlay.recentRevisions(userId, { since, engineSession: sessionId ? `dsh-${sessionId}` : null,
+      ...(context?.kind === 'geo-project' ? { userRoot: context.userRoot } : {}), actors: ["engine"], limit: 50 })).filter((revision) => revision.reason !== "consolidation");
     const files = await this.overlay.files(userId);
     /** @type {Set<string>} */
     const seen = new Set();
@@ -557,7 +726,16 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} id @param {{ value?: string, sensitive?: boolean, status?: string, expectedVersion: number }} patch
    */
   async update(userId, id, { value = undefined, sensitive = undefined, status = undefined, expectedVersion }) {
-    const { file, line } = await this.#target(userId, id);
+    /** @type {{ file: any, line: any }} */
+    let target;
+    try {
+      target = await this.#target(userId, id);
+    } catch (error) {
+      // A memory the person forgot is not on the page any more, and its restore is the same call as any other change of status.
+      if (status === "active" && value === undefined && sensitive === undefined && /** @type {any} */ (error)?.code === "memory_not_found") return this.#restoreForgotten(userId, id, expectedVersion);
+      throw error;
+    }
+    const { file, line } = target;
     if (versionOfHash(file.hash) !== expectedVersion) throw new HttpError(409, "memory_conflict", "Structured memory changed before this update was applied.");
     if (status !== undefined && status !== "active") {
       if (status !== "archived") throw new HttpError(400, "memory_engine_unsupported", "On this memory engine a memory is kept or forgotten.");
@@ -725,14 +903,7 @@ export class NativeMemoryStore {
     const projectId = context.kind === 'geo-project' ? context.projectId : last.projectId;
     if (last.change === "deleted") {
       if (last.before === null) throw new HttpError(409, "memory_conflict", "A deleted memory keeps no text to restore.");
-      if (live) await this.#engine(() => context.sessions.replace(userId, uri, String(last.before)));
-      else await this.#engine(() => context.sessions.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: 20_000,
-        body: { uri, content: String(last.before), mode: "create", wait: true } }));
-      await this.overlay.unreject(userId, rejectionType, statements(String(last.before)));
-      await this.overlay.upsertFile({ userId, uri, memoryType, body: String(last.before), projectId: projectId ?? undefined });
-      if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
-      await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason: "undo", before: null, after: String(last.before), projectId });
-      await this.overlay.markUndone(userId, last.id);
+      await this.#restoreText(userId, { uri, text: String(last.before), memoryType, projectId, revisionId: last.id, reason: "undo" });
       return { undone: "restored", record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [] };
     }
     if (!live) throw new HttpError(404, "memory_not_found", "Memory not found.");
@@ -751,6 +922,118 @@ export class NativeMemoryStore {
     await this.overlay.upsertFile({ userId, uri, memoryType, body: before, projectId });
     await this.overlay.markUndone(userId, last.id);
     return { undone: "restored", record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [] };
+  }
+
+  /**
+   * Put a forgotten file's text back as a file, and take the forget off the list of what can be undone, with one `replace`. A
+   * file the engine has written again at this address since the person forgot it is overwritten by the restore: `create` is a
+   * plain alias of `replace` from v0.5.1, so there is no guard to rely on, and the person asked for this text back (the race is
+   * accepted, not prevented). `replace` on a missing file creates it, parents included (measured on v0.5.1.1, under `memories/`).
+   * What a restore can give back is the text: the engine's own fields (its type) are not restored with it, and its later
+   * extraction writes beside the file rather than into it.
+   * @param {string} userId
+   * @param {{ uri: string, text: string, memoryType: string, projectId?: string | null, revisionId: string, reason: string }} restore
+   */
+  async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason }) {
+    const context = await this.#fileContext(userId, uri);
+    if (context.kind === 'geo-project') projectId = context.projectId;
+    await this.#engine(() => context.sessions.replace(userId, uri, text));
+    await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), statements(text));
+    await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
+    if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
+    await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason, before: null, after: text, projectId });
+    await this.overlay.markUndone(userId, revisionId);
+  }
+
+  /**
+   * What the person forgot and can bring back, as the records the page's 「已忘记的内容」 lists (`status: "archived"`): the files
+   * whose forget kept their text, and the lines a profile edit took out for the same reason, newest first. The overlay's revisions
+   * are the only record of them — the engine no longer holds the file — and a forget that was undone, a hard delete (no text kept),
+   * and what the platform's own checks removed are not here. A file that is live again at the same address, and a line the document
+   * says again, are not forgotten any more.
+   * @param {string} userId @param {{ files?: any[] }} [options]
+   * @returns {Promise<any[]>}
+   */
+  async forgotten(userId, { files = undefined } = {}) {
+    const live = new Map((files ?? await this.files(userId)).map((file) => [file.uri, file]));
+    /** @type {Map<string, any>} */
+    const found = new Map();
+    for (const revision of await this.overlay.forgottenRevisions(userId)) {
+      let context;
+      try { context = await this.#fileContext(userId, revision.uri); }
+      catch (error) { if (/** @type {any} */ (error)?.code === 'memory_scope_denied') continue; throw error; }
+      const place = nativeMemoryFile(revision.uri, context.sessions.memoryRoot(userId));
+      if (!place) continue;
+      const projectId = context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(place.type) ? revision.projectId ?? null : null;
+      const base = { revision, place, scope: projectId ? "project" : "user", scopeId: projectId ?? "" };
+      const kind = /** @type {Record<string, string>} */ (LEGACY_KIND_OF_TYPE)[place.type] ?? "project_fact";
+      const record = (/** @type {Record<string, any>} */ over) => ({
+        scope: base.scope, scopeId: base.scopeId, kind, origin: "explicit", status: "archived", confidence: 1, importance: 0.5, sensitive: false, evidenceCount: 0,
+        createdAt: revision.changedAt, updatedAt: revision.changedAt, lastConfirmedAt: revision.changedAt, expiresAt: null, supersededBy: null, invalidSince: null, validFrom: null,
+        evidence: [], revisions: [], engine: "native", nativeType: place.type, uri: revision.uri, forgottenRevision: revision.id, ...over,
+      });
+      if (revision.change === "deleted") {
+        if (live.has(revision.uri)) continue;
+        const id = nativeFileId(revision.uri);
+        if (!found.has(id)) {
+          const text = String(revision.before ?? "");
+          found.set(id, record({ id, key: place.relPath, value: text, summary: titleOf(place.type, place.relPath, text), version: versionOfHash(contentHash(text)), contentHash: contentHash(text) }));
+        }
+        continue;
+      }
+      // A profile edit that forgot lines: the lines the revision took out, each a record of its own as it was while it lived.
+      const after = new Set(statements(String(revision.after ?? "")).map(lineFingerprint));
+      const present = new Set(statements(live.get(revision.uri)?.body ?? "").map(lineFingerprint));
+      for (const raw of String(revision.before ?? "").split("\n")) {
+        const text = raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
+        if (!text || isLabelLine(raw) || /^#{1,6}\s/.test(raw.trim())) continue;
+        const print = lineFingerprint(text);
+        if (after.has(print) || present.has(print)) continue;
+        const id = `${nativeFileId(revision.uri)}_${print.slice(0, 12)}`;
+        if (found.has(id)) continue;
+        found.set(id, record({ id, key: `profile.md#${print.slice(0, 12)}`, value: text.replace(AS_OF, "").trim(), summary: "", raw: raw.trim(), version: versionOfHash(contentHash(text)),
+          contentHash: contentHash(text), document: { id: nativeFileId(revision.uri), uri: revision.uri } }));
+      }
+    }
+    return [...found.values()].slice(0, 100).map(({ raw: _raw, ...entry }) => entry);
+  }
+
+  /**
+   * Bring one forgotten memory back: the file written again from the text its forget kept, or the profile line added to the profile
+   * document again, and the forget taken off the list. The version the page sends is the forgotten memory's own, so a list the page
+   * read before something else changed it is a 409 and never a guess.
+   * @param {string} userId @param {string} id @param {number} expectedVersion
+   */
+  async #restoreForgotten(userId, id, expectedVersion) {
+    const files = await this.files(userId);
+    const entry = (await this.forgotten(userId, { files })).find((candidate) => candidate.id === id);
+    if (!entry) throw new HttpError(404, "memory_not_found", "Memory not found.");
+    if (entry.version !== expectedVersion) throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
+    this.#touch(userId);
+    const revisions = await this.overlay.revisionsOf(userId, entry.uri, { limit: 200 });
+    const revision = revisions.find((candidate) => candidate.id === entry.forgottenRevision && !candidate.undoneAt);
+    if (!revision) throw new HttpError(404, "memory_not_found", "Memory not found.");
+    const memoryType = entry.nativeType;
+    const projectId = revision.projectId ?? null;
+    if (!entry.document) {
+      // A file: written again from the text its forget kept.
+      await this.#restoreText(userId, { uri: entry.uri, text: String(revision.before), memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
+      return this.getRecord(userId, nativeFileId(entry.uri));
+    }
+    // A line: the line as the document had it, after the document's own lines.
+    const raw = String(revision.before ?? "").split("\n").find((line) => lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")) === lineFingerprint(entry.value));
+    const line = (raw ?? `- ${entry.value}`).trim();
+    const document = files.find((file) => file.uri === entry.uri);
+    if (document) {
+      const body = document.body.replace(/\s+$/, "");
+      await this.#write(userId, document, `${body}\n${line}`, { actor: "user", reason: "restored from forgotten" });
+      await this.overlay.markUndone(userId, revision.id);
+    } else {
+      // The document itself was forgotten since: it comes back with its headings and this one line.
+      const headings = String(revision.before ?? "").split("\n").filter((text) => /^#{1,6}\s/.test(text.trim()));
+      await this.#restoreText(userId, { uri: entry.uri, text: [...headings, line].join("\n"), memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
+    }
+    return this.getRecord(userId, id).catch(() => this.getRecord(userId, nativeFileId(entry.uri)));
   }
 
   /** @param {string} userId @param {string} fileId */

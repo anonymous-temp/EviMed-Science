@@ -222,6 +222,8 @@ const FALLBACK_RULES = {
   // It turns on the one API it exists for and off the workers and warm-ups
   // that would start runs in a runtime this shape does not have.
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["deployment", "switch"],
+  // The API-only (CDSS) stack has no web app and no person to share with: sharing stays off there while the hosted default is on.
+  OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_LEARNING_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_AUTOPILOT_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["deployment", "switch"],
@@ -620,17 +622,6 @@ test("the learning loop has no cap by default, a day, a week or a run (owner rul
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learning-caps", learningDailyLimitCny: 25 }).learningDailyLimitCny, 25);
 });
 
-test("a third of the finished deliveries queue a distillation by default, the share is a fraction, and a share nobody could mean stops the process by name (review L-15)", () => {
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share" }).learningDistillSampleShare, 0.33);
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 1 }).learningDistillSampleShare, 1, "every delivery, as before");
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 0 }).learningDistillSampleShare, 0, "none from a clean delivery is a choice, not an error");
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "0.5" }).learningDistillSampleShare, 0.5);
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "" }).learningDistillSampleShare, 0.33, "an empty value is unset, as .env.example and compose leave it");
-  for (const bad of ["1.5", "-0.1", "most", "NaN"]) {
-    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: bad }), /OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE must be a number from 0 to 1/, bad);
-  }
-});
-
 test("the loop learns nothing from a repaired delivery by default, and stops a method its model never opens after twenty loads (owner, 2026-10-12)", () => {
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn" }).learningRepairDistillShare, 0);
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn", learningRepairDistillShare: 1 }).learningRepairDistillShare, 1, "every repaired delivery, as before");
@@ -956,7 +947,7 @@ test("OpenViking as an engine: the two switches follow whether the engine is the
   assert.equal(base.openVikingModelDailyBudgetCny, 50);
   assert.equal(base.openVikingEngineCheckMs, 1_800_000);
   assert.equal(base.openVikingModelKey, "");
-  assert.match(base.openVikingPin.version, /^\d+\.\d+\.\d+$/);
+  assert.match(base.openVikingPin.version, /^\d+\.\d+\.\d+(?:\.\d+)?$/, "upstream tags a patch of a patch as a fourth number (v0.5.1.1)");
   assert.deepEqual(Object.keys(base.openVikingPin.skills).sort(), ["knowledge-graph", "llm-wiki"]);
 
   const withEngine = loadConfig({ rootDir: repoRoot, ...engine });

@@ -346,6 +346,29 @@ test("the analyser's four fields are required, and an abstract pattern needs thr
   );
 });
 
+test("the two directed relations name their direction: subset its WIDER method, supersedes the one that REPLACES", () => {
+  const decide = (/** @type {any} */ assignment) => gateRelations({ schemaVersion: 1, action: "decide", assignments: [{ ASSIGNMENT: "A1", SKILLS: ["a-method", "b-method"], REASON: "Why.", ...assignment }] })
+    .issues.map((entry) => entry.message).join("\n");
+  assert.match(decide({ RELATION_TYPE: "subset" }), /names no WIDER method/);
+  assert.match(decide({ RELATION_TYPE: "subset", WIDER: "c-method" }), /WIDER "c-method", which is not one of its SKILLS/);
+  assert.equal(decide({ RELATION_TYPE: "subset", WIDER: "a-method" }), "");
+  assert.match(decide({ RELATION_TYPE: "supersedes" }), /names no REPLACES method/);
+  assert.match(decide({ RELATION_TYPE: "supersedes", REPLACES: "c-method" }), /REPLACES "c-method", which is not one of its SKILLS/);
+  assert.equal(decide({ RELATION_TYPE: "supersedes", REPLACES: "b-method" }), "");
+  // The symmetric four need neither, and carry no direction to get wrong.
+  for (const type of ["shared_part", "merge", "conflicts_with"]) assert.equal(decide({ RELATION_TYPE: type }), "", type);
+});
+
+test("a build rewrites nothing under a supersedes: the library records it and stops the replaced method itself", () => {
+  const verdict = gateRelations({
+    schemaVersion: 1,
+    action: "build",
+    assignments: [{ ASSIGNMENT: "A1", SKILLS: ["a-method", "b-method"], RELATION_TYPE: "supersedes", REPLACES: "b-method", REASON: "The later one is the fuller treatment." }],
+    revisions: [{ assignment: "A1", name: "a-method", operation: "retire", baseDigest: BASE_DIGEST, supersededBy: "b-method" }],
+  });
+  assert.ok(verdict.issues.some((entry) => entry.message.includes("is supersedes, so neither method is rewritten")));
+});
+
 test("a build carries out the assignment it was given and rewrites nothing a conflict was found in", () => {
   const invented = gateRelations({
     schemaVersion: 1,

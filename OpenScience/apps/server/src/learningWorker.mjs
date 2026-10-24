@@ -27,7 +27,9 @@ import { HttpError } from "./security.mjs";
  */
 export class LearningWorker {
   /**
-   * @param {{jobs: any, distillation: any, consolidation: any, resolveProject?: (job: any) => Promise<any>,
+   * `evidence` settles a finished run thirty minutes after it ended (`learningEvidence.mjs`, job kind `learning-evidence`); without it the
+   * kind is not claimed.
+   * @param {{jobs: any, distillation: any, consolidation: any, evidence?: { settle: (request: { job: any }) => Promise<any> } | null, resolveProject?: (job: any) => Promise<any>,
    *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>, sweep?: () => Promise<unknown>,
    *          enabled?: boolean, window?: string, windowTimeZone?: string, concurrency?: number,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies
@@ -36,6 +38,7 @@ export class LearningWorker {
     jobs,
     distillation,
     consolidation,
+    evidence = null,
     resolveProject = async () => null,
     resolveRun = async () => null,
     maintain = async () => {},
@@ -69,6 +72,7 @@ export class LearningWorker {
     this.jobs = jobs;
     this.distillation = distillation;
     this.consolidation = consolidation;
+    this.evidence = evidence;
     this.resolveProject = resolveProject;
     this.resolveRun = resolveRun;
     this.maintain = maintain;
@@ -87,7 +91,7 @@ export class LearningWorker {
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
     this.now = now;
-    this.kinds = ["distill", "consolidate"];
+    this.kinds = ["distill", "consolidate", ...(evidence ? ["learning-evidence"] : [])];
     this.workerId = `learning-${randomUUID()}`;
     // Named `timer` and `reconcileTimer` because `pauseRecurringWork` reaches
     // for those two fields by name to drain the system for maintenance. A
@@ -236,6 +240,7 @@ export class LearningWorker {
 
   /** @param {any} job */
   async #execute(job) {
+    if (job.kind === "learning-evidence") return this.evidence.settle({ job });
     if (job.kind === "consolidate") {
       const action = String(job.payload?.action ?? "");
       if (!CONSOLIDATE_ACTIONS.includes(action)) {

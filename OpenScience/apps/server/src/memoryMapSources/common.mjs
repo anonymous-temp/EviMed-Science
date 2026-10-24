@@ -53,6 +53,18 @@ export function instant(value) {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
+/**
+ * How large a mark of this age is drawn when nothing else says how much it matters: 1 today, a fifth after five months. A native memory
+ * file has no importance and no use counter of its own, and a capsule note none either, so what their marks say is how recent they are.
+ * @param {string | null | undefined} at @param {Date} now
+ */
+export function recencyWeight(at, now) {
+  const ms = Date.parse(at ?? "");
+  if (!Number.isFinite(ms)) return 0.2;
+  const days = Math.max(0, (now.getTime() - ms) / 86_400_000);
+  return Math.max(0.2, Math.min(1, 1 - days / 150));
+}
+
 /** @param {number} value */
 export function unit(value) {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
@@ -125,8 +137,9 @@ export function requestMemo() {
  *
  * @typedef {object} MapContribution
  * @property {MapNode[]} [nodes] @property {MapEdge[]} [edges] @property {MapLane[]} [lanes] @property {MapEvent[]} [events]
- * @property {{ t: string, memory?: number, run?: number, method?: number, feedback?: number }[]} [buckets] days, in the researcher's zone
- * @property {{ kinds?: { id: string, label: string, count: number }[], dimensions?: MapDimension[], topics?: MapTopic[] }} [facets]
+ * @property {{ t: string, memory?: number, run?: number, method?: number, feedback?: number, document?: number }[]} [buckets] days, in the researcher's zone
+ * @property {{ kinds?: { id: string, label: string, count: number }[], dimensions?: MapDimension[], topics?: MapTopic[],
+ *   documentTypes?: { id: string, label: string, count: number }[], projectDocuments?: { id: string, count: number }[] }} [facets]
  * @property {{ since?: string | null, topicsStatus?: "ready" | "stale" | "empty" | "off" }} [facts]
  * @property {string[]} [missing] the parts of this source that could not be read while the rest could
  *

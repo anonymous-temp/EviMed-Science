@@ -1,6 +1,6 @@
 {
   "note": "Delete with the account header and no user header.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "DELETE",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-d",
@@ -17,7 +17,7 @@
       "account_id": "evimed",
       "user_id": "fx-user-d",
       "status": "deleting",
-      "task_id": "9085b2b4-a52f-4639-bffc-0d1ed6d6117a"
+      "task_id": "dc619ee3-98c6-409e-821c-4216c310a8a0"
     },
     "error": null,
     "telemetry": null,

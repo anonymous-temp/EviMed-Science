@@ -1,0 +1,129 @@
+{
+  "summary": {
+    "run": "d747a6",
+    "engineUrl": "http://127.0.0.1:19330",
+    "at": "2026-10-24T08:13:08.199Z",
+    "repeat": 3,
+    "decidable": 6,
+    "passed": 6,
+    "needReading": 0,
+    "failed": [],
+    "notAlways": []
+  },
+  "rows": [
+    {
+      "id": "2026-10-13-project-card-market-analysis:#1",
+      "case": "2026-10-13-project-card-market-analysis",
+      "class": "project-card-market-analysis",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "project_fact": 5
+      },
+      "files": {
+        "projects/华东三省充电桩市场分析.md": "# 华东三省充电桩市场分析\n领域：新能源汽车充电基础设施市场研究\n\n面向投资委员会的新能源汽车充电桩市场分析。\n\n## 目标\n- 为投资委员会提供新能源汽车充电桩市场分析。\n\n## 范围或对象\n- 范围限定在华东三省。\n\n## 材料与数据\n- 数据主要来自行业协会年报和三家上市公司公告。\n\n## 约束\n- 周五前出初稿。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A market analysis is kept under the general keys: the material it works from and its deadline are written, and none of the study keys that only a clinical study has (intervention, comparator, outcome, design).",
+      "judge": null
+    },
+    {
+      "id": "2026-10-13-project-card-market-analysis:#2",
+      "case": "2026-10-13-project-card-market-analysis",
+      "class": "project-card-market-analysis",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "project_fact": 5
+      },
+      "files": {
+        "projects/新能源汽车充电桩市场分析.md": "# 新能源汽车充电桩市场分析\n领域：市场分析\n\n面向投资委员会的新能源汽车充电桩市场分析。\n\n## 目标\n- 为投资委员会提供充电桩市场分析。\n\n## 范围或对象\n- 范围限定在华东三省。\n\n## 材料与数据\n- 数据主要来自行业协会年报和三家上市公司公告。\n\n## 约束\n- 周五前要出初稿。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A market analysis is kept under the general keys: the material it works from and its deadline are written, and none of the study keys that only a clinical study has (intervention, comparator, outcome, design).",
+      "judge": null
+    },
+    {
+      "id": "2026-10-13-project-card-market-analysis:#3",
+      "case": "2026-10-13-project-card-market-analysis",
+      "class": "project-card-market-analysis",
+      "decidable": true,
+      "messages": 2,
+      "forwarded": 2,
+      "dropped": 0,
+      "operations": 1,
+      "taskStatus": "completed",
+      "counts": {
+        "project_fact": 5
+      },
+      "files": {
+        "projects/新能源汽车充电桩市场分析.md": "# 新能源汽车充电桩市场分析\n领域：市场分析\n\n面向投资委员会的新能源汽车充电桩市场分析。\n\n## 目标\n- 为投资委员会提供充电桩市场分析。\n\n## 范围或对象\n- 范围限定在华东三省。\n\n## 材料与数据\n- 数据主要来自行业协会年报和三家上市公司公告。\n\n## 约束\n- 周五前要出初稿。"
+      },
+      "failures": [],
+      "verdict": "pass",
+      "expected": "A market analysis is kept under the general keys: the material it works from and its deadline are written, and none of the study keys that only a clinical study has (intervention, comparator, outcome, design).",
+      "judge": null
+    },
+    {
+      "id": "c05-bare-approval:#1",
+      "case": "c05-bare-approval",
+      "class": "work-order-bare-approval",
+      "decidable": true,
+      "messages": 4,
+      "forwarded": 4,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written: 「不错，谢谢」 approves a result and names no approach.",
+      "judge": null
+    },
+    {
+      "id": "c05-bare-approval:#2",
+      "case": "c05-bare-approval",
+      "class": "work-order-bare-approval",
+      "decidable": true,
+      "messages": 4,
+      "forwarded": 4,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written: 「不错，谢谢」 approves a result and names no approach.",
+      "judge": null
+    },
+    {
+      "id": "c05-bare-approval:#3",
+      "case": "c05-bare-approval",
+      "class": "work-order-bare-approval",
+      "decidable": true,
+      "messages": 4,
+      "forwarded": 4,
+      "dropped": 0,
+      "operations": 0,
+      "taskStatus": "completed",
+      "counts": {},
+      "files": {},
+      "failures": [],
+      "verdict": "pass",
+      "expected": "Nothing is written: 「不错，谢谢」 approves a result and names no approach.",
+      "judge": null
+    }
+  ]
+}

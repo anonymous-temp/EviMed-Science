@@ -1,0 +1,46 @@
+{
+  "id": "c04-standing-rule-after-proposal",
+  "class": "work-order-standing-rule",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C04); every name, number and identifier is invented",
+  "expected": "The rule the person adopted from the assistant's proposal is kept: for long documents, outline first.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "帮我写一篇关于远程办公利弊的长文。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "长文我先给大纲，您确认后再写全文，可以吗？"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "好，就这样，以后写长文都先给大纲。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "好的，以后写长文都会先给大纲，您确认后再写全文。"
+      }
+    ]
+  },
+  "expect": {
+    "requireAnyKind": [
+      "preference",
+      "correction"
+    ],
+    "requireTextContains": [
+      "大纲"
+    ]
+  }
+}

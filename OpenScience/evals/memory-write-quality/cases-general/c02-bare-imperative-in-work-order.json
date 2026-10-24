@@ -1,0 +1,35 @@
+{
+  "id": "c02-bare-imperative-in-work-order",
+  "class": "work-order-one-request",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C02); every name, number and identifier is invented",
+  "expected": "Nothing is written: 「让测试通过，不要改测试」 is the condition of one task, and the bare 「好」 states nothing.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "让测试通过，不要改测试。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "已修复被测函数的边界条件，原有测试全部通过，没有改动任何测试文件。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "好。"
+      }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}

@@ -4,7 +4,7 @@ import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, runIsStalled } from "@evimed/domain";
+import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, hasSensitiveText, identifierShapesIn, runIsStalled } from "@evimed/domain";
 import {
   HttpError,
   assertNoSymlinkPath,
@@ -89,7 +89,7 @@ import {
 // Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
-import { clinicalSafetyCautionHits, isResearcherOwnedWork, isVerificationRun, usagePurposeOfRun } from "@evimed/domain";
+import { METHOD_MOUNT_REASONS, clinicalSafetyCautionHits, isResearcherOwnedWork, isVerificationRun, usagePurposeOfRun } from "@evimed/domain";
 // The evidence type stamped beside each preserved capture (C8), which a
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
@@ -666,6 +666,10 @@ function foldEvents(events) {
         // ledger an older control plane cannot read at all; an unknown *field*
         // is simply not folded, which costs the count and nothing else.
         ...(event.kind === "steer" ? { corrections: (current.corrections ?? 0) + 1 } : {}),
+        // What the researcher typed, with the request it arrived by and when: the learning loop's evidence (`learningEvidence.mjs`).
+        // Bounded here, where the ledger meets its ceiling; the transcript keeps the words whole for as long as it is kept.
+        ...(event.kind === "steer" && typeof event.steerText === "string" && event.steerText.trim()
+          ? { steers: [...(current.steers ?? []), normalizeSteer(event)].slice(0, MAX_RUN_CORRECTIONS) } : {}),
         kernelRequestIds: [...new Set([...(current.kernelRequestIds ?? []), ...(event.requestIds ?? []).map(storedKernelRequestId)])],
       }));
       continue;
@@ -1078,7 +1082,7 @@ function normalizeCapabilityHandbooks(value) {
 
 function normalizeMethodDigests(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{name: string, digest: string, seq?: number, trial?: boolean}[]} */
+  /** @type {{name: string, digest: string, seq?: number, trial?: boolean, reason?: string}[]} */
   const entries = [];
   for (const item of value.slice(0, maxLearningMethods)) {
     if (!item || typeof item.name !== "string" || !item.name) continue;
@@ -1091,6 +1095,8 @@ function normalizeMethodDigests(value) {
       // once, and the ledger could no longer tell a measured arm from an
       // ordinary run -- so every later comparison would quietly mix the two.
       ...(item.trial === true ? { trial: true } : {}),
+      // Why a loaded method's card was in front of the run (`METHOD_MOUNT_REASONS`), so a later count can be split by it.
+      ...(typeof item.reason === "string" && METHOD_MOUNT_REASONS.includes(item.reason) ? { reason: item.reason } : {}),
     });
   }
   return entries;
@@ -1303,6 +1309,31 @@ function validateNativeTurn(value) {
     throw corrupt("Native run input has no valid log boundary.");
   }
   return { startSeq: value.startSeq, userSeq: value.userSeq };
+}
+
+/** The longest steer kept on a run: the ledger carries a run for as long as it lives and holds at most a megabyte of every project's. */
+const STEER_TEXT_CHARS = 1500;
+
+/**
+ * The words of a steer as the ledger may hold them: trimmed and cut, and none at all when they carry a credential or an identifier
+ * (`hasSensitiveText`, `identifierShapesIn`, the checks the memory path keeps by) — the count and the request id still say it happened.
+ * @param {unknown} text @returns {string}
+ */
+function steerTextOf(text) {
+  const value = typeof text === "string" ? text.trim().slice(0, STEER_TEXT_CHARS) : "";
+  return value && !hasSensitiveText(value) && !identifierShapesIn(value).length ? value : "";
+}
+
+/**
+ * One steer as the run keeps it: the words (cut, never reworded), the request id they arrived by and the moment they were seen.
+ * @param {any} event a `kernel-request` event of kind `steer`
+ * @returns {{ requestId: string, text: string, at: string }}
+ */
+function normalizeSteer(event) {
+  const requestId = typeof event.steerRequestId === "string" && event.steerRequestId ? event.steerRequestId
+    : Array.isArray(event.requestIds) && typeof event.requestIds[0] === "string" ? event.requestIds[0] : "";
+  const at = Number.isFinite(Date.parse(String(event.steerAt ?? ""))) ? new Date(event.steerAt).toISOString() : new Date(0).toISOString();
+  return { requestId: requestId.slice(0, 512), text: event.steerText.trim().slice(0, STEER_TEXT_CHARS), at };
 }
 
 /** Native request identities are opaque strings, not our short resource ids. */
@@ -4384,6 +4415,9 @@ export class AgentRunStore {
     /** @type {((project: any, run: any) => Promise<unknown>) | null} */
     this.onOriginCardRun = typeof options.onOriginCardRun === "function" ? options.onOriginCardRun : null;
     this.setRuntimePlatformSkillScope = options.setRuntimePlatformSkillScope ?? (() => {});
+    // A runtime launched for the other memory engine than its account is on now is replaced here, between two runs
+    // (`RuntimeManager.adoptMemoryEngine`). A failure never stops a dispatch.
+    this.adoptRuntimeMemoryEngine = options.adoptRuntimeMemoryEngine ?? (() => {});
     this.onPlatformSkillExecution = options.onPlatformSkillExecution ?? (async () => {});
     this.onPlatformSkillRetrieval = options.onPlatformSkillRetrieval ?? (async () => {});
     // What the independent reviewer found on this run's deliverables, as
@@ -5172,6 +5206,7 @@ export class AgentRunStore {
           effectiveRouteReason: effectiveRouteReason ?? "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
+    try { await this.adoptRuntimeMemoryEngine(project); } catch { /* memory never stops a dispatch: the runtime stays as it is */ }
     await this.setRuntimePlatformSkillScope(project, selected.effectiveAgentId ?? null);
     // The run is recorded under the identity it ran as. A ledger row whose specialist pin differs from its effective identity is
     // refused by the fold (and the whole project's ledger with it), so a turn of another capability than the conversation's
@@ -7737,9 +7772,12 @@ export class AgentRunStore {
    * Written before the prompt is sent, like the repair path: a request id the
    * ledger has not seen cannot be matched to the run it belongs to.
    *
-   * @param {any} project @param {string} runId @param {string} requestId
+   * `text` is what the researcher typed, kept on the run with the request it went by (`steers`): the loop learns from their words, and
+   * a count says only that there were some.
+   *
+   * @param {any} project @param {string} runId @param {string} requestId @param {string} [text]
    */
-  async recordCorrection(project, runId, requestId) {
+  async recordCorrection(project, runId, requestId, text = "") {
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const run = foldEvents(events).get(runId);
@@ -7749,7 +7787,8 @@ export class AgentRunStore {
       if ((run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) {
         throw new HttpError(409, "agent_run_correction_limit", `A run accepts at most ${MAX_RUN_CORRECTIONS} corrections.`);
       }
-      const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)] };
+      const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)],
+        ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
@@ -7786,10 +7825,13 @@ export class AgentRunStore {
    *  - Saturates at `MAX_RUN_CORRECTIONS`. The trigger needs one; the ledger has
    *    a hard ceiling, and a keyboard must not be able to fill it.
    *
-   * @param {any} project @param {string} sessionId @param {string} requestId
+   *  - Keeps the words (`text`, as typed, cut at `STEER_TEXT_CHARS`) beside the count: a steer is the researcher's own correction of
+   *    the run, and the loop needs what it said, not how often (`learningEvidence.mjs`, 2026-10-23).
+   *
+   * @param {any} project @param {string} sessionId @param {string} requestId @param {string} [text]
    * @returns {Promise<any | null>}
    */
-  async recordSteeredInput(project, sessionId, requestId) {
+  async recordSteeredInput(project, sessionId, requestId, text = "") {
     if (typeof sessionId !== "string" || !sessionId || typeof requestId !== "string" || !requestId) return null;
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -7801,7 +7843,8 @@ export class AgentRunStore {
       const counted = events.some((event) => event.event === "kernel-request" && event.id === run.id && event.kind === "steer"
         && (event.steerRequestId === requestId || (Array.isArray(event.requestIds) && event.requestIds.includes(requestId))));
       if (counted || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
-      const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId) };
+      const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId),
+        ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
       const updated = foldEvents([...events, event]).get(run.id);
       this.notifyState(project, updated);

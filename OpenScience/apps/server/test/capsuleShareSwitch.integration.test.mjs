@@ -1,6 +1,7 @@
-// Every line has its own switch, and each is off until turned on (evidence-flywheel review fix 8, 2026-10-06), through the composed
-// app against a real PostgreSQL: sharing a capsule with other accounts (its routes, its counters, the flag the share panel reads) and
-// the evidence-zone subscription (its routes, which also ask the frontier's audience, and the recall of subscribed zones).
+// Every line has its own switch (evidence-flywheel review fix 8, 2026-10-06), through the composed app against a real PostgreSQL:
+// sharing a capsule with other accounts (its routes, its counters, the flag the share panel reads; on unless turned off since
+// 2026-10-23) and the evidence-zone subscription (its routes, which also ask the frontier's audience, and the recall of subscribed
+// zones; off until turned on).
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -56,12 +57,16 @@ async function withApp(/** @type {Record<string, any>} */ overrides, /** @type {
   try { await run({ call, metrics }); } finally { await app.close(); }
 }
 
-test("sharing is off until its own switch is on: routes 404 by name, no counter, and the share panel's flag is false", options, async () => {
-  await withApp({ frontierAudience: "operators" }, async ({ call, metrics }) => {
+test("sharing is on unless its own switch is turned off: off, routes 404 by name, no counter, and the share panel's flag is false", options, async () => {
+  // On by default since 2026-10-23 (owner ruling 2026-10-10: it stays on): the switch is how an operator turns it off.
+  await withApp({}, async ({ call }) => {
+    assert.equal((await call("inside", "GET", "/api/me")).body.data.features.capsuleShare, true, "sharing is on unless turned off");
+  });
+  await withApp({ frontierAudience: "operators", capsuleShareEnabled: false }, async ({ call, metrics }) => {
     const me = await call("inside", "GET", "/api/me");
     assert.equal(me.body.data.features.capsuleShare, false);
     for (const [method, route, body] of [["GET", "/api/capsules/deliveries"], ["GET", "/api/capsules/shared/" + "A".repeat(32)], ["POST", "/api/capsules/takedowns", { authorId: "x" }],
-      ["GET", "/api/capsules/anything/deliveries"], ["GET", "/api/capsules/anything/links"], ["GET", "/api/capsules/anything/methods/export?format=agent-skills"]]) {
+      ["GET", "/api/capsules/anything/deliveries"], ["GET", "/api/capsules/anything/links"]]) {
       const answered = await call("inside", method, route, body);
       assert.equal(answered.status, 404, `${method} ${route}`);
       assert.equal(answered.body.code, "capsule_share_not_enabled", `${method} ${route}`);

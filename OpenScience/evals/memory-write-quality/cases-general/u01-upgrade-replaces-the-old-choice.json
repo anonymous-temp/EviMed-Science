@@ -1,0 +1,52 @@
+{
+  "id": "u01-upgrade-replaces-the-old-choice",
+  "class": "keep-upgrade-replaces",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, upgrade); every name, number and identifier is invented",
+  "expected": "A later choice replaces the earlier one: the citation style is AMA afterwards and no line still says Vancouver.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "seed": {
+      "messages": [
+        {
+          "id": "u1",
+          "role": "user",
+          "text": "参考文献一律用 Vancouver 格式。"
+        },
+        {
+          "id": "a1",
+          "role": "assistant",
+          "text": "好的，之后的参考文献都按 Vancouver 格式。"
+        }
+      ]
+    },
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "以后改用 AMA 格式。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，之后的参考文献改用 AMA 格式。"
+      }
+    ]
+  },
+  "expect": {
+    "seedKeeps": [
+      "Vancouver"
+    ],
+    "requireTextContains": [
+      "AMA"
+    ],
+    "noTextContains": [
+      "Vancouver"
+    ]
+  }
+}

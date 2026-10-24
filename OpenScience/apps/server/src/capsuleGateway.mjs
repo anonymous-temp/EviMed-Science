@@ -14,6 +14,26 @@ const recallPaused = () => ({
 /** What a recall answers when nothing reached the relevance floor: an answer the model can act on — look again in other words, or go on without. */
 const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以换个说法再查一次，或不依赖记忆直接回答。";
 
+/**
+ * The capsule's half of a native account's `search` (`memoryGateway.mjs`, item 9): the recall the legacy tool answers with, for the
+ * capsules in force (the entries of the whole account and of this project) and the evidence zones the project follows, and nothing of the research-memory records (a native
+ * account's are the engine's). The index nominates and PostgreSQL decides, as for the recall tool, so a fact the person forgot or an
+ * entry still waiting for them is never returned however long the index lags. A failure of either half is that half's alone.
+ * @param {{ service: { recall: Function } | null, subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null }} dependencies
+ * @returns {(request: { user: any, project: any, query: string, limit: number }) => Promise<Record<string, any>[]>}
+ */
+export function createNativeCapsuleSearch({ service, subscriptions = null }) {
+  return async ({ user, project, query, limit }) => {
+    if (!service || !String(query ?? "").trim()) return [];
+    const [capsule, reference] = await Promise.all([
+      recallAcrossMemory({ capsules: service, memorySubstrate: null }, user, { query, projectId: project.id, limit, standing: false, scope: "capsule", countUsage: false })
+        .then((answer) => answer.items).catch(() => []),
+      subscriptions ? subscriptions.recall(user.id, project.id, query).catch(() => []) : [],
+    ]);
+    return [...capsule, ...reference];
+  };
+}
+
 /** The workload credential, never a caller-supplied field, fixes account and project.
  *
  * `memorySubstrate` is the research-memory half of a recall; without it the
@@ -49,7 +69,10 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
  * recall, read for this project alone, appended after what the capsules and memory returned, never counted in the run's recalled
  * memories (a zone's card is reference context, not a memory) and never read in a conversation that is trying someone's pack.
  * `memoryEngine` is which engine keeps an account's memory (`ResearchMemoryStore.memoryEngine`): on the native one the
- * research-memory half of a recall is not read here.
+ * research-memory half of a recall is not read here. That branch is for the callers that still reach this route as a native
+ * account (a delegated child's recall, the external agent-memory API's reads): a native conversation's own entrance is the
+ * engine's plugin, whose `search` also covers the capsule's half (`createNativeCapsuleSearch`, `memoryGateway.mjs`), and the
+ * capsule's recall and note tools are not registered for it (`packages/socket/plugins/capsule.mjs`, `memoryEnabled`).
  * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, evaluationIsolation?: any, handbooks?: any,
  *   recallLimit?: number, recallMaxLimit?: number, memoryEngine?: ((userId: string) => Promise<string>) | null,
  *   subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null,
@@ -210,14 +233,14 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         // a method (capsuleMethods.mjs). `reviewRequired` stays in the answer
         // as false, for a runtime that still reads it.
         const entry = await service.note(user.id, identity.projectId, { factKind: body.factKind, content: body.content, origin: "inferred" });
-        // "At once" is true of a note that is approved and sits in a capsule this project reads. A note kept in a capsule
-        // nothing reads (the project's list is full), or one the researcher already undid, is stored and does not take
+        // "At once" is true of a note that is approved and sits in a capsule that is in force. A note kept in a capsule nothing
+        // reads (the researcher switched their capsule off), or one the researcher already undid, is stored and does not take
         // effect, and the model is told so (2026-10-10 review M-8: the answer was a constant).
         const takesEffect = entry?.payload?.status === "approved"
-          && await service.inForce(user.id, identity.projectId, String(entry.payload.capsuleId));
+          && await service.inForce(user.id, String(entry.payload.capsuleId));
         sendJson(res, 200, {
           entry, reviewRequired: false, takesEffect, contextOnly: true,
-          ...(takesEffect ? {} : { notice: "这条已存下，但目前不会被读取：本项目已启用的胶囊数已到上限，或这条已被用户撤销。" }),
+          ...(takesEffect ? {} : { notice: "这条已存下，但目前不会被读取：用户的记忆胶囊没有启用，或这条已被用户撤销。" }),
         });
       }
     } catch (error) {

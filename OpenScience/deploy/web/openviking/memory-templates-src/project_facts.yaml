@@ -3,14 +3,18 @@ description: |
   __LANGUAGE__
   Working facts: a standing fact about the user's work that is not a preference and does
   NOT belong to one project's card: who does what in their team ("统计部分由合作者李教授负责，
-  用 R"), a definition or convention their group uses, an arrangement that holds across
-  their projects. A fact about one particular project (its data, its scope, its progress)
-  is written in that project's PROJECT_CONTEXT card and not here as well.
+  用 R"), how a collaborator wants the work delivered ("导师要先看摘要，第一页放摘要"), a
+  definition or convention their group uses, an arrangement that holds across their projects.
+  If the fact names one project or one piece of work, it is a line of that project's
+  PROJECT_CONTEXT card and is not written here as well; if it is about how the user's team or
+  practice works across projects, it is written here.
   Only what the user stated in a user-role message. People appear by role and working
-  responsibility only: no contact details, no health, no private details.
+  responsibility or working convention only: no contact details, no health, no private details.
   One file per subject; update it when the fact changes.
 
   __NEVER_KEEP__
+
+  __DECIDE__
 directory: "viking://user/{{ user_space }}/memories/project_facts"
 filename_template: "{{ topic|lower }}.md"
 enabled: true

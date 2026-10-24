@@ -1,6 +1,7 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
 import { isPlatformStartedRun } from "./memoryAdmission.mjs";
-import { recordTurnCommit } from "./nativeMemoryMetrics.mjs";
+import { recordRuntimeWithoutGateway, recordTurnCommit } from "./nativeMemoryMetrics.mjs";
+import { endedBeforeReset } from "./researchMemory.mjs";
 import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
 import { openVikingUserId } from './openVikingLayout.mjs';
 import { HttpError } from './security.mjs';
@@ -58,7 +59,7 @@ const CONVERSATION = /^[A-Za-z0-9_-]{1,160}$/;
 
 /**
  * @typedef {{
- *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, context: any, namespaceId: string,
+ *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, context: any, namespaceId: string, endedAt: string | null,
  * }} Armed
  */
 
@@ -66,18 +67,21 @@ export class NativeTurnCommit {
   /**
    * @param {{
    *   config: any,
-   *   researchMemory: { configured?: boolean, memoryEngine: (userId: string) => Promise<string> },
+   *   researchMemory: { configured?: boolean, memoryEngine: (userId: string) => Promise<string>, resetInstant?: (userId: string) => Promise<string | null> },
    *   sessions: { configured?: boolean, readSession: (userId: string, sessionId: string) => Promise<any> },
    *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
    *   conversations: { runsOf: (project: any, sessionId: string) => Promise<any[]> },
    *   commit: import("./memoryGateway.mjs").MemoryGatewayCommitSession,
    *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
    *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (timer: any) => void, wait?: (ms: number) => Promise<void>,
+   *   runtimeWithoutGateway?: ((project: any) => boolean) | null,
    *   report?: (line: string) => void,
    * }} dependencies
-   *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test.
+   *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test. `runtimeWithoutGateway` says whether the
+   *   project's live runtime was launched without the memory gateway's address, which only counts (D2 of the 2026-10-23 review:
+   *   an account switched to the engine under an open runtime is learned from by nobody, and nothing said so).
    */
-  constructor({ config, researchMemory, sessions, admission, conversations, commit, memoryContexts = null, setTimer = null, clearTimer = null, wait = null, report = () => {} }) {
+  constructor({ config, researchMemory, sessions, admission, conversations, commit, memoryContexts = null, setTimer = null, clearTimer = null, wait = null, runtimeWithoutGateway = null, report = () => {} }) {
     this.config = config ?? {};
     this.researchMemory = researchMemory;
     this.sessions = sessions;
@@ -85,6 +89,7 @@ export class NativeTurnCommit {
     this.conversations = conversations;
     this.commit = commit;
     this.memoryContexts = memoryContexts;
+    this.runtimeWithoutGateway = runtimeWithoutGateway;
     this.setTimer = setTimer ?? ((fn, ms) => { const timer = setTimeout(fn, ms); timer.unref?.(); return timer; });
     this.clearTimer = clearTimer ?? ((timer) => clearTimeout(timer));
     this.wait = wait ?? ((ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); }));
@@ -135,14 +140,15 @@ export class NativeTurnCommit {
         throw new HttpError(403, 'memory_scope_denied', 'The conversation memory context is unavailable.');
       }
       if (this.closed) return;
-      this.#arm(project, sessionId, context);
+      if (this.runtimeWithoutGateway?.(project) === true) recordRuntimeWithoutGateway("turn_end");
+      this.#arm(project, sessionId, context, String(run?.finishedAt ?? run?.startedAt ?? "") || null);
     } catch (error) {
       this.report(`native turn commit: ${this.#codeOf(error)}`);
     }
   }
 
-  /** @param {any} project @param {string} sessionId @param {any} context */
-  #arm(project, sessionId, context) {
+  /** @param {any} project @param {string} sessionId @param {any} context @param {string | null} endedAt */
+  #arm(project, sessionId, context, endedAt) {
     const userId = String(project.userId);
     const namespaceId = context?.namespaceId ?? openVikingUserId(userId);
     const key = JSON.stringify([userId, namespaceId, sessionId]);
@@ -157,7 +163,7 @@ export class NativeTurnCommit {
       return;
     }
     /** @type {Armed} */
-    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, namespaceId, context };
+    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, namespaceId, context, endedAt };
     entry.timer = this.setTimer(() => { this.armed.delete(key); this.queue.push(entry); this.#pump(); }, this.debounceMs);
     this.armed.set(key, entry);
     recordTurnCommit("scheduled");
@@ -189,10 +195,20 @@ export class NativeTurnCommit {
   }
 
   /** @param {Armed} entry */
+  async #endedBeforeReset(entry) {
+    if (typeof this.researchMemory.resetInstant !== "function") return false;
+    const resetAt = await this.researchMemory.resetInstant(entry.userId).catch(() => null);
+    return endedBeforeReset({ finishedAt: entry.endedAt }, resetAt);
+  }
+
+  /** @param {Armed} entry */
   async #run(entry) {
     if (this.closed) return;
     if (entry.context) await this.memoryContexts.assertLive(entry.context);
     if (await this.#personIsTyping(entry)) { recordTurnCommit("conversation_running"); return; }
+    // A turn that was over before the account reset its memory is not committed after it: the reset deleted the engine's sessions
+    // (and with them what was pending), and the plugin's replay of an old message must not make a session to commit from.
+    if (await this.#endedBeforeReset(entry)) { recordTurnCommit("before_reset"); return; }
     const user = { id: entry.userId };
     // The admission decides who is learned from. Asked before the engine is read so that a paused account, a trial, a
     // conversation that read a patient record and the platform's own projects cost the engine nothing; the gateway's commit

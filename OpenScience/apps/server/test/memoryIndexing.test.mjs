@@ -113,6 +113,40 @@ function indexFact(fake, userId, { capsuleId, factKind, factId, revision, conten
   fake.files.set(capsuleFactUri(userId, { accountCreatedAt, capsuleId, factKind, factId, revision }), content);
 }
 
+// One capsule per person: the index holds one subtree for all of a person's notes, the path cannot say which project a note is for, and the
+// canonical row does. A note of another project is not a candidate (it is dropped before the reranker), and the index is asked for more hits than are
+// wanted so that notes a project may not read do not take the first places.
+test("a fact labelled with another project is dropped before ranking, and the index is asked for headroom", async () => {
+  const fake = openVikingFake();
+  for (const [factId, content] of [["mine", "kidney note of this project"], ["theirs", "kidney note of another project"], ["shared", "kidney fact of the whole account"]]) {
+    indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "preference", factId, revision: 1, content });
+  }
+  const rows = [
+    { id: "mine", revision: 1, project_id: "p1", payload: { capsuleId: "capsule-a", status: "approved", content: "kidney note of this project" } },
+    { id: "theirs", revision: 1, project_id: "p2", payload: { capsuleId: "capsule-a", status: "approved", content: "kidney note of another project" } },
+    { id: "shared", revision: 1, project_id: null, payload: { capsuleId: "capsule-a", status: "approved", content: "kidney fact of the whole account" } },
+  ];
+  const database = {
+    async query(sql) {
+      if (sql.includes("evimed_control.users")) return { rows: [{ generation }] };
+      if (sql.includes("kind='preferences'")) return { rows: [{ id: "active-capsules:account", payload: { items: [{ capsuleId: "capsule-a", mode: "own" }] } }] };
+      return { rows };
+    },
+  };
+  const reranked = [];
+  const indexing = new MemoryIndexing({ database, openViking: fake.client, jobs: {}, rerank: { configured: true, async order(_query, texts) { reranked.push(texts); return texts.map((_, index) => index); } } });
+  const selections = [{ capsuleId: "capsule-a", mode: "own" }];
+  const contents = async (/** @type {string | null} */ projectId) => (await indexing.recall("owner", generation, selections, "kidney", 3, projectId)).map((item) => item.row.payload.content).sort();
+  assert.deepEqual(await contents("p1"), ["kidney fact of the whole account", "kidney note of this project"]);
+  assert.deepEqual(await contents("p2"), ["kidney fact of the whole account", "kidney note of another project"]);
+  assert.deepEqual(await contents(null), ["kidney fact of the whole account"], "a recall in no project reads the account's own entries");
+  assert.equal(reranked.length, 2, "one candidate is not reranked");
+  assert.ok(!reranked[0].includes("kidney note of another project"), "what a project may not read never reaches the reranker");
+  assert.ok(!reranked[1].includes("kidney note of this project"));
+  const asked = fake.calls.filter((call) => call.path === "/api/v1/search/find").map((call) => call.body.node_limit);
+  assert.deepEqual(asked, [12, 12, 12], "three wanted, a few times as many asked for");
+});
+
 test("semantic recall preserves index order but reloads approved current facts from PostgreSQL", async () => {
   const fake = openVikingFake();
   indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "analysis", factId: "stale", revision: 1, content: "kidney prose the index still holds" });
@@ -321,8 +355,9 @@ test("rebuild rewrites the capsule subtree, waits for each write and publishes t
     [["fact-b", 1, "method_preference"], ["runtime-note:ff01", 2, "analysis"]].sort());
   assert.equal([...fake.files.values()][0].startsWith("analysis / knowledge\n\n"), true, "the kind and the layer lead the file");
   const writes = fake.calls.filter((call) => call.path === "/api/v1/content/write");
-  assert.ok(writes.every((call) => call.body.wait === true && call.body.timeout > 0),
+  assert.ok(writes.every((call) => call.body.wait === true),
     "a file the server has not embedded yet is invisible to find, so the readback that follows would be a coin toss");
+  assert.ok(writes.every((call) => !Object.hasOwn(call.body, "timeout")), "v0.5.1 refuses a write body that names a timeout");
   assert.equal(fake.calls.filter((call) => call.method === "DELETE").length, 1);
   const insert = published.find(([sql]) => sql.includes("INSERT INTO evimed_product.memory_index_state"));
   assert.ok(insert, "a rebuild that published nothing would be rebuilt forever");

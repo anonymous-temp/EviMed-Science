@@ -5,7 +5,7 @@
       "items": [
         {
           "seq": 1,
-          "recorded_at": "2026-10-12T23:56:40.115840+00:00",
+          "recorded_at": "2026-10-23T05:47:12.547913+00:00",
           "kind": "created",
           "status": "pending",
           "stage": null,
@@ -14,7 +14,7 @@
         },
         {
           "seq": 2,
-          "recorded_at": "2026-10-12T23:56:40.116382+00:00",
+          "recorded_at": "2026-10-23T05:47:12.548821+00:00",
           "kind": "stage_changed",
           "status": "pending",
           "stage": "queued",
@@ -23,7 +23,7 @@
         },
         {
           "seq": 3,
-          "recorded_at": "2026-10-12T23:56:40.969315+00:00",
+          "recorded_at": "2026-10-23T05:47:13.215493+00:00",
           "kind": "status_changed",
           "status": "running",
           "stage": "submitting",
@@ -32,7 +32,7 @@
         },
         {
           "seq": 4,
-          "recorded_at": "2026-10-12T23:56:40.969315+00:00",
+          "recorded_at": "2026-10-23T05:47:13.215493+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "submitting",
@@ -41,7 +41,7 @@
         },
         {
           "seq": 5,
-          "recorded_at": "2026-10-12T23:56:41.102804+00:00",
+          "recorded_at": "2026-10-23T05:47:13.471088+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "compile: collecting_context",
@@ -50,16 +50,16 @@
         },
         {
           "seq": 6,
-          "recorded_at": "2026-10-12T23:56:46.125614+00:00",
+          "recorded_at": "2026-10-23T05:47:43.535548+00:00",
           "kind": "stage_changed",
           "status": "running",
-          "stage": "compile: agent",
+          "stage": "compile: pipeline",
           "operation": null,
           "error": null
         },
         {
           "seq": 7,
-          "recorded_at": "2026-10-12T23:57:11.252066+00:00",
+          "recorded_at": "2026-10-23T05:48:13.585506+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "compile: completed",
@@ -68,7 +68,7 @@
         },
         {
           "seq": 8,
-          "recorded_at": "2026-10-12T23:57:12.104008+00:00",
+          "recorded_at": "2026-10-23T05:48:13.588977+00:00",
           "kind": "status_changed",
           "status": "completed",
           "stage": "compile: completed",
@@ -79,12 +79,12 @@
       "dropped_count": 0,
       "started_mid_task": false
     },
-    "task_id": "cmp_a72ba693a456e273e3f4d780703839f71c890c84fba8cb95b71d9f2f3dda8d5d",
+    "task_id": "cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
     "task_type": "compile",
     "status": "completed",
-    "created_at": 1791849400.1156456,
-    "updated_at": 1791849432.1039994,
-    "processing_seconds": 30.285237386007793,
+    "created_at": 1792734432.5474696,
+    "updated_at": 1792734493.5889742,
+    "processing_seconds": 60.373812675476074,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
       "request": {
@@ -94,10 +94,13 @@
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
         "skill": "viking://agent/skills/llm-wiki"
       },
-      "token_usage": {
-        "input_tokens": 60864,
-        "output_tokens": 5108,
-        "total_tokens": 65972
+      "pipeline": {
+        "errors": [],
+        "tokens": {
+          "cached": 17152,
+          "input": 31026,
+          "output": 9658
+        }
       }
     },
     "stage": "completed",
@@ -109,23 +112,24 @@
       "skill": "viking://agent/skills/llm-wiki",
       "okf_version": "0.1",
       "created": [
-        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha协议.md",
-        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/设备间时间同步.md",
-        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Beta网关.md",
-        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Gamma仪表盘.md",
-        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen工作组.md",
+        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
+        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Beta 网关.md",
+        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Gamma 仪表盘.md",
+        "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen 工作组.md",
         "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
         "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/index.md"
       ],
       "updated": [],
       "unchanged": [],
-      "page_count": 7,
-      "link_count": 1,
+      "conflicts": [],
+      "page_count": 0,
+      "link_count": 0,
+      "link_report": {},
       "warnings": []
     },
     "error": null,
-    "created_at_iso": "2026-10-12T23:56:40.115646+00:00",
-    "updated_at_iso": "2026-10-12T23:57:12.103999+00:00"
+    "created_at_iso": "2026-10-23T05:47:12.547470+00:00",
+    "updated_at_iso": "2026-10-23T05:48:13.588974+00:00"
   },
   "error": null,
   "telemetry": null,

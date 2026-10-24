@@ -12,12 +12,12 @@ describe("the selection the five views share", () => {
   it("round-trips every choice through the address", () => {
     const chosen = {
       view: "time" as const, project: "prj_a", range: "2026-07-14..2026-07-20", topic: "topic:abc", kind: "decision", dimension: "aspect:habit",
-      focus: "memory:rec_1", depth: 2 as const, chain: true, look: true, q: "剂量",
+      focus: "memory:rec_1", depth: 2 as const, chain: true, look: true, part: "knowledge" as const, q: "剂量",
     };
     const written = selectionParams(chosen);
     expect(parseSelection(written)).toEqual(chosen);
     // The address reads as the parameters the spec names.
-    expect([...written.keys()].sort()).toEqual(["chain", "depth", "dimension", "focus", "kind", "look", "project", "q", "range", "topic", "view"]);
+    expect([...written.keys()].sort()).toEqual(["chain", "depth", "dimension", "focus", "kind", "look", "part", "project", "q", "range", "topic", "view"]);
   });
 
   it("refuses what it does not know: an unknown view, a range that is not the server's grammar, a focus that is no mark", () => {
@@ -25,6 +25,10 @@ describe("the selection the five views share", () => {
     expect(parse("range=forever").range).toBe("all");
     expect(parse("range=2026-07-14").range).toBe("all");
     expect(parse("focus=nonsense").focus).toBeNull();
+    // A part is one of the four the overview's cards drill into; the time view and the received packs are not parts.
+    expect(parse("part=you").part).toBe("you");
+    expect(parse("part=growth").part).toBeNull();
+    expect(parse("part=received").part).toBeNull();
     expect(parse("depth=9").depth).toBe(1);
     expect(parse(`q=${"x".repeat(200)}`).q).toHaveLength(80);
   });

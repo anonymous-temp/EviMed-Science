@@ -168,7 +168,8 @@ export class HandbookLibrary {
       .find((entry) => !entry.deletedAt && (!stopped || entry.payload?.status !== "retired"));
     if (!saved || saved.payload?.recordType !== CAPABILITY_HANDBOOK_RECORD_TYPE
       || saved.payload.capabilityId !== current.payload.capabilityId) throw new HttpError(404, "handbook_revision_unavailable", "That handbook revision is unavailable.");
-    await this.learning.validateHandbook(userId, saved.payload);
+    // A handbook given back may name a feature the platform has since stopped having (the sweep puts such handbooks away): what is written now is held to that list, what was written is not.
+    await this.learning.validateHandbook(userId, saved.payload, { allowStale: true });
     return this.documents.put(userId, "method", id, { ...saved.payload, status: "active", version: Number(current.payload.version ?? 1) + 1,
       verification: "unmeasured", evaluation: null, observations: [], previousRevision: current.revision,
       restoredFromRevision: saved.revision, appliedAt: this.now().toISOString(),

@@ -216,9 +216,15 @@ test("the calendar is the last year whatever the range, and the sources' days ad
     source("activity", { buckets: [{ t: "2026-10-11", run: 3, feedback: 1 }] }),
   ], { range: "30d" });
   assert.deepEqual(map.buckets.series, [
-    { t: "2026-05-01", memory: 2, run: 0, method: 0, feedback: 0 },
-    { t: "2026-10-11", memory: 1, run: 3, method: 0, feedback: 1 },
+    { t: "2026-05-01", memory: 2, run: 0, method: 0, feedback: 0, document: 0 },
+    { t: "2026-10-11", memory: 1, run: 3, method: 0, feedback: 1, document: 0 },
   ]);
+  // The documents added are a day's fifth count, added up like the others, and the heat of the calendar never reads them.
+  const withDocuments = await build([
+    source("records", { buckets: [{ t: "2026-10-11", memory: 1 }] }),
+    source("documents", { buckets: [{ t: "2026-10-11", document: 4 }, { t: "2026-10-09", document: 1 }] }),
+  ]);
+  assert.deepEqual(withDocuments.buckets.series.map((day) => [day.t, day.memory, day.document]), [["2026-10-09", 0, 1], ["2026-10-11", 1, 4]]);
 });
 
 function crowd(count, { projectId = "prj_a", kind = "project_fact", prefix = "m" } = {}) {

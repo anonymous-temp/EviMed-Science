@@ -118,6 +118,17 @@ test('equal native session ids in two project namespaces have independent timers
   assert.equal(f.commits.every(row => row.context === scoped.views.get(row.project.id)), true);
 });
 
+test('the reset fence retains each scoped timer turn date before any namespace session is read', async () => {
+  const scoped = projectContexts(), f = doubles({ memoryContexts: scoped.contexts });
+  f.committer.researchMemory.resetInstant = async () => '2026-10-24T00:00:00Z';
+  await f.committer.noteRunFinished(project('p1'), finished({ finishedAt: '2026-10-23T23:00:00Z' }));
+  await f.committer.noteRunFinished(project('p2'), finished({ finishedAt: '2026-10-24T01:00:00Z' }));
+  f.time.fire(); await f.committer.idle();
+  assert.deepEqual(scoped.reads.map(row => row[0]), ['p2', 'p2']);
+  assert.equal(f.reads.length, 0); assert.deepEqual(f.commits.map(row => row.project.id), ['p2']);
+  assert.equal(counters().before_reset, 1);
+});
+
 test('an armed old project context and an unproven session never fall back to personal reads', async () => {
   const scoped = projectContexts(), f = doubles({ memoryContexts: scoped.contexts });
   await f.committer.noteRunFinished(project('p1'), finished());

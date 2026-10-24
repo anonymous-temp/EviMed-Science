@@ -62,14 +62,27 @@ test("clients cannot impersonate an entry origin or change its account", async (
   assert.equal(calls.length, 1, "the service never saw it");
 });
 
-test("activation and recall reject projects the account does not own", async (t) => {
+test("recall rejects projects the account does not own, and activation names no project: a capsule is in force for the account", async (t) => {
   const { base, headers, calls } = await fixture(t);
   const foreign = await fetch(`${base}/api/capsules/capsule-one/activate`, { method: "POST", headers, body: JSON.stringify({ projectId: "other-project", mode: "own" }) });
-  assert.equal(foreign.status, 404);
+  assert.equal(foreign.status, 400, "a request for one project's activation is refused by name, not answered as an account-wide one");
+  assert.equal((await foreign.json()).code, "capsule_payload_invalid");
   assert.equal(calls.length, 0);
   const response = await fetch(`${base}/api/capsules/recall`, { method: "POST", headers, body: JSON.stringify({ query: "method", projectId: "owned-project" }) });
   assert.equal(response.status, 200);
   assert.equal(calls[0].body.projectId, "owned-project");
+});
+
+test("making a capsule one's own turns the packs off only when asked to, and the ask is a boolean", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const activate = (body) => fetch(`${base}/api/capsules/capsule-one/activate`, { method: "POST", headers, body: JSON.stringify(body) });
+  assert.equal((await activate({ mode: "own" })).status, 200);
+  assert.equal(calls.at(-1).body.clearGuests, undefined, "not asked: the service keeps the packs");
+  assert.equal((await activate({ mode: "own", clearGuests: true })).status, 200);
+  assert.equal(calls.at(-1).body.clearGuests, true);
+  const refused = await activate({ mode: "own", clearGuests: "yes" });
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).code, "capsule_payload_invalid");
 });
 
 test("transfer routes bind export/import to the live user and require explicit body fields",async(t)=>{
@@ -132,22 +145,19 @@ test("a received pack: shelf, one-click enable and disable, and a trial marked o
   assert.equal(unavailable.status, 503);
 });
 
-// Build spec §9.4 #6: 「启用范围可选账号或某个项目」. Until 2026-09-28 the
-// route took no body and every enable was account-wide.
-test("a received pack can be enabled for one project the account opens, and only for such a project", async (t) => {
+// Build spec §9.4 #6 let a pack be enabled for one project alone; since 2026-10-24 (one capsule per person) it is enabled for the account, and the
+// route takes no project: one that names it is refused by name, because answering it with the pack in force everywhere would be a widening nobody asked for.
+test("a received pack is enabled for the account, the scan metered where the researcher is, and a request naming a project is refused", async (t) => {
   const calls = [];
   const audited = [];
   const service = {
-    enableReceived: async (user, id, options) => { calls.push(options); return { id, enabled: true, enabledIn: options.onlyProject ? "project" : "account" }; },
+    enableReceived: async (_user, id, options) => { calls.push(options); return { id, enabled: true }; },
   };
   const store = {
     ensureSessionUser: async () => ({ user: { id: "owner" } }),
     assertCsrf: async () => {},
     selectedProject: async () => ({ id: "current-project" }),
-    requireProject: async (_user, id) => {
-      if (id !== "owned-project") throw new HttpError(404, "project_not_found", "Project unavailable.");
-      return { id };
-    },
+    requireProject: async (_user, id) => ({ id }),
   };
   const handle = createCapsuleRoutes({ store, service, maxJsonBytes: 262144,
     audit: async (_user, action, details) => { audited.push({ action, details }); } });
@@ -157,19 +167,16 @@ test("a received pack can be enabled for one project the account opens, and only
   const post = (body) => fetch(`http://127.0.0.1:${server.address().port}/api/capsules/pack-1/enable`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-  const scoped = await post({ projectId: "owned-project" });
-  assert.equal(scoped.status, 200);
-  assert.equal((await scoped.json()).data.enabledIn, "project");
-  assert.deepEqual(calls[0], { projectId: "owned-project", onlyProject: true });
-  assert.deepEqual(audited[0], { action: "capsule.pack.enable", details: { capsuleId: "pack-1", projectId: "owned-project" } });
+  const refused = await post({ projectId: "owned-project" });
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).code, "capsule_payload_invalid");
+  assert.equal(calls.length, 0, "nothing refused reached the service");
 
-  assert.equal((await post({ projectId: "someone-elses" })).status, 404, "a project the account cannot open is refused, not enabled");
-  assert.equal((await post({ projectId: "" })).status, 400);
-  assert.equal((await post({ projectId: 7 })).status, 400);
-  assert.equal(calls.length, 1, "nothing refused reached the service");
-
-  assert.equal((await post({})).status, 200);
-  assert.deepEqual(calls[1], { projectId: "current-project" }, "no project named: every project, the scan metered where the researcher is");
+  const enabled = await post({});
+  assert.equal(enabled.status, 200);
+  assert.equal("enabledIn" in (await enabled.json()).data, false);
+  assert.deepEqual(calls[0], { projectId: "current-project" }, "the scan is metered where the researcher is; the pack is in force in every project");
+  assert.deepEqual(audited[0], { action: "capsule.pack.enable", details: { capsuleId: "pack-1" } });
 });
 
 // 2026-09-26 audit (M-6): no pack action wrote an audit row (build spec §12).

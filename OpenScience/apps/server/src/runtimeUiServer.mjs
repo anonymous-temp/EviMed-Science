@@ -274,7 +274,7 @@ function assertNativeModelSelection(config, payload) {
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any)=>Promise<{project:any,principal:any}>)|null,
  *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
- *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
+ *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string, text?: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
@@ -308,7 +308,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     const request = payload?.args?.request;
     if (!agentRuns || request?.mode !== "steer") return;
     try {
-      await agentRuns.recordSteeredInput(project, request.sessionId, request.requestId);
+      // Their words as typed, for the learning loop: a steer is the researcher's own correction of the run that is going.
+      const text = Array.isArray(request.content)
+        ? request.content.filter((/** @type {any} */ part) => part?.type === "text" && typeof part.text === "string").map((/** @type {any} */ part) => part.text).join("\n") : "";
+      await agentRuns.recordSteeredInput(project, request.sessionId, request.requestId, text);
     } catch (error) {
       await audit("run.correction.observe", {
         userId: project.userId, projectId: project.id,

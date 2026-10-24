@@ -9,7 +9,7 @@ import { GeoStore } from '../src/geoStore.mjs';
 import { GeoSharedContext } from '../src/geoSharedContext.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
 import { NativeMemoryOverlay } from '../src/nativeMemoryOverlay.mjs';
-import { NativeMemoryStore, nativeFileId } from '../src/nativeMemoryStore.mjs';
+import { NativeMemoryStore, nativeFileId, nativeConversationTitleKey } from '../src/nativeMemoryStore.mjs';
 import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { OpenVikingClient } from '../src/openVikingClient.mjs';
 import { loadConfig } from '../src/config.mjs';
@@ -79,6 +79,104 @@ test('edit forget undo and rejection history use the file namespace even with eq
   assert.equal((await f.store.getRecord(user, id)).scopeId, f.a.projectId);
   assert.equal((await f.overlay.rejectedFingerprints(user, `${f.b.namespaceId}:entities`)).size, 0);
   assert.equal((await f.overlay.file(user, uri)).projectId, f.a.projectId);
+});
+
+test('the forgotten page restores a project file through its namespace and preserves equal rejections elsewhere', options, async t => {
+  const f = await fixture(t), user = f.owner.id, text = 'A project-specific fact';
+  const a = f.seed(f.a, 'entities/item.md', text), b = f.seed(f.b, 'entities/item.md', text);
+  await f.store.remove(user, nativeFileId(a), { keepText: true });
+  await f.overlay.reject(user, `${f.b.namespaceId}:entities`, b, [text]);
+  const [forgotten] = await f.store.forgotten(user);
+  assert.equal(forgotten.uri, a); assert.equal(forgotten.scope, 'project'); assert.equal(forgotten.scopeId, f.a.projectId);
+  const restored = await f.store.update(user, forgotten.id, { status: 'active', expectedVersion: forgotten.version });
+  assert.equal(restored.uri, a); assert.equal(restored.scopeId, f.a.projectId);
+  assert.equal(await f.a.sessions.read(user, a), text); assert.equal(await f.b.sessions.read(user, b), text);
+  assert.equal((await f.overlay.rejectedFingerprints(user, `${f.a.namespaceId}:entities`)).size, 0);
+  assert.equal((await f.overlay.rejectedFingerprints(user, `${f.b.namespaceId}:entities`)).size, 1);
+  for (const request of f.stub.sent('POST', '/api/v1/content/write')) assert.ok(request.body.uri.startsWith(`viking://user/${request.user}/`));
+});
+
+test('equal session ids in personal and project namespaces retain their own conversation project identity', options, async t => {
+  const f = await fixture(t), user = f.owner.id;
+  await f.overlay.noteSession(user, 'dsh-same', 'personal-project');
+  for (const context of [f.personal, f.a, f.b]) {
+    const uri = f.seed(context, 'entities/provenance.md', context.namespaceId);
+    await f.overlay.addRevision({ userId: user, uri, memoryType: 'entities', actor: 'engine', change: 'added', before: null, after: context.namespaceId,
+      engineSession: 'dsh-same', projectId: 'wrong-tag', archiveUri: `${context.userRoot}/sessions/dsh-same/history/archive_001` });
+  }
+  const records = await f.store.records(user);
+  for (const context of [f.a, f.b]) assert.equal(records.find(row => row.uri.startsWith(`${context.userRoot}/`)).evidence[0].projectId, context.projectId);
+  assert.equal(records.find(row => row.uri.startsWith(`${f.personal.userRoot}/`)).evidence[0].projectId, 'personal-project');
+});
+
+async function seedConversationSource(f, context, text) {
+  const uri = f.seed(context, 'project_facts/provenance.md', text);
+  await f.overlay.addRevision({ userId: f.owner.id, uri, memoryType: 'project_facts', actor: 'engine', change: 'added', before: null, after: text,
+    engineSession: 'dsh-shared', projectId: context.projectId, archiveUri: `${context.userRoot}/sessions/dsh-shared/history/archive_001` });
+  return uri;
+}
+
+test('a bare resolver deletion for an ambiguous or isolated cache-miss session cannot remove another project source', options, async t => {
+  const f = await fixture(t), user = f.owner.id, calls = [];
+  const a = await seedConversationSource(f, f.a, 'Source A');
+  f.store.conversationTitles = async (_user, refs) => {
+    calls.push(refs);
+    return Object.fromEntries(refs.map(ref => [ref.sessionId, ref.projectId === f.b.projectId ? null : 'A is live']));
+  };
+  const first = await f.store.profile(user);
+  assert.deepEqual(first.conversations, { shared: 'A is live',
+    [first.records.find(record => record.uri === a).evidence[0].conversationTitleKey]: 'A is live' }, 'the ordinary unambiguous callback remains supported');
+  const b = await seedConversationSource(f, f.b, 'Source B');
+  const page = await f.store.profile(user);
+  assert.equal(calls[1].length, 1, 'only B missed the cache, but the complete request is ambiguous');
+  assert.equal(page.records.find(record => record.uri === a).evidenceCount, 1);
+  assert.equal(page.records.find(record => record.uri === b).evidenceCount, 1, 'an ambiguous bare answer is unknown, not proof of deletion');
+  assert.equal(page.conversations.shared, undefined);
+  const found = await f.store.search(user, '');
+  assert.equal(found.items.find(record => record.uri === a).evidenceCount, 1);
+  assert.equal(found.items.find(record => record.uri === b).evidenceCount, 1);
+});
+
+test('qualified title results keep equal project sessions distinct through profile search cache and deletion', options, async t => {
+  const f = await fixture(t), user = f.owner.id, calls = [];
+  const a = await seedConversationSource(f, f.a, 'Source A'), b = await seedConversationSource(f, f.b, 'Source B');
+  let deleted = false;
+  f.store.conversationTitles = async (_user, refs) => {
+    calls.push(refs);
+    return Object.fromEntries(refs.map(ref => [nativeConversationTitleKey(ref), ref.projectId === f.b.projectId ? deleted ? null : 'B title' : 'A title']));
+  };
+  const page = await f.store.profile(user);
+  for (const [uri, title] of [[a, 'A title'], [b, 'B title']]) {
+    const source = page.records.find(record => record.uri === uri).evidence[0];
+    assert.equal(page.conversations[source.conversationTitleKey], title);
+  }
+  assert.equal(page.conversations.shared, undefined);
+  for (const context of [f.a, f.b]) {
+    const ref = calls[0].find(item => item.projectId === context.projectId);
+    assert.equal(ref.namespaceId, context.namespaceId); assert.equal(ref.projectCreatedAt, context.policy.projectCreatedAt);
+  }
+  const found = await f.store.search(user, '');
+  assert.equal(calls.length, 1, 'profile and both search enrichment passes reuse qualified cache entries');
+  assert.equal(found.conversations[found.items.find(record => record.uri === a).evidence[0].conversationTitleKey], 'A title');
+  deleted = true; f.store.now = () => new Date(Date.now() + 61_000);
+  const after = await f.store.profile(user);
+  assert.equal(after.records.find(record => record.uri === a).evidenceCount, 1);
+  assert.equal(after.records.find(record => record.uri === b).evidenceCount, 0);
+  const search = await f.store.search(user, '');
+  assert.equal(search.items.find(record => record.uri === a).evidenceCount, 1);
+  assert.equal(search.items.find(record => record.uri === b).evidenceCount, 0);
+});
+
+for (const mode of ['unknown', 'failed']) test(`a ${mode} title resolver preserves equal-id provenance without borrowing another title`, options, async t => {
+  const f = await fixture(t), user = f.owner.id;
+  const a = await seedConversationSource(f, f.a, 'Source A'), b = await seedConversationSource(f, f.b, 'Source B');
+  f.store.conversationTitles = async () => { if (mode === 'failed') throw new Error('Resolver unavailable'); return {}; };
+  for (const result of [await f.store.profile(user), await f.store.search(user, '')]) {
+    const records = result.records ?? result.items;
+    assert.equal(records.find(record => record.uri === a).evidenceCount, 1);
+    assert.equal(records.find(record => record.uri === b).evidenceCount, 1);
+    assert.deepEqual(result.conversations, {});
+  }
 });
 
 test('conversation forget checks its supplied namespace before any account file lookup or engine request', options, async t => {

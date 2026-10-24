@@ -88,17 +88,6 @@ export function archiveMemoryRecord(id: string, expectedVersion: number) {
   return productRequest<WebStructuredMemory>(`/memory/records/${encodeURIComponent(id)}`, "PATCH", { status: "archived", expectedVersion });
 }
 
-/** 「不对」 on a learned method: retired, and restorable by rolling back to the revision before. */
-export function retireLearnedMethod(methodId: string, expectedRevision: number) {
-  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/retire`, "POST",
-    { expectedRevision, reason: "在对话中被标为不对" });
-}
-
-export function restoreLearnedMethod(methodId: string, expectedRevision: number, targetRevision: number) {
-  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/rollback`, "POST",
-    { expectedRevision, targetRevision });
-}
-
 /** 「不对」 on a capsule entry: retired, as a revision the entry's undo can take back. */
 export function retireCapsuleEntry(capsuleId: string, entryId: string, expectedRevision: number) {
   return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(capsuleId)}/entries/${encodeURIComponent(entryId)}`, "PATCH",
@@ -114,6 +103,8 @@ export interface MyCapsule {
   capsules: { id: string; title: string; projectId: string | null; revision: number }[];
   /** The notes in force. */
   entries: OwnCapsuleEntry[];
+  /** The notes an outside agent proposed (the agent-memory API's `/note`) that wait for the researcher: 待确认, with 确认 and 不要. */
+  candidates?: OwnCapsuleEntry[];
   /** The notes the researcher forgot: 已忘记的内容 lists them, each with 恢复. */
   forgotten: OwnCapsuleEntry[];
 }
@@ -135,9 +126,11 @@ export function ensureMyCapsule() {
 
 /*
  * The timeline read (`/memory/timeline`) is gone from the page with the
- * 「最近变化」 block it fed (2026-09-23 plan §5.6): a method's history is its
- * row's own 「历史版本」, a memory's is its revisions, and a list of back-office
- * events above the list said the same thing twice.
+ * 「最近变化」 block it fed (2026-09-23 plan §5.6), and from the server with its
+ * last reader (2026-10-24): a method's history is its row's own 「历史版本」,
+ * a memory's is its revisions, and a list of back-office events above the list
+ * said the same thing twice. The overview's growth card and the map's time
+ * view are the map's own document.
  */
 
 /**
@@ -185,10 +178,8 @@ export interface ReceivedCapsule {
   description: string;
   issuerTrust: "verified" | "unverified" | string;
   importedAt: string | null;
-  /** In force account-wide or for this project. */
+  /** In force for the account, so in every project. */
   enabled: boolean;
-  /** Where it is in force: every project, or only the one the shell is in. */
-  enabledIn?: "account" | "project" | null;
   /** Approved entries by kind. */
   counts: Record<string, number>;
   /** The first few methods, in their own words. */
@@ -211,9 +202,9 @@ export function fetchReceivedCapsules() {
   return productRequest<ReceivedCapsule[]>("/capsules/received");
 }
 
-/** One click in, as a reference: in every project, or with `projectId` in that one only. */
-export function enableReceivedCapsule(id: string, projectId?: string) {
-  return productRequest<ReceivedCapsule | null>(`/capsules/${encodeURIComponent(id)}/enable`, "POST", projectId ? { projectId } : {});
+/** One click in, as a reference: for the account, so in every project. */
+export function enableReceivedCapsule(id: string) {
+  return productRequest<ReceivedCapsule | null>(`/capsules/${encodeURIComponent(id)}/enable`, "POST", {});
 }
 
 /** One click out: the pack stops contributing anything. */

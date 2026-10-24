@@ -23,6 +23,14 @@ interface WebAccount {
  * name (it appears once now, in the deletion confirmation, where it is what
  * the deletion acts on), a refresh button, and a card inside a card inside a
  * card around the confirmation.
+ *
+ * A third group, 记忆, is the product's plain statement of what memory keeps
+ * and does not (2026-10-23 rectification T6.5; GB/T 45654-2025 §6.2 b: the
+ * privacy statement says what a memory collects): what is remembered, what
+ * never is, where it is seen, changed and deleted (the 记忆胶囊 page, whose
+ * switch and reset are its own), and that it is not used to train a model.
+ * The words follow the policy in `memoryNeverKept.mjs`; when the policy
+ * moves, this moves with it.
  */
 export function AccountSection() {
   const navigate = useNavigate();
@@ -145,6 +153,17 @@ export function AccountSection() {
             </form>
           )}
         </PanelRow>
+      </Panel>
+
+      <Panel title="记忆">
+        <PanelRow label="会记什么" description="你说过、确认过、纠正过的做法和背景，以及项目的情况。" />
+        <PanelRow label="不会记什么" description="密码、证件号和银行卡号，别人的身份信息，文档和网页里的内容；健康等敏感信息，除非你说“记住”。" />
+        <PanelRow
+          label="查看、修改和删除"
+          description="在记忆胶囊页逐条查看、修改和忘记，也可以整体重置。"
+          control={<Button variant="text" onClick={() => navigate("/app/memory")}>打开记忆胶囊</Button>}
+        />
+        <PanelRow label="不用于训练" description="记忆只用来帮你工作，不会用来训练模型。" />
       </Panel>
     </div>
   );

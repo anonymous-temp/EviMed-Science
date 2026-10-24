@@ -1,0 +1,47 @@
+{
+  "id": "c22-repeated-demonstration",
+  "class": "refuse-repeated-demonstration",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C22); every name, number and identifier is invented",
+  "expected": "Nothing is kept after either conversation: a choice shown in two tasks and never called a rule is not yet a preference (owner decision 3, principle 18); the case changes only if that decision does.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "seed": {
+      "messages": [
+        {
+          "id": "u1",
+          "role": "user",
+          "text": "做个 12 个月预算表，要有透视表。"
+        },
+        {
+          "id": "a1",
+          "role": "assistant",
+          "text": "好的，12 个月预算表已做好，并附了按月份和科目汇总的透视表。"
+        }
+      ]
+    },
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "月度汇总也做成带透视表的。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，月度汇总已加上透视表。"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "透视表"
+    ],
+    "atMostRecords": 0
+  }
+}

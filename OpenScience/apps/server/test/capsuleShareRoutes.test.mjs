@@ -62,7 +62,7 @@ test("with the share switch off every sharing route is a 404 by name and reaches
     ["GET", `/api/capsules/shared/${token}`], ["POST", `/api/capsules/shared/${token}/import`, {}], ["GET", "/api/capsules/deliveries"], ["GET", "/api/capsules/deliveries/dlv_1"],
     ["POST", "/api/capsules/deliveries/dlv_1/decline", {}], ["POST", "/api/capsules/takedowns", { authorId: "someone" }],
     ["POST", "/api/capsules/mine/deliveries", { recipients: ["x"] }], ["GET", "/api/capsules/mine/deliveries"], ["POST", "/api/capsules/mine/links", {}], ["GET", "/api/capsules/mine/links"],
-    ["DELETE", "/api/capsules/mine/links/l1"], ["POST", "/api/capsules/mine/exports/s1/takedown", {}], ["GET", "/api/capsules/mine/methods/export?format=agent-skills"],
+    ["DELETE", "/api/capsules/mine/links/l1"], ["POST", "/api/capsules/mine/exports/s1/takedown", {}],
   ]) {
     const response = await fetch(`${base}${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
     assert.equal(response.status, 404, `${method} ${url}`);
@@ -71,6 +71,10 @@ test("with the share switch off every sharing route is a 404 by name and reaches
   assert.deepEqual(calls, [], "nothing of sharing was called");
   const own = await fetch(`${base}/api/capsules/subscriptions?projectId=owned-project`, { headers });
   assert.equal(own.status, 200, "a zone subscription is not sharing: it has its own switch");
+  // The method pack hands nothing to anyone on this deployment: it is a download of the account's own methods, so it works with sharing off.
+  const pack = await fetch(`${base}/api/capsules/mine/methods/export?format=agent-skills`, { headers });
+  assert.equal(pack.status, 200, "the Agent Skills pack is not behind the sharing switch");
+  assert.equal(pack.headers.get("content-type"), "application/zip");
 });
 
 test("a zone subscription is the frontier's: an account outside its audience reads the answer an unknown path gets, and nothing is read or written", async (t) => {
@@ -189,8 +193,10 @@ test("the sharing levers have the defaults the plan names, are range-checked by 
   assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, false, "the frontier being on does not turn it on");
   assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true", OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, true);
   assert.equal(configUnder({ OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, false, "and its own switch does not turn it on without the frontier");
-  assert.equal(defaults.capsuleShareEnabled, false);
-  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).capsuleShareEnabled, false, "sharing is not the frontier's");
+  // Sharing stays on (owner ruling 2026-10-10; the default was false until 2026-10-23): it is turned off, never on.
+  assert.equal(defaults.capsuleShareEnabled, true);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).capsuleShareEnabled, true, "sharing is not the frontier's");
+  assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: "false" }).capsuleShareEnabled, false);
   assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: "true" }).capsuleShareEnabled, true);
   assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS: "7", OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES: "" }).capsuleShareLinkTtlDays, 7);
   for (const [name, , , bad] of LEVERS) for (const value of bad) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);

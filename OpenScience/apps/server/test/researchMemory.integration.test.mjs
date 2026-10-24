@@ -648,47 +648,20 @@ test("the read-only views read a memory light: texts cut, observations to their 
   assert.deepEqual(change.provenance, whole.provenance);
   assert.equal(change.change, "updated");
 
-  // The timeline's read: the project's view, run summaries left to the runs, the newest first, bounded.
+  // The map's read: run summaries left to the runs, the newest first, bounded, light; a project narrows it to that project's own.
   await store.upsertRecord(alpha, record({ key: "light.summary", kind: "run_summary", scope: "project", scopeId: "p-light", status: "active" }));
   const own = await store.upsertRecord(alpha, record({ key: "light.project", kind: "project_fact", scope: "project", scopeId: "p-light" }));
-  await store.upsertRecord(alpha, record({ key: "light.elsewhere", kind: "project_fact", scope: "project", scopeId: "p-other" }));
-  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() + interval '1 minute' WHERE user_id=$1 AND id=$2", [alpha, own.id]);
-  const timeline = await store.timelineRecords(alpha, { projectId: "p-light", limit: 5 });
-  assert.deepEqual(timeline.map((item) => item.key), ["light.project", "light.view"]);
-  assert.equal(timeline[1].value.length, 1_000);
-  assert.deepEqual((await store.timelineRecords(alpha, { projectId: "p-light", limit: 1 })).map((item) => item.key), ["light.project"]);
+  const elsewhere = await store.upsertRecord(alpha, record({ key: "light.elsewhere", kind: "project_fact", scope: "project", scopeId: "p-other" }));
+  // The order is the times, so the times are set: an update and an insert a millisecond apart order either way on a busy runner.
+  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() + interval '2 minutes' WHERE user_id=$1 AND id=$2", [alpha, own.id]);
+  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() + interval '1 minute' WHERE user_id=$1 AND id=$2", [alpha, elsewhere.id]);
+  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() - interval '1 minute' WHERE user_id=$1 AND id=$2", [alpha, first.id]);
+  const mapped = await store.mapRecords(alpha, { limit: 5 });
+  assert.deepEqual(mapped.map((item) => item.key), ["light.project", "light.elsewhere", "light.view"]);
+  assert.equal(mapped[2].value.length, 1_000);
+  assert.deepEqual((await store.mapRecords(alpha, { projectId: "p-light" })).map((item) => item.key), ["light.project"]);
+  assert.deepEqual((await store.mapRecords(alpha, { limit: 1 })).map((item) => item.key), ["light.project"]);
   await store.purgeUserMemory(alpha);
-});
-
-test("the growth line's read counts, per day in the researcher's zone, what began and what stopped holding", options, async () => {
-  await store.purgeUserMemory(alpha);
-  const at = async (/** @type {string} */ id, /** @type {Record<string, string>} */ columns) => {
-    const names = Object.keys(columns);
-    await database.query(`UPDATE evimed_memory.records SET ${names.map((name, index) => `${name}=$${index + 3}::timestamptz`).join(",")}
-      WHERE user_id=$1 AND id=$2`, [alpha, id, ...names.map((name) => columns[name])]);
-  };
-  const kept = await store.upsertRecord(alpha, record({ key: "growth.kept", status: "active" }));
-  // 16:30 UTC on 09-10 is 00:30 on 09-11 in Shanghai.
-  await at(kept.id, { created_at: "2026-09-10T16:30:00Z", updated_at: "2026-09-10T16:30:00Z" });
-  const forgotten = await store.upsertRecord(alpha, record({ key: "growth.forgotten", kind: "project_fact", scope: "project", scopeId: "p-growth", status: "archived" }));
-  await at(forgotten.id, { created_at: "2026-09-11T02:00:00Z", updated_at: "2026-09-14T02:00:00Z" });
-  const replaced = await store.upsertRecord(alpha, record({ key: "growth.replaced", status: "superseded" }));
-  await at(replaced.id, { created_at: "2026-09-11T03:00:00Z", updated_at: "2026-09-20T02:00:00Z", invalid_since: "2026-09-15T02:00:00Z" });
-  // A run summary is the run's, never a row of the page; another account's memory is theirs.
-  const summary = await store.upsertRecord(alpha, record({ key: "growth.summary", kind: "run_summary", scope: "project", scopeId: "p-growth", status: "active" }));
-  await at(summary.id, { created_at: "2026-09-11T03:00:00Z" });
-  const theirs = await store.upsertRecord(beta, record({ key: "growth.theirs", status: "active" }));
-  await database.query("UPDATE evimed_memory.records SET created_at='2026-09-11T03:00:00Z' WHERE user_id=$1 AND id=$2", [beta, theirs.id]);
-
-  assert.deepEqual(await store.growthDays(alpha, { timeZone: "Asia/Shanghai" }), [
-    { day: "2026-09-11", added: 3, ended: 0 },
-    { day: "2026-09-14", added: 0, ended: 1 },
-    { day: "2026-09-15", added: 0, ended: 1 },
-  ]);
-  assert.deepEqual((await store.growthDays(alpha, { timeZone: "UTC" })).map((row) => [row.day, row.added]).slice(0, 2),
-    [["2026-09-10", 1], ["2026-09-11", 2]]);
-  await store.purgeUserMemory(alpha);
-  await store.purgeUserMemory(beta);
 });
 
 // Owner ruling of 2026-10-10 (review M-5 / R1): an inference the researcher then says themselves is theirs, with no one asked.

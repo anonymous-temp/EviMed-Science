@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  KNOWLEDGE_PAGE_ENGINE_LIMIT, KNOWLEDGE_PAGE_SUBMIT_LIMIT, KNOWLEDGE_TREES, applyKnowledgePageEdits, checkPageQuotations, diffKnowledgePageEdit,
+  KNOWLEDGE_TREES, applyKnowledgePageEdits, checkPageQuotations, diffKnowledgePageEdit,
   emptyKnowledgeUserEdits, isKnowledgeMirrorPath, isTypedKnowledgePage, knowledgeGraphToGraph, knowledgeMirrorPathOf,
   knowledgeSourceIdOfUri, readKnowledgePage, wikiPagesToGraph,
 } from "@evimed/domain";
@@ -25,14 +25,18 @@ import { projectSourceManifestRecord, sourceIndexDocument } from "./sourceServic
  *   where the bytes differ (`#mirror`). It can be run again at any time and after any failure, which is why a failed,
  *   cancelled or expired task loses nothing. Mirrored files are documents under `knowledge-base/wiki/**` and
  *   `knowledge-base/kg/**`, written through the one intake every upload uses.
- * - **Mirror first, then compile, and never at 100 typed pages.** At 128 the engine does not fail: its model rewrote
- *   102 existing pages into one-line stubs to fit and the task said `completed`. The pages as they stood are in the
- *   ledger before any compile is submitted, and a target at `KNOWLEDGE_PAGE_SUBMIT_LIMIT` is not submitted to at all —
- *   the project's state says so (`limited`) and everything already compiled stays as it is.
+ * - **Mirror first, then compile.** The pages as they stand are in the ledger before any compile is submitted, so
+ *   whatever a compile does to them, the ledger holds what they were. (Until v0.5.1 a target also stopped being compiled
+ *   at 100 typed pages: at 128 the engine's model rewrote 102 existing pages into one-line stubs to fit and the task
+ *   said `completed`. v0.5.1.1 has no such cap — a target of 140 pages was compiled twice with every page kept byte for
+ *   byte — and the stop is gone with it.)
  * - **A person's edit is a ledger revision first, then a write-back.** Their blocks are kept on the page's record,
  *   named verbatim in every compile instruction, and put back by code after a compile that dropped them (measured: the
  *   engine keeps them one recompile and loses them the next). A compile and a write-back never touch one target at
- *   the same time: while a round runs, a save is queued and written when the round ends.
+ *   the same time: while a round runs, a save is queued and written when the round ends. Since v0.5.1.1 that is also a
+ *   checked write: a write-back names the hash of the bytes the engine held when the page was last mirrored or written
+ *   (`engineSha256`), and a page the engine's Compile changed since is refused by the engine (409) and not overwritten —
+ *   the mirror and its re-application then put the person's blocks on the engine's newer text.
  * - **Quotation labels are laid on afterwards.** For every source link whose title carries a quotation, whether it is
  *   in the captured text of the document it names (`checkPageQuotations`). ✓ and ⚠ are stored beside the page; a page
  *   or a sentence without a quotation simply has no label, and no page waits for or is refused by any of it.
@@ -41,8 +45,8 @@ import { projectSourceManifestRecord, sourceIndexDocument } from "./sourceServic
  * - **The engine being down stops compiling and nothing else.** Uploads, search and conversations never wait on this
  *   module; pages already mirrored stay readable, and the status says when they were last compiled.
  *
- * Build to delete: the user-block carry and the 100-page stop go when the pin reaches a release whose Compile takes a
- * version precondition and has no page limit (upstream `main` after PR #5750); the mirror and the labels stay.
+ * Build to delete: the user-block carry goes when a release's Compile keeps a person's passages across recompiles on
+ * its own (measured on v0.5.1.1 only for the checked write: the carry is kept); the mirror and the labels stay.
  *
  * @module knowledgePageService
  */
@@ -64,6 +68,15 @@ const QUOTATION_INSTRUCTION = "For every claim-level source link, put the suppor
   + "Keep the file name of every source link exactly as it is, including its .md.";
 const GRAPH_INSTRUCTION = "Use general entity types that fit the material; when it is clinical or scientific, types such as drug, disease, gene, trial, outcome and guideline are welcome.";
 /** One compile of the graph (2026-10-13, live) wrote a whole second graph one level down, under `<target>/<target name>/`. */
+/**
+ * Whether a finished compile is asked once more: a wiki round that ended `completed` with at most one typed page in its target
+ * (the index alone) and was not already asked again. About two compiles in nine did that on the v0.5.1.1 lab (2026-10-23).
+ * @param {{ tree: string, status: string, typed: number, retried: boolean }} round
+ */
+export function asksAgainForIndexOnly({ tree, status, typed, retried }) {
+  return tree === "wiki" && status === "completed" && !retried && Number(typed) <= 1;
+}
+
 const LAYOUT_INSTRUCTION = "Write every file directly under the target directory — index.md, the type directories and relations.jsonl at its top level — and never create a subdirectory named after the target.";
 const LANGUAGE_NAMES = new Map([["zh", "Simplified Chinese"], ["zh-cn", "Simplified Chinese"], ["zh-hans", "Simplified Chinese"], ["zh-tw", "Traditional Chinese"],
   ["zh-hk", "Traditional Chinese"], ["zh-hant", "Traditional Chinese"], ["en", "English"], ["ja", "Japanese"], ["ko", "Korean"], ["fr", "French"], ["de", "German"],
@@ -137,7 +150,7 @@ export class KnowledgePageService {
   constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, libraryText = null, now = () => new Date(), report = () => {} }) {
     this.config = config; this.documents = documents; this.jobs = jobs; this.sources = sources; this.store = store;
     this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.now = now; this.report = report;
-    this.counters = { rounds: 0, failed: 0, compiles: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, limited: 0, deferred: 0,
+    this.counters = { rounds: 0, failed: 0, compiles: 0, indexOnlyRetries: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, writeBackConflicts: 0, deferred: 0,
       quotationsPresent: 0, quotationsAbsent: 0, tokens: 0, misplaced: 0 };
   }
 
@@ -151,7 +164,7 @@ export class KnowledgePageService {
   async #state(userId, projectId) {
     const row = await this.documents.get(userId, "knowledge", stateId(projectId));
     const base = { recordType: STATE_RECORD, projectId, round: 1, pending: {}, lastChangeAt: null, compiledAt: null, lastRound: null, lastError: null,
-      run: null, language: null, pages: { wiki: 0, kg: 0 }, limited: { wiki: false, kg: false }, writeBacks: [], taken: {} };
+      run: null, language: null, pages: { wiki: 0, kg: 0 }, writeBacks: [], taken: {} };
     return { row, value: { ...base, ...(row?.payload ?? {}) } };
   }
 
@@ -566,6 +579,8 @@ export class KnowledgePageService {
         const bytes = await this.resources.download(userId, entry.uri);
         if (!bytes) continue;
         const engineText = bytes.toString("utf8");
+        // The hash of what the engine holds for this page after this pass: its bytes, or the text written over them below.
+        let engineHash = sha256(bytes);
         if (isTypedKnowledgePage(rel, engineText)) summary.typed += 1;
         const record = known.get(rel);
         let text = engineText;
@@ -576,17 +591,23 @@ export class KnowledgePageService {
           if (applied.changed) {
             text = applied.markdown;
             restored = [...applied.restored, ...applied.removedAgain];
-            await this.resources.writePage(userId, entry.uri, text);
+            await this.resources.writePage(userId, entry.uri, text, { expectedSha256: engineHash });
+            engineHash = sha256(text);
             this.counters.writeBacks += 1; this.counters.blocksRestored += restored.length; summary.restored += restored.length;
           }
         }
         const digest = sha256(text);
-        if (record && record.sha256 === digest) { summary.unchanged += 1; continue; }
+        if (record && record.sha256 === digest) {
+          summary.unchanged += 1;
+          // Keep the hash a later write-back names true to the engine's bytes (a re-applied page changed them under the record).
+          if (record.engineSha256 !== engineHash) await this.#savePage(userId, projectId, tree, rel, (value) => value && ({ ...value, engineSha256: engineHash }));
+          continue;
+        }
         const described = await this.#describe(userId, projectId, tree, rel, text, texts);
         const written = await this.entries.writePage({ user, project, tree, rel, buffer: Buffer.from(text, "utf8"), title: described.title });
         const at = this.now().toISOString();
         await this.#savePage(userId, projectId, tree, rel, (value) => ({
-          recordType: PAGE_RECORD, projectId, tree, path: rel, uri: entry.uri, pageSourceId: written.source.id, sha256: digest, engineSha256: sha256(engineText),
+          recordType: PAGE_RECORD, projectId, tree, path: rel, uri: entry.uri, pageSourceId: written.source.id, sha256: digest, engineSha256: engineHash,
           type: described.type, title: described.title, typed: described.typed, dependsOn: described.dependsOn, links: described.links, quotations: described.quotations,
           userEdits: value?.userEdits ?? null, basis: value?.userEdits ? "user" : "compiler",
           restored: restored.length ? { at, count: restored.length, round } : value?.restored ?? null,
@@ -615,7 +636,37 @@ export class KnowledgePageService {
     return summary;
   }
 
-  /** Write the saves that were queued while a round ran, or while the engine could not be reached. @param {any} user @param {any} project */
+  /**
+   * The hash a write-back to one page names: the bytes the engine held when the page was last mirrored or written back
+   * (`engineSha256` of its record) or, for a record that carries none, the bytes it holds now.
+   * @param {string} userId @param {string} uri @param {any} record
+   */
+  async #expectedHash(userId, uri, record) {
+    if (/^[a-f0-9]{64}$/.test(String(record?.engineSha256 ?? ""))) return /** @type {string} */ (record.engineSha256);
+    const bytes = await this.resources.download(userId, uri);
+    if (!bytes) throw new HttpError(409, "knowledge_page_engine_changed", "The page is no longer in the engine.");
+    return sha256(bytes);
+  }
+
+  /**
+   * Write one page of the ledger back to the engine as a checked write, and remember the hash of what it now holds.
+   * @param {string} userId @param {string} projectId @param {"wiki" | "kg"} tree @param {string} rel @param {string} text
+   * @param {{ wait?: boolean }} [options]
+   */
+  async #writeBack(userId, projectId, tree, rel, text, { wait = true } = {}) {
+    const uri = `${this.resources.treeUri(userId, projectId, tree)}/${rel}`;
+    const record = (await this.documents.get(userId, "knowledge", pageId(projectId, tree, rel)))?.payload ?? null;
+    await this.resources.writePage(userId, uri, text, { expectedSha256: await this.#expectedHash(userId, uri, record), wait });
+    this.counters.writeBacks += 1;
+    await this.#savePage(userId, projectId, tree, rel, (value) => value && ({ ...value, engineSha256: sha256(text) }));
+  }
+
+  /**
+   * Write the saves that were queued while a round ran, or while the engine could not be reached. A save whose page the
+   * engine's Compile has changed since it was last read is not written: it is dropped from the queue (counted), because
+   * its blocks are on the page's record and the round that follows names them to the compile and puts them back.
+   * @param {any} user @param {any} project
+   */
   async #flushWriteBacks(user, project) {
     const { value } = await this.#state(user.id, project.id);
     const queued = Array.isArray(value.writeBacks) ? value.writeBacks : [];
@@ -625,11 +676,11 @@ export class KnowledgePageService {
     for (const entry of queued) {
       try {
         const text = await this.entries.readPage(project, entry.tree, entry.path);
-        if (text != null) {
-          await this.resources.writePage(user.id, `${this.resources.treeUri(user.id, project.id, entry.tree)}/${entry.path}`, text);
-          this.counters.writeBacks += 1;
-        }
-      } catch (error) { left.push(entry); this.report(codeOf(error)); }
+        if (text != null) await this.#writeBack(user.id, project.id, entry.tree, entry.path, text);
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code === "knowledge_page_engine_changed") { this.counters.writeBackConflicts += 1; this.report("knowledge_page_engine_changed"); continue; }
+        left.push(entry); this.report(codeOf(error));
+      }
     }
     await this.#updateState(user.id, project.id, (state) => {
       const done = new Set(queued.filter((entry) => !left.includes(entry)).map((entry) => `${entry.tree}/${entry.path}`));
@@ -667,11 +718,10 @@ export class KnowledgePageService {
   }
 
   /**
-   * Submit one tree's compile unless the target is at the page limit. Returns the task, or `{ limited: true }`.
-   * @param {any} user @param {any} project @param {"wiki" | "kg"} tree @param {any} state @param {number} typed @param {number} attempt
+   * Submit one tree's compile. Returns the task.
+   * @param {any} user @param {any} project @param {"wiki" | "kg"} tree @param {any} state @param {number} attempt
    */
-  async #submit(user, project, tree, state, typed, attempt) {
-    if (typed >= KNOWLEDGE_PAGE_SUBMIT_LIMIT) { this.counters.limited += 1; return { limited: true }; }
+  async #submit(user, project, tree, state, attempt) {
     const roots = this.resources.roots(user.id, project.id);
     const from = tree === "wiki" ? [roots.sources] : [roots.sources];
     // The account's library is a compile source beside the project's own documents, when it holds any.
@@ -683,7 +733,7 @@ export class KnowledgePageService {
     const task = await this.resources.submitCompile(user.id, { from, to: roots[tree], skill: tree === "wiki" ? "llm-wiki" : "knowledge-graph",
       instruction: await this.#instruction(user.id, project.id, tree, state), idempotencyKey: key });
     this.counters.compiles += 1;
-    return { limited: false, taskId: task.taskId, key, submittedAt: this.now().toISOString(), status: task.status, stage: task.stage };
+    return { taskId: task.taskId, key, submittedAt: this.now().toISOString(), status: task.status, stage: task.stage };
   }
 
   /**
@@ -736,15 +786,14 @@ export class KnowledgePageService {
       // What the engine holds is in the ledger before a compile may touch it, and nothing a person saved is still waiting.
       await this.#flushWriteBacks(user, project);
       const mirrored = await this.#mirror(user, project, "wiki", { round: state.round });
-      const submitted = await this.#submit(user, project, "wiki", state, mirrored.typed, 0);
+      const submitted = await this.#submit(user, project, "wiki", state, 0);
       await this.#updateState(userId, projectId, (value) => {
         value.pages = { ...value.pages, wiki: mirrored.typed };
         value.taken = taken;
-        value.limited = { ...value.limited, wiki: submitted.limited };
-        value.run = { step: submitted.limited ? "kg-start" : "wiki", startedAt: this.now().toISOString(), changeAt: value.lastChangeAt, wiki: submitted.limited ? null : submitted, kg: null, summary: {} };
+        value.run = { step: "wiki", startedAt: this.now().toISOString(), changeAt: value.lastChangeAt, wiki: submitted, kg: null, summary: {} };
         return value;
       });
-      return defer(submitted.limited ? "knowledge_page_limit" : "knowledge_compile_running", submitted.limited ? 0 : POLL_MS);
+      return defer("knowledge_compile_running", POLL_MS);
     }
 
     const run = state.run;
@@ -763,9 +812,25 @@ export class KnowledgePageService {
       // Ended, or a record the engine no longer holds. Either way what is in the target is mirrored: nothing is lost with a task.
       const mirrored = await this.#mirror(user, project, tree, { reapply: true, round: state.round });
       const cost = task ? await this.#recordUsage(userId, { taskId: task.taskId, tree, usage: task.usage }) : 0;
-      const outcome = { status: task?.status ?? "expired", error: task?.error ?? null, seconds: task?.processingSeconds ?? null, tokens: task?.usage?.totalTokens ?? null, cost, ...mirrored };
+      // A task that says `completed` can still be partial (a job of the pipeline failed): what it reported rides with the round.
+      const outcome = { status: task?.status ?? "expired", error: task?.error ?? null, seconds: task?.processingSeconds ?? null, tokens: task?.usage?.totalTokens ?? null, cost,
+        warnings: (task?.result?.warnings ?? []).slice(0, 5).map((/** @type {string} */ line) => line.slice(0, 300)), ...mirrored };
       const failed = outcome.status !== "completed";
       if (failed) this.counters.failed += 1;
+      // About two compiles in nine end `completed` with only index.md written (the v0.5.1.1 lab, 2026-10-23): from documents enough
+      // for a wiki that is a round that did not happen. It is asked once more, never twice; the second answer stands whatever it is.
+      if (asksAgainForIndexOnly({ tree, status: outcome.status, typed: mirrored.typed, retried: Boolean(held.retried) })
+        && (await this.#readableSources(userId, projectId)).length >= this.config.knowledgePagesMinSources) {
+        const again = await this.#submit(user, project, "wiki", state, (Number(held.attempt) || 0) + 1);
+        this.counters.indexOnlyRetries += 1;
+        await this.#updateState(userId, projectId, (value) => {
+          if (!value.run) return null;
+          value.run.summary = { ...value.run.summary, wikiIndexOnly: outcome };
+          value.run.wiki = { ...again, attempt: (Number(held.attempt) || 0) + 1, retried: true };
+          return value;
+        });
+        return defer("knowledge_compile_running", POLL_MS);
+      }
       await this.#updateState(userId, projectId, (value) => {
         if (!value.run) return null;
         value.pages = { ...value.pages, [tree]: mirrored.typed };
@@ -782,16 +847,15 @@ export class KnowledgePageService {
         return defer("knowledge_round_advancing", 0);
       }
       const mirrored = await this.#mirror(user, project, "kg", { round: state.round });
-      const submitted = await this.#submit(user, project, "kg", state, mirrored.typed, 0);
+      const submitted = await this.#submit(user, project, "kg", state, 0);
       await this.#updateState(userId, projectId, (value) => {
         if (!value.run) return null;
         value.pages = { ...value.pages, kg: mirrored.typed };
-        value.limited = { ...value.limited, kg: submitted.limited };
-        value.run.kg = submitted.limited ? null : submitted;
-        value.run.step = submitted.limited ? "finish" : "kg";
+        value.run.kg = submitted;
+        value.run.step = "kg";
         return value;
       });
-      return defer(submitted.limited ? "knowledge_page_limit" : "knowledge_compile_running", submitted.limited ? 0 : POLL_MS);
+      return defer("knowledge_compile_running", POLL_MS);
     }
 
     // finish: the round is done; its documents leave the queue, the round number moves on. A change recorded while the
@@ -870,7 +934,9 @@ export class KnowledgePageService {
     let writeBack = "queued";
     const { value: state } = await this.#state(user.id, project.id);
     if (this.resources?.configured && !state.run) {
-      try { await this.resources.writePage(user.id, uri, text); writeBack = "written"; this.counters.writeBacks += 1; }
+      // Not waited for: the person's save answers when the file is written, not when the engine has summarised it. A second
+      // save inside those seconds finds the directory busy and is queued, like any write the engine could not take.
+      try { await this.#writeBack(user.id, project.id, where.tree, where.rel, text, { wait: false }); writeBack = "written"; }
       catch (error) { this.report(codeOf(error)); }
     }
     if (writeBack === "queued") {
@@ -1095,17 +1161,15 @@ export class KnowledgePageService {
     const pending = Object.keys(value.pending ?? {}).length;
     const state = !this.enabled ? "disabled"
       : run ? "compiling"
-        : value.limited?.wiki ? "page_limit"
-          : ready && !ready.ok ? "engine_unavailable"
-            : pending ? (readable < this.config.knowledgePagesMinSources && !pages.length ? "below_threshold" : "queued")
-              : value.lastError ? "failed" : wiki.length ? "compiled" : readable < this.config.knowledgePagesMinSources ? "below_threshold" : "idle";
+        : ready && !ready.ok ? "engine_unavailable"
+          : pending ? (readable < this.config.knowledgePagesMinSources && !pages.length ? "below_threshold" : "queued")
+            : value.lastError ? "failed" : wiki.length ? "compiled" : readable < this.config.knowledgePagesMinSources ? "below_threshold" : "idle";
     return {
       enabled: this.enabled, state,
       engine: ready ? { ok: ready.ok, code: ready.code } : null,
       stage: run ? { tree: run.step === "kg" || run.step === "kg-start" ? "kg" : "wiki", step: run.step, task: running?.stage ?? null, status: running?.status ?? null, startedAt: run.startedAt } : null,
       pages: wiki.length, graphFiles: kg.length,
       typedPages: { wiki: wiki.filter((row) => row.payload.typed).length, kg: kg.filter((row) => row.payload.typed).length },
-      pageLimit: KNOWLEDGE_PAGE_SUBMIT_LIMIT, engineLimit: KNOWLEDGE_PAGE_ENGINE_LIMIT, limited: value.limited ?? { wiki: false, kg: false },
       stale: pages.filter((row) => row.payload.stale?.sources?.length).length,
       userEdited: pages.filter((row) => row.payload.userEdits?.blocks?.length).length,
       quotations: wiki.reduce((sum, row) => ({ present: sum.present + (row.payload.quotations?.counts?.present ?? 0), absent: sum.absent + (row.payload.quotations?.counts?.absent ?? 0),
