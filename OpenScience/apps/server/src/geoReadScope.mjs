@@ -415,7 +415,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     Promise.all(roundIds.map((id) => measure.roundSkippedEngines(id))),
     store.query(`SELECT q.*, coalesce(q.pool, g.pool) AS scope_pool, to_jsonb(q)->'client_tags' AS scope_client_tags FROM evimed_geo.questions q
       LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id AND g.geo_project_id = q.geo_project_id AND g.user_id = q.user_id
-      WHERE q.geo_project_id = $1 AND q.user_id = $2`, [project.id, project.userId]),
+      WHERE q.geo_project_id = $1 AND q.user_id = $2 ORDER BY q.id`, [project.id, project.userId]),
     roundIds.length ? measure.projectContext(project.id) : null,
     measure.contaminatedControlGroups(project.id),
   ]);
