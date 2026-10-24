@@ -63,7 +63,7 @@ const baseConfig = { ovNativeMemoryEnabled: true, memoryEnabled: true, nativeMem
  * A committer over doubles. `states` is what reading the engine's session answers, one entry per read (the last repeats);
  * `runs` is the conversation's runs as the ledger folds them.
  */
-function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine = "native", config = {}, runs = [], admit = null, commit = null, settings = {} } = {}) {
+function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine = "native", config = {}, runs = [], admit = null, commit = null, settings = {}, memoryContexts = null } = {}) {
   resetNativeMemoryMetrics();
   const time = clock();
   const reads = [];
@@ -83,13 +83,72 @@ function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine 
     runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id),
   } });
   const committer = new NativeTurnCommit({
-    config: { ...baseConfig, ...config }, researchMemory: memoryDouble({ engine, settings }), sessions, admission,
+    config: { ...baseConfig, ...config }, researchMemory: memoryDouble({ engine, settings }), sessions, admission, memoryContexts,
     conversations: { runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id) },
     commit: commit ?? (async (request) => { commits.push(request); return { commit: "accepted" }; }),
     setTimer: time.setTimer, clearTimer: time.clearTimer, wait: time.wait,
   });
   return { committer, time, reads, commits, runs };
 }
+
+function projectContexts() {
+  const reads = [], views = new Map();
+  for (const id of ['p1', 'p2']) views.set(id, Object.freeze({ kind: 'geo-project', ownerId: USER, projectId: id, namespaceId: `namespace-${id}`,
+    sessions: { readSession: async (_user, session) => { reads.push([id, session]); return { result: { pending_tokens: 100, message_count: 2 } }; } } }));
+  const contexts = {
+    forProject: async project => views.get(project.id),
+    assertLive: async context => { if (views.get(context.projectId) !== context) throw Object.assign(new Error('Context replaced'), { code: 'memory_scope_denied' }); },
+    noteCapture: async () => ({ proved: true }),
+  };
+  return { contexts, views, reads };
+}
+
+test('equal native session ids in two project namespaces have independent timers and immutable commit contexts', async () => {
+  const scoped = projectContexts(), f = doubles({ memoryContexts: scoped.contexts });
+  await f.committer.noteRunFinished(project('p1'), finished());
+  await f.committer.noteRunFinished(project('p2'), finished());
+  await f.committer.noteRunFinished(project('p1'), finished({ id: 'later-p1' }));
+  assert.equal(f.time.armed, 2);
+  for (const id of ['p1', 'p2']) assert.equal(f.committer.isArmed(USER, CONVERSATION, { namespaceId: scoped.views.get(id).namespaceId }), true);
+  assert.equal(f.committer.isArmed(USER, CONVERSATION), false);
+  f.time.fire(); await f.committer.idle();
+  assert.equal(f.reads.length, 0, 'no project read may use the singleton personal sessions view');
+  assert.deepEqual(scoped.reads.map(row => row[0]).sort(), ['p1', 'p1', 'p2', 'p2']);
+  assert.deepEqual(f.commits.map(row => row.context.namespaceId).sort(), ['namespace-p1', 'namespace-p2']);
+  assert.equal(f.commits.every(row => row.context === scoped.views.get(row.project.id)), true);
+});
+
+test('an armed old project context and an unproven session never fall back to personal reads', async () => {
+  const scoped = projectContexts(), f = doubles({ memoryContexts: scoped.contexts });
+  await f.committer.noteRunFinished(project('p1'), finished());
+  scoped.views.set('p1', { ...scoped.views.get('p1'), namespaceId: 'replacement-p1' });
+  f.time.fire(); await f.committer.idle();
+  assert.equal(f.commits.length, 0); assert.equal(scoped.reads.length, 0); assert.equal(f.reads.length, 0);
+  scoped.contexts.noteCapture = async () => null;
+  await f.committer.noteRunFinished(project('p2'), finished()); f.time.fire(); await f.committer.idle();
+  assert.equal(f.commits.length, 0); assert.equal(scoped.reads.length, 0); assert.equal(f.reads.length, 0);
+});
+
+test('closing during asynchronous context resolution cannot arm a new timer afterward', { timeout: 5000 }, async t => {
+  const scoped = projectContexts(); let entered, release;
+  const ready = new Promise(resolve => { entered = resolve; }), barrier = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  scoped.contexts.forProject = async () => { entered(); await barrier; return scoped.views.get('p1'); };
+  const f = doubles({ memoryContexts: scoped.contexts });
+  const note = f.committer.noteRunFinished(project('p1'), finished()); await ready;
+  f.committer.close(); release(); await note;
+  assert.equal(f.time.armed, 0); assert.equal(f.commits.length, 0);
+});
+
+test('a missing context or a replacement during settling cannot fall back or commit under the replacement namespace', async () => {
+  const scoped = projectContexts(), missing = doubles({ memoryContexts: { ...scoped.contexts, forProject: async () => null } });
+  await missing.committer.noteRunFinished(project('p1'), finished());
+  assert.equal(missing.time.armed, 0); assert.equal(missing.reads.length, 0);
+  const f = doubles({ memoryContexts: scoped.contexts });
+  f.committer.wait = async () => { scoped.views.set('p1', { ...scoped.views.get('p1'), namespaceId: 'replacement' }); };
+  await f.committer.noteRunFinished(project('p1'), finished()); f.time.fire(); await f.committer.idle();
+  assert.equal(scoped.reads.length, 1); assert.equal(f.reads.length, 0); assert.equal(f.commits.length, 0);
+});
 
 test("a short exchange of a native account is committed after the quiet, far below the plugin's own threshold", async () => {
   const { committer, time, reads, commits } = doubles({ states: [{ pending_tokens: 140, message_count: 2 }] });
