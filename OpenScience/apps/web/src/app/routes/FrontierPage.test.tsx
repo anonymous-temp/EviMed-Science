@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import type {
   FrontierDaily,
@@ -771,6 +771,10 @@ describe("the actions on a card", () => {
   });
 
   it("shows 「AI 评分」 and never a number the contract does not send", async () => {
+    // The card's time is today's 17:23 seen from today's 20:00: with the real clock, a run between 17:00 and 17:59 saw a
+    // future timestamp, which the card shows as now (「17:4x」), and the "no 17 anywhere else" check below failed.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(new Date().setHours(20, 0, 0, 0)) });
+    onTestFinished(() => { vi.useRealTimers(); });
     const timelineAt = new Date(new Date().setHours(17, 23, 0, 0)).toISOString();
     const title = "87 项研究中的 RCT";
     const summary = "29 个中心纳入 17 至 87 岁患者，随访 13 个月。";
