@@ -523,17 +523,43 @@ export class NativeMemoryOverlay {
     return { files: files.rowCount ?? 0, revisions: revisions.rowCount ?? 0, commits: commits.rowCount ?? 0 };
   }
 
-  /** A project was deleted: what the overlay holds of its files and its conversations. @param {string} userId @param {string} projectId */
+  /** One registered project namespace was removed from the engine. The caller
+   * resolves its authority before invoking this URI-scoped cleanup; the public
+   * project id and native session name are deliberately not deletion keys.
+   */
+  async purgeNamespace(userId, userRoot) {
+    const id = owner(userId), root = scopedRoot(userRoot);
+    if (!root.startsWith('viking://user/gp-')) throw new HttpError(403, 'memory_scope_denied', 'Only a registered project namespace may be purged here.');
+    await this.migrate();
+    return this.database.transaction(async client => {
+      const values = [id, root];
+      const files = await client.query("DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
+      const revisions = await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
+      const commits = await client.query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri LIKE $2 || '/sessions/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND (uri LIKE $2 || '/%' OR memory_type LIKE $3 || ':%')", [id, root, root.split('/').at(-1)]);
+      return { files: files.rowCount ?? 0, revisions: revisions.rowCount ?? 0, commits: commits.rowCount ?? 0 };
+    });
+  }
+
+  /** The personal engine's legacy project tags. Registered project namespaces
+   * have their own exact cleanup and cannot be selected by a reused public id.
+   * @param {string} userId @param {string} projectId
+   */
   async purgeProject(userId, projectId) {
-    const id = owner(userId);
-    const files = await this.#query("DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND project_id=$2 RETURNING uri", [id, String(projectId)]);
-    const uris = files.rows.map((/** @type {any} */ row) => String(row.uri));
-    if (uris.length) {
-      await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
-      await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
-    }
-    await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
-    await this.#query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
-    return { files: uris };
+    const id = owner(userId), values = [id, String(projectId), userRootUri(userId)];
+    await this.migrate();
+    return this.database.transaction(async client => {
+      const files = await client.query("DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND project_id=$2 AND uri LIKE $3 || '/memories/%' RETURNING uri", values);
+      const uris = files.rows.map((/** @type {any} */ row) => String(row.uri));
+      if (uris.length) {
+        await client.query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
+        await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
+      }
+      await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND project_id=$2 AND uri LIKE $3 || '/memories/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND archive_uri LIKE $3 || '/sessions/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2", values.slice(0, 2));
+      return { files: uris };
+    });
   }
 }

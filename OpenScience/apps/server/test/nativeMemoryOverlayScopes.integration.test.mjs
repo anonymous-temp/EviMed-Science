@@ -63,3 +63,58 @@ test('a root predicate is canonical and cannot become a partial-prefix or wildca
     await assert.rejects(f.overlay.commitsOfSession(f.userId, 'dsh-root', { userRoot }), error => error.code === 'memory_scope_denied');
   }
 });
+
+test('namespace cleanup removes only its exact URI history including forgotten files and leaves equal public project ids alone', options, async t => {
+  const f = await fixture(t), roots = [f.personal, f.a, f.b];
+  for (const root of roots) {
+    const uri = `${root}/memories/entities/fact.md`;
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'entities', projectId: 'reused', body: 'Fact' });
+    await f.overlay.setSources(f.userId, uri, [{ type: 'doi', id: '10.1000/example' }]);
+    await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'entities', change: 'added', actor: 'engine', after: 'Fact', projectId: 'reused' });
+    await f.overlay.recordCommit({ userId: f.userId, archiveUri: f.archive(root), engineSession: 'dsh-root', projectId: 'reused', origin: 'page' });
+    await f.overlay.reject(f.userId, root === f.personal ? 'entities' : `${root.split('/').at(-1)}:entities`, uri, ['Forgotten fact']);
+  }
+  await f.overlay.noteSession(f.userId, 'dsh-root', 'reused');
+  const forgotten = `${f.a}/memories/project_facts/forgotten.md`;
+  await f.overlay.addRevision({ userId: f.userId, uri: forgotten, memoryType: 'project_facts', change: 'deleted', actor: 'user', before: 'Private old text', projectId: 'reused' });
+  const purged = await f.overlay.purgeNamespace(f.userId, f.a);
+  assert.deepEqual(purged, { files: 1, revisions: 2, commits: 1 });
+  assert.equal(await f.overlay.file(f.userId, `${f.a}/memories/entities/fact.md`), null);
+  assert.equal((await f.overlay.revisionsOf(f.userId, forgotten)).length, 0);
+  assert.equal((await f.overlay.sources(f.userId)).length, 2);
+  assert.equal((await f.overlay.rejectedFingerprints(f.userId, `${f.a.split('/').at(-1)}:entities`)).size, 0);
+  assert.equal((await f.overlay.rejectedFingerprints(f.userId, 'entities')).size, 1);
+  for (const root of [f.personal, f.b]) assert.ok(await f.overlay.commit(f.userId, f.archive(root)));
+  assert.equal(await f.overlay.projectOfSession(f.userId, 'dsh-root'), 'reused');
+  assert.deepEqual(await f.overlay.purgeNamespace(f.userId, f.a), { files: 0, revisions: 0, commits: 0 });
+  await assert.rejects(f.overlay.purgeNamespace(f.userId, f.personal), error => error.code === 'memory_scope_denied');
+});
+
+test('legacy project cleanup stays in the personal root and never erases another registered namespace sharing its project id', options, async t => {
+  const f = await fixture(t);
+  for (const root of [f.personal, f.a]) {
+    const uri = `${root}/memories/project_facts/fact.md`;
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'project_facts', projectId: 'reused', body: 'Fact' });
+    await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'project_facts', projectId: 'reused', change: 'added', actor: 'engine', after: 'Fact' });
+    await f.overlay.recordCommit({ userId: f.userId, archiveUri: f.archive(root), engineSession: 'dsh-root', projectId: 'reused', origin: 'scan' });
+  }
+  await f.overlay.purgeProject(f.userId, 'reused');
+  assert.equal(await f.overlay.file(f.userId, `${f.personal}/memories/project_facts/fact.md`), null);
+  assert.ok(await f.overlay.file(f.userId, `${f.a}/memories/project_facts/fact.md`));
+  assert.ok(await f.overlay.commit(f.userId, f.archive(f.a)));
+});
+
+test('namespace overlay cleanup is one transaction when a later table delete fails', options, async t => {
+  const f = await fixture(t), uri = `${f.a}/memories/entities/fact.md`;
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'entities', body: 'Fact' });
+  await f.overlay.setSources(f.userId, uri, [{ type: 'doi', id: '10.1000/example' }]);
+  await f.overlay.recordCommit({ userId: f.userId, archiveUri: f.archive(f.a), engineSession: 'dsh-root', origin: 'scan' });
+  await f.database.query("CREATE FUNCTION evimed_memory.refuse_fixture_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture deletion interrupted'; END $$");
+  await f.database.query('CREATE TRIGGER refuse_fixture_delete BEFORE DELETE ON evimed_memory.native_sources FOR EACH ROW EXECUTE FUNCTION evimed_memory.refuse_fixture_delete()');
+  await assert.rejects(f.overlay.purgeNamespace(f.userId, f.a), /fixture deletion interrupted/);
+  assert.ok(await f.overlay.file(f.userId, uri));
+  assert.ok(await f.overlay.commit(f.userId, f.archive(f.a)));
+  await f.database.query('DROP TRIGGER refuse_fixture_delete ON evimed_memory.native_sources');
+  await f.overlay.purgeNamespace(f.userId, f.a);
+  assert.equal(await f.overlay.file(f.userId, uri), null);
+});

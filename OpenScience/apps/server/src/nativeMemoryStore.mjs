@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { zipSync } from 'fflate';
 import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
@@ -130,6 +131,7 @@ function engineFailure(error) {
  */
 const BODIES_PER_ACCOUNT = 400;
 const BODY_ACCOUNTS = 100;
+const MAX_NATIVE_PACK_BYTES = 128 * 1024 * 1024;
 
 export class NativeMemoryStore {
   /** @type {Map<string, { epoch: number, promise: Promise<any[]> }>} */
@@ -823,27 +825,35 @@ export class NativeMemoryStore {
   async reset(userId) {
     this.#assertConfigured();
     this.#touch(userId);
-    const root = this.sessions.memoryRoot(userId);
-    let files = 0;
-    await this.#engine(async () => {
-      for (const [type, segment] of Object.entries(MEMORY_SEGMENT_OF_TYPE)) {
-        if (await this.sessions.remove(userId, `${root}/${segment}`, { recursive: type !== "profile" })) files += 1;
-      }
-    });
-    const sessions = await this.#deleteSessions(userId);
+    const views = await this.#contexts(userId);
+    let files = 0, sessions = 0;
+    for (const context of views) {
+      if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
+      const view = context.sessions, root = view.memoryRoot(userId);
+      await this.#engine(async () => {
+        for (const [type, segment] of Object.entries(MEMORY_SEGMENT_OF_TYPE)) {
+          if (await view.remove(userId, `${root}/${segment}`, { recursive: type !== "profile" })) files += 1;
+        }
+      });
+      sessions += await this.#deleteSessions(userId, () => true, context);
+    }
     const purged = await this.overlay.purgeUser(userId);
     return { files, sessions, revisions: purged.revisions };
   }
 
-  /** Every engine session of the account, deleted. @param {string} userId @param {(name: string) => boolean} [which] */
-  async #deleteSessions(userId, which = () => true) {
-    const root = `${this.sessions.userRoot(userId)}/sessions`;
-    const listed = await this.#engine(() => this.sessions.tree(userId, root, { levelLimit: 1 }));
+  /** Every selected engine session, deleted; a failed delete leaves discovery
+   * intact for retry rather than reporting a successful account reset.
+   * @param {string} userId @param {(name: string) => boolean} which @param {any} context
+   */
+  async #deleteSessions(userId, which = () => true, context = this.#personalContext(userId)) {
+    const view = context.sessions, root = `${context.userRoot}/sessions`;
+    const listed = await this.#engine(() => view.tree(userId, root, { levelLimit: 1 }));
     let deleted = 0;
     for (const node of listed.filter((entry) => entry.isDir)) {
+      if (!node.uri.startsWith(`${root}/`)) throw new HttpError(403, 'memory_scope_denied', 'A listed session is outside its namespace.');
       const name = node.uri.slice(root.length + 1);
       if (!name || name.includes("/") || !which(name)) continue;
-      if (await this.#engine(() => this.sessions.deleteSession(userId, name)).catch(() => false)) deleted += 1;
+      if (await this.#engine(() => view.deleteSession(userId, name))) deleted += 1;
     }
     return deleted;
   }
@@ -856,14 +866,27 @@ export class NativeMemoryStore {
   async deleteProject(userId, projectId) {
     this.#assertConfigured();
     this.#touch(userId);
+    // Snapshot all exact registered incarnations whose policy rows will cascade
+    // with this control project. Never discover them after the project delete.
+    const views = await this.#contexts(userId);
+    const registered = views.filter(context => context.kind === 'geo-project' && context.projectId === projectId);
+    let files = 0, sessions = 0;
+    for (const context of registered) {
+      await this.memoryContexts.assertKnown(context);
+      const root = context.sessions.memoryRoot(userId);
+      const listed = await this.#engine(() => context.sessions.tree(userId, root, { levelLimit: 8 }));
+      if (await this.#engine(() => context.sessions.remove(userId, root, { recursive: true }))) files += listed.filter(node => !node.isDir).length;
+      sessions += await this.#deleteSessions(userId, () => true, context);
+      await this.overlay.purgeNamespace(userId, context.userRoot);
+    }
     const root = this.sessions.memoryRoot(userId);
     const tagged = await this.#engine(() => this.sessions.tree(userId, root, { levelLimit: 8, tags: [`project=${projectId}`] }));
     const fromOverlay = await this.overlay.projectFiles(userId, projectId);
-    const uris = new Set([...tagged.filter((node) => !node.isDir).map((node) => node.uri), ...fromOverlay.map((file) => file.uri)]);
-    let files = 0;
+    const uris = new Set([...tagged.filter((node) => !node.isDir).map((node) => node.uri), ...fromOverlay.map((file) => file.uri)]
+      .filter(uri => nativeMemoryFile(uri, root)));
     for (const uri of uris) if (await this.#engine(() => this.sessions.remove(userId, uri))) files += 1;
     const engineSessions = new Set(await this.overlay.projectSessions(userId, projectId));
-    const sessions = await this.#deleteSessions(userId, (name) => engineSessions.has(name));
+    sessions += await this.#deleteSessions(userId, (name) => engineSessions.has(name));
     await this.overlay.purgeProject(userId, projectId);
     return { files, sessions };
   }
@@ -876,15 +899,39 @@ export class NativeMemoryStore {
   async eraseAccount(userId) {
     this.#assertConfigured();
     this.#touch(userId);
-    const erased = await this.#engine(() => this.sessions.eraseUser(userId));
-    await this.overlay.purgeUser(userId).catch(() => null);
-    await this.overlay.forgetAccount(userId).catch(() => null);
-    return erased;
+    const views = await this.#contexts(userId);
+    let deleted = false;
+    for (const context of views) {
+      if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
+      const erased = await this.#engine(() => context.sessions.eraseUser(userId));
+      if (erased.pending) throw new HttpError(503, 'memory_engine_unavailable', 'Memory deletion is still in progress. Retry before deleting the account.');
+      deleted ||= erased.deleted;
+    }
+    await this.overlay.purgeUser(userId);
+    await this.overlay.forgetAccount(userId);
+    return { deleted, pending: false };
   }
 
   /** The account's memories as the engine's own pack, for the account export. @param {string} userId */
   async exportPack(userId) {
     this.#assertConfigured();
-    return this.#engine(() => this.sessions.exportPack(userId));
+    const views = await this.#contexts(userId);
+    if (views.length === 1) return this.#engine(() => views[0].sessions.exportPack(userId));
+    /** @type {import('fflate').Zippable} */
+    const entries = {};
+    const manifest = [];
+    let bytes = 0;
+    for (const context of views) {
+      await this.memoryContexts.assertKnown(context);
+      const pack = await this.#engine(() => context.sessions.exportPack(userId));
+      bytes += pack.byteLength;
+      if (bytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
+      const name = context.kind === 'owned' ? 'personal.zip' : `projects/${context.namespaceId}.zip`;
+      entries[name] = [pack, { level: 0 }];
+      manifest.push({ path: name, namespaceId: context.namespaceId, projectId: context.projectId, policyRef: context.policyRef ?? null,
+        bytes: pack.byteLength, sha256: createHash('sha256').update(pack).digest('hex') });
+    }
+    entries['manifest.json'] = Buffer.from(JSON.stringify({ schemaVersion: 1, packs: manifest }, null, 2));
+    return Buffer.from(zipSync(entries));
   }
 }

@@ -80,3 +80,17 @@ test('bound client identity conflicts and non-boolean authentication never reach
   await scoped.health();
   assert.equal(calls.length, 1); assert.equal(calls[0].path, '/health'); assert.equal(calls[0].authenticated, false);
 });
+test('an unavailable deletion probe is not proof that namespace erasure completed', async () => {
+  for (const code of ['memory_index_upstream_error', 'memory_index_timeout', 'memory_index_auth_failed']) {
+    const sessions = new OpenVikingSessions({ configured: true, account: 'fixture', request: async input => {
+      if (input.path === '/api/v1/fs/ls') throw Object.assign(new Error('Deletion probe unavailable'), { code });
+      return { status: 'ok' };
+    } });
+    await assert.rejects(sessions.eraseUser('owner', { waitMs: 0 }), error => error.code === code);
+  }
+  const absent = new OpenVikingSessions({ configured: true, account: 'fixture', request: async input => {
+    if (input.path === '/api/v1/fs/ls') throw Object.assign(new Error('Absent'), { code: 'memory_index_not_found' });
+    return { status: 'ok' };
+  } });
+  assert.deepEqual(await absent.eraseUser('owner', { waitMs: 0 }), { deleted: true, pending: false });
+});

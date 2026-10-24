@@ -421,7 +421,9 @@ export class OpenVikingSessions {
         await this.client.request({ path: "/api/v1/fs/ls", userId, query: { uri: this.memoryRoot(userId) }, timeoutMs: this.timeoutMs });
         return { deleted: true, pending: false };
       } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "memory_index_precondition_failed") return { deleted: true, pending: false };
+        const code = /** @type {any} */ (error)?.code;
+        if (code === "memory_index_not_found") return { deleted: true, pending: false };
+        if (code !== "memory_index_precondition_failed") throw error;
       }
       if (Date.now() >= deadline) return { deleted: true, pending: true };
       await sleep(pollMs);
