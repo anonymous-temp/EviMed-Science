@@ -50,20 +50,23 @@ ORIGIN_ROWS = 1500
 CREDIT_LINE_MAX = 80                  # a credit is a short paragraph of its own
 PROPOSE_PER_CAP = 3
 # What an article says before the account it carries. Longest first: the alternation takes the first that matches.
-ORIGIN_MARKERS = ("本文转载自", "本文来源于", "本文来源", "本文来自", "文章来源", "内容来源", "信息来源", "稿件来源", "转载自",
-                  "来源于", "来源", "出处")
+ORIGIN_MARKERS = ("本文转载自", "本文来源于", "本文来源", "本内容来自", "本文来自", "文章来源", "内容来源", "信息来源", "稿件来源",
+                  "转载自", "来源于", "来源", "出处")
 # Markers that may run straight into the name (「本文转载自医学界」); the bare ones need a separator or a quote.
-JOINED_MARKERS = ("本文转载自", "本文来源于", "本文来自", "转载自")
+JOINED_MARKERS = ("本文转载自", "本文来源于", "本内容来自", "本文来自", "转载自")
 NOT_ACCOUNTS = frozenset({"网络", "网络图片", "互联网", "图片", "图源", "本文", "作者", "原创", "受访者", "受访者供图", "企业供图",
                           "公开资料", "官网", "官方网站", "新闻", "资料", "整理", "编辑", "参考文献", "原文", "摄图网", "视觉中国",
                           "图虫创意", "网络公开资料", "公司官网", "公司公告", "企业官网", "医院官网", "pixabay", "unsplash"})
+# A credit to a web page or a document, not to an account (「来源/ 国家药监局网站」, 「来源：GSK官方公告」).
+NOT_ACCOUNT_SUFFIXES = ("官网", "网站", "官方网站", "公告", "年报", "半年报", "章程", "招股书", "报告")
 NAME_SUFFIXES = ("微信公众号", "官方公众号", "公众号", "官方微信", "微信号", "微信")
-_LEAD = r"^[\s*#>▲●■◆·•|丨｜\-—【\[]{0,4}"
+# Up to four marks before the marker (「*」, 「▲」, 「（」), and an editor's note that opens the credit (「编者按：本文来自…」).
+_LEAD = r"^[\s*#>▲●■◆·•|丨｜\-—【\[（(]{0,4}(?:编者按[：:]\s*|【编者按】\s*)?"
 _NAME = r"[「“\"《【]?(?P<name>[^\s，,。；;、」”\"》】|丨｜/()（）:：!！?？<>]{2,40})"
 _JOINED = re.compile(_LEAD + "(?:" + "|".join(JOINED_MARKERS) + r")\s*(?:于)?\s*(?:微信公众号|公众号|微信号|微信)?\s*"
                      r"[：:｜|丨\-—]*\s*" + _NAME)
 _SEPARATED = re.compile(_LEAD + "(?:" + "|".join(ORIGIN_MARKERS) + r")\s*(?:于)?\s*(?:微信公众号|公众号|微信号|微信)?\s*"
-                        r"(?:[：:｜|丨\-—]+\s*|(?=[「“\"《【]))" + _NAME)
+                        r"(?:[：:｜|丨／/\-—]+\s*|(?=[「“\"《【]))" + _NAME)
 
 
 def clean_name(raw: str) -> str | None:
@@ -76,7 +79,7 @@ def clean_name(raw: str) -> str | None:
     if not 2 <= len(name) <= 30 or name.isdigit():
         return None
     lowered = name.lower()
-    if "http" in lowered or "www" in lowered or "." in name or lowered in NOT_ACCOUNTS:
+    if "http" in lowered or "www" in lowered or "." in name or lowered in NOT_ACCOUNTS or name.endswith(NOT_ACCOUNT_SUFFIXES):
         return None
     return name
 

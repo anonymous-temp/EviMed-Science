@@ -42,6 +42,10 @@ def test_origin_credits_are_read_from_short_lines_that_start_with_a_marker():
     ])
     assert wd.origin_names(body) == ["医学界", "健康界", "丁香园", "医药观澜", "中华医学杂志"]
     assert wd.origin_names("本文来自微信公众号：赛柏蓝（ID：saibailan）") == ["赛柏蓝"]
+    # Shapes cut from production bodies of 2026-10-24 (赛柏蓝's reposts; a credit to a web page is not an account's).
+    assert wd.origin_names("编者按：本文来自米内网，作者玲珑；赛柏蓝授权转载，编辑晓琳") == ["米内网"]
+    assert wd.origin_names("（来源｜赛柏蓝；作者｜亿路）") == ["赛柏蓝"]
+    assert wd.origin_names("来源/ 国家药监局网站\n来源：GSK官方公告\n图片来源：东方财富网") == []
     assert wd.origin_names("来源于临床实践") == [], "a bare marker needs a separator or a quote"
     assert wd.origin_names(None) == []
 
