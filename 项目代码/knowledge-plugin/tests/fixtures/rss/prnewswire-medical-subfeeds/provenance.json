@@ -1,0 +1,168 @@
+{
+ "case": "rss/prnewswire-medical-subfeeds",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-24T16:41:16+00:00",
+ "note": "ct-src 2026-10-24: PR Newswire's six medical subject feeds",
+ "source": {
+  "id": "prnewswire-health",
+  "name": "PR Newswire 医药类新闻稿（制药、生物技术、临床试验、审批、医疗器械）",
+  "homepage": "https://www.prnewswire.com/news-releases/health-latest-news/",
+  "lane": "pipeline",
+  "source_type": "media",
+  "access": "rss",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "Cision PR Newswire",
+  "launch_tier": "P1",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.prnewswire.com/rss/health-latest-news/pharmaceuticals-list.rss",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.prnewswire.com"
+   ],
+   "urls": [
+    "https://www.prnewswire.com/rss/health-latest-news/biotechnology-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/clinical-trials-medical-discoveries-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/fda-approval-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/international-medical-approval-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/medical-equipment-list.rss"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-24T16:41:07+00:00",
+ "request_budget": 6,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.prnewswire.com/rss/health-latest-news/pharmaceuticals-list.rss",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.prnewswire.com/rss/health-latest-news/pharmaceuticals-list.rss",
+   "headers": {
+    "content-type": "application/xml",
+    "last-modified": "Sat, 24 Oct 2026 16:40:07 GMT",
+    "etag": "W/\"b160-65e98bfe42134\""
+   },
+   "fetched_at": "2026-10-24T16:41:09+00:00",
+   "file": "01.xml",
+   "gzip": false,
+   "bytes": 45408,
+   "sha256": "7dd4134339db1b5e91fdaaf60215c81b5f4a0adb59a9b1beb01896bfb1792451"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.prnewswire.com/rss/health-latest-news/biotechnology-list.rss",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.prnewswire.com/rss/health-latest-news/biotechnology-list.rss",
+   "headers": {
+    "content-type": "application/xml",
+    "last-modified": "Sat, 24 Oct 2026 16:40:07 GMT",
+    "etag": "W/\"b1e0-65e98bfe6b944\""
+   },
+   "fetched_at": "2026-10-24T16:41:10+00:00",
+   "file": "02.xml",
+   "gzip": false,
+   "bytes": 45536,
+   "sha256": "4070acb3acf876ec7eccca37eaa10a55b97957eb6ec3e91f87e26256adf2bdf2"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.prnewswire.com/rss/health-latest-news/clinical-trials-medical-discoveries-list.rss",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.prnewswire.com/rss/health-latest-news/clinical-trials-medical-discoveries-list.rss",
+   "headers": {
+    "content-type": "application/xml",
+    "last-modified": "Sat, 24 Oct 2026 16:40:39 GMT",
+    "etag": "W/\"b8e3-65e98c1ccda6d\""
+   },
+   "fetched_at": "2026-10-24T16:41:12+00:00",
+   "file": "03.xml",
+   "gzip": false,
+   "bytes": 47331,
+   "sha256": "53257ee7e9a6b61027f8b88676d6fe8276d325191da7718519da62dd0c2b6921"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.prnewswire.com/rss/health-latest-news/fda-approval-list.rss",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.prnewswire.com/rss/health-latest-news/fda-approval-list.rss",
+   "headers": {
+    "content-type": "application/xml",
+    "last-modified": "Sat, 24 Oct 2026 16:41:11 GMT",
+    "etag": "W/\"bc29-65e98c3b8b46e\""
+   },
+   "fetched_at": "2026-10-24T16:41:13+00:00",
+   "file": "04.xml",
+   "gzip": false,
+   "bytes": 48169,
+   "sha256": "58f6d0de89ecab48140b9ec43a00dbc036cccb72a9d75d66fbf55623484ff6ba"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.prnewswire.com/rss/health-latest-news/international-medical-approval-list.rss",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.prnewswire.com/rss/health-latest-news/international-medical-approval-list.rss",
+   "headers": {
+    "content-type": "application/xml",
+    "last-modified": "Sat, 24 Oct 2026 16:41:15 GMT",
+    "etag": "W/\"b5cd-65e98c3f1194a\""
+   },
+   "fetched_at": "2026-10-24T16:41:15+00:00",
+   "file": "05.xml",
+   "gzip": false,
+   "bytes": 46541,
+   "sha256": "6c95fd87e6dbcf7c0e5c3bd30beb77af87f0d44378d993e0d6b4437938015a87"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.prnewswire.com/rss/health-latest-news/medical-equipment-list.rss",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.prnewswire.com/rss/health-latest-news/medical-equipment-list.rss",
+   "headers": {
+    "content-type": "application/xml",
+    "last-modified": "Sat, 24 Oct 2026 16:40:17 GMT",
+    "etag": "W/\"badd-65e98c0744b2d\""
+   },
+   "fetched_at": "2026-10-24T16:41:16+00:00",
+   "file": "06.xml",
+   "gzip": false,
+   "bytes": 47837,
+   "sha256": "ef66769847abe090b69ee9044000f50f47bd0630e08ed832b1aaf3148bc78ebe"
+  }
+ ]
+}

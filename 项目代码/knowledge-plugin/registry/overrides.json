@@ -1002,8 +1002,20 @@
   "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
  },
  "prnewswire-health": {
+  "name": "PR Newswire 医药类新闻稿（制药、生物技术、临床试验、审批、医疗器械）",
   "enabled": true,
-  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json.",
+  "config": {
+   "url": "https://www.prnewswire.com/rss/health-latest-news/pharmaceuticals-list.rss",
+   "urls": [
+    "https://www.prnewswire.com/rss/health-latest-news/biotechnology-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/clinical-trials-medical-discoveries-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/fda-approval-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/international-medical-approval-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/medical-equipment-list.rss"
+   ]
+  },
+  "_why_subfeeds_20261024": "ct-src: the all-health feed (health-latest-news) mixes fitness, dentistry, insurance and securities-lawsuit notices into 20 items covering ~19 hours; PR Newswire's own medical subject feeds (its RSS index, 2026-10-24) cover a day each, 71 distinct releases across these six against 12 medical ones in the all-health feed, and none of the lawsuit or lifestyle notices. medical-pharmaceuticals is left out: 16 of its 20 are in pharmaceuticals."
  },
  "campbell-collaboration": {
   "enabled": true,

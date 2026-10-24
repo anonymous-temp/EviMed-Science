@@ -10021,7 +10021,7 @@
   },
   {
    "id": "prnewswire-health",
-   "name": "PR Newswire 健康类新闻稿总汇",
+   "name": "PR Newswire 医药类新闻稿（制药、生物技术、临床试验、审批、医疗器械）",
    "homepage": "https://www.prnewswire.com/news-releases/health-latest-news/",
    "lane": "pipeline",
    "source_type": "media",
@@ -10039,10 +10039,17 @@
    "disabled_reason": null,
    "category": "industry-media",
    "config": {
-    "url": "https://www.prnewswire.com/rss/health-latest-news/health-latest-news-list.rss",
+    "url": "https://www.prnewswire.com/rss/health-latest-news/pharmaceuticals-list.rss",
     "max_pages": 1,
     "allowed_hosts": [
      "www.prnewswire.com"
+    ],
+    "urls": [
+     "https://www.prnewswire.com/rss/health-latest-news/biotechnology-list.rss",
+     "https://www.prnewswire.com/rss/health-latest-news/clinical-trials-medical-discoveries-list.rss",
+     "https://www.prnewswire.com/rss/health-latest-news/fda-approval-list.rss",
+     "https://www.prnewswire.com/rss/health-latest-news/international-medical-approval-list.rss",
+     "https://www.prnewswire.com/rss/health-latest-news/medical-equipment-list.rss"
     ]
    }
   },

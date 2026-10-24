@@ -430,6 +430,8 @@ ADAPTER_CASES: dict[str, dict] = {
     "rss/medrxiv-epidemiology": {"source": "medrxiv-epidemiology", "budget": 1},
     "rss/ema-new-human-medicines": {"source": "ema-new-human-medicines", "budget": 1},
     "rss/cdc-eid-ahead-of-print": {"source": "cdc-eid-journal", "budget": 1},
+    "rss/prnewswire-medical-subfeeds": {"source": "prnewswire-health", "budget": 6,
+                                        "note": "ct-src 2026-10-24: PR Newswire's six medical subject feeds"},
     "atom/mhra-drug-safety-update": {"source": "mhra-drug-safety-update", "budget": 1},
     "atom/arxiv-qbio-qm": {"source": "arxiv-qbio-qm", "budget": 1},
     # html-list
