@@ -284,6 +284,17 @@ function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}, runId 
 }
 
 /**
+ * The methods a conversation was given, for what it hands its children and the inline method it is bound to: its own
+ * (`evimedCapsuleMethods.forSession`, which the capsule row decides when the conversation begins), the runtime's list when the row does not say.
+ * @param {any} ctx @param {string} sessionId
+ * @returns {any[]}
+ */
+function conversationCapsuleMethods(ctx, sessionId) {
+  const launched = ctx.get('evimedCapsuleMethods') ?? []
+  return (typeof launched.forSession === 'function' ? launched.forSession(sessionId) : null) ?? launched
+}
+
+/**
  * The delegation receipt's digests: which version of each injected skill and
  * capsule method was in the child's room.
  *
@@ -309,13 +320,13 @@ function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}, runId 
  *
  * @param {any} ctx @param {string} runId @param {string} itemId
  * @param {readonly {name: string, body: string}[]} skillBodies @param {string} childSessionId
- * @returns {Promise<{skillDigests: {name: string, digest: string}[], methods: {name: string, digest: string}[], receiptError?: string}>}
+ * @param {readonly any[]} [capsuleMethods] the methods the child was handed: the conversation's own (`evimedCapsuleMethods.forSession`), the runtime's list when it has none
+ * @returns {Promise<{skillDigests: {name: string, digest: string}[], methods: {name: string, digest: string, reason?: string}[], receiptError?: string}>}
  */
-function delegationReceipt(ctx, runId, itemId, skillBodies, childSessionId) {
-  const capsuleMethods = ctx.get('evimedCapsuleMethods') ?? []
+function delegationReceipt(ctx, runId, itemId, skillBodies, childSessionId, capsuleMethods = ctx.get('evimedCapsuleMethods') ?? []) {
   return Promise.all([
     Promise.all(skillBodies.map(async (skill) => ({ name: skill.name, digest: await skillBodyDigestAsync(skill.body) }))),
-    Promise.all(capsuleMethods.map(async (/** @type {any} */ method) => ({ name: method.name, digest: method.digest ?? await skillBodyDigestAsync(method.body ?? '') }))),
+    Promise.all(capsuleMethods.map(async (/** @type {any} */ method) => ({ name: method.name, digest: method.digest ?? await skillBodyDigestAsync(method.body ?? ''), ...(typeof method.reason === 'string' && method.reason ? { reason: method.reason } : {}) }))),
   ]).then(([skillDigests, methods]) => {
     const receipt = { skillDigests, methods }
     const store = ctx.get('evimedRun')
@@ -824,7 +835,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         contractKind,
         skillBodies: method.inline,
         deferredSections: method.deferred,
-        capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
+        capsuleMethods: conversationCapsuleMethods(ctx, entry.sessionId),
         reviewEnabled: config.reviewEnabled,
         skillsDir: config.skillsDir,
       }), name)
@@ -1779,7 +1790,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             skillBodies: method.inline,
             deferredSections: method.deferred,
             skillsDir: config.skillsDir,
-            capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
+            capsuleMethods: conversationCapsuleMethods(ctx, entry.sessionId),
             inputs: args.inputs ?? {},
             toolFilter: childToolFilter(manifest, kind.contractKind),
             memoryText: entry.memoryText ?? null,
@@ -1843,7 +1854,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             entry.delegations.set(handle, delegation)
             // The receipt's digests, computed beside the running child rather than
             // in front of it. See `delegationReceipt` for why the order matters.
-            const receipt = delegationReceipt(ctx, runId, item.id, skillBodies, childSessionId)
+            const receipt = delegationReceipt(ctx, runId, item.id, skillBodies, childSessionId, conversationCapsuleMethods(ctx, entry.sessionId))
             delegation.settled = followDelegation(entry, delegation, run, { request, receipt, injected, signal, parentAgentId: call.agentId })
           } catch (error) {
             abandonStartedChild(run, abort, entry.sessionId, error)

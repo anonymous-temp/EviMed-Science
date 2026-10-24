@@ -699,8 +699,11 @@ export function onPromptAssemble(ctx, fn) {
 /** Current inputs claimed by the loop before assembly, never pending inbox
  * entries or session history. Verified against the pinned loop's preStep:
  * claim -> inbox/claimed -> assemble -> pre-step.
+ * `fn` also receives the assembly itself (`assembly.sections`, `.tools`, `.contexts`), which it may change before the step's request is
+ * sent: what the kernel composed from the registry at the moment is replaced by what this agent should be told. Only what a plugin owns
+ * should be changed there, and what is changed is changed on every assembly of the agent, not only the one that claimed.
  * @param {any} ctx
- * @param {(agent:any, claimed:{inputs:{requestId:string,text:string}[],turn:number,signal?:AbortSignal})=>Promise<boolean>} fn
+ * @param {(agent:any, claimed:{inputs:{requestId:string,text:string}[],turn:number,signal?:AbortSignal}, assembly?:any)=>Promise<boolean>} fn
  * @returns {()=>void}
  */
 export function onClaimedPromptAssemble(ctx, fn) {
@@ -722,7 +725,7 @@ export function onClaimedPromptAssemble(ctx, fn) {
     if (agent) {
       const batch = batches.get(agent)
       batches.delete(agent)
-      if (!context?.signal?.aborted && await fn(agent, { inputs: stepUserInputs(batch), turn: batch?.turn ?? 0, signal: context?.signal })) {
+      if (!context?.signal?.aborted && await fn(agent, { inputs: stepUserInputs(batch), turn: batch?.turn ?? 0, signal: context?.signal }, assembly)) {
         const registry = ctx?.get?.('tools') ?? ctx?.tools
         // Remove only schemas owned by this registry; provider-generated tools
         // remain intact. run_code carries a different schema surface.

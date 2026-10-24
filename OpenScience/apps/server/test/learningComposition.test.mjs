@@ -168,8 +168,11 @@ test("the projection the feed attributes against is the run's own, not whatever 
   // Attribution names deliverables. A projection belonging to a different run
   // holds different deliverable ids, and the failure would not be an error —
   // it would be confident credit assigned to the wrong work.
+  // What is read is the run's own (`runWorkflowProjection` scopes it to the run); with none, only what the control plane itself gave the
+  // conversation counts, and its deliverables are not invented.
   assert.match(serverSource, /await agentRuns\.runWorkflowProjection\(project, run\)/);
-  assert.match(serverSource, /if \(!projection\) return;/);
+  assert.match(serverSource, /if \(!read && !given\.length\) return;/);
+  assert.match(serverSource, /const projection = \{ \.\.\.\(read \?\? \{\}\),/);
 });
 
 test("the evaluation corpus has a producer, and the control plane is not it", async () => {
@@ -386,7 +389,37 @@ test("the 2026-10-12 learning levers reach the parts that read them: the unused-
   // Constructed with the option is not fed: `recordCarried` is the only writer of the count the stop reads, and a
   // `MethodConsolidation` built without the limit would fall back to the domain's default and ignore the deployment's.
   const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
-  assert.match(record, /if \(derived\.answered\) \{\s*for \(const methodId of derived\.carried\) \{\s*await learningService\.recordCarried\(project\.userId, methodId\)/);
+  assert.match(record, /if \(derived\.answered\) \{[^]*?for \(const \{ id: methodId, reason \} of derived\.carriedBy\) \{\s*await learningService\.recordCarried\(project\.userId, methodId, reason \?\? undefined\)/,
+    "a card is counted by why it was there: the exposure slot's is not a load the method is stopped for");
   assert.match(serverSource, /unusedAfterLoads: config\.learningUnusedRetireLoads, onRetirement: \(code\) => learningMetrics\.observeRetirement\(code\)/);
   assert.match(serverSource, /repairShare: config\.learningRepairDistillShare, onRepairSample: \(distilled\) => learningMetrics\.observeRepairSample\(distilled\)/);
+});
+
+test("the loop's counters are kept for a conversation that read a clinical source too: they carry no text, so the early return does not come before them", () => {
+  // 2026-10-23: `recordMethodUse` sat after `if (!reusableClinicalContext) return;`, so every study conversation left no counter and no
+  // `carried`, and a method the study's work used daily read as idle.
+  const block = serverSource.slice(serverSource.indexOf("const reusableClinicalContext = "), serverSource.indexOf("// The platform's own projects (an evaluation harness's among them) must not"));
+  const counted = block.indexOf("await recordMethodUse({ project, run, sessions });");
+  const refused = block.indexOf("if (!reusableClinicalContext) return;");
+  assert.ok(counted > 0 && refused > 0, "both are in the transcript branch");
+  assert.ok(counted < refused, "the counters come first");
+  assert.equal(block.split("await recordMethodUse({ project, run, sessions });").length - 1, 1, "and once");
+});
+
+test("a method that changed or was stopped, and a conversation that is about to begin, reach the runtime that is up", () => {
+  assert.match(serverSource, /learningService\.onMountChange = \(userId\) => runtimeManager\.refreshCapsuleMethods\(\{ userId \}\)/);
+  assert.match(serverSource, /runtimeManager\.methodSimilarity = methodSimilarity;/, "the mount ranks the library by the consolidation's own reading of close");
+  const native = serverSource.slice(serverSource.indexOf("preparePrompt: nativeHandbookContext || learningService"), serverSource.indexOf("authorizeMutation: maintenanceService"));
+  assert.match(native, /request\?\.mode !== "steer"/, "a steer is the same conversation");
+  assert.match(native, /runtimeManager\.refreshCapsuleMethods\(\{ userId: project\.userId, projectId: project\.id, sessionId: String\(request\?\.sessionId \?\? ""\),\s*query: nativeInputText\(request\?\.content\)/);
+  assert.match(native, /scopeId: runScopeOf\(envelope\.route\.effectiveAgentId, OPEN_DOMAIN_ANSWER_AGENT_ID\)/, "the scope is the route the first message was given");
+  assert.match(native, /if \(failed\) throw failed\.error;/, "a supplement that could not be prepared is still told, after the methods were");
+});
+
+test("a conversation that planned and delegated nothing is counted against what the control plane gave it, not skipped for want of a receipt", () => {
+  // 2026-10-23: `readRunStateProjection` scopes a native turn's projection through its workflow proof, which a turn that called none of
+  // the plan tools does not have, so `recordMethodUse` returned at once for the answer line and its methods were never carried or read.
+  const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
+  assert.match(record, /const given = run\.sessionId \? runtimeManager\.methodsGivenTo\(project, String\(run\.sessionId\)\) : \[\];\s*if \(!read && !given\.length\) return;/);
+  assert.match(record, /Array\.isArray\(read\?\.mountedMethods\) && read\.mountedMethods\.length \? read\.mountedMethods/, "the runtime's own receipt is preferred");
 });

@@ -307,6 +307,37 @@ test("a deliverable the root session made itself is attributed to the methods it
   assert.deepEqual(moved.mismatched, [{ name: "triage", mounted: DIGEST_B, current: DIGEST_A }]);
 });
 
+test("why each card was there travels with the receipt: a load is counted for what it was, and an exposure card is not one the run passed over", () => {
+  const exposed = { id: "method:learned:slides", name: "slides", digest: DIGEST_B };
+  const answered = { messages: [{ role: "assistant", parts: [{ type: "text", text: "Here is the answer." }] }] };
+  const derived = runMethodObservations({
+    run: { id: "run_1", sessionId: "root" },
+    // The answer line: nothing planned, nothing delegated, only what the conversation was given.
+    projection: { mountedMethods: [{ name: "triage", digest: DIGEST_A, reason: "similarity" }, { name: "slides", digest: DIGEST_B, reason: "explore" }] },
+    methods: [...METHODS.slice(0, 1), exposed],
+    sessions: [{ sessionId: "root", transcript: answered }],
+  });
+  assert.deepEqual(derived.methodsLoaded, [{ name: "triage", digest: DIGEST_A, reason: "similarity" }, { name: "slides", digest: DIGEST_B, reason: "explore" }]);
+  assert.deepEqual(derived.carriedBy, [{ id: METHODS[0].id, reason: "similarity" }, { id: exposed.id, reason: "explore" }]);
+  assert.equal(derived.answered, true);
+  // A receipt from a runtime that predates the reason says none, and the count reads it as meant for the work, as it always did.
+  const legacy = runMethodObservations({
+    run: { id: "run_2", sessionId: "root" }, projection: { mountedMethods: [{ name: "triage", digest: DIGEST_A }] },
+    methods: METHODS, sessions: [{ sessionId: "root", transcript: answered }],
+  });
+  assert.deepEqual(legacy.carriedBy, [{ id: METHODS[0].id, reason: null }]);
+  assert.deepEqual(legacy.methodsLoaded, [{ name: "triage", digest: DIGEST_A }]);
+  // The root's receipt and a delegation's, two readings of one mount, agree on the more relevant word.
+  const both = runMethodObservations({
+    run: { id: "run_3", sessionId: "root" },
+    projection: { plan: { items: [{ id: "d1", status: "accepted", attempts: 1 }] },
+      subagents: [{ deliverableId: "d1", childSessionId: "child", methods: [{ name: "triage", digest: DIGEST_A, reason: "explore" }] }],
+      mountedMethods: [{ name: "triage", digest: DIGEST_A, reason: "dependency" }] },
+    methods: METHODS, sessions: [{ sessionId: "root", transcript: answered }, { sessionId: "child", transcript: { messages: [] } }],
+  });
+  assert.deepEqual(both.carriedBy, [{ id: METHODS[0].id, reason: "dependency" }]);
+});
+
 test("a method file printed through the shell is opened; one only listed, counted or hashed is not", () => {
   const dir = `_lm${"a".repeat(32)}`;
   const other = `_lm${"b".repeat(32)}`;
@@ -348,7 +379,44 @@ test("a method file printed through the shell is opened; one only listed, counte
   assert.deepEqual([...(found.get("s") ?? [])].sort(), [`file:${dir}`, `file:${other}`]);
 });
 
+test("a method read after a cd into its directory, or through a glob over it, is opened; a folder read as a whole names no method", () => {
+  const dir = `_lm${"a".repeat(32)}`;
+  const other = `_lm${"b".repeat(32)}`;
+  const root = "/runtime/capsule-methods";
+  for (const command of [
+    `cd ${root}/${dir} && cat SKILL.md`,
+    `cd ${root}/${dir}/ && head -80 ./SKILL.md`,
+    `cd "${root}/${dir}"; less SKILL.md`,
+    `(cd ${root}/${dir} && awk 'NR<40' SKILL.md)`,
+    `cd ${root}/${dir} && cat *`,
+    `cd ${root}/${dir} && cat *.md`,
+    `cat ${root}/${dir}/*`,
+    `cat ${root}/${dir}/SKILL*`,
+    `head -50 ${root}/${dir}/*.md | tail -20`,
+    `cd ${root} && cd ${dir} && cat SKILL.md`,
+  ]) {
+    assert.deepEqual(methodFilesReadByCommand(command), [dir], command);
+  }
+  for (const command of [
+    `cd ${root}/${dir} && ls`,
+    `cd ${root}/${dir} && wc -l SKILL.md`,
+    `cd ${root}/${dir} && cat SKILL.md.bak`,
+    `cd ${root}/${dir} && cat scripts/x.py`,
+    `cd ${root}/${dir} && cd /workspace && cat SKILL.md`,
+    `cd /workspace && cat SKILL.md`,
+    `grep -r Workflow ${root}`,
+    `cat ${root}/*/SKILL.md`,
+    `cat ${root}/${dir}/scripts/*`,
+    `ls ${root}/${dir}/*`,
+  ]) {
+    assert.deepEqual(methodFilesReadByCommand(command), [], command);
+  }
+  assert.deepEqual(methodFilesReadByCommand(`cd ${root}/${dir} && cat SKILL.md; cd ${root}/${other} && head SKILL.md`).sort(), [dir, other],
+    "each directory read after a cd of its own");
+});
+
 /**
+ * Run every scenario of an incident case through the reader and hold it to what the case says./**
  * Run every scenario of an incident case through the reader and hold it to what the case says. A scenario names the sessions' tool calls (with
  * `{method-name}` standing for that method's directory), the delegations, the deliverables and what the runtime mounted; each session also
  * carries one assistant message, as every real session does.

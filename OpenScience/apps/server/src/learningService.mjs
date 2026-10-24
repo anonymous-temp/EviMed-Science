@@ -51,15 +51,18 @@
 import { createHash } from "node:crypto";
 
 import {
+  METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_STATUSES,
   appendMethodLink,
   cleanMethodDisplay,
   cleanMethodScope,
   cleanMethodSteps,
   emptyLearning,
+  foldApplied,
   foldCarried,
   foldDecided,
   foldEligible,
+  foldExplored,
   foldLevel,
   foldMethodFeedback,
   foldObservation,
@@ -77,6 +80,7 @@ import {
   retirementProposal,
   unresolvedConflicts,
   validateMethodSkill,
+  withoutRetiredLearningKeys,
 } from "@evimed/domain";
 import { productId } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
@@ -260,6 +264,19 @@ export class LearningService {
     this.documents = documents;
     this.jobs = jobs;
     this.now = now;
+    /**
+     * Told, after a write that changes what a run is given of the library (a method took effect, was amended, stopped or went
+     * back), whose library it was: the composition root has the live runtimes of the account rewrite their methods
+     * (`RuntimeManager.refreshCapsuleMethods`). Told and never asked, so a failure of it costs the runtime a refresh and the write
+     * nothing. A counter write is not one of these.
+     * @type {((userId: string) => unknown) | null}
+     */
+    this.onMountChange = null;
+  }
+
+  /** @param {string} userId */
+  #mountChanged(userId) {
+    try { Promise.resolve(this.onMountChange?.(userId)).catch(() => {}); } catch { /* told, never asked */ }
   }
 
   /**
@@ -270,7 +287,10 @@ export class LearningService {
    * mounted read-only into a container, and the check that it names no absent
    * tool and carries no credential is worth more at the boundary than in the
    * caller that happens to be trusted today.
-   * @param {{frontmatter: any, body: string, files?: any, requireProvenance?: boolean, resolveDigest?: (d: any) => boolean, mountedTools?: readonly string[]}} input
+   * `allowStale` lets a text that names a feature the platform no longer has pass (`method_stale_feature`): a record that was put
+   * away for it (`scripts/ops/learning-sweep.mjs`) is given back by saving its earlier state forward, and what is written now is
+   * held to the list while what was written before it is not.
+   * @param {{frontmatter: any, body: string, files?: any, requireProvenance?: boolean, resolveDigest?: (d: any) => boolean, mountedTools?: readonly string[], allowStale?: boolean}} input
    */
   #validated(input) {
     const verdict = validateMethodSkill({
@@ -282,8 +302,9 @@ export class LearningService {
       resolveDigest: input.resolveDigest,
       ...(input.mountedTools ? { mountedTools: input.mountedTools } : {}),
     });
-    if (!verdict.ok) {
-      throw new HttpError(422, "method_invalid", verdict.issues.slice(0, 4).map((issue) => `${issue.code}: ${issue.message}`).join(" "));
+    const issues = input.allowStale ? verdict.issues.filter((issue) => issue.code !== "method_stale_feature") : verdict.issues;
+    if (issues.length) {
+      throw new HttpError(422, "method_invalid", issues.slice(0, 4).map((issue) => `${issue.code}: ${issue.message}`).join(" "));
     }
     return methodContentDigest({ frontmatter: input.frontmatter, body: input.body, files: input.files }, sha256);
   }
@@ -393,6 +414,7 @@ export class LearningService {
       expectedRevision: 0,
       projectId: null,
     });
+    if (payload.status === "approved") this.#mountChanged(userId);
     return this.getMethod(userId, id);
   }
 
@@ -400,9 +422,10 @@ export class LearningService {
    * Recheck a handbook with the same body, dependency and provenance rules as a method.
    * @param {string} userId
    * @param {{frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], display?: unknown, steps?: unknown, capabilityId?: string | null}} input
+   * @param {{ allowStale?: boolean }} [options] see `#validated`: a record being given back may name what was true when it was written
    */
-  async validateHandbook(userId, input) {
-    return this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
+  async validateHandbook(userId, input, { allowStale = false } = {}) {
+    return this.#validated({ ...input, allowStale, resolveDigest: await this.#digestResolver(userId) });
   }
 
   /** Queue exactly one application per owner, capability and reviewed content.
@@ -469,7 +492,7 @@ export class LearningService {
   async amendMethod(userId, methodId, input) {
     const current = await this.getMethod(userId, methodId);
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
-    const learning = resetLearningForDigest(current.payload.learning, digest);
+    const learning = withoutRetiredLearningKeys(resetLearningForDigest(current.payload.learning, digest));
     const bodyChanged = digest !== current.payload.contentDigest;
     const at = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
@@ -508,6 +531,7 @@ export class LearningService {
     };
     if (payload.files === undefined) delete payload.files;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    this.#mountChanged(userId);
     return this.getMethod(userId, methodId);
   }
 
@@ -705,6 +729,7 @@ export class LearningService {
       statusChangedAt: this.now().toISOString(),
     };
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision });
+    this.#mountChanged(userId);
     return this.getMethod(userId, methodId);
   }
 
@@ -801,9 +826,9 @@ export class LearningService {
       contentDigest: digestOf(target),
       // Given back, the same body starts its count of loads again: it was stopped on that count (`never_opened`), and the
       // next hourly pass would otherwise stop it again before a single run had carried it.
-      learning: sameBody
+      learning: withoutRetiredLearningKeys(sameBody
         ? (current.payload.status === "retired" ? restartCarried(current.payload.learning) : current.payload.learning)
-        : resetLearningForDigest(current.payload.learning, digestOf(target)),
+        : resetLearningForDigest(current.payload.learning, digestOf(target))),
       provenance: { ...target.payload.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) },
       ...(sameBody ? {} : {
         ...(cleanMethodDisplay(target.payload.display) ? { display: cleanMethodDisplay(target.payload.display) } : {}),
@@ -824,6 +849,7 @@ export class LearningService {
     payload.statusReason = effectiveStatusReason(payload);
     payload.statusChangedAt = at;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    this.#mountChanged(userId);
     return this.getMethod(userId, methodId);
   }
 
@@ -924,22 +950,46 @@ export class LearningService {
   }
 
   /**
-   * Count a finished run that carried the method's card to a model that answered (`foldCarried`): the denominator of "was it
-   * ever opened" that the unused-method retirement reads. A stopped method is not counted, and a write that lost a race to
+   * Count a finished run that carried the method's card to a model that answered: the denominator of "was it ever opened" that
+   * the unused-method retirement reads (`foldCarried`), when the card was there because the method was meant for the work (the
+   * mount reasons `similarity` and `dependency`), and exposure only otherwise (`foldExplored`: the exploration slot, a mount that
+   * had no question to rank by), which nothing is stopped for. A stopped method is not counted, and a write that lost a race to
    * another counter write is made again on the fresh record, because this is the one counter a verdict is later drawn from.
-   * @param {string} userId @param {string} methodId
+   * @param {string} userId @param {string} methodId @param {string} [reason] why the card was in front of the run; absent reads as meant for the work
    */
-  async recordCarried(userId, methodId) {
+  async recordCarried(userId, methodId, reason = "similarity") {
+    const fold = /** @type {readonly string[]} */ (METHOD_RELEVANT_MOUNT_REASONS).includes(reason) ? foldCarried : foldExplored;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const document = await this.getMethod(userId, methodId);
       if (document.payload.status === "retired") return document;
       try {
-        return await this.#saveLearning(userId, methodId, document, foldCarried(document.payload.learning));
+        return await this.#saveLearning(userId, methodId, document, fold(document.payload.learning));
       } catch (error) {
         if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 7) throw error;
       }
     }
     throw new HttpError(409, "product_revision_conflict", "Concurrent method counters did not settle.");
+  }
+
+  /**
+   * Record what the researcher did after a run that opened this method (`foldApplied`): once per run, a correction never taken
+   * back. `expectedDigest` is the body the run read: a method amended since is left alone, because the reaction is to text it no
+   * longer holds. A stopped method is not counted.
+   * @param {string} userId @param {string} methodId @param {{ runId: string, outcome: "corrected" | "clean", at: string }} applied
+   * @param {string} [expectedDigest] the content digest the run's file was written from
+   * @returns {Promise<{ document: any, changed: boolean }>}
+   */
+  async recordApplied(userId, methodId, applied, expectedDigest) {
+    let changed = false;
+    const document = await this.#foldLearning(userId, methodId, (current) => {
+      changed = false;
+      if (current.payload.status === "retired") return current.payload.learning;
+      if (expectedDigest && current.payload.contentDigest !== expectedDigest) return current.payload.learning;
+      const learning = foldApplied(current.payload.learning, applied);
+      changed = learning !== current.payload.learning;
+      return learning;
+    });
+    return { document, changed };
   }
 
   /** @param {string} userId @param {string} methodId */
@@ -1143,7 +1193,7 @@ export class LearningService {
    * rather than overwriting a count.
    * @param {string} userId @param {string} methodId @param {any} document @param {any} learning */
   async #saveLearning(userId, methodId, document, learning) {
-    await this.documents.put(userId, "method", methodId, { ...document.payload, learning }, {
+    await this.documents.put(userId, "method", methodId, { ...document.payload, learning: withoutRetiredLearningKeys(learning) }, {
       expectedRevision: document.revision,
       telemetry: true,
     });
