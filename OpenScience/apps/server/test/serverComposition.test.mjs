@@ -119,7 +119,7 @@ function documentRow(kind, id, payload) {
  */
 function capsuleFixtureRows() {
   return [
-    documentRow("preferences", `active-capsules:project:${PROJECT_ID}`, { items: [{ capsuleId: "capsule-a", mode: "own" }] }),
+    documentRow("preferences", "active-capsules:account", { items: [{ capsuleId: "capsule-a", mode: "own" }] }),
     documentRow("capsule", "capsule-a", { title: "Work style", description: "", activationMode: "own", imported: false }),
     documentRow("fact", "approved-method", {
       capsuleId: "capsule-a", factKind: "method_preference", layer: "methods",

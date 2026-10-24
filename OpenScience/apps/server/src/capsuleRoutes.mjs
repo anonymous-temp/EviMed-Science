@@ -70,15 +70,16 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     }
     // 「收到的胶囊」: every pack someone shared, trusted whole (plan §3.3 #4).
     if (parts.length === 1 && parts[0] === "received" && method === "GET") {
-      return reply(await service.received(user.id, { projectId: await current() }));
+      return reply(await service.received(user.id));
     }
     // 「我的记忆胶囊」: read as one, and made on first use.
     if (parts.length === 1 && parts[0] === "mine") {
       if (method === "GET") return reply(await service.mine(user.id));
       if (method === "POST") return reply(await service.ownCapsule(user.id, { create: true }));
     }
+    // The capsules in force are the account's one list (a project has none of its own: `projectId` is not read).
     if (parts.length === 1 && parts[0] === "active" && method === "GET") {
-      return reply(await service.active(user.id, await project(url.searchParams.get("projectId"))));
+      return reply(await service.active(user.id));
     }
     // ------------------------------------------------------------------ sharing inside the platform
     const shares = () => {
@@ -276,24 +277,22 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     }
     if (parts.length === 2 && action === "activate" && method === "POST") {
       // `clearGuests` is how the received packs are turned off while one's own capsule is put in force: asked for, never a side effect.
-      const body = await bodyOf(req, maxJsonBytes, ["mode", "projectId", "clearGuests"]);
+      // No `projectId`: a capsule is in force for the account and so in every project, and a request that names one is refused by
+      // name (`capsule_payload_invalid`) rather than answered as though it had been enabled for that project alone.
+      const body = await bodyOf(req, maxJsonBytes, ["mode", "clearGuests"]);
       if (body.clearGuests !== undefined && typeof body.clearGuests !== "boolean") throw new HttpError(400, "capsule_payload_invalid", "Invalid clearGuests.");
-      body.projectId = await project(body.projectId);
       return reply(await service.activate(user.id, capsuleId, body));
     }
     // A received pack: one click in force, one click out, or tried once in a
     // conversation of its own that writes nothing into the researcher's memory.
-    // Every project, or with `projectId` that one project only (build spec
-    // §9.4 #6); a project the account cannot open is refused by name.
+    // For the whole account, so in every project (a pack was once enabled for one project alone; 2026-10-24, one capsule per
+    // person). A request body names nothing: one that names a `projectId` is refused by name (`capsule_payload_invalid`), because
+    // answering it with the pack enabled everywhere would be a widening nobody asked for. The project the person is in is only where
+    // the scan's model call is metered.
     if (parts.length === 2 && action === "enable" && method === "POST") {
-      const body = await bodyOf(req, maxJsonBytes, ["projectId"]);
-      if (body.projectId !== undefined && (typeof body.projectId !== "string" || !body.projectId)) {
-        throw new HttpError(400, "capsule_payload_invalid", "Invalid project.");
-      }
-      const onlyProject = body.projectId !== undefined ? await project(body.projectId) : null;
-      const enabled = await service.enableReceived(user.id, capsuleId, onlyProject
-        ? { projectId: onlyProject, onlyProject: true } : { projectId: await current() });
-      await audit(user, "capsule.pack.enable", { capsuleId, ...(onlyProject ? { projectId: onlyProject } : {}) });
+      await bodyOf(req, maxJsonBytes, []);
+      const enabled = await service.enableReceived(user.id, capsuleId, { projectId: await current() });
+      await audit(user, "capsule.pack.enable", { capsuleId });
       return reply(enabled);
     }
     if (parts.length === 2 && action === "disable" && method === "POST") {

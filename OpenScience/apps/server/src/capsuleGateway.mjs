@@ -16,7 +16,7 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
 
 /**
  * The capsule's half of a native account's `search` (`memoryGateway.mjs`, item 9): the recall the legacy tool answers with, for the
- * capsules in force in this project and the evidence zones it follows, and nothing of the research-memory records (a native
+ * capsules in force (the entries of the whole account and of this project) and the evidence zones the project follows, and nothing of the research-memory records (a native
  * account's are the engine's). The index nominates and PostgreSQL decides, as for the recall tool, so a fact the person forgot or an
  * entry still waiting for them is never returned however long the index lags. A failure of either half is that half's alone.
  * @param {{ service: { recall: Function } | null, subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null }} dependencies
@@ -233,14 +233,14 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         // a method (capsuleMethods.mjs). `reviewRequired` stays in the answer
         // as false, for a runtime that still reads it.
         const entry = await service.note(user.id, identity.projectId, { factKind: body.factKind, content: body.content, origin: "inferred" });
-        // "At once" is true of a note that is approved and sits in a capsule this project reads. A note kept in a capsule
-        // nothing reads (the project's list is full), or one the researcher already undid, is stored and does not take
+        // "At once" is true of a note that is approved and sits in a capsule that is in force. A note kept in a capsule nothing
+        // reads (the researcher switched their capsule off), or one the researcher already undid, is stored and does not take
         // effect, and the model is told so (2026-10-10 review M-8: the answer was a constant).
         const takesEffect = entry?.payload?.status === "approved"
-          && await service.inForce(user.id, identity.projectId, String(entry.payload.capsuleId));
+          && await service.inForce(user.id, String(entry.payload.capsuleId));
         sendJson(res, 200, {
           entry, reviewRequired: false, takesEffect, contextOnly: true,
-          ...(takesEffect ? {} : { notice: "这条已存下，但目前不会被读取：本项目已启用的胶囊数已到上限，或这条已被用户撤销。" }),
+          ...(takesEffect ? {} : { notice: "这条已存下，但目前不会被读取：用户的记忆胶囊没有启用，或这条已被用户撤销。" }),
         });
       }
     } catch (error) {

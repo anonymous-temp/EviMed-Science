@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { METHOD_RELEVANT_MOUNT_REASONS, NEVER_SHARED_LAYERS } from "@evimed/domain";
+import { entryReaches } from "./capsuleEntryProject.mjs";
 import { sharedFrom } from "./capsuleShareLabel.mjs";
 import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
 import { assertNoSymlinkPath, safeId, writeFileAtomicNoFollow } from "./security.mjs";
@@ -272,7 +273,8 @@ function confirmedAtMs(entry) {
 }
 
 /**
- * The mountable entries of one capsule, paged to the page bound.
+ * The mountable entries of one capsule, paged to the page bound, that a conversation in `projectId` may read: an entry labelled with
+ * another project is that project's (`entryProject`).
  *
  * Every page inside the bound is read, even once the capsule has offered more
  * candidates than a runtime can mount. It used to stop there, on the ground
@@ -288,10 +290,10 @@ function confirmedAtMs(entry) {
  * capsule of unmountable facts already pays on every launch, so the worst case
  * per capsule is unchanged.
  *
- * @param {any} capsules @param {string} userId @param {string} capsuleId
+ * @param {any} capsules @param {string} userId @param {string} capsuleId @param {string | null} projectId
  * @returns {Promise<any[]>}
  */
-async function mountableCapsuleEntries(capsules, userId, capsuleId) {
+async function mountableCapsuleEntries(capsules, userId, capsuleId, projectId) {
   /** @type {any[]} */
   const candidates = [];
   let cursor = null;
@@ -299,7 +301,7 @@ async function mountableCapsuleEntries(capsules, userId, capsuleId) {
     /** @type {any} */
     const result = await capsules.entries(userId, capsuleId, { limit: CAPSULE_ENTRY_PAGE, cursor });
     for (const entry of result?.items ?? []) {
-      if (isMountableEntry(entry)) candidates.push(entry);
+      if (isMountableEntry(entry) && entryReaches(entry, projectId)) candidates.push(entry);
     }
     cursor = result?.nextCursor ?? null;
     if (!cursor) break;
@@ -330,10 +332,10 @@ async function receivedCapsule(capsules, userId, selection) {
 /**
  * The methods this project's active capsules contribute, in a stable order.
  *
- * The active set is read the way `CapsuleService.recall` reads it — this
- * project's activations first, then the account-wide ones, deduplicated, capped
- * at eight — so the memory a run reads and the memory a run recalls cannot come
- * from different capsules.
+ * The active set is read the way `CapsuleService.recall` reads it — the account's
+ * one list, capped at eight, and of its entries those of the whole account and
+ * those labelled with this project — so the memory a run reads and the memory a
+ * run recalls cannot come from different capsules.
  *
  * The candidates are ranked the account's own first, then what received packs
  * brought, and within each most-recently-confirmed first, and truncated against
@@ -357,13 +359,11 @@ async function receivedCapsule(capsules, userId, selection) {
  * counter.
  *
  * @param {any} capsules `CapsuleService`
- * @param {{ userId: string, projectId: string, maxBytes?: number, onLeftOut?: ((entryId: string) => void) | null }} scope
+ * @param {{ userId: string, projectId: string | null, maxBytes?: number, onLeftOut?: ((entryId: string) => void) | null }} scope
  * @returns {Promise<{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean }[]>}
  */
 export async function selectCapsuleMethods(capsules, { userId, projectId, maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES, onLeftOut = null }) {
-  const local = await capsules.active(userId, projectId);
-  const account = await capsules.active(userId, null);
-  const active = [...local.items, ...account.items]
+  const active = (await capsules.active(userId)).items
     .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
     .slice(0, ACTIVE_CAPSULE_LIMIT);
   /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean, confirmedAt: number }[]} */
@@ -372,7 +372,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
     /** @type {any[]} */
     let entries;
     try {
-      entries = await mountableCapsuleEntries(capsules, userId, String(selection.capsuleId));
+      entries = await mountableCapsuleEntries(capsules, userId, String(selection.capsuleId), projectId);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "capsule_not_found") continue;
       throw error;

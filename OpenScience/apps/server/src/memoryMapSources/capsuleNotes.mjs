@@ -1,11 +1,12 @@
 /**
- * The map's capsule notes: the notes in force of the account's own capsules — the 「项目笔记」 a conversation wrote, and whatever the
- * researcher noted on the capsule page — as marks and as the events the growth strip counts.
+ * The map's capsule notes: the notes in force of the account's own capsule — what a conversation noted, each labelled with the project
+ * it was written in (`capsuleEntryProject.mjs`), and whatever the researcher noted on the capsule page, which belongs to no project —
+ * as marks and as the events the growth strip counts.
  *
  * Hidden knowledge:
  *
- * - **A note is a memory to the person.** It is listed on the memory page beside the memories (`mine`: the account capsule and every
- *   capsule of the researcher's own, the notes in force), so the map draws it as a memory — a `memory:entry:<id>` mark of the memory's
+ * - **A note is a memory to the person.** It is listed on the memory page beside the memories (`mine`: the account capsule, and any
+ *   capsule made by hand before there was only one, the notes in force), so the map draws it as a memory — a `memory:entry:<id>` mark of the memory's
  *   own kinds (`profile`, `preference`, `project_fact`… and the capsule's `writing_style`, `expertise`, `method_preference`) — and counts it
  *   in the headline, the growth and the aspects. It was left out while a native account's conversation could not read the notes: a page
  *   that counted what the conversation could not use said more than the platform held (H report §4.4). The package that reaches them
@@ -21,6 +22,7 @@
  */
 
 import { MEMORY_KIND_LABELS_ZH } from "../researchMemoryPersistence.mjs";
+import { entryProject } from "../capsuleEntryProject.mjs";
 import { bucketsOf } from "./activity.mjs";
 import { excerpt, instant, nodeId, recencyWeight } from "./common.mjs";
 import { MAP_LABEL_CHARS, aspectDimension } from "./records.mjs";
@@ -34,13 +36,13 @@ const NOTE_KIND_WORDS = Object.freeze({ writing_style: "写作习惯", expertise
 /**
  * The map's contribution of a set of notes in force. Pure: the source below reads the capsules and this draws what it was given.
  *
- * @param {readonly any[]} entries the notes in force, as `CapsuleService.mine` lists them (`projectId` on the document, the fact in `payload`)
+ * @param {readonly any[]} entries the notes in force, as `CapsuleService.mine` lists them (the project label on the document as `projectId`, the fact in `payload`)
  * @param {{ now: Date, timeZone: string, projectId: string | null }} context `projectId`: the project the map is narrowed to, whose notes alone are drawn
  * @returns {import("./common.mjs").MapContribution}
  */
 export function capsuleNotesContribution(entries, { now, projectId }) {
   const notes = entries.filter((entry) => entry && entry.deletedAt == null && entry.payload?.status === "approved" && String(entry.payload.content ?? "").trim()
-    && (!projectId || entry.projectId === projectId));
+    && (!projectId || entryProject(entry) === projectId));
   /** @type {import("./common.mjs").MapNode[]} */
   const nodes = [];
   /** @type {import("./common.mjs").MapEdge[]} */
@@ -49,17 +51,18 @@ export function capsuleNotesContribution(entries, { now, projectId }) {
   const events = [];
   for (const entry of notes) {
     const kind = String(entry.payload.factKind ?? "profile");
-    const home = entry.projectId ? nodeId("project", entry.projectId) : nodeId("you", "account");
+    const label = entryProject(entry);
+    const home = label ? nodeId("project", label) : nodeId("you", "account");
     const id = nodeId("memory", `entry:${entry.id}`);
     const at = instant(entry.createdAt);
     nodes.push({
       id, type: "memory", subtype: kind, group: /** @type {Record<string, string>} */ (MEMORY_KIND_LABELS_ZH)[kind] ?? /** @type {Record<string, string>} */ (NOTE_KIND_WORDS)[kind] ?? kind, label: excerpt(entry.payload.content, MAP_LABEL_CHARS), weight: recencyWeight(at, now),
-      at, state: "current", reason: null, projectId: entry.projectId ?? null, open: { kind: "entry", id: String(entry.id) },
+      at, state: "current", reason: null, projectId: label, open: { kind: "entry", id: String(entry.id) },
     });
     edges.push({ from: id, to: home, type: "belongs-to" });
     if (at) {
       events.push({
-        id: `${id}:created`, at, type: "memory", change: "created", kind, ref: id, lane: entry.projectId ? `project:${entry.projectId}` : "account",
+        id: `${id}:created`, at, type: "memory", change: "created", kind, ref: id, lane: label ? `project:${label}` : "account",
         text: excerpt(entry.payload.content, 80),
       });
     }

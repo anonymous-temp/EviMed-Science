@@ -120,7 +120,7 @@ test("two accounts, end to end: preview, send, receive, try once, enable, B's co
   const opened = await sharing.open(B, waiting.id);
   assert.deepEqual(opened.preview.entries.map((entry) => entry.content).sort(), preview.entries.map((entry) => entry.content).sort(), "what B reads is what A saw");
   const pack = await sharing.import(B, waiting.id, { expectedDigest: opened.preview.archiveSha256, title: "Ada 的工作方式" });
-  assert.deepEqual((await capsules.active(B, PROJECT)).items, [], "nothing is in force by importing");
+  assert.deepEqual((await capsules.active(B)).items, [], "nothing is in force by importing");
   assert.deepEqual((await mounted("before")).count, 0);
 
   // A trial: the pack as context, writing nothing of B's.
@@ -134,7 +134,7 @@ test("two accounts, end to end: preview, send, receive, try once, enable, B's co
 
   told.length = 0;
   await capsules.enableReceived(B, pack.id, { projectId: PROJECT });
-  assert.deepEqual(told, [{ userId: B, projectId: null, capsuleId: pack.id, change: "enabled" }], "the runtimes that are up are told at once");
+  assert.deepEqual(told, [{ userId: B, capsuleId: pack.id, change: "enabled" }], "the runtimes that are up are told at once");
 
   // ---- B's next conversation carries A's way of working. -----------------------------------------------------------------------
   const carried = await mounted("enabled");

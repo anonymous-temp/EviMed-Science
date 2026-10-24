@@ -82,16 +82,24 @@ test("capsule lifecycle is versioned and deleted capsules never supply context",
 });
 
 
-test("project account has a different activation namespace from account-wide context", options, async () => {
+test("a note is read in its own project's conversations and in no other, an entry of the account's own in every one", options, async () => {
+  // One capsule per person (2026-10-24): the label on a note is a filter, applied by the real store's own columns.
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'account','Scoped',1048576),($1,'other','Other',1048576) ON CONFLICT DO NOTHING", [other]);
-  const capsule = await service.create(other, { title: "Project-only methods" });
-  await service.addEntry(other, capsule.id, { factKind: "preference", content: "Scoped collision evidence." });
-  await service.activate(other, capsule.id, { projectId: "account" });
-  assert.deepEqual((await service.active(other, null)).items, []);
-  assert.equal((await service.recall(other, { projectId: "other", query: "collision" })).items.length, 0);
-  assert.equal((await service.recall(other, { projectId: "account", query: "collision" })).items.length, 1);
+  const note = await service.note(other, "account", { factKind: "preference", content: "Scoped collision evidence." });
+  const own = await service.ownCapsule(other);
+  assert.equal(note.payload.capsuleId, own.id, "the account's one capsule, not a capsule of the project's own");
+  assert.equal(note.projectId, "account");
+  await service.addEntry(other, own.id, { factKind: "preference", content: "Everywhere collision phrase." });
+  assert.equal((await service.recall(other, { projectId: "other", query: "Scoped collision" })).items.length, 0);
+  assert.equal((await service.recall(other, { query: "Scoped collision" })).items.length, 0, "nor a recall in no project");
+  assert.equal((await service.recall(other, { projectId: "account", query: "Scoped collision" })).items.length, 1);
+  for (const projectId of ["account", "other", null]) {
+    assert.equal((await service.recall(other, { projectId, query: "Everywhere collision" })).items.length, 1, `read in ${projectId ?? "no project"}`);
+  }
+  assert.equal((await service.profileFacts(other, "account", ["preference"])).filter((fact) => /Scoped collision/.test(fact.content)).length, 1);
+  assert.equal((await service.profileFacts(other, "other", ["preference"])).filter((fact) => /Scoped collision/.test(fact.content)).length, 0);
+  assert.ok(await service.lookupCount(other, "account", []) > await service.lookupCount(other, "other", []), "the count beside the profile follows the same reach");
 });
-
 
 test("runtime notes are idempotent and take effect at once, and a retirement takes them out", options, async () => {
   // Owner ruling 2026-09-19: no confirmation step anywhere. A note is in force
@@ -109,18 +117,19 @@ test("runtime notes are idempotent and take effect at once, and a retirement tak
 });
 
 
-// 2026-10-10 review M-8, against the real store: a note beside an enabled received pack was kept in a capsule nothing read.
-test("a note taken beside a received pack enabled for the project is read, and the pack stays enabled", options, async () => {
+// 2026-10-10 review M-8, against the real store: a note beside an enabled received pack is read, and the pack stays enabled.
+test("a note taken beside an enabled received pack is read in its project, and the pack stays enabled", options, async () => {
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'beside-pack','Beside pack',1048576) ON CONFLICT DO NOTHING", [other]);
   const documents = new ProductDocuments(database);
   const pack = await documents.put(other, "capsule", `pack-${randomUUID()}`, { title: "Shared pack", imported: true, activationMode: "guest" }, { expectedRevision: 0 });
-  await service.activate(other, pack.id, { mode: "guest", projectId: "beside-pack" });
+  await service.activate(other, pack.id, { mode: "guest" });
   const note = await service.note(other, "beside-pack", { factKind: "preference", content: "Prefer forest plots with prediction intervals." });
-  assert.equal(await service.inForce(other, "beside-pack", note.payload.capsuleId), true);
+  assert.equal(await service.inForce(other, note.payload.capsuleId), true);
   assert.equal((await service.recall(other, { projectId: "beside-pack", query: "forest" })).items.length, 1);
-  const active = (await service.active(other, "beside-pack")).items;
-  assert.deepEqual(active.map((item) => item.capsuleId), [note.payload.capsuleId, pack.id]);
-  assert.deepEqual(active.map((item) => item.mode), ["own", "guest"]);
+  const active = (await service.active(other)).items;
+  assert.ok(active.some((item) => item.capsuleId === pack.id && item.mode === "guest"), "the pack is still enabled");
+  assert.equal(active[0].capsuleId, note.payload.capsuleId, "the person's own capsule comes first");
+  assert.equal(active[0].mode, "own");
 });
 
 /** An index whose recall does whatever the case needs. Nothing else is reached:
