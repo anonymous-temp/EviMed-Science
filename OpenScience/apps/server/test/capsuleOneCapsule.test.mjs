@@ -157,7 +157,7 @@ test("a failed withdrawal of the index copies never fails the fold, and an accou
   assert.ok(lines.some((line) => /index withdrawal not owed \(memory_index_timeout\)/.test(line)));
 });
 
-test("a note whose revision moves under the fold is read again, and one that is gone is left", async () => {
+test("a note whose revision moves under the fold is read again, and the person's edit survives the move", async () => {
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
   const moving = await legacyNote(documents, "project_1", "会被改动的笔记");

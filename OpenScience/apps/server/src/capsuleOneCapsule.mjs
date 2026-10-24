@@ -2,6 +2,7 @@ import {
   ACTIVATION_KEY, ACTIVE_CAPSULE_LIMIT, LEGACY_NOTES_CAPSULE_PREFIX, LEGACY_PROJECT_ACTIVATION_PREFIX,
 } from "./capsuleService.mjs";
 import { entryProject } from "./capsuleEntryProject.mjs";
+import { capsuleMemoryRoot } from "./openVikingClient.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 
 /**
@@ -130,6 +131,25 @@ async function foldLists(capsules, userId, lists) {
     return { dropped: [] };
   }
   return { dropped: [] };
+}
+
+/**
+ * What an emptied capsule owes the recall index: the removal of its subtree, as a row of the withdrawal ledger written in a transaction
+ * of its own (`memoryIndexWithdrawals.mjs`, the ledger every deletion uses), then asked for through `drain` when there is one. Never waited
+ * on for an answer from the index.
+ * @param {{ indexing: { accountGeneration: (userId: string) => Promise<string | null> },
+ *   withdrawals: { migrate: () => Promise<unknown>, enqueue: (client: any, userId: string, uris: string[]) => Promise<unknown> },
+ *   database: { transaction: (operation: (client: any) => Promise<unknown>) => Promise<unknown> }, drain?: (() => unknown) | null }} dependencies
+ * @returns {(userId: string, capsuleIds: string[]) => Promise<void>}
+ */
+export function indexWithdrawalOfCapsules({ indexing, withdrawals, database, drain = null }) {
+  return async (userId, capsuleIds) => {
+    const generation = await indexing.accountGeneration(userId);
+    if (!generation) return;
+    await withdrawals.migrate();
+    await database.transaction((client) => withdrawals.enqueue(client, userId, capsuleIds.map((capsuleId) => capsuleMemoryRoot(userId, { accountCreatedAt: generation, capsuleId }))));
+    void drain?.();
+  };
 }
 
 /**

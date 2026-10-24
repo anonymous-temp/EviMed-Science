@@ -7,14 +7,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
-import { foldAllIntoOneCapsule } from "../src/capsuleOneCapsule.mjs";
+import { foldAllIntoOneCapsule, indexWithdrawalOfCapsules } from "../src/capsuleOneCapsule.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { withdrawProjectDerivedMemory } from "../src/derivedMemory.mjs";
 import { MemoryIndexWithdrawals } from "../src/memoryIndexWithdrawals.mjs";
 import { MemoryIndexing } from "../src/memoryIndexing.mjs";
-import { capsuleMemoryRoot } from "../src/openVikingClient.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 
@@ -77,13 +76,12 @@ test("ten notes capsules become ten project-labelled entries of one capsule, the
   const list = await documents.get(USER, "preferences", `active-capsules:project:${PROJECTS[3]}`);
   await documents.put(USER, "preferences", list.id, { items: [...list.payload.items, { capsuleId: pack.id, mode: "guest" }] }, { expectedRevision: list.revision });
 
-  const generation = await indexing.accountGeneration(USER);
   const owed = [];
   const lines = [];
+  // The very function the server hands the fold, over the real ledger; the index itself is a fake that says yes to every removal.
+  const toLedger = indexWithdrawalOfCapsules({ indexing, withdrawals, database });
   const withdrawIndex = async (/** @type {string} */ userId, /** @type {string[]} */ capsuleIds) => {
-    await withdrawals.migrate();
-    await database.transaction((/** @type {any} */ client) => withdrawals.enqueue(client, userId,
-      capsuleIds.map((capsuleId) => capsuleMemoryRoot(userId, { accountCreatedAt: generation, capsuleId }))));
+    await toLedger(userId, capsuleIds);
     if (userId === USER) owed.push(...capsuleIds);
   };
   const total = await foldAllIntoOneCapsule({ database, capsules, withdrawIndex, log: (line) => lines.push(line) });

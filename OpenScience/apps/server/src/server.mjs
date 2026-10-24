@@ -202,7 +202,7 @@ import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
 import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
 import { MemoryRerank } from "./memoryRerank.mjs";
-import { OpenVikingClient, capsuleMemoryRoot } from "./openVikingClient.mjs";
+import { OpenVikingClient } from "./openVikingClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
@@ -224,7 +224,7 @@ import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
 import { MemoryIndexWithdrawals } from "./memoryIndexWithdrawals.mjs";
 import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
-import { foldAllIntoOneCapsule } from "./capsuleOneCapsule.mjs";
+import { foldAllIntoOneCapsule, indexWithdrawalOfCapsules } from "./capsuleOneCapsule.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { configurePasswordKdfGate } from "./capsuleContainer.mjs";
@@ -8523,14 +8523,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // stderr, one line per account; a failure is said too and costs the start nothing.
       if (capsuleService && productDatabase && !capsuleFoldRun) {
         capsuleFoldRun = true;
-        const withdrawIndex = memoryIndexing && memoryWithdrawals ? async (/** @type {string} */ userId, /** @type {string[]} */ capsuleIds) => {
-          const generation = await memoryIndexing.accountGeneration(userId);
-          if (!generation) return;
-          await memoryWithdrawals.migrate();
-          await productDatabase.transaction((/** @type {any} */ client) => memoryWithdrawals.enqueue(client, userId,
-            capsuleIds.map((capsuleId) => capsuleMemoryRoot(userId, { accountCreatedAt: generation, capsuleId }))));
-          void memoryIndexWorker?.drainWithdrawals();
-        } : null;
+        const withdrawIndex = memoryIndexing && memoryWithdrawals
+          ? indexWithdrawalOfCapsules({ indexing: memoryIndexing, withdrawals: memoryWithdrawals, database: productDatabase, drain: () => memoryIndexWorker?.drainWithdrawals() }) : null;
         void foldAllIntoOneCapsule({ database: productDatabase, capsules: capsuleService, withdrawIndex, log: (line) => process.stderr.write(`${line}\n`) })
           .catch((/** @type {any} */ error) => process.stderr.write(`capsule one-capsule failed: ${error?.code ?? error?.name ?? "error"}\n`));
       }
