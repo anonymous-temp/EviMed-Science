@@ -100,7 +100,7 @@ export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
     const all = query.getAll(key);
     if (!lists.has(key) && all.length !== 1) throw invalid(`${key} may only be given once.`);
     raw[key] = lists.has(key) ? key === "clientTags" ? all : all.flatMap((value) => value.split(",")) : all[0];
-    if (["questionVersion", "version", "strategyVersion", "errorLimit", "errorOffset", "limit", "offset", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
+    if (["questionVersion", "version", "strategyVersion", "errorLimit", "errorOffset", "limit", "offset", "topN", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
       if (!/^\d+$/u.test(raw[key])) throw invalid(`${key} must be a whole number.`);
       raw[key] = Number(raw[key]);
     }

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeGeoReadScope, normalizeGeoMember, geoScopeFromQuery, computeGeoSelection } from "../src/geoReadScope.mjs";
+
+test('source analysis chart limit is a typed integer at the HTTP boundary only when admitted', () => {
+  assert.equal(geoScopeFromQuery(new URLSearchParams('topN=15'), ['topN']).topN, 15);
+  for (const query of ['topN=1.5', 'topN=15&topN=16', 'topN=abc']) assert.throws(() => geoScopeFromQuery(new URLSearchParams(query), ['topN']));
+  assert.throws(() => geoScopeFromQuery(new URLSearchParams('topN=15')));
+});
 import { balanceRows } from "../src/geoMetricsJob.mjs";
 
 test("scope has closed fields, inclusive local dates and compatible aliases", () => {

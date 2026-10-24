@@ -115,6 +115,23 @@ class GeoToolDefinitionTests(unittest.TestCase):
 
 
 class GeoReadTests(_GatewayCase):
+    def test_source_analysis_filters_survive_native_boundary_and_reject_invalid_types(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
+        for selector in [
+            {"viewId": "V17", "sourceType": "unknown", "sourceRelationship": "wrong", "topN": 1},
+            {"viewId": "V18", "sourceLevel": "page", "sourceSearch": "portal?doc=001", "sourceRelationship": "mentions", "topN": 50},
+        ]:
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "success")
+            self.assertEqual(_Gateway.seen[-1]["body"]["filter"], selector)
+        sent = len(_Gateway.seen)
+        for field, value in [("sourceType", ""), ("sourceType", "x" * 101), ("sourceSearch", "x" * 301),
+                             ("sourceRelationship", "owned"), ("sourceLevel", "host"), ("topN", 0),
+                             ("topN", 51), ("topN", 1.5), ("topN", "15")]:
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": {"viewId": "V18", field: value}})
+            self.assertEqual(result["status"], "error")
+        self.assertEqual(len(_Gateway.seen), sent)
+
     def test_signal_material_pages_keep_the_bound_context_and_exact_target(self):
         selected = {"planContextRef": "gpc_" + "a" * 64, "targetKey": "target_exact", "limit": 1, "offset": 2}
         _Gateway.answers["read"] = (200, {"data": {"items": [{"part": 2, "text": "Preserved material"}], "total": 4, "more": True, "nextOffset": 3}})
