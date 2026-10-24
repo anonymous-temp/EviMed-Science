@@ -272,7 +272,7 @@ def call(method, args):
     envelope = json.load(urllib.request.urlopen(request, timeout=60))
     result = envelope.get("result") or {}
     if not result.get("ok"):
-        raise RuntimeError(json.dumps(result.get("error"), ensure_ascii=False)[:800])
+        raise RuntimeError(method + ": " + json.dumps(result.get("error"), ensure_ascii=False)[:800])
     return result.get("value") or {}
 try:
     session = call("session/create", {"request": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"}})

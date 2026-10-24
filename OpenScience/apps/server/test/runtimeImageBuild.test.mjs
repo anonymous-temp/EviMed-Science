@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readFile, mkdtemp, mkdir, writeFile, link, rm } from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { SESSION_PATHS } from "../src/agentbay/runtimeProvider.mjs";
@@ -296,4 +297,26 @@ test("the runtime tool verification cannot pass after any required tool fails", 
     assert.equal(result.status, 73, `${failed} must fail the phase, not only its intermediate command`);
     assert.doesNotMatch(result.stdout, /unexpected-fallthrough/);
   }
+});
+
+
+test("profile installation detaches exportable skill files from pnpm store hardlinks before sealing", { skip: process.platform !== "linux" }, async () => {
+  const { script } = await sources();
+  const start = script.indexOf("  skill_source=/opt/evimed/socket/presets/evimed-universal/skills");
+  const end = script.indexOf('  node /usr/local/bin/evimed-profile-seed.mjs seal', start);
+  assert.ok(start >= 0 && end > start);
+  const scratch = await mkdtemp(path.join(os.tmpdir(), "evimed-skill-detach-"));
+  try {
+    const preset = path.join(scratch, "preset"), source = path.join(preset, "skills"), store = path.join(scratch, "store-SKILL.md");
+    await mkdir(path.join(source, "probe"), { recursive: true });
+    const file = path.join(source, "probe", "SKILL.md");
+    await writeFile(file, "preserved skill bytes"); await link(file, store);
+    assert.equal((await lstat(file)).nlink, 2);
+    const command = script.slice(start, end).replaceAll("/opt/evimed/socket/presets/evimed-universal", preset);
+    const result = spawnSync("bash", ["-euc", command], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(await readFile(file, "utf8"), await readFile(store, "utf8"));
+    assert.equal((await lstat(file)).nlink, 1);
+    assert.notEqual((await lstat(file)).ino, (await lstat(store)).ino);
+  } finally { spawnSync("chmod", ["-R", "u+w", scratch]); await rm(scratch, { recursive: true, force: true }); }
 });
