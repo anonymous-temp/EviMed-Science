@@ -481,3 +481,16 @@ for (const field of ['presentedFiles', 'artifacts', 'outputFiles']) test(`native
   const repeated = await importDelivery(control, { id: `content-${field}`, sessionId: 'content-session', status: 'succeeded', [field]: [relative, article] }, { recovery: true, readRunFile: async (_p, _r, file) => immutable.get(file) });
   assert.equal(repeated?.failed, undefined, 'An already registered identical article is a successful idempotent reconciliation');
 });
+
+test('concurrent explicit recoveries of the same immutable candidate join one import attempt', options, async () => {
+  const { control } = await projectWithBaseline();
+  const produced = { id: 'join-recovery', status: 'succeeded', sessionId: 'session', artifacts: ['deliverables/join/strategy.json'] };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'strategy', scopeKey: 'join', basis: {}, runId: produced.id }) });
+  let release, reached, reads = 0;
+  const held = new Promise(resolve => { release = resolve; }), entered = new Promise(resolve => { reached = resolve; });
+  const recovery = { recovery: true, candidateIdentity: 'same-pinned-version-and-digest', readRunFile: async () => { reads++; reached(); await held; return '{"summary":"One attempt"}'; } };
+  const first = importDelivery(control, produced, recovery); await entered;
+  const second = importDelivery(control, produced, recovery); release();
+  const results = await Promise.all([first, second]);
+  assert.equal(reads, 1); assert.deepEqual(results[0], results[1]);
+});
