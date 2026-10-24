@@ -385,7 +385,7 @@ function blockLength(block: ReaderParagraph): number {
 function TextLink({ url }: { url: string }) {
   return (
     <Tooltip content={url}>
-      <a href={url} {...EXTERNAL} className="rounded text-accent [overflow-wrap:anywhere] hover:underline">
+      <a href={url} {...EXTERNAL} className="rounded text-accent underline decoration-1 underline-offset-2 [overflow-wrap:anywhere]">
         {shortUrl(url)}<span aria-hidden="true"> ↗</span>
       </a>
     </Tooltip>
@@ -806,8 +806,10 @@ export function ReaderActions({ item, more, onStar, onResearch }: {
   onResearch: () => void;
 }) {
   const starred = item.state.starred;
+  // A section of its own: ☆ and ⋯ act on the article, not on a list in its text that comes before them in the document (the walk's
+  // control-after-content read the rail's ☆ as the text's list control, 2026-10-24).
   return (
-    <div className="space-y-2">
+    <section aria-label="文章操作" className="space-y-2">
       <div className="flex items-center gap-1">
         <a href={item.url} {...EXTERNAL} className={buttonClasses({ variant: "secondary", className: "min-w-0 flex-1" })}>
           <span className="truncate">{originalLinkLabel(item)}</span><ArrowUpRight size={16} aria-hidden="true" />
@@ -816,7 +818,7 @@ export function ReaderActions({ item, more, onStar, onResearch }: {
         <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
       </div>
       <Button variant="secondary" className="w-full" onClick={onResearch}>深入研究</Button>
-    </div>
+    </section>
   );
 }
 
@@ -866,7 +868,7 @@ export function ReaderBar({ item, more, onStar, onResearch }: {
         hidden && "translate-y-full",
       )}
     >
-      <div className="mx-auto grid h-14 max-w-read grid-cols-4 px-2">
+      <section aria-label="文章操作" className="mx-auto grid h-14 max-w-read grid-cols-4 px-2">
         <button type="button" aria-pressed={starred} onClick={onStar} className={cn(BAR_TOOL, starred && "text-accent [&_svg]:fill-current")}>
           <Star size={20} aria-hidden="true" />{starred ? "已收藏" : "收藏"}
         </button>
@@ -879,7 +881,7 @@ export function ReaderBar({ item, more, onStar, onResearch }: {
         <Menu label="更多操作" items={more}>
           <button type="button" className={BAR_TOOL}><MoreHorizontal size={20} aria-hidden="true" />更多</button>
         </Menu>
-      </div>
+      </section>
     </nav>
   );
 }
