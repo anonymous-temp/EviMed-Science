@@ -148,7 +148,7 @@ export class OpenVikingResources {
    * @param {string} text @param {{ sourceId: string, sha: string, docType?: string | null, state?: string | null }} facts
    */
   async pushSource(userId, uri, text, { sourceId, sha, docType = null, state = null }) {
-    const tags = [`src=${sourceId}`, `sha=${sha}`, `doctype=${docType || "other"}`, ...(state ? [`state=${state}`] : [])];
+    const tags = [`src=${sourceId}`, `sha=${sha}`, `doctype=${docType || "other"}`, `rendition=${sha256(String(text ?? ""))}`, ...(state ? [`state=${state}`] : [])];
     const body = { uri, content: String(text ?? ""), mode: "replace", wait: true, processing_mode: "vectors_only", tags, tag_mode: "replace" };
     try {
       // One `replace`: from v0.5.1 it creates a file that is not there, parents included (measured on v0.5.1.1), and `create`
@@ -170,7 +170,7 @@ export class OpenVikingResources {
    * The documents pushed under one directory (`sources/` of a project, or the library), each with what its tags say.
    * A directory that does not exist yet holds none.
    * @param {string} userId @param {string} directory
-   * @returns {Promise<Array<{ uri: string, sourceId: string, size: number, sha: string | null, docType: string | null, state: string | null, modTime: string | null }>>}
+   * @returns {Promise<Array<{ uri: string, sourceId: string, size: number, sha: string | null, renditionSha: string | null, docType: string | null, state: string | null, modTime: string | null }>>}
    */
   async listSources(userId, directory) {
     const found = [];
@@ -179,7 +179,8 @@ export class OpenVikingResources {
       const match = SOURCE_FILE.exec(name);
       if (entry.isDir || !match) continue;
       const tags = resourceTags(entry.tags);
-      found.push({ uri: entry.uri, sourceId: match[1], size: Number(entry.size) || 0, sha: tags.sha ?? null, docType: tags.doctype ?? null, state: tags.state ?? null, modTime: entry.modTime ?? null });
+      found.push({ uri: entry.uri, sourceId: match[1], size: Number(entry.size) || 0, sha: tags.sha ?? null, renditionSha: tags.rendition ?? null,
+        docType: tags.doctype ?? null, state: tags.state ?? null, modTime: entry.modTime ?? null });
     }
     return found;
   }

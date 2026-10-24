@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { sourceOriginOf } from "@evimed/domain";
 import { resourcesRoot } from "./openVikingLayout.mjs";
 import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
+import { HttpError } from "./security.mjs";
 
 /**
  * Every readable document of the knowledge base, kept in OpenViking as the file its Compile reads.
@@ -21,9 +22,10 @@ import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
  *   or out of order still ends in the right state, and the same function serves a new upload, a replacement, a
  *   removal and a retry. (The memory index learned this the hard way: a write-only publisher leaves what was deleted
  *   searchable for ever.)
- * - **The tag is the proof.** Each file carries `sha=<the captured text's digest>`; reconciliation lists a project's
- *   `sources/` with tags and compares it with the readable documents PostgreSQL holds — the same ids, the same
- *   digests, nothing else — and repairs what differs. It runs on a timer, before every compile, and as the backfill.
+ * - **The tags identify the expected copy.** `sha` is the captured text's digest; `rendition` also binds the rendered
+ *   header, metadata and page markers. Reconciliation compares both with the readable documents PostgreSQL holds and
+ *   repairs differences. A tag remains metadata: shared-generation readers must separately verify downloaded bytes.
+ *   Reconciliation runs on a timer, before every compile, and as the backfill.
  * - **A compiled page is not a document to push.** The mirror of the wiki and of the graph lives in the same ledger
  *   (`knowledge-base/wiki/**`, `knowledge-base/kg/**`); pushing it back would feed the compile its own output.
  * - **The engine being down is a queue that waits.** Nothing here is on the path of an upload, a search or a
@@ -35,6 +37,7 @@ import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 
 export const SOURCE_SYNC_JOB_KIND = "ov-resource-sync";
 const SCAN_LIMIT = 5000;
+const renditionHash = text => createHash("sha256").update(text).digest("hex");
 
 /** @param {unknown} error @returns {string} */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "ov_resource_sync_failed");
@@ -146,7 +149,8 @@ export class OpenVikingSourceSync {
 
   /** Whether a document belongs under `sources/`: readable, of a project, and not a page of a compiled tree. @param {any} source */
   static pushable(source) {
-    return Boolean(source && !source.deletedAt && source.projectId && sourceReadable(source.payload) && !isCompiledPage(source) && source.payload.analysis?.textSha256);
+    return Boolean(source && !source.deletedAt && source.projectId && sourceReadable(source.payload) && !isCompiledPage(source)
+      && source.payload.analysis?.textSha256 && source.payload.analysis.generation === source.payload.generation);
   }
 
   /**
@@ -157,26 +161,28 @@ export class OpenVikingSourceSync {
   async convergeSource(userId, sourceId, projectId = null) {
     const source = await this.#current(userId, sourceId);
     const project = source?.projectId ?? projectId;
-    // A mirrored page was never pushed, so there is nothing of it to converge.
-    if (!project || (source && isCompiledPage(source))) return { action: "absent", sourceId };
+    if (!project) return { action: "absent", sourceId };
     const uri = this.resources.sourceUri(userId, project, sourceId);
     if (!OpenVikingSourceSync.pushable(source)) {
       const removed = await this.resources.removeSource(userId, uri);
       if (removed) this.counters.removed += 1;
       return { action: removed ? "removed" : "absent", sourceId };
     }
-    const sha = String(source.payload.analysis.textSha256);
-    if ((await this.resources.attrs(userId, uri))?.sha === sha) { this.counters.unchanged += 1; return { action: "unchanged", sourceId }; }
     const rendition = await this.#rendition(userId, source);
     if (!rendition) return { action: "absent", sourceId };
+    const attrs = await this.resources.attrs(userId, uri);
+    if (attrs?.sha === rendition.sha && attrs.rendition === renditionHash(rendition.text)) {
+      this.counters.unchanged += 1; return { action: "unchanged", sourceId };
+    }
     await this.resources.pushSource(userId, uri, rendition.text, { sourceId, sha: rendition.sha, docType: source.payload.docType ?? null });
     this.counters.pushed += 1;
     return { action: "pushed", sourceId };
   }
 
-  /** The readable documents of a project that belong in the engine: id → the digest of the captured text. @param {string} userId @param {string} projectId */
+  /** The complete readable inventory and its text/rendered digests; a partial scan cannot authorize removals.
+   * @param {string} userId @param {string} projectId */
   async expected(userId, projectId) {
-    /** @type {Map<string, { sha: string, docType: string | null }>} */
+    /** @type {Map<string, { sha: string, renditionSha: string, docType: string | null }>} */
     const expected = new Map();
     let cursor = null;
     for (let scanned = 0; scanned < SCAN_LIMIT;) {
@@ -186,24 +192,30 @@ export class OpenVikingSourceSync {
         if (isCompiledPage(item) || item.deletedAt) continue;
         // The list's projection leaves the text digest out; the record itself has it.
         const source = await this.#current(userId, item.id);
-        if (OpenVikingSourceSync.pushable(source)) expected.set(item.id, { sha: String(source.payload.analysis.textSha256), docType: source.payload.docType ?? null });
+        if (OpenVikingSourceSync.pushable(source)) {
+          const rendition = await this.#rendition(userId, source);
+          if (!rendition) throw new HttpError(409, "source_capture_invalid", "The current source capture is unavailable for reconciliation.");
+          expected.set(item.id, { sha: rendition.sha, renditionSha: renditionHash(rendition.text), docType: source.payload.docType ?? null });
+        }
       }
       cursor = page.nextCursor;
       if (!cursor) break;
     }
+    if (cursor) throw new HttpError(422, "ov_resource_scan_incomplete", "The source reconciliation inventory exceeded its scan bound.");
     return expected;
   }
 
   /**
    * Compare a project's readable documents with the files under its `sources/` and repair what differs, both ways.
-   * `apply: false` only reports. The proof of "PostgreSQL = engine" is a report with nothing missing, stale or extra.
+   * `apply: false` only reports. Empty differences certify matching expected tags, not an independent byte readback.
    * @param {string} userId @param {string} projectId @param {{ apply?: boolean }} [options]
    */
   async reconcileProject(userId, projectId, { apply = true } = {}) {
     const expected = await this.expected(userId, projectId);
     const present = new Map((await this.resources.listSources(userId, this.resources.roots(userId, projectId).sources)).map((/** @type {any} */ entry) => [entry.sourceId, entry]));
     const missing = [...expected.keys()].filter((id) => !present.has(id));
-    const stale = [...expected.keys()].filter((id) => present.has(id) && present.get(id).sha !== expected.get(id)?.sha);
+    const stale = [...expected.keys()].filter((id) => present.has(id)
+      && (present.get(id).sha !== expected.get(id)?.sha || present.get(id).renditionSha !== expected.get(id)?.renditionSha));
     const extra = [...present.keys()].filter((id) => !expected.has(id));
     const report = { projectId, expected: expected.size, present: present.size, missing, stale, extra, pushed: 0, removed: 0, failed: /** @type {{ sourceId: string, code: string }[]} */ ([]) };
     if (!apply) return report;
