@@ -24,7 +24,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, mountedMethodDigest } from "@evimed/domain";
+import { METHOD_MOUNT_REASONS, METHOD_SKILL_SCHEMA, mountedMethodDigest } from "@evimed/domain";
 
 import { materializeCapsuleMethods } from "../src/capsuleMethods.mjs";
 import { LearningService } from "../src/learningService.mjs";
@@ -170,7 +170,8 @@ test("a distilled method reaches a container, earns observations, is left alone 
   // --- 2. the launch path writes it into the container's directory (A1) -----
   const mounted = await launch(learning, project);
   assert.equal(mounted.count, 1, "the method did not reach the method directory");
-  assert.deepEqual(Object.keys(mounted.learned[0]).sort(), ["digest", "id", "name"], "an approved method needs nothing else to get there");
+  assert.deepEqual(Object.keys(mounted.learned[0]).sort(), ["digest", "id", "name", "reason"], "an approved method needs nothing else to get there, and the receipt says why it was carried");
+  assert.ok(METHOD_MOUNT_REASONS.includes(mounted.learned[0].reason), "the reason is of the closed vocabulary");
   const [directoryName] = await readdir(mounted.directory);
   const written = await readFile(path.join(mounted.directory, directoryName, "SKILL.md"), "utf8");
   // The bytes the container reads are the bytes the digest names. A receipt
@@ -216,7 +217,7 @@ test("a distilled method reaches a container, earns observations, is left alone 
   assert.deepEqual(afterSecondPass.promoted, [], "it was already in force");
   const approvedMount = await launch(learning, project);
   assert.equal(approvedMount.count, 1);
-  assert.deepEqual(Object.keys(approvedMount.learned[0]).sort(), ["digest", "id", "name"]);
+  assert.deepEqual(Object.keys(approvedMount.learned[0]).sort(), ["digest", "id", "name", "reason"]);
   assert.equal((await learning.getMethod(USER, created.id)).payload.contentDigest, digest, "and no pass rewrote the text");
 
   // --- 6. retirement removes it from the next launch ------------------------
@@ -246,11 +247,11 @@ test("a fresh method takes effect with nothing queued, and its own rejected runs
   assert.deepEqual(queued, [], "nothing is queued to measure a fresh method");
   assert.equal((await learning.getMethod(USER, created.id)).payload.status, "approved", "it takes effect the night it is learned");
 
-  // Three of its runs used it and were rejected in a row: the harm boundary,
-  // and it is retired by the next pass with a reason the researcher can read.
+  // Four of its runs used it and were rejected in a row: the harm boundary of the scientific bounds (`METHOD_SCIENTIFIC_HARM_TEST`,
+  // minRuns 4), and it is retired by the next pass with a reason the researcher can read.
   // `invoked` because the harm test reads only runs that used the method
   // (audit 2026-09-26, L-G2): one that merely carried it says nothing.
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     await learning.recordObservation(USER, created.id, { runId: `trial-${i}`, family: `trial-${i}:d1`, outcome: "rejected",
       at: `2026-09-2${i}T00:00:00.000Z`, contentDigest: created.payload.contentDigest, invoked: true });
   }
@@ -258,6 +259,6 @@ test("a fresh method takes effect with nothing queued, and its own rejected runs
   assert.deepEqual(queued, [], "and still nothing queued: the runs decided");
   const retired = await learning.getMethod(USER, created.id);
   assert.equal(retired.payload.status, "retired");
-  assert.match(retired.payload.statusReason, /用上它的 3 次研究里有 3 次交付被退回/);
+  assert.match(retired.payload.statusReason, /用上它的 4 次研究里有 4 次交付被退回/);
   assert.match(retired.payload.statusReason, /回到上一版/);
 });

@@ -2,7 +2,7 @@
   "id": "x01-cross-key-conflict",
   "class": "keep-cross-key-conflict",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, T1.13); every name, number and identifier is invented",
-  "expected": "The later statement that the person mainly does qualitative research is related to the stored one that they do quantitative cohort studies: the extractor names it as a disagreement (conflictsWith) and neither is silently overwritten.",
+  "expected": "A statement of the same dimension as a stored one (「团队固定周五发布」 beside a stored 「发布固定在周三」) replaces it in place under the same key: one record, the later value, no duplicate under a new key. A later explicit statement wins (owner ruling 2026-10-10); conflictsWith stays for two sources that disagree with neither replacing the other, which this corpus does not yet hold (2026-10-23: the extractor never marks a person's own restatement as a conflict, three of three).",
   "decidable": true,
   "arms": [
     "legacy"
@@ -13,28 +13,32 @@
     "existingKeys": [
       {
         "scope": "user",
-        "kind": "profile",
-        "key": "profile.research_design",
-        "value": "我做定量的队列研究",
-        "summary": "做定量的队列研究"
+        "kind": "preference",
+        "key": "preference.release_cadence",
+        "value": "发布固定在周三",
+        "summary": "版本发布固定在周三"
       }
     ],
     "messages": [
       {
         "id": "u1",
         "role": "user",
-        "text": "我主要做定性研究，访谈和扎根理论为主。"
+        "text": "我们团队固定周五发布，帮我把下个迭代的排期按这个排一下。"
       },
       {
         "id": "a1",
         "role": "assistant",
-        "text": "好的，我会按定性研究的思路来协助您。"
+        "text": "好的，我按周五发布来排下个迭代。"
       }
     ]
   },
   "expect": {
-    "requireConflictWith": [
-      "profile.research_design"
-    ]
+    "requireTextContains": [
+      "周五"
+    ],
+    "noTextContains": [
+      "周三"
+    ],
+    "atMostRecords": 1
   }
 }

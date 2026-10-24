@@ -1,27 +1,22 @@
 /**
- * The tool dependency graph and the unlock sampling that walks it — ToolVerse's
- * TDG and DUS, as pure functions.
+ * The tool dependency graph — ToolVerse's TDG, as pure functions.
  *
- * Hidden knowledge: this is the part of the evaluation corpus that must be
- * reproducible byte for byte, because a brief corpus that regenerates
- * differently is a baseline nobody can compare against. So there is no
- * `Math.random` here and no clock: every choice comes from a seed the caller
- * records in the corpus alongside the tasks.
+ * Hidden knowledge: the graph is the part of the evaluation corpus that must be reproducible byte for byte, so there is no
+ * `Math.random` here and no clock. It is built from the capability manifests and the research server's tool schemas
+ * (`scripts/dev/build-tool-graph.mjs`, held by `pnpm check:tool-graph`) and read by 循证进化's opportunity de-duplication.
  *
- * Two departures from the paper, both because our graph is about real tools
- * rather than generated mocks:
+ * The other half of ToolVerse — the dynamic unlock sampling that walked this graph to draft evaluation briefs
+ * (`unlockSchedule`, `chainSpecs`, `scripts/dev/generate-briefs.mjs`) — was deleted on 2026-10-23: it needed executed edges,
+ * the one script that collects them never ran (the corpus file is empty), and it produced no brief in its life. A walk over
+ * this graph can be written again the day executed edges exist; until then it was a finished part of an algorithm with no
+ * caller (development principle 8).
  *
- *  - **Only an executed edge may be sampled.** ToolVerse asks an LLM whether A
- *    can precede B and then builds tasks on the answer. Ours records how the
- *    edge was established — `schema` (the output field types match the input
- *    parameter), `model` (a model said so), `executed` (we ran the pair and it
- *    worked) — and refuses to build a task on anything but the last. An
- *    unexecuted edge produces a task that cannot be solved, and an unsolvable
- *    task in an evaluation set reads exactly like a capability regression.
- *  - **Edge removal is deterministic and recorded.** The paper's cycle rule is
- *    "delete the lowest priority edge"; ours writes down which edge and why, so
- *    a corpus diff can show that a graph change, not a model change, moved the
- *    task set.
+ * One departure from the paper, because our graph is about real tools rather than generated mocks:
+ *
+ *  - **Edge removal is deterministic and recorded.** The paper's cycle rule is "delete the lowest priority edge"; ours writes
+ *    down which edge and why, so a corpus diff can show that a graph change, not a model change, moved the task set. And an
+ *    edge records how it was established — `schema` (the output field types match the input parameter), `model` (a model said
+ *    so), `executed` (we ran the pair and it worked) — so that only the last may carry a task.
  */
 
 /** How A constrains B: A's output can fill B's required parameter, or the
@@ -62,60 +57,6 @@ export const TOOL_EDGE_STATE_EFFECTS = Object.freeze(['none', 'writes_workspace'
  * @property {readonly ToolGraphNode[]} nodes
  * @property {readonly ToolGraphEdge[]} edges
  */
-
-/* ------------------------------------------------------------ deterministic choice */
-
-/** FNV-1a over the seed string, so a seed can be a readable label. @param {string} text @returns {number} */
-function seedHash(text) {
-  let hash = 0x811c9dc5
-  const source = String(text ?? '')
-  for (let index = 0; index < source.length; index += 1) {
-    hash ^= source.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193) >>> 0
-  }
-  return hash >>> 0
-}
-
-/**
- * mulberry32: small, fast, and — the only property that matters here — the same
- * sequence on every machine and every Node version.
- * @param {string} seed
- * @returns {() => number}
- */
-export function seededRandom(seed) {
-  let state = seedHash(seed) || 1
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0
-    let value = Math.imul(state ^ (state >>> 15), 1 | state)
-    value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-/**
- * Sample without replacement, deterministically.
- *
- * The input is sorted first: a caller that hands us a set built by iteration
- * order would otherwise get a different corpus from the same seed, which is the
- * subtlest way a reproducible pipeline stops being one.
- * @template T
- * @param {readonly T[]} items
- * @param {number} count
- * @param {string} seed
- * @param {(item: T) => string} [key]
- * @returns {T[]}
- */
-export function seededSample(items, count, seed, key = (item) => String(item)) {
-  const pool = [...(items ?? [])].sort((left, right) => key(left).localeCompare(key(right)))
-  const random = seededRandom(seed)
-  for (let index = pool.length - 1; index > 0; index -= 1) {
-    const swap = Math.floor(random() * (index + 1))
-    const held = pool[index]
-    pool[index] = pool[swap]
-    pool[swap] = held
-  }
-  return pool.slice(0, Math.max(0, Math.min(count, pool.length)))
-}
 
 /* ------------------------------------------------------------------ validation */
 
@@ -167,11 +108,6 @@ export function validateToolGraph(graph) {
     }
   }
   return { ok: issues.length === 0, issues }
-}
-
-/** The edges a task may be built on. @param {ToolGraph} graph @returns {ToolGraphEdge[]} */
-export function sampleableEdges(graph) {
-  return [...(graph?.edges ?? [])].filter((edge) => edge.via === 'executed')
 }
 
 /* ------------------------------------------------------------ DAG sanitisation */
@@ -285,105 +221,4 @@ export function sanitizeToolGraph(graph, options = {}) {
   }
 
   return { graph: { ...graph, nodes, edges }, removed }
-}
-
-/* ------------------------------------------------------- dynamic unlock sampling */
-
-/**
- * ToolVerse Algorithm 1, verbatim in structure.
- *
- * Each returned stage is one turn of a task: the tools whose dependencies are
- * all satisfied at that point, sampled down to at most `n`. The number of
- * stages is a property of the graph, not a parameter — which is exactly why
- * this produces long-horizon tasks without anybody choosing a length.
- * @param {ToolGraph} graph
- * @param {{n?: number, seed?: string}} [options]
- * @returns {{stages: string[][], unreached: string[]}}
- */
-export function unlockSchedule(graph, options = {}) {
-  const n = Math.max(1, options.n ?? 2)
-  const seed = options.seed ?? 'evimed'
-  const nodes = (graph?.nodes ?? []).map((node) => node.name)
-  const edges = graph?.edges ?? []
-  const degrees = inDegrees(edges)
-  /** @type {Set<string>} */
-  let ready = new Set(nodes.filter((name) => (degrees.get(name) ?? 0) === 0))
-  const remaining = new Map(nodes.map((name) => [name, degrees.get(name) ?? 0]))
-  /** @type {string[][]} */
-  const stages = []
-  let round = 0
-  while (ready.size) {
-    round += 1
-    const stage = seededSample([...ready], Math.min(ready.size, n), `${seed}:${round}`)
-    const chosen = new Set(stage)
-    ready = new Set([...ready].filter((name) => !chosen.has(name)))
-    stages.push([...stage].sort())
-    for (const name of stage) {
-      for (const edge of edges) {
-        if (edge.from !== name) continue
-        const left = (remaining.get(edge.to) ?? 0) - 1
-        remaining.set(edge.to, left)
-        if (left === 0) ready.add(edge.to)
-      }
-    }
-  }
-  const scheduled = new Set(stages.flat())
-  return { stages, unreached: nodes.filter((name) => !scheduled.has(name)).sort() }
-}
-
-/**
- * How much of the tool surface a set of task chains actually exercises.
- *
- * Reported in the corpus rather than optimised for: the paper's own ablation
- * shows environment count buys very little (100 to 422 environments moved BFCL
- * by 2.5 points), so the honest use of this number is to say what a corpus does
- * not cover.
- * @param {ToolGraph} graph
- * @param {readonly (readonly string[])[]} chains
- * @returns {{tools: number, covered: number, ratio: number, uncovered: string[]}}
- */
-export function graphCoverage(graph, chains) {
-  const tools = (graph?.nodes ?? []).map((node) => node.name)
-  const seen = new Set(chains.flat())
-  const uncovered = tools.filter((name) => !seen.has(name)).sort()
-  const covered = tools.length - uncovered.length
-  return { tools: tools.length, covered, ratio: tools.length ? covered / tools.length : 0, uncovered }
-}
-
-/**
- * @typedef {object} ChainSpec
- * @property {string} id
- * @property {string[][]} stages
- * @property {string[]} tools
- * @property {string} seed
- * @property {number} n
- */
-
-/**
- * A batch of task chains over one graph.
- *
- * `chains` is how many independent walks to take and `n` is the width of a
- * turn; both are recorded on every spec so a corpus can be rebuilt from the
- * spec alone. A chain shorter than `minStages` is dropped rather than padded —
- * a one-turn "long-horizon" task is a single tool call with extra words.
- * @param {ToolGraph} graph
- * @param {{seed?: string, chains?: number, n?: number, minStages?: number, maxStages?: number}} [options]
- * @returns {ChainSpec[]}
- */
-export function chainSpecs(graph, options = {}) {
-  const chains = Math.max(1, options.chains ?? 5)
-  const n = Math.max(1, options.n ?? 2)
-  const minStages = Math.max(1, options.minStages ?? 3)
-  const maxStages = Math.max(minStages, options.maxStages ?? 7)
-  const baseSeed = options.seed ?? 'evimed'
-  /** @type {ChainSpec[]} */
-  const specs = []
-  for (let index = 0; index < chains; index += 1) {
-    const seed = `${baseSeed}:chain:${index}`
-    const { stages } = unlockSchedule(graph, { n, seed })
-    if (stages.length < minStages) continue
-    const kept = stages.slice(0, maxStages)
-    specs.push({ id: `${graph?.capability ?? 'graph'}-${index}`, stages: kept, tools: [...new Set(kept.flat())].sort(), seed, n })
-  }
-  return specs
 }

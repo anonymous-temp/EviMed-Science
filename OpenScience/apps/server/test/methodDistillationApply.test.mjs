@@ -373,7 +373,7 @@ test("a routine's peer is read from whichever of the researcher's projects it ra
       throw Object.assign(new Error("Project not found."), { code: "project_not_found", status: 404 });
     },
   });
-  const read = (/** @type {any} */ input) => input.peerRuns.map((/** @type {any} */ peer) => [peer.runId, peer.transcriptCompleteness, peer.transcriptExcerpts[0]?.parts[0]?.text ?? null]);
+  const read = (/** @type {any} */ input) => input.peerRuns.map((/** @type {any} */ peer) => [peer.runId, peer.transcriptCompleteness, peer.trajectory?.requests[0]?.text ?? null]);
 
   await distillation.execute({ project: renal, run: { id: "run_c", effectiveAgentId: "clinical-evidence-synthesis" }, job: {
     userId: "u1", projectId: "renal",

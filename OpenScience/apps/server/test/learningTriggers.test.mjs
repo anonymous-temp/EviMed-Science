@@ -1,10 +1,10 @@
-// The learning loop starts by itself (owner ruling, 2026-09-19).
+// The learning loop starts by itself (owner ruling, 2026-09-19), and since 2026-10-23 learns from what the researcher did to a run.
 //
-// Under the defaults it could not start at all: one producer needed 「采纳」 and
-// 「我改过」 on the same deliverable (zero adoptions in production), the other a
-// server-side repair round that has defaulted to 0 since 2026-09-17. These are
-// the three signals that replaced them — a finished delivery, a correction,
-// a repeated routine — and the lines they must not cross.
+// Under the defaults it could not start at all: one producer needed 「采纳」 and 「我改过」 on the same deliverable (zero adoptions in
+// production), the other a server-side repair round that has defaulted to 0 since 2026-09-17. The signals that replaced them: a
+// correction (typed into the run, written down by the extractor, a result corrected in the page, or the next turn's first message
+// read as one), a repaired delivery where an operator asks for it, and a routine — τ clean trajectories of one scope and one shape,
+// decided when a run is settled (`routineLessonFor`). A finished delivery queues no lesson of its own any more.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -12,7 +12,8 @@ import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, METHOD_INDUCTION_MIN_TRAJ
 import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  DELIVERY_SAMPLE_PURPOSE, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routineFamily, routinePeriodMs,
+  CONVERSATION_SCOPE, LEARNING_REFUSAL_REASONS, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningRefusal, learningScopeOf,
+  learningTriggersFor, lessonPeers, routineLessonFor, routinePeriodMs, routinePeriodOf,
 } from "../src/learningTriggers.mjs";
 import { sampledByHash } from "../src/runSampling.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput, distillationDispatchId, lessonSignal } from "../src/methodDistillationRuns.mjs";
@@ -42,42 +43,22 @@ function run(overrides = {}) {
 
 /** One of a researcher's projects, as the store resolves it. @param {string} id @param {Record<string, any>} [overrides] */
 const projectOf = (id, overrides = {}) => ({ id, userId: "user_1", archivedAt: null, ...overrides });
-const routineOf = (lessons) => lessons.find((lesson) => lesson.trigger === "routine");
-
 const triggers = (lessons) => lessons.map((lesson) => lesson.trigger);
 
-test('clinical source dependencies stay outside shared lessons, including routine peers and later corrections',async()=>{
-  const home=projectOf('vcr-project');const clinical=run({id:'clinical',corrections:1}),ordinary=run({id:'ordinary'});
-  const jobs={enqueue:async()=>{throw new Error('Clinical text must not reach the queue');}};
-  const worker=new LearningTriggers({jobs,agentRuns:{list:async()=>[clinical,ordinary]},canReuseRun:async(_home,entry)=>entry.id!=='clinical'});
-  assert.deepEqual(await worker.afterRun(home,clinical),{queued:[],skipped:'clinical_context'});
-  assert.deepEqual(await worker.afterCorrection(home,{runId:clinical.id,event:{}}),{queued:[],skipped:'clinical_context'});
-  const ledgers=await worker.ledgersFor(home,[clinical,ordinary],ordinary,ordinary.effectiveAgentId);
-  assert.deepEqual(ledgers[0].runs.map(entry=>entry.id),['ordinary']);
+test("a conversation that read clinical context, or a correction about one, queues nothing and says why", async () => {
+  const home = projectOf("vcr-project");
+  const clinical = run({ id: "clinical", corrections: 1 });
+  const jobs = { enqueue: async () => { throw new Error("Clinical text must not reach the queue"); } };
+  const refused = [];
+  const worker = new LearningTriggers({ jobs, agentRuns: { list: async () => [clinical] }, canReuseRun: async (_home, entry) => entry.id !== "clinical", onRefused: (reason) => refused.push(reason) });
+  assert.deepEqual(await worker.afterRun(home, clinical), { queued: [], skipped: "clinical_context" });
+  assert.deepEqual(await worker.afterCorrection(home, { runId: clinical.id, event: {} }), { queued: [], skipped: "clinical_context" });
+  assert.deepEqual(refused, ["clinical_context", "clinical_context"], "each refusal is counted by its reason");
 });
 
-test("a routine counted across an account's projects asks the clinical-context question once per project, not once per run", async () => {
-  // 2026-10-10 review D7: `ledgersFor` asked the VCR store about every selected run, concurrently, in every project of the account.
-  const projects = [projectOf("home"), projectOf("other"), projectOf("third")];
-  const ledger = Object.fromEntries(projects.map((project) => [project.id, [run({ id: `${project.id}_1` }), run({ id: `${project.id}_2` }), run({ id: `${project.id}_3` })]]));
-  /** @type {[string, number][]} */
-  const asked = [];
-  const worker = new LearningTriggers({
-    jobs: { enqueue: async () => {} },
-    agentRuns: { list: async (project) => ledger[project.id] },
-    projects: async () => projects,
-    canReuseRuns: async (project, runs) => { asked.push([project.id, runs.length]); return runs.map((entry) => entry.id !== "other_2"); },
-  });
-  const ledgers = await worker.ledgersFor(projects[0], ledger.home, ledger.home[2], "clinical-evidence-synthesis");
-  assert.deepEqual(asked, [["home", 3], ["other", 3], ["third", 3]], "one question for each project's selected runs");
-  assert.deepEqual(ledgers.map((entry) => entry.runs.map((item) => item.id)), [
-    ["home_1", "home_2", "home_3"], ["other_1", "other_3"], ["third_1", "third_2", "third_3"],
-  ], "and a run whose conversation read clinical context is still left out");
-});
-
-test("a finished delivery is a lesson by itself; one that needed repairs in its own turn is the repair lesson", () => {
+test("a finished delivery queues no lesson of its own; one that needed repairs in its own turn is the repair lesson", () => {
   const clean = run();
-  assert.deepEqual(triggers(learningTriggersFor({ run: clean, runs: [clean] })), ["delivered"]);
+  assert.deepEqual(learningTriggersFor({ run: clean, runs: [clean] }), [], "its content is the settled run and the routine over three of them");
 
   const repaired = run();
   const projection = { plan: { items: [{ id: "d1", attempts: 1 }, { id: "d2", attempts: 3 }] } };
@@ -99,7 +80,7 @@ test("a finished delivery is a lesson by itself; one that needed repairs in its 
 test("a correction the researcher made is a lesson, whether sent mid-run or written down by the extractor", () => {
   const steered = run({ corrections: 2 });
   const lessons = learningTriggersFor({ run: steered, runs: [steered] });
-  assert.deepEqual(triggers(lessons), ["correction", "delivered"]);
+  assert.deepEqual(triggers(lessons), ["correction"]);
   assert.equal(lessons[0].payload.steeredCorrections, 2);
 
   const said = run();
@@ -114,161 +95,66 @@ test("a correction the researcher made is a lesson, whether sent mid-run or writ
   assert.deepEqual(triggers(learningTriggersFor({ run: failed, runs: [failed] })), ["correction"]);
 });
 
-test("the same kind of operation repeated is induced every Nth time, from all N runs", () => {
+// ---------------------------------------------------------------------------------------------------- routine
+
+/** Clean runs of one scope as the evidence ledger lists them, oldest first, each with the shape of what it left. @param {number} n @param {Record<string, any>} [extra] */
+const familyOf = (n, extra = {}) => Array.from({ length: n }, (_, index) => ({
+  runId: `fam_${index}`, projectId: index % 2 ? "statins" : "aspirin", shape: [{ format: "docx", labels: ["summary", "findings", "next steps"] }], ...extra,
+}));
+const weekly = [{ format: "docx", labels: ["summary", "findings", "next steps"] }];
+
+test("a routine is τ clean trajectories of one shape, every Nth, and is queued once per run", () => {
   assert.equal(METHOD_INDUCTION_MIN_TRAJECTORIES, 3, "the routine threshold is the domain's number");
-  const family = [run(), run(), run(), run(), run(), run()];
-  const other = run({ effectiveAgentId: "meta-analysis" });
-  const ledger = [...family, other];
-  const project = projectOf("paper");
-  const routine = (subject) => routineOf(learningTriggersFor({ run: subject, runs: ledger, project }));
+  const subject = run({ id: "run_now" });
+  const lessonAfter = (before) => routineLessonFor({ run: subject, scope: "clinical-evidence-synthesis", shape: weekly, family: familyOf(before) });
 
-  assert.equal(routine(family[1]), undefined);
-  const third = routine(family[2]);
-  assert.ok(third, "the third successful run of one capability induces its routine");
-  assert.deepEqual(third.payload.peers, [{ runId: family[0].id, projectId: "paper" }, { runId: family[1].id, projectId: "paper" }]);
-  assert.equal(third.payload.capabilityId, "clinical-evidence-synthesis");
-  assert.equal(routine(family[3]), undefined);
-  assert.deepEqual(routine(family[5])?.payload.peers.map((peer) => peer.runId), [family[3].id, family[4].id]);
-  assert.equal(routine(other), undefined, "another capability's first run is not part of this family");
-});
-
-test("a routine is counted across the researcher's own projects, one capability at a time", () => {
-  // One question per project is what a project is for; counted per project,
-  // this researcher never reached the third run of anything.
-  const first = run();
-  const between = run({ effectiveAgentId: "meta-analysis" });
-  const second = run();
-  const third = run();
-  const ledgers = [
-    { project: projectOf("aspirin"), runs: [first, between] },
-    { project: projectOf("statins"), runs: [second] },
-    { project: projectOf("renal"), runs: [third] },
-  ];
-  const lessons = learningTriggersFor({ run: third, runs: ledgers[2].runs, project: ledgers[2].project, ledgers });
-  assert.deepEqual(routineOf(lessons)?.payload, {
-    runId: third.id, trigger: "routine", capabilityId: "clinical-evidence-synthesis",
-    peers: [{ runId: first.id, projectId: "aspirin" }, { runId: second.id, projectId: "statins" }],
+  assert.equal(lessonAfter(0), null);
+  assert.equal(lessonAfter(1), null, "the second clean run of a kind is not yet a routine");
+  const third = lessonAfter(2);
+  assert.ok(third, "the third completes it");
+  assert.deepEqual(third.payload, {
+    runId: "run_now", trigger: "routine", scope: "clinical-evidence-synthesis", capabilityId: "clinical-evidence-synthesis",
+    peers: [{ runId: "fam_0", projectId: "aspirin" }, { runId: "fam_1", projectId: "statins" }],
   }, "each peer by run and by the project its transcript is in");
-  assert.equal(routineOf(learningTriggersFor({ run: third, runs: ledgers[2].runs, project: ledgers[2].project })), undefined,
-    "the same run counted in its own project alone is the first of its kind there");
-  // Another capability's runs neither count nor break the count.
-  assert.equal(routineOf(learningTriggersFor({ run: between, runs: ledgers[0].runs, project: ledgers[0].project, ledgers })), undefined);
+  assert.equal(third.idempotencyKey, "distill:run_now:routine", "keyed by the run alone, so a run is induced from once however often it is settled");
+  assert.equal(lessonAfter(3), null);
+  assert.equal(lessonAfter(4), null);
+  assert.deepEqual(lessonAfter(5)?.payload.peers.map((peer) => peer.runId), ["fam_3", "fam_4"], "the sixth fires again, from the two before it");
+  // The run is counted in once, never against itself: its own row in the family is not one of its peers.
+  const own = { runId: "run_now", shape: weekly };
+  assert.equal(routineLessonFor({ run: subject, scope: "conversation", shape: weekly, family: [...familyOf(1), own] }), null);
+  assert.deepEqual(routineLessonFor({ run: subject, scope: "conversation", shape: weekly, family: [...familyOf(2), own] })?.payload.peers.map((peer) => peer.runId), ["fam_0", "fam_1"]);
 });
 
-test("only the researcher's own work in their own live projects is family", () => {
-  const subject = () => run();
-  /** @param {{ project: any, runs: any[] }} extra */
-  const withPeers = (extra) => {
-    const mine = [run()];
-    const last = subject();
-    const ledgers = [{ project: projectOf("paper"), runs: [...mine, last] }, extra];
-    return routineOf(learningTriggersFor({ run: last, runs: ledgers[0].runs, project: ledgers[0].project, ledgers }));
-  };
-  // A control: one more of the researcher's own runs completes the routine.
-  assert.ok(withPeers({ project: projectOf("other-paper"), runs: [run()] }), "the control completes the group of three");
-  const excluded = [
-    ["an automated run (evaluation cell, probe, harness)", { project: projectOf("other-paper"), runs: [run({ automated: true })] }],
-    ["a run that failed", { project: projectOf("other-paper"), runs: [run({ status: "failed" })] }],
-    ["a run still going", { project: projectOf("other-paper"), runs: [run({ status: "running", finishedAt: null })] }],
-    ["a run in an internal project", { project: projectOf(LEARNING_PROJECT_ID), runs: [run()] }],
-    ["a run in an evaluation cell's project", { project: projectOf("methodeval-0123456789abcdef01234567"), runs: [run()] }],
-    ["a run in an archived project", { project: projectOf("old-paper", { archivedAt: "2026-09-01T00:00:00.000Z" }), runs: [run()] }],
-    ["another researcher's run", { project: projectOf("their-paper", { userId: "user_2" }), runs: [run()] }],
-    ["a run finished in an earlier routine period", { project: projectOf("other-paper"), runs: [run({ finishedAt: new Date(BASE - 25 * HOUR).toISOString() })] }],
-  ];
-  for (const [label, extra] of excluded) assert.equal(withPeers(extra), undefined, `${label} is not family`);
+test("the ordinary conversation can induce a routine: its scope is `conversation`, and it is the shape that says the work is the same", () => {
+  assert.equal(learningScopeOf(run({ effectiveAgentId: "open-domain-answer" })), CONVERSATION_SCOPE);
+  assert.equal(learningScopeOf(run({ effectiveAgentId: null })), CONVERSATION_SCOPE, "a turn nothing routed");
+  assert.equal(learningScopeOf(run({ effectiveAgentId: "geo-content" })), "geo-content");
+  const subject = run({ effectiveAgentId: "open-domain-answer" });
+  const lesson = routineLessonFor({ run: subject, scope: CONVERSATION_SCOPE, shape: weekly, family: familyOf(2) });
+  assert.equal(lesson?.payload.capabilityId, null);
+  assert.equal(lesson?.payload.scope, "conversation");
 });
 
-test("positions do not move: fixed periods, and a run is induced from once however often it is asked", () => {
-  const project = projectOf("paper");
-  // A steady pace across a period boundary. A window sliding back from each
-  // run would hold a constant count here and fire on every run or on none.
-  const periodEnd = Math.floor(Date.UTC(2026, 8, 10) / PERIOD) * PERIOD + PERIOD;
-  const paced = Array.from({ length: 8 }, (_, index) => run({
-    id: `paced_${index}`,
-    finishedAt: new Date(periodEnd + (index - 4) * 24 * HOUR + HOUR).toISOString(),
-  }));
-  const fired = paced.filter((subject) => routineOf(learningTriggersFor({ run: subject, runs: paced, project }))).map((subject) => subject.id);
-  // Four in the closing period (the 3rd fires, the 4th waits), four in the
-  // next, counted from its own start (its 3rd fires).
-  assert.deepEqual(fired, ["paced_2", "paced_6"]);
-
-  // The lesson is keyed by the run alone, and the family behind it does not
-  // shift when later runs arrive: asked again, the same run names the same
-  // lesson and the same peers.
-  const early = routineOf(learningTriggersFor({ run: paced[2], runs: paced.slice(0, 3), project }));
-  const late = routineOf(learningTriggersFor({ run: paced[2], runs: paced, project }));
-  assert.equal(early?.idempotencyKey, `distill:${paced[2].id}:routine`);
-  assert.deepEqual(late, early);
-});
-
-test("a routine lesson is queued once, whichever of the researcher's projects it is counted from", async () => {
-  // A queue that honours idempotency keys, as the product queue does.
-  const jobs = {
-    byKey: new Map(),
-    async enqueue(userId, kind, payload, options) {
-      if (!this.byKey.has(options.idempotencyKey)) this.byKey.set(options.idempotencyKey, { userId, kind, payload, options });
-      return this.byKey.get(options.idempotencyKey);
-    },
-  };
-  const here = projectOf("renal");
-  const [first, second] = [run(), run()];
+test("runs that left something else do not count towards a routine, and a run with no file teaches none", () => {
   const subject = run();
-  const ledgers = new Map([
-    ["aspirin", [first, run({ effectiveAgentId: "open-domain-answer" })]],
-    ["statins", [second]],
-    ["renal", [subject]],
-    ["archived", [run()]],
-    [LEARNING_PROJECT_ID, [run()]],
-  ]);
-  const read = [];
-  const agentRuns = {
-    list: async (project) => { read.push(project.id); return ledgers.get(project.id) ?? []; },
-    runWorkflowProjection: async () => null,
-  };
-  const projects = async (userId) => {
-    assert.equal(userId, "user_1", "only the run's own researcher's projects are asked for");
-    return [projectOf("aspirin"), projectOf("statins"), here, projectOf("archived", { archivedAt: "2026-09-01T00:00:00.000Z" }),
-      projectOf(LEARNING_PROJECT_ID), projectOf("foreign", { userId: "user_2" })];
-  };
-  const triggers = new LearningTriggers({ jobs, agentRuns, projects });
-  const result = await triggers.afterRun(here, subject);
-  assert.deepEqual(result.queued, ["delivered", "routine"]);
-  assert.deepEqual(read.sort(), ["aspirin", "renal", "statins"], "archived, internal and foreign ledgers are never read");
-  const routine = jobs.byKey.get(`distill:${subject.id}:routine`);
-  assert.equal(routine.options.projectId, "renal", "filed under the run that completed it");
-  assert.deepEqual(routine.payload.peers, [{ runId: first.id, projectId: "aspirin" }, { runId: second.id, projectId: "statins" }]);
-  await triggers.afterRun(here, subject);
-  assert.equal([...jobs.byKey.keys()].filter((key) => key.endsWith(":routine")).length, 1, "the same key twice is one lesson");
-
-  // A plain answer never reads the other ledgers.
-  read.length = 0;
-  const answer = run({ effectiveAgentId: "open-domain-answer" });
-  ledgers.set("renal", [subject, answer]);
-  await triggers.afterRun(here, answer);
-  assert.deepEqual(read, ["renal"]);
+  const decks = [{ format: "pptx", labels: ["background", "method"] }];
+  const budget = [{ format: "docx", labels: ["budget", "risks", "timeline"] }];
+  const other = (shape, runId) => ({ runId, projectId: null, shape });
+  assert.equal(routineLessonFor({ run: subject, scope: "s", shape: weekly, family: [...familyOf(1), other(decks, "d"), other(budget, "b")] }), null,
+    "one of the same shape and two of other shapes is not three of one");
+  assert.equal(routineLessonFor({ run: subject, scope: "s", shape: weekly, family: [...familyOf(1), other(decks, "d")] }), null, "and a deck is not a report");
+  assert.ok(routineLessonFor({ run: subject, scope: "s", shape: weekly, family: [...familyOf(1), other([{ format: "docx", labels: ["Summary", "Findings", "Next steps", "Annex"] }], "w")] }),
+    "a report with one more section is still that report");
+  assert.equal(routineLessonFor({ run: subject, scope: "s", shape: [], family: familyOf(5) }), null, "no shape, no routine");
 });
 
-test("a family that cannot be read in full induces nothing, and says so", async () => {
-  const audits = [];
-  const here = projectOf("renal");
-  const subject = run();
-  const triggers = new LearningTriggers({
-    jobs: { enqueue: async () => ({ id: "job" }) },
-    agentRuns: {
-      list: async (project) => {
-        if (project.id === "statins") throw Object.assign(new Error("ledger unreadable"), { code: "agent_runs_corrupt" });
-        return project.id === "renal" ? [subject] : [run(), run()];
-      },
-      runWorkflowProjection: async () => null,
-    },
-    projects: async () => [projectOf("aspirin"), projectOf("statins"), here],
-    audit: async (event, detail) => { audits.push({ event, ...detail }); },
-  });
-  const result = await triggers.afterRun(here, subject);
-  assert.deepEqual(result.queued, ["delivered"], "a position counted over part of the family is a wrong answer");
-  assert.deepEqual(audits.map((entry) => [entry.event, entry.code, entry.detail]),
-    [["learning.routine.family", "agent_runs_corrupt", "clinical-evidence-synthesis"]]);
+test("a routine's period is fixed, counted from the epoch, so positions do not move", () => {
+  const edge = Math.floor(Date.UTC(2026, 8, 10) / PERIOD) * PERIOD + PERIOD;
+  assert.equal(routinePeriodOf(new Date(edge - 1)) + 1, routinePeriodOf(new Date(edge)));
+  assert.equal(routinePeriodOf({ finishedAt: new Date(edge + HOUR).toISOString() }), routinePeriodOf(new Date(edge + 5 * 24 * HOUR)));
+  assert.equal(routinePeriodOf(new Date(edge).toISOString()), routinePeriodOf(new Date(edge)));
+  assert.equal(routinePeriodOf({}), null);
 });
 
 test("a routine lesson's peers read in both shapes it has been queued in", () => {
@@ -279,55 +165,51 @@ test("a routine lesson's peers read in both shapes it has been queued in", () =>
   assert.deepEqual(lessonPeers({ trigger: "delivered" }), []);
 });
 
-test("the platform's own work and a plain answer never teach the researcher's loop", () => {
+// ---------------------------------------------------------------------------------------------------- gates
+
+test("the platform's own work never teaches the researcher's loop, and each refusal has its reason", () => {
   const cases = [
-    run({ automated: true }),
-    run({ effectiveAgentId: "method-distillation" }),
-    run({ transcript: { completeness: "partial" } }),
-    run({ transcript: undefined }),
-    run({ status: "canceled", corrections: 1 }),
+    [run({ automated: true }), "not_researcher_work"],
+    [run({ effectiveAgentId: "method-distillation" }), "not_researcher_work"],
+    [run({ effectiveAgentId: "some-internal-capability" }), "internal_agent"],
+    [run({ transcript: { completeness: "partial" } }), "transcript_incomplete"],
+    [run({ transcript: undefined }), "transcript_incomplete"],
+    [run({ status: "canceled", corrections: 1 }), "not_finished"],
+    [run({ status: "running" }), "not_finished"],
   ];
-  for (const subject of cases) {
-    assert.deepEqual(learningTriggersFor({
-      run: subject, runs: [subject], internalAgent: (id) => id === "method-distillation",
-    }), [], JSON.stringify(subject));
+  for (const [subject, reason] of cases) {
+    const options = { run: subject, runs: [subject], internalAgent: (id) => id === "some-internal-capability" };
+    assert.equal(learningRefusal(options), reason, JSON.stringify(subject));
+    assert.deepEqual(learningTriggersFor(options), [], JSON.stringify(subject));
+    assert.ok(LEARNING_REFUSAL_REASONS.includes(reason));
   }
-  // The answer line delivers and is learned from; it is never a "routine".
-  const answers = [run({ effectiveAgentId: "open-domain-answer" }), run({ effectiveAgentId: "open-domain-answer" }),
-    run({ effectiveAgentId: "open-domain-answer" })];
-  assert.deepEqual(triggers(learningTriggersFor({ run: answers[2], runs: answers })), ["delivered"]);
+  assert.equal(learningRefusal({ run: run(), runs: [], project: projectOf(LEARNING_PROJECT_ID) }), "internal_project");
+  const fine = run();
+  assert.equal(learningRefusal({ run: fine, runs: [fine] }), null);
 });
 
-test("an ordinary conversation is learned from by what the turn left and by what the researcher corrected, not by which capability it was (GA21)", () => {
+test("an ordinary conversation is learned from by what the researcher corrected; what it left is read when the run is settled (GA21)", () => {
   const general = (extra = {}) => run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason: "unrouted:open-domain", artifacts: [], ...extra });
-  // A weekly report, a script, a deck: the files are in whichever record the ledger kept them in.
-  for (const files of [{ outputFiles: ["reports/周报-10-13.docx"] }, { unverifiedArtifacts: ["scripts/rename.py"] }, { artifacts: ["deck.pptx"] }]) {
-    const turn = general(files);
-    assert.deepEqual(triggers(learningTriggersFor({ run: turn, runs: [turn] })), ["delivered"], JSON.stringify(files));
-  }
-  // A question answered in prose left nothing to learn a procedure from.
-  const answered = general();
-  assert.deepEqual(triggers(learningTriggersFor({ run: answered, runs: [answered] })), []);
-  // The researcher's correction is a lesson with or without a file; with one, both.
+  // A turn that left a file queues nothing at once: the settled run and the routine over three of them are its lesson.
+  const turn = general({ outputFiles: ["reports/周报-10-13.docx"] });
+  assert.deepEqual(learningTriggersFor({ run: turn, runs: [turn] }), []);
+  // The researcher's correction is a lesson with or without a file.
   const corrected = general({ corrections: 1 });
   assert.deepEqual(triggers(learningTriggersFor({ run: corrected, runs: [corrected] })), ["correction"]);
   const both = general({ corrections: 1, outputFiles: ["reports/周报-10-13.docx"] });
-  assert.deepEqual(triggers(learningTriggersFor({ run: both, runs: [both] })), ["correction", "delivered"]);
-  // No kind of operation to count a routine over: the Nth conversation is not "the same capability again".
-  const turns = Array.from({ length: METHOD_INDUCTION_MIN_TRAJECTORIES + 1 }, () => general({ outputFiles: ["reports/周报.docx"] }));
-  for (const turn of turns) assert.equal(routineOf(learningTriggersFor({ run: turn, runs: turns })), undefined);
+  assert.deepEqual(triggers(learningTriggersFor({ run: both, runs: [both] })), ["correction"]);
   // A failed turn that left files is not a delivery.
   const failed = general({ status: "failed", outputFiles: ["reports/周报.docx"] });
-  assert.deepEqual(triggers(learningTriggersFor({ run: failed, runs: [failed] })), []);
+  assert.deepEqual(learningTriggersFor({ run: failed, runs: [failed] }), []);
 });
 
-test("researcher-owned GEO and proactive work feed learning while internal evaluations do not", () => {
+test("researcher-owned GEO and proactive work may teach while internal evaluations may not", () => {
   for (const [effectiveAgentId, effectiveRouteReason] of [
     ["geo-content", "geo:content"],
     ["clinical-evidence-synthesis", "autopilot:literature-sentinel"],
   ]) {
-    const subject = run({ automated: true, effectiveAgentId, effectiveRouteReason });
-    assert.deepEqual(triggers(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("research") })), ["delivered"]);
+    const subject = run({ automated: true, effectiveAgentId, effectiveRouteReason, corrections: 1 });
+    assert.deepEqual(triggers(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("research") })), ["correction"]);
     assert.deepEqual(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("acceptance-geo-0929") }), []);
     const evaluating = { ...subject, dispatchId: "methodeval_a1b2c3", effectiveRouteReason: "platform-learning" };
     assert.deepEqual(learningTriggersFor({ run: evaluating, runs: [evaluating], project: projectOf("research") }), []);
@@ -342,28 +224,14 @@ test("a verification run is not a lesson, whichever reason it carries, while the
     for (const extra of [{}, { automated: true }, { automated: false }]) {
       const verification = run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason, outputFiles: ["verification.json"], corrections: 1, ...extra });
       assert.deepEqual(learningTriggersFor({ run: verification, runs: [verification], project: projectOf("research") }), [], `${effectiveRouteReason} ${JSON.stringify(extra)}`);
+      assert.equal(learningRefusal({ run: verification, runs: [verification] }), "not_researcher_work");
     }
   }
-  const episode = run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason: "autopilot:routine", outputFiles: ["briefs/今日.md"] });
-  assert.deepEqual(triggers(learningTriggersFor({ run: episode, runs: [episode], project: projectOf("research") })), ["delivered"]);
-  // And a verification is no peer of a routine: it is never counted into the family an induction reads.
-  const capability = "clinical-evidence-synthesis";
-  const executions = Array.from({ length: METHOD_INDUCTION_MIN_TRAJECTORIES }, () => run({ automated: true, effectiveAgentId: capability, effectiveRouteReason: "autopilot:literature-sentinel" }));
-  const checks = Array.from({ length: 3 }, () => run({ effectiveAgentId: capability, effectiveRouteReason: VERIFICATION_ROUTE_REASON }));
-  const ledger = { project: projectOf("research"), runs: [...checks, ...executions] };
-  const members = routineFamily({ run: executions.at(-1), owner: "user_1", capabilityId: capability, ledgers: [ledger] });
-  assert.deepEqual(members.map((member) => member.run.id), executions.map((item) => item.id));
+  const episode = run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason: "autopilot:routine", outputFiles: ["briefs/今日.md"], corrections: 1 });
+  assert.deepEqual(triggers(learningTriggersFor({ run: episode, runs: [episode], project: projectOf("research") })), ["correction"]);
 });
 
-test("managed research completes the same cross-project routine as interactive work", () => {
-  const family = Array.from({ length: METHOD_INDUCTION_MIN_TRAJECTORIES }, () => run({
-    automated: true, effectiveAgentId: "geo-content", effectiveRouteReason: "geo:content",
-  }));
-  const ledgers = family.map((item, index) => ({ project: projectOf(`brand-${index}`), runs: [item] }));
-  const lessons = learningTriggersFor({ run: family.at(-1), runs: [family.at(-1)], project: ledgers.at(-1).project, ledgers });
-  assert.equal(routineOf(lessons)?.payload.capabilityId, "geo-content");
-  assert.equal(routineOf(lessons)?.payload.peers.length, METHOD_INDUCTION_MIN_TRAJECTORIES - 1);
-});
+// ---------------------------------------------------------------------------------------------------- the queue
 
 test("the queue is fed with one job per lesson, and nothing when the researcher paused learning", async () => {
   const subject = run({ corrections: 1 });
@@ -373,89 +241,94 @@ test("the queue is fed with one job per lesson, and nothing when the researcher 
   const project = { id: "project_1", userId: "user_1" };
 
   const fed = await new LearningTriggers({ jobs, agentRuns }).afterRun(project, subject, null);
-  assert.deepEqual(fed, { queued: ["correction", "delivered"], skipped: null });
+  assert.deepEqual(fed, { queued: ["correction"], skipped: null });
   assert.deepEqual(enqueued.map((job) => [job.kind, job.options.idempotencyKey, job.options.projectId]), [
     ["distill", `distill:${subject.id}:correction`, "project_1"],
-    ["distill", `distill:${subject.id}:delivered`, "project_1"],
   ]);
 
   enqueued.length = 0;
+  const refused = [];
   const paused = { configured: true, settings: async () => ({ learningPaused: true, recallPaused: false, pausedProjects: [] }) };
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, memory: paused }).afterRun(project, subject), { queued: [], skipped: "paused" });
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, memory: paused, onRefused: (reason) => refused.push(reason) }).afterRun(project, subject), { queued: [], skipped: "paused" });
   const trial = async () => ({ trialCapsuleId: "pack-1" });
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, sessionState: trial }).afterRun(project, subject),
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, sessionState: trial, onRefused: (reason) => refused.push(reason) }).afterRun(project, subject),
     { queued: [], skipped: "trial" }, "a conversation trying someone else's capsule teaches the loop nothing");
   assert.equal(enqueued.length, 0);
+  assert.deepEqual(refused, ["paused", "trial"]);
 
   // The internal-capability answer can arrive asynchronously, from the registry.
-  const internal = run({ effectiveAgentId: "source-understanding" });
+  const internal = run({ effectiveAgentId: "some-internal-capability" });
   const internalRuns = { list: async () => [internal], runWorkflowProjection: async () => null };
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns: internalRuns, internalAgent: async (id) => id === "source-understanding" })
-    .afterRun(project, internal), { queued: [], skipped: null });
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns: internalRuns, internalAgent: async (id) => id === "some-internal-capability" })
+    .afterRun(project, internal), { queued: [], skipped: "internal_agent" });
 });
 
-/** A finished run whose id the delivery sample takes (or leaves), found by looking, so the test does not depend on a particular hash. @param {number} share @param {boolean} taken @param {Record<string, any>} [overrides] */
-function sampledRun(share, taken, overrides = {}) {
+test("a finished run is handed to the evidence ledger after its lessons, with the run as the ledger holds it, and a failure there is the evidence's", async () => {
+  const subject = run({ corrections: 1 });
+  const ledgerCopy = { ...subject, steers: [{ requestId: "req_1", text: "再短一点", at: "2026-09-10T10:00:00.000Z" }] };
+  const seen = [];
+  const jobs = { enqueue: async () => ({ id: "job" }) };
+  const project = { id: "project_1", userId: "user_1" };
+  const triggersWith = (afterRun) => new LearningTriggers({ jobs, agentRuns: { list: async () => [ledgerCopy], runWorkflowProjection: async () => null }, evidence: { afterRun } });
+  assert.deepEqual(await triggersWith(async (...args) => { seen.push(args); }).afterRun(project, subject), { queued: ["correction"], skipped: null });
+  assert.equal(seen[0][1].steers.length, 1, "the ledger's copy, which carries the steers");
+  assert.deepEqual(seen[0][2], { guestInfluence: false });
+  assert.deepEqual(await triggersWith(async () => { throw new Error("evidence store down"); }).afterRun(project, subject), { queued: ["correction"], skipped: null });
+  // A run no gate let through is not handed over.
+  seen.length = 0;
+  const automated = run({ automated: true });
+  await new LearningTriggers({ jobs, agentRuns: { list: async () => [automated], runWorkflowProjection: async () => null }, evidence: { afterRun: async () => { seen.push("called"); } } }).afterRun(project, automated);
+  assert.deepEqual(seen, []);
+});
+
+/** A run id the hash of the repair sample puts in (or out of) a share. @param {number} share @param {boolean} taken @param {Record<string, any>} [overrides] */
+function repairSampledRun(share, taken, overrides = {}) {
   for (let attempt = 0; attempt < 500; attempt += 1) {
-    const candidate = run(overrides);
-    if (sampledByHash(candidate.id, share, DELIVERY_SAMPLE_PURPOSE) === taken) return candidate;
+    const candidate = run({ repairRounds: { content: 1, structural: 0 }, ...overrides });
+    if (sampledByHash(candidate.id, share, REPAIR_SAMPLE_PURPOSE) === taken) return candidate;
   }
-  throw new Error("no run id found for the sample");
+  throw new Error("no run id found for the repair sample");
 }
 
-test("only a share of the finished deliveries queue a lesson, chosen by a hash of the run id; the others are skipped and counted, and a correction is never sampled (review L-15)", async () => {
+test("a delivery that needed repairs inside its run queues no lesson by default: the gate's bookkeeping is not the researcher's method (owner, 2026-10-12)", async () => {
   const project = { id: "project_1", userId: "user_1" };
-  const enqueued = [];
-  const jobs = { enqueue: async (_userId, kind, payload, options) => { enqueued.push({ kind, trigger: payload.trigger, key: options.idempotencyKey }); return { id: "job" }; } };
-  /** @type {boolean[]} */ const counted = [];
-  const triggersFor = (/** @type {any[]} */ ledger) => new LearningTriggers({ jobs, agentRuns: { list: async () => ledger, runWorkflowProjection: async () => null },
-    deliveryShare: 0.33, onDeliverySample: (distilled) => counted.push(distilled) });
+  /** @type {any[]} */ const enqueued = [];
+  const jobs = { enqueue: async (_userId, _kind, payload, options) => { enqueued.push({ trigger: payload.trigger, key: options.idempotencyKey }); return { id: "job" }; } };
+  const counted = /** @type {boolean[]} */ ([]);
+  const triggersFor = (/** @type {any[]} */ ledger, /** @type {any} */ options = {}) => new LearningTriggers({
+    jobs, agentRuns: { list: async () => ledger, runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: 3 }] } }) },
+    onRepairSample: (distilled) => counted.push(distilled), ...options });
 
-  // A delivery the sample takes is queued exactly as it was, with nothing added to the answer.
-  const inside = sampledRun(0.33, true);
-  assert.deepEqual(await triggersFor([inside]).afterRun(project, inside), { queued: ["delivered"], skipped: null });
-  // One it leaves is skipped: no job, the answer says which lesson was sampled out, and the counter heard of it.
-  const outside = sampledRun(0.33, false);
-  assert.deepEqual(await triggersFor([outside]).afterRun(project, outside), { queued: [], skipped: null, sampledOut: ["delivered"] });
-  assert.deepEqual(enqueued.map((job) => job.key), [`distill:${inside.id}:delivered`], "only the sampled delivery reached the queue");
-  assert.deepEqual(counted, [true, false]);
+  const repaired = run();
+  assert.deepEqual(triggers(learningTriggersFor({ run: repaired, runs: [repaired], projection: { plan: { items: [{ id: "d1", attempts: 3 }] } } })), ["repair_accepted"]);
 
-  // The same run asked about again gets the same answer: the sample is a property of the run.
-  assert.deepEqual(await triggersFor([outside]).afterRun(project, outside), { queued: [], skipped: null, sampledOut: ["delivered"] });
-  assert.deepEqual(enqueued.length, 1);
+  // Default: none, and the skipped one is a number.
+  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
+  assert.deepEqual(enqueued, []);
+  assert.deepEqual(counted, [false]);
 
-  // The lesson of a delivery that needed repairs is a share of its own (none by default), not the delivery's: see the test below.
-  const repaired = sampledRun(0.33, true, { repairRounds: { content: 1, structural: 0 } });
-  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] },
-    "a run the delivery sample would take is not thereby in the repair sample");
+  // A researcher's correction in that same run is still a lesson.
+  const corrected = run({ corrections: 1 });
+  assert.deepEqual(await triggersFor([corrected]).afterRun(project, corrected), { queued: ["correction"], skipped: null, sampledOut: ["repair_accepted"] });
+  // A clean delivery queues nothing at the run's end.
+  const clean = run();
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns: { list: async () => [clean], runWorkflowProjection: async () => null } }).afterRun(project, clean), { queued: [], skipped: null });
 
-  // A correction is an explicit signal: a run the sample left out still queues it, and only the delivery lesson goes.
-  const corrected = sampledRun(0.33, false, { corrections: 1 });
-  assert.deepEqual(await triggersFor([corrected]).afterRun(project, corrected), { queued: ["correction"], skipped: null, sampledOut: ["delivered"] });
-
-  // A run that was never going to queue a delivery lesson (failed, no artifacts) is not counted as sampled out.
-  counted.length = 0;
-  const empty = sampledRun(0.33, false, { artifacts: [] });
-  assert.deepEqual(await triggersFor([empty]).afterRun(project, empty), { queued: [], skipped: null });
-  assert.deepEqual(counted, []);
+  // The lever: every repaired delivery restores the old behaviour; a share is a hash of the run id.
+  const every = triggersFor([repaired], { repairShare: 1 });
+  assert.deepEqual(await every.afterRun(project, repaired), { queued: ["repair_accepted"], skipped: null });
+  const inside = repairSampledRun(0.5, true);
+  const outside = repairSampledRun(0.5, false);
+  const half = (/** @type {any} */ subject) => triggersFor([subject], { repairShare: 0.5 }).afterRun(project, subject);
+  assert.deepEqual(await half(inside), { queued: ["repair_accepted"], skipped: null });
+  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
+  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] }, "the same run, the same answer");
 });
 
-test("the share of deliveries is one by default, so every delivery queues its lesson as it always did, and zero queues no delivery lesson", async () => {
-  const project = { id: "project_1", userId: "user_1" };
-  const jobs = { enqueue: async () => ({ id: "job" }) };
-  const subject = sampledRun(0.33, false);
-  const agentRuns = { list: async () => [subject], runWorkflowProjection: async () => null };
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns }).afterRun(project, subject), { queued: ["delivered"], skipped: null });
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, deliveryShare: 1 }).afterRun(project, subject), { queued: ["delivered"], skipped: null });
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, deliveryShare: 0 }).afterRun(project, subject), { queued: [], skipped: null, sampledOut: ["delivered"] });
-  // A counter that throws never decides what is learned.
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, deliveryShare: 1, onDeliverySample: () => { throw new Error("counter down"); } }).afterRun(project, subject),
-    { queued: ["delivered"], skipped: null });
-});
-
-test("a lesson that could not be queued is audited, and the others still go", async () => {
-  const subject = run({ corrections: 1 });
+test("a lesson that could not be queued is audited and counted, and the others still go", async () => {
+  const subject = run({ corrections: 1, repairRounds: { content: 1, structural: 0 } });
   const audits = [];
+  const refused = [];
   const jobs = {
     enqueue: async (_userId, _kind, payload) => {
       if (payload.trigger === "correction") throw Object.assign(new Error("full"), { code: "product_job_queue_full" });
@@ -463,21 +336,25 @@ test("a lesson that could not be queued is audited, and the others still go", as
     },
   };
   const result = await new LearningTriggers({
-    jobs,
+    jobs, repairShare: 1,
     agentRuns: { list: async () => [subject], runWorkflowProjection: async () => null },
     audit: async (event, detail) => { audits.push({ event, ...detail }); },
+    onRefused: (reason) => refused.push(reason),
   }).afterRun({ id: "p", userId: "u" }, subject);
-  assert.deepEqual(result.queued, ["delivered"]);
+  assert.deepEqual(result.queued, ["repair_accepted"]);
   assert.deepEqual(audits.map((entry) => [entry.event, entry.code, entry.detail]),
     [["learning.distill.enqueue", "product_job_queue_full", "correction"]]);
+  assert.deepEqual(refused, ["enqueue_failed"]);
 });
 
-test("a routine induction reads every run of the family, each cleaned like the main one", () => {
-  assert.ok(DISTILLATION_TRIGGERS.includes("delivered"));
+// ---------------------------------------------------------------------------------------------------- inputs
+
+test("a routine induction reads each run of the family by its digest, never by raw lines", () => {
+  assert.ok(DISTILLATION_TRIGGERS.includes("delivered"), "a job queued before 2026-10-23 is still read");
   assert.ok(DISTILLATION_TRIGGERS.includes("routine"));
   const transcript = (text) => ({
     header: { completeness: "complete" },
-    messages: [{ sessionId: "s", seq: 1, role: "user", parts: [{ type: "text", text }] }],
+    messages: [{ sessionId: "s", seq: 1, role: "user", source: "user", turnStartSeq: 1, parts: [{ type: "text", text }] }],
   });
   const input = buildDistillationInput({
     run: { id: "run_3", effectiveAgentId: "clinical-evidence-synthesis" },
@@ -489,8 +366,9 @@ test("a routine induction reads every run of the family, each cleaned like the m
     ],
   });
   assert.equal(input.trigger, "routine");
-  assert.deepEqual(input.peerRuns.map((peer) => [peer.runId, peer.transcriptCompleteness, peer.transcriptExcerpts.length]),
-    [["run_1", "complete", 1], ["run_2", "unavailable", 0]]);
+  assert.deepEqual(input.peerRuns.map((peer) => [peer.runId, peer.transcriptCompleteness, peer.trajectory?.requests.map((entry) => entry.text) ?? null]),
+    [["run_1", "complete", ["第一次综述"]], ["run_2", "unavailable", null]]);
+  assert.deepEqual(input.transcriptExcerpts, [], "a routine carries digests and no raw lines");
   // Every other trigger reads one run.
   assert.deepEqual(buildDistillationInput({ run: { id: "r" }, trigger: "delivered", transcript: null }).peerRuns, []);
 });
@@ -532,6 +410,47 @@ test("a correction is a lesson about the run whose result was corrected, evidenc
   assert.equal(input.feedback[0].detail.adoption, "not_recorded");
 });
 
+test("a follow-up that corrected the previous run is the same lesson; one that accepted it, or asked something else, is none", () => {
+  const original = run({ id: "run_orig" });
+  const followUp = (verdict) => ({ id: `feedback:learning-evidence:${verdict}`, trigger: "learning-evidence", runId: "run_orig",
+    subject: { type: "run", id: "run_orig" }, detail: { evidence: "follow-up", verdict, rule: "每节只要三行", quote: "不对，每节只要三行", concerns: [] } });
+  for (const verdict of ["correction", "preference", "rejection"]) {
+    const lesson = correctionLessonFor({ run: original, runs: [original], event: followUp(verdict) });
+    assert.equal(lesson?.trigger, "correction", verdict);
+    assert.equal(lesson?.payload.runId, "run_orig");
+    assert.equal(lesson?.idempotencyKey, `distill:run_orig:correction:feedback:learning-evidence:${verdict}`);
+  }
+  for (const verdict of ["accept", "none"]) assert.equal(correctionLessonFor({ run: original, runs: [original], event: followUp(verdict) }), null, verdict);
+  // A steer is the run's own correction, queued with the run (`afterRun`), and a silent run is nobody's.
+  for (const evidence of ["steer", "silent"]) {
+    assert.equal(correctionLessonFor({ run: original, runs: [original], event: { id: "e", trigger: "learning-evidence", detail: { evidence, verdict: "correction" } } }), null, evidence);
+  }
+});
+
+test("a follow-up's lesson reaches the queue through the same gates, and the evidence of a result corrected in the page is mirrored once the gates have passed", async () => {
+  const original = run({ id: "run_orig" });
+  const project = { id: "project_1", userId: "user_1" };
+  const enqueued = [];
+  const jobs = { enqueue: async (userId, kind, payload, options) => { enqueued.push({ kind, payload, options }); return { id: "job" }; } };
+  const mirrored = [];
+  const evidence = { afterRun: async () => {}, mirrorResultCorrected: async (_project, input) => { mirrored.push(input.runId); } };
+  const event = { id: "feedback:learning-evidence:x", trigger: "learning-evidence", detail: { evidence: "follow-up", verdict: "correction", rule: "r", quote: "不对" } };
+  const triggersWith = (extra = {}) => new LearningTriggers({ jobs, agentRuns: { list: async () => [original] }, evidence, ...extra });
+  assert.deepEqual(await triggersWith().afterCorrection(project, { event, runId: "run_orig" }), { queued: ["correction"], skipped: null });
+  assert.equal(enqueued[0].options.projectId, "project_1");
+  assert.deepEqual(mirrored, [], "a follow-up is already evidence; nothing to mirror");
+  const refused = [];
+  assert.deepEqual(await triggersWith({ onRefused: (reason) => refused.push(reason) }).afterCorrection(project, { event, runId: "run_gone" }), { queued: [], skipped: "run_unavailable" });
+  const resultEvent = correctionEvent();
+  await triggersWith().afterCorrection(project, { event: resultEvent, runId: "run_orig" });
+  assert.deepEqual(mirrored, ["run_orig"]);
+  // Not past the gates: not mirrored either.
+  mirrored.length = 0;
+  const paused = { configured: true, settings: async () => ({ learningPaused: true, recallPaused: false, pausedProjects: [] }) };
+  assert.deepEqual(await triggersWith({ memory: paused }).afterCorrection(project, { event: resultEvent, runId: "run_orig" }), { queued: [], skipped: "paused" });
+  assert.deepEqual(mirrored, []);
+});
+
 test("a correction passes the gates every other lesson passes", () => {
   const original = run({ id: "run_orig" });
   const event = correctionEvent();
@@ -550,50 +469,4 @@ test("two corrections of one run are two dispatches, and a lesson with no discri
   assert.notEqual(first, second, "the second correction does not adopt the first one's bounded run");
   assert.equal(distillationDispatchId("run_1", "correction"), distillationDispatchId("run_1", "correction", ""));
   assert.match(first, /^method-distillation-[a-f0-9]{32}$/);
-});
-
-/** A run id the hash of the repair sample puts in (or out of) a share. @param {number} share @param {boolean} taken @param {Record<string, any>} [overrides] */
-function repairSampledRun(share, taken, overrides = {}) {
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    const candidate = run({ repairRounds: { content: 1, structural: 0 }, ...overrides });
-    if (sampledByHash(candidate.id, share, REPAIR_SAMPLE_PURPOSE) === taken) return candidate;
-  }
-  throw new Error("no run id found for the repair sample");
-}
-
-test("a delivery that needed repairs inside its run queues no lesson by default: the gate's bookkeeping is not the researcher's method (owner, 2026-10-12)", async () => {
-  const project = { id: "project_1", userId: "user_1" };
-  /** @type {any[]} */ const enqueued = [];
-  const jobs = { enqueue: async (_userId, _kind, payload, options) => { enqueued.push({ trigger: payload.trigger, key: options.idempotencyKey }); return { id: "job" }; } };
-  const counted = { repair: /** @type {boolean[]} */ ([]), delivery: /** @type {boolean[]} */ ([]) };
-  const triggersFor = (/** @type {any[]} */ ledger, /** @type {any} */ options = {}) => new LearningTriggers({
-    jobs, agentRuns: { list: async () => ledger, runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: 3 }] } }) },
-    onRepairSample: (distilled) => counted.repair.push(distilled), onDeliverySample: (distilled) => counted.delivery.push(distilled), ...options });
-
-  // The classification is the same pure one it always was; what changed is the share that goes on to cost a run.
-  const repaired = run();
-  assert.deepEqual(triggers(learningTriggersFor({ run: repaired, runs: [repaired], projection: { plan: { items: [{ id: "d1", attempts: 3 }] } } })), ["repair_accepted"]);
-
-  // Default: none, whichever way the delivery sample falls, and the skipped one is a number.
-  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
-  assert.deepEqual(enqueued, []);
-  assert.deepEqual(counted, { repair: [false], delivery: [] }, "heard by the repair counter, and not mistaken for a clean delivery");
-
-  // A researcher's correction in that same run is still a lesson, and a clean delivery is still the delivery sample's.
-  const corrected = run({ corrections: 1 });
-  assert.deepEqual(await triggersFor([corrected]).afterRun(project, corrected), { queued: ["correction"], skipped: null, sampledOut: ["repair_accepted"] });
-  const clean = run();
-  const cleanTriggers = new LearningTriggers({ jobs, agentRuns: { list: async () => [clean], runWorkflowProjection: async () => null } });
-  assert.deepEqual(await cleanTriggers.afterRun(project, clean), { queued: ["delivered"], skipped: null });
-
-  // The lever: every repaired delivery restores the old behaviour; a share is a hash of the run id, as the delivery's is.
-  const every = triggersFor([repaired], { repairShare: 1 });
-  assert.deepEqual(await every.afterRun(project, repaired), { queued: ["repair_accepted"], skipped: null });
-  const inside = repairSampledRun(0.5, true);
-  const outside = repairSampledRun(0.5, false);
-  const half = (/** @type {any} */ subject) => triggersFor([subject], { repairShare: 0.5 }).afterRun(project, subject);
-  assert.deepEqual(await half(inside), { queued: ["repair_accepted"], skipped: null });
-  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
-  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] }, "the same run, the same answer");
-  assert.notEqual(REPAIR_SAMPLE_PURPOSE, DELIVERY_SAMPLE_PURPOSE);
 });

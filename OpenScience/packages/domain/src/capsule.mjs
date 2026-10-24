@@ -60,8 +60,12 @@ export const CAPSULE_FACT_ORIGINS = Object.freeze(['explicit', 'inferred', 'syst
 /** A fact's lifecycle. Retired facts are kept: "was true once" is a fact too. */
 export const CAPSULE_FACT_STATES = Object.freeze(['candidate', 'approved', 'retired'])
 
-/** What a share may contain. The default is the workstyle pack. */
-export const CAPSULE_SHARE_SCOPES = Object.freeze(['workstyle', '+profile', '+knowledge', '+documents'])
+/**
+ * What a share may contain: the scopes `CapsuleTransferService` accepts, and no others. The default is the workstyle pack. A scope the
+ * transfer service refuses is not one a container may declare either (2026-10-23: `+documents` was here and nowhere else, so a
+ * manifest could claim a scope no share ever carried, and the validator was the looser of the two checks).
+ */
+export const CAPSULE_SHARE_SCOPES = Object.freeze(['workstyle', '+profile', '+knowledge'])
 
 /**
  * How a capsule is used: as the researcher's own (`own` — who they are and how
@@ -114,7 +118,11 @@ export const CAPSULE_TIMELINE_EVENT_TYPES = Object.freeze([
 export const NEVER_SHARED_LAYERS = Object.freeze(['sources'])
 
 /**
- * The container's declared payload entries, by scope.
+ * The container's declared payload entries, by scope: exactly the files a share is made of (`renderedFiles` in
+ * `capsuleTransferService.mjs`: the standards, the methods, the provenance, and with the optional scopes the profile and the knowledge
+ * chunks), so that a manifest which declares more is refused by the validator and not only by the second check the transfer service
+ * makes. Paths the old format spoke of (`exemplars/`, `lessons.jsonl`, `timeline.jsonl`, `knowledge/claims.jsonl`, `documents/`) were
+ * never written by any share and were let through by this table alone.
  *
  * A workstyle pack is "how I work", which is why identity, current projects and
  * personal corrections are absent from the default: they are "who I am and what
@@ -124,15 +132,10 @@ export const SHARE_SCOPE_ENTRIES = Object.freeze({
   workstyle: [
     'standards.jsonl',
     'methods/',
-    'knowledge/claims.jsonl',
-    'exemplars/',
-    'lessons.jsonl',
-    'timeline.jsonl',
     'provenance.json',
   ],
   '+profile': ['profile.md'],
   '+knowledge': ['knowledge/chunks.jsonl'],
-  '+documents': ['documents/'],
 })
 
 /** The AEAD and key-agreement scheme the container uses. */

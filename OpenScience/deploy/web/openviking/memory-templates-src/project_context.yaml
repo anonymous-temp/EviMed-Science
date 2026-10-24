@@ -13,7 +13,9 @@ description: |
   project: they never create a card and never change one. One deliverable asked for in a
   single message (an email, a slide deck, a table, a poster) is a request, not a project: a
   card is written only when the conversation is held inside one of the user's named projects,
-  or the user describes a piece of work that goes on beyond this one deliverable.
+  or the user describes a piece of work that goes on beyond this one deliverable. The
+  conditions of one request (its page count, length, price, deadline, what to leave out this
+  time) never go into a card, not even into 约束.
 
   The card has up to six sections and every one is optional: write a section only when the
   user stated something for it, and never fill one from the topic of a question.

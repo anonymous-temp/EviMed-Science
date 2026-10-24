@@ -491,3 +491,20 @@ test("one paired evaluation of a handbook at a time: the next waits its turn wit
   await instance.close();
   assert.deepEqual(jobs.finished.map((entry) => entry.id), ["e1"]);
 });
+
+test("the settle job of a delivery is claimed only where the evidence ledger is composed, and is finished with what it settled", async () => {
+  const settled = [];
+  const evidence = { async settle({ job }) { settled.push(job.payload.runId); return { settled: "silent", routine: false }; } };
+  const without = worker({ jobs: fakeJobs([{ id: "j0", kind: "learning-evidence", userId: "u1", payload: { runId: "r0" } }]) });
+  assert.deepEqual(without.worker.kinds, ["distill", "consolidate"], "no evidence ledger, no claim: the job waits for a deployment that has one");
+  await without.worker.tick();
+  assert.equal(without.jobs.queue.length, 1);
+
+  const jobs = fakeJobs([{ id: "j1", kind: "learning-evidence", userId: "u1", projectId: "p1", payload: { runId: "r1" } }]);
+  const composed = new LearningWorker({ jobs, distillation: { async execute() { throw new Error("not a lesson"); } }, consolidation: { async run() { throw new Error("not a pass"); } },
+    evidence, enabled: true, window: "", now: () => new Date("2026-09-07T23:00:00"), pollMs: 1000, leaseMs: 60_000, reconcileMs: 60_000 });
+  assert.deepEqual(composed.kinds, ["distill", "consolidate", "learning-evidence"]);
+  await composed.tick();
+  assert.deepEqual(settled, ["r1"]);
+  assert.deepEqual(jobs.finished.map((entry) => [entry.id, entry.result.settled]), [["j1", "silent"]]);
+});

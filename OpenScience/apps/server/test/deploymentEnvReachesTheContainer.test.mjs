@@ -106,9 +106,6 @@ const operatorLevers = {
   OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY: ["open-science-web"],
-  // The share of finished deliveries that queue a distillation (2026-10-10): a lever that never arrived would leave the code's third in force
-  // while the operator believes they asked for every delivery, or for none.
-  OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: ["open-science-web"],
   // The two levers of 2026-10-12: repaired deliveries (the gate's bookkeeping) and the unused-method stop. Unset, the code's 0 and 20 hold.
   OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: ["open-science-web"],

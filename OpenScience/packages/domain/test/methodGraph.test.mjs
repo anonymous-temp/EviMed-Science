@@ -15,9 +15,11 @@ import {
   computeMethodLevels,
   emptyLearning,
   bodyPreservation,
+  foldApplied,
   foldCarried,
   foldDecided,
   foldEligible,
+  foldExplored,
   foldLevel,
   foldObservation,
   foldRead,
@@ -28,7 +30,6 @@ import {
   methodLevel,
   methodStrength,
   promotionVerdict,
-  reflectionDue,
   relationIssues,
   resetLearningForDigest,
   retirementProposal,
@@ -36,6 +37,7 @@ import {
   successfulFamilies,
   unresolvedConflicts,
   validateMethodGraph,
+  withoutRetiredLearningKeys,
 } from "../src/methodGraph.mjs";
 
 const DIGEST_A = `sha256:${"a".repeat(64)}`;
@@ -263,12 +265,6 @@ test("a safety-related method is never retired for being quiet, and an incident 
   assert.equal(retirementProposal(method({ status: "retired" }), { nowMs: NOW }).propose, false);
 });
 
-test("reflection fires on accumulated importance, on the memory subsystem's threshold", () => {
-  assert.equal(reflectionDue(149), false);
-  assert.equal(reflectionDue(150), true);
-  assert.equal(reflectionDue(10, 5), true);
-});
-
 /* -------------------------------------------------------------- the graph */
 
 test("levels come from the dependency graph, not from the role label", () => {
@@ -366,21 +362,23 @@ const runs = (pattern, digest = DIGEST_A, { invoked = true } = {}) => {
 };
 
 test("the harm test reads the runs in order and stops at a boundary", () => {
-  // Three rejections in a row cross the harm boundary; two cannot decide alone.
+  // The bounds are the scientific axis's (a correction is ordinary work): three rejections in a row cannot decide, four can.
   assert.equal(methodHarmTest(runs("rr")).state, "watching");
-  assert.deepEqual({ ...methodHarmTest(runs("rrr")), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 3, bad: 3, llr: undefined });
+  assert.equal(methodHarmTest(runs("rrr")).state, "watching");
+  assert.deepEqual({ ...methodHarmTest(runs("rrrr")), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 4, bad: 4, llr: undefined });
   // Two early rejections, then work that holds up: not harm.
   assert.equal(methodHarmTest(runs("rra")).state, "watching");
-  // Four accepted runs are enough to call it clear, and later runs are not read.
-  assert.deepEqual({ ...methodHarmTest(runs("aaaarrrr")), llr: undefined }, { state: "clear", reason: "lower-boundary", runs: 4, bad: 0, llr: undefined });
+  // Three accepted runs are enough to call it clear, and later runs are not read.
+  assert.deepEqual({ ...methodHarmTest(runs("aaaarrrr")), llr: undefined }, { state: "clear", reason: "lower-boundary", runs: 3, bad: 0, llr: undefined });
   // A background-rate mix that never crosses is clear at the cap.
   const mixed = "aaaaaaaaar".repeat(5);
   const capped = methodHarmTest(runs(mixed), { minRuns: 3 });
   assert.equal(capped.state, "clear");
-  // A 40% rate is caught well before the cap.
-  const harmful = methodHarmTest(runs("aarararrar"));
+  // A 60% rate is caught well before the cap; a coin-flip rate is not harm.
+  const harmful = methodHarmTest(runs("rrarrarrr"));
   assert.equal(harmful.state, "harm");
   assert.ok(harmful.runs <= 10, `caught after ${harmful.runs} runs`);
+  assert.notEqual(methodHarmTest(runs("aarararrar")).state, "harm");
   assert.equal(methodHarmTest(emptyLearning(DIGEST_A)).state, "watching");
   assert.equal(methodHarmTest(/** @type {any} */ (undefined)).state, "watching");
 });
@@ -390,7 +388,7 @@ test("a harmful revision is retired now; a stated one is only proposed; another 
   const harmful = retirementProposal(method({ status: "approved", learning: runs("rrrr") }), { nowMs: now });
   assert.equal(harmful.propose, true);
   assert.equal(harmful.immediate, true);
-  assert.match(harmful.reason, /3 of the 3 runs that mounted this revision were rejected/, "decided at the third run, not read further");
+  assert.match(harmful.reason, /4 of the 4 runs that mounted this revision were rejected/, "decided at the fourth run, not read further");
   const stated = retirementProposal(method({ status: "approved", learning: runs("rrrr"), provenance: { origin: "explicit" } }), { nowMs: now });
   assert.deepEqual({ propose: stated.propose, immediate: stated.immediate }, { propose: true, immediate: false });
   // Observations recorded against a revision this method no longer holds.
@@ -544,7 +542,7 @@ test("an unproven merge is one a pass built and the harm test has not cleared", 
   assert.equal(isUnprovenMerge(merged()), true);
   assert.equal(isUnprovenMerge(method({ status: "approved", provenance: { origin: "inferred", runId: "run_1", consolidatedBy: "consolidate:job_1" } })), false, "a taught method a pass only amended is not a merge");
   assert.equal(isUnprovenMerge(method({ status: "approved" })), false);
-  assert.equal(isUnprovenMerge(merged({ learning: runs("aaaa") })), false, "four runs that opened it and held up clear it");
+  assert.equal(isUnprovenMerge(merged({ learning: runs("aaaa") })), false, "runs that opened it and held up clear it");
   assert.equal(isUnprovenMerge(merged({ status: "candidate", learning: runs("aaaa") })), true, "one that is not in force is not cleared");
   assert.equal(isUnprovenMerge(merged({ digest: DIGEST_B, learning: runs("aaaa", DIGEST_A) })), true, "another body's runs prove nothing about this one");
 });
@@ -665,9 +663,66 @@ test("a stated method is only proposed, a safety method is exempt from disuse, a
 });
 
 test("harm and incident are decided before disuse, and an already stopped method is left alone", () => {
-  const hurting = method({ status: "approved", learning: { ...runs("rrr"), counts: { ...runs("rrr").counts, carried: 40, invoked: 3 } } });
+  const hurting = method({ status: "approved", learning: { ...runs("rrrr"), counts: { ...runs("rrrr").counts, carried: 40, invoked: 4 } } });
   assert.equal(retirementProposal(hurting, { nowMs: NOW }).code, "harm");
   const incident = method({ status: "approved", learning: carriedRecord(40), provenance: { origin: "inferred", incident: true } });
   assert.equal(retirementProposal(incident, { nowMs: NOW }).code, "incident");
   assert.equal(retirementProposal(method({ status: "retired", learning: carriedRecord(40) }), { nowMs: NOW }).code, "already_retired");
+});
+
+/* ------------------------------------- what the researcher did after a run that opened it */
+
+test("a run's reaction is one step of the harm test, once, and a correction is never taken back", () => {
+  const at = daysAgo(1);
+  let learning = emptyLearning(DIGEST_A);
+  learning = foldApplied(learning, { runId: "run_1", outcome: "clean", at });
+  learning = foldApplied(learning, { runId: "run_1", outcome: "clean", at });
+  assert.deepEqual([learning.counts.appliedClean, learning.counts.appliedCorrected, learning.observations.length], [1, undefined, 1], "recorded once however often it is read");
+  assert.deepEqual(learning.observations[0], { runId: "run_1", family: "applied:run_1", outcome: "accepted", at, invoked: true, applied: "clean" });
+  // A clean run that is corrected later becomes a corrected one, in the counts too.
+  learning = foldApplied(learning, { runId: "run_1", outcome: "corrected", at });
+  assert.deepEqual([learning.counts.appliedClean, learning.counts.appliedCorrected], [0, 1]);
+  assert.equal(learning.observations[0].outcome, "rejected");
+  // And never the other way round.
+  assert.equal(foldApplied(learning, { runId: "run_1", outcome: "clean", at }), learning);
+  // Nothing recorded for a run with no runId or no outcome the vocabulary knows.
+  assert.equal(foldApplied(learning, { runId: "", outcome: "clean", at }), learning);
+  assert.equal(foldApplied(learning, /** @type {any} */ ({ runId: "run_2", outcome: "applause", at })), learning);
+  // The deliverable counters do not move: a reaction is not a delivery.
+  assert.deepEqual([learning.counts.loaded, learning.counts.succeeded, learning.counts.invoked], [0, 0, 0]);
+  assert.deepEqual(successfulFamilies(foldApplied(emptyLearning(DIGEST_A), { runId: "r", outcome: "clean", at })), [], "a reaction is not a delivery it was learnt from");
+});
+
+test("the researcher's reactions are what retires a method the answer line uses: four corrected runs stop it, clean ones clear it", () => {
+  const react = (/** @type {string} */ pattern, digest = DIGEST_A) => {
+    let learning = emptyLearning(digest);
+    [...pattern].forEach((mark, index) => {
+      learning = foldApplied(learning, { runId: `run_${index}`, outcome: mark === "c" ? "corrected" : "clean", at: daysAgo(pattern.length - index) });
+    });
+    return learning;
+  };
+  assert.equal(methodHarmTest(react("ccc")).state, "watching");
+  assert.equal(methodHarmTest(react("cccc")).state, "harm");
+  const stopped = retirementProposal(method({ status: "approved", learning: react("cccc") }), { nowMs: NOW });
+  assert.deepEqual([stopped.propose, stopped.immediate, stopped.code], [true, true, "harm"]);
+  assert.equal(methodHarmTest(react("kkk")).state, "clear");
+  // A deliverable's step and a reaction are different steps of one run: a package the gate accepted and the researcher corrected is one good and one bad.
+  let both = foldObservation(emptyLearning(DIGEST_A), { runId: "run_1", family: "run_1:d1", outcome: "accepted", at: daysAgo(2), invoked: true });
+  both = foldApplied(both, { runId: "run_1", outcome: "corrected", at: daysAgo(1) });
+  assert.deepEqual(methodHarmTest(both).runs, 2);
+  assert.equal(both.counts.appliedCorrected, 1);
+  // A body that changed starts the count again, reactions included.
+  assert.deepEqual(resetLearningForDigest(react("cc"), DIGEST_B).counts, emptyLearning(DIGEST_B).counts);
+  assert.deepEqual(resetLearningForDigest(react("cc"), DIGEST_B).observations, []);
+});
+
+test("exposure is counted apart from being passed over, and a leftover key of the deleted evaluation is dropped", () => {
+  const explored = foldExplored(foldExplored(emptyLearning(DIGEST_A)));
+  assert.deepEqual([explored.counts.explored, explored.counts.carried], [2, undefined], "an exploration slot is no load a method can be stopped for");
+  assert.ok(METHOD_COUNT_KINDS.includes("explored") && METHOD_COUNT_KINDS.includes("appliedCorrected") && METHOD_COUNT_KINDS.includes("appliedClean"));
+  const old = { ...emptyLearning(DIGEST_A), evaluations: [{ verdict: "better" }] };
+  assert.equal("evaluations" in withoutRetiredLearningKeys(/** @type {any} */ (old)), false);
+  assert.equal(withoutRetiredLearningKeys(old).digest, DIGEST_A);
+  const clean = emptyLearning(DIGEST_A);
+  assert.equal(withoutRetiredLearningKeys(clean), clean, "nothing to drop, nothing copied");
 });

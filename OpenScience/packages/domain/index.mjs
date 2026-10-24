@@ -123,7 +123,7 @@ export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.m
 export { safeAppReturnPath } from './src/returnPath.mjs'
 
 
-// toolNames — 28 exports
+// toolNames — 30 exports
 export {
   MCP_MANAGED_JOB_BASE_NAMES,
   MCP_SERVER_NAME,
@@ -138,6 +138,7 @@ export {
   OPENVIKING_MEMORY_TOOL_NAMES,
   KERNEL_MOUNTED_TOOL_NAMES,
   MOUNTED_TOOL_NAMES,
+  PLATFORM_CHOREOGRAPHY_TOOL_NAMES,
   RETIRED_MCP_TOOL_NAMES,
   RETIRED_SOCKET_TOOL_NAMES,
   ROOT_VISIBLE_MCP_BASE_NAMES,
@@ -148,6 +149,7 @@ export {
   isMcpToolName,
   isOpenVikingMemoryToolName,
   isOpenVikingToolName,
+  isPlatformChoreographyTool,
   isSocketToolName,
   mcpToolBaseName,
   mcpToolName,
@@ -302,6 +304,7 @@ export {
   MAX_ACTIVE_LEARNED_METHODS,
   HANDBOOK_TEXT_LIMITS,
   METHOD_HARM_TEST,
+  METHOD_MOUNT,
   METHOD_SCIENTIFIC_HARM_TEST,
   METHOD_SIMILARITY_PAIR_FLOOR,
   METHOD_SIMILARITY_TOP_K,
@@ -309,7 +312,6 @@ export {
   METHOD_UNPROVEN_MERGE_MIN_CARRIED,
   METHOD_UNUSED_RETIRE_LOADS,
   MEMORY_RECENCY_GAMMA_PER_HOUR,
-  MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_RERANK_WEIGHTS,
   MEMORY_STRENGTH_TAU_DAYS,
   METHOD_INDUCTION_MIN_TRAJECTORIES,
@@ -450,6 +452,40 @@ export {
   toolCalls,
   totalOutputTokens,
 } from './src/runTranscript.mjs'
+
+// artifactShape + trajectoryDigest — what the learning loop reads of a run: the person's requests and interventions, the files it
+// left (by structural shape) and the order of the work's tools with the platform's choreography removed
+export {
+  ARTIFACT_SHAPE_LIMITS,
+  ARTIFACT_SHAPE_MATCH_JACCARD,
+  ARTIFACT_SHAPE_MIN_LABELS,
+  artifactShapesMatch,
+  cleanArtifactShape,
+  cleanArtifactShapes,
+  normalizeShapeLabel,
+} from './src/artifactShape.mjs'
+export {
+  TRAJECTORY_ANCHOR_RADIUS,
+  TRAJECTORY_DIGEST_LIMITS,
+  ownTurnStarts,
+  rootSessionOf,
+  steeredMessages,
+  trajectoryDigest,
+  transcriptMessageText,
+} from './src/trajectoryDigest.mjs'
+
+// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent)
+export {
+  LEARNING_CORRECTION_VERDICTS,
+  LEARNING_EVIDENCE_KINDS,
+  LEARNING_EVIDENCE_LIMITS,
+  LEARNING_EVIDENCE_SUBJECT_TYPE,
+  LEARNING_EVIDENCE_TRIGGER,
+  LEARNING_EVIDENCE_VERDICTS,
+  LEARNING_FOLLOW_UP_WINDOW_MS,
+  cleanLearningEvidence,
+  isLearningCorrection,
+} from './src/learningEvidence.mjs'
 
 // skillSupply — a skill package's source, licence, version, scripts, references, dependencies and operations as one
 // record, and whether the deployment can supply what it needs (read as a label by the availability projection)
@@ -758,6 +794,9 @@ export {
 /** @typedef {import('./src/receipt.mjs').DeliveryReceipt} DeliveryReceipt */
 /** @typedef {import('./src/receipt.mjs').DeliveryReceiptEntry} DeliveryReceiptEntry */
 /** @typedef {import('./src/receipt.mjs').ReceiptFile} ReceiptFile */
+/** @typedef {import('./src/artifactShape.mjs').ArtifactShape} ArtifactShape */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryReaction} TrajectoryReaction */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryDigest} TrajectoryDigest */
 /** @typedef {import('./src/runTranscript.mjs').RunEvent} RunEvent */
 /** @typedef {import('./src/runTranscript.mjs').RunTranscript} RunTranscript */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptMessage} TranscriptMessage */
@@ -816,19 +855,32 @@ export {
   validateMethodSkill,
 } from './src/methodSkill.mjs'
 
+// retiredFeatures — what the platform no longer has, as the literal names a lesson uses for it (a closed list)
+export {
+  RETIRED_FEATURES,
+  methodTextOf,
+  retiredFeaturesIn,
+  retiredFeaturesOfMethod,
+} from './src/retiredFeatures.mjs'
+
 // methodGraph — the lifecycle: counters, promotion, retirement, and the graph
 export {
+  METHOD_APPLIED_OUTCOMES,
   METHOD_COUNT_KINDS,
   METHOD_GRAPH_ISSUE_CODES,
+  METHOD_MOUNT_REASONS,
   METHOD_OBSERVATION_OUTCOMES,
   METHOD_ORIGINS,
   METHOD_RELATION_TYPES,
+  METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_SUCCESS_OUTCOMES,
   computeMethodLevels,
   emptyLearning,
+  foldApplied,
   foldCarried,
   foldDecided,
   foldEligible,
+  foldExplored,
   foldLevel,
   foldObservation,
   foldRead,
@@ -840,7 +892,6 @@ export {
   methodLevel,
   methodStrength,
   promotionVerdict,
-  reflectionDue,
   relationIssues,
   resetLearningForDigest,
   retirementProposal,
@@ -850,6 +901,7 @@ export {
   successfulFamilies,
   unresolvedConflicts,
   validateMethodGraph,
+  withoutRetiredLearningKeys,
 } from './src/methodGraph.mjs'
 
 // methodFeedback — what later became of the results a learned method was used for: the scientific axis of a method's
@@ -880,37 +932,15 @@ export {
   scientificOutcomes,
 } from './src/methodFeedback.mjs'
 
-// toolGraphSampling — ToolVerse's dependency graph and unlock sampling
+// toolGraph — ToolVerse's tool dependency graph: validation and the deterministic DAG clean-up
 export {
   TOOL_EDGE_SOURCES,
   TOOL_EDGE_STATE_EFFECTS,
   TOOL_EDGE_TYPES,
   TOOL_GRAPH_ISSUE_CODES,
-  chainSpecs,
-  graphCoverage,
-  sampleableEdges,
   sanitizeToolGraph,
-  seededRandom,
-  seededSample,
-  unlockSchedule,
   validateToolGraph,
-} from './src/toolGraphSampling.mjs'
-
-// experienceBullets — the capability handbook's self-maintained section
-export {
-  BULLET_TAGS,
-  EXPERIENCE_SECTION_HEADING,
-  EXPERIENCE_SECTION_NOTE,
-  EXPERIENCE_SUBSECTIONS,
-  curateBullets,
-  harmfulBullets,
-  nextBulletId,
-  onlyExperienceSectionChanged,
-  parseExperienceSection,
-  renderBullet,
-  renderExperienceSection,
-  replaceExperienceSection,
-} from './src/experienceBullets.mjs'
+} from './src/toolGraph.mjs'
 
 /** @typedef {import('./src/methodSkill.mjs').MethodSkillIssue} MethodSkillIssue */
 /** @typedef {import('./src/methodSkill.mjs').MethodPayload} MethodPayload */
@@ -920,11 +950,9 @@ export {
 /** @typedef {import('./src/methodGraph.mjs').MethodObservation} MethodObservation */
 /** @typedef {import('./src/methodGraph.mjs').MethodRelation} MethodRelation */
 /** @typedef {import('./src/methodGraph.mjs').MethodProvenance} MethodProvenance */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraph} ToolGraph */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphNode} ToolGraphNode */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphEdge} ToolGraphEdge */
-/** @typedef {import('./src/toolGraphSampling.mjs').ChainSpec} ChainSpec */
-/** @typedef {import('./src/experienceBullets.mjs').ExperienceBullet} ExperienceBullet */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraph} ToolGraph */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraphNode} ToolGraphNode */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraphEdge} ToolGraphEdge */
 
 export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
 // sourceUnderstanding — 19 exports

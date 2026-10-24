@@ -22,34 +22,34 @@
       {
         "name": "a delivery repaired three times inside its own run, with the shares as configured by default",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3 },
-        "shares": { "delivery": 1, "repair": 0 },
+        "shares": { "repair": 0 },
         "expect": { "queued": [], "sampledOut": ["repair_accepted"] },
-        "note": "The delivery share is set to everything so that nothing here depends on a hash: it is the repair share that keeps this out."
+        "note": "It is the repair share that keeps this out. (The share of clean deliveries that queued a lesson, a third, was removed on 2026-10-23: a clean delivery queues no lesson of its own, what it teaches is read when the run is settled.)"
       },
       {
         "name": "the same run, in which the researcher said the assistant had it wrong and the extractor recorded the correction",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3 },
-        "shares": { "delivery": 1, "repair": 0 },
+        "shares": { "repair": 0 },
         "memoryCorrections": [{ "recordId": "record_1", "key": "correction.include_rcts_only", "scope": "user" }],
         "expect": { "queued": ["correction"], "sampledOut": ["repair_accepted"] }
       },
       {
         "name": "the same run, in which the researcher typed a correction into the running turn",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3, "corrections": 1 },
-        "shares": { "delivery": 1, "repair": 0 },
+        "shares": { "repair": 0 },
         "expect": { "queued": ["correction"], "sampledOut": ["repair_accepted"] }
       },
       {
         "name": "an operator who asks for the gate's lessons back gets them",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3 },
-        "shares": { "delivery": 1, "repair": 1 },
+        "shares": { "repair": 1 },
         "expect": { "queued": ["repair_accepted"], "sampledOut": [] }
       },
       {
-        "name": "a delivery accepted on its first submission is still the delivery sample's",
+        "name": "a delivery accepted on its first submission queues no lesson at its end: what it teaches is read when the run is settled, and in the routine over three clean ones",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 1 },
-        "shares": { "delivery": 1, "repair": 0 },
-        "expect": { "queued": ["delivered"], "sampledOut": [] }
+        "shares": { "repair": 0 },
+        "expect": { "queued": [], "sampledOut": [] }
       }
     ],
     "library": [

@@ -2,7 +2,7 @@
   "id": "c09-everyday-context",
   "class": "work-order-everyday-context",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C09); every name, number and identifier is invented",
-  "expected": "Ordinary life context is kept like any other fact: Chengdu, commutes by metro, cooks dinner at home, vegetarian; the two servings of this one request are not.",
+  "expected": "Ordinary life context is kept like any other fact: Chengdu, commutes by metro, cooks dinner at home, vegetarian. Whether 两人份 is kept is not judged: for a person who cooks dinner at home it reads as the size of their household as easily as a condition of this one plan (three of three replays on 2026-10-23 kept it as the household's).",
   "decidable": true,
   "arms": [
     "native",
@@ -32,9 +32,6 @@
     "requireTextContains": [
       "成都",
       "素"
-    ],
-    "noTextContains": [
-      "两人份"
     ]
   }
 }

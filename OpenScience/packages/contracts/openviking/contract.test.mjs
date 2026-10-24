@@ -208,7 +208,9 @@ test("a derived record costs an embedding and no model call, with a language mod
   await withServer({ "/api/v1/content/write": { body: written } }, async ({ port, seen }) => {
     await client(port).write(RECORDED_USER, written.result.uri, "偏好 / 报告呈现", { wait: true });
     const recorded = provenance.recordedExchanges.find((exchange) => exchange.file === "content-write.json");
-    assert.deepEqual(Object.keys(seen[0].body).sort(), Object.keys(recorded.requestBody).sort());
+    // The recording was taken on v0.5.0, whose body still carried `timeout`; v0.5.1.1 refuses that field
+    // (`extra="forbid"`), so the client no longer sends it and the rest of the body is what was recorded.
+    assert.deepEqual(Object.keys(seen[0].body).sort(), Object.keys(recorded.requestBody).filter((key) => key !== "timeout").sort());
     assert.equal(seen[0].body.mode, "replace");
   });
 });

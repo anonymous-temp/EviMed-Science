@@ -25,9 +25,6 @@ export const MEMORY_RECENCY_GAMMA_PER_HOUR = 0.995
 /** Session-memory strength half-life input: S(t) = S0 * e^(-dt/tau), tau in days (§19.22 A4). */
 export const MEMORY_STRENGTH_TAU_DAYS = 30
 
-/** Reflection fires when accumulated importance passes this (event-driven, not timed). */
-export const MEMORY_REFLECTION_IMPORTANCE_THRESHOLD = 150
-
 /**
  * A fact is promoted from session memory to capsule after this many occurrences across runs.
  *
@@ -72,7 +69,11 @@ export const METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS = 14
 /**
  * The detector for a learned method that makes results worse: a capped
  * sequential probability-ratio test over the runs that mounted it, each run
- * bad when its deliverable was rejected (`methodHarmTest`).
+ * bad when its deliverable was rejected.
+ *
+ * Since 2026-10-23 a learned method is no longer read with these numbers: its steps include the researcher's corrections,
+ * which are ordinary work, so `methodHarmTest` reads `METHOD_SCIENTIFIC_HARM_TEST` below. What still reads this one is the
+ * evolution module's tool-use test, where a bad outcome is a delivery the gate refused.
  *
  * Ruling of 2026-09-21, from the research behind it (Anthropic "Adding Error
  * Bars to Evals", Kohavi's online experiments, Netflix's sequential canary
@@ -104,6 +105,25 @@ export const METHOD_HARM_TEST = Object.freeze({ baseRate: 0.1, harmRate: 0.4, al
  * and restoring it gives it a fresh count. Zero turns the rule off (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`).
  */
 export const METHOD_UNUSED_RETIRE_LOADS = 20
+
+/**
+ * What a run is handed of the learned library (`selectLearnedMethods`), once the library is bigger than a prompt wants.
+ *
+ * SkillPyramid retrieves by the task: the few methods nearest to what is being asked, what those reuse, and a bundle that
+ * fits a budget. Ours mounted the sixteen most recently approved, whatever the question was, so a card was in front of the
+ * model in runs it had nothing to do with and "carried and never opened" measured the mix of questions and not the method
+ * (`retirementProposal`, `never_opened`).
+ *
+ *  - `nearest`: how many methods the first message of a conversation pulls in by similarity. Provisional, chosen before there
+ *    is a distribution of scores over a real library; a card is a few hundred bytes, so six is a bound on attention and not
+ *    on cost. The count of runs each reason produced is a metric (`open_science_learning_mount_selected_total`).
+ *  - `explore`: slots held for the approved method that has been in front of the model least. Without one a method that is
+ *    never among the nearest never gets a chance to be opened and so can never show it works.
+ *  - `abstractMax` / `functionalMax`: how many methods of a higher level may be pulled in as the dependencies of what was
+ *    selected (`learning.level`: 0 atomic, 1 functional, 2 and above abstract). The atomic ones a selected method reuses are
+ *    always pulled in, up to the prompt budget.
+ */
+export const METHOD_MOUNT = Object.freeze({ nearest: 6, explore: 1, abstractMax: 1, functionalMax: 3 })
 
 /**
  * The same test over the other axis: the results produced while a revision of a method was read, each bad when a trusted
