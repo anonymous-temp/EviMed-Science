@@ -116,7 +116,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
   const canEdit = !project.access?.abilities || project.access.abilities.includes('edit');
   if (!signal && error) return <LoadError message={error} onRetry={() => setRound(value => value + 1)} />;
   if (!signal) return <p role="status" className="py-2 text-ui text-text-3">正在读取这条发现…</p>;
-  const targets = signal.basis.targets ?? [];
+  const targets = signal.targets ?? signal.basis.targets ?? [];
   const focus = selected ?? (targets.length <= 100 ? targets.map(target => target.key) : []);
   const attempt = signal.currentAttempt;
   const active = attempt?.submitted && ['started', 'processing'].includes(attempt.executionState);

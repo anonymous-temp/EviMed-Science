@@ -21,6 +21,7 @@ export interface GeoSignal {
 export interface GeoSignalTarget { key: string; type: 'finding' | 'claim' | 'article'; id: string; label?: string | null; version: string | number | null; digest: string | null; relationship: string }
 export interface GeoSignalDetail extends GeoSignal {
   basisDigest: string; dispositionReason: string | null;
+  targets?: GeoSignalTarget[];
   basis: { errorId?: string; snapshotId?: string | null; questionId?: string | null; groupId?: string | null; questionVersion?: number | null;
     engine?: string; statement?: string; assessedStatement?: { text?: string; evidence?: string; applicability?: { population?: string; inLabel?: boolean; elements?: Record<string, unknown> } } | null;
     evidenceAvailability?: string; url?: string; orderId?: string; articleId?: string | null; articleResultVersionId?: string | null;

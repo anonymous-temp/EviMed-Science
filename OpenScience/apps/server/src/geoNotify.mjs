@@ -259,7 +259,8 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         idempotencyKey: signal.basis.notificationKey ?? `geo:${project.id}:signal:${row.id}`,
         ...(folded ? { groupKey: `geo-wrong:${project.id}:${dayIn(new Date(signal.detectedAt), timeZone)}` } : {}),
       }, signal.kind === "order_anomaly" && signal.basis.changedText ? HEARD_BY.publishedText : safety ? HEARD_BY.correction : HEARD_BY.progress,
-      signal.kind === "error_observed" && signal.basis.snapshotId ? source(project.id, "answers", signal.basis.snapshotId) : null);
+      signal.kind === "error_observed" && signal.basis.snapshotId ? source(project.id, "answers", signal.basis.snapshotId)
+        : signal.kind === "order_anomaly" && signal.basis.changedText && signal.basis.notificationKey ? source(project.id, "distribution") : null);
     },
 
     /** 1. 诊断完成. @param {any} project @param {{ roundId: string, engines: number, answers: number, wrongOurs: number }} facts */

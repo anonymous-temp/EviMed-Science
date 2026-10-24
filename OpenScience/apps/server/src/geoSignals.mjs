@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { GEO_SIGNAL_KINDS, GEO_SIGNAL_DISPOSITIONS, GEO_SIGNAL_STATES, GEO_SIGNAL_STEPS, GEO_STEPS, geoSignalLifecycle } from '@evimed/domain';
 import { canonicalJson } from './geoStore.mjs';
 import { HttpError } from './security.mjs';
+import { packGeoSignalTargets, readGeoSignalTargets } from './geoSignalTargets.mjs';
 
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const fail = (code, message, status = 409) => new HttpError(status, code, message);
@@ -39,16 +40,23 @@ export class GeoSignals {
   async record(project, event) {
     if (!GEO_SIGNAL_KINDS.includes(event.kind) || typeof event.objectKey !== 'string' || !event.objectKey || event.objectKey.length > 3000
       || typeof event.eventVersion !== 'string' || !event.eventVersion || event.eventVersion.length > 200
-      || !shape(event.basis, Object.keys(event.basis ?? {})) || Buffer.byteLength(JSON.stringify(event.basis)) > 200_000
+      || !shape(event.basis, Object.keys(event.basis ?? {})) || event.kind !== 'source_changed' && Buffer.byteLength(JSON.stringify(event.basis)) > 200_000
       || typeof event.title !== 'string' || !event.title.trim() || event.title.length > 1000) throw fail('geo_payload_invalid', 'Invalid preserved signal.', 400);
     const id = geoSignalId(project.id, event.kind, event.objectKey, event.eventVersion);
     const prior = await this.documents.get(project.userId, 'geo-signal', id);
     if (prior) return this.requireRow(project, prior);
+    const packed = event.kind === 'source_changed' ? packGeoSignalTargets(project, id, event.basis) : { basis: event.basis, pages: [] };
     const payload = { recordType: 'geo-signal', schemaVersion: 1, geoId: project.id, kind: event.kind, step: GEO_SIGNAL_STEPS[event.kind],
-      objectKey: event.objectKey, eventVersion: event.eventVersion, title: event.title, basis: event.basis, basisDigest: digest(event.basis),
+      objectKey: event.objectKey, eventVersion: event.eventVersion, title: event.title, basis: packed.basis, basisDigest: digest(packed.basis),
       observedAt: iso(event.observedAt), detectedAt: this.now().toISOString(), disposition: 'active', dispositionBy: null,
       dispositionAt: null, dispositionReason: null };
-    try { return await this.documents.put(project.userId, 'geo-signal', id, payload, { projectId: project.projectId, expectedRevision: 0 }); }
+    try {
+      if (packed.pages.length) {
+        await this.documents.createBatch(project.userId, [{ kind: 'geo-signal', id, projectId: project.projectId, payload }, ...packed.pages]);
+        return this.requireRow(project, await this.documents.get(project.userId, 'geo-signal', id));
+      }
+      return await this.documents.put(project.userId, 'geo-signal', id, payload, { projectId: project.projectId, expectedRevision: 0 });
+    }
     catch (error) {
       const existing = await this.documents.get(project.userId, 'geo-signal', id);
       if (existing) return this.requireRow(project, existing);
@@ -114,15 +122,15 @@ export class GeoSignals {
       executionState: current.executionState, availability: current.availability, reason: current.reason }
       : geoSignalLifecycle({ disposition: row.payload.disposition, lookupAvailable: execution.available });
     const businessOutcome = await this.businessOutcome(project, row);
-    if (row.payload.kind === 'order_anomaly' && businessOutcome.observation === 'current') {
-      lifecycle.executionState = ['cancelled', 'refunded', 'published', 'verified', 'settled'].includes(businessOutcome.state) ? 'completed' : 'failed_recoverable';
+    if (row.payload.kind === 'order_anomaly' && businessOutcome.observation !== 'unknown') {
+      lifecycle.executionState = businessOutcome.observation === 'historical_episode' || ['cancelled', 'refunded', 'published', 'verified', 'settled'].includes(businessOutcome.state) ? 'completed' : 'failed_recoverable';
       lifecycle.state = row.payload.disposition === 'ignored' ? 'ignored' : lifecycle.executionState;
       lifecycle.availability = 'available';
       lifecycle.reason = lifecycle.executionState === 'completed' ? null : 'order_needs_attention';
     }
     const affectedSteps = [...new Set([row.payload.step,
       ...(row.payload.kind === 'citation_observed' ? ['sources'] : []),
-      ...(row.payload.kind === 'error_observed' || row.payload.basis.targets?.some(target => target.type === 'article') || row.payload.basis.articleId ? ['content'] : [])])];
+      ...(row.payload.kind === 'error_observed' || row.payload.basis.targets?.some(target => target.type === 'article') || row.payload.basis.targetKinds?.includes('article') || row.payload.basis.articleId ? ['content'] : [])])];
     return { id: row.id, revision: row.revision, kind: row.payload.kind, step: row.payload.step, affectedSteps, title: row.payload.title,
       createdAt: row.createdAt, observedAt: row.payload.observedAt, detectedAt: row.payload.detectedAt, disposition: row.payload.disposition,
       ...lifecycle, businessOutcome, actionable: ['pending', 'failed_recoverable'].includes(lifecycle.state) && !['closed', 'withdrawn'].includes(businessOutcome.state)
@@ -138,6 +146,15 @@ export class GeoSignals {
     }
     if (row.payload.kind === 'order_anomaly') {
       const order = (await this.store.query('SELECT state FROM evimed_geo.orders WHERE geo_project_id=$1 AND id=$2', [project.id, basis.orderId])).rows[0];
+      if (order && basis.eventId) {
+        const resolution = (await this.store.query(`SELECT e.id,e.to_state FROM evimed_geo.order_events origin
+          JOIN evimed_geo.order_events e ON e.order_id=origin.order_id AND (e.at,e.id)>(origin.at,origin.id)
+          WHERE origin.order_id=$1 AND origin.id=$2 AND e.from_state IS DISTINCT FROM e.to_state
+            AND (e.to_state IN ('cancelled','refunded','published','verified','settled')
+              OR $3='unknown' AND e.to_state IN ('submitted','accepted')) ORDER BY e.at,e.id LIMIT 1`,
+        [basis.orderId, basis.eventId, basis.toState])).rows[0];
+        if (resolution) return { state: resolution.to_state, currentState: order.state, observation: 'historical_episode', resolutionEventId: resolution.id };
+      }
       return { state: order?.state ?? 'unknown', observation: order ? 'current' : 'unknown' };
     }
     return { state: row.payload.kind === 'source_changed' ? 'unreviewed' : 'observed' };
@@ -176,6 +193,7 @@ export class GeoSignals {
     const project = await this.service.requireProject(user, geoId);
     const [row, execution] = await Promise.all([this.row(project, id), this.executions(project)]);
     return { ...await this.projectRow(project, row, execution), basis: row.payload.basis, basisDigest: row.payload.basisDigest,
+      targets: await readGeoSignalTargets(this.documents, project, row),
       dispositionReason: row.payload.dispositionReason };
   }
 
@@ -198,7 +216,7 @@ export class GeoSignals {
     if (row.payload.kind === 'order_anomaly') throw fail('geo_payload_invalid', 'Open the existing order to resolve its state.', 400);
     const intents = row.payload.kind === 'source_changed' ? ['review', 'analyse'] : row.payload.kind === 'error_observed' ? ['correct', 'analyse'] : ['analyse'];
     if (!intents.includes(input.intent)) throw fail('geo_payload_invalid', 'Choose a supported action for this signal.', 400);
-    const targets = row.payload.basis.targets ?? [];
+    const targets = await readGeoSignalTargets(this.documents, project, row);
     const focus = input.focusRefs ?? targets.map(target => target.key);
     if (!Array.isArray(focus) || focus.length > 100 || new Set(focus).size !== focus.length || focus.some(key => typeof key !== 'string' || !targets.some(target => target.key === key))) {
       throw fail('geo_payload_invalid', 'Choose only preserved affected versions.', 400);
@@ -217,7 +235,8 @@ export class GeoSignals {
     }
     const basis = { schemaVersion: 1, signal: { id: row.id, revision: row.revision, kind: row.payload.kind, title: row.payload.title,
       basisDigest: row.payload.basisDigest, observedAt: row.payload.observedAt, detectedAt: row.payload.detectedAt },
-      event: row.payload.basis, focusRefs: focus, intent: input.intent, previous, groups: [],
+      event: { ...row.payload.basis, targets: targets.filter(target => focus.includes(target.key)),
+        targetSelection: { total: targets.length, selected: focus.length, fullDigest: digest(targets) } }, focusRefs: focus, intent: input.intent, previous, groups: [],
       handlingKey: digest([row.id, row.payload.basisDigest, input.intent, [...focus].sort(), previous?.contextRef ?? null]) };
     return { basis, draft: `${input.intent === 'correct' ? '请根据原回答和适用条件写纠错内容' : input.intent === 'review' ? '请核查这次资料变化影响的指定结论和稿件版本，说明需要更新、已更新以及仍待核实的部分' : '请解释这条发现及其依据，提出下一步建议'}：${row.payload.title}` };
   }
@@ -258,7 +277,7 @@ export class GeoSignals {
     if (!this.notify || row.payload.disposition === 'ignored') return null;
     const outcome = await this.businessOutcome(project, row);
     if (row.payload.kind === 'error_observed' && ['closed', 'withdrawn', 'unknown'].includes(outcome.state)) return null;
-    if (row.payload.kind === 'order_anomaly' && ['cancelled', 'refunded', 'published', 'verified', 'settled'].includes(outcome.state)) return null;
+    if (row.payload.kind === 'order_anomaly' && (outcome.observation === 'historical_episode' || ['cancelled', 'refunded', 'published', 'verified', 'settled'].includes(outcome.state))) return null;
     return this.notify(project, row);
   }
 }

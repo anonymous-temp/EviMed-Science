@@ -10,6 +10,7 @@ const digest = value => createHash('sha256').update(canonicalJson(value)).digest
 const list = value => Array.isArray(value) ? value : [];
 const MARK = 'signals:discovery:v1';
 const PAGE = 100;
+const displayLabel = value => value == null ? null : String(value).slice(0, 160);
 const errorOccurrence = entry => ['business_reopened', 'new_wrong_occurrence', 'judgment_reactivated'].includes(entry?.kind);
 
 /** Pure meaningful impact identity; unrelated profile edits and a later poll do not create a new alert. */
@@ -25,8 +26,8 @@ export function geoSourceImpactEvent(profile, impact, articles, claims) {
     ...articles.filter(article => impact.articleIds.includes(article.id)).map(article => ({ type: 'article', id: article.id, label: article.title ?? null,
       version: article.currentResultVersionId ?? null, digest: article.contentSha256 ?? null,
       relationship: list(article.valueContext?.findingIds).some(id => impact.findingIds.includes(id)) || list(article.claimIds).some(id => claimIds.has(id)) ? 'explicit_dependency' : 'possible_group_dependency' })),
-  ].map(({ label, ...target }) => ({ ...target, label, key: `target_${digest(target)}` })).sort((a, b) => a.key.localeCompare(b.key));
-  return { kind: 'source_changed', objectKey: String(change.id), eventVersion: digest({ notice, targets: targets.map(({ label: _label, ...target }) => target) }), title: String(change.summary || '资料有变化，需要检查相关结论和内容'),
+  ].map(({ label, ...target }) => ({ ...target, label: displayLabel(label), key: `target_${digest(target)}` })).sort((a, b) => a.key.localeCompare(b.key));
+  return { kind: 'source_changed', objectKey: String(change.id), eventVersion: digest({ notice, targets: targets.map(({ label: _label, ...target }) => target) }), title: String(change.summary || '资料有变化，需要检查相关结论和内容').slice(0, 1000),
     observedAt: change.at ?? null, basis: { notice, profileVersionAtDetection: profile.version, targets, mappingState: targets.length ? 'linked' : 'unknown',
       dependencyObservation: 'current_at_detection', findingIds: impact.findingIds, groupIds: impact.groupIds } };
 }
@@ -92,6 +93,7 @@ export class GeoSignalDiscovery {
       const altered = event.detail?.reason === 'text_changed';
       if (!(event.from_state !== event.to_state && ['unknown', 'rejected', 'problem', 'lost'].includes(event.to_state)) && !altered) continue;
       let origin = event.id;
+      let notificationKey = null;
       if (altered) {
         const first = await this.store.query(`WITH current_event AS (SELECT at,id FROM evimed_geo.order_events WHERE order_id=$1 AND id=$2)
           SELECT e.id FROM evimed_geo.order_events e,current_event current WHERE e.order_id=$1 AND e.detail->>'reason'='text_changed'
@@ -102,11 +104,14 @@ export class GeoSignalDiscovery {
                 OR boundary.from_state IS DISTINCT FROM boundary.to_state AND boundary.to_state<>'problem'))
           ORDER BY e.at,e.id LIMIT 1`, [event.order_id, event.id]);
         origin = first.rows[0]?.id ?? event.id;
+        const initial = await this.store.query(`SELECT id FROM evimed_geo.order_events
+          WHERE order_id=$1 AND detail->>'reason'='text_changed' ORDER BY at,id LIMIT 1`, [event.order_id]);
+        if (initial.rows[0]?.id === origin) notificationKey = `geo:order:${event.order_id}:text_changed`;
       }
       const row = await this.signals.record(project, { kind: 'order_anomaly', objectKey: event.order_id,
         eventVersion: altered ? `text:${origin}` : event.id, observedAt: event.at, title: altered ? '已发布内容发生变化，需要检查' : '投放订单需要处理',
         basis: { orderId: event.order_id, eventId: origin, fromState: event.from_state, toState: event.to_state,
-          changedText: altered, articleId: event.article_id, articleResultVersionId: event.article_result_version_id ?? null,
+          changedText: altered, ...(notificationKey ? { notificationKey } : {}), articleId: event.article_id, articleResultVersionId: event.article_result_version_id ?? null,
           articleDigest: event.article_digest ?? null, remedy: 'existing_order_detail' } });
       await this.signals.deliver(project, row);
     }
@@ -123,20 +128,25 @@ export class GeoSignalDiscovery {
         AND ($2::timestamptz IS NULL OR (e.at,e.id)>($2::timestamptz,$3)) ORDER BY e.at,e.id LIMIT $4`, [project.id, mark.orderAt ?? null, mark.orderEventId ?? '', PAGE]),
     ]);
     for (const error of errors.rows) await this.errorEvents(project, error);
-    await this.sources(project);
+    // Source reconciliation has no incremental cursor. A malformed or oversized
+    // profile must not prevent independent answer and order observations.
+    let sourceError = null;
+    try { await this.sources(project); } catch (error) { sourceError = error; }
     await this.citations(project, snapshots.rows);
     await this.orders(project, events.rows);
     const notifications = await this.signals.documents.list(project.userId, 'geo-signal', { projectId: project.projectId, limit: PAGE,
       cursor: mark.noticeCursor ?? null, filter: { recordType: 'geo-signal', geoId: project.id } });
     for (const row of notifications.items) if (!['citation_observed', 'group_changed'].includes(row.payload.kind)) await this.signals.deliver(project, row);
     const tailSnapshot = snapshots.rows.at(-1), tailOrder = events.rows.at(-1);
-    const detail = { ...mark, noticeCursor: notifications.nextCursor, errorId: errors.rows.length === PAGE ? errors.rows.at(-1).id : '',
+    const detail = { ...mark, lastError: null, noticeCursor: notifications.nextCursor, errorId: errors.rows.length === PAGE ? errors.rows.at(-1).id : '',
       snapshotAt: tailSnapshot?._cursor_at ?? mark.snapshotAt ?? null, snapshotId: tailSnapshot?.id ?? mark.snapshotId ?? null,
       orderAt: tailOrder?._cursor_at ?? mark.orderAt ?? null, orderEventId: tailOrder?.id ?? mark.orderEventId ?? null };
-    // Advancing a producer cursor is the final write, after every signal fact above is durable.
+    // Every cursor-bearing producer above is durable. Source reconciliation is
+    // retried in full and never shares those observation cursors.
     await this.store.query(`INSERT INTO evimed_geo.schedule_marks(geo_project_id,key,user_id,kind,state,detail,updated_at)
-      VALUES($1,$2,$3,'notice','done',$4::jsonb,$5) ON CONFLICT(geo_project_id,key) DO UPDATE SET detail=EXCLUDED.detail,updated_at=EXCLUDED.updated_at`,
+      VALUES($1,$2,$3,'notice','done',$4::jsonb,$5) ON CONFLICT(geo_project_id,key) DO UPDATE SET detail=EXCLUDED.detail,state='done',updated_at=EXCLUDED.updated_at`,
     [project.id, MARK, project.userId, JSON.stringify(detail), this.now().toISOString()]);
+    if (sourceError) throw sourceError;
     return { errors: errors.rows.length, snapshots: snapshots.rows.length, orders: events.rows.length };
   }
 
@@ -149,7 +159,19 @@ export class GeoSignalDiscovery {
       const project = await this.store.projectByControlProject(item.user_id, item.project_id);
       if (!project) continue;
       try { await this.project(project); counts.projects++; }
-      catch (error) { counts.failed++; this.report(error?.code ?? 'geo_signal_discovery_failed'); }
+      catch (error) {
+        counts.failed++;
+        const code = typeof error?.code === 'string' ? error.code : 'geo_signal_discovery_failed';
+        this.report(code);
+        // Schedule fairness is independent of producer progress. A failed attempt
+        // changes no cursor, and is retried after other projects get their turn.
+        try {
+          await this.store.query(`INSERT INTO evimed_geo.schedule_marks(geo_project_id,key,user_id,kind,state,detail,updated_at)
+            VALUES($1,$2,$3,'notice','failed',$4::jsonb,$5) ON CONFLICT(geo_project_id,key) DO UPDATE
+            SET state='failed',detail=evimed_geo.schedule_marks.detail || EXCLUDED.detail,updated_at=EXCLUDED.updated_at`,
+          [project.id, MARK, project.userId, JSON.stringify({ lastError: code.slice(0, 160) }), this.now().toISOString()]);
+        } catch { this.report('geo_signal_retry_schedule_failed'); }
+      }
     }
     return counts;
   }
