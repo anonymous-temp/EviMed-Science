@@ -8,6 +8,8 @@ import type { GeoCell } from "./geoClient";
 export type GeoAnalysisId =
   | "V01"
   | "V02"
+  | "V03"
+  | "V08"
   | "V04"
   | "V05"
   | "V06"
@@ -58,7 +60,9 @@ export interface GeoAnalysisRow {
     roundKind?: string | null;
     pool?: string | null;
     entityKind?: "brand" | "generic";
+    entityName?: string;
     entityKey?: string | null;
+    own?: boolean;
     unit?: string;
     basis?: string;
     conditions?: unknown;
@@ -67,19 +71,21 @@ export interface GeoAnalysisRow {
 }
 export interface GeoAnalysisChartCell {
   rowKey: string; columnKey: string; label: string;
-  groupId: string | null; setVersion: number | null; engine: string; pool?: string | null;
+  groupId: string | null; setVersion: number | null; engine: string | null; pool?: string | null;
   groupName?: string | null;
+  entityName?: string; own?: boolean;
   value: number | null; state: string; reason?: string | null; unit?: string; members?: GeoAnalysisMembers | null;
 }
 export interface GeoAnalysisView {
   chart?: {
-    kind?: "bars" | "matrix";
+    kind?: "bars" | "matrix" | "comparison" | "rivals";
     cells?: GeoAnalysisChartCell[];
     labels: string[];
     series: Array<{
       key: string;
       label: string;
       engine?: string | null;
+      own?: boolean;
       values: Array<number | null>;
     }>;
   };
@@ -114,7 +120,7 @@ export interface GeoAnalysisMemberItem {
   status?: string;
   reason?: string;
   askedAt?: string | null;
-  extraction?: {genericMentions: unknown; parserVersion: string | null; judgedAt: string | null} | null;
+  extraction?: {genericMentions: unknown; parserVersion: string | null; registryKey?: string | null; judgedAt: string | null} | null;
   statement?: {
     text: string;
     verdict: string;

@@ -8,6 +8,13 @@ import { GeoLineChart, chartScale } from "./tabs/GeoCharts";
 import { engineName } from "./geoText";
 
 const reasonWords: Readonly<Record<string, string>> = {
+  measurement_method_changed: "测量方法已变化，保留两期读数且不参与排序。",
+  measurement_contract_changed: "测量约定已变化，不参与排序。",
+  metric_members_changed: "合资格成员发生变化，不参与排序。",
+  comparison_basis_changed: "组成指标或有效权重已变化，不参与排序。",
+  comparison_not_selected: "请选择对照区间。",
+  rival_history_unknown: "历史登记依据未知，不能将缺席记为零。",
+  share_agreement_missing: "该轮未约定此声量指标或登记集合。",
   engine_absent: "这个范围没有该平台的回答。",
   no_snapshots: "这个范围没有回答记录。",
   no_valid_answers: "这个范围尚未取得有效回答。",
@@ -42,7 +49,7 @@ function unavailableReason(cell: GeoAnalysisChartCell): string {
     : "尚无可用读数，可在下表查看明细。");
 }
 function platformLabel(cell: GeoAnalysisChartCell): string {
-  return [engineName(cell.engine), cell.pool].filter(Boolean).join(" · ");
+  return [engineName(cell.engine ?? ""), cell.pool].filter(Boolean).join(" · ");
 }
 
 /** Geometry only: every value, display dimension and exact member comes from the full server aggregate. */
@@ -53,6 +60,26 @@ export function GeoAnalysisVisual({ data, onSelect }: {
   const statusId = useId();
   const chart = data.chart;
   if (!chart) return null;
+  if (chart.kind === "comparison") {
+    const cells = chart.cells ?? [], known = cells.filter(cell => cell.state === "known" && cell.value !== null);
+    const max = Math.max(1, ...known.map(cell => Math.abs(cell.value!)));
+    return <ChartCard title="可比变化排序" state={known.length ? "content" : "empty"} emptyText="尚无可排序的可比读数；两期读数和原因保留在下表。" legend={<ul aria-label="变化与不可比状态">{cells.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.label.replace(cell.engine ?? "\u0000",engineName(cell.engine ?? ""))} · {cell.value === null ? "不排序" : `${cell.value>0?"+":""}${cell.value} ${cell.unit === "percentage_points" ? "个百分点" : "分"}`}</Button>{cell.value===null&&<span className="text-caption text-text-3">{unavailableReason(cell)}</span>}</li>)}</ul>}>
+      <svg role="img" aria-label="可比变化排序" viewBox={`0 0 600 ${Math.max(48,known.length*32)}`} className="w-full">
+        <line x1="300" x2="300" y1="0" y2={known.length*32} className="stroke-border"/>
+        {known.map((cell,index)=><rect key={cell.rowKey} x={cell.value!<0?300-Math.abs(cell.value!)/max*280:300} y={index*32+4} width={Math.abs(cell.value!)/max*280} height="24" className={cell.value!<0?"fill-current text-text-3":"fill-current text-accent"}><title>{cell.label}：{cell.value}</title></rect>)}
+      </svg>
+    </ChartCard>;
+  }
+  if (chart.kind === "rivals") {
+    const cells=chart.cells ?? [],known=cells.filter(cell=>cell.state==="known"&&cell.value!==null),unavailable=cells.filter(cell=>cell.state!=="known"||cell.value===null);
+    const lines=chart.series.map(line=>({...line,tone:line.own?"accent" as const:"muted" as const}));
+    const range=chartScale(lines.flatMap(line=>line.values));
+    return <><ChartCard title={data.view?.metricId === "M-17" ? "所选回答与登记品牌集合的相对提及声量份额" : "已登记实体的问句池比较"} footnote={data.view?.metricId === "M-17" ? "相对提及份额仅反映所选回答与登记品牌集合，不代表市场份额。" : undefined} state={known.length?"content":"empty"} emptyText="尚无可绘制的竞品读数；历史未知与样本不足均保留。" legend={<ul aria-label="竞品测量状态">{unavailable.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.entityName} · {cell.pool} · {unavailableWord(cell)}</Button><span className="text-caption text-text-3">{unavailableReason(cell)}</span></li>)}</ul>}>
+      <svg role="img" aria-label={data.view?.metricId === "M-17" ? "已登记品牌相对提及声量份额" : "已登记品牌提及率"} viewBox={`0 0 600 ${Math.max(48,known.filter(cell=>cell.unit!=="answers").length*32)}`} className="w-full">{known.filter(cell=>cell.unit!=="answers").map((cell,index)=><g key={cell.rowKey}><text x="0" y={index*32+22} className="fill-current text-text-2">{cell.entityName} · {cell.pool}</text><rect x="220" y={index*32+4} width={cell.value!*3} height="24" className={cell.own?"fill-current text-accent":"fill-current text-text-3"}/><text x="530" y={index*32+22} className="fill-current text-text">{cell.value}%</text></g>)}</svg>
+      {known.filter(cell=>cell.unit==="answers").length>0&&<BarList label="通用名独立观测" rows={known.filter(cell=>cell.unit==="answers").map(cell=>({key:cell.rowKey,label:`${cell.entityName} · ${cell.pool}`,value:cell.value!,unit:"回答"}))} onSelect={key=>{const cell=cells.find(cell=>cell.rowKey===key);if(cell)onSelect(cell);}}/>}
+      <ul aria-label="所选实体回答">{known.filter(cell=>cell.unit!=="answers").map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.entityName} · {cell.pool} · {cell.value}% · 查看回答</Button></li>)}</ul>
+    </ChartCard>{chart.labels.length>0&&lines.map(line=><ChartCard key={line.key} title={line.label}><GeoLineChart series={[line]} labels={chart.labels} domain={range?[range.low,range.high]:null}/></ChartCard>)}</>;
+  }
   if (chart.kind === "bars") {
     const cells = chart.cells ?? [];
     const known = cells.filter(cell => cell.state === "known" && cell.value !== null);
@@ -94,7 +121,7 @@ export function GeoAnalysisVisual({ data, onSelect }: {
   }
   if (chart.kind === "matrix") {
     const cells = chart.cells ?? [];
-    const engines = [...new Set(cells.map(cell => cell.engine))];
+    const engines = [...new Set(cells.map(cell => cell.engine).filter((engine): engine is string => engine !== null))];
     const groups = new Map<string, GeoAnalysisChartCell[]>();
     for (const cell of cells) {
       const key = JSON.stringify([cell.setVersion, cell.groupId, cell.pool]);

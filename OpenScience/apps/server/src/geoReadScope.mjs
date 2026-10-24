@@ -1,7 +1,8 @@
 /** One authorized observation selection for GEO pages, the native read tool and exports. No metric formulas live here. */
+import { compareGeoMetricCohorts, geoComparisonContractsMatch, geoComparisonKey as comparisonKey, geoComparableAnswer as comparableAnswer } from "./geoComparison.mjs";
 import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, computeGvi, geoMetricMembers, geoJudgementCoverage,
+import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, geoMetricMembers, geoJudgementCoverage,
   GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES, geoCoverageKey } from "@evimed/domain";
 import { computeRoundCells } from "./geoMetricsJob.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
@@ -20,8 +21,6 @@ const hasControls = (/** @type {string} */ value) => [...value].some((character)
 const idShape = /^[A-Za-z0-9_-]{1,80}$/u;
 const digest = (/** @type {unknown} */ value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const invalid = (/** @type {string} */ message, status = 400) => new HttpError(status, "geo_read_filter_invalid", message);
-const comparisonKey = (/** @type {any} */ row) => JSON.stringify([row.questionId, row.engine, row.surface?.mode ?? null]);
-const comparableAnswer = (/** @type {any} */ row) => Boolean(row.questionId) && (row.status === "refusal" || row.status === "valid" && Boolean(row.facts));
 const readTransactions = new AsyncLocalStorage();
 
 /** @param {import('./geoStore.mjs').GeoStore} store */
@@ -486,43 +485,12 @@ async function compareGeoSelections(store, measure, project, current, previous, 
   const left = await selectGeoRows(store, measure, project, { ...current.scope, compareFrom: null, compareTo: null }, { frozenRoundIds: current.roundIds, subset });
   const right = await selectGeoRows(store, measure, project, previous.scope, { frozenRoundIds: previous.selection.roundIds, subset });
   for (const selected of [left, right]) readTransactions.getStore().references.set(selected.selection.reference, { selected, project });
-  const currentCells = left.computed.cells, previousCells = right.computed.cells;
-  const contractKeys = (/** @type {typeof left} */ selected) => [...new Set(selected.selection.comparability.samplingContracts.map((/** @type {any} */ contract) =>
-    JSON.stringify(contract ? { samplingMode: contract.samplingMode, repeats: contract.repeats, sourceBasis: contract.sourceBasis, metricIds: contract.metricIds } : null)))].sort();
-  const contractMatches = contractKeys(left).length === 1 && JSON.stringify(contractKeys(left)) === JSON.stringify(contractKeys(right));
-  const cellKey = (/** @type {any} */ cell) => JSON.stringify([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
-  const before = new Map(previousCells.map((cell) => [cellKey(cell), cell]));
-  const memberKeys = (/** @type {typeof left} */ selected, /** @type {any} */ metric) => {
-    if (!metric) return [];
-    const input = metric.scope === "engine" || metric.scope === "pool_engine" || metric.metricId === "M-20" ? selected.computed.balance.deduped : selected.computed.balance.rows;
-    return [...new Set(geoMetricMembers(/** @type {any[]} */ (input), metric, selected.metricOptions).rows.map(comparisonKey))].sort();
-  };
-  // Equal answer identities do not imply an equal composite: missing assessments redistribute the GVI's ingredient weights.
-  const compositeBasis = (/** @type {typeof left} */ selected, /** @type {any} */ metric) => {
-    if (metric?.metricId !== "M-19") return null;
-    const gvi = computeGvi(selected.computed.cells, { arm: metric.arm });
-    const pools = metric.pool ? [metric.pool] : gvi.poolsUsed;
-    return pools.map((/** @type {string} */ pool) => {
-      const index = gvi.pools[pool];
-      return { pool, weight: metric.pool ? 1 : gvi.poolWeights[pool], dimensions: Object.entries(index?.dimensions ?? {}).map(([dimension, entry]) => ({
-        dimension, weight: index.effectiveWeights[dimension] ?? null,
-        ingredients: entry.used.map((metricId) => {
-          const ingredient = selected.computed.cells.find((candidate) => candidate.metricId === metricId && candidate.pool === pool
-            && candidate.scope === (metric.arm ? "arm" : "pool") && candidate.arm === metric.arm && !candidate.engine && !candidate.variant && !candidate.rival);
-          return { metricId, members: memberKeys(selected, ingredient) };
-        }),
-      })) };
-    });
-  };
-  return { kind: "observational", causal: false, mode, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, consumerModelVersion: "unknown",
-    comparable: mode === "common" && common.size > 0 && contractMatches, commonQuestionEngineModes: common.size,
+  const result = { kind: "observational", causal: false, mode, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, consumerModelVersion: "unknown",
+    comparable: mode === "common" && common.size > 0 && geoComparisonContractsMatch(left, right), commonQuestionEngineModes: common.size,
     excluded: { current: current.rows.length - left.rows.length, previous: previous.rows.length - right.rows.length },
     currentSelection: left.selection, previousSelection: right.selection,
-    cells: currentCells.map((cell) => { const old = before.get(cellKey(cell));
-      const basisMatches = JSON.stringify(compositeBasis(left, cell)) === JSON.stringify(compositeBasis(right, old));
-      const comparable = mode === "common" && common.size > 0 && contractMatches && basisMatches && JSON.stringify(memberKeys(left, cell)) === JSON.stringify(memberKeys(right, old));
-      return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool,
-      engine: cell.engine, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival,
-      current: cell, previous: old ?? null, comparable, reason: !contractMatches ? "measurement_contract_changed" : basisMatches ? null : "comparison_basis_changed", delta: comparable && cell.status === "ok" && old?.status === "ok"
-        && cell.value != null && old.value != null ? Math.round((cell.value - old.value) * 100) / 100 : null }; }) };
+    cells: compareGeoMetricCohorts(left, right, { mode, commonCount: common.size }) };
+  // Raw cohorts are request-local, never serialized into the public comparison response.
+  Object.defineProperty(result, "cohorts", { value: { current: left, previous: right }, enumerable: false });
+  return result;
 }

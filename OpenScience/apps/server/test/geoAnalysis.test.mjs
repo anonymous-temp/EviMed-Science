@@ -5,7 +5,10 @@ import { normalizeGeoAnalysisView, presentGeoAnalysis, freezeGeoAnalysisDocument
 const cell = (value, status = 'ok') => ({metricId:'M-01S',scope:'project',engine:null,pool:null,groupId:null,arm:null,variant:null,rival:null,value,status,numerator:value === 0 ? 0 : 1,denominator:2,members:{selectionRef:'gsel_current',metric:{metricId:'M-01S',scope:'project'},total:2,exact:true}});
 const selected = () => ({scope:{timeZone:'Asia/Shanghai'},selection:{reference:'gsel_current',dataRevision:'data1',methodVersion:'method1',counts:{snapshots:2}},rows:[],questions:[],rounds:[],computed:{cells:[cell(0)]},comparison:null});
 test('the registry refuses unsupported views, arbitrary filters and metrics', () => {
-  assert.throws(() => normalizeGeoAnalysisView({viewId:'V03'}));
+  assert.equal(normalizeGeoAnalysisView({viewId:'V03'}).metricId,'M-01');
+  assert.equal(normalizeGeoAnalysisView({viewId:'V08'}).metricId,'M-16');
+  assert.throws(() => normalizeGeoAnalysisView({viewId:'V09'}));
+  assert.throws(() => normalizeGeoAnalysisView({viewId:'V08',metricId:'M-19'}));
   assert.throws(() => normalizeGeoAnalysisView({viewId:'V01',sql:'SELECT 1'}));
   assert.throws(() => normalizeGeoAnalysisView({viewId:'V02',metricId:'account_score'}));
 });

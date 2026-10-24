@@ -85,3 +85,13 @@ it('builds actual M-15 matrix headings from the exact group, version and P4 pool
  expect(view.chart?.cells?.every(cell=>cell.members?.selectionRef===view.selection.reference)).toBe(true);
  expect(freezeGeoAnalysisDocument(view)).toEqual(frozen);
 });
+it('draws signed comparable changes and keeps unranked reasons reachable',()=>{
+ const chosen=vi.fn(),cells=[{...cell('g','deepseek',20),unit:'percentage_points'},{...cell('h','kimi',null,'unknown'),reason:'measurement_method_changed'}];
+ render(<GeoAnalysisVisual data={{chart:{kind:'comparison',cells,labels:[],series:[]}} as unknown as GeoAnalysisView} onSelect={chosen}/>);
+ expect(screen.getByRole('img',{name:'可比变化排序'})).toBeTruthy();expect(screen.getByRole('button',{name:/\+20 个百分点/})).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:/Kimi.*不排序/}));expect(chosen).toHaveBeenCalledWith(cells[1]);
+});
+it('rival charts preserve insufficient and unknown rows with fixed names rather than hiding the chart',()=>{
+ const cells=[{...cell('r','deepseek',0,'insufficient'),entityName:'Fixed Rival',pool:'P2',reason:'insufficient_sample'}, {...cell('r','kimi',null,'unknown'),entityName:'Legacy Rival',pool:'P3',reason:'rival_history_unknown'}];
+ render(<GeoAnalysisVisual data={{chart:{kind:'rivals',cells,labels:[],series:[]}} as unknown as GeoAnalysisView} onSelect={()=>{}}/>);
+ expect(screen.getByRole('button',{name:/Fixed Rival.*样本不足/})).toBeTruthy();expect(screen.getByRole('button',{name:/Legacy Rival/})).toBeTruthy();
+});

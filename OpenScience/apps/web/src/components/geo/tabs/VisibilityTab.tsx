@@ -143,6 +143,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         noise={line?.key === "mention" && typeof diag?.noise?.band === "number" ? diag.noise.band : null}
         loading={monitoring.state.kind === "loading"}
       />
+      <PoolRivalTrends project={project} rivals={watch?.rivals} />
       <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} />
       {isEngineBarMetric(metric)
         ? <EngineMetricCard diagnosis={diag} metric={metric} selected={engine} onSelect={setEngineParam} />
@@ -188,7 +189,7 @@ function MetricTrend({
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
     // Rivals are measured on our mention rate's own questions (M-16 beside
     // M-01S), so they are drawn on that chart and on no other.
-    rivals: line?.key === "mention" ? rivalLines(watch?.rivals, points.map((point) => point.date)) : [],
+    rivals: line?.key === "mention" ? rivalLines(watch?.rivals?.filter(rival => !rival.pool), points.map((point) => point.date)) : [],
     target,
     targetLabel: target === null ? null : `目标 ${format(target)}`,
     markers: withCoverageMarker(actionMarkers(points.map((point) => point.date), watch), points),
@@ -452,4 +453,20 @@ function MoreMetrics({ geoId, diagnosis }: { geoId: string; diagnosis: GeoDiagno
       </ul>
     </Disclosure>
   );
+}
+
+/** Pool-qualified competitors use their own paired denominator, never the global mention curve. */
+function PoolRivalTrends({project,rivals}:{project:GeoProject;rivals:GeoMonitoring["rivals"]}) {
+ return <>{(rivals??[]).filter(rival=>rival.pool&&rival.ownPoints).map(rival=>{
+  const points=rival.points,own=rival.ownPoints??[],labels=points.map(point=>monthDay(point.date)??point.date),known=points.some(point=>point.value!==null)||own.some(point=>point.value!==null);
+  return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rival.label??`${rival.name} · ${rival.pool}`} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。">
+   <TrendChart label={`${rival.name} ${rival.pool} 同口径趋势`} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
+   <DataTable label={`${rival.name} ${rival.pool} 同口径读数`} rows={points} rowKey={point=>point.date} columns={[
+    {key:"date",header:"实测日期",rowHeader:true,cell:point=>point.date},
+    {key:"own",header:"本品提及率",cell:point=>{const ownPoint=own.find(item=>item.date===point.date);return ownPoint?.value==null?"未知或样本不足":`${ownPoint.value}%`; }},
+    {key:"rival",header:"竞品提及率",cell:point=>point.value==null?"未知或样本不足":`${point.value}%`},
+    {key:"n",header:"共同合资格回答",cell:point=>point.n??"未知"},
+   ]}/>
+  </ChartCard>;
+ })}</>;
 }

@@ -8,6 +8,10 @@ export const GEO_ANALYSIS_REGISTRY = Object.freeze(Object.fromEntries([
   ], [
     'V02', 'readings'
   ], [
+    'V03', 'comparison'
+  ], [
+    'V08', 'rivals'
+  ], [
     'V04', 'metrics'
   ], [
     'V05', 'metrics'
@@ -29,9 +33,9 @@ export function normalizeGeoAnalysisView(input = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !GEO_ANALYSIS_DESCRIPTOR_FIELDS.includes(key)))
     throw invalid();
   const viewId = input.viewId ?? 'V01', metricView = [
-    'V02', 'V04', 'V05'
+    'V02', 'V03', 'V04', 'V05'
   ].includes(viewId), family = GEO_ANALYSIS_REGISTRY[viewId]?.family;
-  const metricId = input.metricId ?? (metricView ? 'M-01' : null), dimension = input.dimension ?? (viewId === 'V05' ? 'group' : metricView ? 'engine' : 'project');
+  const metricId = input.metricId ?? (viewId === 'V08' ? 'M-16' : metricView ? 'M-01' : null), dimension = input.dimension ?? (viewId === 'V05' ? 'group' : metricView ? 'engine' : 'project');
   if (!family || (metricId !== null && !GEO_METRIC_IDS.includes(metricId)) || ![
     'project', 'engine', 'group'
   ].includes(dimension))
@@ -46,18 +50,19 @@ export function normalizeGeoAnalysisView(input = {}) {
     throw invalid();
   if (family === 'coverage' && viewId !== 'V06' && metricId != null)
     throw invalid();
-  if (input.timeGrain != null && (viewId !== 'V02' || ![
+  if (input.timeGrain != null && (!['V02', 'V08'].includes(viewId) || ![
     'day', 'round'
   ].includes(input.timeGrain)))
     throw invalid();
-  if ((input.entityKind != null || input.entityKey != null) && family !== 'metrics')
+  if ((input.entityKind != null || input.entityKey != null) && !['metrics', 'rivals'].includes(family))
     throw invalid();
   if (input.entityKind != null && ![
     'brand', 'generic'
   ].includes(input.entityKind))
     throw invalid();
-  if (input.entityKey != null && (input.entityKind !== 'generic' || typeof input.entityKey !== 'string' || !input.entityKey.trim() || input.entityKey.length > 300))
+  if (input.entityKey != null && (viewId !== 'V08' && input.entityKind !== 'generic' || typeof input.entityKey !== 'string' || !input.entityKey.trim() || input.entityKey.length > 300))
     throw invalid();
+  if (viewId === 'V08' && (input.entityKind === 'generic' || !['M-16','M-17'].includes(metricId))) throw invalid();
   if (viewId === 'V04' && dimension !== 'engine' || viewId === 'V05' && dimension !== 'group')
     throw invalid();
   return {
@@ -65,10 +70,10 @@ export function normalizeGeoAnalysisView(input = {}) {
     ...(viewId === 'V06' ? {
       categoryMode: input.categoryMode ?? 'original_group'
     } : {}),
-    ...(viewId === 'V02' ? {
+    ...(['V02', 'V08'].includes(viewId) ? {
       timeGrain: input.timeGrain ?? 'day'
     } : {}),
-    ...(family === 'metrics' ? {
+    ...(['metrics', 'rivals'].includes(family) ? {
       entityKind: input.entityKind ?? 'brand', ...(input.entityKey != null ? {
         entityKey: input.entityKey
       } : {})

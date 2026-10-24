@@ -4,13 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
 const read=vi.hoisted(()=>vi.fn());
 const memberRead=vi.hoisted(()=>vi.fn());
-const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn()}));
+const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn(),scope:vi.fn()}));
 vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read,getGeoAnalysisMembers:memberRead}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.open}));
 vi.mock('@/lib/apiClient',async original=>({...await original<typeof import('@/lib/apiClient')>(),createWebRuntimeSession:navigation.create}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage}));
 vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:({source}:{source:unknown})=><div data-testid="export">{JSON.stringify(source)}</div>}));
-vi.mock('./geoFrame',()=>({useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>null}));
+vi.mock('./geoFrame',()=>({useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>({openAnalysisScope:navigation.scope})}));
 const project={projectId:'control',sessionId:'session'};
 describe('selected analysis workbench',()=>{
  it('retains exact selection through export and shows null distinct from zero',async()=>{
@@ -110,4 +110,14 @@ it('identifies a renamed generic as current configuration while retaining unknow
  expect(screen.getByText(/通用名来自当前配置，不代表所选历史轮次的登记名称/)).toBeTruthy();
  expect(screen.getByText('50 回答')).toBeTruthy();
  expect(screen.getByTestId('export').textContent).toContain('Renamed');
+});
+
+it('V03 keeps a working comparison action and both exact period member requests',async()=>{
+ const view={viewId:'V03',metricId:'M-01',dimension:'engine'},member=(columnKey:string)=>({selectionRef:'gsel_compare',view,rowKey:'compared',columnKey,expectedDigest:'compare-digest',unit:'answers',total:1,exact:true});
+ read.mockResolvedValue({view,selection:{reference:'gsel_compare'},digest:'compare-digest',columns:[{key:'previous',label:'对照实测'},{key:'current',label:'所选实测'},{key:'delta',label:'变化'}],rows:[{key:'compared',label:'品牌提及率',metricId:'M-01',dimensions:{},values:{previous:{value:0,state:'known',unit:'percent',metric:null,members:member('previous')},current:{value:20,state:'known',unit:'percent',metric:null,members:member('current')},delta:{value:null,state:'unknown',reason:'comparison_not_selected',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial',reasons:['comparison_not_selected']}});
+ memberRead.mockResolvedValue({unit:'answers',total:1,items:[{id:'exact-snapshot',unit:'answers'}],nextOffset:null,digest:'compare-digest'});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V03" embedded/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'选择对照区间'}));expect(navigation.scope).toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'0 %'}));await waitFor(()=>expect(memberRead).toHaveBeenCalledWith('geo',expect.objectContaining({columnKey:'previous',expectedDigest:'compare-digest'}),0));
+ expect(screen.getByTestId('export').textContent).toContain('gsel_compare');
 });

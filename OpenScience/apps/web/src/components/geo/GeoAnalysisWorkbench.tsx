@@ -86,7 +86,7 @@ function AnalysisBody({
   const scope = useGeoReadScope();
   const [view, setView] = useState<GeoAnalysisDescriptor>({
     viewId: initialView,
-    dimension: initialView === "V05" ? "group" : ["V02", "V04"].includes(initialView) ? "engine" : "project",
+    dimension: initialView === "V05" ? "group" : ["V02", "V03", "V04"].includes(initialView) ? "engine" : "project",
   });
   const identity = JSON.stringify([geoId, geoReadScopeQuery(scope), view]);
   return (
@@ -195,6 +195,8 @@ function AnalysisPage({
             options: [
               { value: "V01", label: "当前水平与目标" },
               { value: "V02", label: "指标趋势" },
+              { value: "V03", label: "可比变化排序" },
+              { value: "V08", label: "已登记竞品与趋势" },
               { value: "V04", label: "平台指标比较" },
               { value: "V05", label: "问题群与平台" },
               { value: "V06", label: "原始分类与平台" },
@@ -206,10 +208,10 @@ function AnalysisPage({
             onChange: (value) =>
               setView({
                 viewId: value as GeoAnalysisId,
-                dimension: value === "V05" ? "group" : ["V02", "V04"].includes(value ?? "") ? "engine" : "project",
+                dimension: value === "V05" ? "group" : ["V02", "V03", "V04"].includes(value ?? "") ? "engine" : "project",
               }),
           },
-          ...(view.viewId === "V01" || view.viewId === "V02"
+          ...(["V01", "V02", "V03"].includes(view.viewId)
             ? [
                 {
                   kind: "select" as const,
@@ -233,23 +235,23 @@ function AnalysisPage({
                 },
               ]
             : []),
-          ...(["V01", "V02", "V04", "V05", "V06"].includes(view.viewId) && view.entityKind !== "generic"
+          ...(["V01", "V02", "V03", "V04", "V05", "V06", "V08"].includes(view.viewId) && view.entityKind !== "generic"
             ? [
                 {
                   kind: "select" as const,
                   label: "指标",
                   value:
-                    view.metricId ?? (["V02", "V04", "V05"].includes(view.viewId) ? "M-01" : null),
+                    view.metricId ?? (view.viewId === "V08" ? "M-16" : ["V02", "V03", "V04", "V05"].includes(view.viewId) ? "M-01" : null),
                   allLabel: view.viewId === "V01" ? "全部指标" : undefined,
                   options: Object.entries(GEO_METRIC_LABELS_ZH)
-                    .filter(([id]) => id.startsWith("M-") && (!["V04", "V05"].includes(view.viewId) || !["M-16", "M-17", "M-18", "M-21"].includes(id)))
+                    .filter(([id]) => id.startsWith("M-") && (view.viewId !== "V08" || ["M-16","M-17"].includes(id)) && (!["V04", "V05"].includes(view.viewId) || !["M-16", "M-17", "M-18", "M-21"].includes(id)))
                     .map(([value, label]) => ({ value, label: String(label) })),
                   onChange: (value: string | null) =>
                     setView({ ...view, metricId: value }),
                 },
               ]
             : []),
-          ...(view.viewId === "V02" ? [{kind:"select" as const,label:"时间粒度",value:view.timeGrain ?? "day",options:[{value:"day",label:"按实测日期"},{value:"round",label:"按实际轮次"}],onChange:(value:string|null)=>setView({...view,timeGrain:value === "round"?"round":"day"})}] : []),
+          ...(["V02","V08"].includes(view.viewId) ? [{kind:"select" as const,label:"时间粒度",value:view.timeGrain ?? "day",options:[{value:"day",label:"按实测日期"},{value:"round",label:"按实际轮次"}],onChange:(value:string|null)=>setView({...view,timeGrain:value === "round"?"round":"day"})}] : []),
           ...(["V04","V05"].includes(view.viewId) ? [{kind:"select" as const,label:"实体",value:view.entityKind ?? "brand",options:[{value:"brand",label:"品牌指标"},...(project.product?.genericName?[{value:"generic",label:`当前配置通用名：${project.product.genericName}`}]:[])],onChange:(value:string|null)=>setView({...view,entityKind:value === "generic"?"generic":"brand",entityKey:value === "generic"?(project.product?.genericName ?? undefined):undefined,metricId:value === "generic"?null:"M-01"})}] : []),
           ...(view.viewId === "V06"
             ? [
@@ -301,8 +303,8 @@ function AnalysisPage({
                 补充原始分类
               </Link>
             ) : (
-              <Button size="sm" variant="text" onClick={refresh}>
-                刷新范围
+              <Button size="sm" variant="text" onClick={data.availability.reasons.includes("comparison_not_selected") ? () => frame?.openAnalysisScope?.() : refresh}>
+                {data.availability.reasons.includes("comparison_not_selected") ? "选择对照区间" : "刷新范围"}
               </Button>
             )
           }
@@ -311,6 +313,8 @@ function AnalysisPage({
             .map(
               (reason) =>
                 ({
+                  comparison_not_selected: "选择对照区间后，可按相同问题、平台和采样方式比较变化。",
+                  rival_history_unknown: "部分历史回答缺少登记实体依据，保持未知；阳性提及和合资格分母分别列出。",
                   generic_observation_identity_only: "通用名来自当前配置，不代表所选历史轮次的登记名称。通用名提及是独立观测；缺少匹配的历史实体提取时保留未知，不代表未提及，也不归因到品牌或剂型。",
                   no_selected_readings: "这个范围尚无可用读数。",
                   original_categories_missing:
@@ -409,7 +413,7 @@ function AnalysisPage({
                       : formatGeoValue(value.value, metricUnit(row.metricId ?? undefined))
                   : value.metric
                     ? geoCellWord(value.metric)
-                    : "未测";
+                    : value.reason ? analysisReason(value.reason) : "未测";
               return (
                 <span className="inline-flex flex-col items-end">
                   {value.members ? (
@@ -423,6 +427,7 @@ function AnalysisPage({
                   ) : (
                     word
                   )}
+                  {value.reason && value.state !== "known" && <span className="text-caption text-text-3">{analysisReason(value.reason)}</span>}
                   {value.metric?.denominator != null && (
                     <span className="text-caption text-text-3">
                       {value.metric.numerator ?? "—"} /{" "}
@@ -505,6 +510,10 @@ function unitWord(unit: string) {
   return (
     (
       {
+        percentage_points: "个百分点",
+        rank: "名",
+        percent: "%",
+        index: "分",
         answers: "回答",
         asks: "任务",
         questions: "问题",
@@ -513,4 +522,8 @@ function unitWord(unit: string) {
       } as Record<string, string>
     )[unit] ?? unit
   );
+}
+
+function analysisReason(reason: string): string {
+ return ({comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";
 }
