@@ -12,6 +12,7 @@ import {
   ReaderAbstract,
   ReaderActions,
   ReaderBar,
+  ReaderBrief,
   ReaderByline,
   ReaderFollowups,
   ReaderInsight,
@@ -24,6 +25,7 @@ import {
   ReaderSource,
   ReaderText,
   frontierFallbackReason,
+  readerBodyPresentation,
   readerOutline,
   useReaderLanguage,
 } from "@/components/frontier/FrontierReader";
@@ -37,9 +39,10 @@ type ArticleState = { kind: "loading" } | { kind: "ready"; item: FrontierItemDet
 /**
  * A frontier item's addressed reading page, read like AIHOT's detail page (owner, 2026-10-22; its layout 2026-10-23).
  *
- * Two columns from 1024 px. The left one is the article, every line on one edge: the way back, who said it and when, the title, the
- * original title, AI 导读, AI 解读 where there is one, the full text or the abstract with 中文 / 原文, the pictures, the quoted post,
- * where it came from with 「打开原文 ↗」, 事件后续. The right one sticks beside it, its top on the back row: 「打开原文 ↗」 with ☆ and ⋯,
+ * Two columns from 1024 px. The left one is the article, every line on one edge: the way back, who said it and when (with what it
+ * is — its genre), the title, the original title, AI 导读, AI 要点 (the genre's typed fields, ct-write 2026-10-24), AI 解读 where
+ * there is one, then the text itself once — folded under what was written about it or open, as its genre is read
+ * (`readerBodyPresentation`) — the pictures, the quoted post, where it came from with 「打开原文 ↗」, 事件后续. The right one sticks beside it, its top on the back row: 「打开原文 ↗」 with ☆ and ⋯,
  * 「深入研究」, 推荐理由, 专科, 标签 and 本文目录. Narrower, the notes follow the text and the actions are a bar at the window's bottom
  * that steps aside while reading down; a long text's contents fold above it.
  *
@@ -105,6 +108,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   // A text of three sections or more has its contents: in the right column, or folded above the text on a narrow screen.
   const sections = item.body ? readerOutline(item.body, language, prefix) : [];
   const outline = sections.length >= 3 ? sections : [];
+  const presentation = item.body ? readerBodyPresentation(item, item.body) : null;
   const actions = { item, more, onStar: () => void update("star"), onResearch: research };
   return (
     <PageShell
@@ -123,16 +127,18 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
         </div>
       ) : undefined}
     >
-      <article aria-label="正文" className={wide ? "min-w-0" : "min-w-0 pb-20"}>
+      <article aria-label="正文" data-frontier-reader={item.id} data-genre={item.genre} className={wide ? "min-w-0" : "min-w-0 pb-20"}>
         {originalTitle && <p lang={item.lang !== "und" ? item.lang : undefined} className="max-w-measure-body text-ui text-text-3">{originalTitle}</p>}
         {fallback && <Note className="mt-4" action={<a href={item.url} {...EXTERNAL} className="text-link hover:underline">阅读来源</a>}>{fallback}</Note>}
         <ReaderSameEvent item={item} className="mt-4" />
         {item.lead && <ReaderLead text={item.lead} className="mt-6" />}
+        {item.brief && <ReaderBrief brief={item.brief} item={item} className="mt-8" />}
         {item.insight && <ReaderInsight insight={item.insight} item={item} className="mt-8" />}
         {!wide && outline.length > 0 && <div className="mt-8"><ReaderOutline entries={outline} layout="folded" onReveal={() => setTextOpen(true)} /></div>}
-        {item.body
-          ? <ReaderText kind={item.body.source === "abstract" ? "摘要" : "正文"} text={item.body} lang={item.lang} language={language} onLanguage={setLanguage}
-            ownUrl={item.url} idPrefix={prefix} open={textOpen} onOpen={() => setTextOpen(true)} className="mt-8" />
+        {item.body && presentation
+          ? <ReaderText kind={presentation.kind} text={item.body} lang={item.lang} language={language} onLanguage={setLanguage}
+            ownUrl={item.url} idPrefix={prefix} open={textOpen} onOpen={() => setTextOpen(true)} fold={presentation.fold}
+            readOriginal={presentation.readOriginal ? item.url : undefined} className="mt-8" />
           : <ReaderAbstract item={item} language={language} onLanguage={setLanguage} className="mt-8" />}
         <ReaderMedia media={item.media} className="mt-6" />
         {item.quoted && <ReaderQuote quoted={item.quoted} platform={item.platform} language={language} className="mt-6" />}

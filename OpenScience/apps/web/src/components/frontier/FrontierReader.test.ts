@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insightParts, readerOutline, readerParagraphs, shownText } from "./FrontierReader";
+import { SHORT_BODY_CHARS, insightParts, readerBodyPresentation, readerOutline, readerParagraphs, shownText } from "./FrontierReader";
 
 describe("the reader's paragraphs", () => {
   it("takes a full text's `## ` paragraphs as its section headings, in either language", () => {
@@ -116,5 +116,29 @@ describe("the reader's text structure (2026-10-23)", () => {
     expect(readerOutline(body, "zh", "p")).toEqual([{ id: "p-sec-1", text: "引言", level: 2 }, { id: "p-sec-2", text: "方法", level: 2 }]);
     expect(readerOutline(body, "original", "p")).toEqual([{ id: "p-sec-1", text: "Intro", level: 2 }]);
     expect(shownText({ ...body, original: null }, "original").showing).toBe("zh");
+  });
+});
+
+describe("how a text is shown, by its genre (ct-write W6)", () => {
+  const body = (zh: string, source: "body" | "abstract" | "excerpt" = "body") => ({ zh, original: null, zhKind: "original-zh" as const, complete: true, source });
+  const short = "短。";
+  const long = "长".repeat(SHORT_BODY_CHARS);
+  it("folds a paper's abstract and full text to a preview, naming them 摘要 and 全文", () => {
+    expect(readerBodyPresentation({ genre: "paper", platform: null }, body(short, "abstract"))).toEqual({ kind: "摘要", fold: "preview", readOriginal: false });
+    expect(readerBodyPresentation({ genre: "preprint", platform: null }, body(short, "body"))).toEqual({ kind: "全文", fold: "preview", readOriginal: false });
+  });
+  it("folds a 公众号 article with 阅读原文, whatever its genre, and shows a post whole", () => {
+    expect(readerBodyPresentation({ genre: "commentary", platform: "wechat" }, body(short))).toEqual({ kind: "正文", fold: "preview", readOriginal: true });
+    expect(readerBodyPresentation({ genre: "approval", platform: "wechat" }, body(short))).toEqual({ kind: "正文", fold: "preview", readOriginal: true });
+    expect(readerBodyPresentation({ genre: "social", platform: "x" }, body(long))).toEqual({ kind: "正文", fold: "open", readOriginal: false });
+  });
+  it("folds a policy, a guideline, a trial record and a reading; opens news-like text while short", () => {
+    for (const genre of ["policy", "guideline", "trial", "commentary"] as const) {
+      expect(readerBodyPresentation({ genre, platform: "web" }, body(short)).fold).toBe("preview");
+    }
+    for (const genre of ["news", "industry", "approval", "safety", "conference", "roundup"] as const) {
+      expect(readerBodyPresentation({ genre, platform: "web" }, body(short)).fold).toBe("open");
+      expect(readerBodyPresentation({ genre, platform: null }, body(long)).fold).toBe("preview");
+    }
   });
 });

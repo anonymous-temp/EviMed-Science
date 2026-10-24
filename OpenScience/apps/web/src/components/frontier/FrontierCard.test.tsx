@@ -77,9 +77,10 @@ describe("a card", () => {
     expect(within(card).getByText("RCT")).toHaveClass("rounded-tag");
   });
 
-  it("says the lane in the eyebrow where it is not a paper", () => {
-    renderCard(scored({ evidenceType: null, evidenceTypeLabel: null, lane: "regulatory", laneLabel: "审批监管" }));
-    expect(within(screen.getByRole("article")).getByText("审批监管")).toHaveClass("rounded-tag");
+  it("says what the item is — its genre — in the eyebrow where it is not a paper (ct-write 2026-10-24)", () => {
+    renderCard(scored({ evidenceType: null, evidenceTypeLabel: null, lane: "regulatory", laneLabel: "审批监管", genre: "approval", genreLabel: "审批上市" }));
+    expect(within(screen.getByRole("article")).getByText("审批上市")).toHaveClass("rounded-tag");
+    expect(within(screen.getByRole("article")).queryByText("审批监管")).not.toBeInTheDocument();
   });
 
   it("carries none of what the plan took off it, and no 展开摘要 or 详情", () => {
