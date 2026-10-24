@@ -1671,11 +1671,15 @@ test("release gate profile crosses the actual controller socket and changes only
   const ordinary = buildRuntimeLaunchPlan(config, project, 49152);
   assert.equal(dshProfileInput(config, project, ordinary, 'deepseek-flash', '').modelGatewayUrl, config.modelGatewayInternalUrl);
   const ordinaryInput = dshProfileInput(config, project, ordinary, 'deepseek-flash', '');
-  const gateInput = dshProfileInput(config, project, plan, 'deepseek-flash', '');
+  await writeFile(path.join(project.runtimeDir, 'capsule-methods', 'fixture.md'), '# Mounted fixture method\n');
+  // Both profiles observe the same post-start methods mount; start may materialize its empty directory.
+  const gateComparisonPlan = buildRuntimeLaunchPlan(config, project, 49152, { modelGatewayProfile: 'release-gate' });
+  const gateInput = dshProfileInput(config, project, gateComparisonPlan, 'deepseek-flash', '');
   assert.equal(gateInput.modelGatewayUrl, config.releaseGateModelGatewayInternalUrl);
   assert.equal(gateInput.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL, config.releaseGateModelGatewayInternalUrl);
   const normalizeModel = (/** @type {any} */ input) => ({ ...input, modelGatewayUrl: ordinaryInput.modelGatewayUrl,
     mcpEnvironment: { ...input.mcpEnvironment, EVIMED_MODEL_GATEWAY_URL: ordinaryInput.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL } });
+  assert.equal(ordinaryInput.capsuleMethodsDir, '/runtime/capsule-methods');
   assert.deepEqual(normalizeModel(gateInput), ordinaryInput);
 
   // No database is opened: these are the same pure launch/profile builders the

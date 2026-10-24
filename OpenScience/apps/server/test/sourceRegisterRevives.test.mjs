@@ -42,3 +42,25 @@ test("the same bytes alive are still a duplicate, and another project's copy of 
   assert.notEqual(elsewhere.source.id, first.source.id, "the id is the project's and the bytes'");
   assert.equal(await documents.get("user", "source", first.source.id), null, "the retired row of the first project stays retired");
 });
+
+test("the document double restores deleted content only with its exact revision and keeps its original scope",async()=>{
+ const documents=productDocumentsDouble();
+ const first=await documents.put('user','source','owned',{value:'A'},{expectedRevision:0,projectId:'proj'});
+ const deleted=await documents.remove('user','source','owned',first.revision);
+ await assert.rejects(documents.put('user','source','owned',{value:'B'},{expectedRevision:deleted.revision}),{code:'product_revision_conflict'});
+ await assert.rejects(documents.put('user','source','owned',{value:'B'},{expectedRevision:first.revision,restoreDeleted:true}),{code:'product_revision_conflict'});
+ await assert.rejects(documents.put('foreign','source','owned',{value:'B'},{expectedRevision:deleted.revision,restoreDeleted:true}),{code:'product_revision_conflict'});
+ const restored=await documents.put('user','source','owned',{value:'B'},{expectedRevision:deleted.revision,projectId:'other',restoreDeleted:true});
+ assert.equal(restored.deletedAt,null);assert.equal(restored.revision,deleted.revision+1);assert.equal(restored.projectId,'proj');assert.deepEqual(restored.payload,{value:'B'});
+ assert.equal((await documents.history('user','source','owned')).length,3);
+});
+
+test("A to B to A preserves the original source identity and reactivates only its own project",async()=>{
+ const {sources}=service();const first=await sources.register('user',manifest('knowledge-base/trial.md'));
+ const second=await sources.register('user',{...manifest('knowledge-base/trial.md'),sha256:'b'.repeat(64)});
+ const again=await sources.register('user',manifest('knowledge-base/trial.md'));
+ assert.equal(again.source.id,first.source.id);assert.equal(again.duplicate,false);assert.ok(again.source.revision>first.source.revision);
+ assert.equal((await sources.get('user',second.source.id)).payload.publication.current,false);
+ const other=await sources.register('user',{...manifest('knowledge-base/trial.md'),projectId:'other'});
+ assert.notEqual(other.source.id,again.source.id);
+});
