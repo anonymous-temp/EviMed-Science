@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EviMed Knowledge Source Plugin
-  version: "1.5.1"
+  version: "1.6.0"
   summary: The one interface through which the EviMed platform reads knowledge sources.
   description: |
     The plugin owns everything between the outside world and the platform for *knowledge*
@@ -50,6 +50,14 @@ info:
        plugin itself (`GET /v1/media/{mediaId}`), re-encoded, so a reader never hot-links a platform;
        a post from the six Chinese platforms carries an excerpt and the platform's counts, never its
        author (a member of the public).
+    10. **Leads (1.6.0).** The platform may hand the plugin addresses it found (`POST /v1/leads`):
+       pages its lead triggers searched for. This is the one write the platform makes, and it
+       changes nothing of rule 6: the plugin answers, it never calls back. The plugin reads each
+       address under its own rules (robots, pacing, its readers; a WeChat article's text bought
+       within the shared daily cap) and emits ordinary entries on the stream — under the
+       registered source of that site, account or journal, else under a lead source of its own
+       (`access: lead`, never polled) named and owned by the site — and proposes the site as a
+       discovery candidate (line `lead`). Idempotent on the address; a daily cap bounds it.
   contact:
     name: EviMed knowledge plugin team
   license:
@@ -179,6 +187,33 @@ paths:
                 properties:
                   accepted: { type: integer, minimum: 0 }
                   unknown: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/leads:
+    post:
+      tags: [sources]
+      operationId: submitLeads
+      summary: Addresses the platform's lead triggers found, for the plugin to read under its own rules
+      description: |
+        Added in 1.6.0 (rule 10). At most 50 addresses a call. Each is answered on its own:
+        `accepted` (queued; read within minutes and delivered on the stream as an ordinary entry
+        when it is a dated page of the last 30 days, a WeChat article, a DOI, a PMID or a
+        ClinicalTrials.gov number), `duplicate` (the plugin received it before, or the stream
+        holds it), `refused` (not a public http(s) address, or an excluded host) or `capped`
+        (the day's leads are spent; Asia/Shanghai day). The answer says nothing of what reading
+        will find: that is the stream's.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadBatch" }
+      responses:
+        "200":
+          description: Each address answered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadReceipt" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
@@ -390,8 +425,8 @@ components:
       enum: [direct, browser, relay, bridge, api]
     Access:
       type: string
-      description: "The read method (one adapter each). `evimed-api` is the team's own evidence API used as a scheduled scan. Added in 1.5.0: `socialdata` (X accounts through SocialData), `dajiala` (WeChat official accounts through Dajiala), `social-crawl` (searches of six Chinese platforms through the GEO module's crawler)."
-      enum: [crossref-issn, eutils-query, europepmc, json-api, rss, atom, html-list, browser-list, relay, wechat-bridge, evimed-api, socialdata, dajiala, social-crawl]
+      description: "The read method (one adapter each). `evimed-api` is the team's own evidence API used as a scheduled scan. Added in 1.5.0: `socialdata` (X accounts through SocialData), `dajiala` (WeChat official accounts through Dajiala), `social-crawl` (searches of six Chinese platforms through the GEO module's crawler). Added in 1.6.0: `lead` (a lead source: the pages of one site, account or journal the platform's lead triggers handed over; never polled)."
+      enum: [crossref-issn, eutils-query, europepmc, json-api, rss, atom, html-list, browser-list, relay, wechat-bridge, evimed-api, socialdata, dajiala, social-crawl, lead]
     LaunchTier:
       type: string
       enum: [P0, P1, P2]
@@ -494,6 +529,7 @@ components:
               type: array
               items: { type: string }
               description: Capability ids served by POST /v1/lookups/{capability}.
+            leads: { type: boolean, description: "POST /v1/leads is served. Added in 1.6.0; absent is false." }
         vocabularies:
           type: object
           description: The values this build actually uses; the platform logs any it does not know.
@@ -603,6 +639,62 @@ components:
                   retired: { type: integer, minimum: 0 }
                   failed: { type: integer, minimum: 0 }
             in_trial: { type: integer, minimum: 0 }
+        leads:
+          type: object
+          description: "The addresses received through POST /v1/leads today (Asia/Shanghai day) by what came of them, and how many wait to be read. Added in 1.6.0; absent when this build reports none."
+          required: [today, queued]
+          properties:
+            today:
+              type: object
+              required: [queued, fetched, stale, failed, refused]
+              properties:
+                queued: { type: integer, minimum: 0 }
+                fetched: { type: integer, minimum: 0, description: "Read and delivered as an entry." }
+                stale: { type: integer, minimum: 0, description: "Read, and undated or older than 30 days: not delivered." }
+                failed: { type: integer, minimum: 0 }
+                refused: { type: integer, minimum: 0 }
+            queued: { type: integer, minimum: 0 }
+
+    LeadBatch:
+      type: object
+      required: [leads]
+      additionalProperties: false
+      properties:
+        leads:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: "#/components/schemas/Lead" }
+
+    Lead:
+      type: object
+      required: [url, trigger]
+      additionalProperties: false
+      properties:
+        url: { type: string, format: uri, maxLength: 2048, description: "A public http(s) address." }
+        trigger: { type: string, pattern: "^[a-z][a-z0-9-]{1,39}$", description: "Why the platform looked (its vocabulary, e.g. `zh-report`, `primary-source`); kept with the lead, never on an entry." }
+        query: { type: string, maxLength: 300, description: "The search that found it." }
+        title: { type: string, maxLength: 300, description: "The search engine's title for it; the page's own title wins." }
+        snippet: { type: string, maxLength: 700 }
+        published_hint: { type: string, format: date-time, description: "The search engine's date for it; a page's own date wins." }
+
+    LeadReceipt:
+      type: object
+      required: [accepted, duplicate, refused, capped, results]
+      properties:
+        accepted: { type: integer, minimum: 0 }
+        duplicate: { type: integer, minimum: 0 }
+        refused: { type: integer, minimum: 0 }
+        capped: { type: integer, minimum: 0 }
+        results:
+          type: array
+          items:
+            type: object
+            required: [url, status]
+            properties:
+              url: { type: string, description: "As posted." }
+              status: { type: string, enum: [accepted, duplicate, refused, capped] }
+              reason: { type: string, maxLength: 200 }
 
     DiscoveryDay:
       type: object

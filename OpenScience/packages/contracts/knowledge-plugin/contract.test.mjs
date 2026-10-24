@@ -67,7 +67,8 @@ const REPLAYED = ["health.json", "manifest.json", "sources-page-1.json", "source
   "entries-page-2.json", "entries-tail.json", "identity-doi-pmid-registry.json", "identity-doi.json", "identity-pmid.json",
   "identity-reg.json", "identity-fda.json", "identity-url.json", "text-available.json", "text-pending.json", "lookups.json",
   "lookup-unavailable.json", "error-unauthorized.json", "error-not-found.json", "error-invalid-cursor.json",
-  "entry-x.json", "text-x.json", "entry-wechat.json", "text-wechat.json", "media-x.jpg"];
+  "entry-x.json", "text-x.json", "entry-wechat.json", "text-wechat.json", "media-x.jpg", "health-1.5.1.json", "manifest-1.5.1.json",
+  "leads-accepted.json", "leads-duplicate.json"];
 
 /** A recorded answer as the plugin gave it: its status, its content type and the body bytes. @param {string} name */
 async function recorded(name) {
@@ -165,9 +166,15 @@ test("a contract minor is recorded again only where it changed, and provenance s
   // 1.5.0 added social posts and `Health.providers`: the manifest, the health answer, one X post, one WeChat article, their
   // texts and one stored image were recorded off a plugin that read them live; the stream stands as it was.
   const partials = provenance.partialRecordings ?? [];
-  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0", "1.5.1"], "every minor since the stream was recorded names its partial recording, in order");
+  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0", "1.5.1", "1.6.0"], "every minor since the stream was recorded names its partial recording, in order");
   // 1.5.1 widened EntryText.fetched_from and named the `## ` heading rule: the manifest and the health answer only.
-  const [platformProduced, hostBudget, social, patch] = partials;
+  // 1.6.0 (ct-mix) added POST /v1/leads, the read method `lead`, Health.leads and Manifest.capabilities.leads: the manifest, the
+  // health answer and two posts to /v1/leads, off a plugin over an empty database; the 1.5.1 health answer, which named the paid
+  // providers with the calls a live run made, is kept under its version's name (`health-1.5.1.json`).
+  const [platformProduced, hostBudget, social, patch, leads] = partials;
+  assert.deepEqual(leads.fixtures.slice().sort(), ["health.json", "leads-accepted.json", "leads-duplicate.json", "manifest.json"]);
+  assert.ok(provenance.fixtures["health-1.5.1.json"] && provenance.fixtures["manifest-1.5.1.json"], "the 1.5.1 health answer and manifest are kept, with their provenance");
+  assert.ok(Date.parse(provenance.fixtures["health-1.5.1.json"].recordedAt) >= Date.parse(patch.recordedAt) - 60_000, "…as 1.5.1 recorded it");
   assert.equal(partials.at(-1).contractVersion, pin.version, "the last partial recording is the pin's");
   assert.equal(social.contractVersion, "1.5.0");
   assert.deepEqual(patch.fixtures, ["health.json", "manifest.json"], "a patch records again only what names the contract");
@@ -201,8 +208,9 @@ test("a contract minor is recorded again only where it changed, and provenance s
 
 test("health carries today's use against each host's daily cap, the contract names the field, and the platform reads it as recorded", async () => {
   // A spent cap is the plugin's own refusal until 00:00 UTC and counts against no source's health, so this table is the only
-  // place the spend shows (review 2026-10-10, D-10). The recording is the plugin's own answer (1.4.0's, recorded again by 1.5.0).
-  const body = await fixture("health.json");
+  // place the spend shows (review 2026-10-10, D-10). The recording is the plugin's own answer (1.4.0's, recorded again by 1.5.0
+  // and 1.5.1; the 1.6.0 answer is off an empty database, whose hosts have no use yet).
+  const body = await fixture("health-1.5.1.json");
   assert.ok(body.host_budget && typeof body.host_budget === "object", "the recorded health answer has the table");
   const hosts = Object.keys(body.host_budget);
   assert.ok(hosts.length >= 4, "every capped host is listed, whether or not it was used that day");
@@ -211,7 +219,7 @@ test("health carries today's use against each host's daily cap, the contract nam
   const schema = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8")).components.schemas.Health.properties.host_budget;
   assert.deepEqual(schema.additionalProperties.required, ["used", "cap"]);
   assert.match(schema.description, /Added in 1\.4\.0/);
-  await withPlugin({ "GET /v1/health": await recorded("health.json") }, async ({ client }) => {
+  await withPlugin({ "GET /v1/health": await recorded("health-1.5.1.json") }, async ({ client }) => {
     const health = await client.health();
     assert.deepEqual(health.host_budget, body.host_budget, "every recorded host survives the client's shape check");
     for (const [host, row] of Object.entries(health.host_budget)) {
@@ -477,7 +485,8 @@ test("contract 1.5.0: a recorded X post, a WeChat article, their texts, one imag
     [`GET ${recordedPath("entry-wechat.json")}`]: await recorded("entry-wechat.json"),
     [`GET ${recordedPath("text-wechat.json")}`]: await recorded("text-wechat.json"),
     [`GET ${recordedPath("media-x.jpg")}`]: { status: 200, headers: { "content-type": provenance.fixtures["media-x.jpg"].headers["content-type"] }, body: image },
-    "GET /v1/health": await recorded("health.json"),
+    // The providers with the calls a live run made: the 1.5.1 answer (the 1.6.0 one is off an empty database).
+    "GET /v1/health": await recorded("health-1.5.1.json"),
   };
   await withPlugin(routes, async ({ client }) => {
     const post = await client.entry(xEntry.entry_id);
@@ -517,6 +526,36 @@ test("contract 1.5.0: a recorded X post, a WeChat article, their texts, one imag
   assert.ok(yaml.paths["/v1/media/{mediaId}"]?.get, "GET /v1/media/{mediaId}");
   assert.deepEqual(yaml.components.schemas.Health.properties.discovery.required, ["today", "history", "by_line", "in_trial"]);
   assert.ok(yaml.paths["/v1/sources/screening"]?.post, "POST /v1/sources/screening (fr-sources)");
-  const manifest = await fixture("manifest.json");
+  // The fields a live run populated: the 1.5.1 manifest (the 1.6.0 one is off an empty database, which populates none).
+  const manifest = await fixture("manifest-1.5.1.json");
   for (const field of ["channel", "platform", "author", "media", "metrics"]) assert.ok(manifest.fields.entry.includes(field), `the recorded manifest says it populates ${field}`);
+});
+
+test("contract 1.6.0: leads posted to the recorded plugin are read as it answered them; the manifest offers them and health counts them", async () => {
+  const { LEAD_POSTS } = await import("./fixtures/record.mjs");
+  const accepted = await fixture("leads-accepted.json");
+  const again = await fixture("leads-duplicate.json");
+  await withPlugin({ "POST /v1/leads": await recorded("leads-accepted.json") }, async ({ client, seen }) => {
+    const answer = await client.submitLeads(LEAD_POSTS.map((lead) => ({ ...lead })));
+    assert.deepEqual(answer, { accepted: accepted.accepted, duplicate: 0, refused: 0, capped: 0,
+      results: accepted.results.map((row) => ({ url: row.url, status: row.status, reason: row.reason ?? null })) });
+    assert.deepEqual(JSON.parse(seen[0].body), provenance.fixtures["leads-accepted.json"].request.body, "the client sends what was recorded");
+    assert.equal(seen[0].headers.authorization, `Bearer ${TOKEN}`);
+  });
+  await withPlugin({ "POST /v1/leads": await recorded("leads-duplicate.json") }, async ({ client }) => {
+    const answer = await client.submitLeads(provenance.fixtures["leads-duplicate.json"].request.body.leads);
+    assert.deepEqual(answer.results.map((row) => [row.status, row.reason]), [["duplicate", "received"], ["refused", "not_a_public_address"]]);
+    assert.deepEqual([answer.duplicate, answer.refused], [again.duplicate, again.refused]);
+  });
+  const manifest = await fixture("manifest.json");
+  assert.equal(manifest.capabilities.leads, true);
+  const health = await fixture("health.json");
+  assert.deepEqual(Object.keys(health.leads.today).sort(), ["failed", "fetched", "queued", "refused", "stale"]);
+  assert.equal(health.leads.queued, LEAD_POSTS.length, "the recording's own two addresses wait to be read (its crawler is off)");
+  const yaml = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8"));
+  assert.ok(yaml.paths["/v1/leads"]?.post, "POST /v1/leads");
+  assert.ok(yaml.components.schemas.Access.enum.includes("lead"), "the read method lead");
+  assert.ok(FRONTIER_ACCESSES.includes("lead"), "the platform knows the read method");
+  assert.deepEqual(yaml.components.schemas.Lead.required, ["url", "trigger"]);
+  assert.equal(yaml.components.schemas.LeadBatch.properties.leads.maxItems, 50);
 });
