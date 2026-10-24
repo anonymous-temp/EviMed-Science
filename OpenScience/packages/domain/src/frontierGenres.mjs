@@ -90,6 +90,17 @@ export function frontierGenreFallback(item) {
 }
 
 /**
+ * The one reading rule for an item's genre (contract A of the 2026-10-24 round): `items.genre` where written, code's
+ * fallback otherwise — never null. Every reader (selection, the reader page, ranking, interactions, leads) calls this.
+ *
+ * @param {(NonNullable<Parameters<typeof frontierGenreFallback>[0]> & { genre?: string | null }) | null | undefined} row
+ * @returns {FrontierGenre}
+ */
+export function frontierItemGenre(row) {
+  return isFrontierGenre(row?.genre) ? row.genre : frontierGenreFallback(row)
+}
+
+/**
  * The genre an item is stored with: the model's when it names a known genre and code is not sure of its own, code's
  * otherwise.
  *

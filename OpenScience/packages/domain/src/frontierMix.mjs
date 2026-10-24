@@ -35,7 +35,7 @@
  * Genre is `items.genre` when the editor wrote it, else `frontierGenreFallback` (contract A): `frontierMixGenre`.
  */
 
-import { frontierGenreFallback, isFrontierGenre } from './frontierGenres.mjs'
+import { frontierItemGenre } from './frontierGenres.mjs'
 
 /** @typedef {import('./frontierGenres.mjs').FrontierGenre} FrontierGenre */
 /** @typedef {'research' | 'guideline' | 'regulatory' | 'policy' | 'industry' | 'commentary' | 'social' | 'news'} FrontierMixGroup */
@@ -115,11 +115,11 @@ const GROUP_OF_GENRE = Object.freeze(Object.fromEntries(Object.entries(FRONTIER_
 /**
  * An item's genre as the mix reads it: `items.genre` when written, else code's fallback from its stored fields (contract
  * A, the one mapping).
- * @param {(Parameters<typeof frontierGenreFallback>[0] & { genre?: string | null }) | null | undefined} row
+ * @param {(Parameters<typeof frontierItemGenre>[0] & { genre?: string | null }) | null | undefined} row
  * @returns {FrontierGenre}
  */
 export function frontierMixGenre(row) {
-  return isFrontierGenre(row?.genre) ? /** @type {FrontierGenre} */ (row?.genre) : frontierGenreFallback(row)
+  return frontierItemGenre(row)
 }
 
 /** The group a genre counts against, or null for a genre never selected. @param {string} genre @returns {FrontierMixGroup | null} */

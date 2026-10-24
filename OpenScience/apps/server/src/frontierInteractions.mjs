@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { FRONTIER_INTERACTION_BATCH, FRONTIER_LIST_SURFACES, FRONTIER_SLOTS, frontierGenreFallback, frontierInteraction, isFrontierGenre } from "@evimed/domain";
+import { FRONTIER_INTERACTION_BATCH, FRONTIER_LIST_SURFACES, FRONTIER_SLOTS, frontierInteraction, frontierItemGenre } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -97,14 +97,8 @@ CREATE INDEX IF NOT EXISTS frontier_interactions_view_idx ON evimed_frontier.int
 CREATE INDEX IF NOT EXISTS frontier_interactions_time_idx ON evimed_frontier.interactions (client_at);
 `;
 
-/**
- * An item's genre as a reader names it: the stored one where written, code's fallback from the row otherwise (contract A).
- * @param {Record<string, any> | null | undefined} row an `items` row (snake case) or an item (camel case)
- * @returns {string} a `FRONTIER_GENRES` key
- */
-export function frontierItemGenre(row) {
-  return isFrontierGenre(row?.genre) ? row.genre : frontierGenreFallback(row ?? {});
-}
+/** The item's genre: `@evimed/domain` `frontierItemGenre`, the one reading rule (re-exported for this module's importers). */
+export { frontierItemGenre };
 
 /** The columns `frontierItemGenre` reads, for a query that selects them. */
 export const FRONTIER_GENRE_COLUMNS = "i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane";

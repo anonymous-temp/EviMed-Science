@@ -81,7 +81,7 @@ import {
   FRONTIER_CODE_GENRES,
   frontierGenreDecision,
   frontierGenreFallback,
-  isFrontierGenre,
+  frontierItemGenre,
   frontierSourceDisplayName,
   frontierUpdateKind,
   isFrontierMastheadTitle,
@@ -706,15 +706,8 @@ export function frontierReaderText(texts, source = null) {
   return null;
 }
 
-/**
- * An item's genre as a reader is told it (ct-write 2026-10-24, contract A): the stored one when it is a known genre, code's own
- * answer from the item's fields otherwise (`frontierGenreFallback`) — never null.
- * @param {Record<string, any>} row an `items` row (snake case)
- * @returns {import("@evimed/domain").FrontierGenre}
- */
-export function frontierItemGenre(row) {
-  return isFrontierGenre(row?.genre) ? row.genre : frontierGenreFallback(row);
-}
+/** The item's genre: `@evimed/domain` `frontierItemGenre`, the one reading rule (re-exported for this module's importers). */
+export { frontierItemGenre };
 
 /**
  * The genre code is sure of before an item's edit, or null: `frontierGenreFallback` over what is known then — the item's channel and
