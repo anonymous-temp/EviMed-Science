@@ -2760,10 +2760,11 @@ export function loadConfig(overrides = {}) {
     nativeMemoryReplayAttempts: boundedInteger(overrides.nativeMemoryReplayAttempts ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS, 5, 0, 20, "OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS"),
     // The consolidation of a native account's memories (`nativeMemoryConsolidation.mjs`, 重读旧记忆 on the native engine): OpenViking's own
     // `compile --skill memory` over the account's memories, at most once an interval (days) per account and only after its files changed.
-    // OFF by default: the engine's output on real memory is unmeasured, and the operator switches it on after a probe on an account's own
-    // files. Each run is model calls of the engine's, through the gateway as `memory-extraction` on the OpenViking module's daily budget
+    // On by default since the lab probe of 2026-10-24 (v0.5.1.1: the request accepted, the task completed in 8 s, its result read as the
+    // fixture `packages/contracts/openviking/fixtures/memory/consolidation-task.json`, and nothing changed where nothing was duplicated).
+    // Each run is model calls of the engine's, through the gateway as `memory-extraction` on the OpenViking module's daily budget
     // (`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`); every change it makes is a revision the memory page can undo.
-    nativeMemoryConsolidationEnabled: overrides.nativeMemoryConsolidationEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED", false),
+    nativeMemoryConsolidationEnabled: overrides.nativeMemoryConsolidationEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED", true),
     nativeMemoryConsolidationIntervalDays: boundedInteger(overrides.nativeMemoryConsolidationIntervalDays ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS, 7, 1, 90, "OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS"),
     // The judge of a reworded repeat (`nativeMemoryRejections.mjs`): a line the engine writes that is near one the person removed is put
     // to one model call a commit (thinking off, memory-extraction, charged to the account), and a line the judge cannot say anything
