@@ -275,10 +275,12 @@ test("the checks the work-order cases add: any of several kinds, a count at leas
   assert.deepEqual(failing(reshaping, [record("preference", "周报灰度覆盖约 37%")]), ["no record carries 37%"], "the number is the draft's, not a rule");
   assert.deepEqual(failing(byId("g10"), []), ["at least 1 record(s)", "some record carries 色弱"], "a legacy replay of the older cases decides at-least too");
 
-  const conflict = byId("x01");
-  const conflicts = [{ key: "profile.research_approach", otherKey: "profile.research_design" }];
-  assert.deepEqual(failing(conflict, [record("profile", "定性", "profile.research_approach")], { conflicts }), []);
-  assert.deepEqual(failing(conflict, [record("profile", "定性", "profile.research_approach")], { conflicts: [] }), ["a statement is marked as disagreeing with profile.research_design"]);
+  // The person restating a stored choice in other words replaces it under the same key: the later value, no duplicate.
+  const restated = byId("x01");
+  assert.deepEqual(failing(restated, [record("preference", "团队版本发布固定在周五", "preference.release_cadence")]), []);
+  assert.deepEqual(failing(restated, []), ["some record carries 周五"]);
+  const both = failing(restated, [record("preference", "周五发布", "preference.release_day"), record("preference", "周三发布", "preference.release_cadence")]);
+  assert.ok(both.includes("no record carries 周三") && both.includes("at most 1 record(s)"), "the old choice kept beside the new one under another key is the failure");
 
   // A seed: the recall echo must leave what the first conversation wrote untouched; the upgrade must leave only the later choice in force.
   const echo = byId("c17");
@@ -295,7 +297,15 @@ test("the checks the work-order cases add: any of several kinds, a count at leas
 });
 
 test("the cross-key conflict: a stubbed extractor that names the stored key as disagreeing is seen by the replay store, and one that does not is a failure", async () => {
-  const item = generalCases.find((entry) => entry.id.startsWith("x01"));
+  // A mechanism case of its own: two statements that disagree with neither replacing the other (the corpus's x01 is a
+  // restatement, which replaces). The check `requireConflictWith` and the store's conflict list are what is under test.
+  const item = {
+    id: "conflict-mechanism", class: "keep-cross-key-conflict", decidable: true, arms: ["legacy"],
+    replay: { synthetic: true, projectId: "default",
+      existingKeys: [{ scope: "user", kind: "profile", key: "profile.research_design", value: "我做定量的队列研究", summary: "做定量的队列研究" }],
+      messages: [{ id: "u1", role: "user", text: "我主要做定性研究，访谈和扎根理论为主。" }, { id: "a1", role: "assistant", text: "好的，我会按定性研究的思路来协助您。" }] },
+    expect: { requireConflictWith: ["profile.research_design"] },
+  };
   /** @param {string | null} conflictsWith */
   const replay = async (conflictsWith) => {
     const store = new runner.ReplayStore(item.replay.existingKeys);

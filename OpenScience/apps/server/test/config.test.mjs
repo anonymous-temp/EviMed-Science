@@ -222,6 +222,8 @@ const FALLBACK_RULES = {
   // It turns on the one API it exists for and off the workers and warm-ups
   // that would start runs in a runtime this shape does not have.
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["deployment", "switch"],
+  // The API-only (CDSS) stack has no web app and no person to share with: sharing stays off there while the hosted default is on.
+  OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_LEARNING_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_AUTOPILOT_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["deployment", "switch"],
