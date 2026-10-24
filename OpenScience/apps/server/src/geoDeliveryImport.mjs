@@ -552,12 +552,28 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
   const importRunFiles = async ({ project, run, geoProject, deliverables, failed, trustedContext = null, reader = readRunFile }) => {
     const out = { strategies: 0, gaps: 0, actions: 0, sources: 0, refused: 0, declined: 0, dropped: /** @type {string[]} */ ([]),
       articles: 0, enriched: 0, registered: 0, existing: 0, skipped: 0, unavailable: /** @type {string[]} */ ([]) };
+    /** @type {Array<{path:string,code:string,message:string}>} */
+    const notices = [];
     const unavailable = (/** @type {string} */ path) => {
       if (!trustedContext) return;
       failed.push("geo_plan_output_unavailable"); out.unavailable.push(path); out.refused += 1; report(`geo_plan_output_unavailable:${path}`);
     };
     const refusals = (/** @type {any[]} */ issues, /** @type {string} */ relative, prefix = "", offset = 0) => {
-      const real = issues.filter(issue => !["notice", "ignored_fields", "declined_fields"].includes(issue.code));
+      const real = issues.filter(issue => {
+        // Optional narrative aliases cannot make the valid canonical strategy unavailable. Keep the exact omission visible.
+        const optionalAlias = !prefix && relative.endsWith("/strategy.json")
+          && ["alias_invalid", "alias_empty", "alias_too_long"].includes(issue.code)
+          && /^tiers(?:\.targets\[\d+\])?\.basis$/.test(String(issue.field ?? ""));
+        if (optionalAlias) {
+          const path = `${relative}#${issue.index == null ? "" : `[${issue.index}]`}${issue.field}`;
+          if (!notices.some(notice => notice.path === path && notice.code === issue.code)) {
+            notices.push({ path, code: issue.code, message: issue.message });
+            report(`geo_strategy_optional_alias:${issue.code}:${path}: ${issue.message}`);
+          }
+          return false;
+        }
+        return !["notice", "ignored_fields", "declined_fields"].includes(issue.code);
+      });
       if (!trustedContext) { out.refused += real.length; return; }
       for (const issue of real) {
         const field = `${prefix}${issue.index == null ? "" : `[${issue.index + offset}]`}${prefix ? "." : ""}${issue.field ?? "write"}`;
@@ -686,7 +702,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       report(`run files imported: strategy ${out.strategies} (gaps ${out.gaps}, actions ${out.actions}, sources ${out.sources}, refused ${out.refused}), `
         + `articles ${out.articles} (enriched ${out.enriched}, registered ${out.registered}, skipped ${out.skipped}), declined ${out.declined}, dropped ${out.dropped.length}`);
     }
-    return out;
+    return { ...out, ...(notices.length ? { notices } : {}) };
   };
 
   /** An attempt that lost a write or threw: counted and put on the audit record, where an operator reads it (stderr is nobody's). */

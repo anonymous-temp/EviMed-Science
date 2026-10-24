@@ -770,3 +770,60 @@ test("an invalid optional tier alias still writes canonical text and valid sibli
   assert.deepEqual((await store.latestStrategy(geo.id)).tiers, draft.strategy.tiers);
   assert.equal((await store.latestStrategy(geo.id)).tiers[0].targets[0].note, "Held"); assert.equal(JSON.stringify(data), original);
 });
+
+
+for (const held of [false, true]) for (const alias of [
+  { name: "wrong-type", value: {}, targetValue: {}, code: "alias_invalid" },
+  { name: "blank", value: " \n\u0000 ", targetValue: " \t\u0000 ", code: "alias_empty" },
+  { name: "too-long", value: "😀".repeat(601), targetValue: "😀".repeat(501), code: "alias_too_long" },
+  { name: "canonical-plus-alias-overflow", value: "Extra", targetValue: "Extra", summary: "😀".repeat(600), note: "😀".repeat(500), code: "alias_too_long" },
+]) test(`trusted ${held ? "same-run" : "first"} import treats ${alias.name} narrative aliases as visible advisory results`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `advisory-${geo.id}`, relative = "deliverables/advisory/strategy.json";
+  const context = { mode: "strategy", runId, scopeKey: "original-advisory", basis: { targets: { version: null, rows: [] } } };
+  const input = { tiers: [{ tier: 1, summary: alias.summary ?? "Canonical text", basis: alias.value, buys: "Valid purchase scope",
+    targets: [{ metricId: "M-06", pool: "P2", note: alias.note ?? "Valid qualification", basis: alias.targetValue }] }, { tier: 2, basis: "Valid sibling rationale" }] };
+  const original = JSON.stringify(input), expected = geoStrategyDraft(input).strategy.tiers;
+  if (held) await store.writeStrategy(USER, geo.id, { tiers: expected, runId, scopeKey: context.scopeKey, basis: context.basis });
+  const make = () => importerOf(new Map(), { planningContext: async () => context,
+    readRunFile: async () => original, readFile: async () => { throw new Error("No unpreserved workspace reads"); } });
+  const { importDelivery, reports } = make(), produced = { id: runId, status: "succeeded", artifacts: [relative] };
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined, "optional aliases cannot mark the valid strategy unavailable");
+  assert.equal(result.files.strategies, 1); assert.equal(result.files.refused, 0); assert.deepEqual(result.files.unavailable, []);
+  assert.equal(importDelivery.counters.imported, 1); assert.equal(importDelivery.counters.failed, 0);
+  assert.deepEqual(result.files.notices.map(notice => [notice.path, notice.code]), [
+    [`${relative}#[0]tiers.basis`, alias.code], [`${relative}#[0]tiers.targets[0].basis`, alias.code],
+  ]);
+  for (const notice of result.files.notices) {
+    assert.match(notice.message, /kept only in the original file/);
+    assert.ok(reports.some(report => report.includes(notice.path) && report.includes(notice.code)), "the retained-original qualification remains visible");
+  }
+  assert.deepEqual(result.files.dropped, ["advisory:tiers[0].basis", "advisory:tiers[0].targets[0].basis"]);
+  const stored = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.deepEqual(stored.tiers, expected); assert.deepEqual(stored.basis, context.basis); assert.equal(stored.runId, runId);
+  assert.equal(stored.tiers[0].buys, "Valid purchase scope"); assert.equal(stored.tiers[1].summary, "Valid sibling rationale");
+  assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []); assert.equal(JSON.stringify(input), original);
+  assert.equal(await importDelivery(control, produced), null, "a successful advisory import does not consume failure retries");
+  const replay = await make().importDelivery(control, produced, { recovery: true });
+  assert.equal(replay.failed, undefined); assert.deepEqual(replay.files.notices, result.files.notices);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, stored.version);
+});
+
+for (const invalid of ["canonical", "gaps", "source"]) test(`optional narrative notices cannot hide a real invalid ${invalid} field`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `real-refusal-${geo.id}`, relative = "deliverables/real-refusal/strategy.json";
+  const context = { mode: "strategy", runId, scopeKey: "real-refusal", basis: {} };
+  const input = { summary: "Usable strategy", tiers: [{ tier: 1, summary: "Canonical", basis: {}, targets: [{ metricId: "M-06", note: "Held", basis: {} }] }],
+    ...(invalid === "canonical" ? { tiers: [{ tier: 1, summary: {}, basis: "Optional rationale" }, { tier: 2, summary: "Valid sibling", basis: {} }] } : {}),
+    ...(invalid === "gaps" ? { gaps: 42 } : {}),
+    ...(invalid === "source" ? { sources: [{ domain: "valid.example", name: "Retained" }, { domain: "not a host", name: "Refused" }] } : {}) };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => JSON.stringify(input) });
+  const result = await importDelivery(control, { id: runId, status: "succeeded", artifacts: [relative] });
+  assert.ok(result.failed?.includes("geo_plan_output_unavailable")); assert.ok(result.files.refused > 0);
+  assert.ok(result.files.unavailable.some(path => path.includes(invalid === "canonical" ? "tiers.summary" : invalid === "source" ? "sources" : "gaps")));
+  assert.equal(result.files.unavailable.some(path => path.endsWith(".basis")), false, "only the real validation problem is unavailable");
+  assert.ok(result.files.notices.length > 0); assert.equal(importDelivery.counters.imported, 0); assert.equal(importDelivery.counters.failed, 1);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).summary, "Usable strategy");
+  if (invalid === "source") assert.deepEqual((await store.listSources(geo.id)).map(source => source.domain), ["valid.example"]);
+});
