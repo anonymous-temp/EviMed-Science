@@ -204,8 +204,12 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
 /** Evidence types the genre's label already says: a guideline's, a regulator's decision, a safety notice, a company's release. */
 const GENRE_SAYS_EVIDENCE: ReadonlySet<string> = new Set(["guideline", "regulatory-decision", "safety-notice", "press-release"]);
 
-/** The byline's evidence tag beside the genre: a study's design (「RCT」「队列与病例对照」), never one the genre already names. */
+/**
+ * The byline's evidence tag beside the genre: a study's design (「RCT」「队列与病例对照」), never one the genre already names, and none
+ * for a roundup, whose stories each have their own.
+ */
 export function bylineEvidence(item: FrontierItem): string | null {
+  if (item.genre === "roundup") return null;
   return item.evidenceType && GENRE_SAYS_EVIDENCE.has(item.evidenceType) ? null : evidenceTag(item);
 }
 
@@ -238,18 +242,22 @@ export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; 
   const location = useLocation();
   const state = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: item.title } };
   const quoteLang = brief.quote && brief.quote.zh && item.lang !== "und" ? item.lang : undefined;
+  // The report a reading reads, as its own article, with the reading's own words about it under the link: one row, not two.
+  const subject = brief.about ? brief.points.find((point) => point.key === "subject") ?? null : null;
+  const points = subject ? brief.points.filter((point) => point !== subject) : brief.points;
   return (
     <Block label="AI 要点" labelClassName={AI_LABEL} className={className}>
       <dl data-prose="" className="max-w-measure-body xl:max-w-read">
         {brief.about && (
           <div className="grid gap-x-4 gap-y-0.5 border-b border-faint py-2.5 first:pt-0 sm:grid-cols-[6rem_1fr]">
             <dt className="text-caption text-text-3 sm:pt-1">解读的研究</dt>
-            <dd className="min-w-0 text-reading text-text">
+            <dd className="min-w-0 break-words text-reading text-text">
               <Link to={articlePath(brief.about.publicId)} state={state} className="rounded text-link hover:underline">《{brief.about.title}》</Link>
+              {subject?.text && <p className="mt-1 text-text-2">{subject.text}</p>}
             </dd>
           </div>
         )}
-        {brief.points.map((point) => (
+        {points.map((point) => (
           <div key={point.key} className="grid gap-x-4 gap-y-0.5 border-b border-faint py-2.5 first:pt-0 last:border-b-0 sm:grid-cols-[6rem_1fr]">
             <dt className="text-caption text-text-3 sm:pt-1">{point.label}</dt>
             <dd className="min-w-0 break-words text-reading text-text">
@@ -978,7 +986,7 @@ export function ReaderBar({ item, more, onStar, onResearch }: {
           <MessageSquareText size={20} aria-hidden="true" />深入研究
         </button>
         <a href={item.url} {...EXTERNAL} className={BAR_TOOL}>
-          <ArrowUpRight size={20} aria-hidden="true" />{isSocialItem(item) ? "查看原帖" : "打开原文"}
+          <ArrowUpRight size={20} aria-hidden="true" />{originalLinkLabel(item) === "打开原文" ? "打开原文" : "查看原帖"}
         </a>
         <Menu label="更多操作" items={more}>
           <button type="button" className={BAR_TOOL}><MoreHorizontal size={20} aria-hidden="true" />更多</button>

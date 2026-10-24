@@ -149,7 +149,7 @@ export const FRONTIER_BRIEF_FIELDS = Object.freeze({
   }),
   commentary: Object.freeze({
     points: Object.freeze([
-      textField("subject", "解读的对象", "被解读的研究、指南或政策：名称、期刊、会议或机构"),
+      textField("subject", "解读的研究", "被解读的研究、指南或政策：名称、期刊、会议或机构"),
       textField("result", "原始结果", "被解读研究本身的主要结果"),
       itemsField("analysis", "解读要点", "解读在原始研究之外给出的背景、分析或本土意义，每条一句"),
       textField("view", "作者观点", "解读作者自己的看法或建议，写明是作者的观点"),
@@ -169,7 +169,7 @@ export const FRONTIER_BRIEF_FIELDS = Object.freeze({
   social: Object.freeze({ points: Object.freeze([]), quote: null }),
   roundup: Object.freeze({
     points: Object.freeze([
-      itemsField("stories", "各条消息", "合集里的每一条消息，一条一句：谁的什么研究或事件，出处；最多 6 条"),
+      itemsField("stories", "各条消息", "合集里的每一条消息各写一条，按原文顺序：谁的什么研究或事件、结果，出处；每条独立可读，不用「上述」「该研究」指代别的条目；最多 6 条"),
     ]),
     quote: null,
   }),

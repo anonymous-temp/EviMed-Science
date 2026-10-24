@@ -179,7 +179,7 @@ test("the service names every item's genre — the stored one, else code's — a
   assert.deepEqual([byId.get(unwritten.publicId).genre, byId.get(unwritten.publicId).genreLabel], ["social", "社交动态"]);
   const detail = (await service.getItem(reader, reading.publicId)).body.item;
   assert.deepEqual(detail.brief, { genre: "commentary",
-    points: [{ key: "subject", label: "解读的对象", text: "NEJM 同日发表的两项 3 期试验。" }],
+    points: [{ key: "subject", label: "解读的研究", text: "NEJM 同日发表的两项 3 期试验。" }],
     quote: { key: "remark", label: "原文观点", text: "现有结果支持两种策略均具有临床价值。" },
     about: { publicId: primary.publicId, title: "atacicept 治疗 IgA 肾病" } });
   assert.equal((await service.getItem(reader, primary.publicId)).body.item.brief, null);

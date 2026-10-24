@@ -62,7 +62,9 @@ describe("a 公众号 reading", () => {
     show(rawWechatCommentary());
     const brief = await screen.findByRole("region", { name: "AI 要点" });
     expect(within(brief).getByRole("link", { name: "《Atacicept in IgA Nephropathy》" })).toHaveAttribute("href", "/app/frontier/items/nejm-origin3");
-    expect(brief.querySelector("dt")).toHaveTextContent("解读的研究");
+    // One row: the report as its own article, the reading's words about it under the link.
+    expect([...brief.querySelectorAll("dt")].map((term) => term.textContent)).toEqual(["解读的研究", "解读要点"]);
+    expect(brief.querySelector("dd")).toHaveTextContent("NEJM 同日发表的 ORIGIN 3 与 VISIONARY 两项 3 期试验。");
     const text = screen.getByRole("region", { name: "正文" });
     const original = within(text).getByRole("link", { name: "阅读原文" });
     expect(original).toHaveAttribute("href", "https://mp.weixin.qq.com/s/example");

@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { FRONTIER_GENRE_LABELS_ZH, isFrontierGenre } from "@evimed/domain";
 import { readerNumberSource, trimToWholeSentences, verifyWriting } from "./frontierEditor.mjs";
 
-export const FRONTIER_LEAD_LIMITS = Object.freeze({ chars: 380, min: 80, briefed: 220, input: 12_000 });
+export const FRONTIER_LEAD_LIMITS = Object.freeze({ chars: 380, min: 80, briefed: 160, input: 12_000 });
 const LEAD_MAX_TOKENS = 1_200;
 const LEAD_TIMEOUT_MS = 60_000;
 

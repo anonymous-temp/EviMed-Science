@@ -199,7 +199,7 @@ export function rawWechatCommentary(overrides: Record<string, unknown> = {}): Re
     brief: {
       genre: "commentary",
       points: [
-        { key: "subject", label: "解读的对象", text: "NEJM 同日发表的 ORIGIN 3 与 VISIONARY 两项 3 期试验。" },
+        { key: "subject", label: "解读的研究", text: "NEJM 同日发表的 ORIGIN 3 与 VISIONARY 两项 3 期试验。" },
         { key: "analysis", label: "解读要点", items: ["疗效证据从蛋白尿下降延伸到肾功能保护。", "两项试验非头对头比较，背景治疗不同。"] },
       ],
       quote: { key: "remark", label: "原文观点", text: "现有结果能够支持两种治疗策略均具有临床价值。" },

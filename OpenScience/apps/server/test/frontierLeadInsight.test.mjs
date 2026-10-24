@@ -73,7 +73,7 @@ test("the 导读 is written by its genre: the shared rules first (the cached pre
   assert.equal(calls[0], frontierLeadInstructions("approval", { briefed: true }));
 });
 
-test("a 导读 is as long as its source supports: a one-line post gets a sentence or two, and above 要点 at most 220 characters", () => {
+test("a 导读 is as long as its source supports: a one-line post gets a sentence or two, and above 要点 at most 160 characters", () => {
   // A 268-character X post supports about 80 Chinese characters; a long abstract the full 380.
   assert.equal(frontierLeadLimit("a".repeat(268)), FRONTIER_LEAD_LIMITS.min);
   assert.equal(frontierLeadLimit("a".repeat(5_000)), FRONTIER_LEAD_LIMITS.chars);
