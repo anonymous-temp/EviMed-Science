@@ -7,6 +7,9 @@ import { ProductDocuments } from '../src/productStore.mjs';
 import { GeoSignals, geoSignalId } from '../src/geoSignals.mjs';
 import { GeoSignalDiscovery } from '../src/geoSignalDiscovery.mjs';
 import { GeoPlanContext } from '../src/geoPlanContext.mjs';
+import { NotificationService } from '../src/notificationService.mjs';
+import { createGeoNotifier } from '../src/geoNotify.mjs';
+import { GeoSignalResults } from '../src/geoSignalResults.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
@@ -157,4 +160,95 @@ test('the one native context stages a signal once across tabs and preserves exac
   assert.deepEqual(held.payload.basis.previous, { contextRef: first.referenceId, sessionId: 'signal-native', requestId: 'signal-native-request', runId: 'signal-run', status: 'failed' });
   assert.equal(held.payload.basis.signal.basisDigest, row.payload.basisDigest);
   assert.equal((await signals.detail(user, project.id, row.id)).currentAttempt.runId, 'signal-run');
+});
+
+test('a real recurrence leaves its historical closed signal inactive and opens only the new episode', options, async () => {
+  const errorId = 'episode-error';
+  await store.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,first_snapshot_id,status,judgment_state)
+    VALUES($1,$2,$3,'identity','deepseek','original','open','active')`, [errorId,user.id,project.id]);
+  const initial = await signals.record(project, { kind: 'error_observed', objectKey: errorId, eventVersion: 'first', title: 'Original error', basis: { errorId, snapshotId: 'original', occurrence: { kind: 'first', snapshotId: 'original' } } });
+  assert.equal((await signals.detail(user, project.id, initial.id)).actionable, true);
+  const closed = { kind: 'business_closed', snapshotId: 'correct' };
+  await store.query("UPDATE evimed_geo.errors SET status='closed',judgment_history=$2::jsonb WHERE id=$1", [errorId,JSON.stringify([closed])]);
+  assert.equal((await signals.detail(user, project.id, initial.id)).actionable, false);
+  const reopened = { kind: 'business_reopened', snapshotId: 'later-wrong', previousClosedSnapshotId: 'correct' };
+  await store.query("UPDATE evimed_geo.errors SET status='open',judgment_history=$2::jsonb WHERE id=$1", [errorId,JSON.stringify([closed,reopened])]);
+  const next = await signals.record(project, { kind: 'error_observed', objectKey: errorId, eventVersion: 'actual-recurrence', title: 'Recurring error', basis: { errorId, snapshotId: 'later-wrong', occurrence: reopened } });
+  const old = await signals.detail(user, project.id, initial.id);
+  assert.equal(old.businessOutcome.state, 'closed'); assert.equal(old.actionable, false);
+  assert.equal((await signals.detail(user, project.id, next.id)).actionable, true);
+});
+
+test('legacy exact notice gains the signal destination without a second item or losing read state', options, async () => {
+  const inbox = new NotificationService(database), notifier = createGeoNotifier({ notifications: inbox, store });
+  const key = 'geo:wrong_ours:notice-error:first';
+  const notice = await notifier.wrongOurs(project, { id: 'notice-error', engine: 'deepseek', statement: 'Fictional error', severity: 'S3', last_snapshot_id: 'original-answer' }, { key });
+  const read = await inbox.markRead(user.id, notice.id, notice.revision);
+  const row = await signals.record(project, { kind: 'error_observed', objectKey: 'notice-error', eventVersion: 'first', title: 'Fictional error',
+    basis: { snapshotId: 'earliest-answer', notificationKey: key, engine: 'deepseek', severity: 'S3' } });
+  await notifier.signal(project, row); await notifier.signal(project, row);
+  const saved = await inbox.get(user.id, notice.id);
+  assert.deepEqual(saved.source, { type: 'geo', id: `${project.id}/signals/${row.id}` });
+  assert.equal(saved.readAt, read.readAt); assert.equal(saved.revision, read.revision + 1);
+  assert.equal((await database.query('SELECT count(*)::integer AS n FROM evimed_inbox.notifications WHERE user_id=$1', [user.id])).rows[0].n, 1);
+  assert.equal(await inbox.retargetEventSource('foreign', key, { from: { type: 'geo', id: `${project.id}/answers/original-answer` }, to: saved.source }), null);
+});
+
+test('first changed-text transition and repeated unchanged checks are one safety event; later independent recurrence is another', options, async () => {
+  const discovery = new GeoSignalDiscovery({ store, signals });
+  await store.query("INSERT INTO evimed_geo.orders(id,user_id,geo_project_id,state) VALUES('changed-order',$1,$2,'problem')", [user.id,project.id]);
+  const rows = [
+    ['changed-1','published','problem',{ reason: 'text_changed', checkpoint: 'initial' }],
+    ['changed-2','problem','problem',{ phase: 'check', reason: 'text_changed', check: { missing: [{ text: 'Same missing sentence' }] } }],
+    ['changed-3','problem','problem',{ phase: 'check', reason: 'text_changed', check: { missing: [{ text: 'Same missing sentence' }] } }],
+  ];
+  for (const [index, row] of rows.entries()) await store.query('INSERT INTO evimed_geo.order_events(id,order_id,at,from_state,to_state,detail) VALUES($1,\'changed-order\',$2,$3,$4,$5::jsonb)', [row[0],`2026-10-24T10:00:0${index}Z`,row[1],row[2],JSON.stringify(row[3])]);
+  const events = (await store.query("SELECT * FROM evimed_geo.order_events WHERE order_id='changed-order' ORDER BY at,id")).rows;
+  await discovery.orders(project,events); await discovery.orders(project,events);
+  const saved = await documents.list(user.id,'geo-signal',{ projectId:project.projectId,filter:{recordType:'geo-signal',kind:'order_anomaly',objectKey:'changed-order'} });
+  assert.equal(saved.items.length,1); assert.equal(saved.items[0].payload.basis.changedText,true); assert.equal(saved.items[0].payload.basis.eventId,'changed-1');
+  await store.query("INSERT INTO evimed_geo.order_events(id,order_id,at,from_state,to_state,detail) VALUES('recovered','changed-order','2026-10-24T10:00:04Z','problem','verified','{}'),('changed-4','changed-order','2026-10-24T10:00:05Z','verified','problem','{\"reason\":\"text_changed\"}')");
+  await discovery.orders(project,(await store.query("SELECT * FROM evimed_geo.order_events WHERE id='changed-4'")).rows);
+  assert.equal((await documents.list(user.id,'geo-signal',{projectId:project.projectId,filter:{recordType:'geo-signal',kind:'order_anomaly',objectKey:'changed-order'}})).items.length,2);
+});
+
+test('a GEO reader opens only the proved owner handling run/version, even with an equally named personal project; revocation and forged receipts deny', options, async () => {
+  const viewer = { id: 'shared-viewer' };
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Reader','development')", [viewer.id]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Unrelated equal ID',1048576)", [viewer.id,project.projectId]);
+  await store.query("INSERT INTO evimed_geo.members(geo_project_id,user_id,role) VALUES($1,$2,'viewer')", [project.id,viewer.id]);
+  const row = await signals.record(project,event('shared-read'));
+  const adapter = new GeoPlanContext({ documents,store,service,authorizeSession:async()=>{},runs:async()=>runs });
+  const staged = await adapter.stage(user,project.id,{requestKey:'shared-read-stage',sessionId:'shared-session',mode:'signal',signalId:row.id,expectedSignalRevision:1,intent:'analyse'});
+  const request = {requestId:'shared-request',sessionId:'shared-session',content:[{type:'text',text:'Explain'}],geoPlanContext:{referenceId:staged.referenceId}};
+  await adapter.prepare(user,{id:project.projectId,userId:user.id},request); await store.transaction(()=>adapter.bind(user,{id:project.projectId,userId:user.id},request));
+  const run={id:'shared-run',sessionId:'shared-session',kernelRequestIds:['shared-request'],status:'succeeded'}; runs.push(run);
+  const version={versionId:`rv_${'a'.repeat(64)}`,projectId:project.projectId,path:'deliverables/actual/report.md',digest:'d'.repeat(64),mimeType:'text/markdown',producer:{kind:'runtime',runId:run.id,sessionId:run.sessionId}};
+  const reads=[];
+  const results={ list:async(owner,filter)=>{reads.push([owner,filter.projectId]);return{items:[version],nextCursor:null};},
+    get:async(owner,control,id)=>{reads.push([owner,control]);return id===version.versionId?version:{...version,versionId:id,producer:{...version.producer,sessionId:'unrelated'}};},
+    raw:async(owner,control)=>{reads.push([owner,control]);return{version,bytes:Buffer.from('Actual preserved output')};} };
+  const bridge=new GeoSignalResults({signals,contexts:adapter,results,controlProject:async value=>{assert.equal(value.userId,user.id);return{id:value.projectId,userId:value.userId};},
+    readHistory:async(control,session,only,read,scope)=>{assert.equal(control.userId,user.id);assert.equal(session,run.sessionId);assert.deepEqual(only,[run]);assert.equal(scope.runId,run.id);return{sessionId:session,messages:[{role:'assistant',text:'Actual reply'}],partial:false};} });
+  const record=await bridge.record(viewer,project.id,row.id,run.id);
+  assert.equal(record.history.messages[0].text,'Actual reply');assert.equal(record.files[0].versionId,version.versionId);
+  assert.equal((await bridge.version(viewer,project.id,row.id,run.id,version.versionId,{raw:true})).bytes.toString(),'Actual preserved output');
+  assert.ok(reads.every(([owner,control])=>owner===user.id&&control===project.projectId));
+  assert.equal((await bridge.record(viewer,project.id,null,run.id)).runId,run.id,'the same exact grant serves the project run drawer');
+  runs.push({id:'unrelated-personal',sessionId:'personal',kernelRequestIds:['unrelated-personal-input'],status:'succeeded'});
+  await assert.rejects(bridge.record(viewer,project.id,null,'unrelated-personal'),error=>error.status===404);
+  runs.push({id:'programme-run',sessionId:'programme-session',status:'succeeded'});
+  const programmeBridge=new GeoSignalResults({signals,contexts:adapter,results,controlProject:async value=>({id:value.projectId,userId:value.userId}),
+    programmeRuns:async()=>[{runId:'programme-run',sessionId:'programme-session'}],readHistory:async(_control,session,only)=>({sessionId:session,messages:[{role:'assistant',text:only[0].id}],partial:false})});
+  assert.equal((await programmeBridge.record(viewer,project.id,null,'programme-run')).history.messages[0].text,'programme-run');
+  await assert.rejects(programmeBridge.record(viewer,project.id,row.id,'programme-run'),error=>error.status===404,'a programme grant cannot pretend to handle this signal');
+  await assert.rejects(bridge.record(viewer,project.id,row.id,'foreign-run'),error=>error.status===404);
+  await assert.rejects(bridge.version(viewer,project.id,row.id,run.id,`rv_${'b'.repeat(64)}`,{raw:true}),error=>error.status===404);
+  const binding=(await documents.list(user.id,'geo-plan-context',{projectId:project.projectId,filter:{recordType:'geo-plan-request',requestId:'shared-request'}})).items[0];
+  await documents.put(user.id,'geo-plan-context',binding.id,{...binding.payload,requestDigest:'tampered'},{projectId:project.projectId,expectedRevision:binding.revision});
+  await assert.rejects(bridge.record(viewer,project.id,row.id,run.id),error=>error.status===404);
+  await store.query('DELETE FROM evimed_geo.members WHERE geo_project_id=$1 AND user_id=$2',[project.id,viewer.id]);
+  const before=reads.length;
+  await assert.rejects(bridge.version(viewer,project.id,row.id,run.id,version.versionId,{raw:true}),error=>error.status===404);
+  assert.equal(reads.length,before,'revoked membership never reaches owner result storage');
 });

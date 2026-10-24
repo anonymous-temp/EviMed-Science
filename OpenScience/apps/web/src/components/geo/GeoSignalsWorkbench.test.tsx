@@ -5,7 +5,7 @@ import { GeoSignalsWorkbench } from './GeoSignalsWorkbench';
 import type { GeoSignalDetail, GeoSignalPage } from '@/lib/geoSignalsClient';
 
 const api = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), disposition: vi.fn(), project: vi.fn(), stage: vi.fn(), open: vi.fn(), drawer: vi.fn() }));
-vi.mock('@/lib/geoSignalsClient', () => ({ listGeoSignals: api.list, getGeoSignal: api.detail, setGeoSignalDisposition: api.disposition }));
+vi.mock('@/lib/geoSignalsClient', async original => ({ ...await original<typeof import('@/lib/geoSignalsClient')>(), listGeoSignals: api.list, getGeoSignal: api.detail, setGeoSignalDisposition: api.disposition }));
 vi.mock('@/lib/geoClient', async original => ({ ...await original<typeof import('@/lib/geoClient')>(), getGeoProject: api.project, stageGeoPlanContext: api.stage }));
 vi.mock('./useOpenGeoConversation', () => ({ useOpenGeoConversation: () => api.open }));
 vi.mock('./useGeoPath', () => ({ useGeoDestinationPath: () => () => '/app/geo/geo/actions?session=held#geo-distribution' }));
@@ -58,7 +58,7 @@ it('opens the exact run and immutable result version without claiming medical re
   const completed = { ...attempt, status: 'succeeded', state: 'completed' as const, executionState: 'completed' as const, result: { present: true, artifacts: [{ id: 'rv_old', path: 'deliverables/a/report.md', runId: 'exact-run', sessionId: 'original-session' }] } };
   api.detail.mockResolvedValue(signal({ kind: 'error_observed', state: 'completed', currentAttempt: completed, attempts: [completed], businessOutcome: { state: 'awaiting_remeasure' } }));
   draw(); expect(await screen.findByText('等待后续观察')).toBeTruthy();
-  expect(screen.getByRole('link', { name: /report.md/ })).toHaveAttribute('href', '/app/runs/exact-run/files/deliverables/a/report.md?version=rv_old');
+  expect(screen.getByRole('link', { name: /report.md/ })).toHaveAttribute('href', '/app/runs/exact-run/files/deliverables/a/report.md?version=rv_old&geoProject=geo&signal=gs_exact');
   fireEvent.click(screen.getByRole('button', { name: '查看本次运行' }));
   expect(api.drawer).toHaveBeenCalledWith(expect.objectContaining({ initialRun: expect.objectContaining({ runId: 'exact-run', sessionId: 'original-session' }) }));
 });
@@ -91,4 +91,11 @@ it('overview preview reads full actionable scope and history opens through the s
   fireEvent.click(screen.getByRole('button', { name: '查看全部发现' }));
   expect(await screen.findByRole('combobox', { name: '处理状态' })).toBeTruthy();
   expect(api.list).toHaveBeenCalledWith('geo', { limit: 20 });
+});
+
+it('keeps history reachable after the final actionable item was ignored', async () => {
+  api.list.mockResolvedValue({ ...page([]), counts: { ...page([]).counts, ignored: 1 } });
+  draw('/app/geo/geo');
+  fireEvent.click(await screen.findByRole('button', { name: '查看全部发现' }));
+  expect(await screen.findByRole('combobox', { name: '处理状态' })).toBeTruthy();
 });

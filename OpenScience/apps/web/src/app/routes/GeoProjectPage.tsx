@@ -28,6 +28,8 @@ import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { ProgrammeRunsDrawer } from "@/components/runs/ProgrammeRunsDrawer";
 import { GeoSignalsWorkbench } from "@/components/geo/GeoSignalsWorkbench";
+import { getGeoSignalRunRecord, geoSignalResultHref } from "@/lib/geoSignalsClient";
+import type { ProgrammeRun } from "@/lib/programmeRuns";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
@@ -379,6 +381,12 @@ function GeoBand({
   };
   // What a reader of the AI-run record needs to know to read it again: a step that began or ended, or the project moving on.
   const runsVersion = [project.updatedAt ?? "", ...GEO_STEP_KEYS.map((step) => `${step}:${project.steps[step]?.status ?? "none"}`)].join("|");
+  const readRunRecord = useCallback(async (run: ProgrammeRun) => {
+    if (!run.runId) throw new Error('An exact execution is required.');
+    const record = await getGeoSignalRunRecord(geoId, null, run.runId);
+    if (record.runId !== run.runId || record.sessionId !== run.sessionId) throw new Error('The returned execution does not match.');
+    return { history: record.history, files: record.files.map(file => ({ ...file, href: geoSignalResultHref(geoId, null, file) })) };
+  }, [geoId]);
 
   const paused = project.status === "paused";
   // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
@@ -518,7 +526,7 @@ function GeoBand({
         />
       )}
       {panel === "members" && <MembersDialog geoId={geoId} onClose={() => onPanel(null)} />}
-      {panel === "runs" && <ProgrammeRunsDrawer projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} version={runsVersion} onClose={() => onPanel(null)} />}
+      {panel === "runs" && <ProgrammeRunsDrawer projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} readRecord={project.signalsSupported ? readRunRecord : undefined} version={runsVersion} onClose={() => onPanel(null)} />}
       {panel === "rename" && (
         <RenameDialog
           geoId={geoId}

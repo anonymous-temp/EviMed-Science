@@ -45,6 +45,15 @@ afterEach(() => {
 });
 
 describe("AI 运行 — the record of what a module's programme did in the background", () => {
+  it('uses the supplied exact module reader without reaching owner-only generic history or file APIs', async () => {
+    const run = { ...RUNS[0], runId: 'exact' };
+    const readRecord = vi.fn().mockResolvedValue({ history: { sessionId: run.sessionId, capturedAt: null, partial: false, messages: [{ seq: 1, role: 'assistant', text: 'Shared run answer' }] },
+      files: [{ runId: run.runId, path: 'report.txt', href: '/app/runs/exact/files/report.txt?geoProject=geo&signal=signal&version=version' }] });
+    draw({ initialRun: run, readRecord });
+    expect(await screen.findByText('Shared run answer')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'report.txt' })).toHaveAttribute('href', '/app/runs/exact/files/report.txt?geoProject=geo&signal=signal&version=version');
+    expect(api.runs).not.toHaveBeenCalled(); expect(api.history).not.toHaveBeenCalled();
+  });
   it("lists the runs by what they were, with a state word and a time, and never an id", async () => {
     draw();
     const drawer = await screen.findByRole("dialog", { name: "AI 运行" });

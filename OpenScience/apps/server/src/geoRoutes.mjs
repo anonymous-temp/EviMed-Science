@@ -187,6 +187,7 @@ function money(value, field, zero = false) {
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   selectedExporter?: any,
  *   signals?: import('./geoSignals.mjs').GeoSignals | null,
+ *   signalResults?: import('./geoSignalResults.mjs').GeoSignalResults | null,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any>,
  *     articleReferences?: (project: any, articleId: string) => Promise<any>, articlePublishable?: (project: any, articleId: string) => Promise<any> } | null,
@@ -224,6 +225,7 @@ export function createGeoRoutes(dependencies) {
       get members() { return dependencies.members ?? null; },
       get market() { return dependencies.market ?? null; },
       get signals() { return dependencies.signals ?? null; },
+      get signalResults() { return dependencies.signalResults ?? null; },
     };
 
     // --- operators: the platform's marketplace account ---
@@ -344,8 +346,35 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const tab = parts[2];
+    if (tab === 'runs' && method === 'GET' && hooks.signalResults && parts.length > 3) {
+      if (parts.length === 4) return reply(await hooks.signalResults.record(user, id, null, parts[3]));
+      if (parts[4] === 'results' && [6, 7].includes(parts.length) && (parts.length === 6 || parts[6] === 'raw')) {
+        const value = await hooks.signalResults.version(user, id, null, parts[3], parts[5], { raw: parts.length === 7 });
+        if (parts.length === 6) return reply(value);
+        const { version, bytes } = value;
+        res.writeHead(200, { 'Content-Type': version.mimeType, 'Content-Length': bytes.length,
+          'Content-Disposition': `${url.searchParams.get('download') === '1' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(version.path.split('/').at(-1))}`,
+          'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:", ETag: `"${version.digest}"` });
+        res.end(bytes); return true;
+      }
+      throw new HttpError(404, 'not_found', 'GEO execution route not found.');
+    }
     if (tab === "signals") {
       if (!hooks.signals) throw UNAVAILABLE();
+      if (method === "GET" && parts[4] === "runs" && hooks.signalResults) {
+        if (parts.length === 6) return reply(await hooks.signalResults.record(user, id, parts[3], parts[5]));
+        if (parts[6] === "results" && [8, 9].includes(parts.length) && (parts.length === 8 || parts[8] === "raw")) {
+          const value = await hooks.signalResults.version(user, id, parts[3], parts[5], parts[7], { raw: parts.length === 9 });
+          if (parts.length === 8) return reply(value);
+          const { version, bytes } = value;
+          res.writeHead(200, { "Content-Type": version.mimeType, "Content-Length": bytes.length,
+            "Content-Disposition": `${url.searchParams.get("download") === "1" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(version.path.split("/").at(-1))}`,
+            "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
+            "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:", ETag: `"${version.digest}"` });
+          res.end(bytes); return true;
+        }
+      }
       if (method === "GET" && parts.length === 3) {
         const query = {};
         for (const key of url.searchParams.keys()) {

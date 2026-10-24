@@ -1,5 +1,6 @@
 import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES, geoAbilitiesOf, geoSignalHref } from "@evimed/domain";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
+import { notificationEventId } from "./notificationService.mjs";
 
 /**
  * 「循证 GEO」's notices (build spec 2026-09-25 §5; plan §5.7): exactly five
@@ -157,7 +158,7 @@ const OPERATOR_TITLES = Object.freeze({
 });
 
 /**
- * @param {{ notifications: { create: (userId: string, input: Record<string, any>) => Promise<any> } | null,
+ * @param {{ notifications: { create: (userId: string, input: Record<string, any>) => Promise<any>, get?: (userId:string,id:string)=>Promise<any>, retargetEventSource?: (userId:string,key:string,change:{from:any,to:any})=>Promise<any> } | null,
  *   store: { query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }> },
  *   config?: Record<string, any>, now?: () => Date,
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown> | unknown }} dependencies
@@ -172,10 +173,21 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
    * One person's inbox item. Their own refusal is their own loss: it is counted and audited, and the next person is still told. The
    * item is filed under the control-plane project only for the owner: the inbox holds an item's project to the recipient's own
    * (a foreign key on user and project), and a member's project is the owner's. The item opens the GEO page by its source either way.
-   * @param {any} project @param {string} kind @param {Record<string, any>} input @param {string} userId
+   * @param {any} project @param {string} kind @param {Record<string, any>} input @param {string} userId @param {any} [redirectFrom]
    */
-  async function deliver(project, kind, input, userId) {
+  async function deliver(project, kind, input, userId, redirectFrom = null) {
     try {
+      if (redirectFrom && notifications?.retargetEventSource && input.idempotencyKey) {
+        let original = redirectFrom;
+        if (notifications.get) {
+          try {
+            const previous = await notifications.get(userId, notificationEventId(userId, input.idempotencyKey));
+            if (previous.source?.type === 'geo' && previous.source.id.startsWith(`${project.id}/answers/`)) original = previous.source;
+          } catch (error) { if (error?.code !== 'notification_not_found') throw error; }
+        }
+        const redirected = await notifications.retargetEventSource(userId, input.idempotencyKey, { from: original, to: input.source });
+        if (redirected) { counts[kind] = (counts[kind] ?? 0) + 1; return redirected; }
+      }
       const item = await /** @type {NonNullable<typeof notifications>} */ (notifications).create(userId, {
         noticeType: "notify",
         actions: [{ id: "open", label: "打开", style: "primary" }],
@@ -218,12 +230,13 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
   /**
    * A notice to the owner and to the members it is for (`HEARD_BY`). The answer is the owner's.
    * @param {any} project @param {string} kind @param {Record<string, any>} input @param {readonly string[]} abilities the abilities that make it a member's business
+   * @param {any} [redirectFrom]
    */
-  async function send(project, kind, input, abilities) {
+  async function send(project, kind, input, abilities, redirectFrom = null) {
     if (!notifications) { counts.skipped += 1; return null; }
-    const owner = await deliver(project, kind, input, String(project.userId));
+    const owner = await deliver(project, kind, input, String(project.userId), redirectFrom);
     for (const userId of await membersFor(project, abilities)) {
-      if (await deliver(project, kind, input, userId)) counts.members += 1;
+      if (await deliver(project, kind, input, userId, redirectFrom)) counts.members += 1;
     }
     return owner;
   }
@@ -245,7 +258,8 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         severity: safety ? "safety" : "attention", source: source(project.id, "signals", row.id),
         idempotencyKey: signal.basis.notificationKey ?? `geo:${project.id}:signal:${row.id}`,
         ...(folded ? { groupKey: `geo-wrong:${project.id}:${dayIn(new Date(signal.detectedAt), timeZone)}` } : {}),
-      }, safety ? HEARD_BY.correction : HEARD_BY.progress);
+      }, signal.kind === "order_anomaly" && signal.basis.changedText ? HEARD_BY.publishedText : safety ? HEARD_BY.correction : HEARD_BY.progress,
+      signal.kind === "error_observed" && signal.basis.snapshotId ? source(project.id, "answers", signal.basis.snapshotId) : null);
     },
 
     /** 1. 诊断完成. @param {any} project @param {{ roundId: string, engines: number, answers: number, wrongOurs: number }} facts */

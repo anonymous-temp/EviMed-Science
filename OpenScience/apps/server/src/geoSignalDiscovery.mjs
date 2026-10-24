@@ -89,11 +89,23 @@ export class GeoSignalDiscovery {
 
   async orders(project, events) {
     for (const event of events) {
-      const altered = event.detail?.phase === 'check' && event.detail?.reason === 'text_changed' && event.detail?.check?.missing?.length > 0;
+      const altered = event.detail?.reason === 'text_changed';
       if (!(event.from_state !== event.to_state && ['unknown', 'rejected', 'problem', 'lost'].includes(event.to_state)) && !altered) continue;
+      let origin = event.id;
+      if (altered) {
+        const first = await this.store.query(`WITH current_event AS (SELECT at,id FROM evimed_geo.order_events WHERE order_id=$1 AND id=$2)
+          SELECT e.id FROM evimed_geo.order_events e,current_event current WHERE e.order_id=$1 AND e.detail->>'reason'='text_changed'
+          AND (e.at,e.id)<=(current.at,current.id) AND NOT EXISTS (
+            SELECT 1 FROM evimed_geo.order_events boundary WHERE boundary.order_id=$1 AND (boundary.at,boundary.id)>(e.at,e.id)
+              AND (boundary.at,boundary.id)<=(current.at,current.id)
+              AND (boundary.detail->>'reason' IS NOT NULL AND boundary.detail->>'reason'<>'text_changed'
+                OR boundary.from_state IS DISTINCT FROM boundary.to_state AND boundary.to_state<>'problem'))
+          ORDER BY e.at,e.id LIMIT 1`, [event.order_id, event.id]);
+        origin = first.rows[0]?.id ?? event.id;
+      }
       const row = await this.signals.record(project, { kind: 'order_anomaly', objectKey: event.order_id,
-        eventVersion: altered ? `text:${digest(event.detail.check.missing)}` : event.id, observedAt: event.at, title: altered ? '已发布内容发生变化，需要检查' : '投放订单需要处理',
-        basis: { orderId: event.order_id, eventId: event.id, fromState: event.from_state, toState: event.to_state,
+        eventVersion: altered ? `text:${origin}` : event.id, observedAt: event.at, title: altered ? '已发布内容发生变化，需要检查' : '投放订单需要处理',
+        basis: { orderId: event.order_id, eventId: origin, fromState: event.from_state, toState: event.to_state,
           changedText: altered, articleId: event.article_id, articleResultVersionId: event.article_result_version_id ?? null,
           articleDigest: event.article_digest ?? null, remedy: 'existing_order_detail' } });
       await this.signals.deliver(project, row);

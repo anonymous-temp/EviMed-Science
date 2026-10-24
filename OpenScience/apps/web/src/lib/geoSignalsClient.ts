@@ -1,5 +1,7 @@
 import { productRequest } from './productClient';
 import type { GEO_SIGNAL_STEPS, GEO_SIGNAL_STATE_LABELS_ZH } from '@evimed/domain';
+import { fetchWithWebAuth, webApiBase, WebApiError, type PreservedConversationHistory } from './apiClient';
+import type { ResultVersion } from './resultProvenance';
 
 export type GeoSignalKind = keyof typeof GEO_SIGNAL_STEPS;
 export type GeoSignalState = keyof typeof GEO_SIGNAL_STATE_LABELS_ZH;
@@ -34,3 +36,16 @@ export function listGeoSignals(geoId: string, input: { limit?: number; cursor?: 
 export const getGeoSignal = (geoId: string, signalId: string) => productRequest<GeoSignalDetail>(`${root(geoId)}/${encodeURIComponent(signalId)}`);
 export const setGeoSignalDisposition = (geoId: string, signalId: string, input: { expectedRevision: number; requestKey: string; disposition: 'active' | 'ignored'; reason?: string }) =>
   productRequest<GeoSignalDetail>(`${root(geoId)}/${encodeURIComponent(signalId)}/disposition`, 'POST', input);
+
+const runPath = (geoId: string, signalId: string | null, runId: string) => signalId ? `${root(geoId)}/${encodeURIComponent(signalId)}/runs/${encodeURIComponent(runId)}` : `/geo/projects/${encodeURIComponent(geoId)}/runs/${encodeURIComponent(runId)}`;
+export interface GeoSignalRunRecord { runId: string; sessionId: string; history: PreservedConversationHistory; files: Array<{ versionId: string; path: string; runId: string; sessionId: string }> }
+export const getGeoSignalRunRecord = (geoId: string, signalId: string | null, runId: string) => productRequest<GeoSignalRunRecord>(runPath(geoId, signalId, runId));
+export const getGeoSignalResult = (geoId: string, signalId: string | null, runId: string, versionId: string) => productRequest<ResultVersion>(`${runPath(geoId, signalId, runId)}/results/${encodeURIComponent(versionId)}`);
+export async function readGeoSignalResultBytes(geoId: string, signalId: string | null, runId: string, versionId: string): Promise<Blob> {
+  const base = webApiBase.endsWith('/api') ? webApiBase : `${webApiBase}/api`;
+  const response = await fetchWithWebAuth(`${base}${runPath(geoId, signalId, runId)}/results/${encodeURIComponent(versionId)}/raw`);
+  if (!response.ok) { const body = await response.json().catch(() => ({})); throw new WebApiError(body.error ?? 'Result unavailable', { status: response.status, code: body.code ?? 'geo_signal_not_found' }); }
+  return response.blob();
+}
+export const geoSignalResultHref = (geoId: string, signalId: string | null, file: { runId: string; path: string; versionId: string }) =>
+  `/app/runs/${encodeURIComponent(file.runId)}/files/${file.path.split('/').map(encodeURIComponent).join('/')}?${new URLSearchParams({ version: file.versionId, geoProject: geoId, ...(signalId ? { signal: signalId } : { geoRun: '1' }) })}`;

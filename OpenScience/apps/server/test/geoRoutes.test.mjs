@@ -440,6 +440,24 @@ test('execution history unions exact attended runs and pages beyond fifty withou
   assert.equal(next.json().data.runs.find(run => run.runId === runs[2].runId).label, 'Exact signal handling');
 });
 
+test('scoped signal run and immutable raw routes retain caller identity and sandbox the exact returned bytes', async () => {
+  const calls = [], signalId = `gs_${'a'.repeat(64)}`, versionId = `rv_${'b'.repeat(64)}`;
+  const signalResults = { record: async (...args) => { calls.push(args); return { runId: 'run_actual' }; }, version: async (...args) => {
+    calls.push(args); return { version: { path: 'report.html', mimeType: 'text/html', digest: 'c'.repeat(64) }, bytes: Buffer.from('<p>Saved result</p>') };
+  } };
+  const { routes } = fixture({ signals: {}, signalResults });
+  await routes(request('GET', `/api/geo/projects/geo_1/signals/${signalId}/runs/run_actual`), response());
+  assert.deepEqual(calls[0], [{ id: 'reader' }, 'geo_1', signalId, 'run_actual']);
+  const out = response(); let headers;
+  out.writeHead = function(status, value) { this.status = status; headers = value; return this; };
+  await routes(request('GET', `/api/geo/projects/geo_1/signals/${signalId}/runs/run_actual/results/${versionId}/raw?download=1`), out);
+  assert.deepEqual(calls[1], [{ id: 'reader' }, 'geo_1', signalId, 'run_actual', versionId, { raw: true }]);
+  assert.equal(out.body, '<p>Saved result</p>'); assert.equal(headers['Cache-Control'], 'private, no-store');
+  assert.match(headers['Content-Security-Policy'], /^sandbox; default-src 'none'/); assert.match(headers['Content-Disposition'], /^attachment;/);
+  await routes(request('GET', '/api/geo/projects/geo_1/runs/run_actual'), response());
+  assert.deepEqual(calls[2], [{ id: 'reader' }, 'geo_1', null, 'run_actual']);
+});
+
 
 test("planning boundary errors belong to the closed registry and tell the person how to recover", async()=>{
   const emitted = new Set();

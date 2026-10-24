@@ -12,6 +12,20 @@ const iso = value => value == null || !Number.isFinite(new Date(value).getTime()
 /** The event's identity excludes presentation, polling clocks and notification delivery attempts. */
 export const geoSignalId = (projectId, kind, objectKey, eventVersion) => `gs_${digest([projectId, kind, objectKey, eventVersion])}`;
 
+/** A later recurrence has its own event. It does not reopen the historical handling episode. */
+export function geoSignalErrorOutcome(error, basis) {
+  if (!error) return { state: 'unknown' };
+  const history = Array.isArray(error.judgment_history) ? error.judgment_history : [];
+  const occurrence = basis.occurrence;
+  const index = occurrence?.kind === 'first' ? -1 : history.findIndex(entry => canonicalJson(entry) === canonicalJson(occurrence));
+  if (occurrence?.kind !== 'first' && index < 0) return { state: 'unknown', observation: 'episode_unavailable' };
+  for (const entry of history.slice(index + 1)) {
+    if (entry.kind === 'business_reopened') return { state: 'closed', observation: 'historical_episode', closedSnapshotId: entry.previousClosedSnapshotId ?? null };
+    if (['new_wrong_occurrence', 'judgment_reactivated'].includes(entry.kind)) return { state: 'withdrawn', observation: 'historical_episode' };
+  }
+  return { state: error.judgment_state === 'withdrawn' ? 'withdrawn' : error.status, observation: 'current' };
+}
+
 /**
  * Associations and reversible dispositions over existing event and run owners. No model, payment or new job engine.
  * Producers supply the immutable event basis; public routes accept only selection and disposition.
@@ -111,15 +125,16 @@ export class GeoSignals {
       ...(row.payload.kind === 'error_observed' || row.payload.basis.targets?.some(target => target.type === 'article') || row.payload.basis.articleId ? ['content'] : [])])];
     return { id: row.id, revision: row.revision, kind: row.payload.kind, step: row.payload.step, affectedSteps, title: row.payload.title,
       createdAt: row.createdAt, observedAt: row.payload.observedAt, detectedAt: row.payload.detectedAt, disposition: row.payload.disposition,
-      ...lifecycle, businessOutcome, actionable: ['pending', 'failed_recoverable'].includes(lifecycle.state) && !['closed', 'withdrawn'].includes(businessOutcome.state),
+      ...lifecycle, businessOutcome, actionable: ['pending', 'failed_recoverable'].includes(lifecycle.state) && !['closed', 'withdrawn'].includes(businessOutcome.state)
+        && !(row.payload.kind === 'error_observed' && businessOutcome.state === 'unknown'),
       currentAttempt: current, attempts };
   }
 
   async businessOutcome(project, row) {
     const basis = row.payload.basis;
     if (row.payload.kind === 'error_observed') {
-      const error = (await this.store.query('SELECT status,judgment_state FROM evimed_geo.errors WHERE geo_project_id=$1 AND id=$2', [project.id, basis.errorId])).rows[0];
-      return error ? { state: error.judgment_state === 'withdrawn' ? 'withdrawn' : error.status, observation: 'current' } : { state: 'unknown' };
+      const error = (await this.store.query('SELECT status,judgment_state,judgment_history FROM evimed_geo.errors WHERE geo_project_id=$1 AND id=$2', [project.id, basis.errorId])).rows[0];
+      return geoSignalErrorOutcome(error, basis);
     }
     if (row.payload.kind === 'order_anomaly') {
       const order = (await this.store.query('SELECT state FROM evimed_geo.orders WHERE geo_project_id=$1 AND id=$2', [project.id, basis.orderId])).rows[0];

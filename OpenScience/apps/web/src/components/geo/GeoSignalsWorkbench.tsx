@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { GEO_SIGNAL_STATE_LABELS_ZH } from '@evimed/domain';
 import { getGeoProject, stageGeoPlanContext, type GeoProject } from '@/lib/geoClient';
-import { getGeoSignal, listGeoSignals, setGeoSignalDisposition, type GeoSignal, type GeoSignalDetail, type GeoSignalPage, type GeoSignalState, type GeoSignalAttempt } from '@/lib/geoSignalsClient';
+import { getGeoSignal, listGeoSignals, setGeoSignalDisposition, getGeoSignalRunRecord, geoSignalResultHref, type GeoSignal, type GeoSignalDetail, type GeoSignalPage, type GeoSignalState, type GeoSignalAttempt } from '@/lib/geoSignalsClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import type { ProgrammeRun } from '@/lib/programmeRuns';
 import { Button } from '@/components/ui/Button';
@@ -72,7 +72,7 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   };
   if (!page && error) return <LoadError message={error} onRetry={() => setRound(value => value + 1)} />;
   if (!page) return <p role="status" className="py-2 text-ui text-text-3">正在读取发现与处理…</p>;
-  if (!expanded && page.total === 0 && !error) return null;
+  if (!expanded && page.total === 0 && Object.values(page.counts).every(count => count === 0) && !error) return null;
   return <Section title="发现与处理" count={page.total} toolbar={<div className="flex items-center gap-2">
     {expanded && <Select aria-label="处理状态" value={filter} onChange={event => setFilter(event.target.value as GeoSignalState | '')}><option value="">全部状态</option>{Object.entries(GEO_SIGNAL_STATE_LABELS_ZH).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>}
     {expanded && <Button variant="text" size="sm" onClick={() => setRound(value => value + 1)}>刷新记录</Button>}
@@ -99,6 +99,12 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
   const keys = useRef(new Map<string, string>());
   const arrival = useRef(location.key); arrival.current = location.key;
   const alive = useRef(true);
+  const readRecord = useCallback(async (run: ProgrammeRun) => {
+    if (!run.runId) throw new Error('An exact handling run is required.');
+    const record = await getGeoSignalRunRecord(geoId, signalId, run.runId);
+    if (record.runId !== run.runId || record.sessionId !== run.sessionId) throw new Error('The returned handling record does not match.');
+    return { history: record.history, files: record.files.map(file => ({ ...file, href: geoSignalResultHref(geoId, signalId, file) })) };
+  }, [geoId, signalId]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     let current = true;
@@ -179,10 +185,10 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
         {active && attempt && <Button variant="text" onClick={() => void open({ geoId, projectId: project.projectId, sessionId: attempt.sessionId, exactSession: true })}>回到正在处理的对话</Button>}
         {canEdit && <Button variant="text" loading={busy} onClick={() => void disposition()}>{signal.disposition === 'ignored' ? '恢复提醒' : '忽略这条提醒'}</Button>}
       </div>
-      {attempt?.result?.artifacts?.map(file => <Link key={file.id} className="text-ui text-link hover:underline" to={`/app/runs/${encodeURIComponent(file.runId)}/files/${file.path.split('/').map(encodeURIComponent).join('/')}?version=${encodeURIComponent(file.id)}`}>{file.path.split('/').at(-1)} · 本次产出版本</Link>)}
+      {attempt?.result?.artifacts?.map(file => <Link key={file.id} className="text-ui text-link hover:underline" to={geoSignalResultHref(geoId, signalId, { ...file, versionId: file.id })}>{file.path.split('/').at(-1)} · 本次产出版本</Link>)}
       {signal.attempts.length > 1 && <List label="处理历史" divided>{signal.attempts.map(item => <ListRow key={item.contextRef} title={GEO_SIGNAL_STATE_LABELS_ZH[item.state]} meta={time(item.startedAt ?? item.createdAt)} onOpen={item.runId ? () => setRecord(runOf(item, signal.title)) : undefined} />)}</List>}
       {signal.disposition === 'ignored' && <p className="text-ui text-text-3">忽略只影响这条提醒；正在运行的任务和原有业务状态继续保留。</p>}
     </div>
-    {record && <ProgrammeRunsDrawer key={record.runId ?? record.sessionId} projectId={project.projectId} load={async () => [record]} initialRun={record} onClose={() => setRecord(null)} />}
+    {record && <ProgrammeRunsDrawer key={record.runId ?? record.sessionId} projectId={project.projectId} load={async () => [record]} initialRun={record} readRecord={readRecord} onClose={() => setRecord(null)} />}
   </Section>;
 }

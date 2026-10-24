@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ResultComparison, ResultVersionInspector } from "./ResultVersionInspector";
+import { ResultComparison, ResultVersionInspector, ScopedResultVersionInspector } from "./ResultVersionInspector";
 import { WebApiError } from "@/lib/apiClient";
 import type { ResultVersion } from "@/lib/resultProvenance";
 
@@ -36,6 +36,17 @@ beforeEach(() => {
 });
 vi.mock("@/components/frontier/PublishAsEvidenceCard", async (original) => ({ ...await original<typeof import("@/components/frontier/PublishAsEvidenceCard")>(),
   PublishAsEvidenceCard: ({ version, onClose }: { version: ResultVersion; onClose: () => void }) => <div role="dialog" aria-label="发布为证据卡"><p data-testid="publishing">{version.versionId}</p><button type="button" onClick={onClose}>关闭对话框</button></div> }));
+
+it('a scoped result exposes preview and exact-byte download without owner mutations or account-wide reads', async () => {
+  const bytes = { text: async () => 'Scoped preserved text' } as Blob;
+  const read = vi.fn().mockResolvedValue({ version: old, bytes });
+  render(<MemoryRouter><ScopedResultVersionInspector path={old.path} runId="run_1" versionId={old.versionId} read={read} /></MemoryRouter>);
+  expect(await screen.findByText('Scoped preserved text')).toBeTruthy();
+  await userEvent.click(screen.getByRole('button', { name: '下载此版本' }));
+  expect(api.save).toHaveBeenCalledWith(bytes, 'report.md');
+  for (const method of [api.list, api.related, api.get, api.raw, api.revision, api.replay, api.export]) expect(method).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: '重算此结果' })).toBeNull(); expect(screen.queryByRole('button', { name: '发布为证据卡' })).toBeNull();
+});
 describe("publishing a clinical result as an evidence card", () => {
   it("offers 发布为证据卡 only on a result whose capture recorded an evidence matrix, and opens the dialog for that version", async () => {
     api.get.mockImplementation(async () => ({ ...latest, review: { status: "available", matrixVersionId: `rv_${"c".repeat(64)}` } }));

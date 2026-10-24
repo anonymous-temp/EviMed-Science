@@ -357,6 +357,7 @@ import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoPlanContext } from "./geoPlanContext.mjs";
 import { GeoSignals } from "./geoSignals.mjs";
 import { GeoSignalDiscovery } from "./geoSignalDiscovery.mjs";
+import { GeoSignalResults } from "./geoSignalResults.mjs";
 import { GeoArticleResults } from "./geoArticleResults.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
@@ -2296,7 +2297,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   gradedSha256: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
-   *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, signals?: GeoSignals, signalDiscovery?: GeoSignalDiscovery,
+   *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, signals?: GeoSignals, signalDiscovery?: GeoSignalDiscovery, signalResults?: GeoSignalResults,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   /** @type {GeoArticleResults | null} */
@@ -2499,6 +2500,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
     get signals() { return geo?.signals ?? null; },
+    get signalResults() { return geo?.signalResults ?? null; },
     get selectedExporter() { return documentExportService; },
     get exporter() { return geo?.exporter ?? null; },
     get members() { return geo?.members ?? null; },
@@ -2665,6 +2667,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return { present: artifacts.length > 0 || !professional && answer.available, artifacts, answer };
       } });
     geo.service.signals = geo.signals;
+    if (resultProvenance) geo.signalResults = new GeoSignalResults({ signals: geo.signals, contexts: geoPlanContexts, results: resultProvenance,
+      programmeRuns: async project => programmeRunsOf(await store.requireProject({ id: project.userId }, project.projectId)),
+      controlProject: project => store.requireProject({ id: project.userId }, project.projectId) });
   }
   const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
