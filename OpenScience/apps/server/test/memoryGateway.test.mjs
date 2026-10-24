@@ -110,7 +110,7 @@ test("a caller with no token, a role, or a route outside the table is refused by
 test("health answers liveness and version only, and status is the caller's own space without asking the engine", async (t) => {
   const { stub, call } = await fixture(t);
   const health = await call("GET", "/health");
-  assert.deepEqual(health.json, { status: "ok", healthy: true, version: "v0.5.0" });
+  assert.deepEqual(health.json, { status: "ok", healthy: true, version: "v0.5.1.1" });
   assert.equal(stub.requests.at(-1).user, "", "health carries no identity: a request that names a user registers it");
   const before = stub.requests.length;
   const status = await call("GET", "/api/v1/system/status");
