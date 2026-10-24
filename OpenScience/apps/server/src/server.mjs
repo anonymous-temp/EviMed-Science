@@ -354,6 +354,7 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
+import { createGeoArtifactRefresh, pinGeoRunOutputs } from "./geoPreservedRunImport.mjs";
 import { GeoPlanContext } from "./geoPlanContext.mjs";
 import { GeoSignals } from "./geoSignals.mjs";
 import { GeoSignalDiscovery } from "./geoSignalDiscovery.mjs";
@@ -2344,17 +2345,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         afterImport: async (project, run) => { await geoArticleResults?.complete(project, run); await geoPlanContexts?.complete(project, run); },
         planningContext: (project, run) => geoPlanContexts?.forRun(project, run),
         readRunFile: async (project, run, relative) => {
-          if (!resultProvenance) throw new HttpError(503, "geo_plan_output_unavailable", "The producing run's preserved output is unavailable.");
-          let cursor = null;
-          const candidates = [];
-          do {
-            const page = await resultProvenance.list(project.userId, { projectId: project.id, path:relative, runId:run.id, limit:100, cursor });
-            candidates.push(...page.items.filter(version => version.path === relative && version.producer?.runId === run.id && version.producer?.sessionId === run.sessionId && version.producer?.kind !== "workspace"));
-            cursor = page.nextCursor;
-          } while (cursor);
-          const selected = candidates.sort((left,right)=>String(right.capturedAt).localeCompare(String(left.capturedAt)))[0];
-          if (!selected) throw new HttpError(409, "geo_plan_output_unavailable", "No preserved output of this actual request is available; keep the file and refresh its result capture.");
-          return (await resultProvenance.raw(project.userId,project.id,selected.versionId)).bytes;
+          const pinned = await pinGeoRunOutputs({ results: resultProvenance, project, run, context: null, paths: [relative] });
+          return pinned.readFile(project, run, relative);
         },
         capabilityOutputs: async (id) => ((await agentRegistry)?.get?.(id)?.outputs ?? []).map(output => output.path),
         report: (code) => process.stderr.write(`geo import: ${code}\n`),
@@ -4300,6 +4292,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
   });
   const resultCaptureRepairRoutes = createResultCaptureRepairRoutes({ store, runs: agentRuns, config, maxJsonBytes: config.maxJsonBytes,
+    refreshAndReconcile: geo && geoPlanContexts ? createGeoArtifactRefresh({ runs: agentRuns, results: resultProvenance, geo, contexts: geoPlanContexts }) : null,
     service: resultProvenance ? new ResultCaptureRepairService({ results: resultProvenance, runs: agentRuns, programme: evidenceProgramme }) : null });
   // The co-creation loop (evidence-flywheel plan §5.2, F05–F07): a result published as a card, research continued from a
   // card, the author page. All of it is the frontier's, so with the frontier off none of it is composed, no route

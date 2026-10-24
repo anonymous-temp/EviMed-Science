@@ -238,6 +238,21 @@ function pagesOf(items, max) {
 /** @param {unknown} error @param {string} fallback */
 const codeOf = (error, fallback) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : fallback);
 
+/** Discovery hints only; immutable producing-run snapshots supply every imported byte.
+ * @param {any} run @param {any} context @returns {string[]} */
+export function geoStructuredRunPaths(run, context) {
+  const capability = context?.mode === "strategy" ? "geo-strategy" : context?.mode === "content" ? "geo-content"
+    : context?.mode === "signal" ? run.effectiveAgentId : null;
+  if (!["geo-strategy", "geo-content"].includes(capability)) return [];
+  const name = capability === "geo-strategy" ? "strategy.json" : "articles.json";
+  const paths = ["outputFiles", "presentedFiles", "artifacts", "unverifiedArtifacts"]
+    .flatMap(key => Array.isArray(run[key]) ? run[key].map(file => typeof file === "string" ? file : file?.path) : []);
+  for (const item of run.deliverables ?? run.progress?.deliverables ?? []) {
+    if (item && (!item.capability || item.capability === capability) && /^[A-Za-z0-9_-]{1,160}$/.test(item.id ?? "")) paths.push(`deliverables/${item.id}/${name}`);
+  }
+  return [...new Set(paths.filter(file => typeof file === "string" && new RegExp(`^deliverables/[A-Za-z0-9_-]{1,160}/${name.replace(".", "\\.")}$`).test(file)))].slice(0, 64);
+}
+
 /**
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
  *   audit?: ((event: string, status: string, details: Record<string, any>) => Promise<unknown> | unknown) | null,
@@ -277,19 +292,26 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
    * One attempt at one run. A write that fails is reported, the others go on, and its code is pushed on `failed`: the caller decides
    * whether the attempt was whole.
    * @param {{ id: string, userId: string, workspaceDir: string }} project @param {Record<string, any>} run @param {any} geoProject
-   * @param {string[]} failed
+   * @param {string[]} failed @param {any} options
    */
-  const importOne = async (project, run, geoProject, failed) => {
+  const importOne = async (project, run, geoProject, failed, options) => {
+    const boundInput = planningContext ? await planningContext(geoProject, run) : null;
+    // A selected request owns only its files; legacy project-wide reconciliation belongs to unbound runs.
+    if (boundInput) {
+      const paths = geoStructuredRunPaths(run, boundInput);
+      const capability = boundInput.mode === "strategy" ? "geo-strategy" : "geo-content";
+      const deliverables = paths.map(file => ({ id: file.split("/")[1], capability }));
+      const files = await importRunFiles({ project, run, geoProject, deliverables, failed, trustedContext: boundInput, reader: options.readRunFile ?? readRunFile });
+      const handed = [run.presentedFiles, run.artifacts, run.unverifiedArtifacts, run.outputFiles].some(list => Array.isArray(list) && list.length);
+      const specialist = ["geo-strategy", "geo-content"].includes(run.effectiveAgentId ?? run.agentId);
+      if ((!paths.length && handed && specialist && ["strategy", "content", "signal"].includes(boundInput.mode))
+        || (paths.length && !files.strategies && !files.registered && !files.enriched)) {
+        if (!failed.length) { failed.push("geo_plan_output_unavailable"); report("geo_plan_output_unavailable"); }
+      }
+      return { imported: 0, issues: 0, located: 0, gated: 0, ...(paths.length ? { files } : {}) };
+    }
     failed.push(...(await importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs })).failed);
     const deliverables = [.../** @type {any[]} */ (run.deliverables ?? run.progress?.deliverables ?? [])];
-    const boundInput = planningContext ? await planningContext(geoProject, run) : null;
-    if (boundInput) for (const output of run.outputFiles ?? []) {
-      const file = typeof output === "string" ? output : output?.path;
-      const match = /^deliverables\/([A-Za-z0-9_-]{1,160})\/(?:strategy\.json|articles\.json)$/.exec(file ?? "");
-      const capability = boundInput.mode === "strategy" ? "geo-strategy" : boundInput.mode === "signal" ? run.effectiveAgentId : "geo-content";
-      if (!["geo-strategy", "geo-content"].includes(capability)) continue;
-      if (match && !deliverables.some(item => item.id === match[1] && item.capability === capability)) deliverables.push({ id: match[1], capability });
-    }
     const ids = new Set(deliverables
       .filter((deliverable) => typeof deliverable?.id === "string" && (!deliverable.capability || deliverable.capability === "geo-insight"))
       .map((deliverable) => String(deliverable.id)));
@@ -429,20 +451,20 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
   /**
    * The strategy file and the article files of one run, written. A file that does not parse, or a deliverable that holds none, is
    * passed over; a write that throws is reported and fails the attempt like a claims write does (the next ask tries once more).
-   * @param {{ project: { id: string, userId: string, workspaceDir: string }, run: Record<string, any>, geoProject: any, deliverables: any[], failed: string[] }} input
+   * @param {{ project: { id: string, userId: string, workspaceDir: string }, run: Record<string, any>, geoProject: any, deliverables: any[], failed: string[], trustedContext?: any, reader?: any }} input
    */
-  const importRunFiles = async ({ project, run, geoProject, deliverables, failed }) => {
-    const trustedContext = planningContext ? await planningContext(geoProject, run) : null;
+  const importRunFiles = async ({ project, run, geoProject, deliverables, failed, trustedContext = null, reader = readRunFile }) => {
     const out = { strategies: 0, gaps: 0, actions: 0, sources: 0, refused: 0, declined: 0, dropped: /** @type {string[]} */ ([]),
       articles: 0, enriched: 0, registered: 0, skipped: 0 };
     /** @param {string} id @param {string} file */
     const parsedFile = async (id, file) => {
       try {
         const relative = `${deliverableDir(id)}/${file}`;
-        const bytes = trustedContext && readRunFile ? await readRunFile(project, run, relative) : await readFile(project.workspaceDir, relative);
-        return JSON.parse(String(bytes));
+        const bytes = trustedContext ? await (reader ? reader(project, run, relative) : Promise.reject(Object.assign(new Error("Missing preserved output"), { code: "geo_plan_output_unavailable" }))) : await readFile(project.workspaceDir, relative);
+        try { return JSON.parse(String(bytes)); }
+        catch { throw Object.assign(new Error("The preserved structured output is not valid JSON."), { code: "geo_plan_output_invalid" }); }
       } catch (error) {
-        if (trustedContext && readRunFile) { const code = codeOf(error, "geo_plan_output_unavailable"); failed.push(code); report(code); }
+        if (trustedContext) { const code = codeOf(error, "geo_plan_output_unavailable"); failed.push(code); report(code); }
         return null;
       }
     };
@@ -472,8 +494,10 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
           out.refused += written.issues.filter((issue) => issue.code !== "notice" && issue.code !== "ignored_fields").length;
           out.gaps += Array.isArray(data.gaps) ? data.gaps.length : 0;
           out.actions += Array.isArray(data.actions) ? data.actions.length : 0;
-          out.strategies += 1;
+          if (written.ids.length) out.strategies += 1;
+          else if (originatingContext) failed.push("geo_plan_output_unavailable");
         }
+        if (originatingContext && wroteItself && !Object.keys(data).length) out.strategies += 1;
         for (const page of pagesOf(Array.isArray(sources) ? sources : [], GEO_WRITE_LIMITS.sources)) {
           const written = await geoRuntimeWrite({ store, project: geoProject, what: "sources", body: { items: page } });
           counters.ignoredFields += ignoredIn(written.issues);
@@ -514,11 +538,11 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
             }
             let contentSha256 = typeof entry.contentSha256 === "string" ? entry.contentSha256 : null;
             if (!contentSha256) {
-              try { contentSha256 = createHash("sha256").update(await readFile(project.workspaceDir, fullPath)).digest("hex"); } catch { out.skipped += 1; continue; }
+              try { contentSha256 = createHash("sha256").update(await (trustedContext ? reader(project, run, fullPath) : readFile(project.workspaceDir, fullPath))).digest("hex"); } catch { out.skipped += 1; continue; }
             }
             const item = geoArticleItemOfFile(entry, { deliverableId: id, runId: String(run.id), claimIdByKey, contentSha256 });
             const written = await geoRuntimeWrite({ store, project: geoProject, what: "articles", body: { items: [item] }, articleGate,
-              articleExists: async (_geo, path) => { try { await readFile(project.workspaceDir, path); return true; } catch { return false; } } });
+              articleExists: async (_geo, path) => { try { await (trustedContext ? reader(project, run, path) : readFile(project.workspaceDir, path)); return true; } catch { return false; } } });
             counters.ignoredFields += ignoredIn(written.issues);
             if (written.ids.length) out.registered += 1;
             else out.skipped += 1;
@@ -554,14 +578,15 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
    * one's memory too, and the fold asks again), and then no more; the loss is counted and audited each time.
    * @param {{ id: string, userId: string, workspaceDir: string }} project the control-plane project
    * @param {Record<string, any>} run
+   * @param {{ recovery?: boolean, readRunFile?: any }} [options] Internal recovery consumes only pre-pinned immutable versions.
    * @returns {Promise<{ imported: number, issues: number, located: number, gated: number, carded?: number, failed?: string[] } | null>}
    */
-  async function importDelivery(project, run) {
+  async function importDelivery(project, run, options = {}) {
     if (!run?.id || !TERMINAL.has(String(run.status ?? ""))) return null;
     const id = String(run.id);
-    await beforeImport?.(project, run);
+    if (!options.recovery) await beforeImport?.(project, run);
     while (running.has(id)) await running.get(id)?.catch(() => {});
-    if (done.has(id)) { await afterImport?.(project, run); return null; }
+    if (!options.recovery && done.has(id)) { await afterImport?.(project, run); return null; }
     const attempt = (async () => {
       /** @type {string[]} */
       const failed = [];
@@ -572,7 +597,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
           tries.delete(id);
           return null;
         }
-        const result = await importOne(project, run, geoProject, failed);
+        const result = await importOne(project, run, geoProject, failed, options);
         if (!failed.length) {
           counters.imported += 1;
           done.add(id);
