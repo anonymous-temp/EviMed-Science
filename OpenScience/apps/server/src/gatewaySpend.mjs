@@ -40,6 +40,23 @@ export async function reserveGatewaySpend({ config, usageLedger, caller, attribu
     if (config.requireDurableUsageLedger === true) throw new GatewaySpendRefusal("unrecordable", "its spend cannot be recorded right now.");
     return null;
   }
+  // A control-plane module's own search (ct-mix 2026-10-24: the frontier feed's lead triggers) is booked to its internal
+  // project under the module's purpose, charged to no run, and held to the module's daily budget (`moduleLimit`) — never to
+  // a researcher's caps, which it is not spending.
+  if (caller.purpose === "frontier") {
+    try {
+      return await usageLedger.reserveModel({
+        id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId: null, purpose: "frontier", model,
+        priceVersion: REFERENCE_PRICE_LIST.version, currency: "CNY",
+        requestFingerprint: createHash("sha256").update(JSON.stringify(fingerprint)).digest("hex"),
+        estimatedCost, dailyLimit: 0, weeklyLimit: 0, runLimit: 0, moduleLimit: Number(caller.moduleLimit) || 0, now: at,
+      });
+    } catch (error) {
+      throw error?.code === "usage_budget_exceeded" || error?.code === "usage_module_budget_exceeded"
+        ? new GatewaySpendRefusal("budget", "the module's daily budget is spent.")
+        : new GatewaySpendRefusal("unrecordable", "its spend cannot be recorded right now.");
+    }
+  }
   const attributed = caller.runId == null && attributeRun
     ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
     : null;

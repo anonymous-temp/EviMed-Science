@@ -56,6 +56,14 @@
  *   transaction (an `item_changes` row, the content version). A safety alert
  *   and an operator's pin stay selected. The pipeline's later selections read
  *   the same column.
+ * - **Merge rules** (ct-mix 2026-10-24, `@evimed/domain` `frontierMixMergeVerdict`):
+ *   once an event holds a paper, a news rewrite of it and an X post announcing
+ *   it are never selected over it — one already selected by an arithmetic
+ *   rule leaves the selected feed and names the paper in `same_event_item_id`
+ *   (`#applyMergeRules`, after every placement), and the day's mix never takes
+ *   them. A Chinese 解读 of the paper may stand beside it: the one-selected-item
+ *   gate does not unselect it, and its page and the paper's point at each other
+ *   (`frontierEventCounterparts`).
  * - **A bridge merges.** When one item is the same thing as two events, the two
  *   are one event: the older survives, the other's public id goes into
  *   `event_aliases` and its row keeps `merged_into`, so every old link answers
@@ -113,12 +121,15 @@ import {
   FRONTIER_HOT_TREND,
   FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_MENTION_REGISTRY_IDS,
+  FRONTIER_MIX_COUNTED_RULES,
   FRONTIER_MENTION_SOURCE_TYPES,
   FRONTIER_SOURCE_TYPES,
   frontierHeatDisplay,
+  frontierMixGenre,
+  frontierMixMergeVerdict,
   frontierSourceDisplayName,
 } from "@evimed/domain";
-import { buildDigestInput } from "./frontierEditor.mjs";
+import { buildDigestInput, isChineseTitle } from "./frontierEditor.mjs";
 import { frontierEventReports, frontierRepresentative, frontierStoryEventIds } from "./frontierEventReading.mjs";
 import {
   FRONTIER_EVENT_DIGEST_INSTRUCTIONS,
@@ -148,8 +159,11 @@ export const FRONTIER_CLUSTER_WINDOW_MS = 14 * DAY;
  * bar), the candidate events one grouping call weighs, and the cosine below which a `SAME_OCCURRENCE` is looked at again.
  */
 export const FRONTIER_RECALL = Object.freeze({ minCosine: 0.6, minOverlap: 0.25, topEvents: 10, confirmBelowCosine: 0.85 });
-/** The selection rules the one-selected-item gate may undo: the arithmetic ones. A safety alert and an operator's pin stay. */
-export const FRONTIER_SAME_EVENT_GATED_RULES = Object.freeze(["threshold", "lane-floor", "preprint-lane"]);
+/**
+ * The selection rules the one-selected-item gate and the merge rules may undo: the arithmetic ones — the genre mix's
+ * (`@evimed/domain` `FRONTIER_MIX_COUNTED_RULES`) and the lane floor it replaced. A safety alert and an operator's pin stay.
+ */
+export const FRONTIER_SAME_EVENT_GATED_RULES = FRONTIER_MIX_COUNTED_RULES;
 /** Events on the hot list. */
 export const FRONTIER_HOT_SIZE = 10;
 /**
@@ -233,6 +247,72 @@ export function frontierEventRole({ sourceType, evidenceType, platformProduced =
     return ["guideline", "systematic-review", "regulatory-decision", "safety-notice"].includes(String(evidenceType)) ? "primary" : "report";
   }
   return "report";
+}
+
+/**
+ * The published reports of an event (enabled sources), as the merge rules read them: the genre (`items.genre`, else code's
+ * fallback), whether it is Chinese, how it is selected, and the one-selected-report rule's verdict on it (`addsValue`, null
+ * when none was asked).
+ * @param {{ query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }> }} client @param {string | number} eventId
+ * @returns {Promise<Array<{ id: string, genre: string, evidenceType: string | null, zh: boolean, selected: boolean, selectedRule: string | null,
+ *   addsValue: boolean | null }>>}
+ */
+export async function frontierEventMembers(client, eventId) {
+  const rows = (await client.query(`SELECT i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert,
+      i.lane, i.lang, i.title_raw, i.selected, i.selected_rule, (i.event_selection->>'addsValue')::boolean AS adds_value
+    FROM evimed_frontier.event_items ei
+    JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+    JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+    WHERE ei.event_id = $1 ORDER BY i.id`, [eventId])).rows ?? [];
+  return rows.map((row) => ({ id: String(row.id), genre: frontierMixGenre(row), evidenceType: row.evidence_type ?? null,
+    zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw), selected: row.selected === true,
+    selectedRule: row.selected_rule ?? null, addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null }));
+}
+
+/**
+ * What an item's page points at through its event (ct-mix 2026-10-24, the merge rules): for a Chinese 解读, the paper it
+ * reads (`relation: "paper"`); for a paper, the Chinese 解读 of it (`relation: "reading"`). Published reports of enabled
+ * sources only; an item with neither is absent from the answer. The reader (ct-write) shows them.
+ * @param {{ query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }> }} client @param {Array<string | number>} itemIds
+ * @returns {Promise<Map<string, Array<{ id: string, publicId: string, relation: "paper" | "reading", titleZh: string | null, titleRaw: string }>>>}
+ */
+export async function frontierEventCounterparts(client, itemIds) {
+  /** @type {Map<string, Array<{ id: string, publicId: string, relation: "paper" | "reading", titleZh: string | null, titleRaw: string }>>} */
+  const found = new Map();
+  const ids = [...new Set(itemIds.map(String))].filter((id) => /^\d{1,19}$/.test(id));
+  if (!ids.length) return found;
+  const rows = (await client.query(`SELECT mine.id AS item_id, i.id, i.public_id, i.title_zh, i.title_raw, i.genre, i.platform, i.channel,
+      i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.lang
+    FROM evimed_frontier.items mine
+    JOIN evimed_frontier.event_items ei ON ei.event_id = mine.event_id
+    JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+    JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+    WHERE mine.id = ANY($1::bigint[]) AND mine.event_id IS NOT NULL ORDER BY i.id`, [ids])).rows ?? [];
+  /** @type {Map<string, any[]>} */
+  const byItem = new Map();
+  for (const row of rows) {
+    const list = byItem.get(String(row.item_id)) ?? [];
+    list.push({ ...row, id: String(row.id), genreKey: frontierMixGenre(row),
+      zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw) });
+    byItem.set(String(row.item_id), list);
+  }
+  for (const [itemId, members] of byItem) {
+    const self = members.find((member) => member.id === itemId);
+    if (!self) continue;
+    const others = members.filter((member) => member.id !== itemId);
+    const asMember = (/** @type {any} */ member) => ({ id: member.id, genre: member.genreKey, evidenceType: member.evidence_type ?? null, zh: member.zh });
+    const shape = (/** @type {any} */ member, /** @type {"paper" | "reading"} */ relation) => ({ id: member.id, publicId: member.public_id, relation,
+      titleZh: member.title_zh ?? null, titleRaw: member.title_raw });
+    const own = frontierMixMergeVerdict(asMember(self), others.map(asMember));
+    if (own.verdict === "beside-paper") {
+      found.set(itemId, others.filter((member) => member.id === own.paperId).map((member) => shape(member, "paper")));
+      continue;
+    }
+    const readings = others.filter((member) => frontierMixMergeVerdict(asMember(member), members.filter((x) => x.id !== member.id).map(asMember)).verdict === "beside-paper"
+      && frontierMixMergeVerdict(asMember(member), [asMember(self)]).verdict === "beside-paper");
+    if (readings.length) found.set(itemId, readings.map((member) => shape(member, "reading")));
+  }
+  return found;
 }
 
 /**
@@ -813,6 +893,8 @@ export class FrontierEvents {
       // fr-events 2026-10-22: grouping calls and their second looks, what they labelled, the links and the gate they wrote.
       groupCalls: 0, secondLooks: 0, secondLooksAgreed: 0, sameOccurrence: 0, sameStory: 0, followsLinks: 0, sameEventUnselected: 0,
       lexicalRecalls: 0, regrouped: 0,
+      // ct-mix 2026-10-24: news rewrites and X posts of a paper the merge rules unselected; Chinese 解读 the gate left beside the paper.
+      mergeUnselected: 0, besidePaper: 0,
     };
     /** @type {{ at: string, ranking: any[] } | null} */
     this.lastHot = null;
@@ -1240,12 +1322,13 @@ export class FrontierEvents {
       const story = found.follows ? survivorOf(found.follows) : null;
       const linked = story ? await this.#linkStory(client, target, story) : false;
       const unselected = found.selection ? await this.#applySelection(client, item.id, target, found.selection, now) : false;
+      const mergeUnselected = await this.#applyMergeRules(client, target);
       await this.#linkFromItemLinks(client, item.id, target);
       await this.#refresh(client, [target], now);
       // A card's 「同一事件的全部报道」 appears, its event's title moves, it
       // leaves the selected feed, or its 事件后续 grows: a change every reader
       // of the lists can see.
-      if (outcome !== "created" || linked || unselected) await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
+      if (outcome !== "created" || linked || unselected || mergeUnselected) await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
       return outcome;
     });
   }
@@ -1302,8 +1385,9 @@ export class FrontierEvents {
       const story = found.follows ? events.get(found.follows)?.id ?? null : null;
       const linked = story && story !== place ? await this.#linkStory(client, place, story) : false;
       const unselected = found.selection ? await this.#applySelection(client, item.id, place, found.selection, now) : false;
+      const mergeUnselected = await this.#applyMergeRules(client, place);
       await this.#refresh(client, [...new Set([place, home])], now);
-      if (outcome !== "kept" || linked || unselected) {
+      if (outcome !== "kept" || linked || unselected || mergeUnselected) {
         this.counters.regrouped += 1;
         await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
         return outcome === "kept" ? "joined" : outcome;
@@ -1347,6 +1431,16 @@ export class FrontierEvents {
    */
   async #applySelection(client, itemId, eventId, selection, now) {
     const verdict = JSON.stringify({ addsValue: selection.addsValue, reason: selection.reason ?? null, decidedAt: now.toISOString() });
+    if (selection.addsValue === false) {
+      // A Chinese 解读 of the event's paper stands beside it (the merge rules): the verdict is kept, nothing is unselected.
+      const members = await frontierEventMembers(client, eventId);
+      const self = members.find((member) => member.id === String(itemId));
+      if (self && frontierMixMergeVerdict(self, members.filter((member) => member.id !== self.id)).verdict === "beside-paper") {
+        await client.query(`UPDATE evimed_frontier.items SET event_selection = $2::jsonb, same_event_item_id = NULL WHERE id = $1`, [itemId, verdict]);
+        this.counters.besidePaper += 1;
+        return false;
+      }
+    }
     const others = selection.addsValue === false ? (await client.query(`SELECT i.id, ei.role, i.source_type, i.selected, i.score_total, i.timeline_at
       FROM evimed_frontier.event_items ei JOIN evimed_frontier.items i ON i.id = ei.item_id JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE ei.event_id = $1 AND i.id <> $2 AND i.state = 'published' AND i.selected AND s.enabled`, [eventId, itemId])).rows ?? [] : [];
@@ -1365,6 +1459,28 @@ export class FrontierEvents {
     await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'same-event')", [itemId]);
     this.counters.sameEventUnselected += 1;
     return true;
+  }
+
+  /**
+   * The merge rules over one event, after an item was placed in it (see the module's hidden knowledge): when the event holds a
+   * paper, each news rewrite or X post of it that an arithmetic rule selected leaves the selected feed and names the paper —
+   * an `item_changes` row each. The caller holds the clustering lock and moves the content version.
+   * @param {any} client @param {string} eventId @returns {Promise<number>} how many were unselected
+   */
+  async #applyMergeRules(client, eventId) {
+    const members = await frontierEventMembers(client, eventId);
+    let unselected = 0;
+    for (const member of members) {
+      if (!member.selected || !FRONTIER_SAME_EVENT_GATED_RULES.includes(String(member.selectedRule))) continue;
+      const { verdict, paperId } = frontierMixMergeVerdict(member, members.filter((other) => other.id !== member.id));
+      if ((verdict !== "paper-rewrite" && verdict !== "paper-discussion") || !paperId) continue;
+      await client.query(`UPDATE evimed_frontier.items SET selected = false, selected_rule = NULL, selected_at = NULL, same_event_item_id = $2,
+          updated_at = clock_timestamp() WHERE id = $1 AND selected`, [member.id, paperId]);
+      await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'same-event')", [member.id]);
+      unselected += 1;
+    }
+    this.counters.mergeUnselected += unselected;
+    return unselected;
   }
 
   /**

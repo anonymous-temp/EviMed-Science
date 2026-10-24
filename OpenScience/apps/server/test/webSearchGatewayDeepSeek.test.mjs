@@ -7,7 +7,7 @@ import test from "node:test";
 import { REFERENCE_PRICE_LIST, priceUsage } from "@evimed/domain";
 import { createDeepSeekTools, deepseekResultDate, deepseekToolMetricFamilies } from "../src/deepseekTools.mjs";
 import { providerRefusalCount } from "../src/providerRefusals.mjs";
-import { createWebSearchGatewayHandler, WEB_SEARCH_GATEWAY_PATH } from "../src/webSearchGateway.mjs";
+import { createWebSearch, createWebSearchGatewayHandler, WEB_SEARCH_GATEWAY_PATH } from "../src/webSearchGateway.mjs";
 
 const recorded = JSON.parse(await readFile(new URL("./fixtures/deepseek-tools/recorded-2026-10-17.json", import.meta.url), "utf8")).answers;
 const KEY = "sk-test-only-deepseek-key";
@@ -269,4 +269,31 @@ test("a runtime is offered web_search whenever the gateway has an engine, the pa
     assert.equal(webSearchHasEngine(config), expected, why ?? JSON.stringify(config));
     assert.equal(webSearchGatewayProviderUrl({ ...internal, ...config }), expected ? internal.webSearchGatewayInternalUrl : "");
   }
+});
+
+test("ct-mix: the control plane searches in-process under its module's purpose and budget, charged to no run and to nobody's caps", async () => {
+  const price = priceUsage({ resourceType: "tool-request", tool: "deepseek-search", requests: 1, peak: true }).cost;
+  const ledger = fakeLedger();
+  let attributed = 0;
+  const service = createWebSearch({ ...withDeepSeek, userDailySpendLimit: 20 }, { fetchImpl: upstreams(answer(recorded["search-basic"].body)).fetchImpl,
+    usageLedger: ledger, attributeRun: async () => { attributed += 1; return "run-7"; } });
+  const frontierCaller = { userId: "operator", projectId: "evimed-frontier", runId: null, purpose: "frontier", moduleLimit: 300 };
+  const answered = await service.search({ query: "国家药监局 批准上市", limit: 8, timeRange: "day" }, { caller: frontierCaller });
+  assert.ok(answered.data.results.length > 0);
+  assert.equal(answered.data.timeRange, "day");
+  const [kind, reserve] = ledger.calls[0];
+  assert.equal(kind, "reserve");
+  assert.deepEqual([reserve.purpose, reserve.runId, reserve.dailyLimit, reserve.weeklyLimit, reserve.runLimit, reserve.moduleLimit],
+    ["frontier", null, 0, 0, 0, 300]);
+  assert.deepEqual([reserve.userId, reserve.projectId, reserve.estimatedCost], ["operator", "evimed-frontier", price]);
+  assert.equal(attributed, 0, "no run is looked for");
+  assert.deepEqual(ledger.calls.map(([name]) => name), ["reserve", "settle"]);
+  // The module's budget spent: DeepSeek is not asked; SearXNG still answers.
+  const refused = createWebSearch(withDeepSeek, { fetchImpl: upstreams(answer(recorded["search-basic"].body)).fetchImpl,
+    usageLedger: fakeLedger({ refuse: "usage_module_budget_exceeded" }) });
+  const thin = await refused.search({ query: "q" }, { caller: frontierCaller });
+  assert.deepEqual(thin.data.unresponsiveEngines, ["deepseek"]);
+  // A body the door would refuse is refused here too, by the same code.
+  await assert.rejects(service.search({ query: "" }, { caller: frontierCaller }), { code: "web_search_query_invalid" });
+  assert.equal(service.hasEngine, true);
 });

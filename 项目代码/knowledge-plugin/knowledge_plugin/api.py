@@ -1,4 +1,4 @@
-"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.5.0), served exactly.
+"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.6.0), served exactly.
 
 Rules the handlers keep:
 
@@ -20,6 +20,8 @@ Rules the handlers keep:
 - ``/v1/lookups`` lists nothing in batch 1 and every ``POST`` is ``501 capability_unavailable``.
 - ``/v1/media/{id}`` (1.5.0) serves a stored image's bytes with its content type; an id the store never held, or one it
   has evicted, is ``404 not_found`` — the entry keeps naming it, with its original address.
+- ``POST /v1/leads`` (1.6.0, ct-mix) receives the addresses the platform's lead triggers found and answers each one
+  (``leads.submit``); reading them is the leads loop's (``leads.LeadReader``), never the request's.
 """
 
 from __future__ import annotations
@@ -544,6 +546,13 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                     body["discovery"] = await discovery_health(conn, now)
             except Exception as error:
                 log.warning("discovery health query failed: %s", type(error).__name__)
+            # Leads (ct-mix 2026-10-24, contract 1.6.0): today's by state and the queue; a failure costs this block only.
+            try:
+                from .leads import leads_health
+                async with pool.connection() as conn:
+                    body["leads"] = await leads_health(conn, now)
+            except Exception as error:
+                log.warning("leads health query failed: %s", type(error).__name__)
             body["backlog"] = {"due_sources": int(stats["due_sources"]), "pending_texts": int(stats["pending_texts"]),
                                "oldest_due_s": int((now - stats["oldest_due"]).total_seconds()) if stats["oldest_due"] else 0}
         except Exception as error:  # health must answer even when the database does not
@@ -582,7 +591,7 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
             "plugin": {"name": PLUGIN_NAME, "version": settings.version, "build": settings.build,
                        "started_at": state["started_at"].isoformat().replace("+00:00", "Z")},
             "contract": {"version": CONTRACT_VERSION},
-            "capabilities": {"stream": True, "text": True, "refresh": True, "lookups": []},
+            "capabilities": {"stream": True, "text": True, "refresh": True, "lookups": [], "leads": settings.leads_enabled},
             "vocabularies": {
                 "lane": sorted({r["lane"] for r in rows}), "source_type": sorted({r["source_type"] for r in rows}),
                 "egress": sorted({r["egress"] for r in rows}), "access": sorted({r["access"] for r in rows}),
@@ -687,6 +696,28 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                              selected = EXCLUDED.selected, window_days = EXCLUDED.window_days, reported_at = EXCLUDED.reported_at""",
                         [(sid, screened, off_topic, selected, window, now) for sid, screened, off_topic, selected in accepted])
         return JSONResponse({"accepted": len(accepted), "unknown": len(clean) - len(accepted)})
+
+    @app.post("/v1/leads")
+    async def submit_leads(request: Request):
+        """Addresses the platform's lead triggers found (contract 1.6.0, rule 10): each answered accepted, duplicate,
+        refused or capped (``leads.submit``). Nothing is fetched here."""
+        gate.check(request)
+        from .leads import LeadsInvalid, excluded_hosts, parse_leads, submit
+
+        if not settings.leads_enabled:
+            raise ApiError(501, "capability_unavailable", "this build reads no leads (see /v1/manifest)")
+        try:
+            payload = await request.json()
+        except ValueError:
+            raise ApiError(400, "invalid_params", "the body is not JSON", details={"field": "body"}) from None
+        try:
+            leads = parse_leads(payload)
+        except LeadsInvalid as error:
+            raise ApiError(400, "invalid_params", str(error), details={"field": error.field}) from None
+        async with pool_of().connection() as conn:
+            excluded = await excluded_hosts(conn)
+            body = await submit(conn, leads, clock(), daily_cap=settings.leads_daily, excluded=excluded)
+        return JSONResponse(body)
 
     # ---------------------------------------------------------------- stream
 

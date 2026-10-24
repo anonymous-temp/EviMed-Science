@@ -445,14 +445,21 @@ function frontierSettings(overrides) {
     frontierOffpeak: overrides.frontierOffpeak ?? boolEnv("OPEN_SCIENCE_FRONTIER_OFFPEAK", false),
     // FRONTIER_SELECT_THRESHOLD_DEFAULT (frontierPipeline.mjs, where its calibration is written).
     frontierSelectThreshold: integer("frontierSelectThreshold", "OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", 82, 0, 100),
-    // The preprint lane (owner ruling 2026-10-10, review B D-08): preprint servers and company newsrooms cannot reach the line above
-    // by arithmetic, so each day the best of them are selected anyway, up to this many (0 = no lane), at or above this total.
+    // The preprint lane (owner ruling 2026-10-10, review B D-08): preprint servers cannot reach the line by arithmetic, so each day
+    // the best of them are selected anyway, up to this many (0 = no lane), at or above this total — two places inside the genre mix's
+    // research group since ct-mix (2026-10-24); a company newsroom's release takes the industry group's floor instead.
     // FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT and FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT (frontierPipeline.mjs, with the reasoning).
     frontierPreprintLanePerDay: integer("frontierPreprintLanePerDay", "OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", 2, 0, 10),
     frontierPreprintLaneMinScore: integer("frontierPreprintLaneMinScore", "OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", 60, 0, 100),
     // The most safety pushes one reader receives in a day (owner ruling 2026-10-10: a Class I recall and a boxed-warning alert now go to
     // every reader with the push on). FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT (frontierNotifications.mjs, with the reasoning).
     frontierSafetyPushDailyCap: integer("frontierSafetyPushDailyCap", "OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", 3, 1, 50),
+    // Lead triggers (ct-mix 2026-10-24, frontierLeads.mjs): the feed searches the open web through the platform's gateway for
+    // what it is missing and hands the pages to the knowledge plugin. On with the module (it needs a web-search engine and
+    // the plugin); a day's searches are capped here (FRONTIER_LEADS_DAILY_QUERIES_DEFAULT), each booked under purpose
+    // `frontier` and held to the module's daily budget; 0 makes none.
+    frontierLeadsEnabled: overrides.frontierLeadsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_LEADS_ENABLED", true),
+    frontierLeadsDailyQueries: integer("frontierLeadsDailyQueries", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES", 120, 0, 1000),
     knowledgePluginUrl: pluginUrl,
     knowledgePluginTokenFile: tokenFile,
     knowledgePluginPollMs: integer("knowledgePluginPollMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS", 60_000, 5_000, 3_600_000),

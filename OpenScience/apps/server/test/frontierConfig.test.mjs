@@ -170,3 +170,20 @@ test("notification and safety scans have bounded operator settings passed throug
     assert.match(example, new RegExp(`^${name}=${value}$`, "m")); assert.match(compose, new RegExp(`^\\s+${name}:`, "m"));
   }
 });
+
+test("ct-mix: lead triggers are on with the module, 120 searches a day, one default in config, the module and the example .env", async () => {
+  const { FRONTIER_LEADS_DAILY_QUERIES_DEFAULT, FrontierLeads } = await import("../src/frontierLeads.mjs");
+  const { readFile } = await import("node:fs/promises");
+  const config = configUnder({});
+  assert.deepEqual([config.frontierLeadsEnabled, config.frontierLeadsDailyQueries], [true, FRONTIER_LEADS_DAILY_QUERIES_DEFAULT]);
+  assert.equal(FRONTIER_LEADS_DAILY_QUERIES_DEFAULT, 120);
+  assert.equal(new FrontierLeads({ database: {}, plugin: null, owner: () => null, config: {} }).dailyQueries, FRONTIER_LEADS_DAILY_QUERIES_DEFAULT);
+  assert.equal(new FrontierLeads({ database: {}, plugin: null, owner: () => null, config: { frontierLeadsDailyQueries: 0 } }).dailyQueries, 0, "0 makes none");
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_LEADS_ENABLED: "false" }).frontierLeadsEnabled, false);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES: "40" }).frontierLeadsDailyQueries, 40);
+  assert.throws(() => configUnder({ OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES: "5000" }), /OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES/);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  assert.deepEqual([...example.matchAll(/^OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES=(\d+)$/gm)].map((match) => Number(match[1])), [FRONTIER_LEADS_DAILY_QUERIES_DEFAULT]);
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  for (const name of ["OPEN_SCIENCE_FRONTIER_LEADS_ENABLED", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES"]) assert.match(compose, new RegExp(`\\n\\s+${name}:\\n`), name);
+});

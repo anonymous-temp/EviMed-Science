@@ -47,8 +47,8 @@ test("a tick starts every due loop; the periodic ones wait for their interval", 
   await worker.tick();
   assert.deepEqual(calls, ["process", "process"], "two batches side by side, nothing periodic yet");
   assert.deepEqual(worker.status().pipeline, { batches: 2, claimed: 6, promoted: 2, published: 2, merged: 2, screenedOut: 2, held: 0, failed: 0,
-    dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0, tidied: 0, tidyDropped: 0,
-    leads: 0, insights: 0, retagged: 0 });
+    dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
+    translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0 });
   assert.equal(owners, 1, "the owner is ensured once");
 
   calls.length = 0;
@@ -185,4 +185,32 @@ test("the tag tree's upkeep runs on the owner's money only, at most every fiftee
   assert.equal(ticks, 2);
   assert.deepEqual(reported, ["tags:frontier_tag_judge_failed"]);
   assert.equal(worker.status().loops.tags.failures, 1);
+});
+
+test("ct-mix: the lead triggers run on the owner's money only, at most every fifteen minutes, fail alone, and show in the status", async () => {
+  const { ingest, database } = stubs();
+  const time = clock();
+  let ticks = 0;
+  const leads = {
+    tick: async () => { ticks += 1; if (ticks === 2) throw Object.assign(new Error("no"), { code: "frontier_lead_search_failed" }); return { searched: 3, sent: 2 }; },
+    status: () => ({ configured: true, ticks }),
+  };
+  /** @type {string[]} */
+  const reported = [];
+  const worker = new FrontierWorker({ ingest, database, leads, now: time.now, pollMs: 5_000, pluginPollMs: 60_000,
+    ensureOwner: async () => ({ userId: "ops", projectId: "evimed-frontier" }), report: (loop, code) => reported.push(`${loop}:${code}`) });
+  await worker.tick();
+  assert.equal(ticks, 0, "no owner yet on the first tick");
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 1);
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 1, "not again within fifteen minutes");
+  time.advance(15 * 60_000);
+  await worker.tick();
+  assert.equal(ticks, 2);
+  assert.deepEqual(reported, ["leads:frontier_lead_search_failed"]);
+  assert.equal(worker.status().loops.leads.failures, 1);
+  assert.deepEqual(worker.status().leads, { configured: true, ticks: 2 });
 });

@@ -289,6 +289,9 @@ export const FRONTIER_ACCESSES = Object.freeze([
   'socialdata',
   'dajiala',
   'social-crawl',
+  // Contract 1.6.0 (ct-mix 2026-10-24): a lead source — the pages of one site, account or journal the platform's lead
+  // triggers found and the plugin read once; never polled.
+  'lead',
 ])
 
 export const FRONTIER_ACCESS_LABELS_ZH = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
@@ -306,6 +309,7 @@ export const FRONTIER_ACCESS_LABELS_ZH = /** @type {Readonly<Record<string, stri
   socialdata: 'X 账号（SocialData）',
   dajiala: '公众号（极致了）',
   'social-crawl': '社媒监测',
+  lead: '按需读取',
 }))
 
 /** What kind of publication an entry is (contract 1.5.0, `Entry.channel`):

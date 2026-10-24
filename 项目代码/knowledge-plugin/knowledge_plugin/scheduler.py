@@ -52,7 +52,7 @@ from psycopg.types.json import Jsonb
 from . import policy
 from .db import meta_get, meta_set
 from .fetch import ProtectedFetcher, is_empty_shell
-from .model import NEUTRAL_DETAILS, SOCIAL_ACCESSES, EntryTextResult, FetchError, SourceState, RequestSpec
+from .model import NEUTRAL_DETAILS, UNPOLLED_ACCESSES, EntryTextResult, FetchError, SourceState, RequestSpec
 from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
@@ -72,6 +72,7 @@ ADAPTER_MISSING_RETRY_S = 3600
 LEASE_RENEW_EVERY = 20
 TEXT_BATCH = 20
 SOCIAL_EVERY_S = 60.0
+LEADS_EVERY_S = 60.0
 
 
 def _utcnow() -> datetime:
@@ -122,6 +123,7 @@ class Crawler:
         self.last_error_at: datetime | None = None
         self.polls_total: Counter = Counter()
         self._social = None
+        self._leads = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -142,6 +144,8 @@ class Crawler:
             asyncio.create_task(self._loop("registry", self.watch_registry, REGISTRY_WATCH_EVERY_S, initial_delay=REGISTRY_WATCH_EVERY_S)),
             # fr-social 2026-10-22: X, WeChat and the six platforms (contract 1.5.0), read by their own collector.
             asyncio.create_task(self._loop("social", self.collect_social, SOCIAL_EVERY_S, initial_delay=30.0)),
+            # ct-mix 2026-10-24: the addresses the platform's lead triggers handed over (contract 1.6.0), a few a minute.
+            asyncio.create_task(self._loop("leads", self.read_leads, LEADS_EVERY_S, initial_delay=45.0)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
                  self._settings.concurrency, self._settings.text_concurrency, sorted(self._adapters) or "none")
@@ -240,7 +244,7 @@ class Crawler:
                        RETURNING s.*""",
                     {"now": self._clock(), "limit": limit, "worker": self._settings.worker_id,
                      "until": self._clock() + timedelta(seconds=self._settings.lease_s),
-                     "busy": list(busy_hosts or []), "social": sorted(SOCIAL_ACCESSES)},
+                     "busy": list(busy_hosts or []), "social": sorted(UNPOLLED_ACCESSES)},
                 )).fetchall()
 
     async def _poll_guarded(self, row: dict) -> None:
@@ -808,6 +812,15 @@ class Crawler:
     async def collect_social(self) -> dict:
         """One tick of the social collector (``knowledge_plugin.social``): the social read methods are never claimed above."""
         return await self.social().tick()
+
+    async def read_leads(self) -> dict:
+        """One tick of the leads loop (``leads.py``): queued addresses read under the plugin's rules and emitted."""
+        if not self._settings.leads_enabled:
+            return {"status": "disabled"}
+        if self._leads is None:
+            from .leads import LeadReader
+            self._leads = LeadReader(self._settings, self._pool, self._fetcher, collector=self.social(), clock=self._clock)
+        return await self._leads.tick()
 
     async def discover_medical_sources(self) -> dict:
         from .medical_discovery import run_daily_discovery

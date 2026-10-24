@@ -62,6 +62,9 @@ async def sync_dynamic_registry(conn, base, now) -> dict:
         known = {row.source.id for row in composed}
         composed += [row for row in load_social_registry() if row.source.id not in known]
         composed += await discovered_rows(conn, {row.source.id for row in composed})
+        # ct-mix 2026-10-24: the lead sources (contract 1.6.0), one per site, account or journal a lead was read from.
+        from .leads import lead_rows
+        composed += await lead_rows(conn, {row.source.id for row in composed})
         retired = {row["source_id"] for row in await (await conn.execute(
             "SELECT source_id FROM evimed_knowledge.source_lifecycle")).fetchall()}
         return await sync_registry(conn, [row for row in composed if row.source.id not in retired], now)

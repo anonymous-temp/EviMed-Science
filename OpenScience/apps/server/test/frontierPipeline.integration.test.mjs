@@ -358,7 +358,7 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   assert.equal(edited.summary_zh, "导读：有摘要。");
   assert.equal(editor.calls.edit.length, editsBefore + 1, "one edit, with its abstract");
   assert.deepEqual([edited.selected, edited.selected_rule], [true, "threshold"]);
-  assert.deepEqual(await changes(Number(paper.id)), ["published"]);
+  assert.deepEqual(await changes(Number(paper.id)), ["published", "selected"], "selected by the day's mix at the end of the round that published it");
   assert.equal(Number((await database.query("SELECT to_item_id FROM evimed_frontier.item_links")).rows[0].to_item_id), Number(paper.id));
   const texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
   assert.equal(texts.model_input_sha256, createHash("sha256").update(texts.model_input).digest("hex"));
@@ -567,7 +567,7 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(new Date(collected.hold_until).toISOString(), "2026-09-22T16:00:00.000Z", "tomorrow in Beijing");
 });
 
-test("selection: three a day per source, the lane floor for a lane with nothing selected", options, async () => {
+test("selection: three a day per source, and a genre group short of its floor takes its best from the medium band (ct-mix)", options, async () => {
   await reset();
   const clock = new Date("2026-09-22T12:00:00Z");
   const { pipeline, plugin } = pipelineWith({ now: () => clock });
@@ -575,17 +575,26 @@ test("selection: three a day per source, the lane floor for a lane with nothing 
   for (let index = 0; index < 4; index += 1) {
     papers.push(await deliver({ source_id: "j-small", doi: `10.1000/small.${index}`, title: `Small journal paper ${index} [score:60]`, summary: "P".repeat(200) }));
   }
-  const floor = await deliver({ source_id: "m-stat", title: "Measles cases rise in two provinces [lane:public-health] [score:55]", summary: "M".repeat(200) });
-  const lower = await deliver({ source_id: "m-fierce", title: "Vaccination campaign expands [lane:public-health] [score:45]", summary: "V".repeat(200) });
-  for (const id of [...papers, floor, lower]) plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
-  await pipeline.processBatch();
-  const selected = (await database.query(`SELECT i.title_raw, i.selected, i.selected_rule, i.score_total, i.lane FROM evimed_frontier.items i ORDER BY i.id`)).rows;
-  const small = selected.filter((row) => row.title_raw.startsWith("Small journal"));
+  // EMA's notices are 政策法规 by code's genre: the group's floor is two places of a day of 20, from 60 up.
+  const policy = await deliver({ source_id: "r-ema", title: "EMA consults on a reflection paper [score:40]", summary: "E".repeat(200) });
+  const weakPolicy = await deliver({ source_id: "r-ema", title: "EMA updates a meeting calendar [score:20]", summary: "C".repeat(200) });
+  // A story under the line: news has no floor of its own, it only fills what the others leave above the line.
+  const story = await deliver({ source_id: "m-stat", title: "Measles cases rise in two provinces [lane:public-health] [score:55]", summary: "M".repeat(200) });
+  for (const id of [...papers, policy, weakPolicy, story]) plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  const summary = await pipeline.processBatch();
+  const read = async (/** @type {{ id: number }} */ delivered) => item(Number((await entry(delivered.id)).item_id));
+  const small = await Promise.all(papers.map(read));
   assert.deepEqual(small.map((row) => row.score_total), [74, 74, 74, 74], "authority 3 × 0.8 = 14, plus the model's 60");
   assert.equal(small.filter((row) => row.selected).length, 3, "the fourth is over the source's cap");
-  const health = selected.filter((row) => row.lane === "public-health");
-  assert.deepEqual(health.map((row) => [row.score_total, row.selected, row.selected_rule]), [[65, true, "lane-floor"], [55, false, null]],
-    "below the threshold, but the lane's best at or above 60");
+  assert.ok(small.filter((row) => row.selected).every((row) => row.selected_rule === "threshold"));
+  const [floor, weak, news] = await Promise.all([read(policy), read(weakPolicy), read(story)]);
+  assert.ok(floor.score_total >= 60 && floor.score_total < 70, `the policy item stands in the band (${floor.score_total})`);
+  assert.deepEqual([floor.selected, floor.selected_rule], [true, "genre-floor"]);
+  assert.ok(weak.score_total < 60, `${weak.score_total}`);
+  assert.deepEqual([weak.selected, news.selected], [false, false], "under the band, and news with no floor, stay out");
+  assert.equal(summary.genreFloor, 1);
+  assert.equal(pipeline.counters.mix["genre-floor"], 1);
+  assert.equal(pipeline.status().mix.groups.policy.after, 1, "the operators see today's mix");
 });
 
 /**
@@ -615,9 +624,10 @@ async function selections(named) {
 }
 
 /**
- * The preprint lane's first day (2026-09-22): the lanes of the journal and the registry result have a selected item already, so the
- * lane floor leaves them alone and what is measured is the preprint lane. A preprint's total is the editor's share plus 6 (authority 2,
- * discounted), and so is a newsroom's (a press release): the line is 82, and none of them can reach it.
+ * The preprint lane's first day (2026-09-22), inside the genre mix (ct-mix 2026-10-24): the research group's floor is short of
+ * candidates above the line, but a preprint under it comes in only by the lane's places; the newsroom's release is 行业动态 and
+ * takes the industry group's floor. A preprint's total is the editor's share plus 6 (authority 2, discounted), and so is a
+ * newsroom's: the line is 82, and none of them can reach it.
  * @param {Record<string, any>} [config]
  */
 async function laneDay(config = {}) {
@@ -637,16 +647,17 @@ async function laneDay(config = {}) {
   return { pipeline, plugin, named, summary, clock };
 }
 
-test("F12b: the preprint lane selects the day's best two preprints and company items above the floor, by its own rule, and the daily carries them", options, async () => {
+test("F12b: the preprint lane selects the day's best two preprints above the floor, by its own rule, inside the research group, and the daily carries them", options, async () => {
   const { pipeline, plugin, named, summary } = await laneDay();
   assert.deepEqual(await selections(named), {
     journal: [true, "threshold"], trial: [true, "threshold"],
     d: [true, "preprint-lane"], a: [true, "preprint-lane"], // the two highest totals (72, 68)
-    e: [false, null], b: [false, null], // 66 and 64 clear the floor and find the places taken
+    b: [false, null], // 64 clears the floor and finds the places taken; the research floor does not take a preprint under the line
     c: [false, null], // 58 is under it
+    e: [true, "genre-floor"], // a newsroom's release is 行业动态: the industry group's floor, no longer a preprint-lane place
   });
   assert.equal(summary.preprintLane, 2, "counted in the round's summary...");
-  assert.equal(pipeline.counters.preprintLane, 2, "...and in the pipeline's counters");
+  assert.equal(pipeline.counters.mix["preprint-lane"], 2, "...and in the pipeline's counters");
   // Selected, and still what they are: a preprint with its source class and its unreviewed flag, never an upgraded one.
   const taken = (await database.query(`SELECT source_type, flags, evidence_type, verification, lane, state, score_total FROM evimed_frontier.items
     WHERE selected_rule = 'preprint-lane' ORDER BY score_total DESC`)).rows;
@@ -656,11 +667,11 @@ test("F12b: the preprint lane selects the day's best two preprints and company i
   assert.deepEqual(await changes(Number(lanePick.id)), ["published", "selected"]);
   assert.equal(lanePick.selected_at.toISOString(), "2026-09-22T12:00:00.000Z");
 
-  // The daily of the next morning carries the lane's two with the other two: 精选 and the daily are one selection.
+  // The daily of the next morning carries the lane's two with the others: 精选 and the daily are one selection.
   const daily = await new FrontierDaily({ database, config: { frontierTimeZone: "Asia/Shanghai", frontierDailyTime: "07:30" } }).compose("2026-09-23");
   const issued = new Set([daily.lead?.itemId, ...daily.sections.flatMap((section) => section.itemIds)]);
   const publicIds = async (/** @type {string[]} */ names) => Promise.all(names.map(async (name) => (await item(Number((await entry(named[name].id)).item_id))).public_id));
-  assert.deepEqual([...issued].sort(), (await publicIds(["journal", "trial", "a", "d"])).sort());
+  for (const id of await publicIds(["journal", "trial", "a", "d"])) assert.ok(issued.has(id), id);
 
   // The same day, a better preprint arrives: the places are taken, and selection is sticky.
   const later = await deliverNamed(plugin, { f: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[7]} [score:68]` } }); // 74
@@ -669,11 +680,10 @@ test("F12b: the preprint lane selects the day's best two preprints and company i
   assert.equal((await selections(named)).d[1], "preprint-lane");
 });
 
-test("F12b: a new day has its own places, and what the lane floor took of the lane's classes counts against them", options, async () => {
+test("F12b: a new day has its own places, and yesterday's stand", options, async () => {
   const { plugin, named } = await laneDay();
   assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
-  // 2026-09-23: nothing is selected in the evidence lane yet, so the lane floor takes its best (a preprint, 66) first; that is one of the
-  // day's two places, and the lane fills the other with the next best above the floor (61), leaving 60 out.
+  // 2026-09-23: the lane takes the day's best two above the floor (66, 61) and leaves 60 out.
   const { pipeline: next } = pipelineWith({ now: () => new Date("2026-09-23T12:00:00Z"), plugin, config: { frontierSelectThreshold: 82 } });
   const day = await deliverNamed(plugin, {
     g: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[8]} [score:54]` }, // 60
@@ -681,8 +691,8 @@ test("F12b: a new day has its own places, and what the lane floor took of the la
     j: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[10]} [score:55]` }, // 61
   });
   const summary = await next.processBatch();
-  assert.deepEqual(await selections(day), { g: [false, null], i: [true, "lane-floor"], j: [true, "preprint-lane"] });
-  assert.equal(summary.preprintLane, 1);
+  assert.deepEqual(await selections(day), { g: [false, null], i: [true, "preprint-lane"], j: [true, "preprint-lane"] });
+  assert.equal(summary.preprintLane, 2);
   // Yesterday's two stand: a new day takes nothing back.
   assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
 });
@@ -691,12 +701,12 @@ test("F12b: the floor and the number are the operator's: a floor of 70 takes the
   for (const [config, expected] of /** @type {Array<[Record<string, number>, string[]]>} */ ([
     [{ frontierPreprintLaneMinScore: 70 }, ["d"]],
     [{ frontierPreprintLanePerDay: 0 }, []],
-    [{ frontierPreprintLanePerDay: 3 }, ["a", "d", "e"]],
+    [{ frontierPreprintLanePerDay: 3 }, ["a", "b", "d"]],
   ])) {
     const { named, pipeline } = await laneDay(config);
     const taken = Object.entries(await selections(named)).filter(([, [, rule]]) => rule === "preprint-lane").map(([name]) => name).sort();
     assert.deepEqual(taken, expected, JSON.stringify(config));
-    assert.equal(pipeline.counters.preprintLane, expected.length, JSON.stringify(config));
+    assert.equal(pipeline.counters.mix["preprint-lane"] ?? 0, expected.length, JSON.stringify(config));
   }
 });
 
@@ -706,8 +716,8 @@ test("F12b: only a verified, unretracted, summarised article of an enabled sourc
   // First with the lane off, so the items are published and none is taken...
   const off = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 82, frontierPreprintLanePerDay: 0 } });
   const named = await deliverNamed(off.plugin, {
-    journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 84: the evidence lane has its selection
-    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 89: and so has the pipeline lane
+    journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 84
+    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 89
     retracted: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[11]} [score:70]` }, // 76
     letter: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[12]} [score:68]` }, // 74
     hidden: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[13]} [score:66]` }, // 72
@@ -716,7 +726,6 @@ test("F12b: only a verified, unretracted, summarised article of an enabled sourc
     good1: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[16]} [score:60]` }, // 66
     good2: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[17]} [score:59]` }, // 65
     good3: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[18]} [score:58]` }, // 64
-    newsroom: { source_id: "c-novo", title: `${DISTINCT_TOPICS[19]} [score:57]` }, // 63
   });
   await off.pipeline.processBatch();
   assert.deepEqual(Object.entries(await selections(named)).filter(([, [selected]]) => selected).map(([name]) => name), ["journal", "trial"], "no lane, no place");

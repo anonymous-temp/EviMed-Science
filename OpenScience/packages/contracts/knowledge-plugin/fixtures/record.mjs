@@ -48,7 +48,7 @@
  *
  * `--platform-source` records only what contract 1.3.0 changed (`recordPlatformSource` below) and keeps the rest; `--host-budget`
  * does the same for 1.4.0 (`recordHostBudget`), `--social` for 1.5.0 (`recordSocial`), `--patch` for 1.5.1 (`recordPatch`: the health
- * answer and the manifest only).
+ * answer and the manifest only), `--leads` for 1.6.0 (`recordLeads`: the health answer, the manifest and two posts to `/v1/leads`).
  */
 
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -516,6 +516,68 @@ export async function recordPatch({ baseUrl, token, outDir = here, serverRole = 
   return recordings.map(({ name, status }) => ({ name, status }));
 }
 
+/** The addresses `recordLeads` posts: two pages of a site nobody registered (one of them posted twice), and a DOI. */
+export const LEAD_POSTS = Object.freeze([
+  Object.freeze({ url: "https://med.example.cn/news/2026-10-24/1", trigger: "zh-report", query: "司美格鲁肽 肾脏结局", title: "司美格鲁肽改善肾脏结局",
+    published_hint: "2026-10-24T01:00:00.000Z" }),
+  Object.freeze({ url: "https://doi.org/10.1056/NEJMoa2599999", trigger: "primary-source" }),
+]);
+
+/**
+ * Contract 1.6.0 (2026-10-24, ct-mix): `POST /v1/leads`, the read method `lead`, `Health.leads` and `Manifest.capabilities.leads`.
+ * The health answer and the manifest are recorded again off a live plugin of 1.6.0 (they name the contract and carry the new
+ * fields), and two posts to `/v1/leads`: the first accepts its addresses, the second posts one of them again and an address that
+ * is no public page, and is answered `duplicate` and `refused`. The plugin's crawler is off, so nothing is read; every other
+ * recording stays as it was made.
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string }} options
+ */
+export async function recordLeads({ baseUrl, token, outDir = here, serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off), over an empty scratch database" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const accepted = await exchange(base, { name: "leads-accepted.json", path: "/v1/leads", method: "POST", ...signed, body: { leads: LEAD_POSTS } });
+  const again = await exchange(base, { name: "leads-duplicate.json", path: "/v1/leads", method: "POST", ...signed,
+    body: { leads: [{ url: LEAD_POSTS[0].url, trigger: "event-hot" }, { url: "https://localhost/not-public", trigger: "hot-tag" }] } });
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+    accepted, again,
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const [health, manifest, first, second] = recordings.map(json);
+  if (manifest.contract?.version !== "1.6.0") throw new Error(`the plugin serves contract ${manifest.contract?.version}, not 1.6.0`);
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  if (manifest.capabilities?.leads !== true || !health.leads) throw new Error("the plugin does not serve leads");
+  if (first.accepted !== LEAD_POSTS.length || second.duplicate !== 1 || second.refused !== 1) throw new Error("the lead posts were not answered as recorded");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  // The 1.5.1 health answer named the paid providers with the calls a live run had made, and its manifest the fields that run
+  // populated; a plugin of 1.6.0 over an empty scratch database has neither. Both are kept as they were recorded, under their
+  // version's name, and the contract test reads the providers and the fields there.
+  for (const name of ["health", "manifest"]) {
+    if (provenance.fixtures[`${name}.json`] && !provenance.fixtures[`${name}-1.5.1.json`]) {
+      await writeFile(path.join(outDir, `${name}-1.5.1.json`), await readFile(path.join(outDir, `${name}.json`)));
+      provenance.fixtures[`${name}-1.5.1.json`] = { ...provenance.fixtures[`${name}.json`] };
+    }
+  }
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.6.0 adds POST /v1/leads (the addresses the platform's lead triggers found, read under the plugin's own rules), the read method `lead`, Health.leads and Manifest.capabilities.leads: the health answer and the manifest name the new contract and carry the new fields, and two posts to /v1/leads record its answers (accepted; duplicate and refused). Every other recording is the earlier plugins', still valid.",
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
 /** One image off `GET /v1/media/{id}`, recorded like any exchange but asking for an image. @param {string} base @param {string} id @param {string} token */
 async function mediaExchange(base, id, token) {
   const recordedHeaders = { accept: "image/*" };
@@ -541,7 +603,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exitCode = 1;
   } else {
     const serverRole = argument("server-role");
-    const recorded = process.argv.includes("--patch")
+    const recorded = process.argv.includes("--leads")
+      ? await recordLeads({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
+      : process.argv.includes("--patch")
       ? await recordPatch({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}), ...(argument("version") ? { version: argument("version") } : {}) })
       : process.argv.includes("--platform-source")
       ? await recordPlatformSource({ baseUrl, token: loaded.value })

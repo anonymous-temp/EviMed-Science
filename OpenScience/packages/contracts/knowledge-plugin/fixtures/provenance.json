@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.5.1",
+  "contractVersion": "1.6.0",
   "plugin": {
     "name": "evimed-knowledge-plugin",
     "version": "0.1.0",
@@ -32,11 +32,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "3162",
+        "content-length": "2756",
         "content-type": "application/json",
-        "date": "Thu, 22 Oct 2026 16:53:27 GMT"
+        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
       },
-      "recordedAt": "2026-10-22T16:53:28.434Z"
+      "recordedAt": "2026-10-24T17:19:34.772Z"
     },
     "manifest.json": {
       "request": {
@@ -49,11 +49,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1329",
+        "content-length": "1193",
         "content-type": "application/json",
-        "date": "Thu, 22 Oct 2026 16:53:27 GMT"
+        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
       },
-      "recordedAt": "2026-10-22T16:53:28.442Z"
+      "recordedAt": "2026-10-24T17:19:34.784Z"
     },
     "sources-page-1.json": {
       "request": {
@@ -468,6 +468,103 @@
         "x-content-type-options": "nosniff"
       },
       "recordedAt": "2026-10-22T06:43:40.207Z"
+    },
+    "health-1.5.1.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/health",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "none"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "3162",
+        "content-type": "application/json",
+        "date": "Thu, 22 Oct 2026 16:53:27 GMT"
+      },
+      "recordedAt": "2026-10-22T16:53:28.434Z"
+    },
+    "manifest-1.5.1.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/manifest",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "1329",
+        "content-type": "application/json",
+        "date": "Thu, 22 Oct 2026 16:53:27 GMT"
+      },
+      "recordedAt": "2026-10-22T16:53:28.442Z"
+    },
+    "leads-accepted.json": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/leads",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json"
+        },
+        "credential": "the deployment token",
+        "body": {
+          "leads": [
+            {
+              "url": "https://med.example.cn/news/2026-10-24/1",
+              "trigger": "zh-report",
+              "query": "司美格鲁肽 肾脏结局",
+              "title": "司美格鲁肽改善肾脏结局",
+              "published_hint": "2026-10-24T01:00:00.000Z"
+            },
+            {
+              "url": "https://doi.org/10.1056/NEJMoa2599999",
+              "trigger": "primary-source"
+            }
+          ]
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "202",
+        "content-type": "application/json",
+        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
+      },
+      "recordedAt": "2026-10-24T17:19:34.752Z"
+    },
+    "leads-duplicate.json": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/leads",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json"
+        },
+        "credential": "the deployment token",
+        "body": {
+          "leads": [
+            {
+              "url": "https://med.example.cn/news/2026-10-24/1",
+              "trigger": "event-hot"
+            },
+            {
+              "url": "https://localhost/not-public",
+              "trigger": "hot-tag"
+            }
+          ]
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "245",
+        "content-type": "application/json",
+        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
+      },
+      "recordedAt": "2026-10-24T17:19:34.757Z"
     }
   },
   "partialRecordings": [
@@ -545,6 +642,25 @@
       ],
       "reason": "Contract 1.5.1 widens EntryText.fetched_from (openalex, landing, publisher-feed, europepmc-fulltext, elsevier) and says a full text's section headings are '## ' paragraphs: the health answer and the manifest name the new contract. Every other recording is the earlier plugins', still valid.",
       "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off) over a scratch database that tools/social_live_check.py filled once, live (one X account, NEJM: 12 posts; one WeChat account, NEJM医学前沿: 13 articles, 1 body), and one real OpenAlex request through its own fetcher"
+    },
+    {
+      "recordedAt": "2026-10-24T17:19:34.791Z",
+      "server": "http://127.0.0.1:49221",
+      "plugin": {
+        "name": "evimed-knowledge-plugin",
+        "version": "0.1.0",
+        "build": "dev",
+        "started_at": "2026-10-24T17:19:27.001024Z"
+      },
+      "contractVersion": "1.6.0",
+      "fixtures": [
+        "health.json",
+        "manifest.json",
+        "leads-accepted.json",
+        "leads-duplicate.json"
+      ],
+      "reason": "Contract 1.6.0 adds POST /v1/leads (the addresses the platform's lead triggers found, read under the plugin's own rules), the read method `lead`, Health.leads and Manifest.capabilities.leads: the health answer and the manifest name the new contract and carry the new fields, and two posts to /v1/leads record its answers (accepted; duplicate and refused). Every other recording is the earlier plugins', still valid.",
+      "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off), over an empty scratch database"
     }
   ]
 }

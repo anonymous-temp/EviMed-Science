@@ -2081,6 +2081,16 @@ export function frontierMetricFamilies(enabled, snapshot) {
     ["ok", "throttled", "exhausted", "unavailable"].map((state) => ({ labels: { state }, value: budget.state === state ? 1 : 0 })));
   add("pipeline_total", "What the pipeline's batches did since this process started.", "counter",
     Object.entries(worker.pipeline).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+  // ct-mix 2026-10-24: the lead triggers' searches by trigger, what the plugin answered for the pages handed over, failures by code.
+  const leads = worker.leads;
+  if (leads?.counters) {
+    add("lead_searches_total", "Lead-trigger web searches made, by trigger.", "counter",
+      Object.entries(leads.counters.searches ?? {}).map(([trigger, value]) => ({ labels: { trigger }, value: Number(value) })));
+    add("lead_pages_total", "Pages lead searches found that the feed did not have, by what the plugin answered (unsent: it did not answer).", "counter",
+      Object.entries(leads.counters.plugin ?? {}).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+    add("lead_failures_total", "Lead searches and hand-overs that failed, by code.", "counter",
+      Object.entries(leads.counters.failures ?? {}).map(([code, value]) => ({ labels: { code }, value: Number(value) })));
+  }
   add("worker_loop_failures_total", "Worker loop runs that ended in an error, by loop.", "counter",
     Object.entries(worker.loops).map(([loop, state]) => ({ labels: { loop }, value: Number(/** @type {any} */ (state).failures) })));
   add("worker_loop_stalled", "Worker loops still running past the lease (1 = stalled).", "gauge",

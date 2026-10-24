@@ -9,9 +9,9 @@ data and makes no content-generating model call (plan `docs/superpowers/specs/20
 
 ## The contract
 
-`contract/knowledge-plugin-openapi.yaml` (v1.5.1, normative; a vendored copy of the plan's file,
+`contract/knowledge-plugin-openapi.yaml` (v1.6.0, normative; a vendored copy of the plan's file,
 kept byte-identical by a test while this lives in the monorepo). Paths: `/v1/manifest`,
-`/v1/health` (no token), `/v1/sources[/{id}]`, `/v1/entries?after=<seq>` (the stream, ascending
+`/v1/health` (no token), `/v1/sources[/{id}]`, `POST /v1/leads` (1.6.0), `/v1/entries?after=<seq>` (the stream, ascending
 `seq`), `/v1/entries/{id}`, `/v1/entries/{id}/text` (on-demand abstract and enrichment),
 `POST /v1/entries/{id}/refresh`, `/v1/media/{id}` (1.5.0: a stored image's bytes), `/v1/lookups` (empty in batch 1;
 `POST` answers 501).
@@ -69,8 +69,10 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `EVIMED_SOURCE_REQUESTS_URL` | unset | optional public HTTPS JSON source wish list, pulled daily through protected fetching; only supported AI discovery readers on plugin-approved scholarly hosts are admitted, existing exclusions preserved |
 | `KNOWLEDGE_PLUGIN_CRAWL` | `1` | `0` serves the stored stream without crawling |
 | `KNOWLEDGE_PLUGIN_DISCOVERY` | `1` | `0` stops automatic source discovery and the source lifecycle (`discovery.py`, `lifecycle.py`) |
-| `KNOWLEDGE_PLUGIN_DISCOVERY_CAPS` | unset | the daily validations per candidate line, `line=n,…` over the defaults (`outbound=60,journal=25,directory=30,hot-origin=15,social=20,request=25,readmit=30`) |
+| `KNOWLEDGE_PLUGIN_DISCOVERY_CAPS` | unset | the daily validations per candidate line, `line=n,…` over the defaults (`outbound=60,journal=25,directory=30,hot-origin=15,social=20,request=25,readmit=30,lead=20`) |
 | `KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES` | `120` | article pages the outbound line reads a day to find the sites they link to |
+| `KNOWLEDGE_PLUGIN_LEADS` | `1` | `0` reads no leads and answers `POST /v1/leads` 501 (contract 1.6.0, `leads.py`) |
+| `KNOWLEDGE_PLUGIN_LEADS_DAILY` | `300` | addresses `POST /v1/leads` accepts a Shanghai day; past it, `capped` |
 | `KNOWLEDGE_PLUGIN_PORT` / `KNOWLEDGE_PLUGIN_HOST` | `8080` / `0.0.0.0` | listen address |
 | `KNOWLEDGE_PLUGIN_REGISTRY` | `registry/sources.json` | the runtime registry file (watched; re-synced on change) |
 | `KNOWLEDGE_PLUGIN_CONCURRENCY` / `KNOWLEDGE_PLUGIN_TEXT_CONCURRENCY` | `4` / `2` | parallel polls / enrichments |
@@ -113,7 +115,8 @@ Shanghai day:
    `hot-origin` (the journals and sites of entries several publishers carried), `social` (quoted accounts, and the
    WeChat accounts our WeChat bodies credit as their origin — 「来源：…」, 「本文转载自…」, a closed marker list —,
    `social/wechat_discovery.py`), `request` (the source-request manifest, any lane but `ai`), `parent-feed`
-   (`medical_discovery.py`), `readmit` (retired sources due for a re-check). A WeChat candidate of any line (also a
+   (`medical_discovery.py`), `readmit` (retired sources due for a re-check), `lead` (the sites, WeChat accounts and
+   journals of the pages the platform's lead triggers handed over; see Leads below). A WeChat candidate of any line (also a
    lead's article link, `candidate_from_link`) is validated by one Dajiala call — `post_history` by its nickname (¥0.16)
    or by the link (¥0.14), at most 20 a Shanghai day across lines: Dajiala names exactly that account, its posts carry one
    `__biz` we do not read yet, and it posted within 30 days; it then goes on trial as an ordinary WeChat row (priority 4,
@@ -128,6 +131,21 @@ delivered, reported back by the platform after each mirror (`POST /v1/sources/sc
 in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days, `by_line`, `in_trial`).
 `python -m knowledge_plugin lifecycle` prints what the rules would retire now (writes nothing; `--apply` retires);
 `python -m knowledge_plugin discover [--lines a,b] [--caps line=n,…]` runs one cycle in the foreground.
+
+## Leads (contract 1.6.0)
+
+The platform decides when to go looking for material — a daily watch, a congress in its window, a genre 精选 is short of, an
+event that turned hot, a story without a Chinese report or without its primary source — searches through its own web-search
+gateway, and posts what it found to `POST /v1/leads` (at most 50 addresses a call). Each address is answered on its own:
+`accepted` (queued), `duplicate` (received before, or the stream holds it), `refused` (not a public address, or an owner-excluded
+host) or `capped` (`KNOWLEDGE_PLUGIN_LEADS_DAILY` a Shanghai day). `leads.py`'s loop then reads a few a minute under the plugin's
+own rules — a page through the protected fetch (robots, pacing, the relay) with its main text and metadata, a WeChat article
+bought through Dajiala within the shared daily cap (never read as a page), a DOI through Crossref, a PMID through PubMed's summary,
+a trial number through ClinicalTrials.gov's API — and emits ordinary entries: a page or an article only when it carries a date
+within 30 days. An entry goes under the registered source of its site, account or journal, else under a lead source of its own
+(`evimed_knowledge.lead_sources`, access `lead`, never polled, named and owned by the site), and the site, account or journal
+becomes a discovery candidate of line `lead` unless `registry/discovery.json` excludes it. `/v1/health` `leads` counts today's
+addresses by what came of them. The plugin still never calls the platform and makes no model call.
 
 ## The paper text chain (contract 1.5.1)
 

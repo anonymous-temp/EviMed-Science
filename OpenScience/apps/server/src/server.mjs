@@ -193,7 +193,7 @@ import {
   publicSourceCredentialMissingMetricFamily,
   publicSourceCredentialReadiness,
 } from "./publicSourceGateway.mjs";
-import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
+import { WEB_SEARCH_GATEWAY_PATH, createWebSearch, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { createDeepSeekTools, deepseekToolMetricFamilies } from "./deepseekTools.mjs";
 import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
@@ -352,6 +352,7 @@ import { FrontierWeekly } from "./frontierWeekly.mjs";
 import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { createFrontierUsage } from "./frontierUsage.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
+import { FrontierLeads } from "./frontierLeads.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
 // 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
@@ -2216,6 +2217,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage> } | null} */
   let frontier = null;
+  // The gateway's search (composed with the gateways below), which the feed's lead triggers call in-process.
+  /** @type {{ service: ReturnType<typeof createWebSearch> | null }} */
+  const webSearchRef = { service: null };
   if (config.frontierEnabled && productDatabase) {
     const client = new KnowledgePluginClient({
       baseUrl: config.knowledgePluginUrl, tokenFile: config.knowledgePluginTokenFile, timeoutMs: config.knowledgePluginTimeoutMs,
@@ -2293,8 +2297,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       isOperator:(/** @type {string} */ userId)=>config.operatorUsers.includes(userId),
       ensureProject:(/** @type {string} */ userId)=>ensureEvidenceProject(store,userId),
       readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
+    // Lead triggers (ct-mix 2026-10-24): searches for what the feed is missing, through the gateway's search under the
+    // module's purpose and budget, handed to the plugin.
+    const leads = new FrontierLeads({ database: productDatabase, plugin: client, config, budget, owner: () => editor.owner,
+      webSearch: { search: (/** @type {Record<string, unknown>} */ body, /** @type {{ caller: any }} */ searchContext) => {
+        if (!webSearchRef.service) throw Object.assign(new Error("Open-web search is not composed yet."), { code: "web_search_unconfigured" });
+        return webSearchRef.service.search(body, searchContext);
+      } } });
     const worker = new FrontierWorker({
-      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, database: productDatabase,
+      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, leads, database: productDatabase,
       ensureOwner: async () => {
         const owner = await ensureFrontierProject({ store, config });
         editor.owner = owner;
@@ -5420,7 +5431,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     } : null,
   });
   const connectorCredentialGatewayHandler = createConnectorCredentialGatewayHandler({ runtimeManager, store: connectorCredentials });
-  const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
+  const webSearchService = createWebSearch(config, {
     evaluationIsolation,
     runPurpose,
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
@@ -5431,6 +5442,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     runScope: autopilotRunScope,
     deepseekTools,
   });
+  webSearchRef.service = webSearchService;
+  const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, { service: webSearchService });
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
     // The module's own admission, as the GEO gateway below is given it.
