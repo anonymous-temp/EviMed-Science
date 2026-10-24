@@ -53,6 +53,50 @@
    "how": "tools/social_live_check.py (the collector's own read)"
   },
   {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-cjim",
+   "asked": "中华内科杂志",
+   "answered": "中华内科杂志",
+   "biz_matches": true,
+   "posts": 13,
+   "newest": "2026-10-23",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-cmda",
+   "asked": "中国医师协会",
+   "answered": "中国医师协会",
+   "biz_matches": true,
+   "posts": 10,
+   "newest": "2026-10-13",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-cmi",
+   "asked": "中国医疗保险",
+   "answered": "中国医疗保险",
+   "biz_matches": true,
+   "posts": 36,
+   "newest": "2026-10-24",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-csc",
+   "asked": "中华医学会心血管病学分会",
+   "answered": "中华医学会心血管病学分会",
+   "biz_matches": true,
+   "posts": 13,
+   "newest": "2026-10-22",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
    "at": "2026-10-24T16:30Z",
    "id": "wx-jianshiju",
    "asked": "健识局",
@@ -86,6 +130,28 @@
    "how": "tools/social_live_check.py (the collector's own read)"
   },
   {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-nifdc",
+   "asked": "中国药检",
+   "answered": "中国药检",
+   "biz_matches": true,
+   "posts": 23,
+   "newest": "2026-10-23",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-nmjc",
+   "asked": "中华医学杂志",
+   "answered": "中华医学杂志",
+   "biz_matches": true,
+   "posts": 18,
+   "newest": "2026-10-24",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
    "at": "2026-10-24T16:30Z",
    "id": "wx-nmpa",
    "asked": "国家药监局",
@@ -97,6 +163,17 @@
    "how": "tools/social_live_check.py (the collector's own read)"
   },
   {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-nsfc",
+   "asked": "国家自然科学基金委员会",
+   "answered": "国家自然科学基金委员会",
+   "biz_matches": true,
+   "posts": 11,
+   "newest": "2026-10-22",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
    "at": "2026-10-24T16:30Z",
    "id": "wx-sinamed",
    "asked": "新浪医药",
@@ -104,6 +181,17 @@
    "biz_matches": true,
    "posts": 80,
    "newest": "2026-10-23",
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)"
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-who",
+   "asked": "世界卫生组织",
+   "answered": "世界卫生组织",
+   "biz_matches": true,
+   "posts": 10,
+   "newest": "2026-10-15",
    "cost_cny": 0.16,
    "how": "tools/social_live_check.py (the collector's own read)"
   },
