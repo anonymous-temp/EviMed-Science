@@ -89,3 +89,48 @@ async def test_the_composition_adds_the_social_rows_and_retires_none_of_the_rest
         accesses = await (await conn.execute(
             "SELECT access, count(*) AS n FROM evimed_knowledge.sources WHERE retired_at IS NULL GROUP BY access")).fetchall()
     assert {row["access"]: row["n"] for row in accesses}["rss"] == 1
+
+
+def builder():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("build_social_registry", ROOT / "tools" / "build_social_registry.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_builder_names_a_wechat_row_by_its_article_its_biz_or_its_name_and_refuses_a_temporary_link(tmp_path, monkeypatch):
+    build = builder()
+    assert build.wechat_url({"verified_url": "https://mp.weixin.qq.com/s/abc", "biz": "MzA5", "expected_names": ["甲"]}) \
+        == "https://mp.weixin.qq.com/s/abc"
+    assert build.wechat_url({"biz": "MzA5MjE3MzUxNA==", "expected_names": ["甲"]}) \
+        == "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA5MjE3MzUxNA=="
+    assert build.wechat_url({"expected_names": ["医学界"]}) == "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C"
+    account = {"id": "wx-a", "name": "甲", "expected_names": ["甲"], "group": "clinical", "category": "clinical",
+               "source_type": "media", "authority": 3, "owner_entity": "甲", "priority": 1}
+    research = tmp_path / "research"
+    research.mkdir()
+    monkeypatch.setattr(build, "RESEARCH", research)
+    (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [account]}))
+    (row,) = build.wechat_rows("2099-01-01")
+    assert row["config"]["polls_per_day"] == 2 and row["poll_floor_s"] == 43200, "tier 1 is read twice a day"
+    assert "verified_url" not in row["config"] and "biz" not in row["config"]
+    temporary = {**account, "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1&ver=1&signature=x"}
+    (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [temporary]}))
+    with pytest.raises(SystemExit, match="temporary link"):
+        build.wechat_rows("2099-01-01")
+    (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [{**account, "group": "misc"}]}))
+    with pytest.raises(SystemExit, match="group"):
+        build.wechat_rows("2099-01-01")
+
+
+def test_the_wechat_list_has_its_categories_and_tiers():
+    """S3 (ct-src 2026-10-24): 150–200 accounts, by group, regulators and societies first."""
+    document = json.loads(SOCIAL.read_text())
+    counts = document["counts"]
+    assert 150 <= counts["wechat"] <= 200
+    groups = counts["wechat_by_group"]
+    assert groups["industry"] >= 30 and groups["clinical"] >= 40 and groups["society-journal"] >= 25
+    assert groups["hospital"] >= 10 and groups["regulator"] >= 10
+    assert sum(counts["wechat_by_priority"].values()) == counts["wechat"]

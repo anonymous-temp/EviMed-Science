@@ -14,7 +14,7 @@ What each costs (the ledger's amounts):
 - Dajiala: what the answer's ``cost_money`` says (``post_history`` ¥0.14 by id or link, ¥0.16 by nickname,
   ``article_detail`` ¥0.03), with
   ``remain_money`` recorded as the balance. Codes (its documentation, 2026): 0 ok; -1 rate limited (5 a second); 20001
-  balance; 10002 key or code wrong; 101/104 the account or article is gone (charged); 105/20003/30001/400 the request
+  balance; 10002 key or code wrong; 101/104/107 the account or article is gone (charged; 107 is AIHOT's too); 105/20003/30001/400 the request
   was wrong (free); 2003/2005/50000 the provider failed, try later. 20002 is documented as a wrong request but behaves as
   one that passes: on 2026-10-22 production had 88 of 300 ``article_detail`` calls answer it, all between 16:21 and 17:29
   Beijing while the balance ran down, and the same links read fine after the top-up — so it is ``failed`` (try later),
@@ -48,7 +48,7 @@ POST_HISTORY_BY_NAME_CNY = 0.16
 ARTICLE_DETAIL_CNY = 0.03
 DAJIALA_RATE_LIMITED = -1
 DAJIALA_BALANCE = 20001
-DAJIALA_GONE = (101, 104)
+DAJIALA_GONE = (101, 104, 107)       # 107: measured 2026-10-24 on a nickname no account answers to (¥0.02)
 DAJIALA_RETRY = (2003, 2005, 20002, 50000)    # 20002: module docstring
 CRAWL_PATH = "/api/crawl"
 CRAWL_MAX_BYTES = 8 * 1024 * 1024

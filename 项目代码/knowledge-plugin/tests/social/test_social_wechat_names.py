@@ -206,3 +206,15 @@ async def test_the_name_lookup_respects_the_cap_and_the_balance(social_settings,
     assert (await capped.tick())["wechat"] == {"capped": 1}
     assert asked == [], "¥0.16 would pass a ¥0.15 cap: the call is not made"
     assert (await source(pool, "wx-pharmcube"))["last_error_code"] == "daily_cap"
+
+
+@pytest.mark.db
+async def test_a_nickname_no_account_answers_to_is_gone_and_asked_again_in_three_days(social_settings, pool):
+    """Measured 2026-10-24: 「肿瘤资讯」 (a name the research thought current) answered code 107 at ¥0.02; the account's
+    listed name 「良医汇肿瘤资讯」 answered with its biz."""
+    await sync(pool, [row("wx-oncologynews", "肿瘤资讯", biz="MjM5Nzc4MDk2MA==")])
+    fetcher, asked, _ = fakes({"code": 107, "msg": "", "cost_money": 0.02})
+    collector = SocialCollector(social_settings, pool, fetcher, clock=lambda: NOW)
+    assert (await collector.tick())["wechat"] == {"failed": 1}
+    state = await source(pool, "wx-oncologynews")
+    assert state["last_error_code"] == "dajiala_gone:code_107" and state["next_poll_at"] == NOW + wechat_mod.GONE_RETRY

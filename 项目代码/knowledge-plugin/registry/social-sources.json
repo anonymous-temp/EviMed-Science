@@ -7,22 +7,22 @@
  },
  "counts": {
   "x": 170,
-  "wechat": 69,
+  "wechat": 186,
   "social": 6,
   "watch_list": 41,
   "wechat_by_group": {
-   "industry": 19,
-   "clinical": 20,
-   "society-journal": 10,
-   "hospital": 0,
-   "regulator": 5,
-   "research-media": 15
+   "industry": 38,
+   "clinical": 68,
+   "society-journal": 39,
+   "hospital": 13,
+   "regulator": 11,
+   "research-media": 17
   },
   "wechat_by_priority": {
-   "1": 15,
-   "2": 19,
-   "3": 19,
-   "4": 16
+   "1": 50,
+   "2": 80,
+   "3": 38,
+   "4": 18
   }
  },
  "sources": [
@@ -4520,6 +4520,69 @@
    }
   },
   {
+   "id": "wx-biopharma-xb",
+   "name": "生物制药小编",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E7%94%9F%E7%89%A9%E5%88%B6%E8%8D%AF%E5%B0%8F%E7%BC%96",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "生物制药小编（佰傲谷 BioValley 系）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E7%94%9F%E7%89%A9%E5%88%B6%E8%8D%AF%E5%B0%8F%E7%BC%96",
+    "expected_names": [
+     "生物制药小编"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-bmj-medicine",
+   "name": "BMJ医学",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=BMJ%E5%8C%BB%E5%AD%A6",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "BMJ（英国医学杂志）中国",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=BMJ%E5%8C%BB%E5%AD%A6",
+    "expected_names": [
+     "BMJ医学",
+     "BMJ"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-caca",
    "name": "中国抗癌协会",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzAxMDAxMjcwOA==",
@@ -4549,6 +4612,194 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MzAxMDAxMjcwOA=="
+   }
+  },
+  {
+   "id": "wx-cacm",
+   "name": "中华中医药学会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E4%B8%AD%E5%8C%BB%E8%8D%AF%E5%AD%A6%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华中医药学会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E4%B8%AD%E5%8C%BB%E8%8D%AF%E5%AD%A6%E4%BC%9A",
+    "expected_names": [
+     "中华中医药学会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-camdi",
+   "name": "中国医疗器械行业协会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E7%96%97%E5%99%A8%E6%A2%B0%E8%A1%8C%E4%B8%9A%E5%8D%8F%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国医疗器械行业协会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E7%96%97%E5%99%A8%E6%A2%B0%E8%A1%8C%E4%B8%9A%E5%8D%8F%E4%BC%9A",
+    "expected_names": [
+     "中国医疗器械行业协会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cellpress",
+   "name": "CellPress细胞科学",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=CellPress%E7%BB%86%E8%83%9E%E7%A7%91%E5%AD%A6",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "Cell Press 细胞出版社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=CellPress%E7%BB%86%E8%83%9E%E7%A7%91%E5%AD%A6",
+    "expected_names": [
+     "CellPress细胞科学"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cgp-journal",
+   "name": "中国全科医学杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%85%A8%E7%A7%91%E5%8C%BB%E5%AD%A6%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "《中国全科医学》杂志社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%85%A8%E7%A7%91%E5%8C%BB%E5%AD%A6%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中国全科医学杂志",
+     "中国全科医学"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cha-hospital",
+   "name": "中国医院协会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E9%99%A2%E5%8D%8F%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国医院协会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E9%99%A2%E5%8D%8F%E4%BC%9A",
+    "expected_names": [
+     "中国医院协会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-chima",
+   "name": "CHIMA",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA4NzAwMjMyOQ==",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国医院协会信息专业委员会（CHIMA）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA4NzAwMjMyOQ==",
+    "expected_names": [
+     "CHIMA"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzA4NzAwMjMyOQ=="
    }
   },
   {
@@ -4585,6 +4836,255 @@
    }
   },
   {
+   "id": "wx-chinese-stroke",
+   "name": "中国卒中学会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8D%92%E4%B8%AD%E5%AD%A6%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国卒中学会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8D%92%E4%B8%AD%E5%AD%A6%E4%BC%9A",
+    "expected_names": [
+     "中国卒中学会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cicams",
+   "name": "中国医学科学院肿瘤医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E7%A7%91%E5%AD%A6%E9%99%A2%E8%82%BF%E7%98%A4%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国医学科学院肿瘤医院（国家癌症中心）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E7%A7%91%E5%AD%A6%E9%99%A2%E8%82%BF%E7%98%A4%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "中国医学科学院肿瘤医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cjc-cardiol",
+   "name": "中华心血管病杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%BF%83%E8%A1%80%E7%AE%A1%E7%97%85%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社《中华心血管病杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%BF%83%E8%A1%80%E7%AE%A1%E7%97%85%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中华心血管病杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cjc-circulation",
+   "name": "中国循环杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%BE%AA%E7%8E%AF%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "《中国循环杂志》（阜外医院主办）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%BE%AA%E7%8E%AF%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中国循环杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cjd-diabetes",
+   "name": "中华糖尿病杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E7%B3%96%E5%B0%BF%E7%97%85%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社《中华糖尿病杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E7%B3%96%E5%B0%BF%E7%97%85%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中华糖尿病杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cje-epi",
+   "name": "中华流行病学杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E6%B5%81%E8%A1%8C%E7%97%85%E5%AD%A6%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社《中华流行病学杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E6%B5%81%E8%A1%8C%E7%97%85%E5%AD%A6%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中华流行病学杂志",
+     "中华流行病学微平台"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cjebp",
+   "name": "中国循证儿科杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%BE%AA%E8%AF%81%E5%84%BF%E7%A7%91%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "复旦大学附属儿科医院《中国循证儿科杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%BE%AA%E8%AF%81%E5%84%BF%E7%A7%91%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中国循证儿科杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cjem",
+   "name": "中华内分泌代谢杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%86%85%E5%88%86%E6%B3%8C%E4%BB%A3%E8%B0%A2%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社《中华内分泌代谢杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%86%85%E5%88%86%E6%B3%8C%E4%BB%A3%E8%B0%A2%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中华内分泌代谢杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-cjim",
    "name": "中华内科杂志",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzAxMjUyNzQzNA==",
@@ -4614,6 +5114,254 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MzAxMjUyNzQzNA=="
+   }
+  },
+  {
+   "id": "wx-cjn-neuro",
+   "name": "中华神经科杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E7%A5%9E%E7%BB%8F%E7%A7%91%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社《中华神经科杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E7%A5%9E%E7%BB%8F%E7%A7%91%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中华神经科杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cjp-peds",
+   "name": "中华儿科杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%84%BF%E7%A7%91%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社《中华儿科杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%84%BF%E7%A7%91%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中华儿科杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cjtrd",
+   "name": "中华结核和呼吸杂志",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E7%BB%93%E6%A0%B8%E5%92%8C%E5%91%BC%E5%90%B8%E6%9D%82%E5%BF%97",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社《中华结核和呼吸杂志》",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E7%BB%93%E6%A0%B8%E5%92%8C%E5%91%BC%E5%90%B8%E6%9D%82%E5%BF%97",
+    "expected_names": [
+     "中华结核和呼吸杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cma-anesth",
+   "name": "中华医学会麻醉学分会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E9%BA%BB%E9%86%89%E5%AD%A6%E5%88%86%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会麻醉学分会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E9%BA%BB%E9%86%89%E5%AD%A6%E5%88%86%E4%BC%9A",
+    "expected_names": [
+     "中华医学会麻醉学分会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cma-diabetes",
+   "name": "中华医学会糖尿病学分会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E7%B3%96%E5%B0%BF%E7%97%85%E5%AD%A6%E5%88%86%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会糖尿病学分会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E7%B3%96%E5%B0%BF%E7%97%85%E5%AD%A6%E5%88%86%E4%BC%9A",
+    "expected_names": [
+     "中华医学会糖尿病学分会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cma-nephro",
+   "name": "中华医学会肾脏病学分会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E8%82%BE%E8%84%8F%E7%97%85%E5%AD%A6%E5%88%86%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会肾脏病学分会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E8%82%BE%E8%84%8F%E7%97%85%E5%AD%A6%E5%88%86%E4%BC%9A",
+    "expected_names": [
+     "中华医学会肾脏病学分会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cma-ophth",
+   "name": "中华医学会眼科学分会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E7%9C%BC%E7%A7%91%E5%AD%A6%E5%88%86%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会眼科学分会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E7%9C%BC%E7%A7%91%E5%AD%A6%E5%88%86%E4%BC%9A",
+    "expected_names": [
+     "中华医学会眼科学分会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cma-radiol",
+   "name": "中华医学会放射学分会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E6%94%BE%E5%B0%84%E5%AD%A6%E5%88%86%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会放射学分会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E5%8C%BB%E5%AD%A6%E4%BC%9A%E6%94%BE%E5%B0%84%E5%AD%A6%E5%88%86%E4%BC%9A",
+    "expected_names": [
+     "中华医学会放射学分会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -4682,6 +5430,38 @@
    }
   },
   {
+   "id": "wx-cmde-official",
+   "name": "中国器审",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzY0MDg4NTcxMg==",
+   "lane": "mixed",
+   "source_type": "regulator",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家药品监督管理局医疗器械技术审评中心（CMDE）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-regulator",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzY0MDg4NTcxMg==",
+    "expected_names": [
+     "中国器审"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzY0MDg4NTcxMg=="
+   }
+  },
+  {
    "id": "wx-cmi",
    "name": "中国医疗保险",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5ODQ4MjU4MQ==",
@@ -4711,6 +5491,38 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MjM5ODQ4MjU4MQ=="
+   }
+  },
+  {
+   "id": "wx-cmj1887",
+   "name": "CMJ1887",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=CMJ1887",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华医学会杂志社 Chinese Medical Journal",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=CMJ1887",
+    "expected_names": [
+     "CMJ1887",
+     "CMJ中华医学杂志英文版"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -4747,6 +5559,161 @@
    }
   },
   {
+   "id": "wx-cmt-cardio",
+   "name": "中国医学论坛报今日循环",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%BE%AA%E7%8E%AF",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "中国医学论坛报社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%BE%AA%E7%8E%AF",
+    "expected_names": [
+     "中国医学论坛报今日循环"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cmt-dental",
+   "name": "中国医学论坛报今日口腔",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%8F%A3%E8%85%94",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "中国医学论坛报社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%8F%A3%E8%85%94",
+    "expected_names": [
+     "中国医学论坛报今日口腔"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cmt-endo",
+   "name": "中国医学论坛报今日内分泌",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%86%85%E5%88%86%E6%B3%8C",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "中国医学论坛报社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%86%85%E5%88%86%E6%B3%8C",
+    "expected_names": [
+     "中国医学论坛报今日内分泌"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cmt-onco",
+   "name": "中国医学论坛报今日肿瘤",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E8%82%BF%E7%98%A4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "中国医学论坛报社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E8%82%BF%E7%98%A4",
+    "expected_names": [
+     "中国医学论坛报今日肿瘤"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-cmt-resp",
+   "name": "中国医学论坛报今日呼吸",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%91%BC%E5%90%B8",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "中国医学论坛报社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E5%AD%A6%E8%AE%BA%E5%9D%9B%E6%8A%A5%E4%BB%8A%E6%97%A5%E5%91%BC%E5%90%B8",
+    "expected_names": [
+     "中国医学论坛报今日呼吸"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-cn-healthcare",
    "name": "健康界",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MjM5NzUzODczMg==&mid=2650015996&idx=2&sn=d6a8437419b4c74b50667e9c9703fb20&chksm=bf090d24fbdb37f07541f982edb19a1cdff37c99154907ab3d5d5567235a53597d135185cbce",
@@ -4777,6 +5744,37 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NzUzODczMg==&mid=2650015996&idx=2&sn=d6a8437419b4c74b50667e9c9703fb20&chksm=bf090d24fbdb37f07541f982edb19a1cdff37c99154907ab3d5d5567235a53597d135185cbce",
     "biz": "MjM5NzUzODczMg=="
+   }
+  },
+  {
+   "id": "wx-cna-nursing",
+   "name": "中华护理学会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E6%8A%A4%E7%90%86%E5%AD%A6%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中华护理学会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%8D%8E%E6%8A%A4%E7%90%86%E5%AD%A6%E4%BC%9A",
+    "expected_names": [
+     "中华护理学会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -4846,6 +5844,37 @@
    }
   },
   {
+   "id": "wx-cphi-online",
+   "name": "CPHI制药在线",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=CPHI%E5%88%B6%E8%8D%AF%E5%9C%A8%E7%BA%BF",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "CPHI制药在线（英富曼）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=CPHI%E5%88%B6%E8%8D%AF%E5%9C%A8%E7%BA%BF",
+    "expected_names": [
+     "CPHI制药在线"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-csc",
    "name": "中华医学会心血管病学分会",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5NDE0NTUxNg==",
@@ -4875,6 +5904,68 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MjM5NDE0NTUxNg=="
+   }
+  },
+  {
+   "id": "wx-csco-official",
+   "name": "CSCO",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=CSCO",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国临床肿瘤学会（CSCO）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=CSCO",
+    "expected_names": [
+     "CSCO"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-denglingshe",
+   "name": "瞪羚社",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E7%9E%AA%E7%BE%9A%E7%A4%BE",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "瞪羚社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E7%9E%AA%E7%BE%9A%E7%A4%BE",
+    "expected_names": [
+     "瞪羚社"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -4911,6 +6002,162 @@
    }
   },
   {
+   "id": "wx-dxy-derm",
+   "name": "丁香园皮肤时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E7%9A%AE%E8%82%A4%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E7%9A%AE%E8%82%A4%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园皮肤时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-drugguide",
+   "name": "丁香园用药指南",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E7%94%A8%E8%8D%AF%E6%8C%87%E5%8D%97",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E7%94%A8%E8%8D%AF%E6%8C%87%E5%8D%97",
+    "expected_names": [
+     "丁香园用药指南"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-endo",
+   "name": "丁香园内分泌时间",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5NDA1ODEzOA==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5NDA1ODEzOA==",
+    "expected_names": [
+     "丁香园内分泌时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MjM5NDA1ODEzOA=="
+   }
+  },
+  {
+   "id": "wx-dxy-gensurg",
+   "name": "丁香园普外时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E6%99%AE%E5%A4%96%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E6%99%AE%E5%A4%96%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园普外时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-gi",
+   "name": "丁香园消化时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E6%B6%88%E5%8C%96%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E6%B6%88%E5%8C%96%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园消化时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-dxy-heart",
    "name": "丁香园心血管时间",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzA5MjE3MzUxNA==&mid=2651578464&idx=2&sn=71a77ace9d81ea98f628074d5c2c099e&chksm=8ac5930cdcc954018b536447487d8b5fb64e1073c76da8ecc1dafae62402aee00e2e55002dab",
@@ -4941,6 +6188,226 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA5MjE3MzUxNA==&mid=2651578464&idx=2&sn=71a77ace9d81ea98f628074d5c2c099e&chksm=8ac5930cdcc954018b536447487d8b5fb64e1073c76da8ecc1dafae62402aee00e2e55002dab",
     "biz": "MzA5MjE3MzUxNA=="
+   }
+  },
+  {
+   "id": "wx-dxy-hema",
+   "name": "丁香园血液时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E8%A1%80%E6%B6%B2%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E8%A1%80%E6%B6%B2%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园血液时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-imaging",
+   "name": "丁香园影像时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E5%BD%B1%E5%83%8F%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E5%BD%B1%E5%83%8F%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园影像时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-infect",
+   "name": "丁香园感染时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E6%84%9F%E6%9F%93%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E6%84%9F%E6%9F%93%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园感染时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-insight-db",
+   "name": "丁香园 Insight 数据库",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=Mzk3NTA3Nzc2Ng==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=Mzk3NTA3Nzc2Ng==",
+    "expected_names": [
+     "丁香园 Insight 数据库",
+     "Insight数据库"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "Mzk3NTA3Nzc2Ng=="
+   }
+  },
+  {
+   "id": "wx-dxy-nephro",
+   "name": "丁香园肾内时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E8%82%BE%E5%86%85%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E8%82%BE%E5%86%85%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园肾内时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-neuro",
+   "name": "丁香园神经时间",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=Mzg4NjkzMzM1Nw==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=Mzg4NjkzMzM1Nw==",
+    "expected_names": [
+     "丁香园神经时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "Mzg4NjkzMzM1Nw=="
+   }
+  },
+  {
+   "id": "wx-dxy-obgyn",
+   "name": "丁香园妇产时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E5%A6%87%E4%BA%A7%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E5%A6%87%E4%BA%A7%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园妇产时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -4977,6 +6444,162 @@
    }
   },
   {
+   "id": "wx-dxy-ortho",
+   "name": "丁香园骨科时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E9%AA%A8%E7%A7%91%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E9%AA%A8%E7%A7%91%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园骨科时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-peds",
+   "name": "丁香园儿科时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E5%84%BF%E7%A7%91%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E5%84%BF%E7%A7%91%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园儿科时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-psych",
+   "name": "丁香园精神时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E7%B2%BE%E7%A5%9E%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E7%B2%BE%E7%A5%9E%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园精神时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-dxy-resp",
+   "name": "丁香园呼吸时间",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA5MjIxMzgxMg==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA5MjIxMzgxMg==",
+    "expected_names": [
+     "丁香园呼吸时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzA5MjIxMzgxMg=="
+   }
+  },
+  {
+   "id": "wx-dxy-rheum",
+   "name": "丁香园风湿时间",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E9%A3%8E%E6%B9%BF%E6%97%B6%E9%97%B4",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%81%E9%A6%99%E5%9B%AD%E9%A3%8E%E6%B9%BF%E6%97%B6%E9%97%B4",
+    "expected_names": [
+     "丁香园风湿时间"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-eyjlr",
    "name": "E药经理人",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MjM5NzY2MDQwMg==&mid=2650436897&idx=1&sn=0ad2967cd12fb0b199684be9233eab55&chksm=bf6cc7fbadfdd946a0fcd3c5c9e0138d5b6015ff88192971335f51d078aad4e5dba9df4f4612",
@@ -5007,6 +6630,38 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NzY2MDQwMg==&mid=2650436897&idx=1&sn=0ad2967cd12fb0b199684be9233eab55&chksm=bf6cc7fbadfdd946a0fcd3c5c9e0138d5b6015ff88192971335f51d078aad4e5dba9df4f4612",
     "biz": "MjM5NzY2MDQwMg=="
+   }
+  },
+  {
+   "id": "wx-fuwai",
+   "name": "中国医学科学院阜外医院",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5NjM0NjQyOA==",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国医学科学院阜外医院（国家心血管病中心）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5NjM0NjQyOA==",
+    "expected_names": [
+     "中国医学科学院阜外医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MjM5NjM0NjQyOA=="
    }
   },
   {
@@ -5042,6 +6697,132 @@
    }
   },
   {
+   "id": "wx-healthy-beijing",
+   "name": "健康北京",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%81%A5%E5%BA%B7%E5%8C%97%E4%BA%AC",
+   "lane": "mixed",
+   "source_type": "regulator",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "北京市卫生健康委员会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-regulator",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%81%A5%E5%BA%B7%E5%8C%97%E4%BA%AC",
+    "expected_names": [
+     "健康北京"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-hit-expert",
+   "name": "HIT专家网官微",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=HIT%E4%B8%93%E5%AE%B6%E7%BD%91%E5%AE%98%E5%BE%AE",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "HIT专家网（医疗信息化媒体）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=HIT%E4%B8%93%E5%AE%B6%E7%BD%91%E5%AE%98%E5%BE%AE",
+    "expected_names": [
+     "HIT专家网官微",
+     "HIT专家网"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-huoshi",
+   "name": "火石创造",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E7%81%AB%E7%9F%B3%E5%88%9B%E9%80%A0",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "火石创造（杭州火石创造）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E7%81%AB%E7%9F%B3%E5%88%9B%E9%80%A0",
+    "expected_names": [
+     "火石创造"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-huxijie",
+   "name": "呼吸界",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzU3NjA5MTM2OQ==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "呼吸界（呼吸专科媒体）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzU3NjA5MTM2OQ==",
+    "expected_names": [
+     "呼吸界"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzU3NjA5MTM2OQ=="
+   }
+  },
+  {
    "id": "wx-inature",
    "name": "iNature",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzU3MTE3MjUyOA==",
@@ -5071,6 +6852,38 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MzU3MTE3MjUyOA=="
+   }
+  },
+  {
+   "id": "wx-jebm",
+   "name": "JEBM循证医学英文",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=JEBM%E5%BE%AA%E8%AF%81%E5%8C%BB%E5%AD%A6%E8%8B%B1%E6%96%87",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "四川大学华西医院中国循证医学中心（JEBM / 中国循证医学杂志）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=JEBM%E5%BE%AA%E8%AF%81%E5%8C%BB%E5%AD%A6%E8%8B%B1%E6%96%87",
+    "expected_names": [
+     "JEBM循证医学英文",
+     "中国循证医学杂志"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -5300,6 +7113,37 @@
    }
   },
   {
+   "id": "wx-liangyihui-hema",
+   "name": "血液肿瘤资讯",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E8%A1%80%E6%B6%B2%E8%82%BF%E7%98%A4%E8%B5%84%E8%AE%AF",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "良医汇（上海良医汇）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E8%A1%80%E6%B6%B2%E8%82%BF%E7%98%A4%E8%B5%84%E8%AE%AF",
+    "expected_names": [
+     "血液肿瘤资讯"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-mdweekly",
    "name": "医师报",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzA3NjA1MDkxMA==&mid=2651485438&idx=2&sn=f6c2cc631dc0dce1e2eae02ee4ea653c&chksm=85e0f4dd1d35738a051cfd498d77df0eff8af40ccc9c6c649a4ab6135b319eb7ed4c24c05d09",
@@ -5333,6 +7177,37 @@
    }
   },
   {
+   "id": "wx-mdweekly-onco",
+   "name": "医师报肿瘤频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%B8%88%E6%8A%A5%E8%82%BF%E7%98%A4%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医师报社",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%B8%88%E6%8A%A5%E8%82%BF%E7%98%A4%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医师报肿瘤频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-medlive",
    "name": "医脉通",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5OTA4MzA4MA==",
@@ -5362,6 +7237,258 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MjM5OTA4MzA4MA=="
+   }
+  },
+  {
+   "id": "wx-medlive-cardio",
+   "name": "医脉通心血管",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%BF%83%E8%A1%80%E7%AE%A1",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%BF%83%E8%A1%80%E7%AE%A1",
+    "expected_names": [
+     "医脉通心血管",
+     "医脉通心内科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-endo",
+   "name": "医脉通内分泌科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%86%85%E5%88%86%E6%B3%8C%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%86%85%E5%88%86%E6%B3%8C%E7%A7%91",
+    "expected_names": [
+     "医脉通内分泌科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-gi",
+   "name": "医脉通消化科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E6%B6%88%E5%8C%96%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E6%B6%88%E5%8C%96%E7%A7%91",
+    "expected_names": [
+     "医脉通消化科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-guideline",
+   "name": "医脉通临床指南",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E4%B8%B4%E5%BA%8A%E6%8C%87%E5%8D%97",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E4%B8%B4%E5%BA%8A%E6%8C%87%E5%8D%97",
+    "expected_names": [
+     "医脉通临床指南",
+     "医脉通指南"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-hema",
+   "name": "医脉通血液科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E8%A1%80%E6%B6%B2%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E8%A1%80%E6%B6%B2%E7%A7%91",
+    "expected_names": [
+     "医脉通血液科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-liver",
+   "name": "医脉通肝脏科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E8%82%9D%E8%84%8F%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E8%82%9D%E8%84%8F%E7%A7%91",
+    "expected_names": [
+     "医脉通肝脏科",
+     "医脉通肝病科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-nephro",
+   "name": "医脉通肾内频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E8%82%BE%E5%86%85%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E8%82%BE%E5%86%85%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医脉通肾内频道",
+     "医脉通肾内科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-neuro",
+   "name": "医脉通神经科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E7%A5%9E%E7%BB%8F%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E7%A5%9E%E7%BB%8F%E7%A7%91",
+    "expected_names": [
+     "医脉通神经科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -5398,6 +7525,131 @@
    }
   },
   {
+   "id": "wx-medlive-peds",
+   "name": "医脉通儿科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%84%BF%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%84%BF%E7%A7%91",
+    "expected_names": [
+     "医脉通儿科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-psych",
+   "name": "医脉通精神科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E7%B2%BE%E7%A5%9E%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E7%B2%BE%E7%A5%9E%E7%A7%91",
+    "expected_names": [
+     "医脉通精神科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-resp",
+   "name": "医脉通呼吸频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%91%BC%E5%90%B8%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E5%91%BC%E5%90%B8%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医脉通呼吸频道",
+     "医脉通呼吸科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-medlive-uro",
+   "name": "医脉通泌尿外科",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E6%B3%8C%E5%B0%BF%E5%A4%96%E7%A7%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%84%89%E9%80%9A%E6%B3%8C%E5%B0%BF%E5%A4%96%E7%A7%91",
+    "expected_names": [
+     "医脉通泌尿外科"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-medsci",
    "name": "梅斯医学",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzI0Njc5ODM4MQ==&mid=2247720580&idx=5&sn=1b97744667acacd3948e8a5a52253fc4&chksm=e8791f43968e3bc20cc2131d8e36456e8efd6517feeb069329ed4e9adfd75501b3bbcb55d35a",
@@ -5428,6 +7680,37 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI0Njc5ODM4MQ==&mid=2247720580&idx=5&sn=1b97744667acacd3948e8a5a52253fc4&chksm=e8791f43968e3bc20cc2131d8e36456e8efd6517feeb069329ed4e9adfd75501b3bbcb55d35a",
     "biz": "MzI0Njc5ODM4MQ=="
+   }
+  },
+  {
+   "id": "wx-medtrend",
+   "name": "MedTrend医趋势",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=MedTrend%E5%8C%BB%E8%B6%8B%E5%8A%BF",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "MedTrend医趋势",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=MedTrend%E5%8C%BB%E8%B6%8B%E5%8A%BF",
+    "expected_names": [
+     "MedTrend医趋势"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -5463,6 +7746,71 @@
    }
   },
   {
+   "id": "wx-natcm-zgzy",
+   "name": "中国中医",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA3ODQwNzYzMg==",
+   "lane": "mixed",
+   "source_type": "regulator",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家中医药管理局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-regulator",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA3ODQwNzYzMg==",
+    "expected_names": [
+     "中国中医",
+     "国家中医药管理局"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzA3ODQwNzYzMg=="
+   }
+  },
+  {
+   "id": "wx-nature-portfolio",
+   "name": "Nature Portfolio",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=Nature%20Portfolio",
+   "lane": "mixed",
+   "source_type": "journal",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "Springer Nature（自然科研）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=Nature%20Portfolio",
+    "expected_names": [
+     "Nature Portfolio",
+     "Nature自然科研"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-nejm",
    "name": "NEJM医学前沿",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzIxNTc4NzU0MQ==&mid=2247562533&idx=1&sn=bb65229f68df3bea7dacff60b14fc132&chksm=9677a76079906d3f21409b7ba58b8f333d74d4cfff3f58e1eefef660b180530e6abb1d58eefe",
@@ -5493,6 +7841,70 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MzIxNTc4NzU0MQ==&mid=2247562533&idx=1&sn=bb65229f68df3bea7dacff60b14fc132&chksm=9677a76079906d3f21409b7ba58b8f333d74d4cfff3f58e1eefef660b180530e6abb1d58eefe",
     "biz": "MzIxNTc4NzU0MQ=="
+   }
+  },
+  {
+   "id": "wx-nhc-healthychina",
+   "name": "健康中国",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5NjI2ODA4Mw==",
+   "lane": "mixed",
+   "source_type": "regulator",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家卫生健康委员会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-regulator",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MjM5NjI2ODA4Mw==",
+    "expected_names": [
+     "健康中国"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MjM5NjI2ODA4Mw=="
+   }
+  },
+  {
+   "id": "wx-nhsa-gov",
+   "name": "国家医保局",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzU2MzY3NTA2MQ==",
+   "lane": "mixed",
+   "source_type": "regulator",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "国家医疗保障局",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-regulator",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzU2MzY3NTA2MQ==",
+    "expected_names": [
+     "国家医保局"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzU2MzY3NTA2MQ=="
    }
   },
   {
@@ -5722,6 +8134,132 @@
    }
   },
   {
+   "id": "wx-phirda",
+   "name": "中国医药创新促进会",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E8%8D%AF%E5%88%9B%E6%96%B0%E4%BF%83%E8%BF%9B%E4%BC%9A",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国医药创新促进会（PhIRDA）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E5%8C%BB%E8%8D%AF%E5%88%9B%E6%96%B0%E4%BF%83%E8%BF%9B%E4%BC%9A",
+    "expected_names": [
+     "中国医药创新促进会",
+     "中国药促会"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-plagh-301",
+   "name": "解放军总医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E8%A7%A3%E6%94%BE%E5%86%9B%E6%80%BB%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国人民解放军总医院（301医院）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E8%A7%A3%E6%94%BE%E5%86%9B%E6%80%BB%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "解放军总医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-puh3",
+   "name": "北京大学第三医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%97%E4%BA%AC%E5%A4%A7%E5%AD%A6%E7%AC%AC%E4%B8%89%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "北京大学第三医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%97%E4%BA%AC%E5%A4%A7%E5%AD%A6%E7%AC%AC%E4%B8%89%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "北京大学第三医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-pumch-doctor",
+   "name": "协和医生说",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzIwODc4ODYzNw==",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国医学科学院北京协和医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzIwODc4ODYzNw==",
+    "expected_names": [
+     "协和医生说"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzIwODc4ODYzNw=="
+   }
+  },
+  {
    "id": "wx-pumch-journal",
    "name": "协和医学杂志",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzI3MzYzNTAwOA==&mid=2247580506&idx=1&sn=2b215aaaa0ca3b2b416cbd1d02df8697&chksm=ea0c82807e1b22018bb23a878a589282b3ebb03538ec902fef8a64b17b40bbc01bd2a34accf3",
@@ -5787,6 +8325,130 @@
    }
   },
   {
+   "id": "wx-qilu",
+   "name": "齐鲁医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E9%BD%90%E9%B2%81%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "山东大学齐鲁医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E9%BD%90%E9%B2%81%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "齐鲁医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-qixie-zhijia",
+   "name": "器械之家",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%99%A8%E6%A2%B0%E4%B9%8B%E5%AE%B6",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "器械之家",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%99%A8%E6%A2%B0%E4%B9%8B%E5%AE%B6",
+    "expected_names": [
+     "器械之家"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-renji",
+   "name": "上海交通大学医学院附属仁济医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%8A%E6%B5%B7%E4%BA%A4%E9%80%9A%E5%A4%A7%E5%AD%A6%E5%8C%BB%E5%AD%A6%E9%99%A2%E9%99%84%E5%B1%9E%E4%BB%81%E6%B5%8E%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "上海交通大学医学院附属仁济医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%8A%E6%B5%B7%E4%BA%A4%E9%80%9A%E5%A4%A7%E5%AD%A6%E5%8C%BB%E5%AD%A6%E9%99%A2%E9%99%84%E5%B1%9E%E4%BB%81%E6%B5%8E%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "上海交通大学医学院附属仁济医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-ruijin",
+   "name": "上海交通大学医学院附属瑞金医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%8A%E6%B5%B7%E4%BA%A4%E9%80%9A%E5%A4%A7%E5%AD%A6%E5%8C%BB%E5%AD%A6%E9%99%A2%E9%99%84%E5%B1%9E%E7%91%9E%E9%87%91%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "上海交通大学医学院附属瑞金医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%8A%E6%B5%B7%E4%BA%A4%E9%80%9A%E5%A4%A7%E5%AD%A6%E5%8C%BB%E5%AD%A6%E9%99%A2%E9%99%84%E5%B1%9E%E7%91%9E%E9%87%91%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "上海交通大学医学院附属瑞金医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-saibailan",
    "name": "赛柏蓝",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MjM5NTA4Mzc2Mg==&mid=2653427659&idx=7&sn=c6ab35828c265edfe95f6dad7e2fc2c1&chksm=bc53123fdc5e8bb6c451fccd483facb234f8ff628e0759f4bbcd41bb8ac23c768a27f31d56ce",
@@ -5817,6 +8479,38 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NTA4Mzc2Mg==&mid=2653427659&idx=7&sn=c6ab35828c265edfe95f6dad7e2fc2c1&chksm=bc53123fdc5e8bb6c451fccd483facb234f8ff628e0759f4bbcd41bb8ac23c768a27f31d56ce",
     "biz": "MjM5NTA4Mzc2Mg=="
+   }
+  },
+  {
+   "id": "wx-saibailan-device",
+   "name": "赛柏蓝器械",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA3MTIwODc3MQ==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "赛柏蓝",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA3MTIwODc3MQ==",
+    "expected_names": [
+     "赛柏蓝器械"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzA3MTIwODc3MQ=="
    }
   },
   {
@@ -5884,6 +8578,68 @@
    }
   },
   {
+   "id": "wx-shanghai-12320",
+   "name": "健康上海12320",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%81%A5%E5%BA%B7%E4%B8%8A%E6%B5%B712320",
+   "lane": "mixed",
+   "source_type": "regulator",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "上海市卫生健康委员会",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-regulator",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%81%A5%E5%BA%B7%E4%B8%8A%E6%B5%B712320",
+    "expected_names": [
+     "健康上海12320"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-shenlan-guan",
+   "name": "深蓝观",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E6%B7%B1%E8%93%9D%E8%A7%82",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "深蓝观（医药产业媒体）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E6%B7%B1%E8%93%9D%E8%A7%82",
+    "expected_names": [
+     "深蓝观"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-sinamed",
    "name": "新浪医药",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzAxNjI5NzI4MA==",
@@ -5945,6 +8701,99 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MzIyMTczMzk5OA=="
+   }
+  },
+  {
+   "id": "wx-sysucc",
+   "name": "中山大学肿瘤防治中心订阅号",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%B1%B1%E5%A4%A7%E5%AD%A6%E8%82%BF%E7%98%A4%E9%98%B2%E6%B2%BB%E4%B8%AD%E5%BF%83%E8%AE%A2%E9%98%85%E5%8F%B7",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中山大学肿瘤防治中心",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%B1%B1%E5%A4%A7%E5%AD%A6%E8%82%BF%E7%98%A4%E9%98%B2%E6%B2%BB%E4%B8%AD%E5%BF%83%E8%AE%A2%E9%98%85%E5%8F%B7",
+    "expected_names": [
+     "中山大学肿瘤防治中心订阅号"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-the-intellectual",
+   "name": "知识分子",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E7%9F%A5%E8%AF%86%E5%88%86%E5%AD%90",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "知识分子（科学媒体）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-research-media",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E7%9F%A5%E8%AF%86%E5%88%86%E5%AD%90",
+    "expected_names": [
+     "知识分子"
+    ],
+    "priority": 4,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-tiantan",
+   "name": "北京天坛医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%97%E4%BA%AC%E5%A4%A9%E5%9D%9B%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "首都医科大学附属北京天坛医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%97%E4%BA%AC%E5%A4%A9%E5%9D%9B%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "北京天坛医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -6012,6 +8861,37 @@
    }
   },
   {
+   "id": "wx-wchscu-ebm",
+   "name": "华西循证",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8D%8E%E8%A5%BF%E5%BE%AA%E8%AF%81",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "四川大学华西医院中国循证医学中心 / Cochrane中国中心",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 43200,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-society-journal",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8D%8E%E8%A5%BF%E5%BE%AA%E8%AF%81",
+    "expected_names": [
+     "华西循证"
+    ],
+    "priority": 1,
+    "polls_per_day": 2,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-who",
    "name": "世界卫生组织",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA3ODU5NDY2NA==",
@@ -6076,6 +8956,68 @@
    }
   },
   {
+   "id": "wx-xiangya",
+   "name": "百年湘雅",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E7%99%BE%E5%B9%B4%E6%B9%98%E9%9B%85",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中南大学湘雅医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E7%99%BE%E5%B9%B4%E6%B9%98%E9%9B%85",
+    "expected_names": [
+     "百年湘雅"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-xiaohuajie",
+   "name": "消化界",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E6%B6%88%E5%8C%96%E7%95%8C",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "消化界（消化专科媒体）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E6%B6%88%E5%8C%96%E7%95%8C",
+    "expected_names": [
+     "消化界"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-xieheba",
    "name": "协和八",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzAxMDA4NjU3OA==&mid=2652601038&idx=1&sn=07dd37cc33f54f3de70e4822a7c5c3b1&chksm=81e8475bdc0b3fa4e5d28c27ed9ba192dcace06d6471d8b23110efd383f9b508faaaf6bb02d3",
@@ -6106,6 +9048,37 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MzAxMDA4NjU3OA==&mid=2652601038&idx=1&sn=07dd37cc33f54f3de70e4822a7c5c3b1&chksm=81e8475bdc0b3fa4e5d28c27ed9ba192dcace06d6471d8b23110efd383f9b508faaaf6bb02d3",
     "biz": "MzAxMDA4NjU3OA=="
+   }
+  },
+  {
+   "id": "wx-xinkangjie",
+   "name": "新康界",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E6%96%B0%E5%BA%B7%E7%95%8C",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "新康界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E6%96%B0%E5%BA%B7%E7%95%8C",
+    "expected_names": [
+     "新康界"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -6173,6 +9146,37 @@
    }
   },
   {
+   "id": "wx-yaodu",
+   "name": "药渡",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E8%8D%AF%E6%B8%A1",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "药渡（北京药渡）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E8%8D%AF%E6%B8%A1",
+    "expected_names": [
+     "药渡"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-yaopingzhongxin",
    "name": "药评中心",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzAwNDQwODY5Mw==",
@@ -6202,6 +9206,38 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MzAwNDQwODY5Mw=="
+   }
+  },
+  {
+   "id": "wx-yaorongyun",
+   "name": "药融云",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E8%8D%AF%E8%9E%8D%E4%BA%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "药融云 / 摩熵数科",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E8%8D%AF%E8%9E%8D%E4%BA%91",
+    "expected_names": [
+     "药融云",
+     "摩熵医药"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -6238,6 +9274,68 @@
    }
   },
   {
+   "id": "wx-yaozh",
+   "name": "药智网",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E8%8D%AF%E6%99%BA%E7%BD%91",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "药智网（重庆药智网络科技）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E8%8D%AF%E6%99%BA%E7%BD%91",
+    "expected_names": [
+     "药智网"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yigu",
+   "name": "医谷",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%B0%B7",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "医谷（医疗健康产业媒体）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%B0%B7",
+    "expected_names": [
+     "医谷"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-yikahui",
    "name": "医咖会",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzI2OTQyMzc5MA==",
@@ -6267,6 +9365,100 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MzI2OTQyMzc5MA=="
+   }
+  },
+  {
+   "id": "wx-yimaike",
+   "name": "医麦客",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E9%BA%A6%E5%AE%A2",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "医麦客（细胞与基因治疗产业媒体）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E9%BA%A6%E5%AE%A2",
+    "expected_names": [
+     "医麦客"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yiyao-dili",
+   "name": "医药地理",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%8D%AF%E5%9C%B0%E7%90%86",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "医药地理（运营主体未核实）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E8%8D%AF%E5%9C%B0%E7%90%86",
+    "expected_names": [
+     "医药地理"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yiyao-yao",
+   "name": "医曜",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=Mzg3OTU4MTEwNA==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "医曜（运营主体未核实）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=Mzg3OTU4MTEwNA==",
+    "expected_names": [
+     "医曜"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "Mzg3OTU4MTEwNA=="
    }
   },
   {
@@ -6368,6 +9560,37 @@
    }
   },
   {
+   "id": "wx-yxj-emicu",
+   "name": "医学界急诊与重症频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%80%A5%E8%AF%8A%E4%B8%8E%E9%87%8D%E7%97%87%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%80%A5%E8%AF%8A%E4%B8%8E%E9%87%8D%E7%97%87%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界急诊与重症频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-yxj-endo",
    "name": "医学界内分泌频道",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzUxNzY3MDg4NQ==&mid=2247837581&idx=1&sn=3a4bde1d89003c89f944f6e16df12c49&chksm=f8010ed3b7618d4531273fe0a0d96b897803b21f8188d3c5d66bc5a8e8caf4e3ec9dc76a3713",
@@ -6398,6 +9621,161 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MzUxNzY3MDg4NQ==&mid=2247837581&idx=1&sn=3a4bde1d89003c89f944f6e16df12c49&chksm=f8010ed3b7618d4531273fe0a0d96b897803b21f8188d3c5d66bc5a8e8caf4e3ec9dc76a3713",
     "biz": "MzUxNzY3MDg4NQ=="
+   }
+  },
+  {
+   "id": "wx-yxj-gi",
+   "name": "医学界消化肝病频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%B6%88%E5%8C%96%E8%82%9D%E7%97%85%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%B6%88%E5%8C%96%E8%82%9D%E7%97%85%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界消化肝病频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yxj-hema",
+   "name": "医学界血液频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E8%A1%80%E6%B6%B2%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E8%A1%80%E6%B6%B2%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界血液频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yxj-infect",
+   "name": "医学界感染频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%84%9F%E6%9F%93%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%84%9F%E6%9F%93%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界感染频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yxj-lab",
+   "name": "医学界检验频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%A3%80%E9%AA%8C%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E6%A3%80%E9%AA%8C%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界检验频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yxj-nephro",
+   "name": "医学界肾病频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E8%82%BE%E7%97%85%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E8%82%BE%E7%97%85%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界肾病频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -6433,6 +9811,37 @@
    }
   },
   {
+   "id": "wx-yxj-obgyn",
+   "name": "医学界妇产科频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E5%A6%87%E4%BA%A7%E7%A7%91%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E5%A6%87%E4%BA%A7%E7%A7%91%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界妇产科频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-yxj-onco",
    "name": "医学界肿瘤频道",
    "homepage": "https://mp.weixin.qq.com/s?__biz=MzU4MjQzNjAzMA==&mid=2247911776&idx=6&sn=a2df49fa531ca82db3bdeb7ec959c5fc&chksm=fc500bbbcade69f746f8f04a7ae0de8d00506fdf33ba2b992ac864bb087c3de498d3d92f5ff2",
@@ -6463,6 +9872,130 @@
     ],
     "verified_url": "https://mp.weixin.qq.com/s?__biz=MzU4MjQzNjAzMA==&mid=2247911776&idx=6&sn=a2df49fa531ca82db3bdeb7ec959c5fc&chksm=fc500bbbcade69f746f8f04a7ae0de8d00506fdf33ba2b992ac864bb087c3de498d3d92f5ff2",
     "biz": "MzU4MjQzNjAzMA=="
+   }
+  },
+  {
+   "id": "wx-yxj-peds",
+   "name": "医学界儿科频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E5%84%BF%E7%A7%91%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E5%84%BF%E7%A7%91%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界儿科频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yxj-psych",
+   "name": "医学界精神病学频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E7%B2%BE%E7%A5%9E%E7%97%85%E5%AD%A6%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E7%B2%BE%E7%A5%9E%E7%97%85%E5%AD%A6%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界精神病学频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yxj-resp",
+   "name": "医学界呼吸频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E5%91%BC%E5%90%B8%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E5%91%BC%E5%90%B8%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界呼吸频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-yxj-rheum",
+   "name": "医学界风湿免疫频道",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E9%A3%8E%E6%B9%BF%E5%85%8D%E7%96%AB%E9%A2%91%E9%81%93",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "医学界",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-clinical",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C%E9%A3%8E%E6%B9%BF%E5%85%8D%E7%96%AB%E9%A2%91%E9%81%93",
+    "expected_names": [
+     "医学界风湿免疫频道"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
@@ -6531,6 +10064,37 @@
    }
   },
   {
+   "id": "wx-zgkxb",
+   "name": "中国科学报",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E7%A7%91%E5%AD%A6%E6%8A%A5",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "中国科学报社（中国科学院主管）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-research-media",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E4%B8%AD%E5%9B%BD%E7%A7%91%E5%AD%A6%E6%8A%A5",
+    "expected_names": [
+     "中国科学报"
+    ],
+    "priority": 4,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
    "id": "wx-zhidx",
    "name": "智东西",
    "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA4MTQ4NjQzMw==",
@@ -6592,6 +10156,100 @@
      "mp.weixin.qq.com"
     ],
     "biz": "MzkzMDQyNTY0Mw=="
+   }
+  },
+  {
+   "id": "wx-zju-fah",
+   "name": "浙大一院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E6%B5%99%E5%A4%A7%E4%B8%80%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "浙江大学医学院附属第一医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E6%B5%99%E5%A4%A7%E4%B8%80%E9%99%A2",
+    "expected_names": [
+     "浙大一院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
+   }
+  },
+  {
+   "id": "wx-zjyj-capital",
+   "name": "中经医健资本圈",
+   "homepage": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA3Mjg4OTI0Mw==",
+   "lane": "mixed",
+   "source_type": "media",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "中国经营报系（中经传媒）",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-industry",
+   "config": {
+    "url": "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA3Mjg4OTI0Mw==",
+    "expected_names": [
+     "中经医健资本圈"
+    ],
+    "priority": 3,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ],
+    "biz": "MzA3Mjg4OTI0Mw=="
+   }
+  },
+  {
+   "id": "wx-zs-hospital",
+   "name": "复旦大学附属中山医院",
+   "homepage": "https://weixin.sogou.com/weixin?type=1&query=%E5%A4%8D%E6%97%A6%E5%A4%A7%E5%AD%A6%E9%99%84%E5%B1%9E%E4%B8%AD%E5%B1%B1%E5%8C%BB%E9%99%A2",
+   "lane": "mixed",
+   "source_type": "evidence-body",
+   "access": "dajiala",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "复旦大学附属中山医院",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "category": "wechat-hospital",
+   "config": {
+    "url": "https://weixin.sogou.com/weixin?type=1&query=%E5%A4%8D%E6%97%A6%E5%A4%A7%E5%AD%A6%E9%99%84%E5%B1%9E%E4%B8%AD%E5%B1%B1%E5%8C%BB%E9%99%A2",
+    "expected_names": [
+     "复旦大学附属中山医院"
+    ],
+    "priority": 2,
+    "polls_per_day": 1,
+    "role": "organisation",
+    "allowed_hosts": [
+     "mp.weixin.qq.com"
+    ]
    }
   },
   {
