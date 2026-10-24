@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insightParts, readerParagraphs } from "./FrontierReader";
+import { insightParts, readerOutline, readerParagraphs, shownText } from "./FrontierReader";
 
 describe("the reader's paragraphs", () => {
   it("takes a full text's `## ` paragraphs as its section headings, in either language", () => {
@@ -66,5 +66,55 @@ describe("the 解读's citations", () => {
   it("keeps an [n] that names no ref as plain text, never a dead link", () => {
     expect(insightParts("另见[3]，或 [x]、［1］。", refs)).toEqual(["另见[3]，或 [x]、［1］。"]);
     expect(insightParts("没有引用。", [])).toEqual(["没有引用。"]);
+  });
+});
+
+describe("the reader's text structure (2026-10-23)", () => {
+  it("sets a paragraph whose lines all start 「1.」「1、」「•」「-」 as a list, numbered or not, and keeps a decimal a number", () => {
+    expect(readerParagraphs("1. 第一项\n2. 第二项\n\n3、第三项\n\n• 甲\n• 乙\n\n- one\n- two\n\n1.5 mg 每日一次")).toEqual([
+      { kind: "list", ordered: true, start: 1, items: ["第一项", "第二项"] },
+      { kind: "list", ordered: true, start: 3, items: ["第三项"] },
+      { kind: "list", ordered: false, start: 1, items: ["甲", "乙"] },
+      { kind: "list", ordered: false, start: 1, items: ["one", "two"] },
+      { kind: "paragraph", runIn: null, text: "1.5 mg 每日一次" },
+    ]);
+  });
+
+  it("sets the line that leads into two or more items as words, then the list; a mixed paragraph stays words", () => {
+    expect(readerParagraphs("按信号来看，本次发布实现了：\n- 排名第 8\n- 没有问题")).toEqual([
+      { kind: "paragraph", runIn: null, text: "按信号来看，本次发布实现了：" },
+      { kind: "list", ordered: false, start: 1, items: ["排名第 8", "没有问题"] },
+    ]);
+    expect(readerParagraphs("开头一行\n- 只有一项")).toEqual([{ kind: "paragraph", runIn: null, text: "开头一行\n- 只有一项" }]);
+  });
+
+  it("sets a paragraph that starts 「> 」 as a quotation", () => {
+    expect(readerParagraphs("> 引用的第一行\n> 第二行")).toEqual([{ kind: "quote", text: "引用的第一行\n第二行" }]);
+  });
+
+  it("draws an address on a paragraph of its own and up to two short lines before it as one source line", () => {
+    expect(readerParagraphs("FDA 发布了新的指南。\n\n（美国FDA网站）\n\n原文链接：\n\nhttps://www.fda.gov/vaccines-blood-biologics/safety-availability-biologics/x")).toEqual([
+      { kind: "paragraph", runIn: null, text: "FDA 发布了新的指南。" },
+      { kind: "source", words: ["（美国FDA网站）", "原文链接："], url: "https://www.fda.gov/vaccines-blood-biologics/safety-availability-biologics/x" },
+    ]);
+  });
+
+  it("takes no sentence into a source line: what ends like a sentence, or runs past thirty characters, stays a paragraph", () => {
+    const blocks = readerParagraphs("这是一句完整的话。\n\n一段没有标点但是超过了三十个字符长度的说明文字一段没有标点但是超过\n\nhttps://nmpa.gov.cn/a");
+    expect(blocks.map((block) => block.kind)).toEqual(["paragraph", "paragraph", "source"]);
+    expect(blocks[2]).toEqual({ kind: "source", words: [], url: "https://nmpa.gov.cn/a" });
+  });
+
+  it("drops the item's own address, and the short lines that name it, because the end of the article has it", () => {
+    expect(readerParagraphs("正文一段。\n\n原文链接：\n\nhttp://www.nejm.org/doi/x/", { ownUrl: "https://nejm.org/doi/x" })).toEqual([
+      { kind: "paragraph", runIn: null, text: "正文一段。" },
+    ]);
+  });
+
+  it("lists a text's sections for its contents, with the ids its headings take, in the language on screen", () => {
+    const body = { zh: "## 引言\n\n一。\n\n## 方法\n\n二。", original: "## Intro\n\nOne.", zhKind: "translation" as const, complete: true, source: "body" as const };
+    expect(readerOutline(body, "zh", "p")).toEqual([{ id: "p-sec-1", text: "引言", level: 2 }, { id: "p-sec-2", text: "方法", level: 2 }]);
+    expect(readerOutline(body, "original", "p")).toEqual([{ id: "p-sec-1", text: "Intro", level: 2 }]);
+    expect(shownText({ ...body, original: null }, "original").showing).toBe("zh");
   });
 });

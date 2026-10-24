@@ -48,7 +48,7 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
             <li key={event.id} className={index > 0 ? "max-sm:hidden" : undefined}>
               <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
                 <span className={cn("w-5 shrink-0 text-right tabular-nums", rankTone(event.rank))}>{event.rank}</span>
-                <span data-row-title className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{event.title}</span>
+                <span data-row-title data-prose="" className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{event.title}</span>
                 {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
                 {change && <span className="shrink-0 text-caption text-text-2">{change}</span>}
               </Link>
@@ -140,8 +140,10 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
       </div>
       {event.heat !== null && (
         <div className="w-16 shrink-0 sm:w-28">
-          <p className="flex h-control items-center justify-end gap-0.5">
+          {/* 「405 热度」: the number with its unit, a typed space between them. */}
+          <p className="flex h-control items-baseline justify-end gap-1">
             <span className="text-title font-semibold tabular-nums text-text">{event.heat}</span>
+            <span className="sr-only"> </span>
             <span className="text-caption text-text-3">热度</span>
           </p>
           <div className="flex h-7 justify-end max-sm:hidden"><Sparkline points={event.trend} /></div>

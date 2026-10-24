@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "./apiClient";
 import {
   addFrontierFollow,
+  fetchFrontierOpsTags,
+  fetchFrontierTag,
   fetchFrontierNotificationSwitch,
   setFrontierNotificationSwitch,
   fetchFrontierDaily,
@@ -22,6 +24,7 @@ import {
   listFrontierDailies,
   listFrontierFollows,
   listFrontierItems,
+  listFrontierTags,
   operateFrontierItem,
   parseFacts,
   parseFrontierItem,
@@ -30,6 +33,7 @@ import {
   saveFrontierItemToLibrary,
   setFrontierDigestSwitch,
   starFrontierItem,
+  undoFrontierTagChange,
 } from "./frontierClient";
 import { rawFrontierItem as rawItem } from "@/components/frontier/__fixtures__/frontierItems";
 
@@ -49,11 +53,13 @@ afterEach(() => { vi.unstubAllGlobals(); });
 describe("the items list", () => {
   it("asks with every filter named and the page size bounded", async () => {
     fetchMock.mockResolvedValue(reply(200, { data: { items: [rawItem()], nextCursor: "c2", version: 41, mode: "keyword" } }));
-    const page = await listFrontierItems({ view: "all", lane: "safety", specialty: "pharmacy", window: "7d", q: " 司美格鲁肽 ", starred: true, cursor: "c1", limit: 500 });
+    const page = await listFrontierItems({
+      view: "all", lane: "safety", specialties: ["pharmacy", "oncology"], tag: "hcc", evidence: "rct", unread: true, window: "7d", q: " 司美格鲁肽 ", starred: true, cursor: "c1", limit: 500,
+    });
     const url = new URL(requested()[0].url, "http://localhost");
     expect(url.pathname).toBe("/api/frontier/items");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      view: "all", by: "timeline", lane: "safety", specialty: "pharmacy", window: "7d", q: "司美格鲁肽", starred: "1", cursor: "c1", limit: "50",
+      view: "all", by: "timeline", lane: "safety", specialty: "pharmacy,oncology", tag: "hcc", evidence: "rct", unread: "1", window: "7d", q: "司美格鲁肽", starred: "1", cursor: "c1", limit: "50",
     });
     expect(page).toMatchObject({ nextCursor: "c2", version: "41", mode: "keyword", restarted: false });
     expect(page.items).toHaveLength(1);
@@ -493,8 +499,9 @@ describe("the reader's blocks (contract B)", () => {
     ],
     quoted: { author: { name: "DeepSeek", handle: "deepseek_ai" }, text: "Big news", translation: "重大消息", url: "javascript:alert(1)" },
     metrics: { likes: 12, reposts: null, replies: -1, views: 9000.4 },
-    topics: [{ slug: "cardiology", name: "心血管", group: "specialty" }, { slug: "cardiology", name: "重复", group: "specialty" }, { slug: "x", name: "未知组", group: "planet" }, { name: "无 slug" }],
-    tags: ["#评测", "评测", "Agent", "", 3],
+    topics: [{ slug: "cardiology", name: "心血管", group: "specialty" }],
+    tags: [{ slug: "eval", name: "#评测" }, { slug: "eval", name: "重复" }, { slug: "agent", name: "Agent" }, { name: "无 slug" }, "旧的字符串", { slug: "a b/c", name: "坏 slug" }, { slug: "deepseek", name: "DeepSeek" }, { slug: "llm", name: "大模型" }, { slug: "fifth", name: "第五个" }],
+    scoreParts: { authority: 24, impact: 22, novelty: 14, relevance: 14 },
     sameEvent: { itemId: "selected-1", title: "精选收录的那一篇" },
     followups: { eventId: "ev1", more: true, rows: [
       { itemId: "f1", title: "后续报道", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "follows" },
@@ -515,8 +522,10 @@ describe("the reader's blocks (contract B)", () => {
     expect(item.body).toEqual({ zh: "第一段\n\n第二段", original: "First\n\nSecond", zhKind: "translation", complete: false, source: null });
     expect(item.quoted).toEqual({ author: { name: "DeepSeek", handle: "deepseek_ai" }, text: "Big news", translation: "重大消息", url: null });
     expect(item.metrics).toEqual({ likes: 12, reposts: null, replies: null, views: 9000 });
-    expect(item.topics).toEqual([{ slug: "cardiology", name: "心血管", group: "specialty" }, { slug: "x", name: "未知组", group: "genre" }]);
-    expect(item.tags).toEqual(["评测", "Agent"]);
+    // Tags are slug and name, each once, at most four; the older string tags and the retired topics are not read.
+    expect(item.tags).toEqual([{ slug: "eval", name: "评测" }, { slug: "agent", name: "Agent" }, { slug: "deepseek", name: "DeepSeek" }, { slug: "llm", name: "大模型" }]);
+    expect("topics" in item).toBe(false);
+    expect(item.scoreParts).toEqual({ authority: 24, impact: 22, novelty: 14, relevance: 14 });
     expect(item.sameEvent).toEqual({ itemId: "selected-1", title: "精选收录的那一篇" });
     expect(item.followups).toEqual({ eventId: "ev1", more: true, rows: [
       { itemId: "f1", title: "后续报道", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "follows" },
@@ -536,7 +545,7 @@ describe("the reader's blocks (contract B)", () => {
   it("leaves out what the server did not fill, and makes nothing up in its place", () => {
     const item = parseFrontierItemDetail(rawItem({ summary: "列表里的导读" }))!;
     expect(item).toMatchObject({
-      lead: "列表里的导读", insight: null, body: null, media: [], quoted: null, metrics: null, topics: null, tags: null, sameEvent: null, followups: null,
+      lead: "列表里的导读", insight: null, body: null, media: [], quoted: null, metrics: null, tags: [], scoreParts: null, sameEvent: null, followups: null,
       channel: null, platform: null, author: null, thumb: null,
     });
     // A body the server did not call incomplete is complete; a Chinese text with no kind is not called a translation.
@@ -602,5 +611,75 @@ describe("the reader's blocks (contract B)", () => {
     expect(requested()[2].url).toBe("/api/frontier/events/ev1?order=asc");
     await fetchFrontierEvent("ev1");
     expect(requested()[3].url).toBe("/api/frontier/events/ev1");
+  });
+});
+
+describe("an item's specialties, tags and score parts (2026-10-23)", () => {
+  it("reads a retired specialty as its successor or not at all, each once, at most two", () => {
+    const item = parseFrontierItem(rawItem({ specialties: [{ key: "surgery-anesthesia", label: "外科与麻醉" }, { key: "geriatrics", label: "老年" }, "general-surgery", { key: "oncology" }, { key: "cardiology" }] }))!;
+    expect(item.specialties).toEqual([{ key: "general-surgery", label: "普通外科" }, { key: "oncology", label: "肿瘤" }]);
+  });
+
+  it("reads the score's tier from the server, or from the fixed tiers, and its parts only when all four are within their maxima", () => {
+    expect(parseFrontierItem(rawItem({ score: 86, scoreBand: undefined }))!.scoreBand).toBe("high");
+    expect(parseFrontierItem(rawItem({ score: 72, scoreBand: undefined }))!.scoreBand).toBe("medium");
+    expect(parseFrontierItem(rawItem({ score: 86, scoreParts: { authority: 31, impact: 25, novelty: 18, relevance: 12 } }))!.scoreParts).toBeNull();
+    expect(parseFrontierItem(rawItem({ score: 86, scoreParts: { authority: 30, impact: 25, novelty: 18 } }))!.scoreParts).toBeNull();
+    // A safety alert carries no score, and so no parts.
+    expect(parseFrontierItem(rawItem({ safetyAlert: true, score: 90, scoreParts: { authority: 30, impact: 30, novelty: 15, relevance: 15 } }))).toMatchObject({ score: null, scoreParts: null, scoreBand: null });
+  });
+});
+
+describe("the tag tree", () => {
+  it("asks for a specialty's popular tags and for the tags a search names", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { data: { tags: [{ slug: "hcc", name: "肝细胞癌", count: 34 }, { slug: "", name: "坏的" }, { slug: "nash", name: "#非酒精性脂肪肝", count: -1, specialties: ["gastroenterology", "geriatrics"] }] } }));
+    expect(await listFrontierTags({ specialties: ["oncology", "gastroenterology"] })).toEqual([
+      { slug: "hcc", name: "肝细胞癌", count: 34, specialties: [] },
+      { slug: "nash", name: "非酒精性脂肪肝", count: 0, specialties: ["gastroenterology"] },
+    ]);
+    await listFrontierTags({ q: " 肝 ", limit: 8 });
+    const [popular, search] = requested().map((call) => new URL(call.url, "http://localhost"));
+    expect(popular.pathname).toBe("/api/frontier/tags");
+    expect(Object.fromEntries(popular.searchParams)).toEqual({ specialty: "oncology,gastroenterology", limit: "24" });
+    expect(Object.fromEntries(search.searchParams)).toEqual({ q: "肝", limit: "8" });
+  });
+
+  it("reads nothing where the server has no tag tree yet", async () => {
+    fetchMock.mockImplementation(async () => reply(404, { error: "Not found.", code: "not_found" }));
+    expect(await listFrontierTags({ q: "肝" })).toEqual([]);
+    expect(await fetchFrontierTag("hcc")).toBeNull();
+  });
+
+  it("reads one tag, the one a merged slug became, and nothing for a tag that is not there", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { tag: {
+      slug: "hcc", name: "肝细胞癌", nameEn: "Hepatocellular Carcinoma", specialties: [{ key: "oncology", label: "肿瘤" }],
+      broader: { slug: "liver-cancer", name: "肝癌" }, narrower: [], count30d: 34,
+    }, mergedFrom: "liver-cell-cancer" } }));
+    expect(await fetchFrontierTag("liver-cell-cancer")).toEqual({
+      slug: "hcc", name: "肝细胞癌", nameEn: "Hepatocellular Carcinoma", specialties: [{ key: "oncology", label: "肿瘤" }],
+      broader: { slug: "liver-cancer", name: "肝癌" }, narrower: [], count30d: 34, mergedFrom: "liver-cell-cancer",
+    });
+    fetchMock.mockResolvedValueOnce(reply(404, { error: "No such tag.", code: "frontier_tag_not_found" }));
+    expect(await fetchFrontierTag("gone")).toBeNull();
+  });
+
+  it("follows a tag by its slug", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { follow: { id: "9", kind: "tag", key: "hcc", label: "肝细胞癌", muted: false } } }));
+    expect(await addFrontierFollow({ kind: "tag", key: "hcc", label: "肝细胞癌" })).toEqual({ id: "9", kind: "tag", key: "hcc", label: "肝细胞癌", muted: false });
+  });
+
+  it("reads the operators' view of the tree, and takes a change back", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { data: {
+      specialties: [{ key: "oncology", label: "肿瘤", tags: [{ slug: "hcc", name: "肝细胞癌", state: "active", count30d: 34, origin: "seed" }] }],
+      candidates: [{ slug: "car-t", name: "CAR-T 细胞治疗", count30d: 5, sources30d: 3, firstSeen: "2026-10-20T02:00:00Z" }],
+      changes: [{ id: 7, at: "2026-10-22T02:00:00Z", action: "merge", tag: { slug: "liver-cell-cancer", name: "肝细胞性肝癌" }, other: { slug: "hcc", name: "肝细胞癌" }, reason: "同义", undoable: true }],
+    } }));
+    const tree = await fetchFrontierOpsTags();
+    expect(tree.specialties[0].tags[0]).toEqual({ slug: "hcc", name: "肝细胞癌", state: "active", count30d: 34, origin: "seed" });
+    expect(tree.candidates).toEqual([{ slug: "car-t", name: "CAR-T 细胞治疗", count30d: 5, sources30d: 3, firstSeen: "2026-10-20T02:00:00Z" }]);
+    expect(tree.changes[0]).toMatchObject({ id: "7", action: "merge", undoable: true, other: { slug: "hcc", name: "肝细胞癌" } });
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { ok: true } }));
+    await undoFrontierTagChange("7");
+    expect(requested().at(-1)).toEqual({ url: "/api/frontier/ops/tags/changes/7/undo", method: "POST" });
   });
 });

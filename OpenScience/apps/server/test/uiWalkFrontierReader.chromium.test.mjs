@@ -32,7 +32,8 @@ for (const [size, viewport] of [["desktop", { width: 1512, height: 945 }], ["pho
         // A pasted address and a reload both read the same preserved record.
         await page.goto(`${base}${route}`);
         await page.getByRole("heading", { level: 1, name: item.title, exact: true }).waitFor();
-        assert.equal(await page.getByRole("link", { name: /^原文/ }).getAttribute("href"), item.url);
+        // 「打开原文」 heads the reader's rail (and closes the text); a post's is 「在 X 查看原帖」 (owner, 2026-10-23).
+        assert.equal(await page.getByRole("link", { name: /^(打开原文|在.+查看原帖)/ }).first().getAttribute("href"), item.url);
         assert.equal(await page.getByRole("dialog").count(), 0, "the reader is an addressed page");
         await page.reload();
         await page.getByRole("heading", { level: 1, name: item.title, exact: true }).waitFor();

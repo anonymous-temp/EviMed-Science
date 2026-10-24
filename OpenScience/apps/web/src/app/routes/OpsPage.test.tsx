@@ -24,6 +24,7 @@ vi.mock("@/components/settings/WebTasksCard", async () => {
 });
 
 vi.mock("@/components/settings/GeoMarketCard", () => ({ GeoMarketCard: () => <div>循证 GEO 投放</div> }));
+vi.mock("@/components/settings/FrontierTagsCard", () => ({ FrontierTagsCard: () => <div>前沿标签</div> }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -46,6 +47,7 @@ describe("运维: the deployment's console and the evolution engine", () => {
     render(<OpsPage />);
     expect(screen.getByText("部署配置检查")).toBeInTheDocument();
     expect(screen.getByText("循证 GEO 投放")).toBeInTheDocument();
+    expect(screen.getByText("前沿标签")).toBeInTheDocument();
     expect(screen.getByText("循证进化面板")).toBeInTheDocument();
     // The sentence that stood above the cards had no action and no number: what stopping does is said in the confirmation of 停止 and 重启.
     expect(screen.queryByRole("note")).toBeNull();

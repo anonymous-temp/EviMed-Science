@@ -177,11 +177,11 @@ const WALK_TABLES = {
       "extension": {"controls":9,"borders":5}
     },
     "views": [
-      {"view":"frontier","route":"/app/frontier","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
+      {"view":"frontier","route":"/app/frontier","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10,"colors":9},"budgetNote":"colours: the cards' titles are title-ink, the deep brand blue the owner asked for (2026-10-23), one colour more — 9 on the live walk of evimed-01e965e99a11-1; controls: the 「AI 评分」 pill on every card (owner 2026-10-23: a score says its name and opens its four parts) is a control of its own — 22 px, 12 px, round, one look for its three tiers — beside the shell's, the tabs, the search, the 栏目 chips, ☆/⋯ and the card titles: 10 kinds (fixture walk 2026-10-23, fr2)","shapes":3,"rows":true},
       {"view":"frontier-hot","route":"/app/frontier?view=hot","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
       {"view":"frontier-daily","route":"/app/frontier?view=daily","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10},"budgetNote":"a published issue with a lead has both its 24px headline link and 16px row links","shapes":3,"rows":true},
-      {"view":"frontier-all","route":"/app/frontier?view=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
-      {"view":"frontier-following","route":"/app/frontier?view=following","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","shapes":3,"rows":false},
+      {"view":"frontier-all","route":"/app/frontier?view=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10,"colors":9},"budgetNote":"colours: the cards' titles are title-ink, the deep brand blue the owner asked for (2026-10-23), one colour more — 9 on the live walk of evimed-01e965e99a11-1; controls: the 「AI 评分」 pill on every card (owner 2026-10-23: a score says its name and opens its four parts) is a control of its own — 22 px, 12 px, round, one look for its three tiers — beside the shell's, the tabs, the search, the 栏目 chips, ☆/⋯ and the card titles: 10 kinds (fixture walk 2026-10-23, fr2)","shapes":3,"rows":true},
+      {"view":"frontier-following","route":"/app/frontier?view=following","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4,"controls":11,"colors":9},"budgetNote":"colours: title-ink on the cards' titles (see frontier); controls: the feed's ten (see frontier) and the 「查看全部关注专区」 text link, 11 (fixture walk 2026-10-23, fr2); borders: the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","shapes":3,"rows":false},
       {"view":"frontier-zones","route":"/app/frontier/zones","pattern":"/app/frontier/zones","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's field","shapes":3,"rows":true},
       {"view":"frontier-daily-empty","route":"/app/frontier?view=daily&day=2020-01-01","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","rows":false},
       {"view":"frontier-zone","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budget":"frontier","rows":false},
@@ -3059,8 +3059,10 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   };
   const text = document.body.innerText || "";
   // What the vocabulary checks read: the page less what it quotes. A source's own words in a <blockquote> or <q> can say
-  // "undefined" (「…is undefined.」 in the DECLARE–TIMI 58 abstract a card quotes) or 「…起生效」 and are not the product talking.
-  const unquoted = [...document.querySelectorAll("blockquote, q")].reduce((rest, el) => rest.replace(el.innerText, " "), text);
+  // "undefined" (「…is undefined.」 in the DECLARE–TIMI 58 abstract a card quotes) or 「…起生效」 and are not the product talking —
+  // nor are a document's or an item's own words marked `data-prose` (a 前沿动态 card's title and 导读 said a policy's 「11月1日起生效」,
+  // and the walk of evimed-01e965e99a11-1 read it as the back office, 2026-10-23).
+  const unquoted = [...document.querySelectorAll("blockquote, q, [data-prose]")].reduce((rest, el) => rest.replace(el.innerText, " "), text);
   const kinds = (values) => new Set(values).size;
 
   // The style inventory of the 2026-09-23 walk (the plan's §3 numbers were

@@ -24,23 +24,27 @@
  *    wave-two readers below return `null` for both, so a block that has
  *    nothing behind it is hidden or says 「还在准备」, and never breaks the page.
  *  - Nothing a response carries is rendered unread. Items are parsed field by
- *    field, so a field the page does not know — a dimension's score, a model
- *    name — never reaches the DOM. Since 2026-09-24 a card shows one number,
- *    the editorial total (`score`, plan 2026-09-23 §6.2 编辑评分) with its
- *    band; the four dimensions behind it stay words (`levels`), and that is
- *    enforced here, not remembered at each render. A link is kept only when it
- *    is http(s).
+ *    field, so a field the page does not know — a model name — never reaches
+ *    the DOM. A card shows one number, 「AI 评分」 (`score`, 0–100) in its
+ *    band; since 2026-10-23 its four parts (`scoreParts`, maxima in
+ *    `FRONTIER_SCORE_MAXIMA`) are what its breakdown draws, and they are read
+ *    only from that field. A link is kept only when it is http(s).
  *  - Heat is shown as the server shows it: a whole number (heat × 10), with
  *    the hot list's rank change, badge and trend, and the event page's side
  *    column. How it is computed, in the reader's words, is `@evimed/domain`'s
  *    `FRONTIER_HEAT_METHOD_ZH`, stated from the same numbers (no longer on the page).
  */
 import {
+  FRONTIER_EVIDENCE_TYPE_LABELS_ZH,
+  FRONTIER_EVIDENCE_TYPES as EVIDENCE_TYPE_KEYS,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANE_LABELS_ZH,
   FRONTIER_LANES as LANE_KEYS,
+  FRONTIER_SCORE_MAXIMA,
   FRONTIER_SPECIALTIES as SPECIALTY_KEYS,
+  FRONTIER_SPECIALTY_GROUPS as SPECIALTY_GROUP_TABLE,
   FRONTIER_SPECIALTY_LABELS_ZH,
+  frontierSpecialtyKey,
 } from "@evimed/domain";
 import { WebApiError, webApiBase, webErrorMessage } from "./apiClient";
 import { productRequest } from "./productClient";
@@ -64,10 +68,36 @@ export const FRONTIER_LANES: readonly FrontierLabelled[] = Object.freeze(
   LANE_KEYS.map((key) => ({ key, label: FRONTIER_LANE_LABELS_ZH[key] })),
 );
 
-/** The twenty-one specialties the dropdown offers, in the vocabulary's order. */
+/** The thirty specialties (owner, 2026-10-23), in the order the 「专科」 panel lists them. */
 export const FRONTIER_SPECIALTIES: readonly FrontierLabelled[] = Object.freeze(
   SPECIALTY_KEYS.map((key) => ({ key, label: FRONTIER_SPECIALTY_LABELS_ZH[key] })),
 );
+
+/** The 「专科」 panel's groups — 内科, 外科, 妇儿, 五官与皮肤, 医技与其他 — each with its specialties in panel order. */
+export const FRONTIER_SPECIALTY_GROUPS: ReadonlyArray<{ key: string; label: string; specialties: readonly string[] }> = Object.freeze(
+  SPECIALTY_GROUP_TABLE.map((group) => ({ key: group.key, label: group.label, specialties: [...group.specialties] })),
+);
+
+/** The evidence types a reader filters by (「证据类型」), strongest forms first. */
+export const FRONTIER_EVIDENCE_TYPES: readonly FrontierLabelled[] = Object.freeze(
+  EVIDENCE_TYPE_KEYS.map((key) => ({ key, label: FRONTIER_EVIDENCE_TYPE_LABELS_ZH[key] })),
+);
+
+/**
+ * A specialty a link or a stored item names, as this build reads it: itself, its successor (外科与麻醉 → 普通外科), or nothing
+ * (公共卫生 is a lane, 老年 a population tag) — `@evimed/domain`'s `frontierSpecialtyKey`.
+ */
+export function readSpecialtyKey(value: unknown): string | null {
+  return frontierSpecialtyKey(value);
+}
+
+/** The four parts of 「AI 评分」, in the order its breakdown draws them, with each one's maximum. */
+export const FRONTIER_SCORE_PARTS: ReadonlyArray<{ key: keyof FrontierScoreParts; label: string; max: number }> = Object.freeze([
+  { key: "impact", label: "实践影响", max: FRONTIER_SCORE_MAXIMA.impact },
+  { key: "authority", label: "权威性", max: FRONTIER_SCORE_MAXIMA.authority },
+  { key: "novelty", label: "新颖性", max: FRONTIER_SCORE_MAXIMA.novelty },
+  { key: "relevance", label: "国内相关性", max: FRONTIER_SCORE_MAXIMA.relevance },
+]);
 
 /**
  * Item flags, for the one case the server sent a key without its word. The
@@ -86,8 +116,20 @@ export type FrontierAxis = "timeline" | "published";
 export type FrontierWindow = "24h" | "3d" | "7d" | "30d";
 export const FRONTIER_WINDOWS: readonly FrontierWindow[] = Object.freeze(["24h", "3d", "7d", "30d"]);
 export type FrontierLevel = "high" | "medium" | "low";
-/** The band an editorial score reads in: at or above the selection line, from 60 up to it, below 60. */
+/** The tier 「AI 评分」 reads in (2026-10-23): `high` from 85, `medium` from 70, `low` below. */
 export type FrontierScoreBand = "high" | "medium" | "low";
+/** 「AI 评分」's four parts; their maxima are `FRONTIER_SCORE_MAXIMA` (30 / 30 / 20 / 20) and they add up to the score. */
+export interface FrontierScoreParts {
+  authority: number;
+  impact: number;
+  novelty: number;
+  relevance: number;
+}
+/** One of an item's tags, as the list and the reader both carry it (`#肝细胞癌`): the slug filters the feed by it. */
+export interface FrontierTagRef {
+  slug: string;
+  name: string;
+}
 export type FrontierVerification = "pending" | "passed" | "repaired" | "title-only";
 export type FrontierDatePrecision = "instant" | "day" | "inferred";
 export type FrontierSearchMode = "list" | "keyword" | "hybrid";
@@ -169,14 +211,18 @@ export interface FrontierItem {
   verification: FrontierVerification;
   editorDiagnostics?: FrontierEditorDiagnostics | null;
   /**
-   * The editorial total, 0–100 (「编辑评分 · 满分 100」): null for a safety
-   * alert, which is not scored for a reader, and for an item not scored in full.
+   * 「AI 评分」, 0–100: null for a safety alert, which is not scored for a
+   * reader, and for an item not scored in full.
    */
   score: number | null;
-  /** The band `score` reads in; null with no score. */
+  /** The tier `score` reads in; null with no score. */
   scoreBand: FrontierScoreBand | null;
-  /** The four dimensions in words. The numbers behind them never leave the server. */
+  /** The four parts of `score`, for its breakdown; null with no score, or from a server that does not send them. */
+  scoreParts: FrontierScoreParts | null;
+  /** The four dimensions in words (the older shape; the breakdown reads `scoreParts`). */
   levels: { authority: FrontierLevel | null; impact: FrontierLevel | null; novelty: FrontierLevel | null; relevance: FrontierLevel | null };
+  /** The item's active tags, in order, at most four (`#肝细胞癌`); empty from a server that sends none. */
+  tags: FrontierTagRef[];
   openAccess: { status: string; pdfUrl: string | null } | null;
   /**
    * The plugin's enrichment as facts, by the plugin's own keys — the ones this
@@ -287,13 +333,6 @@ export interface FrontierMetrics {
   views: number | null;
 }
 
-export type FrontierTopicGroup = "specialty" | "disease" | "drug" | "organisation" | "genre";
-export interface FrontierTopic {
-  slug: string;
-  name: string;
-  group: FrontierTopicGroup;
-}
-
 /** One development of the event an item belongs to (「事件后续」): its own article, newest first, the item itself excluded. */
 export interface FrontierFollowup {
   itemId: string;
@@ -327,10 +366,6 @@ export interface FrontierItemDetail extends FrontierItem {
   media: FrontierMedia[];
   quoted: FrontierQuoted | null;
   metrics: FrontierMetrics | null;
-  /** Null from a server that does not send topics yet (the reader then shows the item's specialties). */
-  topics: FrontierTopic[] | null;
-  /** At most eight, shown as #tag; null from a server that does not send tags yet. */
-  tags: string[] | null;
   /** This item reports an occurrence whose selected report is another item. */
   sameEvent: { itemId: string; title: string } | null;
   followups: FrontierFollowups | null;
@@ -342,7 +377,14 @@ export interface FrontierItemsQuery {
   view?: FrontierView;
   by?: FrontierAxis;
   lane?: string | null;
-  specialty?: string | null;
+  /** Any of these specialties (`specialty=a,b`). */
+  specialties?: readonly string[];
+  /** One tag's slug: items with it, with a tag merged into it, or with a narrower one under it. */
+  tag?: string | null;
+  /** One evidence type (`FRONTIER_EVIDENCE_TYPES`). */
+  evidence?: string | null;
+  /** Only what this reader has not opened. */
+  unread?: boolean;
   window?: FrontierWindow | null;
   q?: string | null;
   starred?: boolean;
@@ -437,10 +479,34 @@ export interface FrontierSources {
 
 export interface FrontierFollow {
   id: string;
-  kind: "topic" | "specialty" | "drug" | "source" | "event";
+  /** `tag`: one of the tag tree's tags, keyed by its slug (2026-10-23). */
+  kind: "topic" | "specialty" | "drug" | "source" | "event" | "tag";
   key: string;
   label: string;
   muted: boolean;
+}
+
+/** One row of `GET /api/frontier/tags`: a tag, how many items carried it in the last 30 days, and (for a search) its specialties. */
+export interface FrontierTagCount extends FrontierTagRef {
+  count: number;
+  specialties: string[];
+}
+
+/** `GET /api/frontier/tags/:slug`: one tag, where it sits in the tree, and `mergedFrom` when the slug asked for was merged into it. */
+export interface FrontierTagDetail extends FrontierTagRef {
+  nameEn: string | null;
+  specialties: FrontierLabelled[];
+  broader: FrontierTagRef | null;
+  narrower: FrontierTagRef[];
+  count30d: number;
+  mergedFrom: string | null;
+}
+
+/** `GET /api/frontier/ops/tags` (operators): each specialty's active tags, the candidates, and the recent changes. */
+export interface FrontierOpsTags {
+  specialties: Array<{ key: string; label: string; tags: Array<FrontierTagRef & { state: string; count30d: number; origin: string | null }> }>;
+  candidates: Array<FrontierTagRef & { count30d: number; sources30d: number; firstSeen: string | null }>;
+  changes: Array<{ id: string; at: string | null; action: string; tag: FrontierTagRef; other: FrontierTagRef | null; reason: string | null; undoable: boolean }>;
 }
 
 /*
@@ -698,6 +764,64 @@ function labelled(value: unknown, fallback: Readonly<Record<string, string>>, ma
   return out;
 }
 
+/**
+ * An item's specialties: each key read through `readSpecialtyKey` (a retired one is its successor or nothing), labelled from this
+ * build's table, each once, at most two (`FRONTIER_MAX_SPECIALTIES`).
+ */
+function parseSpecialties(value: unknown): FrontierLabelled[] {
+  if (!Array.isArray(value)) return [];
+  const out: FrontierLabelled[] = [];
+  for (const entry of value) {
+    const key = readSpecialtyKey(text(record(entry)?.key) ?? text(entry));
+    if (!key || out.some((specialty) => specialty.key === key)) continue;
+    out.push({ key, label: SPECIALTY_LABELS[key] ?? key });
+    if (out.length >= 2) break;
+  }
+  return out;
+}
+
+/** A tag's slug, as the server writes it (lower-case letters, digits and dashes): what an address and a follow carry. Anything else names no tag. */
+const TAG_SLUG = /^[a-z0-9][a-z0-9-]{1,79}$/;
+
+/** One tag reference — a slug and a name — or null. */
+function parseTagRef(value: unknown): FrontierTagRef | null {
+  const raw = record(value);
+  const slug = text(raw?.slug)?.trim();
+  const name = text(raw?.name)?.trim().replace(/^#+/, "");
+  return slug && name && TAG_SLUG.test(slug) ? { slug, name: name.slice(0, 40) } : null;
+}
+
+/** An item's tags, in order, each once, at most four; a server that sends none (or the older `string[]`) gives none. */
+function parseTags(value: unknown): FrontierTagRef[] {
+  if (!Array.isArray(value)) return [];
+  const out: FrontierTagRef[] = [];
+  for (const entry of value) {
+    const tag = parseTagRef(entry);
+    if (!tag || out.some((known) => known.slug === tag.slug)) continue;
+    out.push(tag);
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+/** The tier of a score (85 / 70), for a server that sent a score and no tier. */
+export function scoreTier(score: number): FrontierScoreBand {
+  return score >= 85 ? "high" : score >= 70 ? "medium" : "low";
+}
+
+/** The four parts of a score, each a whole number within its maximum; null when any is missing. */
+function parseScoreParts(value: unknown): FrontierScoreParts | null {
+  const raw = record(value);
+  if (!raw) return null;
+  const parts: Partial<FrontierScoreParts> = {};
+  for (const { key, max } of FRONTIER_SCORE_PARTS) {
+    const part = raw[key];
+    if (typeof part !== "number" || !Number.isFinite(part) || part < 0 || part > max) return null;
+    parts[key] = Math.round(part);
+  }
+  return parts as FrontierScoreParts;
+}
+
 /** A stored image's id: the hash of its bytes, as the plugin names it. Anything else addresses nothing. */
 const MEDIA_ID = /^[A-Za-z0-9_-]{8,128}$/;
 
@@ -814,7 +938,7 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     evidenceType: text(raw.evidenceType),
     evidenceTypeLabel: text(raw.evidenceTypeLabel),
     evidenceBasis: orNull(raw.evidenceBasis, ["pubmed-types", "registry", "model"] as const),
-    specialties: labelled(raw.specialties, SPECIALTY_LABELS, 3),
+    specialties: parseSpecialties(raw.specialties),
     flags: labelled(raw.flags, FLAG_LABELS),
     entities: {
       drugs: strings(entities?.drugs, 20),
@@ -838,7 +962,8 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     editorDiagnostics: parseFrontierEditorDiagnostics(raw.editorDiagnostics),
     // A safety alert carries no score for a reader, whatever a server sent.
     score: raw.safetyAlert === true ? null : score,
-    scoreBand: raw.safetyAlert === true || score === null ? null : orNull(raw.scoreBand, ["high", "medium", "low"] as const),
+    scoreBand: raw.safetyAlert === true || score === null ? null : orNull(raw.scoreBand, ["high", "medium", "low"] as const) ?? scoreTier(score),
+    scoreParts: raw.safetyAlert === true || score === null ? null : parseScoreParts(raw.scoreParts),
     levels: {
       authority: orNull(levels?.authority, LEVELS),
       impact: orNull(levels?.impact, LEVELS),
@@ -856,6 +981,7 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     platform: orNull(raw.platform, FRONTIER_PLATFORMS),
     author: parseAuthor(raw.author),
     thumb: parseMedia(raw.thumb),
+    tags: parseTags(raw.tags),
   };
 }
 
@@ -887,7 +1013,6 @@ function parseInsight(value: unknown): FrontierInsight | null {
   }).sort((a, b) => a.n - b.n).slice(0, INSIGHT_REFS);
   return { text: body.slice(0, INSIGHT_MAX), refs };
 }
-const TOPIC_GROUPS = ["specialty", "disease", "drug", "organisation", "genre"] as const;
 
 /** A count the source showed, or null where it showed none. */
 const tally = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null);
@@ -911,7 +1036,6 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
   const counted = metrics ? { likes: tally(metrics.likes), reposts: tally(metrics.reposts), replies: tally(metrics.replies), views: tally(metrics.views) } : null;
   const same = record(raw.sameEvent);
   const followups = record(raw.followups);
-  const seenTopics = new Set<string>();
   return {
     ...item,
     abstract: text(raw.abstract),
@@ -935,15 +1059,6 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
       url: safeLink(quoted?.url),
     } : null,
     metrics: counted && Object.values(counted).some((entry) => entry !== null) ? counted : null,
-    topics: Array.isArray(raw.topics) ? raw.topics.flatMap((entry) => {
-      const topic = record(entry);
-      const slug = text(topic?.slug)?.trim();
-      const name = text(topic?.name)?.trim();
-      if (!slug || !name || seenTopics.has(slug)) return [];
-      seenTopics.add(slug);
-      return [{ slug, name: name.slice(0, 40), group: oneOf(topic?.group, TOPIC_GROUPS, "genre") }];
-    }).slice(0, 12) : null,
-    tags: Array.isArray(raw.tags) ? [...new Set(strings(raw.tags, 20).map((tag) => tag.trim().replace(/^#+/, "").slice(0, 40)).filter(Boolean))].slice(0, 8) : null,
     sameEvent: same && text(same.itemId) && text(same.title) && text(same.itemId) !== item.id ? { itemId: text(same.itemId)!, title: text(same.title)! } : null,
     followups: followups && text(followups.eventId) ? {
       eventId: text(followups.eventId)!,
@@ -1110,7 +1225,7 @@ function parseEvent(value: unknown): FrontierEvent | null {
     status: oneOf(raw.status, ["developing", "settled"] as const, "developing"),
     lane,
     laneLabel: text(raw.laneLabel) ?? LANE_LABELS[lane] ?? "",
-    specialties: labelled(raw.specialties, SPECIALTY_LABELS, 3),
+    specialties: parseSpecialties(raw.specialties),
     sourceCount72h: count(raw.sourceCount72h),
     reportCount: count(raw.reportCount),
     firstAt: moment(raw.firstAt),
@@ -1253,7 +1368,10 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   params.set("view", query.view ?? "selected");
   params.set("by", query.by ?? "timeline");
   if (query.lane) params.set("lane", query.lane);
-  if (query.specialty) params.set("specialty", query.specialty);
+  if (query.specialties?.length) params.set("specialty", query.specialties.join(","));
+  if (query.tag) params.set("tag", query.tag);
+  if (query.evidence) params.set("evidence", query.evidence);
+  if (query.unread) params.set("unread", "1");
   if (query.follow) params.set("follow", query.follow);
   if (query.window) params.set("window", query.window);
   const q = query.q?.trim();
@@ -1315,7 +1433,7 @@ function parseFollow(value: unknown): FrontierFollow | null {
   const follow = record(value);
   const followId = text(follow?.id) ?? (typeof follow?.id === "number" ? String(follow.id) : null);
   const key = text(follow?.key);
-  const kind = orNull(follow?.kind, ["topic", "specialty", "drug", "source", "event"] as const);
+  const kind = orNull(follow?.kind, ["topic", "specialty", "drug", "source", "event", "tag"] as const);
   return followId && key && kind ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true } : null;
 }
 
@@ -1339,6 +1457,96 @@ export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; k
 export async function removeFrontierFollow(followId: string): Promise<void> {
   await productRequest<unknown>(`/frontier/follows/${id(followId)}`, "DELETE");
   window.dispatchEvent(new Event(FRONTIER_FOLLOWS_CHANGED));
+}
+
+/* ----------------------------------------------------------------------- tags */
+
+function parseTagCount(value: unknown): FrontierTagCount | null {
+  const tag = parseTagRef(value);
+  if (!tag) return null;
+  const raw = record(value)!;
+  return { ...tag, count: count(raw.count), specialties: strings(raw.specialties, 30).flatMap((key) => readSpecialtyKey(key) ?? []) };
+}
+
+/**
+ * `GET /api/frontier/tags`: the active tags of some specialties, most used in the last 30 days first (the 「专科」 panel's 热门标签),
+ * or the tags whose name or an alias holds some words (the search box's suggestions). Empty where the route answers nothing.
+ */
+export async function listFrontierTags({ specialties = [], q = "", limit = 24 }: { specialties?: readonly string[]; q?: string; limit?: number }): Promise<FrontierTagCount[]> {
+  const params = new URLSearchParams();
+  if (specialties.length) params.set("specialty", specialties.join(","));
+  const words = q.trim().slice(0, 40);
+  if (words) params.set("q", words);
+  params.set("limit", String(Math.min(50, Math.max(1, Math.floor(limit)))));
+  const raw = await optional(async () => record(await productRequest<unknown>(`/frontier/tags?${params.toString()}`)));
+  return (Array.isArray(raw?.tags) ? raw.tags : []).map(parseTagCount).filter((tag): tag is FrontierTagCount => tag !== null).slice(0, limit);
+}
+
+/** A tag that is not there: unknown, or retired without a successor (404 `frontier_tag_not_found`). */
+function tagGone(error: unknown): boolean {
+  return error instanceof WebApiError && error.status === 404 && error.code === "frontier_tag_not_found";
+}
+
+/** `GET /api/frontier/tags/:slug`: the tag, or — for a slug merged into another — that one with `mergedFrom`; null for a tag that is not there. */
+export async function fetchFrontierTag(slug: string): Promise<FrontierTagDetail | null> {
+  try {
+    const answer = record(await productRequest<unknown>(`/frontier/tags/${id(slug)}`));
+    const raw = record(answer?.tag);
+    const tag = parseTagRef(raw);
+    if (!tag || !raw) return null;
+    return {
+      ...tag,
+      nameEn: text(raw.nameEn),
+      specialties: parseSpecialties(raw.specialties),
+      broader: parseTagRef(raw.broader),
+      narrower: (Array.isArray(raw.narrower) ? raw.narrower : []).map(parseTagRef).filter((entry): entry is FrontierTagRef => entry !== null).slice(0, 50),
+      count30d: count(raw.count30d),
+      // Beside the tag (as the server sends it) or in it.
+      mergedFrom: text(answer?.mergedFrom) ?? text(raw.mergedFrom),
+    };
+  } catch (error) {
+    if (tagGone(error) || frontierAbsence(error)) return null;
+    throw error;
+  }
+}
+
+/** `GET /api/frontier/ops/tags` (operators). */
+export async function fetchFrontierOpsTags(): Promise<FrontierOpsTags> {
+  const raw = record(await productRequest<unknown>("/frontier/ops/tags")) ?? {};
+  const list = (value: unknown) => (Array.isArray(value) ? value : []);
+  return {
+    specialties: list(raw.specialties).flatMap((entry) => {
+      const specialty = record(entry);
+      const key = text(specialty?.key);
+      if (!specialty || !key) return [];
+      return [{
+        key,
+        label: text(specialty.label) ?? SPECIALTY_LABELS[key] ?? key,
+        tags: list(specialty.tags).flatMap((value) => {
+          const tag = parseTagRef(value);
+          const row = record(value);
+          return tag && row ? [{ ...tag, state: text(row.state) ?? "active", count30d: count(row.count30d), origin: text(row.origin) }] : [];
+        }),
+      }];
+    }),
+    candidates: list(raw.candidates).flatMap((value) => {
+      const tag = parseTagRef(value);
+      const row = record(value);
+      return tag && row ? [{ ...tag, count30d: count(row.count30d), sources30d: count(row.sources30d), firstSeen: moment(row.firstSeen) }] : [];
+    }),
+    changes: list(raw.changes).flatMap((value) => {
+      const row = record(value);
+      const changeId = text(row?.id) ?? (typeof row?.id === "number" ? String(row.id) : null);
+      const tag = parseTagRef(row?.tag);
+      if (!row || !changeId || !tag) return [];
+      return [{ id: changeId, at: moment(row.at), action: text(row.action) ?? "", tag, other: parseTagRef(row.other), reason: text(row.reason), undoable: row.undoable === true }];
+    }),
+  };
+}
+
+/** `POST /api/frontier/ops/tags/changes/:id/undo` (operators): takes a change of the tag tree back. */
+export async function undoFrontierTagChange(changeId: string): Promise<void> {
+  await productRequest<unknown>(`/frontier/ops/tags/changes/${id(changeId)}/undo`, "POST", {});
 }
 
 /**

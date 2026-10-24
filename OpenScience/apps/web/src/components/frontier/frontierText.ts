@@ -9,18 +9,20 @@
  * 2026-10-07 — a heat is shown as a number, and the domain keeps its method
  * (`FRONTIER_HEAT_METHOD_ZH`) for the operator's documents.
  */
-import type {
-  FrontierDaily,
-  FrontierEvent,
-  FrontierHotEvent,
-  FrontierHotWindow,
-  FrontierItem,
-  FrontierPlatform,
-  FrontierPrimaryKind,
-  FrontierScoreBand,
-  FrontierTrendPoint,
+import {
+  FRONTIER_SCORE_PARTS,
+  scoreTier,
+  type FrontierDaily,
+  type FrontierEvent,
+  type FrontierHotEvent,
+  type FrontierHotWindow,
+  type FrontierItem,
+  type FrontierPlatform,
+  type FrontierPrimaryKind,
+  type FrontierScoreBand,
+  type FrontierTrendPoint,
 } from "@/lib/frontierClient";
-import { dayKey, dayLabel } from "@/lib/inboxGroups";
+import { dayKey } from "@/lib/inboxGroups";
 import { relativeTime } from "@/lib/runPresentation";
 
 /* ------------------------------------------------------------------ actions */
@@ -62,31 +64,34 @@ export function evidenceTag(item: Pick<FrontierItem, "evidenceType" | "evidenceT
   return item.evidenceTypeLabel;
 }
 
-/** At most this many #tags under a card: its specialties first, then its diseases. */
+/** At most this many #tags under a card: the item's own, in its order (the reader lists all of them). */
 export const CARD_MAX_TAGS = 3;
 
-/** A #tag under a card: a specialty filters the feed by it, a disease searches for it. */
-export type CardTag = { kind: "specialty" | "term"; key: string; label: string };
-
-/** 「#消化 #结直肠癌」: the specialties (at most two), then the diseases, three in all. */
-export function cardTags(item: Pick<FrontierItem, "specialties" | "entities">): CardTag[] {
-  const tags: CardTag[] = item.specialties.slice(0, 2).map((specialty) => ({ kind: "specialty", key: specialty.key, label: specialty.label }));
-  for (const disease of item.entities.diseases) {
-    if (tags.length >= CARD_MAX_TAGS) break;
-    const label = disease.trim();
-    if (label && !tags.some((tag) => tag.label === label)) tags.push({ kind: "term", key: label, label });
-  }
-  return tags;
+/**
+ * The eyebrow tag of a card: the evidence type of a paper (「RCT」), else the item's lane (「审批监管」) — one word for what it is.
+ * None for a safety alert, which says 「安全警示」 first already.
+ */
+export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel">): string | null {
+  if (item.safetyAlert) return null;
+  return evidenceTag(item) ?? (item.laneLabel || null);
 }
 
-/**
- * The band an editorial score reads in: the server's, measured against its
- * selection line. A score that came without one is at most 「中」 — only the
- * server knows where the line is.
- */
+/** 「AI 评分」: one name everywhere — the card's pill, the reader's 推荐理由, a screen reader. */
+export const SCORE_LABEL = "AI 评分";
+
+/** What 「AI 评分」 measures, under its breakdown. */
+export const SCORE_NOTE = "衡量对临床和科研读者的重要程度，不代表证据等级";
+
+/** The tier a score reads in: the server's (85 / 70), or from the score itself where a server sent none. */
 export function scoreBand(item: Pick<FrontierItem, "score" | "scoreBand">): FrontierScoreBand | null {
   if (item.score === null) return null;
-  return item.scoreBand ?? (item.score >= 60 ? "medium" : "low");
+  return item.scoreBand ?? scoreTier(item.score);
+}
+
+/** The four parts of a score as its bars draw them — 实践影响 x/30, 权威性 x/30, 新颖性 x/20, 国内相关性 x/20 — or none. */
+export function scoreBreakdown(item: Pick<FrontierItem, "scoreParts">): Array<{ key: string; label: string; value: number; max: number }> {
+  const parts = item.scoreParts;
+  return parts ? FRONTIER_SCORE_PARTS.map(({ key, label, max }) => ({ key, label, value: parts[key], max })) : [];
 }
 
 /** One item as Markdown (「⋯ › 复制为 Markdown」): its title linked to the original, what it says, who said it. */
@@ -108,9 +113,9 @@ export function isSocialItem(item: Pick<FrontierItem, "platform">): boolean {
   return item.platform !== null && item.platform !== "web";
 }
 
-/** The header's way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「查看原文」. */
+/** The way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「打开原文」. */
 export function originalLinkLabel(item: Pick<FrontierItem, "platform">): string {
-  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "查看原文";
+  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "打开原文";
   const platform = PLATFORM_LABELS[item.platform];
   return /^[A-Za-z]/.test(platform ?? "") ? `在 ${platform} 查看原帖` : `在${platform}查看原帖`;
 }
@@ -179,16 +184,86 @@ export function sinceText(value: string | null, now = Date.now()): string {
 }
 
 /**
- * The feed's time column. Inside a day group the day is its heading, so the
- * column is the clock; where the list is not cut into days (a search, 与我相关)
- * it is the clock today and the day (「9月20日」) before.
+ * When an item came, in a list that is not cut into days (与我相关, a search by relevance, an event's list), said in the card's meta row
+ * after its source: the clock today (「09:06」), the day before (「10月20日」), the year too before this one. A day-grouped list
+ * has the clock in its own column instead (`clock`).
  */
-export function timeColumn(item: Pick<FrontierItem, "timelineAt">, grouped: boolean, now = Date.now()): string {
-  if (grouped) return clock(item.timelineAt);
+export function metaTime(item: Pick<FrontierItem, "timelineAt">, now = Date.now()): string {
   const key = dayKey(item.timelineAt);
   if (!key) return "";
-  const label = dayLabel(key, now);
-  return label === "今天" ? clock(item.timelineAt) : label;
+  if (key === dayKey(now)) return clock(item.timelineAt);
+  const [year, month, day] = key.split("-").map(Number);
+  return year === new Date(now).getFullYear() ? `${month}月${day}日` : `${year}年${month}月${day}日`;
+}
+
+/** A day group's heading: 「今天 · 10月23日 周四 · 11 条」, 「10月22日 周三 · 40 条」 — the count once the whole day is on screen. */
+export function dayHeading(day: Pick<ItemDay, "key" | "label" | "items">, whole: boolean, now = Date.now()): string {
+  return [day.key === dayKey(now) ? "今天" : null, day.label, whole ? `${day.items.length} 条` : null].filter(Boolean).join(" · ");
+}
+
+/* ---------------------------------------------------------------------- links */
+
+/**
+ * A bare address in a text: http(s), up to the first space or a character no address carries in running Chinese text. What trails it
+ * — a full stop, a comma, a closing bracket the address did not open — is the sentence's, not the address's (`trimUrl`).
+ */
+const URL_IN_TEXT = /https?:\/\/[^\s<>"'`（）【】「」『』《》，。；：！？、“”‘’]+/g;
+
+/** An address without what the sentence put after it: trailing punctuation, and closing brackets it did not open. */
+export function trimUrl(raw: string): string {
+  let url = raw;
+  for (;;) {
+    const last = url.slice(-1);
+    if (/[.,;:!?'"]/.test(last)) { url = url.slice(0, -1); continue; }
+    const pairs: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+    if (pairs[last] && url.split(last).length > url.split(pairs[last]).length) { url = url.slice(0, -1); continue; }
+    return url;
+  }
+}
+
+/** The longest an address is shown: its site and the start of its path (the whole address is its tooltip). */
+const SHOWN_URL_MAX = 40;
+
+/**
+ * An address as a reader takes it in: the site without `www.`, then the path — whole if the two fit in 40 characters, else its first
+ * segment and 「…」 (「fda.gov/vaccines-blood-biologics/…」), else cut at 40. The query and the fragment are not shown.
+ */
+export function shortUrl(url: string): string {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return url.length > SHOWN_URL_MAX ? `${url.slice(0, SHOWN_URL_MAX - 1)}…` : url; }
+  const host = parsed.hostname.replace(/^www\./, "");
+  let path = parsed.pathname.replace(/\/+$/, "");
+  try { path = decodeURI(path); } catch { /* an address that is not valid percent-encoding is shown as it came */ }
+  const whole = `${host}${path}`;
+  if (whole.length <= SHOWN_URL_MAX) return whole;
+  const first = path.split("/").filter(Boolean)[0];
+  const head = first ? `${host}/${first}/…` : "";
+  if (head && head.length <= SHOWN_URL_MAX) return head;
+  return `${whole.slice(0, SHOWN_URL_MAX - 1)}…`;
+}
+
+/** A piece of a text: its own words, or an address in it. */
+export type TextPiece = string | { url: string };
+
+/** A text cut into its words and its bare addresses, in order; what trails an address stays with the words after it. */
+export function splitUrls(text: string): TextPiece[] {
+  const pieces: TextPiece[] = [];
+  let rest = 0;
+  for (const match of text.matchAll(URL_IN_TEXT)) {
+    const url = trimUrl(match[0]);
+    if (!/^https?:\/\/[^/]+\.[^/]/.test(url)) continue;
+    if (match.index > rest) pieces.push(text.slice(rest, match.index));
+    pieces.push({ url });
+    rest = match.index + url.length;
+  }
+  if (rest < text.length) pieces.push(text.slice(rest));
+  return pieces;
+}
+
+/** An address as compared with an item's own: no trailing slash, no fragment, `http` and `https` alike, the site's `www.` aside. */
+export function sameAddress(a: string, b: string): boolean {
+  const key = (value: string) => value.trim().replace(/#.*$/, "").replace(/\/+$/, "").replace(/^https?:\/\/(www\.)?/i, "").toLowerCase();
+  return key(a) === key(b);
 }
 
 /* ---------------------------------------------------------------------- days */

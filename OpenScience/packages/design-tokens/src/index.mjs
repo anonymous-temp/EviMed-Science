@@ -50,7 +50,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '2.1.4'
+export const DESIGN_TOKENS_VERSION = '2.2.0'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -241,6 +241,9 @@ export const COLOR_ROLES = Object.freeze(
     text: { light: 'n-900', dark: '#eef1f4', note: '16.00 on the page' },
     'text-2': { light: 'n-700', dark: '#c3cad2', note: '9.37 on the page' },
     'text-3': { light: 'n-500', dark: '#8d96a0', note: '5.48 on the page, 5.29 on the sidebar — nothing lighter carries text' },
+    // The title of a list row that opens a document (前沿动态's cards, 2026-10-23): the brand's deep blue, not black and not the
+    // bright accent, which is what it turns under the pointer; a read row's title steps down to `text-2`.
+    'title-ink': { light: 'brand-900', dark: 'brand-100', note: '12.62 on the page, 11.43 on a hovered row' },
     // Icons and rules only. Never a word, and never a status: 2.69 on the page,
     // under the 3:1 a meaningful graphic needs, which is why `dot-*` has its own
     // steps and `contrast.mjs` fails a dot that borrows this one.
@@ -639,6 +642,11 @@ export const TYPE_SCALE = Object.freeze(
     // is the deliberate one; this alias keeps unmigrated pages rendering at `ui`.
     'ui-sm': { size: 14, lineHeight: '22px', use: 'retired alias of `ui`' },
     body: { size: 16, lineHeight: '1.75', use: 'report prose and the reading column' },
+    // An article's own text in the frontier reader (2026-10-23): 16 below 1280 px and 18 from there, its AI 导读 a step above (18 / 20),
+    // all at 1.8 — the sizes of the scale, read at the line height of a long text.
+    reading: { size: 16, lineHeight: '1.8', use: "an article's text in the reader, below 1280 px" },
+    'reading-lg': { size: 18, lineHeight: '1.8', use: "an article's text from 1280 px; its AI 导读 below 1280 px" },
+    'reading-xl': { size: 20, lineHeight: '1.8', use: "an article's AI 导读 from 1280 px" },
     wordmark: { size: 16, lineHeight: '1.3', use: 'the EviMed lockup in the sidebar', family: 'serif' },
     section: { size: 18, lineHeight: '26px', use: 'a section heading inside an answer or a report' },
     heading: { size: 20, lineHeight: '28px', use: 'a card heading on a data page, a document title in a preview pane' },

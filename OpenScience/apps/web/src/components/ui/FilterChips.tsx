@@ -47,7 +47,9 @@ export const FilterChip = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
   icon?: LucideIcon;
   /** Draws the ▾ of a chip that opens a menu. */
   menu?: boolean;
-}>(function FilterChip({ pressed, icon: Icon, menu = false, className, children, type = "button", ...rest }, ref) {
+  /** The icon after the words (「#肝细胞癌 ×」, a mark a press lets go of). */
+  iconEnd?: boolean;
+}>(function FilterChip({ pressed, icon: Icon, menu = false, iconEnd = false, className, children, type = "button", ...rest }, ref) {
   return (
     <button
       ref={ref}
@@ -56,8 +58,9 @@ export const FilterChip = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
       className={filterChipClasses({ selected: Boolean(pressed), className })}
       {...rest}
     >
-      {Icon && <Icon size={16} aria-hidden="true" />}
+      {Icon && !iconEnd && <Icon size={16} aria-hidden="true" />}
       {children}
+      {Icon && iconEnd && <Icon size={16} className="text-text-3" aria-hidden="true" />}
       {menu && <ChevronDown size={16} className="text-text-3" aria-hidden="true" />}
     </button>
   );

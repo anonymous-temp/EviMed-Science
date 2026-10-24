@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { frontierItem } from "./__fixtures__/frontierItems";
 import {
-  cardTags,
+  cardEyebrow,
   dailyMeta,
+  dayHeading,
   evidenceTag,
   groupByDay,
   hotBoardStamp,
@@ -14,10 +15,16 @@ import {
   rankLabel,
   rankTone,
   researchDraft,
+  metaTime,
+  originalLinkLabel,
+  sameAddress,
   scoreBand,
+  scoreBreakdown,
+  shortUrl,
   sparkline,
+  splitUrls,
   stamp,
-  timeColumn,
+  trimUrl,
 } from "./frontierText";
 import type { FrontierItem } from "@/lib/frontierClient";
 
@@ -25,15 +32,12 @@ import type { FrontierItem } from "@/lib/frontierClient";
 const NOW = new Date(2026, 8, 22, 12, 0, 0).getTime();
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 8, day, hour, minute, 0).toISOString();
 
-describe("the time column", () => {
-  it("is the clock inside a day group", () => {
-    expect(timeColumn(frontierItem({ timelineAt: at(21, 9, 5) }), true, NOW)).toBe("09:05");
-  });
-
-  it("is the clock today and the day before, where the list is not cut into days", () => {
-    expect(timeColumn(frontierItem({ timelineAt: at(22, 8, 30) }), false, NOW)).toBe("08:30");
-    expect(timeColumn(frontierItem({ timelineAt: at(21, 8, 30) }), false, NOW)).toBe("昨天");
-    expect(timeColumn(frontierItem({ timelineAt: at(18, 8, 30) }), false, NOW)).toBe("9月18日");
+describe("when a card says it came", () => {
+  it("is, in a list not cut into days, the clock today and the date before — never 「昨天」 in a narrow column", () => {
+    expect(metaTime(frontierItem({ timelineAt: at(22, 8, 30) }), NOW)).toBe("08:30");
+    expect(metaTime(frontierItem({ timelineAt: at(21, 8, 30) }), NOW)).toBe("9月21日");
+    expect(metaTime(frontierItem({ timelineAt: at(18, 8, 30) }), NOW)).toBe("9月18日");
+    expect(metaTime(frontierItem({ timelineAt: new Date(2025, 11, 30, 9).toISOString() }), NOW)).toBe("2025年12月30日");
   });
 
   it("says when something was last read: the clock today, the date before", () => {
@@ -57,6 +61,13 @@ describe("the day groups", () => {
       ["9月19日 周六", "d"],
     ]);
   });
+
+  it("are headed 「今天 · 9月22日 周二 · 2 条」 — 今天 only for today, the count only for a whole day", () => {
+    const [today, before] = groupByDay([frontierItem({ id: "a", timelineAt: at(22, 9) }), frontierItem({ id: "b", timelineAt: at(22, 8) }), frontierItem({ id: "c", timelineAt: at(21, 9) })]);
+    expect(dayHeading(today, true, NOW)).toBe("今天 · 9月22日 周二 · 2 条");
+    expect(dayHeading(before, true, NOW)).toBe("9月21日 周一 · 1 条");
+    expect(dayHeading(before, false, NOW)).toBe("9月21日 周一");
+  });
 });
 
 describe("what a card carries", () => {
@@ -67,23 +78,35 @@ describe("what a card carries", () => {
     expect(evidenceTag(frontierItem({ evidenceType: "press-release", evidenceTypeLabel: "企业新闻稿", flags: [{ key: "press-release", label: "企业新闻稿·数据未发表" }] }))).toBeNull();
   });
 
-  it("tags the specialties first and then the diseases, three in all", () => {
-    const item = frontierItem({
-      specialties: [{ key: "gastroenterology", label: "消化" }, { key: "oncology", label: "肿瘤" }, { key: "surgery", label: "外科" }],
-      entities: { drugs: ["阿司匹林"], trials: [], orgs: [], diseases: ["结直肠癌", "腺瘤"] },
-    });
-    expect(cardTags(item)).toEqual([
-      { kind: "specialty", key: "gastroenterology", label: "消化" },
-      { kind: "specialty", key: "oncology", label: "肿瘤" },
-      { kind: "term", key: "结直肠癌", label: "结直肠癌" },
-    ]);
+  it("has one eyebrow: a paper's evidence type, else its lane, and none on a safety alert, which says 安全警示 first", () => {
+    expect(cardEyebrow(frontierItem())).toBe("RCT");
+    expect(cardEyebrow(frontierItem({ evidenceType: null, evidenceTypeLabel: null, lane: "regulatory", laneLabel: "审批监管" }))).toBe("审批监管");
+    expect(cardEyebrow(frontierItem({ safetyAlert: true, evidenceType: "safety-notice", evidenceTypeLabel: "安全通告" }))).toBeNull();
   });
 
-  it("reads the score in the server's band, at most 「中」 without one, and nothing without a score", () => {
+  it("reads the score in the server's tier, or in the fixed tiers (85, 70) without one, and nothing without a score", () => {
     expect(scoreBand({ score: 86, scoreBand: "high" })).toBe("high");
-    expect(scoreBand({ score: 80, scoreBand: null })).toBe("medium");
-    expect(scoreBand({ score: 42, scoreBand: null })).toBe("low");
+    expect(scoreBand({ score: 85, scoreBand: null })).toBe("high");
+    expect(scoreBand({ score: 84, scoreBand: null })).toBe("medium");
+    expect(scoreBand({ score: 70, scoreBand: null })).toBe("medium");
+    expect(scoreBand({ score: 69, scoreBand: null })).toBe("low");
     expect(scoreBand({ score: null, scoreBand: null })).toBeNull();
+  });
+
+  it("breaks the score into its four parts with their maxima, and into nothing without them", () => {
+    expect(scoreBreakdown(frontierItem({ score: 86, scoreParts: { authority: 27, impact: 25, novelty: 18, relevance: 16 } }))).toEqual([
+      { key: "impact", label: "实践影响", value: 25, max: 30 },
+      { key: "authority", label: "权威性", value: 27, max: 30 },
+      { key: "novelty", label: "新颖性", value: 18, max: 20 },
+      { key: "relevance", label: "国内相关性", value: 16, max: 20 },
+    ]);
+    expect(scoreBreakdown(frontierItem({ score: 86 }))).toEqual([]);
+  });
+
+  it("opens an article as 「打开原文」 and a post on its platform", () => {
+    expect(originalLinkLabel({ platform: null })).toBe("打开原文");
+    expect(originalLinkLabel({ platform: "wechat" })).toBe("打开原文");
+    expect(originalLinkLabel({ platform: "x" })).toBe("在 X 查看原帖");
   });
 
   it("copies as Markdown: the title linked to the original, what it says, who said it", () => {
@@ -223,5 +246,32 @@ describe("the 深入研究 draft", () => {
     expect(first({ evidenceType: "guideline" })).toBe("这份指南的推荐依据是什么");
     expect(first({ evidenceType: "safety-notice", sourceType: "regulator" })).toBe("这项决定依据什么");
     expect(first({ evidenceType: "other", sourceType: "media" })).toBe("这条消息的依据是什么");
+  });
+});
+
+describe("an address in a text", () => {
+  it("leaves out what the sentence put after it: punctuation and a bracket it did not open", () => {
+    expect(trimUrl("https://fda.gov/a.")).toBe("https://fda.gov/a");
+    expect(trimUrl("https://fda.gov/a),")).toBe("https://fda.gov/a");
+    expect(trimUrl("https://en.wikipedia.org/wiki/Aspirin_(drug)")).toBe("https://en.wikipedia.org/wiki/Aspirin_(drug)");
+  });
+
+  it("cuts a text into its words and its addresses, a full-width bracket or comma ending the address", () => {
+    expect(splitUrls("详见 https://www.fda.gov/news/x。另见（https://nmpa.gov.cn/a）")).toEqual([
+      "详见 ", { url: "https://www.fda.gov/news/x" }, "。另见（", { url: "https://nmpa.gov.cn/a" }, "）",
+    ]);
+    expect(splitUrls("没有地址的一句话")).toEqual(["没有地址的一句话"]);
+  });
+
+  it("is shown as its site and the start of its path, at most 40 characters", () => {
+    expect(shortUrl("https://www.fda.gov/vaccines-blood-biologics/safety-availability-biologics/important-information-about-x")).toBe("fda.gov/vaccines-blood-biologics/…");
+    expect(shortUrl("https://www.nejm.org/doi/x")).toBe("nejm.org/doi/x");
+    expect(shortUrl("https://example.org/?utm_source=a")).toBe("example.org");
+    expect(shortUrl("https://a.example.org/a-very-long-first-segment-of-a-path-that-goes-on/x").length).toBeLessThanOrEqual(40);
+  });
+
+  it("is the item's own address whatever its scheme, its www., its trailing slash or its fragment", () => {
+    expect(sameAddress("http://www.fda.gov/a/", "https://fda.gov/a#top")).toBe(true);
+    expect(sameAddress("https://fda.gov/a", "https://fda.gov/b")).toBe(false);
   });
 });

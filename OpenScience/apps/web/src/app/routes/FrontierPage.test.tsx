@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import type {
   FrontierDaily,
@@ -37,6 +37,9 @@ const client = vi.hoisted(() => ({
   unhideFrontierItem: vi.fn(),
   markFrontierItemRead: vi.fn(),
   saveFrontierItemToLibrary: vi.fn(),
+  listFrontierTags: vi.fn(),
+  fetchFrontierTag: vi.fn(),
+  addFrontierFollow: vi.fn(),
 }));
 // Partial: the vocabulary, the parsers and the error words stay real.
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
@@ -148,6 +151,9 @@ beforeEach(() => {
   client.hideFrontierItem.mockResolvedValue({ starred: false, hidden: true, read: false });
   client.unhideFrontierItem.mockResolvedValue({ starred: false, hidden: false, read: false });
   client.markFrontierItemRead.mockResolvedValue({ starred: false, hidden: false, read: true });
+  client.listFrontierTags.mockResolvedValue([]);
+  client.fetchFrontierTag.mockResolvedValue(null);
+  client.addFrontierFollow.mockImplementation(async (input: { kind: string; key: string; label: string }) => ({ id: "f-new", muted: false, ...input }));
 });
 
 describe("where the module is not offered", () => {
@@ -168,7 +174,11 @@ describe("where the module is not offered", () => {
 
 /** The one row of controls: the six view tabs, and the right-hand controls of the view that is open. */
 const viewTabs = () => within(screen.getByRole("tablist", { name: "动态视图" }));
-const controlRow = () => screen.getByRole("tablist", { name: "动态视图" }).parentElement!;
+/** The page's toolbar: the views and the search on its first row, the open view's controls on its second. */
+const controlRow = () => screen.getByRole("group", { name: "动态筛选与搜索" });
+/** The second row alone, where the open view has one. */
+const secondRow = () => controlRow().querySelector<HTMLElement>("[data-toolbar-row]");
+const lanes = () => within(screen.getByRole("group", { name: "栏目" }));
 
 describe("the page and its views", () => {
   it("opens on 精选 under a one-line header — the title and a link to the evidence zones — with the search in the toolbar of the sticky band, no sentence under it", async () => {
@@ -179,10 +189,10 @@ describe("the page and its views", () => {
     expect(screen.getByRole("tab", { name: "证据专区" })).toBeInTheDocument();
     // The views, the filters and the search are one toolbar, in the band the shell keeps at the top of the page (R19, audit D C1d).
     const toolbar = screen.getByRole("group", { name: "动态筛选与搜索" });
-    expect(toolbar).toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
+    expect(toolbar).toContainElement(screen.getByRole("combobox", { name: "搜索" }));
     expect(toolbar).toContainElement(screen.getByRole("tablist", { name: "动态视图" }));
     expect(toolbar.closest("[data-page-chrome]")).toHaveClass("sticky", "top-0");
-    expect(header).not.toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
+    expect(header).not.toContainElement(screen.getByRole("combobox", { name: "搜索" }));
     expect(toolbar.compareDocumentPosition(screen.getByRole("tabpanel")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await screen.findByText("今天的一条 RCT");
     expect(screen.queryByText(/每天替你读/)).not.toBeInTheDocument();
@@ -248,99 +258,160 @@ describe("the page and its views", () => {
 });
 
 describe("the control row", () => {
-  it("holds the tabs on the left and, for 精选, 全部栏目 · 全部专科 · 收藏 on the right — one row, no lane chips", async () => {
+  it("has the views and the search on its first row and, for 精选, the nine 栏目, 「专科 ▾」 and 「更多筛选 ▾」 on a second", async () => {
     renderPage();
     await screen.findByText("今天的一条 RCT");
-    const row = within(controlRow());
-    expect(row.getByRole("button", { name: "全部栏目" })).toHaveAttribute("aria-haspopup", "menu");
-    expect(row.getByRole("button", { name: "全部专科" })).toHaveAttribute("aria-haspopup", "menu");
-    expect(row.getByRole("button", { name: "收藏" })).toHaveAttribute("aria-pressed", "false");
-    // The time range is a filter of 全部 only; the lanes are one menu, not a second row of chips.
-    expect(row.queryByRole("button", { name: "时间" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "栏目" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "临床证据" })).not.toBeInTheDocument();
-    expect(row.queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
+    const tabsRow = screen.getByRole("tablist", { name: "动态视图" }).parentElement!;
+    expect(tabsRow).toContainElement(screen.getByRole("combobox", { name: "搜索" }));
+    const row = secondRow()!;
+    expect(row).not.toBeNull();
+    // 栏目 is a row of chips, one choice, all nine in sight; nothing of it is a menu.
+    const group = screen.getByRole("group", { name: "栏目" });
+    expect(row).toContainElement(group);
+    expect(lanes().getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "临床证据", "指南共识", "药物安全", "审批监管", "研发产业", "公共卫生", "科研与基金", "AI 与医学"]);
+    expect(lanes().getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(row).getByRole("button", { name: "专科" })).toHaveAttribute("aria-haspopup", "dialog");
+    expect(within(row).getByRole("button", { name: "更多筛选" })).toHaveAttribute("aria-haspopup", "dialog");
+    // The old menus are gone: 全部渠道 is 来源 inside 更多筛选, and nothing stacks two dimensions in one list.
+    for (const gone of ["全部渠道", "全部栏目", "全部专科", "收藏", "时间"]) expect(within(row).queryByRole("button", { name: gone })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
   });
 
-  it("narrows by lane, specialty and stars, and keeps them in the address", async () => {
+  it("narrows by 栏目 at once, keeps it in the address, and lets go of it with 全部", async () => {
     renderPage();
     await screen.findByText("今天的一条 RCT");
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "全部栏目" }));
-    // The five lanes a reader looks for come first.
-    const lanes = (await screen.findAllByRole("menuitemradio")).map((item) => item.textContent);
-    expect(lanes.slice(0, 6)).toEqual(["全部栏目", "临床证据", "指南共识", "药物安全", "审批监管", "研发产业"]);
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "药物安全" }));
+    await userEvent.click(lanes().getByRole("button", { name: "药物安全" }));
     await waitFor(() => expect(lastFeedQuery()).toMatchObject({ lane: "safety" }));
-    expect(screen.getByRole("button", { name: "全部栏目：药物安全" })).toHaveAttribute("aria-haspopup", "menu");
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "全部专科" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "心血管" }));
-    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ lane: "safety", specialty: "cardiology" }));
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "收藏" }));
-    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ lane: "safety", specialty: "cardiology", starred: true }));
-    expect(location()).toContain("lane=safety&specialty=cardiology&starred=1");
-    expect(screen.getByRole("button", { name: "全部专科：心血管" })).toHaveAttribute("aria-haspopup", "menu");
-    // Choosing 「全部栏目」 again clears the lane.
-    await userEvent.click(screen.getByRole("button", { name: "全部栏目：药物安全" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "全部栏目" }));
+    expect(location()).toBe("/app/frontier?lane=safety");
+    expect(lanes().getByRole("button", { name: "药物安全" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(lanes().getByRole("button", { name: "全部" }));
     await waitFor(() => expect(lastFeedQuery()?.lane).toBeNull());
   });
 
-  it("narrows by channel — 文献, 资讯, 社媒, 官方 — keeps it in the address, and lets go of it with the other filters", async () => {
+  it("narrows by several specialties from their groups, then by one of their popular tags, and keeps both in the address", async () => {
+    client.listFrontierTags.mockResolvedValue([{ slug: "hcc", name: "肝细胞癌", count: 34, specialties: [] }, { slug: "af", name: "心房颤动", count: 20, specialties: [] }]);
     renderPage();
     await screen.findByText("今天的一条 RCT");
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "全部渠道" }));
-    expect((await screen.findAllByRole("menuitemradio")).map((item) => item.textContent)).toEqual(["全部渠道", "文献", "资讯", "社媒", "官方"]);
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "社媒" }));
-    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ channel: "social" }));
-    expect(location()).toContain("channel=social");
-    expect(screen.getByRole("button", { name: "全部渠道：社媒" })).toBeInTheDocument();
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "清除筛选" }));
-    await waitFor(() => expect(lastFeedQuery()?.channel).toBeNull());
-    expect(location()).not.toContain("channel=");
+    await userEvent.click(within(secondRow()!).getByRole("button", { name: "专科" }));
+    const panel = screen.getByRole("dialog", { name: "专科" });
+    // The thirty, under 内科 / 外科 / 妇儿 / 五官与皮肤 / 医技与其他.
+    expect(within(panel).getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(expect.arrayContaining(["内科", "外科", "妇儿", "五官与皮肤", "医技与其他"]));
+    expect(within(within(panel).getByRole("group", { name: "外科" })).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["普通外科", "骨科", "心胸外科", "神经外科", "泌尿外科"]);
+    expect(within(panel).queryByRole("group", { name: "热门标签" })).not.toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole("button", { name: "肿瘤" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ specialties: ["oncology"] }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "专科" })).getByRole("button", { name: "心血管" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ specialties: ["oncology", "cardiology"] }));
+    expect(new URLSearchParams(location().split("?")[1]).get("specialty")).toBe("oncology,cardiology");
+    expect(screen.getByRole("button", { name: "专科：肿瘤 等 2 个" })).toBeInTheDocument();
+    // Their popular tags, the second level of the same panel.
+    await waitFor(() => expect(client.listFrontierTags).toHaveBeenLastCalledWith({ specialties: ["oncology", "cardiology"], limit: 24 }));
+    const hot = within(screen.getByRole("dialog", { name: "专科" })).getByRole("group", { name: "热门标签" });
+    await userEvent.click(within(hot).getByRole("button", { name: "#肝细胞癌" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ specialties: ["oncology", "cardiology"], tag: "hcc" }));
+    // The chosen tag is a pressed chip of its own on the row, with 「关注」 beside it.
+    expect(within(secondRow()!).getByRole("button", { name: "#肝细胞癌" })).toHaveAttribute("aria-pressed", "true");
+    // 「清除」 inside the panel lets go of the specialties and the tag.
+    await userEvent.click(within(screen.getByRole("dialog", { name: "专科" })).getByRole("button", { name: "清除" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ specialties: [], tag: null }));
   });
 
-  it("reads a channel from the address, and ignores one it does not know", async () => {
-    renderPage("/app/frontier?view=all&channel=literature");
-    await screen.findByText("今天的一条 RCT");
-    expect(lastFeedQuery()).toMatchObject({ channel: "literature" });
-    expect(screen.getByRole("button", { name: "全部渠道：文献" })).toBeInTheDocument();
+  it("follows the chosen tag from beside its chip, and lets go of the tag with a press on it", async () => {
+    client.fetchFrontierTag.mockResolvedValue({ slug: "hcc", name: "肝细胞癌", nameEn: null, specialties: [], broader: null, narrower: [], count30d: 34, mergedFrom: null });
+    renderPage("/app/frontier?tag=hcc");
+    const chip = await within(controlRow()).findByRole("button", { name: "#肝细胞癌" });
+    expect(lastFeedQuery()).toMatchObject({ tag: "hcc" });
+    await userEvent.click(await within(controlRow()).findByRole("button", { name: "关注" }));
+    expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "tag", key: "hcc", label: "肝细胞癌" });
+    expect(await within(controlRow()).findByRole("button", { name: "已关注" })).toBeDisabled();
+    await userEvent.click(chip);
+    await waitFor(() => expect(lastFeedQuery()?.tag).toBeNull());
+    expect(location()).not.toContain("tag=");
   });
 
-  it("offers the time range in 全部", async () => {
+  it("says 已关注 beside a tag the reader already follows", async () => {
+    client.listFrontierFollows.mockResolvedValue([{ id: "8", kind: "tag", key: "hcc", label: "肝细胞癌", muted: false }]);
+    renderPage("/app/frontier?view=all&tag=hcc");
+    expect(await within(controlRow()).findByRole("button", { name: "已关注" })).toBeDisabled();
+  });
+
+  it("reads a tag merged into another as that one, and puts it in the address", async () => {
+    client.fetchFrontierTag.mockResolvedValue({ slug: "hcc", name: "肝细胞癌", nameEn: null, specialties: [], broader: null, narrower: [], count30d: 34, mergedFrom: "liver-cell-cancer" });
+    renderPage("/app/frontier?view=all&tag=liver-cell-cancer");
+    await waitFor(() => expect(location()).toBe("/app/frontier?view=all&tag=hcc"));
+    expect(await within(controlRow()).findByRole("button", { name: "#肝细胞癌" })).toBeInTheDocument();
+  });
+
+  it("narrows by source, evidence type, time, stars and unread from 「更多筛选」, and lets go of all of them with 「清除筛选」", async () => {
     renderPage("/app/frontier?view=all");
     await screen.findByText("今天的一条 RCT");
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "时间" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "7 天" }));
-    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ view: "all", window: "7d" }));
+    await userEvent.click(within(secondRow()!).getByRole("button", { name: "更多筛选" }));
+    const panel = () => screen.getByRole("dialog", { name: "更多筛选" });
+    const group = (name: string) => within(within(panel()).getByRole("group", { name }));
+    expect(group("来源").getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "文献", "资讯", "社媒", "官方"]);
+    expect(group("证据类型").getAllByRole("button")[0]).toHaveTextContent("全部");
+    expect(group("时间").getAllByRole("button").map((chip) => chip.textContent)).toEqual(["不限", "24 小时", "3 天", "7 天", "30 天"]);
+    await userEvent.click(group("来源").getByRole("button", { name: "社媒" }));
+    await userEvent.click(group("证据类型").getByRole("button", { name: "RCT" }));
+    await userEvent.click(group("时间").getByRole("button", { name: "7 天" }));
+    await userEvent.click(within(panel()).getByRole("switch", { name: "只看收藏" }));
+    await userEvent.click(within(panel()).getByRole("switch", { name: "只看未读" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ channel: "social", evidence: "rct", window: "7d", starred: true, unread: true }));
+    for (const part of ["channel=social", "evidence=rct", "window=7d", "starred=1", "unread=1"]) expect(location()).toContain(part);
+    expect(screen.getByRole("button", { name: "更多筛选：更多筛选 · 5" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "清除筛选" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ channel: null, evidence: null, window: null, starred: false, unread: false }));
+    expect(location()).toBe("/app/frontier?view=all");
   });
 
-  it("keeps a lane, a specialty and the stars from an older address on the controls", async () => {
-    renderPage("/app/frontier?lane=pipeline&specialty=oncology&starred=1");
-    await screen.findByText("今天的一条 RCT");
-    expect(screen.getByRole("button", { name: "全部栏目：研发产业" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "全部专科：肿瘤" })).toBeInTheDocument();
-    expect(within(controlRow()).getByRole("button", { name: "收藏" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("filters by a card's specialty tag and searches for its disease tag", async () => {
-    feed = async () => page([frontierItem({ id: "tagged", title: "带标签的一条", timelineAt: ago(0.1), entities: { drugs: [], trials: [], orgs: [], diseases: ["心衰"] } })]);
+  it("offers the time range in 全部 only", async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: "#心血管" }));
-    await waitFor(() => expect(location()).toBe("/app/frontier?specialty=cardiology"));
-    await userEvent.click(await screen.findByRole("button", { name: "#心衰" }));
-    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ view: "all", q: "心衰" }));
+    await screen.findByText("今天的一条 RCT");
+    await userEvent.click(within(secondRow()!).getByRole("button", { name: "更多筛选" }));
+    expect(within(screen.getByRole("dialog", { name: "更多筛选" })).queryByRole("group", { name: "时间" })).not.toBeInTheDocument();
   });
 
-  it("puts the hot list's time range in the same row, and the briefing's period", async () => {
+  it.each([
+    ["/app/frontier?view=all&channel=literature&evidence=rct&unread=1", { channel: "literature", evidence: "rct", unread: true }],
+    ["/app/frontier?view=all&channel=podcast&evidence=anecdote", { channel: null, evidence: null }],
+    ["/app/frontier?lane=pipeline&specialty=oncology&starred=1", { lane: "pipeline", specialties: ["oncology"], starred: true }],
+    ["/app/frontier?specialty=oncology,cardiology", { specialties: ["oncology", "cardiology"] }],
+    // A retired specialty reads as its successor, or as nothing.
+    ["/app/frontier?specialty=surgery-anesthesia", { specialties: ["general-surgery"] }],
+    ["/app/frontier?specialty=geriatrics,public-health,rheumatology,no-such", { specialties: ["rheumatology"] }],
+  ])("reads %s from the address", async (path, expected) => {
+    renderPage(path);
+    await screen.findByText("今天的一条 RCT");
+    expect(lastFeedQuery()).toMatchObject(expected);
+  });
+
+  it("says the chosen specialty on its chip from an older address", async () => {
+    renderPage("/app/frontier?specialty=surgery-anesthesia");
+    await screen.findByText("今天的一条 RCT");
+    expect(within(secondRow()!).getByRole("button", { name: "专科：普通外科" })).toHaveTextContent("普通外科");
+  });
+
+  it("narrows by a card's tag in place, and from 与我相关 opens 全部 with it", async () => {
+    feed = async () => page([frontierItem({ id: "tagged", title: "带标签的一条", timelineAt: ago(0.1), tags: [{ slug: "heart-failure", name: "心力衰竭" }] })]);
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "#心力衰竭" }));
+    await waitFor(() => expect(location()).toBe("/app/frontier?tag=heart-failure"));
+    expect(lastFeedQuery()).toMatchObject({ view: "selected", tag: "heart-failure" });
+    expect(within(controlRow()).getByRole("button", { name: "#心力衰竭" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("puts the hot list's time range on the second row, and the briefing's period", async () => {
     client.fetchFrontierHotBoard.mockResolvedValue(board([hotEvent(1)]));
     renderPage("/app/frontier?view=hot");
     const range = await screen.findByRole("group", { name: "时间范围" });
-    expect(controlRow()).toContainElement(range);
+    expect(secondRow()).toContainElement(range);
     expect(within(range).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["当前", "本周", "本月"]);
-    expect(within(controlRow()).queryByRole("button", { name: "全部栏目" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "栏目" })).not.toBeInTheDocument();
     await userEvent.click(viewTabs().getByRole("tab", { name: "简报" }));
     const period = await screen.findByRole("group", { name: "简报周期" });
-    expect(controlRow()).toContainElement(period);
+    expect(secondRow()).toContainElement(period);
     expect(within(period).getByRole("button", { name: "日报" })).toHaveAttribute("aria-pressed", "true");
     // Pressing the tab again on the weekly stays on it; the chip is the way between the two.
     await userEvent.click(within(period).getByRole("button", { name: "周报" }));
@@ -349,13 +420,46 @@ describe("the control row", () => {
     await userEvent.click(viewTabs().getByRole("tab", { name: "简报" }));
     expect(location()).toBe("/app/frontier?view=weekly");
   });
+
+  it("has no second row in 与我相关, which has no controls", async () => {
+    renderPage("/app/frontier?view=foryou");
+    await waitFor(() => expect(client.fetchFrontierForYou).toHaveBeenCalled());
+    expect(secondRow()).toBeNull();
+    expect(controlRow()).toContainElement(screen.getByRole("combobox", { name: "搜索" }));
+  });
+
+  describe("on a phone", () => {
+    beforeEach(() => {
+      vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+        matches: query === "(max-width: 639px)", media: query, onchange: null,
+        addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
+      }) as unknown as MediaQueryList);
+    });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it("keeps the 栏目 chips on the second row, scrolling, and puts the rest behind one 「筛选」 sheet", async () => {
+      renderPage("/app/frontier?view=all&specialty=oncology&starred=1");
+      await screen.findByText("今天的一条 RCT");
+      expect(screen.getByRole("group", { name: "栏目" }).className).toMatch(/overflow-x-auto/);
+      expect(screen.queryByRole("button", { name: /^专科/ })).not.toBeInTheDocument();
+      await userEvent.click(within(secondRow()!).getByRole("button", { name: "筛选，已选 2 项" }));
+      const sheet = screen.getByRole("dialog", { name: "筛选" });
+      for (const name of ["内科", "外科", "热门标签", "来源", "证据类型", "时间"]) expect(within(sheet).getByRole("group", { name })).toBeInTheDocument();
+      expect(within(sheet).getByRole("switch", { name: "只看收藏" })).toHaveAttribute("aria-checked", "true");
+      expect(within(sheet).getByRole("switch", { name: "只看未读" })).toBeInTheDocument();
+      // 「重置」 lets go of the filters at once and leaves the search alone.
+      await userEvent.click(within(sheet).getByRole("button", { name: "重置" }));
+      await waitFor(() => expect(lastFeedQuery()).toMatchObject({ specialties: [], starred: false }));
+      expect(location()).toBe("/app/frontier?view=all");
+    });
+  });
 });
 
 describe("search", () => {
   it("searches the whole feed, orders it by time on request, and goes back where it began", async () => {
     renderPage();
     await screen.findByText("今天的一条 RCT");
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "司美格鲁肽");
+    await userEvent.type(screen.getByRole("combobox", { name: "搜索" }), "司美格鲁肽");
     await waitFor(() => expect(lastFeedQuery()).toMatchObject({ view: "all", q: "司美格鲁肽" }));
     const results = await screen.findByRole("region", { name: "搜索结果" });
     expect(within(results).getAllByRole("article")).toHaveLength(2);
@@ -363,7 +467,7 @@ describe("search", () => {
     expect(within(results).getAllByText("精选")[0]).toHaveClass("sr-only");
     await userEvent.click(within(controlRow()).getByRole("button", { name: "按时间" }));
     await waitFor(() => expect(lastFeedQuery()).toMatchObject({ q: "司美格鲁肽", sort: "time" }));
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索" }));
+    await userEvent.clear(screen.getByRole("combobox", { name: "搜索" }));
     await waitFor(() => expect(location()).toBe("/app/frontier"));
     expect(viewTabs().getByRole("tab", { name: "精选" })).toHaveAttribute("aria-selected", "true");
   });
@@ -387,13 +491,13 @@ describe("search", () => {
     // The default `userEvent`: `setup()` would replace the clipboard the 日报 tests below stub.
     const user = userEvent;
     renderPage("/app/frontier?view=hot");
-    await user.type(screen.getByRole("searchbox", { name: "搜索" }), "司美");
+    await user.type(screen.getByRole("combobox", { name: "搜索" }), "司美");
     await waitFor(() => expect(location()).toContain("q="));
     await user.click(screen.getByRole("button", { name: "清除搜索" }));
     await waitFor(() => expect(location()).toBe("/app/frontier?view=hot"));
-    expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveValue("");
-    expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveFocus();
-    await user.type(screen.getByRole("searchbox", { name: "搜索" }), "司美");
+    expect(screen.getByRole("combobox", { name: "搜索" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "搜索" })).toHaveFocus();
+    await user.type(screen.getByRole("combobox", { name: "搜索" }), "司美");
     await waitFor(() => expect(location()).toContain("q="));
     await user.keyboard("{Escape}");
     await waitFor(() => expect(location()).toBe("/app/frontier?view=hot"));
@@ -403,6 +507,23 @@ describe("search", () => {
     feed = async (query) => (query.q ? page([]) : page([today]));
     renderPage("/app/frontier?view=all&q=%E6%97%A0%E6%AD%A4%E8%8D%AF");
     expect(await screen.findByText("没有找到和“无此药”相关的动态")).toBeInTheDocument();
+  });
+
+  it("offers the tags whose name holds the words, narrows the feed to the one chosen and empties the box; Enter still searches the words", async () => {
+    client.listFrontierTags.mockImplementation(async ({ q }: { q?: string }) => (q ? [{ slug: "hcc", name: "肝细胞癌", count: 34, specialties: ["oncology"] }] : []));
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    const box = screen.getByRole("combobox", { name: "搜索" });
+    await userEvent.type(box, "肝细胞");
+    const list = await screen.findByRole("listbox", { name: "标签建议" });
+    expect(client.listFrontierTags).toHaveBeenCalledWith({ q: "肝细胞", limit: 8 });
+    await userEvent.click(within(list).getByRole("option", { name: "#肝细胞癌" }));
+    await waitFor(() => expect(location()).toBe("/app/frontier?tag=hcc"));
+    expect(box).toHaveValue("");
+    expect(lastFeedQuery()).toMatchObject({ view: "selected", tag: "hcc", q: null });
+    expect(within(controlRow()).getByRole("button", { name: "#肝细胞癌" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.type(box, "肝癌{Enter}");
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ view: "all", q: "肝癌", tag: "hcc" }));
   });
 });
 
@@ -480,23 +601,26 @@ describe("当前热点", () => {
     await screen.findByText("今天的一条 RCT");
     expect(screen.queryByRole("heading", { name: "当前热点" })).not.toBeInTheDocument();
     client.fetchFrontierHotBoard.mockResolvedValue(board([hotEvent(1)]));
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "全部栏目" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "临床证据" }));
+    await userEvent.click(lanes().getByRole("button", { name: "临床证据" }));
     await waitFor(() => expect(lastFeedQuery()).toMatchObject({ lane: "evidence" }));
     expect(screen.queryByRole("heading", { name: "当前热点" })).not.toBeInTheDocument();
   });
 });
 
 describe("the feed", () => {
-  it("falls into days headed by the date, counting a day once it is whole", async () => {
+  it("falls into days headed 「今天 · 10月23日 周四 · 11 条」, counting a day once it is whole, the heading held under the band", async () => {
     feed = async () => page([today, yesterday], { nextCursor: "c1" });
     renderPage();
-    const headings = await screen.findAllByRole("heading", { level: 2, name: /^\d+月\d+日 周./ });
+    const headings = await screen.findAllByRole("heading", { level: 2, name: /^(今天 · )?\d+月\d+日 周./ });
     // Today is whole (the next page cannot reach back to it); the last day may continue.
-    expect(headings[0]).toHaveTextContent(/1 条$/);
+    expect(headings[0]).toHaveTextContent(/^今天 · \d+月\d+日 周.· 1 条$/);
+    expect(headings[1]).not.toHaveTextContent("今天");
     expect(headings[1]).not.toHaveTextContent("条");
+    expect(headings[0]).toHaveClass("sticky", "top-[var(--page-chrome-h,0px)]");
     const lists = headings.map((heading) => heading.closest("section")!.querySelector("ul")!);
     expect(within(lists[0]).getByRole("heading", { level: 3 })).toHaveAttribute("data-row-title");
+    // A day group's card has its clock in its own column.
+    expect(within(lists[0]).getByRole("listitem").querySelector(".w-14 time")).not.toBeNull();
   });
 
   it("restarts from page one, quietly, when the list changed under a stale cursor", async () => {
@@ -640,16 +764,17 @@ describe("the actions on a card", () => {
     renderPage();
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
     const title = () => within(within(card).getByRole("heading", { level: 3 })).getByRole("link");
-    expect(title()).toHaveClass("text-text");
+    expect(title()).toHaveClass("text-title-ink");
     await userEvent.click(title());
     expect(client.markFrontierItemRead).toHaveBeenCalledWith("today-1");
     expect(title()).toHaveClass("text-text-2");
   });
 
-  it("shows the editorial total and never a dimension's number", async () => {
+  it("shows 「AI 评分」 and never a number the contract does not send", async () => {
     renderPage();
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
-    expect(within(card).getByRole("img", { name: "编辑评分 86" })).toHaveTextContent("86");
+    expect(card.querySelector("[data-score]")).toHaveTextContent(/^AI 评分\s*86$/);
+    expect(card).not.toHaveTextContent("编辑评分");
     // The fixture carries scoreTotal 87 and scores 29 / 17 / 13, which the contract never sends.
     for (const number of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(number);
   });
@@ -672,7 +797,7 @@ describe("热榜", () => {
     expect(rows[0]).toHaveTextContent("01");
     expect(within(rows[0]).getByRole("link", { name: "不饱和磷脂脂质体实现亲水药物超缓释" })).toHaveAttribute("href", "/app/frontier/events/ev1");
     expect(rows[0]).toHaveTextContent("2 家机构报道 · 含原始论文 · 3 小时前更新");
-    expect(rows[0]).toHaveTextContent("38热度");
+    expect(rows[0]).toHaveTextContent("38 热度");
     expect(rows[0].querySelector("svg[data-sparkline] path")).not.toBeNull();
     expect(within(rows[2]).getByText("新")).toHaveClass("bg-accent-soft");
     expect(within(rows[2]).getByText("暂无走势")).toBeInTheDocument();
@@ -905,7 +1030,7 @@ it("lists the followed evidence zones as the first group of the feed, under the 
   expect(within(panel).queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
   expect(within(controlRow()).getByRole("button", { name: "管理关注" })).toBeInTheDocument();
   expect(within(controlRow()).getByRole("button", { name: "管理关注" })).toHaveClass("bg-transparent");
-  expect(within(controlRow()).getByRole("button", { name: "全部栏目" })).toBeInTheDocument();
+  expect(within(controlRow()).getByRole("group", { name: "栏目" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "全部关注" })).not.toBeInTheDocument();
 });
 
@@ -925,8 +1050,9 @@ describe("关注 with nothing to show yet", () => {
     expect(screen.queryByRole("region", { name: "关注的证据专区" })).not.toBeInTheDocument();
     const row = within(controlRow());
     expect(row.queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
-    expect(row.queryByRole("button", { name: "全部栏目" })).not.toBeInTheDocument();
-    expect(row.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
+    expect(row.queryByRole("group", { name: "栏目" })).not.toBeInTheDocument();
+    expect(row.queryByRole("button", { name: "更多筛选" })).not.toBeInTheDocument();
+    expect(secondRow()).toBeNull();
     expect(feedQueries()).toEqual([]);
   });
 
@@ -940,7 +1066,7 @@ describe("关注 with nothing to show yet", () => {
     await waitFor(() => expect(client.listFrontierItems).toHaveBeenCalledWith(expect.objectContaining({ follow: "all", view: "all" })));
     expect(await screen.findByText("今天的一条 RCT")).toBeInTheDocument();
     expect(screen.queryByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).not.toBeInTheDocument();
-    expect(within(controlRow()).getByRole("button", { name: "全部栏目" })).toBeInTheDocument();
+    expect(within(controlRow()).getByRole("group", { name: "栏目" })).toBeInTheDocument();
     expect(drawer).toBeInTheDocument();
   });
 
@@ -962,7 +1088,7 @@ it("with only zones followed shows the zones and no feed block, no 「没有结�
   expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
   expect(feedQueries()).toEqual([]);
   expect(within(controlRow()).getByRole("button", { name: "管理关注" })).toBeInTheDocument();
-  expect(within(controlRow()).queryByRole("button", { name: "全部栏目" })).not.toBeInTheDocument();
+  expect(within(controlRow()).queryByRole("group", { name: "栏目" })).not.toBeInTheDocument();
 });
 
 it("says 「关注的内容暂时没有新动态」 — not 「没有结果」 — when what is followed has nothing new", async () => {
@@ -1029,27 +1155,29 @@ it("shows the aggregate following feed before opening its management drawer", as
   await userEvent.click(screen.getByRole("button", { name: "管理关注" }));
   expect(await screen.findByRole("dialog", { name: "管理关注" })).toBeInTheDocument();
 });
-it("lets the reader expand a cut summary and read details without replacing the original title link", async () => {
-  // jsdom lays nothing out: a summary is cut where the test says its text overflows.
-  const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("line-clamp-3") ? 120 : 60; });
-  const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(60);
-  try {
-    renderPage();
-    const title = await screen.findByRole("link", { name: "今天的一条 RCT" });
-    const card = title.closest("article")!;
-    const expand = within(card).getByRole("button", { name: "展开摘要" });
-    await userEvent.click(expand);
-    expect(expand).toHaveAttribute("aria-expanded", "true");
-    expect(title).toHaveAttribute("href", "/app/frontier/items/today-1");
-    await userEvent.click(within(card).getByRole("button", { name: "详情" }));
-    expect(location()).toBe("/app/frontier/items/today-1");
-  } finally {
-    scrollHeight.mockRestore();
-    clientHeight.mockRestore();
-  }
+it("opens the reader from anywhere on a card, keeps the original out of the feed, and records the reading", async () => {
+  renderPage();
+  const title = await screen.findByRole("link", { name: "今天的一条 RCT" });
+  const card = title.closest("article")!;
+  expect(within(card).queryByRole("button", { name: /展开摘要|收起摘要|详情/ })).not.toBeInTheDocument();
+  expect(title).toHaveAttribute("href", "/app/frontier/items/today-1");
+  await userEvent.click(title);
+  expect(location()).toBe("/app/frontier/items/today-1");
+  expect(client.markFrontierItemRead).toHaveBeenCalledWith("today-1");
 });
 
-it("restores loaded pages and expansion by fetching fresh authenticated content", async () => {
+it("puts the date in the meta row, and no time column, in the lists that are not cut into days", async () => {
+  client.fetchFrontierForYou.mockResolvedValue({ state: "available", basis: "tags", paused: false, items: [
+    { item: frontierItem({ id: "fy-1", title: "与你相关的一条", timelineAt: beforeMidnight(30), source: { id: "annonc", name: "肿瘤学年鉴" } }), reason: { text: "因为你在做：肝癌", topic: "肝癌", memoryId: null } },
+  ] });
+  renderPage("/app/frontier?view=foryou");
+  const card = await screen.findByRole("article", { name: "与你相关的一条" });
+  const date = new Date(MIDNIGHT - 30 * HOUR);
+  expect(card).toHaveTextContent(`肿瘤学年鉴 · ${date.getMonth() + 1}月${date.getDate()}日`);
+  expect(card.closest("li")!.querySelector(".w-14")).toBeNull();
+});
+
+it("restores loaded pages by fetching fresh authenticated content", async () => {
   const first = frontierItem({ id: "first", title: "First preserved page", summary: "Fresh account content" });
   const second = frontierItem({ id: "second", title: "Second preserved page" });
   client.listFrontierItems.mockImplementation(async (query: FrontierItemsQuery) => ({
@@ -1061,8 +1189,7 @@ it("restores loaded pages and expansion by fetching fresh authenticated content"
   await screen.findByRole("link", { name: "Second preserved page" });
   expect(client.listFrontierItems).toHaveBeenCalledWith(expect.objectContaining({ cursor: "page-two" }));
   const article = screen.getByRole("link", { name: "First preserved page" }).closest("article")!;
-  expect(within(article).getByRole("button", { name: "收起摘要" })).toHaveAttribute("aria-expanded", "true");
-  expect(within(article).getByText("Fresh account content")).not.toHaveClass("line-clamp-3");
+  expect(within(article).getByText("Fresh account content")).toBeInTheDocument();
 });
 
 it("discards pagination replies after leaving a listing view", async () => {
@@ -1096,7 +1223,7 @@ describe("the feed's composition", () => {
       await userEvent.click(viewTabs().getByRole("tab", { name }));
       const facts = expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
       expect(facts.toolbars, `${name}: one toolbar`).toHaveLength(1);
-      expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" }), `${name}: the search is in it`).toBeInTheDocument();
+      expect(within(facts.toolbars[0]).getByRole("combobox", { name: "搜索" }), `${name}: the search is in it`).toBeInTheDocument();
     }
   });
 });

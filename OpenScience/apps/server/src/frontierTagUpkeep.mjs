@@ -19,12 +19,14 @@
  * @module frontierTagUpkeep
  */
 
-import { FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH } from "@evimed/domain";
+import { FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_SCOPES_ZH } from "@evimed/domain";
 import { bumpFrontierVersion, FRONTIER_META_KEYS } from "./frontierPersistence.mjs";
 import { FRONTIER_TAG_KINDS, FRONTIER_TAG_RULES, tagKey, tagName, tagSlug } from "./frontierTags.mjs";
 
 const DAY_MS = 86_400_000;
-const SPECIALTY_LINE = FRONTIER_SPECIALTIES.map((key) => `${key} ${FRONTIER_SPECIALTY_LABELS_ZH[key]}`).join("；");
+// The specialties with what each takes — the editor's own wording (2026-10-24: the first day's promotions filed 成本效果分析 and
+// 电子烟 under 全科与基层, from the labels alone).
+const SPECIALTY_LINE = FRONTIER_SPECIALTIES.map((key) => `${key} ${FRONTIER_SPECIALTY_LABELS_ZH[key]}（${FRONTIER_SPECIALTY_SCOPES_ZH[key]}）`).join("；");
 const JUDGE_BATCH = 20;
 const JUDGE_MAX_TOKENS = 3_000;
 const JUDGE_TIMEOUT_MS = 90_000;
@@ -36,7 +38,7 @@ export const FRONTIER_TAG_JUDGE_INSTRUCTIONS = [
   "你在维护一个面向国内临床医生、药师和医学研究者的医学资讯平台的标签树。标签表示一条资讯具体讲什么：疾病、药物或药物类别、疗法、技术、研究方法、生物学或临床概念、人群、卫生政策。",
   "下面每个候选标签附：最近用到它的几条消息标题，以及标签树里和它最接近的已有标签（带编号）。逐个判断，只输出 JSON。",
   "",
-  "- verdict \"new\"：它是一个稳定的医学概念，不是已有标签的另一种说法。给出 zh（规范中文名，国内临床和指南常用写法，2 到 16 个字）、en（英文名，优先用 MeSH 主题词的写法）、kind（disease、drug、drug-class、therapy、technology、method、concept、population、policy 之一）、specialties（0 到 2 个专科键）、broader（它是某个已有标签的下位概念时填那个编号，否则 null）。",
+  "- verdict \"new\"：它是一个稳定的医学概念，不是已有标签的另一种说法。给出 zh（规范中文名，国内临床和指南常用写法，2 到 16 个字）、en（英文名，优先用 MeSH 主题词的写法）、kind（disease、drug、drug-class、therapy、technology、method、concept、population、policy 之一）、specialties（0 到 2 个专科键，按专科说明选：药学只给药学实践本身，全科与基层只给基层与家庭医学的内容；研究方法、技术、人群、生物学概念这类跨很多专科的给空数组）、broader（它是某个已有标签的下位概念时填那个编号，否则 null）。",
   "- verdict \"same\"：它和某个已有标签是同一个概念（同义词、缩写、写法不同），same_as 填那个编号。",
   "- verdict \"reject\"：不适合做标签：专科或栏目名、证据类型或研究设计、机构、公司、期刊、国家或地区、人名、几乎任何资讯都能用的泛词、一次性的事件或句子。why 用 10 个字以内说明。",
   "",

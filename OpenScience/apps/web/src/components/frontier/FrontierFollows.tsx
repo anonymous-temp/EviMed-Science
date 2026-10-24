@@ -11,8 +11,8 @@ type EditableKind = "topic" | "drug" | "specialty";
 
 /** What a reader types for each kind, shown as the field's example; a specialty is chosen from the list instead. */
 const EXAMPLES: Record<"topic" | "drug", string> = { topic: "例如：房颤抗凝", drug: "例如：司美格鲁肽" };
-/** The kinds a follow can be, in the reader's words; the card's menu makes the source and event ones. */
-const KIND_WORDS: Record<FrontierFollow["kind"], string> = { topic: "主题", drug: "药物", specialty: "专科", source: "来源", event: "事件" };
+/** The kinds a follow can be, in the reader's words; the card's menu makes the source and event ones, the feed's tag chip the tag ones. */
+const KIND_WORDS: Record<FrontierFollow["kind"], string> = { topic: "主题", drug: "药物", specialty: "专科", source: "来源", event: "事件", tag: "标签" };
 export function FrontierFollows({ selected, onSelect, onChanged }: {
   selected: string | null; onSelect: (id: string | null) => void; onChanged: () => void;
 }) {
