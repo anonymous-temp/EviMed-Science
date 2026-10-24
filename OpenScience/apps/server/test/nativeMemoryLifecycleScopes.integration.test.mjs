@@ -144,3 +144,17 @@ test('pending account erasure blocks metadata deletion and retries all snapshott
   assert.ok(erased.includes(f.b.namespaceId));
 });
 
+test('personal-only export retains exact bytes but still checks account incarnation and the same byte budget', options, async t => {
+  const f = await fixture(t), user = f.owner.id, original = Buffer.from('PK-personal-original');
+  f.contexts.all = async () => [f.personal];
+  f.personal.sessions.exportPack = async () => original;
+  assert.equal(await f.store.exportPack(user), original);
+  f.personal.sessions.exportPack = async () => Buffer.alloc(128 * 1024 * 1024 + 1);
+  await assert.rejects(f.store.exportPack(user), error => error.code === 'memory_export_too_large');
+  let requested = false;
+  f.personal.sessions.exportPack = async () => { requested = true; return original; };
+  await f.accounts.database.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id=$1", [user]);
+  await assert.rejects(f.store.exportPack(user), error => error.code === 'memory_scope_denied');
+  assert.equal(requested, false);
+});
+

@@ -916,16 +916,16 @@ export class NativeMemoryStore {
   async exportPack(userId) {
     this.#assertConfigured();
     const views = await this.#contexts(userId);
-    if (views.length === 1) return this.#engine(() => views[0].sessions.exportPack(userId));
     /** @type {import('fflate').Zippable} */
     const entries = {};
     const manifest = [];
     let bytes = 0;
     for (const context of views) {
-      await this.memoryContexts.assertKnown(context);
+      if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
       const pack = await this.#engine(() => context.sessions.exportPack(userId));
       bytes += pack.byteLength;
       if (bytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
+      if (views.length === 1) return pack;
       const name = context.kind === 'owned' ? 'personal.zip' : `projects/${context.namespaceId}.zip`;
       entries[name] = [pack, { level: 0 }];
       manifest.push({ path: name, namespaceId: context.namespaceId, projectId: context.projectId, policyRef: context.policyRef ?? null,
