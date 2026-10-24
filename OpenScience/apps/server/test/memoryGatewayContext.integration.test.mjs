@@ -150,7 +150,7 @@ test('project-native list pages all allowed files using raw page offsets and ini
   f.stub.seedMemory(a.namespaceId, 'preferences/private.md', 'Excluded');
   for (let index = 0; index < 205; index++) f.stub.seedMemory(a.namespaceId, `project_facts/fact-${String(index).padStart(3, '0')}.md`, `Project fact ${index}`);
   const seen = new Set(); let offset = 0, pages = 0;
-  do {
+  while (pages < 10) {
     const response = await f.call(f.a, 'POST', '/mcp', { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'list', arguments: { uri: `${a.userRoot}/memories`, recursive: true, offset, limit: 100 } } });
     assert.equal(response.status, 200);
     const value = JSON.parse(response.json.result.content[0].text); pages++;
@@ -158,7 +158,7 @@ test('project-native list pages all allowed files using raw page offsets and ini
     if (!value.hasMore) break;
     assert.ok(value.nextOffset > offset); offset = value.nextOffset;
     assert.ok(pages < 10);
-  } while (true);
+  }
   assert.equal(seen.size, 205); assert.equal(pages, 3);
   assert.equal(f.stub.users.get(a.namespaceId).learning, false);
   assert.deepEqual(f.stub.users.get(a.namespaceId).memoryTypes.slice().sort(), [...OPENVIKING_PROJECT_MEMORY_TYPES].sort());
@@ -168,13 +168,13 @@ test('a project memory listing can follow its own continuation beyond twenty tho
   const f = await fixture(t), a = await f.contexts.forProject(f.a);
   for (let index = 0; index < 20200; index++) f.stub.seedMemory(a.namespaceId, `project_facts/fact-${String(index).padStart(5, '0')}.md`, 'Project fact');
   let offset = 20000, lastUri = '', pages = 0;
-  do {
+  while (pages < 5) {
     const response = await f.call(f.a, 'POST', '/mcp', { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'list', arguments: { uri: `${a.userRoot}/memories`, recursive: true, offset, limit: 100 } } });
     assert.equal(response.status, 200); assert.equal(response.json.error, undefined);
     const value = JSON.parse(response.json.result.content[0].text); pages++;
     lastUri = value.items.at(-1)?.uri ?? lastUri;
     if (!value.hasMore) break;
     assert.ok(value.nextOffset > offset); offset = value.nextOffset; assert.ok(pages < 5);
-  } while (true);
+  }
   assert.match(lastUri, /fact-20199\.md$/); assert.equal(pages, 3);
 });
