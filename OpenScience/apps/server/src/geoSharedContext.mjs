@@ -64,21 +64,27 @@ export class GeoSharedContext {
   /** Include historical project incarnations for owner export/cleanup. Never
    * include a previous account incarnation with a reused public account id. */
   async namespacesForOwner(ownerId) {
-    const owner = (await this.database.query('SELECT created_at::text AS created FROM evimed_control.users WHERE id=$1', [ownerId])).rows[0];
-    if (!owner) throw refused();
-    const namespaces = [], seen = new Set();
-    let cursor = null;
-    do {
-      const page = await this.documents.list(ownerId, KIND, { limit: 100, cursor,
-        filter: { recordType: RECORD_TYPE, namespace: { ownerId, ownerCreatedAt: owner.created } } });
-      for (const row of page.items) {
-        const policy = this.read(row, ownerId);
-        if (seen.has(policy.namespace.id)) throw refused();
-        seen.add(policy.namespace.id); namespaces.push(policy.namespace);
-        if (namespaces.length > 10000) throw new HttpError(502, 'memory_index_listing_too_large', 'The project memory namespace listing exceeded its bound.');
-      }
-      cursor = page.nextCursor;
-    } while (cursor);
-    return namespaces.sort((left, right) => left.id.localeCompare(right.id));
+    return (await this.policiesForOwner(ownerId)).map(policy => policy.namespace);
+  }
+
+  async policiesForOwner(ownerId) {
+    return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+      const owner = (await client.query('SELECT created_at::text AS created FROM evimed_control.users WHERE id=$1 FOR SHARE', [ownerId])).rows[0];
+      if (!owner) throw refused();
+      const namespaces = [], seen = new Set();
+      let cursor = null;
+      do {
+        const page = await this.documents.list(ownerId, KIND, { limit: 100, cursor,
+          filter: { recordType: RECORD_TYPE, namespace: { ownerId, ownerCreatedAt: owner.created } } });
+        for (const row of page.items) {
+          const policy = this.read(row, ownerId);
+          if (seen.has(policy.namespace.id)) throw refused();
+          seen.add(policy.namespace.id); namespaces.push(policy);
+          if (namespaces.length > 10000) throw new HttpError(502, 'memory_index_listing_too_large', 'The project memory namespace listing exceeded its bound.');
+        }
+        cursor = page.nextCursor;
+      } while (cursor);
+      return namespaces.sort((left, right) => left.namespace.id.localeCompare(right.namespace.id));
+    }));
   }
 }
