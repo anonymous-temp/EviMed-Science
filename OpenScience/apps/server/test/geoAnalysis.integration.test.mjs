@@ -240,3 +240,67 @@ test('C1 exact matrix cells and same-day actual round members retain native/expo
  const request={requestId:'c1-unsent',sessionId:'c1-session',content:[{type:'text',text:'Explain selected matrix.'}],geoPlanContext:{referenceId:staged.referenceId}};
  await adapter.bind(user,{id:project.projectId,userId:project.userId},request);const frozen=await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId});assert.equal(frozen.digest,full.digest);assert.deepEqual(frozen.rows,full.rows);
 });
+
+test('same-day round chronology is canonical across authorized pages, exact members, export and frozen native context', options, async () => {
+  const { freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } = await import('../src/geoAnalysis.mjs');
+  await store.query(`INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name)
+    VALUES('chronology-group',$1,$2,10,'P2','Chronology fixture')`, [user.id, project.id]);
+  const questions = Array.from({ length: 50 }, (_, index) => ({ id: `chronology-q${index}`, text: `Question ${index}` }));
+  await store.query(`INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text)
+    SELECT q.id,$1,$2,'chronology-group',10,'P2',q.text
+    FROM jsonb_to_recordset($3::jsonb) AS q(id text,text text)`, [user.id, project.id, JSON.stringify(questions)]);
+  const expected = Array.from({ length: 12 }, (_, index) => `chronology-r${index + 1}`);
+  const rounds = [...expected, 'chronology-unknown'].reverse().map(id => {
+    const hour = id === 'chronology-unknown' ? null : Number(id.slice('chronology-r'.length));
+    return { id, asked_at: hour == null ? null : `2026-10-05T${String(hour).padStart(2, '0')}:00:00Z`, finished_at: `2026-10-05T${String(hour ?? 14).padStart(2, '0')}:00:01Z` };
+  });
+  await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at,created_at,surface)
+    SELECT r.id,$1,$2,'weekly','done',10,'{deepseek}','2026-10-05',r.finished_at::timestamptz,r.finished_at::timestamptz,'{"mode":"web"}'
+    FROM jsonb_to_recordset($3::jsonb) AS r(id text,finished_at text)`, [user.id, project.id, JSON.stringify(rounds)]);
+  const answers = rounds.flatMap(round => questions.map(question => ({ id: `${round.id}-${question.id}`, round_id: round.id, question_id: question.id, asked_at: round.asked_at })));
+  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+    SELECT s.id,$1,$2,s.round_id,s.question_id,'deepseek',s.asked_at::timestamptz,'valid','Chronology original answer','{"mode":"web"}'
+    FROM jsonb_to_recordset($3::jsonb) AS s(id text,round_id text,question_id text,asked_at text)`, [user.id, project.id, JSON.stringify(answers)]);
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,statements,checks)
+    SELECT s.id,$1,$2,'2026-10-05','[]',false,'[]','{"judgementCoverage":{"status":"complete"}}'
+    FROM jsonb_to_recordset($3::jsonb) AS s(id text)`, [user.id, project.id, JSON.stringify(answers)]);
+  const { readGeoSelection } = await import('../src/geoReadScope.mjs');
+  const history = await readGeoSelection(store, project, { questionVersion: 10, engines: ['deepseek'] }, { history: true, historyLimit: 20 });
+  const first = await service.analysis(user, project.id, { selectionRef: history.selection.reference, viewId: 'V02', metricId: 'M-01', dimension: 'engine', timeGrain: 'round', limit: 5 });
+  const input = { selectionRef: first.selection.reference, view: first.view, expectedDigest: first.digest };
+  const full = await freezeSelectedGeoAnalysis(store, project, input);
+  const points = full.rows.filter(row => row.dimensions.period === 'round');
+  const expectedRounds = [...expected, 'chronology-unknown'];
+  assert.deepEqual(points.map(row => row.dimensions.roundId), expectedRounds);
+  assert.deepEqual(points.map(row => row.dimensions.roundOrdinal), Array.from({ length: 13 }, (_, index) => index + 1));
+  assert.equal(points.at(-1).dimensions.date, null);
+  assert.match(full.chart.labels.at(-1), /采样时间未知/);
+  const paged = [];
+  for (let offset = 0; offset < full.rows.length; offset += 5) {
+    const page = await service.analysis(user, project.id, { selectionRef: first.selection.reference, ...first.view, expectedDigest: first.digest, limit: 5, offset });
+    paged.push(...page.rows);
+  }
+  assert.deepEqual(paged.map(row => row.key), full.rows.map(row => row.key));
+  for (const point of points) {
+    const member = point.values.current.members;
+    const members = await service.runtimeRead(project, 'snapshots', { selectionRef: member.selectionRef, member: member.metric, limit: 50 });
+    assert.equal(members.total, 50);
+    assert.deepEqual(members.items.map(item => item.id).sort(), questions.map(question => `${point.dimensions.roundId}-${question.id}`).sort());
+  }
+  const document = freezeGeoAnalysisDocument(full);
+  assert.deepEqual(document.typedTable.rows.filter(row => row.period === 'round').map(row => JSON.parse(row.dimensions).roundId), expectedRounds);
+  const exports = [];
+  await service.selectedExport(user, project, { ...input, formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, { requestFrozen: async (...args) => { exports.push(args); return { id: 'chronology-export' }; } });
+  assert.deepEqual(exports[0][1].typedTable.rows, document.typedTable.rows);
+  const { GeoPlanContext } = await import('../src/geoPlanContext.mjs');
+  const { ProductDocuments } = await import('../src/productStore.mjs');
+  const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
+  service.planContexts = adapter;
+  const staged = await adapter.stage(user, project.id, { ...input, requestKey: 'chronology-stage', sessionId: 'chronology-session', mode: 'analysis', intent: 'explain' });
+  const request = { requestId: 'chronology-native', sessionId: 'chronology-session', content: [{ type: 'text', text: 'Explain this chronological analysis.' }], geoPlanContext: { referenceId: staged.referenceId } };
+  await adapter.bind(user, { id: project.projectId, userId: project.userId }, request);
+  const native = await service.runtimeRead(project, 'analysis', { planContextRef: staged.referenceId });
+  assert.deepEqual(native.rows.map(row => row.key), full.rows.map(row => row.key));
+  const nativePage = await service.runtimeRead(project, 'analysis', { planContextRef: staged.referenceId, limit: 5, offset: 5 });
+  assert.deepEqual(nativePage.rows.map(row => row.key), full.rows.slice(5, 10).map(row => row.key));
+});

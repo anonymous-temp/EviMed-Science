@@ -82,7 +82,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
     ].filter(Boolean).join(' · ');
     if (generic) {
       const row = {
-        key: hash(dims), label: `通用名提及回答 · ${prefix}`, metricId: null, dimensions: {
+        key: hash(dims), label: `当前配置通用名：${entityKey} · 提及回答 · ${prefix}`, metricId: null, dimensions: {
           ...dims, unit: 'answers'
         }, values: {}, links: []
       };
@@ -150,7 +150,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
   ];
   return {
     definition: {
-      metricId: view.metricId, unit: generic ? 'answers' : 'metric_inputs', methodVersion: selected.selection.methodVersion, dataType: generic ? 'observed_generic_facts' : 'domain_metric', countingRule: generic ? 'Observed exact registered generic entity mentions; never inferred from brands.' : 'Existing domain metric computed over the exact engine and versioned group intersection.', denominatorRule: generic ? 'Valid deduplicated answers; exact preserved entity extraction, unknown extraction and positive mentions are separate counts. An absent generic entry is unknown, not a measured negative.' : 'Existing domain eligibility and floors; engine inputs use the canonical deduplicated cohort.'
+      metricId: view.metricId, unit: generic ? 'answers' : 'metric_inputs', methodVersion: selected.selection.methodVersion, dataType: generic ? 'observed_generic_facts' : 'domain_metric', countingRule: generic ? `当前配置通用名：${entityKey}。按保留的历史实体提取统计；当前名称不代表历史登记，也不由品牌提及推断。` : 'Existing domain metric computed over the exact engine and versioned group intersection.', denominatorRule: generic ? 'Valid deduplicated answers; exact preserved entity extraction, unknown extraction and positive mentions are separate counts. An absent generic entry is unknown, not a measured negative.' : 'Existing domain eligibility and floors; engine inputs use the canonical deduplicated cohort.'
     }, contextualBasis: [
       {
         kind: 'metric_entities_and_groups', id: 'project', version: null, digest: hash({

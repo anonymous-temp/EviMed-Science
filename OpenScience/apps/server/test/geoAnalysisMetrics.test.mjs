@@ -66,6 +66,12 @@ test('preserved generic aliases remain independent of brand counts and historica
   ctx.product.genericName = 'Renamed';
   const historical = presentGeoAnalysis(input, { viewId: 'V04', entityKind: 'generic', entityKey: 'Renamed' }, ctx);
   assert.ok(historical.rows.every(row => row.values.unknown.value === 100 && row.values.mentioned.value === 0));
+  assert.ok(historical.rows.every(row => row.label.includes('当前配置通用名：Renamed')));
+  assert.match(historical.definition.countingRule, /当前配置通用名：Renamed/);
+  const report = freezeGeoAnalysisDocument(historical);
+  assert.match(report.canonicalMarkdown, /当前名称不代表历史登记/);
+  assert.ok(report.typedTable.rows.every(row => row.label.includes('当前配置通用名：Renamed')));
+
 });
 test('full chart/export retain rows beyond page 200 and wide typed tables become tidy without dropping columns', () => {
   const input = fixture(), template = input.rows[0];
@@ -116,4 +122,12 @@ test('round charts order same-day rounds by observed time rather than newest-fir
  input.rows=input.rounds.flatMap(round=>base.map(row=>({...row,snapshotId:`${round.id}-${row.snapshotId}`,roundId:round.id,askedAt:`2026-10-01T${String(Number(round.id.slice(1))).padStart(2,'0')}:00:00Z`})));
  input.computed=computeGeoSelection(input.rows,input.metricOptions);const view=presentGeoAnalysis(input,{viewId:'V02',metricId:'M-01',timeGrain:'round'},context());
  assert.equal(view.chart.labels.length,12);assert.match(view.chart.labels[1],/第 2 轮/);assert.match(view.chart.labels[9],/第 10 轮/);const points=view.rows.filter(row=>row.dimensions.period==='round');for(const row of points)assert.equal(row.dimensions.roundOrdinal,Number(row.dimensions.roundId.slice(1)));
+ const expected=Array.from({length:12},(_,index)=>`r${index+1}`);
+ assert.deepEqual([...new Set(points.map(row=>row.dimensions.roundId))],expected);
+ assert.deepEqual(points.map(row=>[row.dimensions.roundId,row.dimensions.engine]),expected.flatMap(round=>['deepseek','kimi'].map(engine=>[round,engine])));
+ const pages=[];for(let offset=0;offset<view.page.total;offset+=5){const page=presentGeoAnalysis(input,view.view,{...context(),allRows:false,limit:5,offset});assert.equal(page.digest,view.digest);pages.push(...page.rows);}
+ assert.deepEqual(pages.map(row=>row.key),view.rows.map(row=>row.key));
+ const exported=freezeGeoAnalysisDocument(view);
+ assert.deepEqual(exported.typedTable.rows.filter(row=>row.period==='round').map(row=>JSON.parse(row.dimensions).roundId),points.map(row=>row.dimensions.roundId));
+
 });

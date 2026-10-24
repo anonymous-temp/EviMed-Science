@@ -210,8 +210,19 @@ export function presentGeoAnalysis(selected, request, context = {}) {
       );
     }
   }
-  rows.sort((a, b) =>
-    documentExportDigest([
+  rows.sort((a, b) => {
+    if (view.timeGrain === "round") {
+      const roundA = a.dimensions.period === "round";
+      const roundB = b.dimensions.period === "round";
+      // One canonical chronology feeds the table, chart, pages, exports and native freeze.
+      // Unknown observation times already follow known times on this round axis.
+      if (roundA !== roundB) return roundA ? -1 : 1;
+      if (roundA) {
+        const ordinal = a.dimensions.roundOrdinal - b.dimensions.roundOrdinal;
+        if (ordinal) return ordinal;
+      }
+    }
+    return documentExportDigest([
       a.dimensions.date ?? "",
       a.dimensions.period ?? "",
       a.label,
@@ -223,8 +234,8 @@ export function presentGeoAnalysis(selected, request, context = {}) {
         b.label,
         b.key,
       ]),
-    ),
-  );
+    );
+  });
   if (rows.length > 20_000)
     throw new HttpError(
       422,
@@ -232,7 +243,6 @@ export function presentGeoAnalysis(selected, request, context = {}) {
       "Narrow the dates, metric or dimension to at most 20,000 analysis rows.",
     );
   const plotRows = rows.filter(row => ["day", "round"].includes(row.dimensions.period));
-  if (view.timeGrain === "round") plotRows.sort((a,b) => a.dimensions.roundOrdinal - b.dimensions.roundOrdinal);
   const dates = [
     ...new Set(
       plotRows

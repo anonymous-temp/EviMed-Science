@@ -94,9 +94,20 @@ it('reloads the actual platform metric, exact generic entity and round grain thr
  fireEvent.click(screen.getByText('所选数据分析'));
  fireEvent.click(await screen.findByRole('button',{name:'指标：品牌提及率'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'事实准确率'}));
  await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V04',metricId:'M-06'}),0,undefined));
- fireEvent.click(screen.getByRole('button',{name:'实体：品牌指标'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'通用名：Generic'}));
+ fireEvent.click(screen.getByRole('button',{name:'实体：品牌指标'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'当前配置通用名：Generic'}));
  await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V04',entityKind:'generic',entityKey:'Generic',metricId:null}),0,undefined));
  fireEvent.click(screen.getByRole('button',{name:'分析：平台指标比较'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'指标趋势'}));
  fireEvent.click(await screen.findByRole('button',{name:'时间粒度：按实测日期'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'按实际轮次'}));
  await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V02',timeGrain:'round'}),0,undefined));
+});
+
+it('identifies a renamed generic as current configuration while retaining unknown historical extraction',async()=>{
+ const view={viewId:'V04',entityKind:'generic',entityKey:'Renamed',dimension:'engine'};
+ read.mockResolvedValue({view,selection:{reference:'gsel_historical'},digest:'historical-digest',columns:[{key:'unknown',label:'实体提取未能定位'}],rows:[{key:'historical',label:'当前配置通用名：Renamed · 提及回答 · deepseek',metricId:null,dimensions:{engine:'deepseek',entityKey:'Renamed',entityKind:'generic'},values:{unknown:{value:50,state:'known',unit:'answers',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial',reasons:['generic_observation_identity_only']}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={{...project,product:{genericName:'Renamed'}} as never} initialView="V04"/></MemoryRouter>);
+ fireEvent.click(screen.getByText('所选数据分析'));
+ expect(await screen.findByText(/当前配置通用名：Renamed.*提及回答/)).toBeTruthy();
+ expect(screen.getByText(/通用名来自当前配置，不代表所选历史轮次的登记名称/)).toBeTruthy();
+ expect(screen.getByText('50 回答')).toBeTruthy();
+ expect(screen.getByTestId('export').textContent).toContain('Renamed');
 });
