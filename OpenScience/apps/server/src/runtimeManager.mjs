@@ -7087,14 +7087,15 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null }} [options]
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null,
+   *           transformResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<Buffer>) | null }} [options]
    *   `uiAssetPrefix` is the project's stable path for build assets the document
    *   is rewritten to reference; `immutable` marks a URL that names its content;
    *   `rebaseDocument: false` serves bytes as they are (an asset route);
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -7193,6 +7194,7 @@ export class RuntimeManager {
         await this.onSessionAbort(project, abortedSessionId);
       }
       streaming = (upstreamRes.headers.get("content-type") ?? "").toLowerCase().includes("text/event-stream");
+      if (streaming && transformResponse) throw new HttpError(403, "runtime_ui_method_denied", "This scoped frame uses the native multiplexed event stream.");
       const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, {
         surface,
         frameAncestors: frameAncestorsFor(this.config),
@@ -7223,9 +7225,11 @@ export class RuntimeManager {
             responseBytes += bytes;
           });
           if (!responseClosed && !res.destroyed && !res.writableEnded) {
+            const projected = transformResponse ? await transformResponse({ body: payload, status: upstreamRes.status, contentType: upstreamRes.headers.get('content-type') ?? '' }) : payload;
+            if (!Buffer.isBuffer(projected) || projected.length > this.config.maxJsonBytes) throw new HttpError(413, "runtime_proxy_response_too_large", "The scoped native response exceeds its bound.");
             const served = surface === "ui" && rebaseDocument
-              ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath, uiAssetPrefix)
-              : payload;
+              ? rebaseRuntimeUiDocument(projected, responseHeaders, uiBasePath, uiAssetPrefix)
+              : projected;
             if (served !== payload) responseHeaders["content-length"] = String(served.length);
             res.writeHead(upstreamRes.status, responseHeaders);
             responseEnded = true;
@@ -7759,7 +7763,9 @@ export class RuntimeManager {
    * session and endpoint policies. Capacity is reserved through socket close.
    * @param {any} req @param {any} socket @param {Buffer} head
    * @param {Record<string, any>} project @param {string} suffix
-   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void>, prepare?: (endpoint: string, payload?: any) => Promise<void> }} policy
+   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void>, prepare?: (endpoint: string, payload?: any) => Promise<void>,
+   * projectItem?: (endpoint:string,payload:any,value:any)=>Promise<{forward:boolean,value?:any}>, onStreamClosed?: (endpoint:string)=>void,
+   * withAuthority?: (operation:()=>Promise<void>)=>Promise<void> }} policy
    */
   async proxyUpgrade(req, socket, head, project, suffix, policy) {
     this.enforceUiProxyEnabled();
@@ -7788,7 +7794,8 @@ export class RuntimeManager {
             await this.assertPersonalSkillPromptGeneration(project, payload?.args?.request ?? {});
             return operation();
           };
-          return this.pluginService ? this.pluginService.withAdmission(project, prompt, { prompt: true }) : prompt();
+          const authorized = () => policy.withAuthority ? policy.withAuthority(prompt) : prompt();
+          return this.pluginService ? this.pluginService.withAdmission(project, authorized, { prompt: true }) : authorized();
         },
       });
     } catch (error) {

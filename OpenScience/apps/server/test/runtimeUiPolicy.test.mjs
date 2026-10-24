@@ -126,6 +126,59 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
 
 const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpoint, payload: { args } });
 
+test('scoped response projections retain their original stream identity and native error/end ordering', { timeout: 5000 }, async t => {
+  const projected = [], ended = [];
+  const f = await fixture(t, {}, { projectItem: async (endpoint, payload, value) => {
+    projected.push([endpoint, payload]);
+    return value.hide ? { forward: false } : { forward: true, value: { ...value, scoped: payload.args.sessionId } };
+  }, onStreamClosed: endpoint => ended.push(endpoint) });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('one', 'session/page', { sessionId: 'root' }));
+  assert.equal((await c.next()).value.scoped, 'root');
+  const peer = [...f.peers][0];
+  peer.send(JSON.stringify({ type: 'item', streamId: 'one', value: { hide: true } }));
+  peer.send(JSON.stringify({ type: 'item', streamId: 'one', value: { next: true } }));
+  assert.equal((await c.next()).value.next, true);
+  peer.send(JSON.stringify({ type: 'error', streamId: 'one', error: { code: 'fixture', message: 'Expected end', details: {} } }));
+  peer.send(JSON.stringify({ type: 'end', streamId: 'one' }));
+  assert.equal((await c.next()).type, 'error'); assert.equal((await c.next()).type, 'end');
+  assert.deepEqual(ended, ['session/page'], 'native error/end closes the scope only once');
+  assert.ok(projected.every(([endpoint, payload]) => endpoint === 'session/page' && payload.args.sessionId === 'root'));
+  c.send(open('two', 'session/page', { sessionId: 'root' })); await c.next();
+  c.send({ type: 'cancel', streamId: 'two' });
+  assert.equal((await c.next()).type, 'end');
+  assert.deepEqual(ended, ['session/page', 'session/page']);
+  const closed = once(c.ws, 'close');
+  peer.send(JSON.stringify({ type: 'item', streamId: 'never-authorized', value: { private: true } }));
+  assert.equal((await closed)[0], 1008);
+});
+
+test('HTTP scoped response projection is buffered, bounded and refuses unprojected SSE', { timeout: 5000 }, async t => {
+  const f = await fixture(t, { maxJsonBytes: 1024 });
+  let mode = 'normal', calls = 0;
+  f.upstream.on('request', (_req, res) => {
+    res.writeHead(200, { 'content-type': mode === 'sse' ? 'text/event-stream' : 'application/json' });
+    res.end(JSON.stringify({ own: 'visible', foreign: 'private' }));
+  });
+  f.manager.proxy = (req, res, project, suffix, options) => RuntimeManager.prototype.proxy.call(f.manager, req, res, project, suffix, {
+    ...options, transformResponse: async ({ body, contentType, status }) => {
+      calls++;
+      assert.equal(status, 200); assert.match(contentType, /application\/json/);
+      return mode === 'oversized' ? Buffer.alloc(1025) : Buffer.from(JSON.stringify({ own: JSON.parse(body).own }));
+    },
+  });
+  const fetchResult = () => fetch(`${f.base}/api/session/list`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ type: 'client-request', rpcId: 'read', method: 'session/list', payload: { args: { _request: {} } } }) });
+  const normal = await fetchResult();
+  assert.equal(normal.status, 200); const text = await normal.text();
+  assert.equal(text, '{"own":"visible"}'); assert.equal(Number(normal.headers.get('content-length')), Buffer.byteLength(text));
+  mode = 'sse'; const streaming = await fetchResult();
+  assert.equal(streaming.status, 403); assert.equal(calls, 1, 'SSE is never passed to a whole JSON response transform');
+  assert.equal((await streaming.text()).includes('private'), false);
+  mode = 'oversized'; const oversized = await fetchResult();
+  assert.equal(oversized.status, 413); assert.equal(calls, 2);
+  assert.equal((await oversized.text()).includes('private'), false);
+});
+
 test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
   const checked = [], charged = [], forwarded = [];
   const f = await fixture(t, {}, {}, {

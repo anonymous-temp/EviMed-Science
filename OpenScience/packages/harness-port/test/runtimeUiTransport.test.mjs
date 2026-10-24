@@ -5,6 +5,16 @@ import vm from 'node:vm';
 import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES } from '@evimed/domain';
 import { installRuntimeUiTransport } from '../src/runtimeUiTransport.mjs';
 
+test('scoped bootstrap retains its non-owner hint through the pinned index assignment', () => {
+  const { target } = browser();
+  const access = { type: 'baseline', owner: false, grants: [{ resource: { kind: 'session', id: 'root' }, actions: ['session/prompt'] }] };
+  installRuntimeUiTransport({ ...frame, access }, target);
+  target.__DSH_REMOTE_ACCESS__ = { type: 'baseline', owner: true };
+  assert.deepEqual(target.__DSH_REMOTE_ACCESS__, access);
+  assert.throws(() => target.__DSH_REMOTE_ACCESS__.grants[0].actions.push('session/selectModel'));
+  assert.throws(() => installRuntimeUiTransport({ ...frame, access: { ...access, owner: true } }, browser().target), /Invalid scoped runtime access/);
+});
+
 const frame = { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', prefix: '/__evimed/f/frame-a/', muxResponseMaxBytes: RUNTIME_UI_MUX_RESPONSE_MAX_BYTES };
 function browser() {
   /** @type {any[]} */ const sockets = [];

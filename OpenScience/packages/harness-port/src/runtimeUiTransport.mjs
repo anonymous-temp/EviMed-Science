@@ -2,7 +2,7 @@
  * Browser-only official transport hooks. Keep the installer self-contained:
  * the control plane serializes it into the parser-blocking frame bootstrap.
  * No module import, browser fetch replacement, or Host-ownership claim is used.
- * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string, muxResponseMaxBytes:number}} frame
+ * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string, access?:{type:string,owner:boolean,grants:any[]}, muxResponseMaxBytes:number}} frame
  *   `assets`, when present, is the path every frame shares for the kernel
  *   application's content-addressed files (`/__evimed/k/`): a plugin bundle
  *   named by revision loads from there, so the browser keeps one copy for
@@ -15,6 +15,16 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
   if (frame.assets !== undefined && frame.assets !== '/__evimed/k/') throw new Error('Invalid runtime frame');
   if (!Number.isSafeInteger(frame.muxResponseMaxBytes) || frame.muxResponseMaxBytes <= 0) throw new Error('Invalid runtime receive limit');
   if (target.__DSH_TRANSPORT__) throw new Error('Runtime transport already installed');
+  if (frame.access !== undefined) {
+    if (frame.access?.type !== 'baseline' || frame.access.owner !== false || !Array.isArray(frame.access.grants)) throw new Error('Invalid scoped runtime access');
+    const access = Object.freeze({ type: 'baseline', owner: false, grants: Object.freeze(frame.access.grants.map(grant => Object.freeze({
+      resource: Object.freeze({ ...grant.resource }), actions: Object.freeze([...grant.actions]),
+    }))) });
+    // The pinned index assigns its owner snapshot after this blocking bootstrap.
+    // Keep the scoped snapshot through that assignment without changing bundles
+    // or briefly advertising owner controls. This is a UI hint, not authority.
+    Object.defineProperty(target, '__DSH_REMOTE_ACCESS__', { get: () => access, set: () => {}, configurable: false });
+  }
   const origin = target.location.origin;
   const nativeFetch = target.fetch.bind(target);
   const streams = new Map();

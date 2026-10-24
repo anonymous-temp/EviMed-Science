@@ -272,12 +272,13 @@ function assertNativeModelSelection(config, payload) {
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
+ *   resolveDelegatedFrame?:((user:any,delegation:any)=>Promise<{project:any,principal:any}>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, authorizeMutation = null,
-  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, audit = async () => {} }) {
+  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, resolveDelegatedFrame = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
    * the run it steers, so the learning loop's correction trigger has an in-run
@@ -486,6 +487,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     const frame = parseRuntimeUiFramePath(req.url ?? "/");
     const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     const claims = validateRuntimeUiFrame({ config, req, user, session, frameId: frame.frameId });
+    if (claims.version === 2) {
+      if (!resolveDelegatedFrame) throw new HttpError(403, "runtime_ui_frame_invalid", "This deployment cannot open the delegated frame.");
+      const resolved = await resolveDelegatedFrame(user, claims.delegation);
+      if (resolved.project.userId !== claims.delegation.ownerId || resolved.project.id !== claims.projectId
+        || resolved.principal.actorId !== user.id) throw new HttpError(403, "runtime_ui_frame_invalid", "The delegated frame identity changed.");
+      return { user, session, ...resolved, claims, frame };
+    }
     const project = await store.requireProject(user, claims.projectId);
     return { user, session, project, claims, frame };
   }
