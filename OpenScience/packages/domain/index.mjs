@@ -36,9 +36,7 @@ export { SOURCE_SCOPE_UNAVAILABLE_CONTEXT, sourceCitationProse, sourceCitationRe
 // knowledgePage — 「知识页」: the product layer around the pages OpenViking's Compile writes — where their mirror lives, how one is read, how a person's edits outlive a recompile
 export {
   KNOWLEDGE_GRAPH_FOLDER,
-  KNOWLEDGE_PAGE_ENGINE_LIMIT,
   KNOWLEDGE_PAGE_FOLDER,
-  KNOWLEDGE_PAGE_SUBMIT_LIMIT,
   KNOWLEDGE_PAGE_TYPES,
   KNOWLEDGE_TREES,
   KNOWLEDGE_USER_EDIT_LIMITS,

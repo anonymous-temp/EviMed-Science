@@ -18,10 +18,11 @@
  *   next time the instruction did not name them. So the ledger keeps what a person wrote as blocks
  *   (`diffKnowledgePageEdit`), every instruction carries them, and after each compile the ones the engine dropped are
  *   put back (`applyKnowledgePageEdits`) — by code, so it does not depend on the model's attention.
- * - **128 typed pages is where v0.5.0 turns destructive.** Past it the compile does not fail: the model, told its
- *   bundle is over the limit, rewrote 102 existing pages into one-line stubs to get under it and the task reported
- *   `completed` with no warning. The scheduler therefore counts typed pages (`isTypedKnowledgePage`) before it
- *   submits and stops at `KNOWLEDGE_PAGE_SUBMIT_LIMIT`, well short of the engine's own number.
+ * - **v0.5.0 turned destructive at 128 typed pages, and v0.5.1.1 has no such number.** Past it the compile did not fail:
+ *   the model, told its bundle was over the limit, rewrote 102 existing pages into one-line stubs to get under it and the
+ *   task reported `completed` with no warning, so the scheduler stopped at 100 typed pages. The limit left `CompileLimits`
+ *   in v0.5.1; a target of 140 pages was compiled twice on v0.5.1.1 and every page stayed byte for byte, and the stop is gone.
+ *   `isTypedKnowledgePage` still says which files are pages.
  *
  * Pure and browser-safe, like the rest of the package.
  *
@@ -37,10 +38,6 @@ export const KNOWLEDGE_GRAPH_FOLDER = 'knowledge-base/kg'
 /** The two compiled trees of a project: the `llm-wiki` target and the `knowledge-graph` target. */
 export const KNOWLEDGE_TREES = Object.freeze(['wiki', 'kg'])
 /** @typedef {'wiki' | 'kg'} KnowledgeTree */
-
-/** The engine's own bound on typed pages in one target (v0.5.0), and where this platform stops submitting. */
-export const KNOWLEDGE_PAGE_ENGINE_LIMIT = 128
-export const KNOWLEDGE_PAGE_SUBMIT_LIMIT = 100
 
 /** The page types upstream's `llm-wiki` writes, with the names the product shows; any other type is shown as written. */
 export const KNOWLEDGE_PAGE_TYPES = Object.freeze([

@@ -5,63 +5,55 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities",
       "size": 0,
       "isDir": true,
-      "modTime": "2026-10-13T00:12:25.000Z",
+      "modTime": "2026-10-23T05:48:56.000Z",
       "rel_path": "entities",
-      "abstract": "# viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities [Directory abstract is not ready]"
+      "abstract": "本目录是一组围绕设备时间同步与边缘网关产品的实体参考条目，主要覆盖 Alpha 协议、Beta 网关、Gamma 仪表盘、Lumen 工作组以及 alphad 参考实现等核心概念。从样本条目看，各文档以结构化元数据与正文相结合的方式，说明实体的定义、关键属性、版本信息与来源依据，内容涉及时间同步协议、边缘部署、Web 管理界面与下游设备时间偏差等主题。"
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/alphad.md",
-      "size": 904,
+      "size": 853,
       "isDir": false,
-      "modTime": "2026-10-13T00:12:25.000Z",
+      "modTime": "2026-10-23T05:48:46.000Z",
       "rel_path": "entities/alphad.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Alpha协议.md",
-      "size": 987,
+      "size": 848,
       "isDir": false,
-      "modTime": "2026-10-13T00:12:25.000Z",
+      "modTime": "2026-10-23T05:48:46.000Z",
       "rel_path": "entities/Alpha协议.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Beta网关.md",
-      "size": 1256,
+      "size": 1189,
       "isDir": false,
-      "modTime": "2026-10-13T00:12:25.000Z",
+      "modTime": "2026-10-23T05:48:46.000Z",
       "rel_path": "entities/Beta网关.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Gamma仪表盘.md",
-      "size": 839,
+      "size": 642,
       "isDir": false,
-      "modTime": "2026-10-13T00:12:25.000Z",
+      "modTime": "2026-10-23T05:48:46.000Z",
       "rel_path": "entities/Gamma仪表盘.md",
       "abstract": ""
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/Lumen工作组.md",
-      "size": 913,
+      "size": 973,
       "isDir": false,
-      "modTime": "2026-10-13T00:12:25.000Z",
+      "modTime": "2026-10-23T05:48:46.000Z",
       "rel_path": "entities/Lumen工作组.md",
       "abstract": ""
     },
     {
-      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/entities/湖滨店.md",
-      "size": 690,
-      "isDir": false,
-      "modTime": "2026-10-13T00:12:25.000Z",
-      "rel_path": "entities/湖滨店.md",
-      "abstract": ""
-    },
-    {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/kg/relations.jsonl",
-      "size": 1520,
+      "size": 1103,
       "isDir": false,
-      "modTime": "2026-10-13T00:12:25.000Z",
+      "modTime": "2026-10-23T05:48:46.000Z",
       "rel_path": "relations.jsonl",
       "abstract": ""
     }

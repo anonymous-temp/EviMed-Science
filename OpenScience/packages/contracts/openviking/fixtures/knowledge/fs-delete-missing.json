@@ -8,7 +8,8 @@
       "memory_uris": []
     },
     "semantic_root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665",
-    "semantic_status": "queued"
+    "semantic_status": "queued",
+    "task_id": "d44446a2-4615-4aaa-905e-c3a5f5d8779a"
   },
   "error": null,
   "telemetry": null,

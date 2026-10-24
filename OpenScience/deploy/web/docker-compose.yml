@@ -85,7 +85,7 @@ services:
   # rank through it, and a deployment that skipped the overlay would silently
   # fall back to term matching.
   evimed-openviking:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.0@sha256:c60a83cd79cfce80db5266acb8bdd0908eee8abe8ff559a5f786aa504c251ccf}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217}
     environment:
       # The built-in VikingBot is the runtime of Compile (the official
       # `llm-wiki` and `knowledge-graph` skills). It binds the container's
@@ -98,26 +98,19 @@ services:
       # entrypoint rewrites this path only when OPENVIKING_CONF_CONTENT is set,
       # which would put that credential in `docker inspect` output.
       OPENVIKING_CONFIG_FILE: /run/openviking-secrets/ov.conf
-      # The account the identity shim asserts for a Compile task: the one the
-      # control plane asserts on every request it makes.
-      SHIM_ACCOUNT: ${OPEN_SCIENCE_OPENVIKING_ACCOUNT:-evimed}
-    # The identity shim first, then the image's own entrypoint as PID 1
-    # (openviking/entrypoint.sh). In trusted auth mode v0.5.0 forwards only the
-    # root key to its Compile runtime and the bot refuses a request that names
-    # no user; the shim adds the two identity headers from the target the
-    # server already authorized. Run through `sh` so the file needs no
-    # executable bit to survive however the release directory was copied.
-    entrypoint: ["sh", "/opt/evimed-shim/entrypoint.sh"]
+    # The image's own entrypoint. Until v0.5.1 a wrapper started an identity
+    # shim beside it, because in trusted auth mode the server forwarded only the
+    # root key to its Compile runtime and the bot refused a request that named
+    # no user; since v0.5.1 the server forwards the account and the user itself.
     volumes:
       - evimed-openviking-data:/app/.openviking
       - evimed-openviking-secrets:/run/openviking-secrets:ro
       # Release files, bound read-only from the directory this compose file is
-      # in — the way the Caddyfile is — so a release's shim and templates are
-      # the ones its control plane was tested with. The container runs as uid
-      # 10001 with no capabilities: the three paths must be world-readable,
-      # which the init step below verifies by name before the server starts.
-      - ./openviking/identity_shim.py:/opt/evimed-shim/identity_shim.py:ro
-      - ./openviking/entrypoint.sh:/opt/evimed-shim/entrypoint.sh:ro
+      # in — the way the Caddyfile is — so a release's templates are the ones
+      # its control plane was tested with. The container runs as uid 10001
+      # with no capabilities: the directory must be world-readable, which the
+      # init step below verifies by name before the server starts.
+      #
       # `memory.custom_templates_dir`. A directory that is not here is silent
       # upstream: the server falls back to its built-in memory types.
       - ./openviking/memory-templates:/app/memory-templates:ro
@@ -149,10 +142,8 @@ services:
       - memory-recall-internal
       - memory-index-egress
     healthcheck:
-      # Three processes, three questions: the server's `/health` (answered by
-      # the process itself, no credential), the bot's, and the shim — which
-      # serves three POST routes and answers 404 by name to anything else, so a
-      # 404 from it is the proof it is the shim that is listening.
+      # Two processes, two questions: the server's `/health` (answered by the
+      # process itself, no credential) and the bot's.
       # `/ready` is not asked: it probes the embedder, and would make this
       # container's health a report on DashScope's availability.
       test:
@@ -160,7 +151,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request as r, urllib.error as e\nr.urlopen('http://127.0.0.1:1933/health', timeout=3).read()\nr.urlopen('http://127.0.0.1:18790/health', timeout=3).read()\ntry:\n    r.urlopen(r.Request('http://127.0.0.1:18791/', data=b'{}', method='POST'), timeout=3)\n    raise SystemExit('the identity shim answered a route it does not serve')\nexcept e.HTTPError as refused:\n    assert refused.code == 404, refused.code",
+          "import urllib.request as r\nr.urlopen('http://127.0.0.1:1933/health', timeout=3).read()\nr.urlopen('http://127.0.0.1:18790/health', timeout=3).read()",
         ]
       interval: 30s
       timeout: 10s
@@ -171,8 +162,9 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          # Idle about 0.8 GB (server 0.47, bot 0.40, shim 0.02); 0.94 GB after
-          # dozens of compiles (lab/knowledge, 2026-10-12).
+          # Idle about 0.8 GB (server 0.47, bot 0.40); 0.94 GB after dozens of
+          # compiles (lab/knowledge, 2026-10-12, v0.5.0 — not re-measured on
+          # v0.5.1.1, whose Compile is a map/reduce pipeline).
           memory: 3g
     security_opt:
       - no-new-privileges:true
@@ -185,7 +177,7 @@ services:
   # data directory the server would otherwise have to be root to create, and
   # refuses to finish when a release file the server needs cannot be read.
   evimed-openviking-init:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.0@sha256:c60a83cd79cfce80db5266acb8bdd0908eee8abe8ff559a5f786aa504c251ccf}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217}
     user: "0:0"
     entrypoint: ["python", "-c"]
     command:
@@ -257,13 +249,12 @@ services:
                 os.lchown(path, 10001, 10001)
         # The release files the server is started with. It runs as 10001 with
         # no capability, so each must be readable by "other" — and each fails
-        # quietly when it is not: a shim that cannot be read is a Compile that
-        # fails eighteen seconds after it was accepted, and a template directory
-        # that cannot be read is a server that extracts with upstream's memory
-        # types and says nothing. Naming the path here is the loud version.
+        # quietly when it is not: a template directory that cannot be read is a
+        # server that extracts with upstream's memory types and says nothing.
+        # Naming the path here is the loud version.
         release = pathlib.Path('/input/openviking')
         templates = release / 'memory-templates'
-        needed = [release / 'identity_shim.py', release / 'entrypoint.sh', templates]
+        needed = [templates]
         needed += [templates / (name + '.yaml') for name in ('profile', 'preferences', 'entities', 'corrections', 'project_context', 'decisions', 'follow_ups', 'project_facts')]
         for path in needed:
             try:
@@ -577,11 +568,11 @@ services:
       # the root key; `configure:production-state` generates it and renders the
       # same value into ov.conf. The budget is the platform's own money for
       # those calls, per rolling day (0 = no cap); a request it refuses is
-      # answered 402, which the engine does not retry.
+      # answered 402 `insufficient_quota`, which the engine does not retry.
       OPEN_SCIENCE_OPENVIKING_MODEL_KEY_FILE: /run/openviking-secrets/model-key
       OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: ${OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY:-50}
       # How often the engine's facts are re-read (version, memory templates,
-      # the Compile shim, the two pinned skills). Value-less: unset keeps
+      # the Compile runtime's identity, the two pinned skills). Value-less: unset keeps
       # config.mjs's default, 30 minutes.
       OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS:
       # What is built on the engine, each behind its own switch. Value-less on

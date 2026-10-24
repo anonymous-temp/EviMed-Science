@@ -1,6 +1,6 @@
 {
   "note": "Delete a user: 202 with a task id owned by root.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "DELETE",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-b",
@@ -18,7 +18,7 @@
       "account_id": "evimed",
       "user_id": "fx-user-b",
       "status": "deleting",
-      "task_id": "8a9bd64c-8356-4182-b2ba-7cdb45296f0a"
+      "task_id": "ce24fdfa-a532-47db-b170-84ff436a1968"
     },
     "error": null,
     "telemetry": null,

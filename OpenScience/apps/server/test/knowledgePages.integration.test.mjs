@@ -1,7 +1,7 @@
 // The knowledge base on OpenViking's Resources and Compile, end to end against PostgreSQL and an engine that holds its
 // files in memory (`helpers/openVikingResourcesStub.mjs`): documents pushed and reconciled both ways, a compile scheduled,
 // polled and mirrored by content hash, the routes the reader and the graph view are built on, a person's edit that
-// survives a recompile that dropped it, a removed document labelling its pages, the page limit, and the engine down.
+// survives a recompile that dropped it, a removed document labelling its pages, a wiki of a hundred pages and more, and the engine down.
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -26,7 +26,7 @@ const DOCUMENTS = {
 };
 
 test("documents are pushed, compiled by the engine, mirrored, read, edited and kept through a recompile", {
-  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured", timeout: 180_000,
+  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured", timeout: 300_000,
 }, async () => {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-knowledge-"));
   /** What the next compile writes: `(request, engine, ids) => void`. */
@@ -152,7 +152,7 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     // The status route also learns the reader's language, once.
     let status = await api(`/api/knowledge-pages?projectId=${project.id}`);
     assert.equal(status.status, 200);
-    assert.deepEqual([status.body.data.enabled, status.body.data.state, status.body.data.pending, status.body.data.readable, status.body.data.pageLimit], [true, "queued", 3, 3, 100]);
+    assert.deepEqual([status.body.data.enabled, status.body.data.state, status.body.data.pending, status.body.data.readable], [true, "queued", 3, 3]);
     const first = await compileRound();
     assert.equal(first.wiki.status, "completed");
     assert.deepEqual([first.wiki.created, first.wiki.typed, first.kg.created, first.kg.typed], [3, 3, 3, 2]);
@@ -247,6 +247,61 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     page = (await api(`/api/knowledge-pages/page?sourceId=${saved.body.data.page.sourceId}`)).body.data;
     assert.ok(page.markdown.includes(mine));
 
+    // ---- 5b. a write-back is a checked write: a page the engine changed behind the ledger is not overwritten ----------------
+    // The engine's own Compile rewrote the page after the last mirror (here: the stub is told to). The person saves again from
+    // the ledger's copy: the write names the hash the engine held when the page was last mirrored, the engine refuses it, the
+    // save is queued — and the next round drops it instead of overwriting, because the person's paragraph is on the record
+    // and the round names it to the compile and puts it back after.
+    const alphaUri = `${roots.wiki}/concept/Alpha 协议.md`;
+    // Every version of a page is a document of its own, so the page is found by its path, in the tree, each time.
+    const alphaNow = async () => (await api(`/api/knowledge-pages/page?sourceId=${(await api(`/api/knowledge-pages/tree?projectId=${project.id}`)).body.data.pages.find((/** @type {any} */ entry) => entry.path === "concept/Alpha 协议.md").sourceId}`)).body.data;
+    const engineWrote = `${edited}\n引擎在两次整理之间改写了这一页。\n`;
+    engine.put(alphaUri, engineWrote);
+    // Each compile of these two rounds ends the page in words no earlier version had: bytes identical to a version the ledger has
+    // already retired are a document the ledger already knows (a page that returns to an earlier text cannot be mirrored: noted in
+    // the package's handoff, and not this test's business).
+    const plainScript = script;
+    let rewrites = 0;
+    script = (request, stub) => {
+      plainScript(request, stub);
+      if (request.skill.endsWith("/llm-wiki")) { rewrites += 1; stub.put(alphaUri, `${wikiV1()["concept/Alpha 协议.md"]}\n整理备注（${rewrites}）。\n`); }
+    };
+    const mine2 = "团队备注（二）：同步周期的现场配置由运维组维护。";
+    const second2 = await api("/api/knowledge-pages/page", { method: "PUT", body: JSON.stringify({ sourceId: saved.body.data.page.sourceId, markdown: edited.replace("## 相关", `${mine2}\n\n## 相关`), baseSha256: sha256(edited) }) });
+    assert.equal(second2.status, 200, JSON.stringify(second2.body));
+    assert.deepEqual([second2.body.data.changed, second2.body.data.writeBack], [true, "queued"], "the write went over a page the engine had changed");
+    assert.equal(engine.text(alphaUri), engineWrote, "the engine's page was overwritten");
+    await ingest();
+    await syncSources();
+    assert.equal((await api(`/api/knowledge-pages?projectId=${project.id}`)).body.data.writeBacksQueued, 1);
+    const conflictsBefore = app.knowledgePages.status().writeBackConflicts;
+    compiles.length = 0;
+    await api("/api/knowledge-pages/compile", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    await compileRound();
+    assert.equal(app.knowledgePages.status().writeBackConflicts, conflictsBefore + 1, "the refused save was not counted");
+    assert.equal((await api(`/api/knowledge-pages?projectId=${project.id}`)).body.data.writeBacksQueued, 0, "a save the engine refused stays queued for ever");
+    assert.ok(compiles[0].instruction.includes(mine2), "the compile was not told about the paragraph the refused save carried");
+    // What the round mirrored is the engine's page with the person's paragraphs put back: both are on the engine and in the ledger.
+    page = await alphaNow();
+    assert.ok(page.markdown.includes(mine) && page.markdown.includes(mine2), "a paragraph of the person's was lost");
+    assert.equal(engine.text(alphaUri), page.markdown, "the engine's page and the ledger's disagree after the round");
+    // A directory the engine is still processing is a busy refusal, not a changed page: the save stays queued to be tried again.
+    engine.setBusy(`${roots.wiki}/concept`);
+    const third2 = await api("/api/knowledge-pages/page", { method: "PUT", body: JSON.stringify({ sourceId: page.sourceId, markdown: `${page.markdown}\n补充一行。\n`, baseSha256: page.sha256 }) });
+    assert.deepEqual([third2.status, third2.body.data.writeBack], [200, "queued"]);
+    await ingest();
+    await syncSources();
+    engine.setBusy(`${roots.wiki}/concept`, false);
+    const conflictsAfter = app.knowledgePages.status().writeBackConflicts;
+    compiles.length = 0;
+    await api("/api/knowledge-pages/compile", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
+    await compileRound();
+    assert.equal(app.knowledgePages.status().writeBackConflicts, conflictsAfter, "a busy directory was counted as a changed page");
+    assert.ok(engine.text(alphaUri)?.includes("补充一行。"), "the save that found the directory busy was not written when it was tried again");
+    page = await alphaNow();
+    assert.equal(engine.text(alphaUri), page.markdown);
+    script = plainScript;
+
     // ---- 6. a document is removed: its pages are labelled at once, the engine's copy goes, a recompile is queued -----
     const beta = await app.sourceService.get(user.id, ids["beta.txt"]);
     const dependents = await api(`/api/sources/${ids["beta.txt"]}/dependents`);
@@ -277,16 +332,16 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     // The rewritten page no longer rests on the removed document, and says so by having no label.
     assert.deepEqual((await api(`/api/knowledge-pages/tree?projectId=${project.id}`)).body.data.pages.find((/** @type {any} */ entry) => entry.path === "entity/Beta网关.md").labels.stale, []);
 
-    // ---- 8. at 100 typed pages nothing is submitted, and everything compiled stays --------------------------------
+    // ---- 8. a target at the number the platform used to stop at (100 typed pages) is compiled like any other ----------------------
     for (let index = 0; index < 100; index += 1) engine.put(`${roots.wiki}/entity/filler-${index}.md`, `---\ntype: entity\ntitle: Filler ${index}\ndescription: d\n---\n\n# Filler ${index}\n`);
     compiles.length = 0;
     script = (request) => { compiles.push(request); };
     await api("/api/knowledge-pages/compile", { method: "POST", body: JSON.stringify({ projectId: project.id }) });
-    const limited = await compileRound();
-    assert.equal(limited.wiki, undefined, "no wiki compile was submitted");
-    assert.deepEqual(compiles.map((request) => request.skill.split("/").pop()), ["knowledge-graph"]);
+    const large = await compileRound();
+    assert.equal(large.wiki.status, "completed", "a wiki of 100 pages and more was not compiled");
+    assert.deepEqual(compiles.map((request) => request.skill.split("/").pop()), ["llm-wiki", "knowledge-graph"]);
     status = await api(`/api/knowledge-pages?projectId=${project.id}`);
-    assert.deepEqual([status.body.data.state, status.body.data.limited.wiki, status.body.data.typedPages.wiki >= 100], ["page_limit", true, true]);
+    assert.deepEqual([status.body.data.state, status.body.data.typedPages.wiki >= 100, "limited" in status.body.data, "pageLimit" in status.body.data], ["compiled", true, false, false]);
 
     // ---- 8b. a graph written one level down is not the graph: it is taken out and counted, nothing else changes ----------
     script = (request) => {
@@ -308,7 +363,7 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     const offline = await upload("epsilon.md", "# Epsilon\n\n第五份资料。\n");
     await ingest();
     assert.equal((await app.sourceService.get(user.id, offline)).payload.status, "complete");
-    assert.equal((await api(`/api/knowledge-pages/page?sourceId=${saved.body.data.page.sourceId}`)).status, 200);
+    assert.ok((await alphaNow()).markdown, "a page already mirrored is not readable while the engine is down");
     assert.equal((await api(`/api/knowledge-pages/graph?projectId=${project.id}&kind=kg`)).status, 200);
     assert.equal(await app.sourceSyncWorker.tick(), null, "the push failed and stays queued");
     const waiting = await app.store.database.query("SELECT status, error FROM evimed_product.jobs WHERE user_id=$1 AND kind='ov-resource-sync' AND status='queued'", [user.id]);
@@ -322,11 +377,11 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     // ---- 10. what readiness and the operator metrics say of it ----------------------------------------------------------
     const ready = await (await fetch(`${base}/api/ready`)).json();
     const knowledge = ready.data.checks.memoryIndex.knowledge;
-    assert.ok(knowledge.pages.enabled && knowledge.pages.rounds >= 5 && knowledge.pages.pagesMirrored >= 6 && knowledge.pages.limited >= 1);
+    assert.ok(knowledge.pages.enabled && knowledge.pages.rounds >= 5 && knowledge.pages.pagesMirrored >= 6 && knowledge.pages.limited === undefined);
     assert.ok(knowledge.sources.enabled && knowledge.sources.pushed >= 5 && knowledge.sources.removed >= 2);
     assert.ok(knowledge.resources.configured && knowledge.resources.compiles >= 5);
     const metrics = await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer knowledge-metrics-token" } })).text();
-    for (const line of [/^open_science_knowledge_compile_total\{event="round"\} [5-9]/m, /^open_science_knowledge_compile_total\{event="page_limit"\} [1-9]/m,
+    for (const line of [/^open_science_knowledge_compile_total\{event="round"\} [5-9]/m, /^open_science_knowledge_mirror_total\{event="write_back_conflict"\} [1-9]/m,
       /^open_science_knowledge_source_sync_total\{outcome="pushed"\} [5-9]/m, /^open_science_knowledge_mirror_total\{event="blocks_restored"\} [1-9]/m,
       /^open_science_knowledge_compile_tokens_total [1-9]/m]) assert.match(metrics, line);
   } finally {

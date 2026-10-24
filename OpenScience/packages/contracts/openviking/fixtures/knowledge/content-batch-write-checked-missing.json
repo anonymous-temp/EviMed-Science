@@ -1,0 +1,11 @@
+{
+  "status": "error",
+  "result": null,
+  "error": {
+    "code": "CONFLICT",
+    "message": "Expected content no longer exists: viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/gone.md",
+    "details": {}
+  },
+  "telemetry": null,
+  "profile": null
+}

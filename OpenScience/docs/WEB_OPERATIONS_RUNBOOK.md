@@ -871,14 +871,14 @@ not sufficient containment for those events.
   `restore` refuses a volume that holds anything, and checks every file
   against the archive's manifest as it lands. Wait for
   `checks.memoryIndex.engine.ok` in `/api/ready` before declaring it done: the
-  engine's own facts (version, templates, skills, the Compile shim) are read
+  engine's own facts (version, templates, skills, Compile's identity) are read
   again within five minutes. Drilled 2026-10-13 on a check container started
   from this repository's compose definition: 180 of 180 files of 8 accounts
   byte-identical, tags and search results unchanged, every engine fact true
   (`.evimed-local/acceptance/course-correction-20261012/live/ovbase/backup-restore/`).
-  A volume written by v0.5.0 is not readable by v0.4.x: going back below the
-  pin is a restore of a copy taken under the older release, never a downgrade
-  in place.
+  A volume written by v0.5.0 is not readable by v0.4.x, nor one written by
+  v0.5.1.1 by v0.5.0: going back below the pin is a restore of a copy taken
+  under the older release, never a downgrade in place.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,

@@ -1,6 +1,6 @@
 {
   "note": "A registered user's settings (memory_policy only). X-OpenViking-User is the user named in the URL.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-a/settings",

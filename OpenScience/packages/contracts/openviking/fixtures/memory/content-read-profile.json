@@ -1,6 +1,6 @@
 {
   "note": "profile.md: what the plugin injects at session start.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/content/read?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fprofile.md",
