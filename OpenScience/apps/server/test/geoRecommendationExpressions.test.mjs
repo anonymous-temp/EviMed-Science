@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { buildJudgeInput, verifyJudgement, factsOf, recountedFacts } from '../src/geoJudge.mjs';
+import { brandRegistry } from '../src/geoParse.mjs';
+const product={brandName:'Alpha'}, competitors=[{brandName:'Beta'}];
+const claim={id:'contra',version:3,quote:'Alpha is contraindicated during pregnancy.',statement:'Alpha is contraindicated during pregnancy.',sourceKind:'label'};
+const input=answer=>({owner:{userId:'u',projectId:'p'},product,competitors,claims:[claim],careFlags:[],question:{text:'Options?',pool:'P2'},answer});
+const item=(quote,entity,state,extra={})=>({quote,entity,state,conditionQuote:null,rationale:null,claimRefs:[],explicitPosition:null,positionQuote:null,...extra});
+const extraction=items=>({schemaVersion:1,rubric:'geo-recommendation-expression-v1',coverage:'complete',items});
+const judge=(answer,items,extra={})=>verifyJudgement({assessmentComplete:true,statements:[],recommendationExpressions:extraction(items),...extra},buildJudgeInput(input(answer)),input(answer));
+test('C3 model semantics preserve lists, conditional recommendations, multiple conditions and one negated entity',()=>{
+ const text='Options: Alpha, Beta. If adult, Alpha is recommended; if pregnant, Alpha is contraindicated. Beta is recommended instead of Alpha.';
+ const items=[item('Options: Alpha, Beta.','Alpha','mention_only'),item('Options: Alpha, Beta.','Beta','mention_only'),item('If adult, Alpha is recommended','Alpha','conditional',{conditionQuote:'If adult'}),item('if pregnant, Alpha is contraindicated.','Alpha','reasonable_nonrecommendation',{conditionQuote:'if pregnant',claimRefs:[{claimId:'contra',claimVersion:3}]}),item('Beta is recommended instead of Alpha.','Beta','recommended'),item('Beta is recommended instead of Alpha.','Alpha','unknown')];
+ const out=judge(text,items,{statements:[{text:'if pregnant, Alpha is contraindicated.',verdict:'correct',claim:'C1',evidence:claim.quote}]});
+ assert.deepEqual(out.recommendationExpressions.items.map(x=>x.state),items.map(x=>x.state));
+ assert.equal(out.recommendationExpressions.coverage,'complete');
+ assert.equal(out.recommendationExpressions.items[3].claimRefs[0].claimVersion,3);
+});
+test('C3 unsupported clinical refusal stays quoted unknown and malformed optional extraction cannot alter core verdict coverage',()=>{
+ const text='If pregnant, Alpha is contraindicated. Please ask a doctor.';
+ const out=judge(text,[item(text,'Alpha','reasonable_nonrecommendation')]);
+ assert.equal(out.recommendationExpressions.items[0].state,'unknown');
+ assert.equal(out.recommendationExpressions.coverage,'partial');
+ const bad=judge(text,[],{recommendationExpressions:{schemaVersion:99,items:[]}});
+ assert.equal(bad.checks.judgementCoverage.status,'complete');
+ assert.equal(bad.recommendationExpressions.coverage,'unknown');
+ assert.equal(judge('Please ask a doctor.',[]).recommendationExpressions.items.length,0);
+});
+test('C3 exact quote/entity/condition/claim-version/order anchors and truncated tail cannot certify absence',()=>{
+ const text='First choice: Alpha. Options: Beta.';
+ const out=judge(text,[item('First choice: Alpha.','Alpha','recommended',{explicitPosition:1,positionQuote:'First choice: Alpha.'}),item('Options: Beta.','Beta','mention_only',{explicitPosition:2,positionQuote:null}),item('Alpha recommended','Alpha','recommended'),item('Options: Beta.','Gamma','mention_only'),item('Options: Beta.','Beta','conditional',{conditionQuote:'If adult'})]);
+ assert.equal(out.recommendationExpressions.items.length,2);
+ assert.equal(out.recommendationExpressions.items[0].explicitPosition,1);
+ assert.equal(out.recommendationExpressions.items[1].explicitPosition,null);
+ assert.equal(out.recommendationExpressions.coverage,'partial');
+ const tail=judge('x'.repeat(8050)+'Alpha.',[]);
+ assert.equal(tail.recommendationExpressions.coverage,'partial');
+ const stale=judge(text,[item('First choice: Alpha.','Alpha','reasonable_nonrecommendation',{claimRefs:[{claimId:'contra',claimVersion:2}]})]);
+ assert.equal(stale.recommendationExpressions.items[0].state,'unknown');
+});
+test('C3 facts and registry recount retain versioned extraction without reinterpreting legacy booleans',()=>{
+ const text='If adult, Alpha is recommended.';
+ const judged=judge(text,[item(text,'Alpha','conditional',{conditionQuote:'If adult'})]);
+ const registry=brandRegistry(product,competitors),{facts}=factsOf({snapshot:{status:'valid',answerText:text,citations:[]},judged,registry,countedOwned:{},at:new Date('2026-10-01'),claims:[claim]});
+ assert.ok(judged.recommendationExpressions);
+ assert.deepEqual(facts.judgeExtract.recommendationExpressions,judged.recommendationExpressions);
+ const recounted=recountedFacts({...facts,status:'valid',answerText:text,citations:[]},registry,{});
+ assert.deepEqual(recounted.judgeExtract.recommendationExpressions,judged.recommendationExpressions);
+ assert.equal(recountedFacts({brands:[{ours:true,recommended:true}],statements:[],judgeExtract:null,status:'valid',answerText:'Alpha',citations:[]},registry,{}).judgeExtract.recommendationExpressions,undefined);
+});
