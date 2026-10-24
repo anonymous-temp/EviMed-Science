@@ -230,6 +230,8 @@ export interface GeoProject extends GeoScopedView {
    * for the client, a step waiting on credits or one that failed. A to-do list, never a log of what is done; `[]` when nothing is asked.
    */
   needsYou: GeoNeedsYou[];
+  /** The durable signal reader is composed on this deployment. */
+  signalsSupported?: boolean;
 }
 
 /** The kinds of to-do the project view lists (`GEO_NEEDS_YOU_KINDS`), each a verb and the object it opens. */
@@ -1168,6 +1170,7 @@ function readProject(raw: GeoProject): GeoProject {
     steps,
     sessionId: typeof raw?.sessionId === "string" && raw.sessionId ? raw.sessionId : null,
     needsYou: Array.isArray(raw?.needsYou) ? raw.needsYou.filter((item) => item && typeof item.key === "string" && item.target) : [],
+    signalsSupported: raw?.signalsSupported === true,
     // A server that does not say is one from before the market switch: it
     // offered the budget, and so does this page.
     market: { configured: raw?.market?.configured !== false },
@@ -1493,8 +1496,16 @@ export function exportGeo(geoId: string, kind: GeoExportKind) {
  * a time, never an id. A record to read, not a conversation to go to (the person's own conversation is the project's `sessionId`).
  */
 export async function getGeoProgrammeRuns(geoId: string): Promise<ProgrammeRun[]> {
-  const value = await productRequest<{ runs?: unknown }>(`${project(geoId)}/runs`);
-  const rows = Array.isArray(value?.runs) ? (value.runs as Array<Record<string, unknown>>) : [];
+  const rows: Array<Record<string, unknown>> = [];
+  let cursor: string | null = null;
+  const seen = new Set<string>();
+  do {
+    const value: { runs?: unknown; nextCursor?: string | null } = await productRequest(`${project(geoId)}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+    if (Array.isArray(value?.runs)) rows.push(...value.runs);
+    cursor = value.nextCursor ?? null;
+    if (cursor && seen.has(cursor)) throw new Error('The execution cursor did not advance.');
+    if (cursor) seen.add(cursor);
+  } while (cursor);
   return rows.filter((row) => row && typeof row.sessionId === "string" && row.sessionId).map((row) => ({
     sessionId: String(row.sessionId),
     ...(typeof row.runId === "string" && row.runId ? { runId: row.runId } : {}),
@@ -1589,6 +1600,6 @@ export const markGeoMarketOrderLost = (orderId: string, reason: string) =>
   productRequest<{ id: string; state: GeoOrderState }>(`/geo/market/orders/${id(orderId)}/lost`, "POST", { reason });
 export const clearGeoMarketStop = (note: string) => productRequest<{ cleared: boolean; day?: string }>("/geo/market/clear-stop", "POST", { note });
 
-export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content"|"analysis";view?:import("./geoAnalysisClient").GeoAnalysisDescriptor;expectedDigest?:string;focus?:{rowKey:string;columnKey:string};intent?:"explain"|"compare"|"next_steps";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[]}) {
-  return productRequest<{referenceId:string;sessionId:string;draft:string}>(`${project(geoId)}/strategy/context`, "POST", input);
+export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content"|"analysis"|"signal";view?:import("./geoAnalysisClient").GeoAnalysisDescriptor;expectedDigest?:string;focus?:{rowKey:string;columnKey:string};intent?:"explain"|"compare"|"next_steps"|"analyse"|"review"|"correct";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[];signalId?:string;expectedSignalRevision?:number;focusRefs?:string[];previousContextRef?:string}) {
+  return productRequest<{referenceId:string;sessionId:string;draft:string;state?:"staged"|"bound";requestId?:string|null}>(`${project(geoId)}/strategy/context`, "POST", input);
 }

@@ -1,5 +1,5 @@
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
-import { frontierNoticeHref, shareNoticeHref } from "@evimed/domain";
+import { frontierNoticeHref, shareNoticeHref, geoSignalHref } from "@evimed/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
@@ -441,7 +441,11 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   // A memory's confirm, correct and delete controls are on its own page.
   if (item.source.type === "memory") return `/app/memory?record=${encodeURIComponent(item.source.id)}`;
   // A 循证 GEO notice names the page it is about: `<geoId>/<tab>[/<item>]`.
-  if (item.source.type === "geo" && /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/.test(item.source.id)) return `/app/geo/${item.source.id}`;
+  if (item.source.type === "geo") {
+    const signal = geoSignalHref(item.source.id);
+    if (signal) return signal;
+    if (/^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/.test(item.source.id)) return `/app/geo/${item.source.id}`;
+  }
   // A 虚拟临床研究 notice names a study and, optionally, its tab: `<studyId>[/<tab>]`.
   // The study page's address has exactly those two segments, so a third one —
   // or anything that is not an id — is not an address and opens nothing.

@@ -411,6 +411,35 @@ test('structured judgment feedback keeps its exact fields and review history sta
   await assert.rejects(routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', { ...body, resolved: true }), response()), { status: 400 });
 });
 
+test('signal routes keep read selectors and reversible dispositions closed; no arbitrary execution state is accepted', async () => {
+  const calls = [], signalId = `gs_${'a'.repeat(64)}`;
+  const signals = { list: async (...args) => { calls.push(['list', ...args]); return { items: [], total: 0 }; },
+    detail: async (...args) => { calls.push(['detail', ...args]); return { id: signalId }; },
+    disposition: async (...args) => { calls.push(['disposition', ...args]); return { id: signalId, state: 'ignored' }; } };
+  const { routes } = fixture({ signals });
+  await routes(request('GET', '/api/geo/projects/geo_1/signals?state=pending&limit=5&actionable=true'), response());
+  assert.deepEqual(calls[0], ['list', { id: 'reader' }, 'geo_1', { state: 'pending', limit: '5', actionable: 'true' }]);
+  await routes(request('GET', `/api/geo/projects/geo_1/signals/${signalId}`), response());
+  assert.equal(calls[1][3], signalId);
+  const body = { expectedRevision: 1, requestKey: 'ignore', disposition: 'ignored' };
+  await routes(request('POST', `/api/geo/projects/geo_1/signals/${signalId}/disposition`, body), response());
+  assert.deepEqual(calls[2].at(-1), body);
+  await assert.rejects(routes(request('GET', '/api/geo/projects/geo_1/signals?state=pending&state=completed'), response()), { status: 400 });
+  await assert.rejects(routes(request('POST', `/api/geo/projects/geo_1/signals/${signalId}/disposition`, { ...body, runId: 'forged', completed: true }), response()), { status: 400 });
+});
+
+test('execution history unions exact attended runs and pages beyond fifty without repeating tied timestamps', async () => {
+  const runs = Array.from({ length: 61 }, (_, index) => ({ runId: `run_${String(index).padStart(3, '0')}`, sessionId: 'same-session', startedAt: '2026-10-24T00:00:00Z', status: 'succeeded', reason: null }));
+  const service = { allows: () => true, requireProject: async () => ({ id: 'geo_1', userId: 'owner', projectId: 'control' }) };
+  const { routes } = fixture({ service, projects: { programmeRuns: async () => runs }, signals: { attendedRuns: async () => [{ ...runs[2], label: 'Exact signal handling' }] } });
+  const first = response(); await routes(request('GET', '/api/geo/projects/geo_1/runs'), first);
+  const page = first.json().data; assert.equal(page.total, 61); assert.equal(page.runs.length, 50); assert.ok(page.nextCursor);
+  const next = response(); await routes(request('GET', `/api/geo/projects/geo_1/runs?cursor=${encodeURIComponent(page.nextCursor)}`), next);
+  assert.equal(next.json().data.runs.length, 11);
+  assert.equal(new Set([...page.runs, ...next.json().data.runs].map(run => run.runId)).size, 61);
+  assert.equal(next.json().data.runs.find(run => run.runId === runs[2].runId).label, 'Exact signal handling');
+});
+
 
 test("planning boundary errors belong to the closed registry and tell the person how to recover", async()=>{
   const emitted = new Set();

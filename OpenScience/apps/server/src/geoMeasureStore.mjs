@@ -947,7 +947,10 @@ export class GeoMeasureStore {
         judgment_history = CASE WHEN ${observedAt} IS NULL THEN CASE WHEN EXISTS (
           SELECT 1 FROM jsonb_array_elements(errors.judgment_history) receipt WHERE receipt->>'kind'='wrong_occurrence_time_unknown' AND receipt->>'snapshotId'=$7
         ) THEN errors.judgment_history ELSE errors.judgment_history || jsonb_build_array(${unknownOccurrence}) END
-          WHEN errors.judgment_state='withdrawn' THEN errors.judgment_history || jsonb_build_array(jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text)) ELSE errors.judgment_history END,
+          WHEN errors.judgment_state='withdrawn' THEN errors.judgment_history || jsonb_build_array(jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text)) ELSE errors.judgment_history END
+          || CASE WHEN errors.status='closed' AND ${observedAt} >
+            (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.closed_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine)
+            THEN jsonb_build_array(jsonb_build_object('kind','business_reopened','snapshotId',$7::text,'previousClosedSnapshotId',errors.closed_snapshot_id,'changedAt',$17::text)) ELSE '[]'::jsonb END,
         last_snapshot_id = CASE WHEN ${observedAt} IS NOT NULL AND (errors.last_snapshot_id IS NULL OR ${observedAt} >= coalesce(
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.last_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine), '-infinity'::timestamptz))
           THEN EXCLUDED.last_snapshot_id ELSE errors.last_snapshot_id END,
@@ -1110,7 +1113,8 @@ export class GeoMeasureStore {
       await client.query("SELECT snapshot_id FROM evimed_geo.facts WHERE snapshot_id=$1 FOR SHARE", [answer.id]);
       await client.query("SELECT id FROM evimed_geo.snapshots WHERE id=$1 FOR SHARE", [answer.id]);
       await client.query("SELECT id FROM evimed_geo.errors WHERE id=$1 FOR UPDATE", [observed.id]);
-      const result = await client.query(`UPDATE evimed_geo.errors e SET status='closed',closed_snapshot_id=$2,updated_at=$3
+      const result = await client.query(`UPDATE evimed_geo.errors e SET status='closed',closed_snapshot_id=$2,updated_at=$3::timestamptz,
+          judgment_history=e.judgment_history || jsonb_build_array(jsonb_build_object('kind','business_closed','snapshotId',$2::text,'previousStatus',e.status,'changedAt',($3::timestamptz)::text))
         WHERE e.id=$1 AND e.user_id=$4 AND e.geo_project_id=$5 AND e.judgment_state='active' AND e.status IN ('acting','awaiting_remeasure')
         AND md5(to_jsonb(e)::text)=$6 AND EXISTS(SELECT 1 FROM evimed_geo.snapshots s JOIN evimed_geo.facts f ON f.snapshot_id=s.id
           WHERE s.id=$2 AND md5(to_jsonb(s)::text)=$7 AND md5(to_jsonb(f)::text)=$8)

@@ -15,6 +15,8 @@ export interface GeoConversationTarget {
   sessionId?: string | null;
   resultRevision?: { referenceId: string };
   geoPlanContext?: { referenceId: string };
+  /** A versioned handling attempt resumes its own native session even while another is selected in the page URL. */
+  exactSession?: boolean;
 }
 
 /**
@@ -65,7 +67,7 @@ export function useOpenGeoConversation() {
       if (project.projectId !== target.projectId) throw new Error("GEO project mismatch");
       const sameProject = location.pathname.startsWith(`/app/geo/${encodeURIComponent(geoId)}/`) || location.pathname === `/app/geo/${encodeURIComponent(geoId)}`;
       const selectedSession = sameProject ? geoSessionIdFromChatPath(location.pathname) || new URLSearchParams(location.search).get("session") : null;
-      const sessionId = selectedSession || target.sessionId || project.sessionId || undefined;
+      const sessionId = ((target.geoPlanContext || target.resultRevision || target.exactSession) ? target.sessionId || selectedSession : selectedSession || target.sessionId) || project.sessionId || undefined;
       unsubscribe();
       let opened = false;
       await useProjectStore.getState().select(target.projectId, () => {

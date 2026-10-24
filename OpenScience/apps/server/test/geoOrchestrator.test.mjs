@@ -207,6 +207,17 @@ test("a long 讲错我方 statement is shortened in the title and whole in the b
   assert.equal(sent[1].body, "点开看这条回答和依据。", "a statement the title kept whole is not repeated");
 });
 
+test('versioned signals share inbox identity, recipient abilities and exact object links', async () => {
+  const sent = [];
+  const notifier = createGeoNotifier({ notifications: { create: async (userId, input) => { sent.push({ userId, input }); return { id: 'notice' }; } }, store: { query: async () => ({ rows: [] }) } });
+  const id = `gs_${'b'.repeat(64)}`;
+  await notifier.signal(project, { id, payload: { kind: 'source_changed', title: 'Source changed', basis: {}, detectedAt: '2026-10-24T00:00:00Z' } });
+  assert.equal(sent.length, 1); assert.equal(sent[0].input.idempotencyKey, `geo:${project.id}:signal:${id}`);
+  assert.equal(geoNoticeHref(sent[0].input.source.id), `/app/geo/${project.id}?signal=${id}`);
+  await notifier.signal(project, { id, payload: { kind: 'citation_observed', title: 'Page sighting', basis: {} } });
+  assert.equal(sent.length, 1, 'ordinary page sightings do not duplicate the established first-cited milestone');
+});
+
 test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severities folded per day; operators apart", async () => {
   /** @type {Array<{ userId: string, input: Record<string, any> }>} */
   const sent = [];
@@ -245,7 +256,7 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
     "machinery goes to operators only");
   // G21: an engine down on the probe host is handled there, never in the placement account.
   assert.equal(operator[0].input.body, "引擎 Kimi。在探测机上重新登录这家 AI，或重开它的标签页；恢复后会自动续测。");
-  assert.deepEqual(GEO_NOTICE_KINDS, ["diagnosis_done", "targets_ready", "first_publishable", "first_cited", "wrong_or_safety"]);
+  assert.deepEqual(GEO_NOTICE_KINDS, ["diagnosis_done", "targets_ready", "first_publishable", "first_cited", "wrong_or_safety", "signal_discovered"]);
   // The measurement's event reads the error row and keeps the event's own key.
   const rowStore = { async query(/** @type {string} */ sql) {
     if (sql.includes("FROM evimed_geo.errors")) return { rows: [{ id: "e9", geo_project_id: "geo_1", user_id: "u1", engine: "deepseek", severity: "S4",

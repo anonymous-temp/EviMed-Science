@@ -27,6 +27,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { ProgrammeRunsDrawer } from "@/components/runs/ProgrammeRunsDrawer";
+import { GeoSignalsWorkbench } from "@/components/geo/GeoSignalsWorkbench";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
@@ -497,8 +498,9 @@ function GeoBand({
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
       ) : (
         <>
+          {project.signalsSupported && <GeoSignalsWorkbench geoId={geoId} project={project} step={api.step} />}
           {api.scopePending && (api.scopeError ? <LoadError message={api.scopeError} onRetry={reload} /> : <TabSkeleton />)}
-          <div hidden={api.scopePending}><GeoTab api={api} /></div>
+          <div hidden={api.scopePending || project.signalsSupported && params.has("signal")}><GeoTab api={api} /></div>
         </>
       )}
       {scopeOpen && <GeoScopeDialog geoId={geoId} project={project} initial={api.scope?.selectionRef && project.scope ? { ...project.scope, selectionRef: api.scope.selectionRef } : api.scope} onClose={() => setScopeOpen(false)} onApply={next => {

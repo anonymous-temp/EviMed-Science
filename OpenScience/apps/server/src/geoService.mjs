@@ -355,6 +355,7 @@ export function compactAction(action) {
 
 export class GeoService {
   /** @type {any} */ planContexts = null;
+  /** @type {import('./geoSignals.mjs').GeoSignals | null} */ signals = null;
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
    *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function, blockedBy?: Function } | null,
@@ -726,6 +727,7 @@ export class GeoService {
       // What the project really asks of its person — a budget not decided, articles to look at, the worst errors with their way to a
       // correction, the strategy's to-dos for the client, a step waiting on credits or one that failed. A to-do list, never a log.
       needsYou,
+      signalsSupported: Boolean(this.signals),
       overview: {
         metrics,
         week,

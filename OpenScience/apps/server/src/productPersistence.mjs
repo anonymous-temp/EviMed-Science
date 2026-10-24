@@ -10,7 +10,7 @@ export const PRODUCT_KINDS = Object.freeze([
   // project. Its own kind rather than a field on `method`, because it is a
   // property of the project's next run and not of any one method: a method can
   // be on trial in one project and absent from another at the same instant.
-  "geo-plan-context", "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
+  "geo-plan-context", "geo-signal", "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
   // What a project's datasets mean: one document per dataset, the recorded interpretation a repeat analysis starts from.
   "dataset-semantics",
   // What was published about a work after it was published (a retraction, a correction, an expression of concern, a new

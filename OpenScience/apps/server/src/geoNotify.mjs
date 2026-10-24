@@ -1,4 +1,4 @@
-import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES, geoAbilitiesOf } from "@evimed/domain";
+import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES, geoAbilitiesOf, geoSignalHref } from "@evimed/domain";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 
 /**
@@ -47,7 +47,7 @@ import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
  */
 
 /** The five user-facing kinds, by the key each notice is counted under. */
-export const GEO_NOTICE_KINDS = Object.freeze(["diagnosis_done", "targets_ready", "first_publishable", "first_cited", "wrong_or_safety"]);
+export const GEO_NOTICE_KINDS = Object.freeze(["diagnosis_done", "targets_ready", "first_publishable", "first_cited", "wrong_or_safety", "signal_discovered"]);
 
 const SOURCE_PATH = /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/;
 
@@ -58,6 +58,8 @@ const SOURCE_PATH = /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/;
  */
 export function geoNoticeHref(sourceId) {
   const id = String(sourceId ?? "");
+  const signal = geoSignalHref(id);
+  if (signal) return signal;
   return SOURCE_PATH.test(id) ? `/app/geo/${id}` : null;
 }
 
@@ -231,6 +233,20 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
 
   const notifier = {
     counts,
+
+    /** A persisted versioned finding. Ordinary page sightings stay in history; the existing first-cited milestone remains singular. */
+    signal(project, row) {
+      const signal = row.payload;
+      if (signal.kind === "citation_observed" || signal.kind === "group_changed") return Promise.resolve(null);
+      const safety = signal.kind === "error_observed" || signal.kind === "source_changed" || signal.basis.changedText;
+      const folded = signal.kind === "error_observed" && !GEO_URGENT_SEVERITIES.includes(String(signal.basis.severity));
+      return send(project, "signal_discovered", {
+        title: signal.kind === "error_observed" ? wrongOursTitle(project, signal.basis) : clip(signal.title, 100), body: signal.kind === "source_changed" ? "查看本次变化关联的结论和稿件版本，选择要处理的范围。" : "查看原始记录、当前状态和可执行的下一步。",
+        severity: safety ? "safety" : "attention", source: source(project.id, "signals", row.id),
+        idempotencyKey: signal.basis.notificationKey ?? `geo:${project.id}:signal:${row.id}`,
+        ...(folded ? { groupKey: `geo-wrong:${project.id}:${dayIn(new Date(signal.detectedAt), timeZone)}` } : {}),
+      }, safety ? HEARD_BY.correction : HEARD_BY.progress);
+    },
 
     /** 1. 诊断完成. @param {any} project @param {{ roundId: string, engines: number, answers: number, wrongOurs: number }} facts */
     diagnosisDone(project, { roundId, engines, answers, wrongOurs }) {

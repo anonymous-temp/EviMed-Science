@@ -286,7 +286,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
     if (boundInput) for (const output of run.outputFiles ?? []) {
       const file = typeof output === "string" ? output : output?.path;
       const match = /^deliverables\/([A-Za-z0-9_-]{1,160})\/(?:strategy\.json|articles\.json)$/.exec(file ?? "");
-      const capability = boundInput.mode === "strategy" ? "geo-strategy" : "geo-content";
+      const capability = boundInput.mode === "strategy" ? "geo-strategy" : boundInput.mode === "signal" ? run.effectiveAgentId : "geo-content";
+      if (!["geo-strategy", "geo-content"].includes(capability)) continue;
       if (match && !deliverables.some(item => item.id === match[1] && item.capability === capability)) deliverables.push({ id: match[1], capability });
     }
     const ids = new Set(deliverables
@@ -487,7 +488,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       }
     }
     // ---- the articles
-    const contentIds = trustedContext && trustedContext.mode !== "content" ? [] : idsOf("geo-content");
+    const contentIds = trustedContext && !["content", "signal"].includes(trustedContext.mode) ? [] : idsOf("geo-content");
     if (contentIds.length) {
       const claimIdByKey = new Map((await store.listClaims(geoProject.id)).map((claim) => [claim.claimKey, claim.id]));
       for (const id of contentIds) {

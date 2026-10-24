@@ -33,15 +33,16 @@ const metaOf = (run: ProgrammeRun) => [PROGRAMME_RUN_STATE_LABELS[run.state], ru
  * are in (a run's transcript is read from there), and a `version` that changes when its page has read something new — a run began or
  * ended — so the list is read again in place.
  */
-export function ProgrammeRunsDrawer({ projectId, load, version = null, onClose }: {
+export function ProgrammeRunsDrawer({ projectId, load, version = null, initialRun = null, onClose }: {
   projectId: string;
   load: () => Promise<ProgrammeRun[]>;
   version?: string | number | null;
+  initialRun?: ProgrammeRun | null;
   onClose: () => void;
 }) {
   const [state, setState] = useState<Load>({ kind: "loading" });
   const [round, setRound] = useState(0);
-  const [record, setRecord] = useState<ProgrammeRun | null>(null);
+  const [record, setRecord] = useState<ProgrammeRun | null>(initialRun);
   const loader = useRef(load);
   loader.current = load;
 

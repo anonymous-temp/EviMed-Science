@@ -355,6 +355,8 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoPlanContext } from "./geoPlanContext.mjs";
+import { GeoSignals } from "./geoSignals.mjs";
+import { GeoSignalDiscovery } from "./geoSignalDiscovery.mjs";
 import { GeoArticleResults } from "./geoArticleResults.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
@@ -2294,7 +2296,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   gradedSha256: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
-   *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
+   *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, signals?: GeoSignals, signalDiscovery?: GeoSignalDiscovery,
+   *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   /** @type {GeoArticleResults | null} */
   let geoArticleResults = null;
@@ -2495,6 +2498,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
+    get signals() { return geo?.signals ?? null; },
     get selectedExporter() { return documentExportService; },
     get exporter() { return geo?.exporter ?? null; },
     get members() { return geo?.members ?? null; },
@@ -2643,6 +2647,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       runs: async project => { const control = await store.requireProject(await store.userById(project.userId), project.projectId); return control ? agentRuns.list(control) : []; },
       articleResults: geoArticleResults });
     geo.service.planContexts = geoPlanContexts;
+    geo.signals = new GeoSignals({ documents: productDocuments, store: geo.store, service: geo.service,
+      runs: project => geoPlanContexts.runs(project),
+      resultForRun: async (project, run) => {
+        const control = await store.requireProject(await store.userById(project.userId), project.projectId);
+        const artifacts = [];
+        let cursor = null;
+        if (resultProvenance) do {
+          const page = await resultProvenance.list(project.userId, { projectId: project.projectId, runId: run.id, limit: 100, cursor });
+          artifacts.push(...page.items.filter(result => result.producer?.runId === run.id && result.producer?.sessionId === run.sessionId)
+            .map(result => ({ id: result.versionId, path: result.path, runId: run.id, sessionId: run.sessionId })));
+          cursor = page.nextCursor;
+        } while (cursor);
+        const history = await preservedConversationHistory(control, run.sessionId, [run], undefined, { runId: run.id });
+        const answer = { available: history.messages.some(message => message.role === "assistant" && message.text.trim()), partial: history.partial };
+        const professional = ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"].includes(run.effectiveAgentId ?? run.agentId);
+        return { present: artifacts.length > 0 || !professional && answer.available, artifacts, answer };
+      } });
+    geo.service.signals = geo.signals;
   }
   const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
@@ -5358,6 +5380,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }
     // The value profiles' upkeep (geoValueUpkeep.mjs): the module's own loop, always composed with it.
     geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, sourceChanges, entityVocabulary, learning: geoLearning, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
+    if (geoParts.signals) {
+      geoParts.signals.notify = (project, row) => notifier.signal(project, row);
+      geoParts.signalDiscovery = new GeoSignalDiscovery({ store: geoParts.store, signals: geoParts.signals, report: code => process.stderr.write(`geo signals: ${code}\n`) });
+    }
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier, policies:evolutionModulePolicies,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
@@ -5421,6 +5447,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         errors: () => tickGeoErrors(measureDeps),
         ...(geoParts.questionBank ? { questionBank: () => geoParts.questionBank.tick() } : {}),
         valueUpkeep: () => geoParts.valueUpkeep.tick(),
+        ...(geoParts.signalDiscovery ? { signals: () => geoParts.signalDiscovery.tick() } : {}),
         orchestrator: () => running.tick(),
         schedules: () => running.tickSchedules(),
         catalogue: () => tickGeoCatalogue(marketDeps),

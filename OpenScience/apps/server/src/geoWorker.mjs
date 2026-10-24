@@ -66,6 +66,7 @@ export const GEO_WORKER_LOOPS = Object.freeze([
   // The value profiles' upkeep (G10c): old versions pruned within a bound, counted. `optional`: it is composed with the module, and a
   // worker built without it (a test's) has nothing missing.
   Object.freeze({ name: "valueUpkeep", package: "value", every: 10 * MINUTE, leased: true, optional: true }),
+  Object.freeze({ name: "signals", package: "signals", every: MINUTE, leased: true, optional: true }),
 ]);
 
 /** @param {unknown} error */

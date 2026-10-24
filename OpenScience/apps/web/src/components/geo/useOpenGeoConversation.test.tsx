@@ -27,12 +27,12 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal
 
 vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: vi.fn() }));
 
-function Opener({ sessionId, draft, resultRevision }: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string } }) {
+function Opener({ sessionId, draft, resultRevision, exactSession }: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string }; exactSession?: boolean }) {
   const open = useOpenGeoConversation();
   const [result, setResult] = useState("");
   return (
     <>
-      <button type="button" onClick={() => { void open({ projectId: "p-new", sessionId, resultRevision }, draft).then((opened) => setResult(String(opened))); }}>open</button>
+      <button type="button" onClick={() => { void open({ projectId: "p-new", sessionId, resultRevision, exactSession }, draft).then((opened) => setResult(String(opened))); }}>open</button>
       <span data-testid="result">{result}</span>
     </>
   );
@@ -43,7 +43,7 @@ function Probe() {
   return <pre data-testid="probe">{JSON.stringify({ path: location.pathname, intent: location.state?.runtimeUiIntent ?? null })}</pre>;
 }
 
-function renderOpener(props: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string } }, initial = "/app/geo") {
+function renderOpener(props: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string }; exactSession?: boolean }, initial = "/app/geo") {
   render(
     <MemoryRouter initialEntries={[initial]}>
       <Routes><Route path="*" element={<><Opener {...props} /><Probe /></>} /></Routes>
@@ -72,6 +72,14 @@ beforeEach(() => {
 afterEach(() => useProjectStore.getState().clear());
 
 describe("opening a GEO project's conversation", () => {
+  it("resumes the exact handling session even when the project URL holds a different conversation", async () => {
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "Existing project" }];
+    renderOpener({ sessionId: "original-session", exactSession: true }, "/app/geo/geo_new/overview?session=unrelated-session");
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/original-session"));
+    expect(probe().intent?.sessionId).toBe("original-session");
+    expect(probe().intent?.geoPlanContext).toBeUndefined();
+  });
   it("switches the shell to the GEO project first, then opens the conversation with the draft unsent", async () => {
     // Created a moment ago: not in the list the shell read at start.
     mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];

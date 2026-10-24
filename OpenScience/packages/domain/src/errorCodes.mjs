@@ -1655,6 +1655,8 @@ export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
+  'geo_signal_not_found',
+  'geo_signal_conflict',
   'geo_plan_context_invalid',
   'geo_plan_context_not_found',
   'geo_plan_context_unavailable',
@@ -2124,6 +2126,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   media_market_response_too_large: '媒介集市的答复超过了大小上限，这次结果没有采用。',
   media_market_request_invalid: '发给媒介集市的请求不符合要求（媒体类型、订单号、标题或正文），已拒绝。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
+  geo_signal_not_found: '找不到这条线索，请刷新后查看当前记录。',
+  geo_signal_conflict: '这条线索或处理请求已更新，请刷新后继续。',
   geo_plan_context_invalid: '方案选择不完整，请刷新方案页后重新选择。',
   geo_plan_context_not_found: '找不到所选方案依据，请返回信源页重新选择。',
   geo_plan_context_unavailable: '暂时无法读取方案依据，请保留当前稿件并稍后重试。',

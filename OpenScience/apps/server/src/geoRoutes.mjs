@@ -64,7 +64,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "snapshots", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "owned-links", "source-ownership", "analysis", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "owned-links", "source-ownership", "signals", "analysis", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -186,6 +186,7 @@ function money(value, field, zero = false) {
  *       startedAt: string | null }>> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   selectedExporter?: any,
+ *   signals?: import('./geoSignals.mjs').GeoSignals | null,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any>,
  *     articleReferences?: (project: any, articleId: string) => Promise<any>, articlePublishable?: (project: any, articleId: string) => Promise<any> } | null,
@@ -222,6 +223,7 @@ export function createGeoRoutes(dependencies) {
       get cards() { return dependencies.cards ?? null; },
       get members() { return dependencies.members ?? null; },
       get market() { return dependencies.market ?? null; },
+      get signals() { return dependencies.signals ?? null; },
     };
 
     // --- operators: the platform's marketplace account ---
@@ -342,6 +344,23 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const tab = parts[2];
+    if (tab === "signals") {
+      if (!hooks.signals) throw UNAVAILABLE();
+      if (method === "GET" && parts.length === 3) {
+        const query = {};
+        for (const key of url.searchParams.keys()) {
+          if (!["limit", "cursor", "kind", "state", "step", "actionable"].includes(key) || url.searchParams.getAll(key).length !== 1) throw new HttpError(400, "geo_payload_invalid", "Invalid signal query.");
+          query[key] = url.searchParams.get(key);
+        }
+        return reply(await hooks.signals.list(user, id, query));
+      }
+      if (method === "GET" && parts.length === 4) return reply(await hooks.signals.detail(user, id, parts[3]));
+      if (method === "POST" && parts.length === 5 && parts[4] === "disposition") {
+        const body = await bodyOf(req, maxJsonBytes, ["expectedRevision", "requestKey", "disposition", "reason"]);
+        return reply(await hooks.signals.disposition(user, id, parts[3], body));
+      }
+      throw new HttpError(404, "not_found", "GEO route not found.");
+    }
     if (tab === "strategy" && parts.length === 4 && parts[3] === "context" && method === "POST") {
       if (!service.planContexts) throw UNAVAILABLE();
       return reply(await service.planContexts.stage(user, id, await readJson(req, maxJsonBytes)));
@@ -450,15 +469,33 @@ export function createGeoRoutes(dependencies) {
       // row named by what it was (the route reason's sentence, never the brief it was sent with) and none of them a place to go.
       if (tab === "runs") {
         const project = await service.requireProject(user, id);
-        const runs = dependencies.projects?.programmeRuns ? await dependencies.projects.programmeRuns(project.userId, project.projectId).catch(() => []) : [];
+        for (const key of url.searchParams.keys()) if (!["limit", "cursor"].includes(key) || url.searchParams.getAll(key).length !== 1) throw new HttpError(400, "geo_payload_invalid", "Invalid execution page.");
+        const limit = Number(url.searchParams.get("limit") ?? 50);
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new HttpError(400, "geo_payload_invalid", "Invalid execution page.");
+        let cursor = null;
+        if (url.searchParams.has("cursor")) try {
+          const raw = url.searchParams.get("cursor");
+          if (raw.length > 1000) throw new Error();
+          cursor = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+          if (!Array.isArray(cursor) || cursor.length !== 3 || cursor[0] !== project.id || typeof cursor[1] !== "string" || typeof cursor[2] !== "string") throw new Error();
+        } catch { throw new HttpError(400, "geo_payload_invalid", "Refresh the execution list."); }
+        const [programme, attended] = await Promise.all([
+          dependencies.projects?.programmeRuns ? dependencies.projects.programmeRuns(project.userId, project.projectId) : [],
+          hooks.signals ? hooks.signals.attendedRuns(project) : [],
+        ]);
+        const all = [...new Map([...programme, ...attended].map(run => [run.runId, run])).values()]
+          .sort((a, b) => String(b.startedAt ?? "").localeCompare(String(a.startedAt ?? "")) || b.runId.localeCompare(a.runId));
+        const runs = all.filter(run => !cursor || String(run.startedAt ?? "") < cursor[1] || String(run.startedAt ?? "") === cursor[1] && run.runId < cursor[2]);
+        const selected = runs.slice(0, limit), last = selected.at(-1);
         return reply({
-          runs: runs.slice(0, 50).map((run) => ({
+          runs: selected.map((run) => ({
             sessionId: String(run.sessionId),
             runId: String(run.runId),
-            label: geoVisibleQuestionOfReason(run.reason),
+            label: 'label' in run ? run.label : geoVisibleQuestionOfReason(run.reason),
             state: ["running", "queued", "starting"].includes(String(run.status)) ? "running" : String(run.status) === "succeeded" ? "finished" : "stopped",
             startedAt: run.startedAt ?? null,
           })),
+          total: all.length, nextCursor: runs.length > limit && last ? Buffer.from(JSON.stringify([project.id, String(last.startedAt ?? ""), last.runId])).toString("base64url") : null,
         });
       }
       // The project's product zone and its cards: each claim with its quotation, its ✓/⚠ and the card revision it stands in.

@@ -25,6 +25,7 @@
  */
 
 export const DOMAIN_VERSION = '0.1.0'
+export { GEO_SIGNAL_KINDS, GEO_SIGNAL_STATES, GEO_SIGNAL_DISPOSITIONS, GEO_SIGNAL_STEPS, GEO_SIGNAL_STATE_LABELS_ZH, geoSignalLifecycle, geoSignalHref } from './src/geoSignals.mjs'
 export { availableRunActions, availableRunStepActions, runIsStalled } from './src/runActions.mjs'
 export { ARTIFACT_ROLES, artifactPresentation, compareArtifacts } from './src/artifactPresentation.mjs'
 export { frontierEventEvidenceCounts } from './src/frontierEventEvidence.mjs'

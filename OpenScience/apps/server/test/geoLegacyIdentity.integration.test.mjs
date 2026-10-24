@@ -223,6 +223,8 @@ test('a new wrong after verified closure reopens once and its own replay preserv
   assert.equal(first.notified, 1);
   await record({ ...latest, deps: { ...f.deps, now: () => new Date('2026-10-24T06:00:00Z') } });
   const [row] = await errors(f); assert.equal(row.id, `${f.id}_error`); assert.equal(row.status, 'open'); assert.equal(row.closed_snapshot_id, null); assert.equal(row.last_snapshot_id, latest.snapshot.id); assert.equal(row.updated_at.toISOString(), '2026-10-24T05:01:00.000Z'); assert.equal(row.materials.length, 1); assert.equal(f.notices.length, 1);
+  assert.equal(row.judgment_history.filter(receipt => receipt.kind === 'business_reopened' && receipt.snapshotId === latest.snapshot.id && receipt.previousClosedSnapshotId === correct.snapshot.id).length, 1);
+  assert.equal(row.judgment_history.filter(receipt => receipt.kind === 'business_closed' && receipt.snapshotId === correct.snapshot.id).length, 1);
 });
 
 test('a verified wrong strictly after closure within one millisecond reopens and notifies once at PostgreSQL precision', options, async () => {
