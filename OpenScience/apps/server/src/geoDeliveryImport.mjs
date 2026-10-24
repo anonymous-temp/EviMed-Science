@@ -305,7 +305,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       const handed = [run.presentedFiles, run.artifacts, run.unverifiedArtifacts, run.outputFiles].some(list => Array.isArray(list) && list.length);
       const specialist = ["geo-strategy", "geo-content"].includes(run.effectiveAgentId ?? run.agentId);
       if ((!paths.length && handed && specialist && ["strategy", "content", "signal"].includes(boundInput.mode))
-        || (paths.length && !files.strategies && !files.registered && !files.enriched)) {
+        || (paths.length && !files.strategies && !files.registered && !files.enriched && !files.existing)) {
         if (!failed.length) { failed.push("geo_plan_output_unavailable"); report("geo_plan_output_unavailable"); }
       }
       return { imported: 0, issues: 0, located: 0, gated: 0, ...(paths.length ? { files } : {}) };
@@ -455,7 +455,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
    */
   const importRunFiles = async ({ project, run, geoProject, deliverables, failed, trustedContext = null, reader = readRunFile }) => {
     const out = { strategies: 0, gaps: 0, actions: 0, sources: 0, refused: 0, declined: 0, dropped: /** @type {string[]} */ ([]),
-      articles: 0, enriched: 0, registered: 0, skipped: 0 };
+      articles: 0, enriched: 0, registered: 0, existing: 0, skipped: 0 };
     /** @param {string} id @param {string} file */
     const parsedFile = async (id, file) => {
       try {
@@ -531,12 +531,18 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
           const known = held.find((article) => article.path === fullPath
             || (article.path === entry.path && (article.deliverableId == null || article.deliverableId === id)));
           try {
+            const preservedDigest = trustedContext ? createHash("sha256").update(await reader(project, run, fullPath)).digest("hex") : null;
+            if (trustedContext && ((entry.contentSha256 && entry.contentSha256 !== preservedDigest)
+              || (known && (known.contentSha256 !== preservedDigest || known.runId !== run.id)))) {
+              failed.push("geo_plan_output_unavailable"); out.skipped += 1; continue;
+            }
             if (known) {
+              out.existing += 1;
               const changed = await store.setArticleReader(geoProject.id, known.id, geoArticleReader(entry));
               if (changed) out.enriched += 1;
               continue;
             }
-            let contentSha256 = typeof entry.contentSha256 === "string" ? entry.contentSha256 : null;
+            let contentSha256 = preservedDigest ?? (typeof entry.contentSha256 === "string" ? entry.contentSha256 : null);
             if (!contentSha256) {
               try { contentSha256 = createHash("sha256").update(await (trustedContext ? reader(project, run, fullPath) : readFile(project.workspaceDir, fullPath))).digest("hex"); } catch { out.skipped += 1; continue; }
             }
