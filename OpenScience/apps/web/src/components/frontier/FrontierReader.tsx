@@ -207,7 +207,7 @@ const AI_LABEL = "text-caption text-accent";
 export function ReaderLead({ text, className }: { text: string; className?: string }) {
   return (
     <Block label="AI 导读" labelClassName={AI_LABEL} className={className}>
-      <p className="max-w-measure-body whitespace-pre-line break-words text-reading-lg text-text xl:max-w-read xl:text-reading-xl">{text}</p>
+      <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-reading-lg text-text xl:max-w-read xl:text-reading-xl">{text}</p>
     </Block>
   );
 }
@@ -250,7 +250,7 @@ export function ReaderInsight({ insight, item, className }: { insight: FrontierI
   const cited = insight.refs.filter((ref) => parts.includes(ref));
   return (
     <Block label="AI 解读" labelClassName={AI_LABEL} className={className}>
-      <p className="max-w-measure-body whitespace-pre-line break-words text-reading text-text xl:max-w-read xl:text-reading-lg">
+      <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-reading text-text xl:max-w-read xl:text-reading-lg">
         {parts.map((part, index) => (typeof part === "string" ? part : (
           <sup key={index}>
             {/* One line of 12 px text with the page's corner: the look of the quoted post's 「原文」, so a citation is not a kind of
