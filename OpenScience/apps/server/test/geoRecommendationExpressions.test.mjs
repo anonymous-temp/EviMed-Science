@@ -205,3 +205,28 @@ test('C3 F2 mixed source occurrences retain exact expression identities and disp
  assert.equal(freezeGeoAnalysisDocument(view).typedTable.rows.length,11);
  assert.equal(facts.checks.judgementCoverage.status,'complete');
 });
+
+test('C3 Q1 conflicting verified positions merge commutatively and remain uncertain after later duplicates',()=>{
+ const quote='First choice: Alpha. Second choice: Alpha.',one=ordered(quote,1,'First','First choice: Alpha.'),two=ordered(quote,2,'Second','Second choice: Alpha.');
+ const outputs=[[one,two],[two,one],[one,two,one],[two,one,two]].map(items=>judge(quote,items));
+ for(const out of outputs){
+  assert.equal(out.recommendationExpressions.items.length,1);
+  const expression=out.recommendationExpressions.items[0];
+  assert.equal(expression.state,'recommended');
+  for(const field of ['explicitPosition','positionQuote','positionToken','positionKind'])assert.equal(expression[field],null,field);
+  assert.equal(out.recommendationExpressions.coverage,'partial');
+  assert.ok(out.recommendationExpressions.reasons.includes('expression_position_conflict'));
+  assert.equal(out.checks.judgementCoverage.status,'complete');
+ }
+ for(const out of outputs.slice(1))assert.deepEqual(out.recommendationExpressions,outputs[0].recommendationExpressions);
+});
+test('C3 Q1 matching verified positions keep deterministic evidence and undeclared positions do not create conflicts',()=>{
+ const quote='First choice: Alpha. 1st recommendation: Alpha.',word=ordered(quote,1,'First','First choice: Alpha.'),numeric=ordered(quote,1,'1st','1st recommendation: Alpha.'),undeclared=item(quote,'Alpha','recommended');
+ for(const items of [[word,word],[word,numeric],[numeric,word],[undeclared,word],[word,undeclared]]){
+  const out=judge(quote,items);
+  assert.equal(out.recommendationExpressions.items[0].explicitPosition,1);
+  assert.equal(out.recommendationExpressions.coverage,'complete');
+ }
+ assert.deepEqual(judge(quote,[word,numeric]).recommendationExpressions,judge(quote,[numeric,word]).recommendationExpressions);
+ assert.deepEqual(judge(quote,[word,undeclared]).recommendationExpressions,judge(quote,[undeclared,word]).recommendationExpressions);
+});

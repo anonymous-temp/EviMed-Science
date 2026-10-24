@@ -36,3 +36,23 @@ test('V09 legacy positive passages remain unknown; partial and unjudged preserve
  });
 
 test('V09 missing immutable provenance is a payload digest, never a manufactured assessment version',()=>{const view=presentGeoAnalysis(selected([row('old',[], 'complete',{assessmentFacts:null,facts:{judgeExtract:{recommendations:['Old passage']}}})]),{viewId:'V09'},{allRows:true});const expression=view.rows.find(r=>r.dimensions.kind==='expression');assert.equal(expression.dimensions.assessmentVersion,null);assert.match(expression.dimensions.assessmentPayloadDigest,/^[a-f0-9]{64}$/);});
+
+test('V09 Q2 rejects excess output during expression expansion before visiting later observations',()=>{
+ const rows=Array.from({length:19992},(_,n)=>row(`scale-${n}`,[item('Alpha recommended.','recommended')]));
+ rows.push({get status(){throw new Error('An over-limit analysis must stop before reading tail observations.');}});
+ assert.throws(()=>presentGeoAnalysis(selected(rows),{viewId:'V09'},{allRows:true}),error=>error.status===422&&error.code==='geo_read_filter_invalid');
+});
+test('V09 Q2 accepted near-limit scope preserves full row order exact answer members and unknown coverage',()=>{
+ const rows=Array.from({length:19990},(_,n)=>row(`scale-${n}`,[item('Alpha recommended.',n%3===0?'unknown':'recommended')]));
+ const memberItems=new Map(),view=presentGeoAnalysis(selected(rows),{viewId:'V09'},{allRows:true,memberItems});
+ assert.equal(view.page.total,19999);
+ const expressions=view.rows.filter(row=>row.dimensions.kind==='expression');
+ assert.deepEqual(expressions.map(row=>row.dimensions.snapshotId),rows.map(row=>row.snapshotId));
+ for(const position of [0,9999,19989]){
+  const member=expressions[position].values.answers.members,items=memberItems.get(`${member.rowKey}:${member.columnKey}`);
+  assert.equal(items.length,1);assert.equal(items[0].snapshotId,rows[position].snapshotId);
+ }
+ assert.equal(view.rows.find(row=>row.dimensions.category==='unclassified').values.answers.value,6664);
+ rows.push(row('scale-edge',[item('Alpha recommended.','recommended')]));
+ assert.equal(presentGeoAnalysis(selected(rows),{viewId:'V09'},{allRows:true}).page.total,20000);
+});
