@@ -1328,8 +1328,9 @@ export class FrontierProfiles {
   /**
    * Save the onboarding answer (`PUT /api/frontier/prefs`): `role` (a `FRONTIER_READER_ROLES` word or null), `specialties`
    * (at most three; finishing needs one), `interests` (at most ten tag slugs of the tree or entity keys; a tag is kept by the
-   * address that stands for it now), `done` (finished now) or `skipped` (skipped now). A field not sent is left as it is. The
-   * cached ranking is dropped, so the next read ranks with the answer.
+   * address that stands for it now), `done` (finished) or `skipped` (skipped) — each time kept as the first, so an answer
+   * changed later is not a second onboarding. A field not sent is left as it is. The cached ranking is dropped, so the next
+   * read ranks with the answer.
    * @param {string} userId @param {Record<string, unknown>} body
    */
   async savePrefs(userId, body) {
@@ -1373,8 +1374,8 @@ export class FrontierProfiles {
         role = CASE WHEN $7 THEN EXCLUDED.role ELSE evimed_frontier.user_prefs.role END,
         specialties = CASE WHEN $8 THEN EXCLUDED.specialties ELSE evimed_frontier.user_prefs.specialties END,
         interests = CASE WHEN $9 THEN EXCLUDED.interests ELSE evimed_frontier.user_prefs.interests END,
-        onboarded_at = coalesce(EXCLUDED.onboarded_at, evimed_frontier.user_prefs.onboarded_at),
-        onboarding_skipped_at = coalesce(EXCLUDED.onboarding_skipped_at, evimed_frontier.user_prefs.onboarding_skipped_at)`,
+        onboarded_at = coalesce(evimed_frontier.user_prefs.onboarded_at, EXCLUDED.onboarded_at),
+        onboarding_skipped_at = coalesce(evimed_frontier.user_prefs.onboarding_skipped_at, EXCLUDED.onboarding_skipped_at)`,
     [userId, set.role ?? current.role, specialties, set.interests ?? current.interests, body.done === true ? at : null, body.skipped === true ? at : null,
       "role" in set, "specialties" in set, "interests" in set]);
     await this.database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [userId]);
