@@ -94,3 +94,43 @@ test('V22 admitted 20,000-page one-round upper bound indexes raw citation lists 
  assert.ok(built.rows.every(row=>row.values.observation.value==='present'));assert.equal(built.chart.cells.length,15);
  console.log(JSON.stringify({fixture:'V22-20k-pages-one-round',rows:count,rawUrlReads:urlReads,elapsedMs:Math.round(performance.now()-started),endHeapMiB:Math.round(process.memoryUsage().heapUsed/1024/1024)}));
 });
+test('V22 only valid linked repeats supply presence while non-valid URL provenance stays drillable', () => {
+    for (const status of ['refusal', 'failed', 'error', 'suspect']) for (const declaration of [false, true]) for (const mixed of ['none', 'valid_empty', 'valid_linked']) {
+        const selected = fixture();
+        selected.rows = [
+            { ...selected.rows[0], status, surface: declaration ? complete : { mode: 'web' }, repeatIndex: 0 },
+            { ...selected.rows[2], snapshotId: 'absent', roundId: 'r2', askedAt: '2026-10-02T00:00:00Z' },
+            { ...selected.rows[0], snapshotId: 'positive', roundId: 'r3', askedAt: '2026-10-03T00:00:00Z', surface: complete },
+        ];
+        if (mixed !== 'none') selected.rows.push({ ...selected.rows[0], snapshotId: 'valid-repeat', repeatIndex: 1, status: 'valid', surface: complete, citations: mixed === 'valid_linked' ? [link] : [] });
+        selected.computed.balance.deduped = selected.rows;
+        selected.rounds = selected.rounds.slice(0, 3);
+        const ctx = context(), view = presentGeoAnalysis(selected, { viewId: 'V22' }, ctx);
+        const [first, absent, positive] = view.rows, hasValidPositive = mixed === 'valid_linked';
+        const detail = `${status}, declared ${declaration}, mixed ${mixed}`;
+        assert.equal(first.values.observation.value, hasValidPositive ? 'present' : null, detail);
+        assert.equal(first.values.observation.state, hasValidPositive ? 'known' : 'unknown', detail);
+        assert.equal(first.values.observation.reason, hasValidPositive ? null : 'answer_not_returned', detail);
+        assert.equal(first.values.transition.value, hasValidPositive ? 'first_observed_in_scope' : null, detail);
+        assert.equal(first.dimensions.firstObserved, hasValidPositive ? '2026-10-01T00:00:00Z' : '2026-10-03T00:00:00Z');
+        assert.equal(absent.values.observation.value, 'absent');
+        assert.equal(absent.values.transition.value, hasValidPositive ? 'no_longer_observed' : 'absent');
+        assert.equal(absent.dimensions.previousRoundId, hasValidPositive ? 'r1' : null);
+        assert.deepEqual(ctx.memberItems.get(`${absent.key}:transition`).map(item => item.snapshotId), hasValidPositive ? ['a', 'valid-repeat', 'absent'] : ['absent']);
+        assert.equal(positive.values.observation.value, 'present');
+        assert.equal(positive.values.transition.value, 'new_appearance');
+        assert.deepEqual(ctx.memberItems.get(`${positive.key}:transition`).map(item => item.snapshotId), ['absent', 'positive']);
+        assert.equal(view.chart.cells[0].value, hasValidPositive ? 1 : null);
+        const frozen = freezeGeoAnalysisDocument(view);
+        assert.equal(frozen.cover.analysis.rows[0].values.observation.value, hasValidPositive ? 'present' : null);
+        assert.equal(frozen.typedTable.rows[0].observation, hasValidPositive ? 'present' : null);
+        assert.equal(frozen.typedTable.rows[0].observation_state, hasValidPositive ? 'known' : 'unknown');
+        assert.match(frozen.canonicalMarkdown, /有效重复中的引用仍可观察/);
+        assert.match(frozen.canonicalMarkdown, /未引用须所有相关重复均有效且引用列表完整/);
+        if (status === 'refusal') {
+            assert.deepEqual(ctx.memberItems.get(`${first.key}:observation`)[0].source.pages[0].preservedCitations, [link]);
+            const sources = presentGeoAnalysis(selected, { viewId: 'V19' }, context());
+            assert.equal(sources.rows[0].values.answers.value, hasValidPositive ? 3 : 2, 'V19 keeps admitted refused citation provenance');
+        }
+    }
+});

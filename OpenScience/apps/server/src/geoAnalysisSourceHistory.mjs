@@ -61,7 +61,8 @@ export function buildGeoSourceHistory(selected, view, base) {
             const points = new Map();
             for (const round of ordered) {
                 const sampled = collections.get(key).get(round.id), batch = sampled.batch;
-                const observation = batch.some(row => preserved.has(row.snapshotId)) ? 'present' : sampled.reason ? null : 'absent';
+                // Only a valid repeat can establish presence; completeness and other repeats still govern absence.
+                const observation = batch.some(row => row.status === 'valid' && preserved.has(row.snapshotId)) ? 'present' : sampled.reason ? null : 'absent';
                 points.set(round.id, { ...sampled, roundId: round.id, observation, items: batch.map(row => member(row, page, preserved.get(row.snapshotId))), previous: null, transition: null });
             }
             // Cohort chronology is its own answer timestamps, even when another cohort was sampled earlier in a round.
@@ -118,7 +119,7 @@ export function buildGeoSourceHistory(selected, view, base) {
         availability: { status: rows.length ? 'ready' : 'empty', reasons: ['citation_history_selected_scope', 'citation_completeness_required'], remedy: null },
         definition: {
             ...base.definition, unit: 'observations',
-            countingRule: 'Preserved citation presence is observable. Absence requires a returned valid answer and an explicit complete linked citation list. Legacy empty arrays, linkless retrieval, refusal, failure and missing samples remain unknown. First observation is in selected scope only. Citation completeness is the collection producer’s preserved declaration, not evidence of exhaustive knowledge across the web or model.',
+            countingRule: 'Preserved citation presence requires a valid returned repeat with a usable URL; a non-valid repeat cannot establish presence. A valid positive remains observable in a mixed batch. Absence requires every selected repeat to be valid with an explicit complete linked citation list. Without a valid positive, legacy empty arrays, linkless retrieval, refusal, failure and missing samples remain unknown. First observation is in selected scope only. Citation completeness is the collection producer’s preserved declaration, not evidence of exhaustive knowledge across the web or model.',
             denominatorRule: 'Only the same immutable question, set version, exact engine and sampling mode form a comparison cohort. New appearance requires prior comparable observable absence; no-longer-observed requires later comparable observable absence. Unknown intervals remain blank. No fitted citation lifetime or causal interpretation.',
         },
     };

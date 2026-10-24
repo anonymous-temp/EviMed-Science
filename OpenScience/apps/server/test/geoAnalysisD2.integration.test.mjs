@@ -124,3 +124,62 @@ test('V19 bounded chart remainder is a distinct-answer union retained in real pa
     if (process.env.GEO_D2_RECEIPTS_DIR)
         await writeFile(`${process.env.GEO_D2_RECEIPTS_DIR}/native-remainder.json`, JSON.stringify({ fullRows: 70, pagedNative: true, pages: native.frozenPages.pages.length, chartCells: native.chart.cells.length, remainder: remainder.value, simpleSum: 69, digest: full.digest }, null, 2));
 });
+test('V22 eligible repeat status controls stored presence and absence without losing valid positives or raw links', opts, async () => {
+    await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'d2-status-control','Status history',1048576)", [user.id]);
+    const statusProject = await store.createProject({ userId: user.id, projectId: 'd2-status-control', engines: ['deepseek'], coverageDays: 90, product: {} });
+    await store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('d2-status-g',$1,$2,1,'P2','Status')", [user.id, statusProject.id]);
+    await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) VALUES('d2-status-q',$1,$2,'d2-status-g',1,'P2','Status original question?',true)", [user.id, statusProject.id]);
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const roundId = `d2-status-r${n}`, at = `2026-10-${10 + n}T00:00:00Z`;
+        await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES($1,$2,$3,'baseline','done',1,'{deepseek}',$4,'{\"mode\":\"web\"}')", [roundId, user.id, statusProject.id, at.slice(0, 10)]);
+        const statuses = [3, 7, 8].includes(n) ? ['refusal', 'valid'] : [n === 1 ? 'refusal' : n === 2 ? 'failed' : 'valid'];
+        for (const [repeatIndex, status] of statuses.entries()) {
+            const id = `d2-status-s${n}-${status}`, jobId = `${id}-job`;
+            await store.query("INSERT INTO evimed_geo.probe_jobs(id,user_id,geo_project_id,round_id,question_id,engine,repeat_index,status) VALUES($1,$2,$3,$4,'d2-status-q','deepseek',$5,'done')", [jobId, user.id, statusProject.id, roundId, repeatIndex]);
+            await measure.insertSnapshot({ id, userId: user.id, geoProjectId: statusProject.id, roundId, questionId: 'd2-status-q', engine: 'deepseek', askedAt: new Date(at), status, answerText: `Original ${status} result`, answerSha256: null, citations: [4, 6, 8].includes(n) || n === 3 && status === 'valid' ? [] : [link], surface: { mode: 'web', citationObservation: complete }, screenshotSha256: null, latencyMs: null, warnings: [], probeJobId: jobId });
+        }
+    }
+    const view = await service.analysis(user, statusProject.id, { from: '2026-10-11', to: '2026-10-18', viewId: 'V22' });
+    const full = await freezeSelectedGeoAnalysis(store, statusProject, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest });
+    assert.deepEqual(full.rows.map(row => [row.dimensions.roundId, row.values.observation.value, row.values.transition.value]), [
+        ['d2-status-r1', null, null], ['d2-status-r2', null, null], ['d2-status-r3', null, null],
+        ['d2-status-r4', 'absent', 'absent'], ['d2-status-r5', 'present', 'new_appearance'], ['d2-status-r6', 'absent', 'no_longer_observed'],
+        ['d2-status-r7', 'present', 'new_appearance'], ['d2-status-r8', null, null],
+    ]);
+    for (const row of full.rows.slice(0, 3)) {
+        assert.equal(row.values.observation.reason, 'answer_not_returned');
+        assert.equal(row.values.observation.state, 'unknown');
+        const members = await service.analysisMembers(user, statusProject.id, { selectionRef: view.selection.reference, ...view.view, expectedDigest: view.digest, rowKey: row.key, columnKey: 'observation' });
+        assert.ok(members.items.some(item => item.status !== 'valid'));
+        for (const item of members.items) {
+            assert.deepEqual(item.answer.citations, item.snapshotId === 'd2-status-s3-valid' ? [] : [link], 'the raw URL provenance remains available even when status makes history unknown');
+            assert.deepEqual(item.answer.surface.citationObservation, complete);
+        }
+        if (row.dimensions.roundId === 'd2-status-r3') assert.deepEqual(members.items.map(item => item.repeatIndex).sort(), [0, 1]);
+    }
+    const firstAbsent = full.rows[3], laterAbsent = full.rows[5];
+    for (const [row, ids] of [[firstAbsent, ['d2-status-s4-valid']], [laterAbsent, ['d2-status-s5-valid', 'd2-status-s6-valid']]]) {
+        const members = await service.analysisMembers(user, statusProject.id, { selectionRef: view.selection.reference, ...view.view, expectedDigest: view.digest, rowKey: row.key, columnKey: 'transition' });
+        assert.deepEqual(members.items.map(item => item.snapshotId), ids);
+    }
+    const sources = await service.analysis(user, statusProject.id, { selectionRef: view.selection.reference, viewId: 'V19' });
+    assert.equal(sources.rows[0].values.answers.value, 5, 'V19 retains D1 eligible refused citations independently of V22 history');
+    const mixedPositive = await service.analysisMembers(user, statusProject.id, { selectionRef: view.selection.reference, ...view.view, expectedDigest: view.digest, rowKey: full.rows[6].key, columnKey: 'observation' });
+    assert.ok(mixedPositive.items.some(item => item.status === 'valid' && item.source.pages[0].preservedCitations.some(citation => citation.url === link.url)), 'a valid linked repeat remains a known positive even beside a refused repeat');
+    assert.equal(full.rows[7].values.observation.reason, 'answer_not_returned', 'a mixed empty batch cannot establish absence despite complete declarations');
+    const document = freezeGeoAnalysisDocument(full);
+    assert.deepEqual(document.typedTable.rows.slice(0, 3).map(row => [row.observation, row.observation_state, row.observation_reason, row.transition]), [[null, 'unknown', 'answer_not_returned', null], [null, 'unknown', 'answer_not_returned', null], [null, 'unknown', 'answer_not_returned', null]]);
+    const requests = [];
+    await service.selectedExport(user, statusProject, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest, formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, { requestFrozen: async (...args) => { requests.push(args); return { id: 'd2-status-export' }; } });
+    assert.deepEqual(requests[0][1].typedTable.rows, document.typedTable.rows);
+    const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
+    service.planContexts = adapter;
+    const staged = await adapter.stage(user, statusProject.id, { requestKey: 'd2-status-history', sessionId: 'd2-status-session', mode: 'analysis', selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest, intent: 'explain' });
+    const request = { requestId: 'd2-status-request', sessionId: 'd2-status-session', content: [{ type: 'text', text: 'Explain status-qualified citation history.' }], geoPlanContext: { referenceId: staged.referenceId } };
+    await adapter.prepare(user, { id: statusProject.projectId, userId: user.id }, request);
+    await adapter.bind(user, { id: statusProject.projectId, userId: user.id }, request);
+    const native = await service.runtimeRead(statusProject, 'analysis', { planContextRef: staged.referenceId, limit: 50 });
+    assert.deepEqual(native.rows, full.rows);
+    assert.deepEqual(native.chart.cells.slice(0, 3).map(cell => [cell.value, cell.state, cell.reason]), [[null, 'unknown', 'answer_not_returned'], [null, 'unknown', 'answer_not_returned'], [null, 'unknown', 'answer_not_returned']]);
+    if (process.env.GEO_D2_RECEIPTS_DIR) await writeFile(`${process.env.GEO_D2_RECEIPTS_DIR}/document-v22.json`, JSON.stringify({ ...document, version: 1, rendererVersion: 'pandoc-chromium-v1', sourceDigest: full.digest, sourceType: 'typed-table', formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, null, 2));
+});
