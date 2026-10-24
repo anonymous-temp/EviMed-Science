@@ -651,8 +651,11 @@ test("the read-only views read a memory light: texts cut, observations to their 
   // The map's read: run summaries left to the runs, the newest first, bounded, light; a project narrows it to that project's own.
   await store.upsertRecord(alpha, record({ key: "light.summary", kind: "run_summary", scope: "project", scopeId: "p-light", status: "active" }));
   const own = await store.upsertRecord(alpha, record({ key: "light.project", kind: "project_fact", scope: "project", scopeId: "p-light" }));
-  await store.upsertRecord(alpha, record({ key: "light.elsewhere", kind: "project_fact", scope: "project", scopeId: "p-other" }));
-  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() + interval '1 minute' WHERE user_id=$1 AND id=$2", [alpha, own.id]);
+  const elsewhere = await store.upsertRecord(alpha, record({ key: "light.elsewhere", kind: "project_fact", scope: "project", scopeId: "p-other" }));
+  // The order is the times, so the times are set: an update and an insert a millisecond apart order either way on a busy runner.
+  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() + interval '2 minutes' WHERE user_id=$1 AND id=$2", [alpha, own.id]);
+  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() + interval '1 minute' WHERE user_id=$1 AND id=$2", [alpha, elsewhere.id]);
+  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() - interval '1 minute' WHERE user_id=$1 AND id=$2", [alpha, first.id]);
   const mapped = await store.mapRecords(alpha, { limit: 5 });
   assert.deepEqual(mapped.map((item) => item.key), ["light.project", "light.elsewhere", "light.view"]);
   assert.equal(mapped[2].value.length, 1_000);
