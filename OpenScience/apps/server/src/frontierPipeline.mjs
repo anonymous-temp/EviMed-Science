@@ -2423,7 +2423,7 @@ export class FrontierPipeline {
         FOR UPDATE OF i SKIP LOCKED)
       UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
       RETURNING i.id, i.title_raw, i.title_zh, i.platform, i.primary_source_id, i.published_at, i.lease_until,
-        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane`,
+        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.selected, i.score_total`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", LEAD_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs)])).rows;
     if (!claimed.length) return;
@@ -2438,7 +2438,9 @@ export class FrontierPipeline {
       const result = await frontierWriteLead(this.editor, {
         sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, titleZh: item.title_zh,
-        text: reader.text, kind: reader.source, post: item.platform === "x", genre: frontierItemGenre(item) });
+        text: reader.text, kind: reader.source, post: item.platform === "x", genre: frontierItemGenre(item),
+        // Above an 「AI 要点」 (an item whose reader is read, of a genre with fields) the 导读 leaves the details to it.
+        briefed: frontierReaderWorthy(item, this.threshold) && frontierBriefWanted(frontierItemGenre(item)) });
       if (result.error && (frontierProviderUnavailable(result.error) || result.error === "usage_budget_exceeded" || result.error === "frontier_editor_unavailable")) {
         if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
         return false;
