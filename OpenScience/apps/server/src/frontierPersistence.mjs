@@ -323,6 +323,9 @@ ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_refs jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_basis text;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_at timestamptz(3);
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS text_arrived_at timestamptz(3);
+-- ct-base 2026-10-24: what the item is as a reader names it (@evimed/domain FRONTIER_GENRES; null until written)
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS genre text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS genre_basis text CHECK (genre_basis IN ('code', 'model'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_origin text CHECK (body_text_origin IN ('oa-pdf'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS oa_pdf_tried_at timestamptz(3);
 -- rt2 2026-10-22: a full text read from an open-access PDF is the paper to its references, up to 100,000 characters, and its
