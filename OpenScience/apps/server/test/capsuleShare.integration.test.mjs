@@ -532,8 +532,7 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   const triggersAt = (offset) => new LearningTriggers({ jobs: { enqueue: async (_user, _kind, payload) => queued.push(payload) }, agentRuns: { list: async () => [], runWorkflowProjection: async () => null },
     audit: async (event, detail) => audited.push([event, detail.code]),
     guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY }) });
-  // A run teaches by being corrected (the researcher steered it) or, settled later, by being one of three clean ones of one shape; the
-  // first is what is at the moment it finishes, so these runs were each steered once.
+  // A correction typed into the run is what queues a lesson since 2026-10-23 (the sampled `delivered` lesson is gone); the guest mark rides on it.
   const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled, corrections: 1 }));
   const early = await triggersAt(0).afterRun(project, { ...guestA });
   await triggersAt(0).afterRun(project, { ...guestB });

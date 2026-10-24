@@ -947,7 +947,7 @@ test("OpenViking as an engine: the two switches follow whether the engine is the
   assert.equal(base.openVikingModelDailyBudgetCny, 50);
   assert.equal(base.openVikingEngineCheckMs, 1_800_000);
   assert.equal(base.openVikingModelKey, "");
-  assert.match(base.openVikingPin.version, /^\d+\.\d+\.\d+$/);
+  assert.match(base.openVikingPin.version, /^\d+\.\d+\.\d+(?:\.\d+)?$/, "upstream tags a patch of a patch as a fourth number (v0.5.1.1)");
   assert.deepEqual(Object.keys(base.openVikingPin.skills).sort(), ["knowledge-graph", "llm-wiki"]);
 
   const withEngine = loadConfig({ rootDir: repoRoot, ...engine });
