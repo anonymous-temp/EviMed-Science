@@ -305,6 +305,8 @@ describe("an open-access paper with its whole text", () => {
       ["[2]", "FDA 受理口服 PCSK9 抑制剂的上市申请", "/app/frontier/items/f-1"],
     ]);
     expect(cites.every((link) => link.parentElement!.tagName === "SUP")).toBe(true);
+    // The marker's size is a step of the scale, not the base sheet's 75% of the paragraph (13.5 px beside an 18 px text).
+    expect(cites.every((link) => link.parentElement!.classList.contains("text-caption"))).toBe(true);
     // [3] names no report: it stays the words it is.
     expect(paragraph).toHaveTextContent("还要看后续数据[3]。");
     const rows = within(within(insight).getByRole("list", { name: "解读引用的报道" })).getAllByRole("listitem");
