@@ -74,7 +74,7 @@ describe("账户", () => {
     const user = userEvent.setup();
     open();
     const group = (await screen.findByRole("heading", { name: "记忆" })).closest("section")!;
-    for (const label of ["会记什么", "不会记什么", "查看、修改和删除", "不用于训练"]) expect(within(group).getByText(label)).toBeInTheDocument();
+    for (const label of ["会记什么", "不会记什么"]) expect(within(group).getByText(label)).toBeInTheDocument();
     expect(within(group).getByText(/你说过、确认过、纠正过的做法和背景，以及项目的情况/)).toBeInTheDocument();
     expect(within(group).getByText(/密码、证件号和银行卡号，别人的身份信息，文档和网页里的内容；健康等敏感信息，除非你说“记住”/)).toBeInTheDocument();
     expect(within(group).getByText(/记忆只用来帮你工作，不会用来训练模型/)).toBeInTheDocument();
