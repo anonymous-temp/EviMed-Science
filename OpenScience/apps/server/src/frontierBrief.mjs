@@ -39,13 +39,13 @@ const BRIEF_TIMEOUT_MS = 60_000;
  */
 
 /** @param {string} key @param {string} label @param {string} hint @returns {FrontierBriefField} */
-const text = (key, label, hint) => Object.freeze({ key, label, kind: /** @type {const} */ ("text"), hint });
+const textField = (key, label, hint) => Object.freeze({ key, label, kind: /** @type {const} */ ("text"), hint });
 /** A field of names and identifiers (a registry number, a journal, a funder): Chinese prose is not asked of it. @param {string} key @param {string} label @param {string} hint @returns {FrontierBriefField} */
-const names = (key, label, hint) => Object.freeze({ key, label, kind: /** @type {const} */ ("text"), hint, names: true });
+const namesField = (key, label, hint) => Object.freeze({ key, label, kind: /** @type {const} */ ("text"), hint, names: true });
 /** @param {string} key @param {string} label @param {string} hint @returns {FrontierBriefField} */
-const items = (key, label, hint) => Object.freeze({ key, label, kind: /** @type {const} */ ("items"), hint });
+const itemsField = (key, label, hint) => Object.freeze({ key, label, kind: /** @type {const} */ ("items"), hint });
 /** @param {string} key @param {string} label @param {string} hint @returns {FrontierBriefQuote} */
-const quote = (key, label, hint) => Object.freeze({ key, label, hint });
+const quoteField = (key, label, hint) => Object.freeze({ key, label, hint });
 
 // The research rows (paper: Medscape MedBrief, NEJM Journal Watch, 2 Minute Medicine; guideline: 梅斯 指南, JAMA Guideline Synopsis;
 // policy: 国家医保局 / 卫健委 政策解读; approval: FDA oncology approval notices, NMPA 批准公告; safety: FDA Drug Safety Communication,
@@ -55,113 +55,113 @@ const quote = (key, label, hint) => Object.freeze({ key, label, hint });
 export const FRONTIER_BRIEF_FIELDS = Object.freeze({
   paper: Object.freeze({
     points: Object.freeze([
-      text("question", "研究问题", "研究要回答的临床或科学问题，一句话"),
-      text("design", "设计与对象", "研究设计、人群、样本量、干预与对照、随访时间"),
-      items("results", "主要结果", "主要终点的两组结果及效应量和置信区间；最多再加一条最重要的次要终点，每条一句"),
-      text("safety", "安全性", "不良事件或安全性结果"),
-      text("limits", "局限", "原文写明的、最限制外推的一两条局限"),
+      textField("question", "研究问题", "研究要回答的临床或科学问题，一句话"),
+      textField("design", "设计与对象", "研究设计、人群、样本量、干预与对照、随访时间"),
+      itemsField("results", "主要结果", "主要终点的两组结果及效应量和置信区间；最多再加一条最重要的次要终点，每条一句"),
+      textField("safety", "安全性", "不良事件或安全性结果"),
+      textField("limits", "局限", "原文写明的、最限制外推的一两条局限"),
     ]),
-    quote: quote("conclusion", "作者结论", "摘要或正文里作者结论（Conclusions / 结论）的原句"),
+    quote: quoteField("conclusion", "作者结论", "摘要或正文里作者结论（Conclusions / 结论）的原句"),
   }),
   preprint: Object.freeze({
     points: Object.freeze([
-      text("question", "研究问题", "研究要回答的问题，一句话"),
-      text("design", "设计与样本", "研究设计、数据来源、人群、样本量"),
-      items("results", "主要发现", "主要结果及效应量和置信区间，写成关联或估计，每条一句"),
-      names("funding", "资助与利益冲突", "原文写明的资助方、作者的企业任职或利益冲突"),
-      text("limits", "局限", "原文写明的局限"),
+      textField("question", "研究问题", "研究要回答的问题，一句话"),
+      textField("design", "设计与样本", "研究设计、数据来源、人群、样本量"),
+      itemsField("results", "主要发现", "主要结果及效应量和置信区间，写成关联或估计，每条一句"),
+      namesField("funding", "资助与利益冲突", "原文写明的资助方、作者的企业任职或利益冲突"),
+      textField("limits", "局限", "原文写明的局限"),
     ]),
-    quote: quote("conclusion", "作者结论", "作者结论的原句"),
+    quote: quoteField("conclusion", "作者结论", "作者结论的原句"),
   }),
   guideline: Object.freeze({
     points: Object.freeze([
-      text("issuer", "制定机构与版本", "制定或发布的学会、机构，版本或年份"),
-      text("population", "适用人群", "指南针对的疾病、人群和场景"),
-      items("changes", "主要更新", "改变最大的推荐，写成「由……调整为……」并照抄原文的推荐等级和证据级别；没有对比时写主要推荐及其等级，每条一句"),
-      text("basis", "依据", "调整所依据的研究或证据（研究名称、系统评价、GRADE 等）"),
+      textField("issuer", "制定机构与版本", "制定或发布的学会、机构，版本或年份"),
+      textField("population", "适用人群", "指南针对的疾病、人群和场景"),
+      itemsField("changes", "主要更新", "改变最大的推荐，写成「由……调整为……」并照抄原文的推荐等级和证据级别；没有对比时写主要推荐及其等级，每条一句"),
+      textField("basis", "依据", "调整所依据的研究或证据（研究名称、系统评价、GRADE 等）"),
     ]),
-    quote: quote("recommendation", "推荐意见", "最重要的一条推荐意见的原句，连同它的推荐等级"),
+    quote: quoteField("recommendation", "推荐意见", "最重要的一条推荐意见的原句，连同它的推荐等级"),
   }),
   policy: Object.freeze({
     points: Object.freeze([
-      text("document", "发文机关与文号", "发文机关、文件名称和文号"),
-      text("audience", "适用对象", "适用的机构、人群、药品或产品范围"),
-      items("changes", "核心内容", "文件规定或改变的主要措施，每条一句"),
-      items("numbers", "关键数字", "原文给出的数量、比例、金额，每条一句"),
-      text("timeline", "时间节点", "施行日期、申报或截止时间、过渡期"),
+      textField("document", "发文机关与文号", "发文机关、文件名称和文号"),
+      textField("audience", "适用对象", "适用的机构、人群、药品或产品范围"),
+      itemsField("changes", "核心内容", "文件规定或改变的主要措施，每条一句"),
+      itemsField("numbers", "关键数字", "原文给出的数量、比例、金额，每条一句"),
+      textField("timeline", "时间节点", "施行日期、申报或截止时间、过渡期"),
     ]),
-    quote: quote("provision", "原文规定", "最关键的一条规定或官方澄清的原句"),
+    quote: quoteField("provision", "原文规定", "最关键的一条规定或官方澄清的原句"),
   }),
   approval: Object.freeze({
     points: Object.freeze([
-      text("decision", "批准事项", "哪个机构、做了什么决定（常规批准、加速批准、附条件批准、优先审评、受理、积极意见、拒绝或撤回），药品通用名和商品名、企业"),
-      text("evidence", "关键研究", "关键试验的名称、设计（单臂或随机）、样本量、主要终点结果及置信区间"),
-      text("dose", "用法用量", "原文写明的剂量和用法"),
-      text("conditions", "附加条件", "原文写明的确证性研究要求、突破性疗法、优先审评、上市后要求"),
-      text("safety", "安全性", "常见不良反应、警告或使用限制"),
+      textField("decision", "批准事项", "哪个机构、做了什么决定（常规批准、加速批准、附条件批准、优先审评、受理、积极意见、拒绝或撤回），药品通用名和商品名、企业"),
+      textField("evidence", "关键研究", "关键试验的名称、设计（单臂或随机）、样本量、主要终点结果及置信区间"),
+      textField("dose", "用法用量", "原文写明的剂量和用法"),
+      textField("conditions", "附加条件", "原文写明的确证性研究要求、突破性疗法、优先审评、上市后要求"),
+      textField("safety", "安全性", "常见不良反应、警告或使用限制"),
     ]),
-    quote: quote("indication", "适应症原文", "批准适应症的原句"),
+    quote: quoteField("indication", "适应症原文", "批准适应症的原句"),
   }),
   safety: Object.freeze({
     points: Object.freeze([
-      text("action", "监管措施", "哪个机构采取了什么措施：黑框警告、禁忌、说明书修订、召回级别、停用或短缺"),
-      text("risk", "风险", "发现了什么安全问题，严重程度"),
-      text("products", "涉及产品与人群", "涉及的药品、器械、批号，受影响的患者人群"),
-      items("professionals", "医务人员须知", "原文写给医务人员的处置建议，每条一句"),
-      items("patients", "患者须知", "原文写给患者的建议，每条一句"),
-      text("evidence", "依据", "原文给出的病例报告数、数据来源"),
+      textField("action", "监管措施", "哪个机构采取了什么措施：黑框警告、禁忌、说明书修订、召回级别、停用或短缺"),
+      textField("risk", "风险", "发现了什么安全问题，严重程度"),
+      textField("products", "涉及产品与人群", "涉及的药品、器械、批号，受影响的患者人群"),
+      itemsField("professionals", "医务人员须知", "原文写给医务人员的处置建议，每条一句"),
+      itemsField("patients", "患者须知", "原文写给患者的建议，每条一句"),
+      textField("evidence", "依据", "原文给出的病例报告数、数据来源"),
     ]),
-    quote: quote("warning", "警示原文", "说明书或公告里警示内容的原句"),
+    quote: quoteField("warning", "警示原文", "说明书或公告里警示内容的原句"),
   }),
   industry: Object.freeze({
     points: Object.freeze([
-      text("event", "事件", "哪家公司做了什么：授权、并购、融资、合作、研发读出、财报或人事"),
-      text("terms", "交易条款", "首付款、里程碑、总额、分成、区域、股权或融资轮次与金额"),
-      text("asset", "资产与阶段", "涉及的药物或技术、分子类型、靶点、适应症和研发阶段"),
-      text("data", "关键数据", "原文给出的疗效、安全性或经营数据，与安慰剂或对照的差值"),
-      text("benchmark", "对标", "原文提到的前期数据、竞品数据或市场预期"),
-      text("next", "下一步", "原文写明的申报、III 期或上市时间"),
+      textField("event", "事件", "哪家公司做了什么：授权、并购、融资、合作、研发读出、财报或人事"),
+      textField("terms", "交易条款", "首付款、里程碑、总额、分成、区域、股权或融资轮次与金额"),
+      textField("asset", "资产与阶段", "涉及的药物或技术、分子类型、靶点、适应症和研发阶段"),
+      textField("data", "关键数据", "原文给出的疗效、安全性或经营数据，与安慰剂或对照的差值"),
+      textField("benchmark", "对标", "原文提到的前期数据、竞品数据或市场预期"),
+      textField("next", "下一步", "原文写明的申报、III 期或上市时间"),
     ]),
     quote: null,
   }),
   conference: Object.freeze({
     points: Object.freeze([
-      names("meeting", "会议与摘要号", "会议名称、摘要编号、研究名称或注册号、汇报人"),
-      text("design", "设计", "是否随机、盲法、分期、人群、样本量、主要终点"),
-      items("results", "主要结果", "主要终点结果及效应量和置信区间，每条一句"),
-      text("safety", "安全性", "严重或 3 级以上不良事件的两组对比"),
-      text("limits", "局限", "原文写明的局限：期中分析、非随机、单一地区、总生存不成熟等"),
-      names("publication", "发表情况", "是否同步发表及期刊"),
+      namesField("meeting", "会议与摘要号", "会议名称、摘要编号、研究名称或注册号、汇报人"),
+      textField("design", "设计", "是否随机、盲法、分期、人群、样本量、主要终点"),
+      itemsField("results", "主要结果", "主要终点结果及效应量和置信区间，每条一句"),
+      textField("safety", "安全性", "严重或 3 级以上不良事件的两组对比"),
+      textField("limits", "局限", "原文写明的局限：期中分析、非随机、单一地区、总生存不成熟等"),
+      namesField("publication", "发表情况", "是否同步发表及期刊"),
     ]),
-    quote: quote("conclusion", "研究者结论", "研究者或讲者结论的原句"),
+    quote: quoteField("conclusion", "研究者结论", "研究者或讲者结论的原句"),
   }),
   trial: Object.freeze({
     points: Object.freeze([
-      names("registry", "登记号", "试验登记号（NCT、CTR、ChiCTR 等）"),
-      text("design", "设计", "分期、随机与盲法、组别"),
-      text("population", "人群与样本量", "纳入的疾病和人群，计划或实际入组人数"),
-      text("arms", "干预与对照", "试验组和对照组的干预、剂量"),
-      text("endpoint", "主要终点", "主要终点及评估时间"),
-      names("sponsor", "申办方与地点", "申办方、研究中心或国家"),
-      text("status", "状态与时间", "招募状态、开始和预计完成时间；已登记结果时写主要结果"),
+      namesField("registry", "登记号", "试验登记号（NCT、CTR、ChiCTR 等）"),
+      textField("design", "设计", "分期、随机与盲法、组别"),
+      textField("population", "人群与样本量", "纳入的疾病和人群，计划或实际入组人数"),
+      textField("arms", "干预与对照", "试验组和对照组的干预、剂量"),
+      textField("endpoint", "主要终点", "主要终点及评估时间"),
+      namesField("sponsor", "申办方与地点", "申办方、研究中心或国家"),
+      textField("status", "状态与时间", "招募状态、开始和预计完成时间；已登记结果时写主要结果"),
     ]),
     quote: null,
   }),
   commentary: Object.freeze({
     points: Object.freeze([
-      text("subject", "解读的对象", "被解读的研究、指南或政策：名称、期刊、会议或机构"),
-      text("result", "原始结果", "被解读研究本身的主要结果"),
-      items("analysis", "解读要点", "解读在原始研究之外给出的背景、分析或本土意义，每条一句"),
-      text("view", "作者观点", "解读作者自己的看法或建议，写明是作者的观点"),
+      textField("subject", "解读的对象", "被解读的研究、指南或政策：名称、期刊、会议或机构"),
+      textField("result", "原始结果", "被解读研究本身的主要结果"),
+      itemsField("analysis", "解读要点", "解读在原始研究之外给出的背景、分析或本土意义，每条一句"),
+      textField("view", "作者观点", "解读作者自己的看法或建议，写明是作者的观点"),
     ]),
-    quote: quote("remark", "原文观点", "解读作者最关键的一句原话"),
+    quote: quoteField("remark", "原文观点", "解读作者最关键的一句原话"),
   }),
   news: Object.freeze({
     points: Object.freeze([
-      text("finding", "主要发现", "研究或事件的核心事实；报道研究时写主要终点是否达到"),
-      text("source", "出处", "消息依据的期刊、会议、机构或文件"),
-      text("design", "研究设计", "报道研究时的设计、人群和样本量"),
-      items("facts", "关键数字", "原文最重要的数字，每条一句"),
+      textField("finding", "主要发现", "研究或事件的核心事实；报道研究时写主要终点是否达到"),
+      textField("source", "出处", "消息依据的期刊、会议、机构或文件"),
+      textField("design", "研究设计", "报道研究时的设计、人群和样本量"),
+      itemsField("facts", "关键数字", "原文最重要的数字，每条一句"),
     ]),
     quote: null,
   }),
@@ -169,7 +169,7 @@ export const FRONTIER_BRIEF_FIELDS = Object.freeze({
   social: Object.freeze({ points: Object.freeze([]), quote: null }),
   roundup: Object.freeze({
     points: Object.freeze([
-      items("stories", "各条消息", "合集里的每一条消息，一条一句：谁的什么研究或事件，出处；最多 6 条"),
+      itemsField("stories", "各条消息", "合集里的每一条消息，一条一句：谁的什么研究或事件，出处；最多 6 条"),
     ]),
     quote: null,
   }),

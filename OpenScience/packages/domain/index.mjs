@@ -1346,6 +1346,7 @@ export {
   FRONTIER_NOTICE_KINDS,
   frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
+/** @typedef {import('./src/frontierGenres.mjs').FrontierGenre} FrontierGenre */
 // frontierGenres — 8 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
 // the genres code is sure of, and code's fallback and decision over the editor model's genre.
 export {
