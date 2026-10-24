@@ -14,6 +14,7 @@ const textDigest = (value) => digest(String(value));
 const routeDigest = (value) => textDigest(String(value).replace(/\s+/g, " ").trim());
 const validRequestId = (value) => typeof value === "string" && value.length > 0 && value.length <= 512 && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const validSession = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+const validRequestIdentity = request => validSession(request?.sessionId) && validRequestId(request?.requestId);
 const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes", "geoContextRef", "geoAnalysisRead"];
 
 export class NativeHandbookContext {
@@ -69,13 +70,18 @@ export class NativeHandbookContext {
     if (count >= MAX_ENVELOPES) throw new HttpError(503, "handbook_context_limit", "The request context limit is reached.");
   }
 
+  /** A selected operation must be addressable by the same identity the immutable route store accepts. */
+  assertRequestIdentity(request) {
+    if (!validRequestIdentity(request)) throw new HttpError(400, "handbook_request_invalid", "The native request identity cannot preserve its selected input route.");
+  }
+
   /** Freeze before forwarding, never write to a shared session context file. */
   async prepare(project, request) {
     // A steer continues the current turn's method. Reclassifying a short
     // correction here could inject another capability's handbook into it.
     // The next queued turn gets its own snapshot in the ordinary path.
     if (request?.mode === "steer") return null;
-    if (!validSession(request?.sessionId) || !validRequestId(request?.requestId)) return null;
+    if (!validRequestIdentity(request)) return null;
     const fingerprint = digest(JSON.stringify(request));
     const key = this.file(project, request.sessionId, request.requestId);
     const pending = this.preparing.get(key);

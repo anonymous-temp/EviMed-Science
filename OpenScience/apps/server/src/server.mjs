@@ -2300,7 +2300,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let geoArticleResults = null;
   /** @type {GeoPlanContext | null} */ let geoPlanContexts = null;
   const geoPlanRevisionInputs = new WeakMap();
-  const geoPlanOwnWork = new WeakSet();
+  const geoPlanOwnWork = new WeakMap();
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
@@ -5992,6 +5992,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     await assertPublicSessionPrompt(project, sessionId, binding);
     const registry = await agentRegistry;
     const selected = input?.request && geoPlanContexts ? await geoPlanContexts.routingInputForRequest(project, input.request) : null;
+    if (input?.request && geoPlanOwnWork.has(input.request) && (!selected || selected.referenceId !== geoPlanOwnWork.get(input.request))) {
+      throw new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");
+    }
     if (binding?.mode === "specialist" && !selected) return {
       effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
       effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
@@ -8177,12 +8180,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     recordPromptActor: recordExtensionPromptActor,
     prepareGeoPlan: async (user, project, request) => {
       if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
+      nativeHandbookContext.assertRequestIdentity(request);
       await geoPlanContexts.prepare(user, project, request);
     },
     bindGeoPlan: async (user, project, request) => {
       if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
       const planInput = await geoPlanContexts.bind(user, project, request);
-      geoPlanOwnWork.add(request);
+      geoPlanOwnWork.set(request, planInput?.id);
       const existing = (planInput?.actions ?? []).filter(action => action.work?.mode === "modify_existing");
       if (existing.length === 1) geoPlanRevisionInputs.set(request, { versionId: existing[0].work.resultVersionId, digest: existing[0].work.digest,
         target: { kind: "geo-article", geoProjectId: planInput.geoId, articleId: existing[0].work.articleId }, expectedHeadVersionId: existing[0].work.resultVersionId });
@@ -8197,7 +8201,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return resultRevisions.bind(user.id, project, request);
     } : null,
     preparePrompt: async (project, request) => {
-      try { return await nativeHandbookContext.prepare(project, request); }
+      try {
+        const prepared = await nativeHandbookContext.prepare(project, request);
+        if (geoPlanOwnWork.has(request) && request.mode !== "steer" && (!prepared
+          || prepared.route?.geoContextRef !== geoPlanOwnWork.get(request)
+          || ![prepared.route?.effectiveAgentId, prepared.route?.effectiveAgentVersion, prepared.route?.effectiveRuntimeAgent]
+            .every(value => typeof value === "string" && value.length > 0))) {
+          throw new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");
+        }
+        return prepared;
+      }
       catch (error) {
         if (geoPlanOwnWork.has(request)) {
           const refused = error instanceof HttpError ? error : new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");

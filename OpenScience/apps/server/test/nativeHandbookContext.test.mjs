@@ -186,3 +186,19 @@ test("adoption never borrows a later queued route when the initiating input has 
   assert.equal(await context.routeFor(project,"session",["initiating","later"],"Same forwarded text"),null);
   assert.equal((await context.routeFor(project,"session",["later","initiating"],"Same forwarded text")).effectiveAgentId,"geo-content");
 }));
+
+
+test("selected request identity validation and ordinary advisory preparation share the same native bounds",async()=>fixture(async({context,project})=>{
+  for(const requestId of ["", "x".repeat(513), "bad\nidentity", "bad\u007fidentity", 0, null, {}]) {
+    const input=request(requestId);
+    assert.throws(()=>context.assertRequestIdentity(input),{code:"handbook_request_invalid"});
+    assert.equal(await context.prepare(project,input),null,"ordinary unsupported native identities retain their advisory behavior");
+  }
+  assert.throws(()=>context.assertRequestIdentity({...request("valid"),sessionId:"s".repeat(129)}),{code:"handbook_request_invalid"});
+  const boundary=request("x".repeat(512));
+  assert.doesNotThrow(()=>context.assertRequestIdentity(boundary));
+  assert.ok(await context.prepare(project,boundary));
+  const steer={...request("legal-steer"),mode:"steer"};
+  assert.doesNotThrow(()=>context.assertRequestIdentity(steer));
+  assert.equal(await context.prepare(project,steer),null,"a legal steer keeps the initiating route instead of preparing a new one");
+}));
