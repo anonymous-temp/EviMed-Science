@@ -8,6 +8,24 @@ import {
   readFrozenGeoAnalysisPage,
 } from "../src/geoAnalysisFrozenPages.mjs";
 const project = { id: "geo", projectId: "control", userId: "owner" };
+test('paged source analysis preserves bounded top-N remainder unions and exact chart member references', async () => {
+  const citations = Array.from({ length: 200 }, (_, i) => ({ url: `https://type${i}.example/a` }));
+  const rows = ['one', 'two'].map(snapshotId => ({ snapshotId, questionId: snapshotId, engine: 'deepseek', roundId: 'r', status: 'valid', askedAt: '2026-10-01T00:00:00Z', citations, facts: {} }));
+  const selected = { scope: {}, selection: { reference: 'gsel_sources_frozen', dataRevision: 'r', methodVersion: 'm', counts: {} }, rows,
+    rounds: [{ id: 'r' }], questions: [], computed: { balance: { deduped: rows }, cells: [] } };
+  const sources = citations.map((citation, i) => ({ id: `source-${i}`, domain: new URL(citation.url).hostname, kind: `type-${i}`, name: `Type ${i}` }));
+  const view = presentGeoAnalysis(selected, { viewId: 'V17', topN: 1 }, { sources, allRows: true, memberItems: new Map() });
+  const remainder = view.chart.cells.at(-1);
+  assert.equal(remainder.members.total, 2, 'overlapping answer unions cannot be reconstructed by adding type row counts');
+  const pack = freezeGeoAnalysisPages(view, { parentId: 'gpc_parent', project, actorId: 'actor' });
+  assert.ok(pack.pages.length > 0);
+  assert.deepEqual(pack.analysis.chart, view.chart);
+  assert.equal(pack.analysis.chart.denominator, 2);
+  assert.deepEqual(pack.analysis.chart.cells.at(-1).members, remainder.members);
+  const fixture = stored(pack);
+  const page = await readFrozenGeoAnalysisPage(fixture.documents, project, fixture.parent, { limit: 10, offset: 10 });
+  assert.deepEqual(page.chart, view.chart);
+});
 test("a 600-group chart pages all canonical values without repeating the entire chart in the native envelope", async () => {
   const rows = Array.from({ length: 600 }, (_, index) => ({ snapshotId: `s${index}`, questionId: `q${index}`, groupId: `g${index}`, engine: "deepseek", roundId: "r", status: "valid", pool: "P2", repeatIndex: 0, askedAt: "2026-10-01T00:00:00Z", facts: { brands: [], statements: [], checks: { judgementCoverage: { status: "complete" } } } }));
   const metricOptions = { engines: ["deepseek"], samplingMode: "web" };

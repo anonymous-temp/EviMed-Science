@@ -24,6 +24,7 @@ export const GEO_FROZEN_ANALYSIS_LIMITS = Object.freeze({
   totalBytes: 16 * 1024 * 1024,
   previewRows: 5,
   summaryBytes: 200000,
+  chartBytes: 16 * 1024,
 });
 /** @param {any} analysis @param {{parentId:string,project:any,actorId:string}} input */
 export function freezeGeoAnalysisPages(
@@ -99,15 +100,24 @@ export function freezeGeoAnalysisPages(
     0,
     GEO_FROZEN_ANALYSIS_LIMITS.previewRows,
   );
+  // Small charts can contain independently computed unions (for example the
+  // overlapping source-type remainder). Keep those exact counts and member
+  // references; they are not recoverable by summing canonical row values.
+  // Source charts have at most topN (<=50) plus one union remainder. If their
+  // actual text exceeds the summary bound, refuse breadth rather than discard
+  // an independently computed aggregate. Other small charts are retained too.
+  const retainChart = analysis.chart && (analysis.chart.kind === 'sources'
+    || bytes(analysis.chart) <= GEO_FROZEN_ANALYSIS_LIMITS.chartBytes);
   const compact = {
     ...analysis,
     // Charts and comparison summaries duplicate the canonical row values. Native
     // readers page those rows; copying every chart cell here defeated paging.
-    chart: analysis.chart ? { kind: analysis.chart.kind ?? null, labels: [], series: [], cells: [], source: "frozen_rows" } : analysis.chart,
+    chart: retainChart ? analysis.chart : analysis.chart ? { kind: analysis.chart.kind ?? null, labels: [], series: [], cells: [], source: "frozen_rows" } : analysis.chart,
     comparison: analysis.comparison ? { ...analysis.comparison, cells: [], cellsSource: "frozen_rows" } : analysis.comparison,
     nativeProjection: { chartDigest: analysis.chart ? hash(analysis.chart) : null,
       comparisonCellsDigest: analysis.comparison?.cells ? hash(analysis.comparison.cells) : null,
-      instruction: "Read every frozen row page for full values and comparison evidence; chart arrays are not repeated in this native projection." },
+      instruction: retainChart ? "The bounded chart retains exact aggregate values and member references. Read every frozen row page for full table values and comparison evidence."
+        : "Read every frozen row page for full values and comparison evidence; chart arrays are not repeated in this native projection." },
     rows: preview,
     page: {
       total: analysis.rows.length,
