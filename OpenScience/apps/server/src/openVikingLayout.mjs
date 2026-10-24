@@ -82,9 +82,9 @@ export function openVikingScopedId(prefix, value, purpose) {
 export function projectNativeMemoryNamespace(input) {
   const keys = ['ownerId', 'ownerCreatedAt', 'projectId', 'projectCreatedAt'];
   if (!input || keys.some(key => typeof input[key] !== 'string' || !input[key] || input[key].length > 200 || /[\r\n\0]/.test(input[key]))) throw new Error('Invalid project memory identity');
-  const identity = Object.fromEntries(keys.map(key => [key, input[key]]));
-  const id = openVikingScopedId('gp', JSON.stringify(keys.map(key => identity[key])), 'project-native-memory');
-  return Object.freeze({ kind: 'project', ...identity, id, engineUser: id });
+  const { ownerId, ownerCreatedAt, projectId, projectCreatedAt } = input;
+  const id = openVikingScopedId('gp', JSON.stringify(keys.map(key => input[key])), 'project-native-memory');
+  return Object.freeze({ kind: 'project', ownerId, ownerCreatedAt, projectId, projectCreatedAt, id, engineUser: id });
 }
 
 /** Everything one account holds in the engine. */
