@@ -265,6 +265,16 @@ ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS metrics jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}';
 -- The media proxy serves an id only while a published item names it: one containment lookup per picture.
 CREATE INDEX IF NOT EXISTS frontier_items_media_idx ON evimed_frontier.items USING gin (media jsonb_path_ops) WHERE media <> '[]'::jsonb;
+-- ct-write 2026-10-24: the reader's 「AI 要点」 (frontierBrief.mjs) — the genre's typed fields as served ({genre, points, quote}), the
+-- basis it was written on (the settled reader text's hash, a colon, the genre), when, and which instructions wrote it; and which
+-- instructions wrote the 导读 (lead_version) and the 推荐理由 (reason_version), so the backfill (scripts/ops/frontier-rewrite.mjs)
+-- rewrites only what an older prompt wrote.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief_basis text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief_at timestamptz(3);
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief_version text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_version text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS reason_version text;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_keys (
   key     text PRIMARY KEY,

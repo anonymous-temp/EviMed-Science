@@ -1,4 +1,4 @@
-import { frontierEventEvidenceCounts } from '@evimed/domain';
+import { FRONTIER_GENRE_LABELS_ZH, frontierEventEvidenceCounts } from '@evimed/domain';
 import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
@@ -17,7 +17,8 @@ import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.m
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
 import { FRONTIER_FALLBACKS } from "./frontierIngest.mjs";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
-import { frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { frontierItemGenre, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { frontierBriefView } from "./frontierBrief.mjs";
 import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
 import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
@@ -484,7 +485,8 @@ const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, 
   (SELECT coalesce(jsonb_agg(jsonb_build_object('slug', x.slug, 'name', x.name) ORDER BY x.rank), '[]'::jsonb)
      FROM (SELECT DISTINCT ON (r.id) r.slug, r.name, it.rank FROM evimed_frontier.item_tags it
              JOIN evimed_frontier.tags tg ON tg.id = it.tag_id JOIN evimed_frontier.tags r ON r.id = coalesce(tg.merged_into, tg.id)
-            WHERE it.item_id = i.id AND r.state = 'active' ORDER BY r.id, it.rank) x) AS tag_refs`;
+            WHERE it.item_id = i.id AND r.state = 'active' ORDER BY r.id, it.rank) x) AS tag_refs,
+  i.genre`;
 
 const ITEM_FROM = `evimed_frontier.items i
   JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -610,6 +612,9 @@ export class FrontierService {
       summary: row.summary_zh ?? null,
       // The 推荐理由 is the reader's, for selected and near-line items only (frontierEditor.mjs: why it was retired, and came back).
       reason: frontierReaderWorthy(row, this.selectThreshold) ? row.reason_zh ?? null : null,
+      // What the item is as a reader names it (ct-write 2026-10-24): the stored genre, else code's from the item's fields — never null.
+      genre: frontierItemGenre(row),
+      genreLabel: FRONTIER_GENRE_LABELS_ZH[frontierItemGenre(row)],
       // Contract B's card fields: where the item comes from and its first picture.
       channel: frontierItemChannel(row),
       platform: typeof row.platform === "string" && row.platform ? row.platform : null,
@@ -958,7 +963,7 @@ export class FrontierService {
       // whether or not the column exists yet.
       const row = (await client.query(`SELECT ${ITEM_COLUMNS}, i.quoted, i.metrics, t.abstract_raw, t.abstract_zh, t.publication_types, t.mesh, t.journal,
           t.authors_short, t.enrichment, t.body_text, t.body_excerpt, t.body_zh, t.body_zh_kind, t.body_zh_source, t.body_complete, t.quoted_zh, t.reader_tidy,
-          i.lead_zh, i.insight_zh, i.insight_refs,
+          i.lead_zh, i.insight_zh, i.insight_refs, i.brief,
           (to_jsonb(i)->>'same_event_item_id') AS same_event_item_id
         FROM ${ITEM_FROM} WHERE i.public_id=$1 AND i.state = 'published' AND s.enabled`, [publicId])).rows[0];
       if (!row) throw failure(404, "frontier_item_not_found", "No such item.");
@@ -989,6 +994,24 @@ export class FrontierService {
         },
       };
     });
+  }
+
+  /**
+   * The 「AI 要点」 as served (`frontierBriefView`: the genre's table decides keys and labels), or null. A commentary that the event
+   * layer placed with a primary report says which: `about` is that report — the earliest published `primary` member of its event —
+   * opening as its own article (contract B; read from the event, never matched here).
+   * @param {any} client @param {Record<string, any>} row
+   */
+  async #brief(client, row) {
+    const brief = frontierBriefView(row.brief);
+    if (!brief || brief.genre !== "commentary") return brief;
+    const about = (await client.query(`SELECT o.public_id, coalesce(o.title_zh, o.title_raw) AS title
+      FROM evimed_frontier.event_items me
+      JOIN evimed_frontier.events e ON e.id = me.event_id AND e.merged_into IS NULL
+      JOIN evimed_frontier.event_items oe ON oe.event_id = me.event_id AND oe.item_id <> me.item_id AND oe.role = 'primary'
+      JOIN evimed_frontier.items o ON o.id = oe.item_id AND o.state = 'published'
+      WHERE me.item_id = $1 ORDER BY o.timeline_at, o.id LIMIT 1`, [row.id])).rows[0];
+    return about ? { ...brief, about: { publicId: String(about.public_id), title: String(about.title) } } : brief;
   }
 
   /**
@@ -1038,6 +1061,8 @@ export class FrontierService {
     return {
       // The reader's 导读 paragraph (frontierLead.mjs), else the card's summary.
       lead: row.lead_zh ?? row.summary_zh ?? null,
+      // The genre's typed 「AI 要点」 (frontierBrief.mjs), with — for a reading of another report — the report it reads.
+      brief: await this.#brief(client, row),
       insight: await this.#insight(client, row),
       body: {
         zh: translated ?? (chinese ? original : null),
