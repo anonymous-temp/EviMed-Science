@@ -49,8 +49,9 @@ earlier version had was deleted on 2026-09-04.
 - **Memory and knowledge on OpenViking.** An account's memory is on one of two engines: the
   platform's own records in PostgreSQL (OpenViking only their derived recall index, with
   validity, replacement, conflicts and source links kept per record), or OpenViking's native
-  engine, which extracts, merges and recalls it through its official DSH plugin. Memory
-  capsules export and import as signed, encrypted files. The knowledge base pushes every
+  engine, which extracts, merges and recalls it through its official DSH plugin. A person's
+  memory capsule is one thing, shown as an overview of what it holds and has gained, and is
+  shared between accounts or exported and imported as a signed, encrypted file. The knowledge base pushes every
   readable document to OpenViking as a resource, where its official wiki and graph skills
   compile linked pages and a knowledge graph; the memory map and the knowledge graph show
   both to the person.

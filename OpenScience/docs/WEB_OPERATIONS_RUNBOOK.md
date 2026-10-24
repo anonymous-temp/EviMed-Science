@@ -1141,6 +1141,56 @@ inferences the researcher's own later message made their own word; nothing asks 
 medicine it names any more: a record parked under that rule is put in force the next time it is observed, or when its owner
 confirms it on the memory page.
 
+Since 2026-10-24 the block of a conversation inside a project also leads with that project's card (the six general slots, at most 1,500
+characters, handed once per conversation, never for the default or an internal project or an unattended turn; the read is bounded by
+`OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS`, default 1500), and a native account's block carries its own capsule's profile entries
+beside the plugin's listing. `open_science_memory_resident_card_total{outcome}` counts the card read (`read`, `empty`, `unread`,
+`timeout`); a `timeout` that grows means the card read is slower than its bound and conversations start without it.
+
+### Memory, the capsule and the learning loop: what to read after the 2026-10-23/24 rectification
+
+Native memory. `node scripts/ops/native-commit-report.mjs --user <id> --since <date> --text` says why a commit wrote nothing
+(`proposed_nothing`: the model proposed nothing; `only_skipped`: the engine refused, with its reason codes; `--backfill` writes the facts
+onto ledger rows settled before the column existed; the engine's task records are kept about a day, the diff's own
+`skipped_operations` answers after that). `node scripts/ops/memory-engine.mjs --user <id> --to native --migrate` is a report, `--apply`
+moves the account and always carries its records (`--leave-records` is refused; for an account that is already native `--migrate`
+replays what was left and sets `migrated_at`). `node scripts/ops/native-silent-zero-audit.mjs --days 14 --min-commits 1` lists the accounts
+whose commits all extracted nothing (report only). Counters: `open_science_native_memory_commit_operations_total{outcome}`
+(`wrote`, `wrote_and_skipped`, `only_skipped`, `proposed_nothing`), `…_skipped_operations_total{reason}`,
+`…_runtime_without_gateway_total{at}` (stays flat after a switch), `…_runtime_engine_switch_total{outcome}`,
+`…_rejection_judge_total{outcome}` (`over_budget` above 0 means `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS`, 40 per account
+per UTC day, is too low) and `…_consolidation_total{outcome}`. A removed line's normalised words (at most 400 characters) are kept on its
+rejection row so that a reworded repeat is caught; they are never shown and go with the rejection (the person's restatement, a reset,
+the account). The native 重读旧记忆 is off until it has been probed on an account with at least four memory files:
+`OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=true` for one deployment, watch `…_consolidation_total` go `submitted` then `completed`,
+read the revisions (`reason='consolidation'`, actor `engine`) in `evimed_memory.native_revisions`, undo one from the page, and record
+the task's real `result` as a fixture under `packages/contracts/openviking/fixtures/memory/`. No retention period is promised for a native
+memory; none is configured.
+
+The capsule. The first start of a release that carries `capsuleOneCapsule.mjs` writes one stderr line per account with something to fold
+(`capsule one-capsule: user=… notes_capsules=N entries=N lists=N left=N`, and `dropped_from_force=<capsule>@<project>,…` when a project's
+packs did not fit the account's eight); none repeats on the next start. After it, as SQL: `select count(*) from evimed_product.documents
+where kind='capsule' and id like 'runtime-notes:%' and deleted_at is null` and the same for `kind='preferences' and id like
+'active-capsules:project:%'` are 0, and the former notes are facts of `account-capsule:%` with a `project_id`. The folded capsules are in
+the trash, restorable; there is no reverse pass. `open_science_memory_index_withdrawals_pending` returns to 0 within minutes (the emptied
+capsules' index subtrees are withdrawn). `open_science_capsule_runtime_refresh_total{outcome=asked|failed}` counts the refreshes that
+enabling or disabling a pack asks of the account's running runtimes. `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` is on by default, so a
+deployment's private override that pins it `false` turns sharing off by value: check `GET /api/me` → `features.capsuleShare`.
+
+The learning loop. `node scripts/ops/learning-evidence-report.mjs [--user <id>] [--json]` reads the evidence ledger (read-only);
+`node scripts/ops/learning-sweep.mjs --all` is a report for every account that holds a method or handbook naming a retired feature, `--user
+<id> --apply` retires them restorably (reason `stale_feature`) and closes applied handbook candidates, `--user <id> --restore` gives back
+everything it put away. Counters: `open_science_learning_evidence_total{evidence,verdict}`, `…_evidence_last_at{account}` (the time of an
+account's last learning evidence, the account as twelve hex characters), `…_lessons_total{trigger}`, `…_trigger_refused_total{reason}`,
+`…_evidence_failed_total{reason}`, `…_evidence_quotes_total{outcome}`, `…_mount_selected_total{reason}`, `…_mount_ranked_total`,
+`…_method_applied_total{outcome}`, `…_consolidate_noop_total{reason}`, `…_relations_total{type}` and the retirement codes `superseded`,
+`unproven_merge_expired`, `library_cap`; `open_science_learning_spend_cny` is where the follow-up judge's calls show (purpose `learning`).
+The job kind `learning-evidence` is the settling of a run 30 minutes after it ended; a memory reset cancels it with the rest of the
+account's learning. `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE` is gone: a run's `delivered` sample no longer exists. The
+consolidation pass's result lives on the job (`evimed_product.jobs`, `kind='consolidate'`): `shortlist.mode` and `shortlist.topScore` (read
+the provisional 0.80 floor against it), `groupsFormed`, `groups`, `skippedUnchanged`, `noop[]`, `relations`, `levels`; a second pass in the
+same hour must skip every group and dispatch no `method-relations` run.
+
 ### The knowledge base's document types after R10
 
 Until R10 the first pass called every PDF or Word file a published paper, every table 「队列数据」 and read a file named `review` or
@@ -1158,16 +1208,20 @@ report's `format` count: those documents were not named by the judge, and a 「�
 readable document's captured text is pushed to the engine as a resource (`ov-resource-sync` jobs, reconciled every
 `OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS`), and OpenViking's own Compile writes the project's wiki and its knowledge graph
 with the official `llm-wiki` and `knowledge-graph` skills. `knowledgePageService.mjs` only schedules it and keeps the product's
-copy. A round runs per project, ten minutes after the last change to its documents (`..._DEBOUNCE_MS`) and only once five
-documents are readable (`..._MIN_SOURCES`), within the account's `knowledge` caps (`..._DAILY_LIMIT_CNY` 10, `..._WEEKLY_LIMIT_CNY`
-40; 0 = no cap), and not at all once the target holds 100 typed pages — the engine's own limit of 128 is destructive at this pin,
-so the state reads `limited` and what is compiled stays as it is. After each task the service mirrors the engine's files by content
+copy. A round runs per project, ten minutes after the last change to its documents (`..._DEBOUNCE_MS`) and only once one
+document is readable (`..._MIN_SOURCES`, default 1), within the account's `knowledge` caps (`..._DAILY_LIMIT_CNY` 10,
+`..._WEEKLY_LIMIT_CNY` 40; 0 = no cap). There is no page limit at v0.5.1.1 (the platform's own stop at 100 typed pages was removed on
+2026-10-23: a target of 140 pages was compiled twice with no page changed), but a compile reads the whole existing wiki, so a large
+wiki costs more per round, and the caps move now that the tokens are read from `meta.pipeline.tokens` — watch the `knowledge`
+purpose's spend for the first week. A `completed` task can be partial (`warnings` on the status and on the round) and about one compile
+in four of a small corpus wrote only `index.md`; a person's save that meets a page the engine changed since is dropped and counted
+(`open_science_knowledge_mirror_total{event="write_back_conflict"}`), because the next round re-applies their blocks. After each task the service mirrors the engine's files by content
 hash into the knowledge base under `knowledge-base/wiki/` and `knowledge-base/kg/` (the 知识页 filter of 知识库), puts back a
 person's edits a recompile dropped, and labels each quotation ✓ or ⚠ against the document it names; a label never withholds a
 page. A changed, replaced, removed or retracted document labels the pages that link to it and queues the next round. The engine
 down stops compiling and nothing else: uploads, search and the pages already mirrored are unaffected. The engine's model calls
 are the platform's cost under the `knowledge` purpose (see "The model path" in `WEB_DEPLOYMENT.md`). To read it: `GET
-/api/knowledge-pages?projectId=` (state, last compiled, pages against the limit), the `wiki-compile` and `ov-resource-sync` jobs,
+/api/knowledge-pages?projectId=` (state, last compiled, pages), the `wiki-compile` and `ov-resource-sync` jobs,
 and `checks.memoryIndex.engine` in `/api/ready`. `evals/knowledge-pages` is the offline instrument for whether pages help an
 answer; its 2026-10-12 run, on the pages of the self-built compiler since removed, did not show pages raising cross-document
 answer quality over a decomposition instruction (+0.014, interval −0.053 to 0.085), so their value is browsing, accumulation
