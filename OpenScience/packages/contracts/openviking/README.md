@@ -123,8 +123,9 @@ Measured on the lab of 2026-10-23 unless a line says it is read from upstream's 
   page. All 140 pages stayed byte for byte, no stub, no refusal. The second run ended `completed` with a partial-output
   warning and read 1.58 M input tokens (1.49 M cached) against 17 k for the first: a compile reads the existing wiki, so its
   cost grows with the wiki, not with the change. What was *not* seen is a compile that rewrites more than a hundred pages
-  (the agent's plan failed on that run); "no cap" is shown, "safe at any size" is not. The platform's own stop at 100 pages
-  (`KNOWLEDGE_PAGE_SUBMIT_LIMIT`) is removed in its own commit, which can be dropped on its own.
+  (the agent's plan failed on that run); "no cap" is shown, "safe at any size" is not. The platform's own stop at 100 typed
+  pages (`KNOWLEDGE_PAGE_SUBMIT_LIMIT`, the `limited` state and `page_limit`) is removed, in its own commit (the last of the
+  package, so that it can be dropped on its own).
 - **`completed` is not "complete".** A failed job of the pipeline leaves the task `completed` with `meta.pipeline.errors` and a
   "Partial output" line in `result.warnings` (reported as `warnings` on the task and on the round). And a compile of the same
   three short documents wrote only `index.md`, with no error and no warning, on 2 of 9 runs (4 to 6 pages on the others, and the recorder asks again until a run writes the pages the other fixtures are read against);

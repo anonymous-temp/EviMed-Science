@@ -481,7 +481,7 @@ export function removeFromLibrary(sourceId: string) {
  * (`/api/knowledge-pages/*`). The shapes are the routes' own; the words they are shown in are the page's.
  */
 export type KnowledgeTreeName = "wiki" | "kg";
-export type KnowledgeState = "disabled" | "idle" | "below_threshold" | "queued" | "compiling" | "compiled" | "page_limit" | "engine_unavailable" | "failed";
+export type KnowledgeState = "disabled" | "idle" | "below_threshold" | "queued" | "compiling" | "compiled" | "engine_unavailable" | "failed";
 export type KnowledgeStaleReason = "changed" | "retracted" | "removed";
 export interface KnowledgeQuotationCounts { present: number; absent: number; none: number; sourceMissing?: number }
 export interface KnowledgeRoundTree { status: string; seconds: number; tokens: number; cost: number; files: number; typed: number; created: number; updated: number; unchanged: number; retired: number; restored: number }
@@ -495,9 +495,6 @@ export interface KnowledgeStatus {
   pages: number;
   graphFiles: number;
   typedPages: { wiki: number; kg: number };
-  pageLimit: number;
-  engineLimit: number;
-  limited: { wiki: boolean; kg: boolean };
   stale: number;
   userEdited: number;
   quotations: KnowledgeQuotationCounts;
