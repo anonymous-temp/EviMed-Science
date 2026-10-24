@@ -47,8 +47,11 @@ export async function freezeGeoPlanBasis(store, project, input = {}, focus = {})
         ...Object.fromEntries(["metricId", "scope", "pool", "engine", "groupId", "arm", "variant", "rival", "numerator", "denominator", "value", "ciLow", "ciHigh", "ci_low", "ci_high", "status", "dataType", "data_type", "reason", "methodVersion"].filter(key => cell[key] !== undefined).map(key => [key, cell[key]])),
         memberReference: selected.selection.reference, memberCount: cell.members?.total ?? null, memberDigest: cell.members?.digest ?? null })), counts: selected.selection.counts,
         rounds: selected.rounds.map(round => ({ id: round.id, date: round.sample_date ?? null, kind: round.kind })) } } };
-    if (Buffer.byteLength(JSON.stringify(basis)) > 200_000) throw fail("geo_plan_basis_too_large", "Narrow the selected groups, sources or dates before planning.", 422);
-    return { selected, basis };
+    const serialized = JSON.stringify(basis);
+    if (Buffer.byteLength(serialized) > 200_000) throw fail("geo_plan_basis_too_large", "Narrow the selected groups, sources or dates before planning.", 422);
+    // PostgreSQL date/timestamp values may be Date instances. Freeze the JSON
+    // representation the ledger will actually preserve before hashing it.
+    return { selected, basis: JSON.parse(serialized) };
   });
 }
 
@@ -133,6 +136,7 @@ export class GeoPlanContext {
       if (rows.length !== new Set(body.errorIds).size) throw fail("geo_plan_focus_invalid", "The error is outside this selection.", 400);
     }
     const draft = body.mode === "analysis" ? "请解释所选分析中的实测结果、样本和缺失情况，并说明能够得出的结论。" : body.mode === "strategy" ? "请根据所选问题群和信源生成或调整实施方案，保留依据与不确定性。" : "请按所选方案行动处理内容，保留依据和原稿，完成后关联成果。";
+    basis = JSON.parse(JSON.stringify(basis));
     const payload = { recordType: "geo-plan-context", id, geoId: project.id, actorId: user.id, fingerprint, sessionId: body.sessionId, mode: body.mode,
       strategyVersion: body.strategyVersion ?? null, scopeKey, basis, basisDigest: geoPlanDigest(basis), actions, groupIds: body.groupIds ?? basis.groups.map(group => group.id),
       actionKeys: body.actionKeys ?? [], draft, state: "staged", requestId: null, outputs: [] };
@@ -150,7 +154,8 @@ export class GeoPlanContext {
       if (receipt.projectId !== project.projectId || receipt.payload.fingerprint !== fingerprint) throw fail("geo_plan_context_conflict", "This key already names another selection.");
       return this.publicOf(await this.resolve(user, project, receipt.payload.referenceId));
     }
-    const { basis, draft } = await this.service.signals.stageInput(project, body);
+    const { basis: inputBasis, draft } = await this.service.signals.stageInput(project, body);
+    const basis = JSON.parse(JSON.stringify(inputBasis));
     const id = `gpc_${geoPlanDigest([user.id, project.id, "signal", basis.handlingKey])}`;
     const payload = { recordType: "geo-plan-context", id, geoId: project.id, actorId: user.id, fingerprint: geoPlanDigest({ handlingKey: basis.handlingKey, actorId: user.id }),
       sessionId: body.sessionId, mode: "signal", strategyVersion: null, scopeKey: `signal:${basis.handlingKey}`, basis, basisDigest: geoPlanDigest(basis),
