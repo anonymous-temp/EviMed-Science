@@ -532,16 +532,17 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   const triggersAt = (offset) => new LearningTriggers({ jobs: { enqueue: async (_user, _kind, payload) => queued.push(payload) }, agentRuns: { list: async () => [], runWorkflowProjection: async () => null },
     audit: async (event, detail) => audited.push([event, detail.code]),
     guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY }) });
-  const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled }));
+  // A correction typed into the run is what queues a lesson since 2026-10-23 (the sampled `delivered` lesson is gone); the guest mark rides on it.
+  const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled, corrections: 1 }));
   const early = await triggersAt(0).afterRun(project, { ...guestA });
   await triggersAt(0).afterRun(project, { ...guestB });
-  assert.deepEqual(early.queued, ["delivered"], "the run still learns for its own account");
+  assert.deepEqual(early.queued, ["correction"], "the run still learns for its own account");
   assert.equal(early.guestInfluence, "uncorroborated", JSON.stringify(audited));
   assert.equal(queued[0].guestInfluence.uncorroborated, true);
   assert.ok(await documents.get(alice, "preferences", `guest-run:${guestA.id}`), "the run is marked");
   const late = await triggersAt(15).afterRun(project, { ...vouchedA });
   await triggersAt(15).afterRun(project, { ...vouchedB });
-  assert.deepEqual(late.queued, ["delivered"]);
+  assert.deepEqual(late.queued, ["correction"]);
   assert.equal(late.guestInfluence, undefined, "another account has kept this snapshot for the period: the run is as any run");
   assert.equal(await documents.get(alice, "preferences", `guest-run:${vouchedA.id}`), null);
   assert.equal(queued.at(-1).guestInfluence, undefined);
