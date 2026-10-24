@@ -96,6 +96,20 @@ test("the safety push ceiling has one default: the config's, the notifier's fall
   assert.match(compose, /^\s+OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP:\s*$/m);
 });
 
+test("the events route's per-reader minute has one default: the config's, the module's and the example .env agree; out of range stops the start", async () => {
+  const { FRONTIER_EVENTS_PER_MINUTE_DEFAULT, FrontierInteractions } = await import("../src/frontierInteractions.mjs");
+  const { readFile } = await import("node:fs/promises");
+  assert.equal(configUnder({}).frontierEventsPerMinute, FRONTIER_EVENTS_PER_MINUTE_DEFAULT);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE: "120" }).frontierEventsPerMinute, 120);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE: "" }).frontierEventsPerMinute, FRONTIER_EVENTS_PER_MINUTE_DEFAULT, "empty is unset");
+  for (const value of ["0", "9", "10001", "1.5", "many"]) assert.throws(() => configUnder({ OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE: value }), /OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE/);
+  assert.equal(new FrontierInteractions({ database: {} }).perMinute, FRONTIER_EVENTS_PER_MINUTE_DEFAULT);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.equal([...example.matchAll(/^OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE=(\d+)$/gm)].map((match) => Number(match[1])).join(), String(FRONTIER_EVENTS_PER_MINUTE_DEFAULT));
+  assert.match(compose, /^\s+OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE:\s*$/m);
+});
+
 test("every lever is read from the environment, and an empty value reads as unset", () => {
   const config = configUnder({
     OPEN_SCIENCE_FRONTIER_ENABLED: "true", OPEN_SCIENCE_FRONTIER_AUDIENCE: "operators", OPEN_SCIENCE_FRONTIER_PREVIEW_USERS: "acceptance, qa",
