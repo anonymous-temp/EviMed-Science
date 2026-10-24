@@ -137,14 +137,18 @@ test('legacy and signal producers share the first text-change notice, preserve r
   inbox.attachChannels({ registry: { enabledIds: () => ['fixture'] }, onChange: item => sent.push(item.id) });
   const notifier = createGeoNotifier({ notifications: inbox, store });
   const discovery = new GeoSignalDiscovery({ store, signals });
-  for (const firstProducer of ['legacy', 'signal', 'pre-repair']) {
+  for (const firstProducer of ['legacy', 'signal', 'pre-repair', 'pre-delivered']) {
     const id = `order-${firstProducer}`;
     await store.query("INSERT INTO evimed_geo.orders(id,user_id,geo_project_id,state) VALUES($1,'owner',$2,'problem')", [id, project.id]);
     await store.query("INSERT INTO evimed_geo.order_events(id,order_id,at,from_state,to_state,detail) VALUES($1,$2,'2026-10-24T01:00:00Z','published','problem','{\"reason\":\"text_changed\"}')", [id, id]);
-    if (firstProducer === 'pre-repair') await signals.record(project, { kind: 'order_anomaly', objectKey: id, eventVersion: `text:${id}`, title: 'Prior immutable event', basis: { orderId: id, eventId: id, changedText: true, toState: 'problem' } });
+    if (firstProducer.startsWith('pre-')) await signals.record(project, { kind: 'order_anomaly', objectKey: id, eventVersion: `text:${id}`, title: 'Prior immutable event', basis: { orderId: id, eventId: id, changedText: true, toState: 'problem' } });
     await discovery.orders(project, (await store.query('SELECT * FROM evimed_geo.order_events WHERE order_id=$1', [id])).rows);
     const row = (await signals.all(project, 'geo-signal', { recordType: 'geo-signal', objectKey: id }))[0];
-    assert.equal(row.payload.basis.notificationKey, firstProducer === 'pre-repair' ? undefined : `geo:order:${id}:text_changed`);
+    assert.equal(row.payload.basis.notificationKey, firstProducer.startsWith('pre-') ? undefined : `geo:order:${id}:text_changed`);
+    if (firstProducer === 'pre-delivered') for (const recipient of [user.id, 'reviewer']) await inbox.create(recipient, {
+      noticeType: 'notify', severity: 'safety', title: 'A previous signal notification', body: 'Previous content',
+      source: { type: 'geo', id: `${project.id}/signals/${row.id}` }, idempotencyKey: `geo:${project.id}:signal:${row.id}`,
+    });
     const legacy = () => notifier.textChanged({ userId: user.id, geoProjectId: project.id, orderId: id, changed: ['Protected text'] });
     if (firstProducer !== 'signal') {
       const item = await legacy(); await inbox.markRead(user.id, item.id, item.revision);
@@ -155,6 +159,6 @@ test('legacy and signal producers share the first text-change notice, preserve r
     assert.ok(notices.every(item => item.event_count === 1));
     if (firstProducer !== 'signal') assert.ok(notices.find(item => item.user_id === user.id).read_at);
   }
-  assert.equal((await database.query('SELECT count(*)::integer AS n FROM evimed_inbox.notifications')).rows[0].n, 6);
-  assert.equal(sent.length, 6);
+  assert.equal((await database.query('SELECT count(*)::integer AS n FROM evimed_inbox.notifications')).rows[0].n, 8);
+  assert.equal(sent.length, 8);
 });

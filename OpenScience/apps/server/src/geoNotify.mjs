@@ -1,6 +1,7 @@
 import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES, geoAbilitiesOf, geoSignalHref } from "@evimed/domain";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { notificationEventId } from "./notificationService.mjs";
+import { geoSignalId } from "./geoSignals.mjs";
 
 /**
  * 「循证 GEO」's notices (build spec 2026-09-25 §5; plan §5.7): exactly five
@@ -173,10 +174,19 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
    * One person's inbox item. Their own refusal is their own loss: it is counted and audited, and the next person is still told. The
    * item is filed under the control-plane project only for the owner: the inbox holds an item's project to the recipient's own
    * (a foreign key on user and project), and a member's project is the owner's. The item opens the GEO page by its source either way.
-   * @param {any} project @param {string} kind @param {Record<string, any>} input @param {string} userId @param {any} [redirectFrom]
+   * @param {any} project @param {string} kind @param {Record<string, any>} input @param {string} userId @param {any} [redirectFrom] @param {any} [compatible]
    */
-  async function deliver(project, kind, input, userId, redirectFrom = null) {
+  async function deliver(project, kind, input, userId, redirectFrom = null, compatible = null) {
     try {
+      if (compatible && notifications?.get) for (const key of compatible.keys) {
+        let prior;
+        try { prior = await notifications.get(userId, notificationEventId(userId, key)); }
+        catch (error) { if (error?.code === 'notification_not_found') continue; throw error; }
+        if (prior.source?.type !== 'geo' || ![`${project.id}/distribution`, compatible.source.id].includes(prior.source.id)) continue;
+        const redirected = prior.source.id === compatible.source.id ? prior : await notifications.retargetEventSource?.(userId, key, { from: prior.source, to: compatible.source });
+        counts[kind] = (counts[kind] ?? 0) + 1;
+        return redirected ?? prior;
+      }
       if (redirectFrom && notifications?.retargetEventSource && input.idempotencyKey) {
         let original = redirectFrom;
         if (notifications.get) {
@@ -230,19 +240,26 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
   /**
    * A notice to the owner and to the members it is for (`HEARD_BY`). The answer is the owner's.
    * @param {any} project @param {string} kind @param {Record<string, any>} input @param {readonly string[]} abilities the abilities that make it a member's business
-   * @param {any} [redirectFrom]
+   * @param {any} [redirectFrom] @param {any} [compatible]
    */
-  async function send(project, kind, input, abilities, redirectFrom = null) {
+  async function send(project, kind, input, abilities, redirectFrom = null, compatible = null) {
     if (!notifications) { counts.skipped += 1; return null; }
-    const owner = await deliver(project, kind, input, String(project.userId), redirectFrom);
+    const owner = await deliver(project, kind, input, String(project.userId), redirectFrom, compatible);
     for (const userId of await membersFor(project, abilities)) {
-      if (await deliver(project, kind, input, userId, redirectFrom)) counts.members += 1;
+      if (await deliver(project, kind, input, userId, redirectFrom, compatible)) counts.members += 1;
     }
     return owner;
   }
 
   /** @param {string} geoId @param {string} tab @param {string} [item] */
   const source = (geoId, tab, item) => ({ type: "geo", id: item ? `${geoId}/${tab}/${item}` : `${geoId}/${tab}` });
+  const textChangeCompatibility = async (project, orderId, origin = null) => {
+    const first = (await store.query(`SELECT e.id FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id=e.order_id
+      WHERE o.geo_project_id=$1 AND o.id=$2 AND e.detail->>'reason'='text_changed' ORDER BY e.at,e.id LIMIT 1`, [project.id, orderId])).rows[0];
+    if (!first || origin != null && first.id !== origin) return null;
+    const id = geoSignalId(project.id, 'order_anomaly', orderId, `text:${first.id}`);
+    return { keys: [`geo:order:${orderId}:text_changed`, `geo:${project.id}:signal:${id}`], source: source(project.id, 'signals', id) };
+  };
 
   const notifier = {
     counts,
@@ -254,13 +271,12 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       const safety = signal.kind === "error_observed" || signal.kind === "source_changed" || signal.basis.changedText;
       const folded = signal.kind === "error_observed" && !GEO_URGENT_SEVERITIES.includes(String(signal.basis.severity));
       let notificationKey = signal.basis.notificationKey;
+      const compatible = signal.kind === 'order_anomaly' && signal.basis.changedText && signal.basis.eventId
+        ? await textChangeCompatibility(project, signal.basis.orderId, signal.basis.eventId) : null;
       // Older immutable signal rows predate the compatible notification key.
       // Derive it from the same authoritative first episode without rewriting history.
       if (!notificationKey && signal.kind === "order_anomaly" && signal.basis.changedText && signal.basis.eventId) {
-        const first = (await store.query(`SELECT e.id FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id=e.order_id
-          WHERE o.geo_project_id=$1 AND o.id=$2 AND e.detail->>'reason'='text_changed' ORDER BY e.at,e.id LIMIT 1`,
-        [project.id, signal.basis.orderId])).rows[0];
-        if (first?.id === signal.basis.eventId) notificationKey = `geo:order:${signal.basis.orderId}:text_changed`;
+        if (compatible) notificationKey = compatible.keys[0];
       }
       return send(project, "signal_discovered", {
         title: signal.kind === "error_observed" ? wrongOursTitle(project, signal.basis) : clip(signal.title, 100), body: signal.kind === "source_changed" ? "查看本次变化关联的结论和稿件版本，选择要处理的范围。" : "查看原始记录、当前状态和可执行的下一步。",
@@ -269,7 +285,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         ...(folded ? { groupKey: `geo-wrong:${project.id}:${dayIn(new Date(signal.detectedAt), timeZone)}` } : {}),
       }, signal.kind === "order_anomaly" && signal.basis.changedText ? HEARD_BY.publishedText : safety ? HEARD_BY.correction : HEARD_BY.progress,
       signal.kind === "error_observed" && signal.basis.snapshotId ? source(project.id, "answers", signal.basis.snapshotId)
-        : signal.kind === "order_anomaly" && signal.basis.changedText && notificationKey ? source(project.id, "distribution") : null);
+        : signal.kind === "order_anomaly" && signal.basis.changedText && notificationKey ? source(project.id, "distribution") : null, compatible);
     },
 
     /** 1. 诊断完成. @param {any} project @param {{ roundId: string, engines: number, answers: number, wrongOurs: number }} facts */
@@ -383,12 +399,13 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       const article = event.articleId
         ? (await store.query(`SELECT title FROM evimed_geo.articles WHERE geo_project_id = $1 AND id = $2`, [project.id, event.articleId])).rows[0] : null;
       const changed = (Array.isArray(event.changed) ? event.changed : []).map((text) => clip(text, 30)).filter(Boolean).slice(0, 5);
+      const compatible = event.orderId ? await textChangeCompatibility(project, event.orderId) : null;
       return send(project, "wrong_or_safety", {
         title: `${clip(event.mediaName || "媒体", 20)}改动了已发布的${article?.title ? `《${clip(article.title, 40)}》` : "稿件"}`,
         body: changed.length ? `和交稿不一致：${changed.join("、")}。已要求媒体改回。` : "和交稿不一致，已要求媒体改回。",
         severity: "safety", source: source(project.id, "distribution"),
         idempotencyKey: String(event.idempotencyKey || `geo:order:${event.orderId}:text_changed`),
-      }, HEARD_BY.publishedText);
+      }, HEARD_BY.publishedText, null, compatible);
     },
 
     /**
