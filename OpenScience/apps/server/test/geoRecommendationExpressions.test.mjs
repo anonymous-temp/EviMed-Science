@@ -129,3 +129,52 @@ test('C3 ordinal token cannot be the entity name or an entity fragment from anot
 });
 
 test('C3 same judge distinguishes declared mention ordering from explicit recommendation ordering',()=>{const quote='1. Alpha is recommended.';for(const positionKind of ['mention_order','unknown',null]){const out=judge(quote,[item(quote,'Alpha','recommended',{explicitPosition:1,positionQuote:quote,positionToken:'1',positionKind})]);assert.equal(out.recommendationExpressions.items[0].explicitPosition,null);}});
+
+const ordered=(quote,position,positionToken,positionQuote=quote)=>item(quote,'Alpha','recommended',{explicitPosition:position,positionQuote,positionToken,positionKind:'explicit_recommendation_order'});
+test('C3 F2 complete numeric and ordinal boundaries are checked in the original answer even when both quotes are shortened',()=>{
+ const cases=[
+  ['第十二顺位推荐 Alpha。','第十二顺位推荐 Alpha。','第十二顺位推荐 Alpha。','第十',10],
+  ['第十一顺位推荐 Alpha。','第十一顺位推荐 Alpha。','第十一顺位推荐 Alpha。','第十',10],
+  ['Alpha 推荐顺位为第十二。','Alpha 推荐顺位为第十二。','Alpha 推荐顺位为第十','第十',10],
+  ['Alpha 推荐顺位为第十二。','Alpha 推荐顺位为第十','Alpha 推荐顺位为第十','第十',10],
+  ['Alpha recommendation rank is 12.','Alpha recommendation rank is 12.','Alpha recommendation rank is 1','1',1],
+  ['Alpha recommendation rank is 12.','Alpha recommendation rank is 1','Alpha recommendation rank is 1','1',1],
+  ['12. Alpha is recommended.','2. Alpha is recommended.','2. Alpha is recommended.','2',2],
+  ['Alpha rank is １２.','Alpha rank is １','Alpha rank is １','１',1],
+  ['１２. Alpha is recommended.','２. Alpha is recommended.','２. Alpha is recommended.','２',2],
+  ['Alpha rank is 第十壹。','Alpha rank is 第十','Alpha rank is 第十','第十',10],
+  ['二1. Alpha is recommended.','1. Alpha is recommended.','1. Alpha is recommended.','1',1],
+  ['Alpha rank is 1二。','Alpha rank is 1','Alpha rank is 1','1',1],
+  ['Alpha rank is 12th.','Alpha rank is 12','Alpha rank is 12','12',12],
+  ['Alpha rank is 12.5.','Alpha rank is 12','Alpha rank is 12','12',12],
+  ['Alpha rank is -1.','Alpha rank is -1.','Alpha rank is -1.','1',1],
+ ];
+ for(const [text,quote,positionQuote,token,rank] of cases){
+  const out=judge(text,[ordered(quote,rank,token,positionQuote)]);
+  assert.equal(out.recommendationExpressions.items[0].explicitPosition,null,`${text} / ${quote} / ${token}`);
+  assert.equal(out.recommendationExpressions.items[0].state,'recommended');
+  assert.equal(out.recommendationExpressions.coverage,'partial');
+  assert.equal(out.checks.judgementCoverage.status,'complete');
+ }
+});
+test('C3 F2 complete original ASCII fullwidth and Chinese ordinal controls remain usable',()=>{
+ for(const [text,token,rank] of [['Alpha rank is 12.','12',12],['Alpha rank is １２.','１２',12],['第十二顺位推荐 Alpha。','第十二',12],['第12位推荐 Alpha。','第12位',12],['The 12th recommendation is Alpha.','12th',12],['First choice: Alpha.','First',1],['1. Alpha is recommended.','1',1]]){
+  const out=judge(text,[ordered(text,rank,token)]);
+  assert.equal(out.recommendationExpressions.items[0].explicitPosition,rank,text);
+  assert.equal(out.recommendationExpressions.coverage,'complete');
+ }
+});
+test('C3 F2 an intact rank in one quote occurrence cannot certify the same quote when another occurrence truncates a larger numeral',()=>{
+ const quote='Alpha recommendation rank is 1';
+ for(const text of [`${quote}. ${quote}2.`,`${quote}2. ${quote}.`]){
+  const out=judge(text,[ordered(quote,1,'1')]);
+  assert.equal(out.recommendationExpressions.items.length,1);
+  assert.equal(out.recommendationExpressions.items[0].answerOffsets.length,2);
+  assert.equal(out.recommendationExpressions.items[0].explicitPosition,null,text);
+  assert.equal(out.recommendationExpressions.coverage,'partial');
+ }
+ const out=judge(`${quote}. ${quote}.`,[ordered(quote,1,'1')]);
+ assert.equal(out.recommendationExpressions.items[0].answerOffsets.length,2);
+ assert.equal(out.recommendationExpressions.items[0].explicitPosition,1);
+ assert.equal(out.recommendationExpressions.coverage,'complete');
+});
