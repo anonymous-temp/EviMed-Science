@@ -24,7 +24,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { FRONTIER_GENRES, FRONTIER_LANES, frontierGenreDecision, frontierGenreFallback } from "../../packages/domain/index.mjs";
+import { FRONTIER_GENRES, FRONTIER_LANES, FRONTIER_SOURCE_TYPE_LABELS_ZH, frontierGenreDecision, frontierGenreFallback } from "../../packages/domain/index.mjs";
 import { FRONTIER_BRIEF_FIELDS, FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief, quotationForm } from "../../apps/server/src/frontierBrief.mjs";
 import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION, FrontierEditor, isChineseTitle, readerNumberSource } from "../../apps/server/src/frontierEditor.mjs";
 import { FRONTIER_LEAD_VERSION, buildLeadInput, frontierLeadLimit, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
@@ -146,6 +146,8 @@ async function runCase(editor, entry, skipEdit) {
   if (!skipEdit) {
     edited = await editor.edit({
       titleRaw: item.titleRaw, sourceName: item.sourceName, isChinese: isChineseTitle(item.titleRaw),
+      // As the pipeline shows it: the source's kind beside its name (「媒体」「期刊」「监管」).
+      sourceTypeLabel: /** @type {Record<string, string>} */ (FRONTIER_SOURCE_TYPE_LABELS_ZH)[item.sourceType] ?? undefined,
       allowedLanes: FRONTIER_LANES.filter((lane) => lane !== "mixed"), journal: item.journal ?? null, publicationTypes: item.publicationTypes ?? [],
       abstract: kind === "abstract" ? entry.text : null, bodyExcerpt: kind === "abstract" ? null : entry.text.slice(0, 12_000),
       glossary: [], genreFixed: ["safety", "social", "trial", "preprint", "roundup"].includes(fallback) ? fallback : null,
