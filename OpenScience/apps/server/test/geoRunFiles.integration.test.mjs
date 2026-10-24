@@ -494,3 +494,90 @@ test('concurrent explicit recoveries of the same immutable candidate join one im
   const results = await Promise.all([first, second]);
   assert.equal(reads, 1); assert.deepEqual(results[0], results[1]);
 });
+
+async function nativeContentFixture(artifacts, makeFiles) {
+  const { geo, control } = await projectWithBaseline();
+  const groupId = `spec-${geo.id}`;
+  await database.query(`INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES($1,$2,$3,1,'P2','Selected')`, [groupId, USER, geo.id]);
+  const produced = { id: `spec-${geo.id}`, status: 'succeeded', sessionId: 'session', effectiveAgentId: 'geo-content', artifacts };
+  const context = { mode: 'content', runId: produced.id };
+  let files = makeFiles(groupId);
+  const makeImporter = () => importerOf(new Map(), { planningContext: async () => context, readRunFile: async (_project, _run, file) => {
+    if (!files.has(file)) throw Object.assign(new Error('No preserved bytes'), { code: 'geo_plan_output_unavailable' }); return files.get(file);
+  }, readFile: async () => { throw new Error('No workspace reads'); } }).importDelivery;
+  return { geo, control, produced, makeImporter, replaceFiles: next => { files = next(groupId); } };
+}
+
+test('SPEC-1: each manifest may register only its own canonical deliverable even when another candidate body is pinned', options, async () => {
+  const artifacts = ['deliverables/a/articles.json', 'deliverables/b/articles.json', 'deliverables/b/articles/b.md'];
+  const f = await nativeContentFixture(artifacts, groupId => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: artifacts[2], layer: 'popular', title: 'Cross-folder', groupId }] })],
+    [artifacts[1], '{"articles":[]}'], [artifacts[2], '# B'],
+  ]));
+  const importDelivery = f.makeImporter(), result = await importDelivery(f.control, f.produced);
+  assert.equal((await store.listArticles(f.geo.id)).length, 0);
+  assert.ok(result.failed?.includes('geo_plan_output_unavailable')); assert.equal(importDelivery.counters.imported, 0);
+  f.replaceFiles(groupId => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'A', groupId }] })],
+    [artifacts[1], JSON.stringify({ articles: [{ path: artifacts[2], layer: 'popular', title: 'B', groupId }] })],
+    ['deliverables/a/articles/a.md', '# A'], [artifacts[2], '# B'],
+  ]));
+  const recovered = await importDelivery(f.control, f.produced, { recovery: true });
+  assert.equal(recovered.failed, undefined);
+  assert.deepEqual((await store.listArticles(f.geo.id)).map(article => [article.path, article.deliverableId]).sort(), [
+    ['deliverables/a/articles/a.md', 'a'], ['deliverables/b/articles/b.md', 'b'],
+  ]);
+});
+
+test('SPEC-2: mixed accepted/refused entries retain useful rows but stay partial and allow bounded corrected recovery', options, async () => {
+  const artifacts = ['deliverables/a/articles.json', 'deliverables/a/articles/a.md', 'deliverables/a/articles/b.md'];
+  const files = (groupId, layer) => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'A', groupId }, { path: 'articles/b.md', layer, title: 'B', groupId }] })],
+    [artifacts[1], '# A'], [artifacts[2], '# B'],
+  ]);
+  const f = await nativeContentFixture(artifacts, groupId => files(groupId, 'invalid-layer'));
+  const importDelivery = f.makeImporter(), first = await importDelivery(f.control, f.produced);
+  assert.equal(first.files.registered, 1); assert.equal(first.files.skipped, 1); assert.ok(first.failed?.includes('geo_plan_output_unavailable'));
+  assert.equal(importDelivery.counters.imported, 0);
+  const kept = (await store.listArticles(f.geo.id))[0];
+  const retry = await importDelivery(f.control, f.produced);
+  assert.ok(retry.failed?.includes('geo_plan_output_unavailable')); assert.equal(await importDelivery(f.control, f.produced), null, 'Automatic attempts remain bounded');
+  f.replaceFiles(groupId => files(groupId, 'popular'));
+  const recovered = await importDelivery(f.control, f.produced, { recovery: true });
+  assert.equal(recovered.failed, undefined); assert.equal((await store.listArticles(f.geo.id)).length, 2);
+  assert.equal((await store.listArticles(f.geo.id)).find(article => article.path === kept.path).id, kept.id);
+  await f.makeImporter()(f.control, f.produced, { recovery: true }); assert.equal((await store.listArticles(f.geo.id)).length, 2);
+});
+
+for (const empty of ['{}', '{"articles":[]}', 'null', '42']) test(`SPEC-2: a valid first manifest cannot hide an unavailable second manifest ${empty}`, options, async () => {
+  const artifacts = ['deliverables/a/articles.json', 'deliverables/b/articles.json', 'deliverables/a/articles/a.md'];
+  const f = await nativeContentFixture(artifacts, groupId => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'A', groupId }] })],
+    [artifacts[1], empty], [artifacts[2], '# A'],
+  ]));
+  const importer = f.makeImporter(), result = await importer(f.control, f.produced);
+  assert.equal(result.files.registered, 1); assert.ok(result.failed?.includes('geo_plan_output_unavailable'));
+  assert.equal(importer.counters.imported, 0); assert.equal((await store.listArticles(f.geo.id)).length, 1);
+});
+
+test('SPEC-3: an authorized bound source review imports its preserved value idempotently and rejects foreign review scope', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/review/geo-value.json';
+  const produced = { id: `review-${geo.id}`, status: 'succeeded', sessionId: 'session', effectiveAgentId: 'geo-insight', artifacts: [relative], deliverables: [{ id: 'review', capability: 'geo-insight' }] };
+  const basis = { signal: { id: 'signal', kind: 'source_changed', basisDigest: 'signal-digest' }, event: { notice: { id: 'source' }, targets: [{ key: 'selected' }] }, focusRefs: ['selected'], intent: 'review' };
+  const context = { mode: 'signal', referenceId: 'context', runId: produced.id, basis };
+  const review = { signalId: 'signal', basisDigest: 'signal-digest', contextRef: 'context', targets: [{ targetKey: 'selected', outcome: 'uncertain', reason: 'The original source is unavailable.' }] };
+  let file = JSON.stringify({ sourceChanges: [{ id: 'source', review }] });
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context, readRunFile: async (_p, actual, path) => { assert.equal(actual.id, produced.id); assert.equal(path, relative); return file; },
+    readFile: async () => { throw new Error('No workspace fallback'); } });
+  const first = await importDelivery(control, produced);
+  assert.equal(first.failed, undefined);
+  const profile = await store.latestValue(geo.id); assert.equal(profile.runId, produced.id); assert.deepEqual(profile.data.sourceChanges[0].review, review);
+  await importDelivery(control, produced, { recovery: true }); assert.equal((await store.latestValue(geo.id)).version, profile.version);
+  for (const invalid of [{ ...review, signalId: 'foreign' }, { ...review, basisDigest: 'foreign' }, { ...review, contextRef: 'foreign' },
+    { ...review, targets: [{ ...review.targets[0], targetKey: 'unselected' }] }]) {
+    file = JSON.stringify({ sourceChanges: [{ id: 'source', review: invalid }] });
+    const result = await importDelivery(control, produced, { recovery: true });
+    assert.ok(result.failed?.includes('geo_plan_output_unavailable')); assert.equal((await store.latestValue(geo.id)).version, profile.version);
+  }
+});

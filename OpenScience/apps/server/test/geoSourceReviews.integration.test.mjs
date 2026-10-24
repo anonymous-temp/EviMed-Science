@@ -13,6 +13,7 @@ import { GeoSignals } from '../src/geoSignals.mjs';
 import { GeoSignalResults } from '../src/geoSignalResults.mjs';
 import { GeoPlanContext } from '../src/geoPlanContext.mjs';
 import { ResultProvenanceService } from '../src/resultProvenanceService.mjs';
+import { createGeoDeliveryImport } from '../src/geoDeliveryImport.mjs';
 import { GeoSourceReviews, summarizeGeoSourceReviews } from '../src/geoSourceReviews.mjs';
 import { GeoSignalInputs } from '../src/geoSignalInputs.mjs';
 import { GeoArticleResults } from '../src/geoArticleResults.mjs';
@@ -78,6 +79,30 @@ test('actual captured review bytes need an exact bound request and accepted targ
     { targetKey: 'untouched', outcome: 'no_change_needed', reason: 'A forged out-of-focus result.' },
   ] };
   const file = await capture('deliverables/review/geo-value.json', JSON.stringify({ sourceChanges: [{ id: 'source', review }] }));
+  // The native completion imports the same preserved review into the existing value record, without granting unselected targets.
+  run.artifacts = [file.path]; run.deliverables = [{ id: 'review', capability: 'geo-insight' }]; run.effectiveAgentId = 'geo-insight';
+  let snapshotAvailable = false;
+  const importDelivery = createGeoDeliveryImport({ store, planningContext: (project, run) => contexts.forRun(project, run),
+    readFile: async () => { throw new Error('No workspace fallback for a bound source review'); },
+    readRunFile: async (_control, producing, relative) => {
+      assert.equal(producing.id, run.id); assert.equal(relative, file.path);
+      if (!snapshotAvailable) throw Object.assign(new Error('Original snapshot missing'), { code: 'geo_plan_output_unavailable' });
+      return (await results.raw(user.id, control.id, file.versionId)).bytes;
+    } });
+  const missing = await importDelivery(control, run);
+  assert.ok(missing.failed?.includes('geo_plan_output_unavailable'));
+  assert.equal((await store.latestValue(project.id)).data.sourceChanges?.find(change => change.id === 'source')?.review, undefined);
+  snapshotAvailable = true;
+  const imported = await importDelivery(control, run, { recovery: true });
+  assert.ok(imported.failed?.includes('geo_plan_output_unavailable'), 'The unselected target is reported as a partial refusal');
+  const savedReview = (await store.latestValue(project.id)).data.sourceChanges.find(change => change.id === 'source').review;
+  assert.deepEqual(savedReview.targets.map(target => target.targetKey), ['article', 'finding', 'claim', 'unchanged']);
+  assert.equal(savedReview.contextRef, staged.referenceId);
+  assert.equal(importDelivery.counters.imported, 0, 'An imported supported review does not hide a refused target');
+  const profileVersion = (await store.latestValue(project.id)).version;
+  await importDelivery(control, run, { recovery: true });
+  assert.equal((await store.latestValue(project.id)).version, profileVersion, 'The same supported review is semantically idempotent');
+
   const partial = await reader.forRun(project, signal, run, targets);
   assert.equal(partial.records.length, 4); assert.ok(partial.issues.includes('review_target_invalid'));
   assert.equal(partial.records.find(row => row.targetKey === 'article').outcome, 'update_proposed');

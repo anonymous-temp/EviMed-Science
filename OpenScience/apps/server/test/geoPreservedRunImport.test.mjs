@@ -77,3 +77,18 @@ test('content pins both manifest and the actual handed article in its deliverabl
   const pinned = await pinGeoRunOutputs({ results: f.results, project, run: produced, context: { mode: 'content' }, transcript: t });
   assert.equal(String(await pinned.readFile(project, produced, article)), String(bytes));
 });
+
+test('SPEC-3: bound signal review pins only handed canonical geo-value bytes of its actual supported capability', async () => {
+  const relative = 'deliverables/native/geo-value.json', f = fixture();
+  const reviewRun = { ...run, effectiveAgentId: 'geo-insight', artifacts: [relative], deliverables: [{ id: 'native', capability: 'geo-insight' }] };
+  f.versions[0] = { ...f.version, path: relative };
+  const t = transcript(); t.messages[1].parts[0].input.file_path = `/workspace/${relative}`;
+  const pinned = await pinGeoRunOutputs({ project, run: reviewRun, context: { mode: 'signal' }, transcript: t, results: f.results });
+  assert.equal(String(await pinned.readFile(project, reviewRun, relative)), String(f.bytes));
+  for (const unqualified of [{ ...reviewRun, effectiveAgentId: 'open-domain-answer', deliverables: [] }, { ...reviewRun, artifacts: [] }]) {
+    const refused = await pinGeoRunOutputs({ project, run: unqualified, context: { mode: 'signal' }, transcript: t, results: f.results });
+    await assert.rejects(refused.readFile(project, unqualified, relative), { code: 'geo_plan_output_unavailable' });
+  }
+  const analysis = await pinGeoRunOutputs({ project, run: reviewRun, context: { mode: 'analysis' }, transcript: t, results: f.results });
+  await assert.rejects(analysis.readFile(project, reviewRun, relative), { code: 'geo_plan_output_unavailable' });
+});
