@@ -220,6 +220,47 @@ test('shared native question answers correlate to delivered carrier and stop aft
   assert.equal(answered, 1);
 });
 
+test('successful shared MUX question answers release their correlation slots and a refusal retains the question', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  peer.on('message', raw => {
+    const call = JSON.parse(raw.toString());
+    if (call.type !== 'open') return;
+    if (call.endpoint === '$events') peer.send(JSON.stringify({ type: 'item', streamId: call.streamId, value: { type: 'ready', clientId: 'native-client', host: { home: '/private' } } }));
+    else if (call.streamId === 'refused') peer.send(JSON.stringify({ type: 'error', streamId: call.streamId, error: { code: 'fixture_refused', message: 'Try again', details: {} } }));
+    else {
+      peer.send(JSON.stringify({ type: 'item', streamId: call.streamId }));
+      peer.send(JSON.stringify({ type: 'end', streamId: call.streamId }));
+    }
+  });
+  c.send(open('events', '$events')); await c.next();
+  let lastArgs;
+  for (let index = 0; index < 140; index++) {
+    const eventId = `question-${index}`, callId = `call-${index}`;
+    peer.send(JSON.stringify({ type: 'item', streamId: 'events', value: { type: 'waterfall', event: 'user-questions/request', eventId,
+      agentId: 'shared-root', request: { wait: { callId }, questions: [] } } }));
+    assert.equal((await c.next()).value.eventId, eventId);
+    const method = 'userQuestions/answer';
+    const args = { agentId: 'shared-root', callId, answers: [] };
+    if (index === 0) {
+      c.send(open('refused', method, args)); const refusal = await c.next();
+      assert.equal(refusal.type, 'error'); assert.equal(refusal.error.code, 'fixture_refused');
+    }
+    c.send(open(`answer-${index}`, method, args));
+    assert.equal((await c.next()).type, 'item'); assert.equal((await c.next()).type, 'end');
+    if (index === 0) {
+      c.send(open('duplicate-initial', method, args)); const duplicate = await c.next();
+      assert.equal(duplicate.type, 'error'); assert.equal(duplicate.error.code, 'runtime_ui_method_denied');
+      assert.equal((await c.next()).type, 'end');
+    }
+    lastArgs = args;
+  }
+  c.send(open('duplicate-answer', 'userQuestions/answer', lastArgs));
+  const denied = await c.next(); assert.equal(denied.type, 'error'); assert.equal(denied.error.code, 'runtime_ui_method_denied');
+});
+
 test('a still-valid older HTTP ticket cannot roll a renewed shared carrier expiry backward', { timeout: 5000 }, async t => {
   const shared = { allowed: true, inputs: [], locked: false };
   const f = await fixture(t, { runtimeUiFrameTtlMs: 1000 }, {}, { shared });

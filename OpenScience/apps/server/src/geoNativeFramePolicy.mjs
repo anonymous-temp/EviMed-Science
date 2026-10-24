@@ -45,7 +45,11 @@ export class GeoNativeFramePolicy {
         if (['session/list', 'session/control', '$events'].includes(method)) await this.refresh();
         assertCurrent();
         if (context.signal.aborted || method === '$events' && eventsId !== context.streamId) return { forward: false };
-        return this.scope.project(method, payload, value);
+        const projected = this.scope.project(method, payload, value);
+        // A successful MUX item is the native RPC result. The pinned gateway
+        // does not echo question cancellation to the answering peer.
+        if (projected.forward) this.scope.complete(method, payload);
+        return projected;
       },
       onStreamClosed: (endpoint, streamId) => { if (this.carrier === generation && endpoint === '$events' && eventsId === streamId) { eventsId = null; this.scope.closeEvents(); } },
     };
