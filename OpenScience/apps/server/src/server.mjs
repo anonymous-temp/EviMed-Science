@@ -2669,9 +2669,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return { present: artifacts.length > 0 || !professional && answer.available, artifacts, answer };
       } });
     geo.service.signals = geo.signals;
+    const signalControlProject = async project => {
+      const owner = await store.userById(project.userId);
+      if (!owner) throw new HttpError(404, "geo_project_not_found", "The GEO project owner is unavailable.");
+      return store.requireProject(owner, project.projectId);
+    };
     if (resultProvenance) geo.signalResults = new GeoSignalResults({ signals: geo.signals, contexts: geoPlanContexts, results: resultProvenance,
-      programmeRuns: async project => programmeRunsOf(await store.requireProject({ id: project.userId }, project.projectId)),
-      controlProject: project => store.requireProject({ id: project.userId }, project.projectId) });
+      programmeRuns: async project => programmeRunsOf(await signalControlProject(project)), controlProject: signalControlProject });
     if (geo.signalResults && resultProvenance) {
       const reviews = new GeoSourceReviews({ bridge: geo.signalResults, results: resultProvenance, store: geo.store });
       geo.signals.sourceReviewForRun = (project, signal, run, targets) => reviews.forRun(project, signal, run, targets);
