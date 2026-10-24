@@ -453,6 +453,12 @@ function frontierSettings(overrides) {
     // The most safety pushes one reader receives in a day (owner ruling 2026-10-10: a Class I recall and a boxed-warning alert now go to
     // every reader with the push on). FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT (frontierNotifications.mjs, with the reasoning).
     frontierSafetyPushDailyCap: integer("frontierSafetyPushDailyCap", "OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", 3, 1, 50),
+    // Lead triggers (ct-mix 2026-10-24, frontierLeads.mjs): the feed searches the open web through the platform's gateway for
+    // what it is missing and hands the pages to the knowledge plugin. On with the module (it needs a web-search engine and
+    // the plugin); a day's searches are capped here (FRONTIER_LEADS_DAILY_QUERIES_DEFAULT), each booked under purpose
+    // `frontier` and held to the module's daily budget; 0 makes none.
+    frontierLeadsEnabled: overrides.frontierLeadsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_LEADS_ENABLED", true),
+    frontierLeadsDailyQueries: integer("frontierLeadsDailyQueries", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES", 120, 0, 1000),
     knowledgePluginUrl: pluginUrl,
     knowledgePluginTokenFile: tokenFile,
     knowledgePluginPollMs: integer("knowledgePluginPollMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS", 60_000, 5_000, 3_600_000),

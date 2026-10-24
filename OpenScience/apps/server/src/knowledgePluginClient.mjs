@@ -877,6 +877,25 @@ export class KnowledgePluginClient {
     return { accepted: integer(body?.accepted, 0, Number.MAX_SAFE_INTEGER) ?? 0, unknown: integer(body?.unknown, 0, Number.MAX_SAFE_INTEGER) ?? 0 };
   }
 
+  /**
+   * Pages the platform's lead triggers found, handed to the plugin to read under its own rules (`POST /v1/leads`, contract
+   * 1.6.0, ct-mix 2026-10-24): at most 50 a call, each an http(s) address with the trigger that found it and what the search
+   * said of it. The plugin answers each address `accepted` (queued), `duplicate` (it has it), `refused` (it will not read
+   * it) or `capped` (its day's leads are spent); an answer it did not give is left out.
+   * @param {Array<{ url: string, trigger: string, query?: string, title?: string, snippet?: string, published_hint?: string }>} leads
+   * @returns {Promise<{ accepted: number, duplicate: number, refused: number, capped: number, results: Array<{ url: string, status: string, reason: string | null }> }>}
+   */
+  async submitLeads(leads) {
+    if (!Array.isArray(leads) || leads.length < 1 || leads.length > 50) throw pluginError(400, "knowledge_plugin_request_invalid", "A lead post carries 1-50 addresses.");
+    const body = await this.#request("POST", "/v1/leads", { body: { leads } });
+    const statuses = ["accepted", "duplicate", "refused", "capped"];
+    const results = (Array.isArray(body?.results) ? body.results : [])
+      .filter((/** @type {any} */ row) => isObject(row) && typeof row.url === "string" && statuses.includes(row.status))
+      .map((/** @type {any} */ row) => ({ url: row.url, status: row.status, reason: text(row.reason, 200) ?? null }));
+    const count = (/** @type {string} */ name) => integer(body?.[name], 0, Number.MAX_SAFE_INTEGER) ?? 0;
+    return { accepted: count("accepted"), duplicate: count("duplicate"), refused: count("refused"), capped: count("capped"), results };
+  }
+
   status() {
     return { configured: this.configured, minContract: this.minContract, lastError: this.lastError, counters: { ...this.counters } };
   }

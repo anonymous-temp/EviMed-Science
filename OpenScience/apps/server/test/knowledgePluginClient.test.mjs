@@ -399,3 +399,25 @@ test("contract 1.5.0: media is read as bytes with its type, an unknown id is not
   await assert.rejects(plugin.media("../etc/passwd"), { code: "knowledge_plugin_not_found" });
   assert.equal(calls.length, 3, "an id that is not a sha256 never leaves the platform");
 });
+
+test("ct-mix: leads are posted to /v1/leads with the token, 1-50 a call; the answer is read row by row and what is not one is left out", async () => {
+  const leads = [{ url: "https://news.example.cn/a", trigger: "zh-report", title: "标题", published_hint: "2026-10-24T01:00:00.000Z" },
+    { url: "https://doi.org/10.1056/x", trigger: "primary-source" }];
+  const { plugin, calls } = client([{ body: { accepted: 1, duplicate: 1, refused: 0, capped: 0, results: [
+    { url: "https://news.example.cn/a", status: "accepted" }, { url: "https://doi.org/10.1056/x", status: "duplicate", reason: "seen 2026-10-23" },
+    { url: "https://x.example/", status: "made-up" }, "not a row"] } }]);
+  const answer = await plugin.submitLeads(leads);
+  assert.equal(calls[0].url, "http://plugin.test:8080/v1/leads");
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers.authorization, "Bearer test-only-token-one");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { leads });
+  assert.deepEqual(answer, { accepted: 1, duplicate: 1, refused: 0, capped: 0, results: [
+    { url: "https://news.example.cn/a", status: "accepted", reason: null }, { url: "https://doi.org/10.1056/x", status: "duplicate", reason: "seen 2026-10-23" }] });
+  await assert.rejects(plugin.submitLeads([]), { code: "knowledge_plugin_request_invalid" });
+  await assert.rejects(plugin.submitLeads(Array.from({ length: 51 }, (_, index) => ({ url: `https://e.example/${index}`, trigger: "hot-tag" }))),
+    { code: "knowledge_plugin_request_invalid" });
+  // A plugin older than 1.6.0 has no such path: a 404 names itself, and nothing is retried.
+  const old = client([{ status: 404, body: { code: "not_found", message: "no such path", retryable: false } }]);
+  await assert.rejects(old.plugin.submitLeads(leads), { code: "knowledge_plugin_not_found" });
+  assert.equal(old.calls.length, 1);
+});

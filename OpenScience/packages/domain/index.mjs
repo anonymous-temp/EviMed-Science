@@ -1383,6 +1383,22 @@ export {
   frontierMixSelect,
   frontierMixSourceCap,
 } from './src/frontierMix.mjs'
+// frontierLeadWatch — 11 exports: what the frontier feed goes looking for and when (lead triggers): the triggers and their
+// shares of a day's searches, the congress calendar (`frontier-congresses.json`) and its windows, the Chinese regulatory
+// and industry watch, a genre group's gap queries, the identifiers a report names, and the key a query is deduplicated by.
+export {
+  FRONTIER_CONGRESS_WINDOW_DAYS,
+  FRONTIER_CONGRESSES,
+  FRONTIER_LEAD_GENRE_QUERIES,
+  FRONTIER_LEAD_REGULATORY_WATCH,
+  FRONTIER_LEAD_RESULTS_PER_QUERY,
+  FRONTIER_LEAD_SHARES,
+  FRONTIER_LEAD_TRIGGERS,
+  frontierActiveCongresses,
+  frontierIdentifierLeads,
+  frontierLeadPlaces,
+  frontierLeadQueryKey,
+} from './src/frontierLeadWatch.mjs'
 // projectCard — the slots a project's memory is read in: six general ones for any kind of
 // work, the clinical elements as an extension written only when a study was described,
 // `project.ext.<name>` for the extras of other kinds of work, and the one check on a

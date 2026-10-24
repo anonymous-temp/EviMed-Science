@@ -1,0 +1,969 @@
+{
+  "_doc": "Major medical congresses from 2026-10-15 to 2027-12-31 (ct-mix 2026-10-24): each occurrence with its dates as its organiser published them, the day its abstracts go online where published, and the zh/en keywords the frontier feed's lead triggers search while it is on — from 3 days before its start to 3 days after its end, and from the day its abstracts go online to 3 days after. Compiled from each organiser's own page (source_url) on 2026-10-24; an occurrence whose dates were not published is left out rather than guessed. Extend it as dates are announced (ASH, AHA, AASLD, IDWeek and ACR 2027, and the 2027 CSCO, CSC, GW-ICC, OCC, CDS and CACA meetings were not yet published).",
+  "generated_at": "2026-10-24",
+  "congresses": [
+    {
+      "id": "gw-icc-2026",
+      "name_en": "Great Wall International Congress of Cardiology & Asian Heart Society Congress 2026 (GW-ICC/AHS 2026)",
+      "name_zh": "第37届长城心脏病学大会暨亚洲心脏大会2026（长城会）",
+      "start": "2026-10-15",
+      "end": "2026-10-18",
+      "abstracts_at": null,
+      "city": "Beijing",
+      "keywords_en": [
+        "GW-ICC 2026",
+        "Great Wall International Congress of Cardiology"
+      ],
+      "keywords_zh": [
+        "长城会 2026",
+        "长城心脏病学大会",
+        "GW-ICC 2026"
+      ],
+      "specialty": "cardiology",
+      "source_url": "https://news.qq.com/rain/a/20260916A0CDT700"
+    },
+    {
+      "id": "ueg-week-2026",
+      "name_en": "UEG Week 2026",
+      "name_zh": "欧洲胃肠病学周",
+      "start": "2026-10-17",
+      "end": "2026-10-20",
+      "abstracts_at": null,
+      "city": "Barcelona",
+      "keywords_en": [
+        "UEG Week 2026",
+        "UEGW 2026"
+      ],
+      "keywords_zh": [
+        "UEG Week 2026",
+        "欧洲胃肠病学周"
+      ],
+      "specialty": "gastroenterology",
+      "source_url": "https://ueg.eu/"
+    },
+    {
+      "id": "chest-2026",
+      "name_en": "CHEST Annual Meeting 2026",
+      "name_zh": "美国胸科医师学会年会",
+      "start": "2026-10-18",
+      "end": "2026-10-21",
+      "abstracts_at": null,
+      "city": "Phoenix",
+      "keywords_en": [
+        "CHEST 2026",
+        "CHEST Annual Meeting"
+      ],
+      "keywords_zh": [
+        "CHEST 2026",
+        "美国胸科医师学会年会"
+      ],
+      "specialty": "respiratory",
+      "source_url": "https://www.hcplive.com/view/chest-2026-preview-late-breakers-interviews"
+    },
+    {
+      "id": "asn-kidney-week-2026",
+      "name_en": "ASN Kidney Week 2026",
+      "name_zh": "美国肾脏病学会年会（肾脏周）",
+      "start": "2026-10-21",
+      "end": "2026-10-25",
+      "abstracts_at": null,
+      "city": "Denver",
+      "keywords_en": [
+        "Kidney Week 2026",
+        "ASN Kidney Week"
+      ],
+      "keywords_zh": [
+        "ASN 2026",
+        "肾脏周",
+        "美国肾脏病学会年会"
+      ],
+      "specialty": "nephrology",
+      "source_url": "https://www.asn-online.org/education/kidneyweek/2026/meeting-overview.aspx"
+    },
+    {
+      "id": "ectrims-2026",
+      "name_en": "MSToronto2026 – 10th Joint ACTRIMS-ECTRIMS Meeting",
+      "name_zh": "ECTRIMS-ACTRIMS联合大会（欧洲多发性硬化治疗与研究委员会年会）",
+      "start": "2026-10-21",
+      "end": "2026-10-23",
+      "abstracts_at": null,
+      "city": "Toronto",
+      "keywords_en": [
+        "ECTRIMS 2026",
+        "MSToronto2026",
+        "ACTRIMS-ECTRIMS"
+      ],
+      "keywords_zh": [
+        "ECTRIMS 2026",
+        "多发性硬化 大会",
+        "ECTRIMS大会"
+      ],
+      "specialty": "neurology",
+      "source_url": "https://ectrims.eu/"
+    },
+    {
+      "id": "idweek-2026",
+      "name_en": "IDWeek 2026",
+      "name_zh": "美国感染病周",
+      "start": "2026-10-21",
+      "end": "2026-10-24",
+      "abstracts_at": null,
+      "city": "Washington, D.C.",
+      "keywords_en": [
+        "IDWeek 2026",
+        "IDWeek"
+      ],
+      "keywords_zh": [
+        "IDWeek 2026",
+        "美国感染病周"
+      ],
+      "specialty": "infectious-disease",
+      "source_url": "https://www.idweek.org/"
+    },
+    {
+      "id": "esmo-2026",
+      "name_en": "ESMO Congress 2026",
+      "name_zh": "欧洲肿瘤内科学会年会",
+      "start": "2026-10-23",
+      "end": "2026-10-27",
+      "abstracts_at": null,
+      "city": "Madrid",
+      "keywords_en": [
+        "ESMO 2026",
+        "ESMO Congress 2026"
+      ],
+      "keywords_zh": [
+        "ESMO 2026",
+        "ESMO大会",
+        "欧洲肿瘤内科学会年会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.esmo.org/meeting-calendar/esmo-congress-2026"
+    },
+    {
+      "id": "aasld-2026",
+      "name_en": "The Liver Meeting 2026 (AASLD)",
+      "name_zh": "美国肝病研究学会年会",
+      "start": "2026-11-05",
+      "end": "2026-11-09",
+      "abstracts_at": null,
+      "city": "Denver",
+      "keywords_en": [
+        "AASLD 2026",
+        "The Liver Meeting 2026"
+      ],
+      "keywords_zh": [
+        "AASLD 2026",
+        "美国肝病研究学会年会"
+      ],
+      "specialty": "gastroenterology",
+      "source_url": "https://www.aasld.org/tlm-26/home"
+    },
+    {
+      "id": "acr-convergence-2026",
+      "name_en": "ACR Convergence 2026",
+      "name_zh": "美国风湿病学会年会",
+      "start": "2026-11-06",
+      "end": "2026-11-11",
+      "abstracts_at": null,
+      "city": "Orlando",
+      "keywords_en": [
+        "ACR Convergence 2026",
+        "ACR 2026"
+      ],
+      "keywords_zh": [
+        "ACR 2026",
+        "美国风湿病学会年会"
+      ],
+      "specialty": "rheumatology",
+      "source_url": "https://rheumatology.org/annual-meeting"
+    },
+    {
+      "id": "aha-2026",
+      "name_en": "AHA Scientific Sessions 2026",
+      "name_zh": "美国心脏协会科学年会",
+      "start": "2026-11-06",
+      "end": "2026-11-09",
+      "abstracts_at": null,
+      "city": "Chicago",
+      "keywords_en": [
+        "AHA 2026",
+        "AHA Scientific Sessions 2026"
+      ],
+      "keywords_zh": [
+        "AHA 2026",
+        "美国心脏协会年会"
+      ],
+      "specialty": "cardiology",
+      "source_url": "https://professional.heart.org/en/meetings/scientific-sessions"
+    },
+    {
+      "id": "caca-cchio-2026",
+      "name_en": "China Conference of Holistic Integrative Oncology 2026 (CCHIO 2026, China Anti-Cancer Association)",
+      "name_zh": "2026中国整合肿瘤学大会（中国抗癌协会；2023年由中国肿瘤学大会更名）",
+      "start": "2026-11-12",
+      "end": "2026-11-15",
+      "abstracts_at": null,
+      "city": "Changsha",
+      "keywords_en": [
+        "CCHIO 2026",
+        "China Anti-Cancer Association congress"
+      ],
+      "keywords_zh": [
+        "CCHIO 2026",
+        "中国整合肿瘤学大会",
+        "中国肿瘤学大会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://news.qq.com/rain/a/20260922A098LS00"
+    },
+    {
+      "id": "csc-2026",
+      "name_en": "Chinese Society of Cardiology Annual Congress 2026 (CSC 2026)",
+      "name_zh": "中华医学会第二十八次心血管年会",
+      "start": "2026-11-12",
+      "end": "2026-11-15",
+      "abstracts_at": null,
+      "city": "Guangzhou",
+      "keywords_en": [
+        "CSC 2026",
+        "Chinese Society of Cardiology congress"
+      ],
+      "keywords_zh": [
+        "CSC 2026",
+        "中华医学会心血管年会",
+        "心血管年会 2026"
+      ],
+      "specialty": "cardiology",
+      "source_url": "https://csc.cma.org.cn/art/2026/5/31/art_595_59247.html"
+    },
+    {
+      "id": "cds-2026",
+      "name_en": "Chinese Diabetes Society Annual Meeting 2026 (CDS 2026)",
+      "name_zh": "中华医学会第二十八次糖尿病学术会议",
+      "start": "2026-11-18",
+      "end": "2026-11-21",
+      "abstracts_at": null,
+      "city": "Xiamen",
+      "keywords_en": [
+        "CDS 2026",
+        "Chinese Diabetes Society annual meeting"
+      ],
+      "keywords_zh": [
+        "CDS 2026",
+        "中华医学会糖尿病学术会议",
+        "糖尿病学分会年会"
+      ],
+      "specialty": "endocrinology",
+      "source_url": "https://journals.csu.edu.cn/news-detail/2526"
+    },
+    {
+      "id": "rsna-2026",
+      "name_en": "RSNA 2026 Annual Meeting",
+      "name_zh": "北美放射学会年会",
+      "start": "2026-11-29",
+      "end": "2026-12-03",
+      "abstracts_at": null,
+      "city": "Chicago",
+      "keywords_en": [
+        "RSNA 2026",
+        "RSNA annual meeting"
+      ],
+      "keywords_zh": [
+        "RSNA 2026",
+        "北美放射学会年会"
+      ],
+      "specialty": "radiology",
+      "source_url": "https://www.rsna.org/news/announcements/annual-meeting"
+    },
+    {
+      "id": "esmo-asia-2026",
+      "name_en": "ESMO Asia Congress 2026",
+      "name_zh": "ESMO亚洲年会",
+      "start": "2026-12-04",
+      "end": "2026-12-06",
+      "abstracts_at": null,
+      "city": "Singapore",
+      "keywords_en": [
+        "ESMO Asia 2026",
+        "ESMO Asia Congress"
+      ],
+      "keywords_zh": [
+        "ESMO Asia 2026",
+        "ESMO亚洲年会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.esmo.org/meeting-calendar/esmo-asia-congress-2026"
+    },
+    {
+      "id": "sabcs-2026",
+      "name_en": "San Antonio Breast Cancer Symposium 2026",
+      "name_zh": "圣安东尼奥乳腺癌研讨会",
+      "start": "2026-12-08",
+      "end": "2026-12-11",
+      "abstracts_at": "2026-11-23",
+      "city": "San Antonio",
+      "keywords_en": [
+        "SABCS 2026",
+        "San Antonio Breast Cancer Symposium"
+      ],
+      "keywords_zh": [
+        "SABCS 2026",
+        "圣安东尼奥乳腺癌大会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.sabcs.org/"
+    },
+    {
+      "id": "ash-2026",
+      "name_en": "68th ASH Annual Meeting and Exposition",
+      "name_zh": "美国血液学会年会",
+      "start": "2026-12-12",
+      "end": "2026-12-15",
+      "abstracts_at": "2026-11-04",
+      "city": "New Orleans",
+      "keywords_en": [
+        "ASH 2026",
+        "ASH Annual Meeting"
+      ],
+      "keywords_zh": [
+        "ASH 2026",
+        "美国血液学会年会"
+      ],
+      "specialty": "hematology",
+      "source_url": "https://www.hematology.org/meetings/annual-meeting"
+    },
+    {
+      "id": "jpm-2027",
+      "name_en": "45th Annual J.P. Morgan Healthcare Conference",
+      "name_zh": "摩根大通医疗健康大会",
+      "start": "2027-01-11",
+      "end": "2027-01-14",
+      "abstracts_at": null,
+      "city": "San Francisco",
+      "keywords_en": [
+        "JPM 2027",
+        "J.P. Morgan Healthcare Conference"
+      ],
+      "keywords_zh": [
+        "JPM 2027",
+        "摩根大通医疗健康大会",
+        "摩根大通医疗大会"
+      ],
+      "specialty": null,
+      "source_url": "https://www.jpmorgan.com/about-us/events-conferences/health-care-conference"
+    },
+    {
+      "id": "asco-gi-2027",
+      "name_en": "2027 ASCO Gastrointestinal Cancers Symposium",
+      "name_zh": "ASCO胃肠道肿瘤研讨会",
+      "start": "2027-01-21",
+      "end": "2027-01-23",
+      "abstracts_at": null,
+      "city": "San Francisco",
+      "keywords_en": [
+        "ASCO GI 2027",
+        "Gastrointestinal Cancers Symposium"
+      ],
+      "keywords_zh": [
+        "ASCO GI 2027",
+        "ASCO胃肠肿瘤研讨会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://moscone.com/events/american-society-clinical-oncology-gi-cancers-symposium-2027"
+    },
+    {
+      "id": "asco-gu-2027",
+      "name_en": "2027 ASCO Genitourinary Cancers Symposium",
+      "name_zh": "ASCO泌尿生殖系统肿瘤研讨会",
+      "start": "2027-02-11",
+      "end": "2027-02-13",
+      "abstracts_at": null,
+      "city": "San Francisco",
+      "keywords_en": [
+        "ASCO GU 2027",
+        "Genitourinary Cancers Symposium"
+      ],
+      "keywords_zh": [
+        "ASCO GU 2027",
+        "ASCO泌尿肿瘤研讨会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://moscone.com/events/american-society-clinical-oncology-gu-cancers-symposium-2027"
+    },
+    {
+      "id": "croi-2027",
+      "name_en": "CROI 2027 (34th Conference on Retroviruses and Opportunistic Infections)",
+      "name_zh": "逆转录病毒与机会性感染大会",
+      "start": "2027-03-21",
+      "end": "2027-03-24",
+      "abstracts_at": null,
+      "city": "San Diego",
+      "keywords_en": [
+        "CROI 2027",
+        "Conference on Retroviruses and Opportunistic Infections"
+      ],
+      "keywords_zh": [
+        "CROI 2027",
+        "逆转录病毒与机会性感染大会"
+      ],
+      "specialty": "infectious-disease",
+      "source_url": "https://www.croiconference.org/about/croi-2027-preliminary-important-dates-and-deadlines/"
+    },
+    {
+      "id": "wcn-2027",
+      "name_en": "ISN World Congress of Nephrology 2027 (WCN'27)",
+      "name_zh": "世界肾脏病大会",
+      "start": "2027-04-01",
+      "end": "2027-04-04",
+      "abstracts_at": null,
+      "city": "Kuala Lumpur",
+      "keywords_en": [
+        "WCN 2027",
+        "World Congress of Nephrology"
+      ],
+      "keywords_zh": [
+        "WCN 2027",
+        "世界肾脏病大会"
+      ],
+      "specialty": "nephrology",
+      "source_url": "https://www.theisn.org/wcn27/"
+    },
+    {
+      "id": "aacr-2027",
+      "name_en": "AACR Annual Meeting 2027",
+      "name_zh": "美国癌症研究协会年会",
+      "start": "2027-04-02",
+      "end": "2027-04-07",
+      "abstracts_at": null,
+      "city": "Orlando",
+      "keywords_en": [
+        "AACR 2027",
+        "AACR Annual Meeting 2027"
+      ],
+      "keywords_zh": [
+        "AACR 2027",
+        "美国癌症研究协会年会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.aacr.org/meeting/aacr-annual-meeting-2027/"
+    },
+    {
+      "id": "escmid-global-2027",
+      "name_en": "ESCMID Global 2027 (formerly ECCMID)",
+      "name_zh": "欧洲临床微生物学与感染病学大会",
+      "start": "2027-04-09",
+      "end": "2027-04-13",
+      "abstracts_at": null,
+      "city": "Stockholm",
+      "keywords_en": [
+        "ESCMID Global 2027",
+        "ESCMID 2027"
+      ],
+      "keywords_zh": [
+        "ESCMID Global 2027",
+        "欧洲临床微生物与感染病大会"
+      ],
+      "specialty": "infectious-disease",
+      "source_url": "https://www.escmid.org/congress-events/escmid-global/munich-2026/yearly-plan"
+    },
+    {
+      "id": "acc-2027",
+      "name_en": "ACC.27 Together With WCC (ACC Annual Scientific Session 2027)",
+      "name_zh": "美国心脏病学会年会",
+      "start": "2027-04-10",
+      "end": "2027-04-12",
+      "abstracts_at": null,
+      "city": "Houston",
+      "keywords_en": [
+        "ACC.27",
+        "ACC 2027 Scientific Session"
+      ],
+      "keywords_zh": [
+        "ACC.27",
+        "ACC 2027",
+        "美国心脏病学会年会"
+      ],
+      "specialty": "cardiology",
+      "source_url": "https://accscientificsession.acc.org/"
+    },
+    {
+      "id": "aan-2027",
+      "name_en": "AAN 2027 Annual Meeting",
+      "name_zh": "美国神经病学学会年会",
+      "start": "2027-05-01",
+      "end": "2027-05-05",
+      "abstracts_at": null,
+      "city": "Washington, D.C.",
+      "keywords_en": [
+        "AAN 2027",
+        "AAN Annual Meeting"
+      ],
+      "keywords_zh": [
+        "AAN 2027",
+        "美国神经病学学会年会"
+      ],
+      "specialty": "neurology",
+      "source_url": "https://www.aan.com/conferences-community/upcoming-conference-dates/"
+    },
+    {
+      "id": "esmo-breast-2027",
+      "name_en": "ESMO Breast Cancer 2027",
+      "name_zh": "ESMO乳腺癌大会",
+      "start": "2027-05-12",
+      "end": "2027-05-14",
+      "abstracts_at": null,
+      "city": "Milan",
+      "keywords_en": [
+        "ESMO Breast 2027",
+        "ESMO Breast Cancer 2027"
+      ],
+      "keywords_zh": [
+        "ESMO Breast 2027",
+        "ESMO乳腺癌大会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.esmo.org/meeting-calendar/esmo-breast-cancer-2027"
+    },
+    {
+      "id": "ats-2027",
+      "name_en": "ATS 2027 International Conference",
+      "name_zh": "美国胸科学会国际会议",
+      "start": "2027-05-14",
+      "end": "2027-05-19",
+      "abstracts_at": null,
+      "city": "New Orleans",
+      "keywords_en": [
+        "ATS 2027",
+        "ATS International Conference"
+      ],
+      "keywords_zh": [
+        "ATS 2027",
+        "美国胸科学会年会"
+      ],
+      "specialty": "respiratory",
+      "source_url": "https://site.thoracic.org/conference/program/ats-2027-call-for-input"
+    },
+    {
+      "id": "ddw-2027",
+      "name_en": "Digestive Disease Week 2027 (DDW 2027)",
+      "name_zh": "美国消化疾病周",
+      "start": "2027-05-15",
+      "end": "2027-05-18",
+      "abstracts_at": null,
+      "city": "Washington, D.C.",
+      "keywords_en": [
+        "DDW 2027",
+        "Digestive Disease Week"
+      ],
+      "keywords_zh": [
+        "DDW 2027",
+        "美国消化疾病周"
+      ],
+      "specialty": "gastroenterology",
+      "source_url": "https://ddw.org/"
+    },
+    {
+      "id": "era-2027",
+      "name_en": "64th ERA Congress",
+      "name_zh": "欧洲肾脏协会年会",
+      "start": "2027-06-03",
+      "end": "2027-06-06",
+      "abstracts_at": null,
+      "city": "Rotterdam",
+      "keywords_en": [
+        "ERA 2027",
+        "ERA Congress 2027"
+      ],
+      "keywords_zh": [
+        "ERA 2027",
+        "欧洲肾脏协会年会"
+      ],
+      "specialty": "nephrology",
+      "source_url": "https://www.era-online.org/events/rotterdam-2027/"
+    },
+    {
+      "id": "asco-2027",
+      "name_en": "2027 ASCO Annual Meeting",
+      "name_zh": "美国临床肿瘤学会年会",
+      "start": "2027-06-04",
+      "end": "2027-06-08",
+      "abstracts_at": null,
+      "city": "Chicago",
+      "keywords_en": [
+        "ASCO 2027",
+        "ASCO Annual Meeting"
+      ],
+      "keywords_zh": [
+        "ASCO 2027",
+        "ASCO年会",
+        "美国临床肿瘤学会年会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://conferences.asco.org/am/dates-know"
+    },
+    {
+      "id": "bio-2027",
+      "name_en": "BIO International Convention 2027",
+      "name_zh": "BIO国际大会（美国生物技术创新组织国际大会）",
+      "start": "2027-06-07",
+      "end": "2027-06-10",
+      "abstracts_at": null,
+      "city": "Philadelphia",
+      "keywords_en": [
+        "BIO 2027",
+        "BIO International Convention"
+      ],
+      "keywords_zh": [
+        "BIO 2027",
+        "BIO国际大会"
+      ],
+      "specialty": null,
+      "source_url": "https://www.bio.org/events/bio-international-convention"
+    },
+    {
+      "id": "eular-2027",
+      "name_en": "EULAR 2027 Congress",
+      "name_zh": "欧洲抗风湿病联盟年会",
+      "start": "2027-06-09",
+      "end": "2027-06-12",
+      "abstracts_at": null,
+      "city": "Berlin",
+      "keywords_en": [
+        "EULAR 2027",
+        "EULAR Congress"
+      ],
+      "keywords_zh": [
+        "EULAR 2027",
+        "欧洲抗风湿病联盟年会"
+      ],
+      "specialty": "rheumatology",
+      "source_url": "https://convention.visitberlin.de/en/newsroom/pressemitteilungen/berlin-eular-2027"
+    },
+    {
+      "id": "eha-2027",
+      "name_en": "EHA2027 Congress",
+      "name_zh": "欧洲血液学协会年会",
+      "start": "2027-06-10",
+      "end": "2027-06-13",
+      "abstracts_at": null,
+      "city": "Barcelona",
+      "keywords_en": [
+        "EHA 2027",
+        "EHA2027 Congress"
+      ],
+      "keywords_zh": [
+        "EHA 2027",
+        "欧洲血液学协会年会"
+      ],
+      "specialty": "hematology",
+      "source_url": "https://ehaweb.org/connect-network/eha2027-congress"
+    },
+    {
+      "id": "easl-2027",
+      "name_en": "EASL Congress 2027",
+      "name_zh": "欧洲肝脏研究学会年会",
+      "start": "2027-06-16",
+      "end": "2027-06-19",
+      "abstracts_at": null,
+      "city": "London",
+      "keywords_en": [
+        "EASL 2027",
+        "EASL Congress 2027"
+      ],
+      "keywords_zh": [
+        "EASL 2027",
+        "欧洲肝病学会年会"
+      ],
+      "specialty": "gastroenterology",
+      "source_url": "https://www.easlcongress.eu/2026-easl-congress-2027/"
+    },
+    {
+      "id": "ada-2027",
+      "name_en": "ADA 87th Scientific Sessions (2027)",
+      "name_zh": "美国糖尿病协会科学年会",
+      "start": "2027-06-18",
+      "end": "2027-06-21",
+      "abstracts_at": null,
+      "city": "Washington, D.C.",
+      "keywords_en": [
+        "ADA 2027",
+        "ADA Scientific Sessions"
+      ],
+      "keywords_zh": [
+        "ADA 2027",
+        "美国糖尿病协会年会"
+      ],
+      "specialty": "endocrinology",
+      "source_url": "https://professional.diabetes.org/scientific-sessions"
+    },
+    {
+      "id": "isth-2027",
+      "name_en": "ISTH 2027 Congress",
+      "name_zh": "国际血栓与止血学会大会",
+      "start": "2027-06-26",
+      "end": "2027-06-30",
+      "abstracts_at": null,
+      "city": "Vancouver",
+      "keywords_en": [
+        "ISTH 2027",
+        "ISTH Congress"
+      ],
+      "keywords_zh": [
+        "ISTH 2027",
+        "国际血栓与止血学会大会"
+      ],
+      "specialty": "hematology",
+      "source_url": "https://www.isth.org/page/FutureMeetings"
+    },
+    {
+      "id": "aaic-2027",
+      "name_en": "Alzheimer's Association International Conference 2027 (AAIC 2027)",
+      "name_zh": "阿尔茨海默病协会国际会议",
+      "start": "2027-07-18",
+      "end": "2027-07-21",
+      "abstracts_at": null,
+      "city": "Chicago",
+      "keywords_en": [
+        "AAIC 2027",
+        "Alzheimer's Association International Conference"
+      ],
+      "keywords_zh": [
+        "AAIC 2027",
+        "阿尔茨海默病协会国际会议"
+      ],
+      "specialty": "neurology",
+      "source_url": "https://www.alz.org/futuremeetings"
+    },
+    {
+      "id": "esc-2027",
+      "name_en": "ESC Congress 2027",
+      "name_zh": "欧洲心脏病学会年会",
+      "start": "2027-08-27",
+      "end": "2027-08-30",
+      "abstracts_at": null,
+      "city": "Milan",
+      "keywords_en": [
+        "ESC Congress 2027",
+        "ESC 2027"
+      ],
+      "keywords_zh": [
+        "ESC 2027",
+        "欧洲心脏病学会年会"
+      ],
+      "specialty": "cardiology",
+      "source_url": "https://www.escardio.org/events/congresses/esc-congress/future-destinations/"
+    },
+    {
+      "id": "ers-2027",
+      "name_en": "ERS Congress 2027",
+      "name_zh": "欧洲呼吸学会年会",
+      "start": "2027-09-11",
+      "end": "2027-09-14",
+      "abstracts_at": null,
+      "city": "Milan",
+      "keywords_en": [
+        "ERS Congress 2027",
+        "ERS 2027"
+      ],
+      "keywords_zh": [
+        "ERS 2027",
+        "欧洲呼吸学会年会"
+      ],
+      "specialty": "respiratory",
+      "source_url": "https://www.ersnet.org/congress-and-events/congress"
+    },
+    {
+      "id": "wclc-2027",
+      "name_en": "IASLC 2027 World Conference on Lung Cancer",
+      "name_zh": "世界肺癌大会",
+      "start": "2027-09-11",
+      "end": "2027-09-14",
+      "abstracts_at": null,
+      "city": "Denver",
+      "keywords_en": [
+        "WCLC 2027",
+        "World Conference on Lung Cancer"
+      ],
+      "keywords_zh": [
+        "WCLC 2027",
+        "世界肺癌大会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://iaslc.secure-platform.com/a/page/IASLC_Programs/WCLC27_Chairs_CoChairs"
+    },
+    {
+      "id": "esmo-2027",
+      "name_en": "ESMO Congress 2027",
+      "name_zh": "欧洲肿瘤内科学会年会",
+      "start": "2027-09-17",
+      "end": "2027-09-21",
+      "abstracts_at": null,
+      "city": "Barcelona",
+      "keywords_en": [
+        "ESMO 2027",
+        "ESMO Congress 2027"
+      ],
+      "keywords_zh": [
+        "ESMO 2027",
+        "ESMO大会",
+        "欧洲肿瘤内科学会年会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.esmo.org/meeting-calendar/esmo-congress-2027"
+    },
+    {
+      "id": "astro-2027",
+      "name_en": "ASTRO 69th Annual Meeting (2027)",
+      "name_zh": "美国放射肿瘤学会年会",
+      "start": "2027-09-18",
+      "end": "2027-09-22",
+      "abstracts_at": null,
+      "city": "Chicago",
+      "keywords_en": [
+        "ASTRO 2027",
+        "ASTRO Annual Meeting"
+      ],
+      "keywords_zh": [
+        "ASTRO 2027",
+        "美国放射肿瘤学会年会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.astro.org/news-and-publications/astrogram/2026/astrogram_101426"
+    },
+    {
+      "id": "easd-2027",
+      "name_en": "63rd EASD Annual Meeting (EASD 2027)",
+      "name_zh": "欧洲糖尿病研究协会年会",
+      "start": "2027-09-20",
+      "end": "2027-09-24",
+      "abstracts_at": null,
+      "city": "Budapest",
+      "keywords_en": [
+        "EASD 2027",
+        "EASD Annual Meeting"
+      ],
+      "keywords_zh": [
+        "EASD 2027",
+        "欧洲糖尿病研究协会年会"
+      ],
+      "specialty": "endocrinology",
+      "source_url": "https://www.easd.org/annual-meeting/easd-2027/"
+    },
+    {
+      "id": "ectrims-2027",
+      "name_en": "ECTRIMS Global 2027 (43rd ECTRIMS Congress)",
+      "name_zh": "欧洲多发性硬化治疗与研究委员会年会",
+      "start": "2027-10-05",
+      "end": "2027-10-08",
+      "abstracts_at": null,
+      "city": "Vienna",
+      "keywords_en": [
+        "ECTRIMS 2027",
+        "ECTRIMS Global 2027"
+      ],
+      "keywords_zh": [
+        "ECTRIMS 2027",
+        "多发性硬化 大会"
+      ],
+      "specialty": "neurology",
+      "source_url": "https://ectrims.eu/events-ectrims-congress"
+    },
+    {
+      "id": "ueg-week-2027",
+      "name_en": "UEG Week 2027",
+      "name_zh": "欧洲胃肠病学周",
+      "start": "2027-10-16",
+      "end": "2027-10-19",
+      "abstracts_at": null,
+      "city": "Copenhagen",
+      "keywords_en": [
+        "UEG Week 2027",
+        "UEGW 2027"
+      ],
+      "keywords_zh": [
+        "UEG Week 2027",
+        "欧洲胃肠病学周"
+      ],
+      "specialty": "gastroenterology",
+      "source_url": "https://ueg.eu/week"
+    },
+    {
+      "id": "chest-2027",
+      "name_en": "CHEST Annual Meeting 2027",
+      "name_zh": "美国胸科医师学会年会",
+      "start": "2027-10-24",
+      "end": "2027-10-27",
+      "abstracts_at": null,
+      "city": "Vancouver",
+      "keywords_en": [
+        "CHEST 2027",
+        "CHEST Annual Meeting"
+      ],
+      "keywords_zh": [
+        "CHEST 2027",
+        "美国胸科医师学会年会"
+      ],
+      "specialty": "respiratory",
+      "source_url": "https://www.chestnet.org/learning-and-events/events/chest-annual-meeting"
+    },
+    {
+      "id": "asn-kidney-week-2027",
+      "name_en": "ASN Kidney Week 2027",
+      "name_zh": "美国肾脏病学会年会（肾脏周）",
+      "start": "2027-10-27",
+      "end": "2027-10-31",
+      "abstracts_at": null,
+      "city": "San Diego",
+      "keywords_en": [
+        "Kidney Week 2027",
+        "ASN Kidney Week"
+      ],
+      "keywords_zh": [
+        "ASN 2027",
+        "肾脏周",
+        "美国肾脏病学会年会"
+      ],
+      "specialty": "nephrology",
+      "source_url": "https://asn-online.org/education/kidneyweek/archives/future.aspx"
+    },
+    {
+      "id": "rsna-2027",
+      "name_en": "RSNA 2027 Annual Meeting",
+      "name_zh": "北美放射学会年会",
+      "start": "2027-11-14",
+      "end": "2027-11-18",
+      "abstracts_at": null,
+      "city": "Chicago",
+      "keywords_en": [
+        "RSNA 2027",
+        "RSNA annual meeting"
+      ],
+      "keywords_zh": [
+        "RSNA 2027",
+        "北美放射学会年会"
+      ],
+      "specialty": "radiology",
+      "source_url": "https://www.rsna.org/annual-meeting"
+    },
+    {
+      "id": "esmo-asia-2027",
+      "name_en": "ESMO Asia Congress 2027",
+      "name_zh": "ESMO亚洲年会",
+      "start": "2027-12-03",
+      "end": "2027-12-05",
+      "abstracts_at": null,
+      "city": "Singapore",
+      "keywords_en": [
+        "ESMO Asia 2027",
+        "ESMO Asia Congress"
+      ],
+      "keywords_zh": [
+        "ESMO Asia 2027",
+        "ESMO亚洲年会"
+      ],
+      "specialty": "oncology",
+      "source_url": "https://www.esmo.org/meeting-calendar/esmo-asia-congress-2027"
+    }
+  ]
+}
