@@ -150,3 +150,15 @@ test('a registered but unused namespace has an empty readable page and initializ
   assert.deepEqual(await f.store.files(user, { context }), []);
   assert.equal((await context.sessions.settings(user)).learning, false);
 });
+
+test('a noncanonical accepted archive never becomes a permanently pending page record', options, async t => {
+  const f = await fixture(t), user = f.owner.id;
+  const request = f.sessions.rootClient.request.bind(f.sessions.rootClient);
+  f.sessions.rootClient.request = async input => {
+    const answer = await request(input);
+    if (input.path.endsWith('/commit') && answer.result?.archive_uri) answer.result.archive_uri += '/';
+    return answer;
+  };
+  await assert.rejects(f.store.remember(user, { text: 'A fact', projectId: f.a.projectId }), error => error.code === 'memory_scope_denied');
+  assert.equal((await f.overlay.pendingCommits(user)).length, 0);
+});

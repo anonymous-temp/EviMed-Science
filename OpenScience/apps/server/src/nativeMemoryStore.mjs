@@ -787,7 +787,7 @@ export class NativeMemoryStore {
     const result = answer?.result ?? {};
     if (result.status !== "accepted" || typeof result.archive_uri !== "string") throw new HttpError(503, "memory_engine_unavailable", "The memory service did not accept it.");
     const archive = parseArchiveUri(result.archive_uri);
-    if (!archive || archive.rest || archive.userRoot !== context.userRoot || archive.session !== session) {
+    if (!archive || archive.rest || archive.archiveUri !== result.archive_uri || archive.userRoot !== context.userRoot || archive.session !== session) {
       throw new HttpError(403, 'memory_scope_denied', 'The memory archive does not match its page request.');
     }
     const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId, origin: "page",
