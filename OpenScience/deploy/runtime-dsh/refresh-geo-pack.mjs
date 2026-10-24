@@ -18,7 +18,22 @@ async function filesUnder(root, relative = "") {
   return files;
 }
 
-export async function refreshGeoPack(source, target) {
+/**
+ * A directory move that also works where rename cannot: in a Docker build on overlayfs, a directory that a lower image
+ * layer created answers rename with EXDEV (2026-10-24, the first delta release after this script: `/opt/evimed/skills/
+ * geo-private` comes from the base image). There it is copied and the original removed — not atomic, but a failure inside
+ * a build step fails the whole build, so no half-replaced tree can ship.
+ */
+export async function moveDirectory(from, to, renameImpl = rename) {
+  try { await renameImpl(from, to); }
+  catch (error) {
+    if (error?.code !== "EXDEV") throw error;
+    await cp(from, to, { recursive: true, force: true });
+    await rm(from, { recursive: true, force: true });
+  }
+}
+
+export async function refreshGeoPack(source, target, { renameImpl = rename } = {}) {
   const installed = await lstat(target).catch(error => { if (error.code === "ENOENT") return null; throw error; });
   if (installed && !installed.isDirectory()) fail();
   const entries = await readdir(source, { withFileTypes: true });
@@ -41,9 +56,9 @@ export async function refreshGeoPack(source, target) {
   let moved = false;
   try {
     await cp(source, staging, { recursive: true, force: true });
-    if (installed) { await rename(target, previous); moved = true; }
-    try { await rename(staging, target); }
-    catch (error) { if (moved) await rename(previous, target); moved = false; throw error; }
+    if (installed) { await moveDirectory(target, previous, renameImpl); moved = true; }
+    try { await moveDirectory(staging, target, renameImpl); }
+    catch (error) { if (moved) await moveDirectory(previous, target, renameImpl); moved = false; throw error; }
     await rm(previous, { recursive: true, force: true }); moved = false;
     return "replaced";
   } finally {

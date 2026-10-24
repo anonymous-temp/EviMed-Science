@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { refreshGeoPack } from "../../../deploy/runtime-dsh/refresh-geo-pack.mjs";
+import { rename } from "node:fs/promises";
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "evimed-geo-refresh-"));
@@ -67,4 +68,23 @@ test("a complete pack can populate a base that predates the private pack", async
     tree: digest(`skills/method/SKILL.md\0${digest("new private method\n")}\n`) }));
   assert.equal(await refreshGeoPack(source, target), "replaced");
   assert.equal(await readFile(path.join(target, "skills", "method", "SKILL.md"), "utf8"), "new private method\n");
+});
+
+test("a pack replaces a base directory that rename cannot move (overlayfs EXDEV in a delta build)", async (t) => {
+  // 2026-10-24: the first delta release after this script failed at its rename — the base image's
+  // /opt/evimed/skills/geo-private lives in a lower layer, and overlayfs answers EXDEV.
+  const { source, target } = await fixture(t);
+  await mkdir(path.join(source, "skills", "method"), { recursive: true });
+  await writeFile(path.join(source, "skills", "method", "SKILL.md"), "new private method\n");
+  const digest = (value) => createHash("sha256").update(value).digest("hex");
+  await writeFile(path.join(source, "VENDORED.json"), JSON.stringify({ package: "geo-skills", files: 1,
+    tree: digest(`skills/method/SKILL.md\0${digest("new private method\n")}\n`) }));
+  const exdev = async (from, to) => {
+    if (from === target) throw Object.assign(new Error("EXDEV: cross-device link not permitted"), { code: "EXDEV" });
+    return rename(from, to);
+  };
+  assert.equal(await refreshGeoPack(source, target, { renameImpl: exdev }), "replaced");
+  assert.deepEqual((await readdir(target)).sort(), ["VENDORED.json", "skills"]);
+  assert.equal(await readFile(path.join(target, "skills", "method", "SKILL.md"), "utf8"), "new private method\n");
+  assert.deepEqual((await readdir(path.dirname(target))).filter((name) => name.startsWith(".evimed-geo-pack-")), []);
 });
