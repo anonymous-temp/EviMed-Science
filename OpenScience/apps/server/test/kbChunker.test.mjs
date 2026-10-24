@@ -19,7 +19,7 @@ test("a page map cuts the document page by page, and every chunk is an exact sli
     [2, "第二页：利伐沙班 15 mg 每日一次。\n"],
     [4, "第三页：出血处理。"],
   ], "an empty page has nothing to index");
-  assert.equal(chunks[0].prefix, "房颤指南");
+  assert.equal(chunks[0].prefix, "");
   assert.deepEqual(chunks.map((chunk) => chunk.ordinal), [0, 1, 2]);
 });
 
@@ -42,7 +42,7 @@ test("text no page claims is still indexed: a gap belongs to the page after it, 
 test("without pages, headings start chunks and carry their path into the prefix", () => {
   const text = "# 抗凝治疗\n\n总述段落。\n\n## 剂量\n\n利伐沙班 20 mg。\n\n## 出血\n\n停药并评估。\n";
   const chunks = chunkDocument({ text, title: "指南" });
-  assert.deepEqual(chunks.map((chunk) => chunk.prefix), ["指南 › 抗凝治疗", "指南 › 抗凝治疗 › 剂量", "指南 › 抗凝治疗 › 出血"]);
+  assert.deepEqual(chunks.map((chunk) => chunk.prefix), ["抗凝治疗", "抗凝治疗 › 剂量", "抗凝治疗 › 出血"]);
   assert.ok(text.slice(chunks[1].start, chunks[1].end).startsWith("## 剂量"));
   assert.ok(text.slice(chunks[1].start, chunks[1].end).includes("利伐沙班 20 mg。"));
 });
