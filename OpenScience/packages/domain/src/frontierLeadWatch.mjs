@@ -36,8 +36,22 @@ export const FRONTIER_LEAD_SHARES = Object.freeze({
   'genre-gap': 0.08, 'event-hot': 0.12, 'zh-report': 0.20, 'primary-source': 0.10,
 })
 
-/** Results a query hands the plugin at most, and the novelty window it asks the engines for. */
+/** Results a query hands the plugin at most. */
 export const FRONTIER_LEAD_RESULTS_PER_QUERY = 5
+
+/**
+ * Hosts a search result is never handed over from: the social networks, whose pages need a sign-in the plugin does not
+ * have and whose posts the feed reads, where it reads them at all, through its own social adapters. A closed list (the
+ * trial searches of 2026-10-24 returned LinkedIn posts for a company's press release).
+ */
+export const FRONTIER_LEAD_SKIP_HOSTS = Object.freeze(['linkedin.com', 'x.com', 'twitter.com', 'facebook.com', 'instagram.com',
+  'youtube.com', 'tiktok.com', 'weibo.com', 'zhihu.com', 'douyin.com', 'bilibili.com', 'xiaohongshu.com'])
+
+/** Whether a result's host is one never handed over (`FRONTIER_LEAD_SKIP_HOSTS`, or below one). @param {string} host */
+export function frontierLeadSkipHost(host) {
+  const parts = String(host ?? '').toLowerCase().replace(/\.$/, '').split('.')
+  return parts.some((_, index) => FRONTIER_LEAD_SKIP_HOSTS.includes(parts.slice(index).join('.')))
+}
 
 /**
  * The Chinese regulatory and industry watch (owner, 2026-10-24: NMPA 批准上市, 药审中心 突破性治疗, 医保 谈判, 集采 中选): one

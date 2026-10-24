@@ -13,6 +13,7 @@ import {
   frontierIdentifierLeads,
   frontierLeadPlaces,
   frontierLeadQueryKey,
+  frontierLeadSkipHost,
 } from '../index.mjs'
 
 test('every trigger has a share, the shares make the whole day, and the watches are half of it', () => {
@@ -76,4 +77,12 @@ test('identifiers a report names become addresses: the columns first, then the t
     ['10.1016/s0140-6736(26)01234-5', 'NCT01111111'])
   assert.equal(frontierIdentifierLeads({ text: 'NCT01234567 NCT01234568 NCT01234569 NCT01234570' }).length, 3)
   assert.deepEqual(frontierIdentifierLeads({ doi: 'not a doi', pmid: '12', text: null }), [])
+})
+
+test('a social network\'s page is never handed over, whatever its subdomain; a news site is', () => {
+  assert.equal(frontierLeadSkipHost('www.linkedin.com'), true)
+  assert.equal(frontierLeadSkipHost('m.weibo.com'), true)
+  assert.equal(frontierLeadSkipHost('x.com'), true)
+  assert.equal(frontierLeadSkipHost('nmpa.gov.cn'), false)
+  assert.equal(frontierLeadSkipHost('box.com'), false, 'a suffix that is not a whole label is no match')
 })

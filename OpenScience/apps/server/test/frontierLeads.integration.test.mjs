@@ -146,7 +146,7 @@ test("a tick: each search booked under the module's purpose and budget, results 
   const knownUrl = (await database.query("SELECT canonical_url FROM evimed_frontier.items WHERE id = $1", [known.id])).rows[0].canonical_url;
   const search = fakeSearch((body) => [
     { url: knownUrl, title: "already", engine: "deepseek" },
-    { url: `https://news.example.cn/${encodeURIComponent(body.query)}/new#top`, title: "new", snippet: "s", engine: "deepseek", publishedDate: "2026-10-24T01:00:00.000Z" },
+    { url: `https://news.example.cn/${encodeURIComponent(body.query)}/new#top`, title: "新的报道", snippet: "s", engine: "deepseek", publishedDate: "2026-10-24T01:00:00.000Z" },
     { url: "ftp://not.a.page/x", title: "bad", engine: "searxng" },
   ]);
   const { leads, plugin } = leadsWith({ search, config: { frontierLeadsDailyQueries: 16 } });
@@ -217,4 +217,18 @@ test("switched off, without a search, a plugin or an owner the module does nothi
   assert.equal(frontierLeadUrl("https://user:pw@example.org/x"), null);
   assert.equal(frontierLeadUrl("https://example.org/a?b=1#c"), "https://example.org/a?b=1");
   assert.equal(createHash("sha256").update("x").digest("hex").length, 64);
+});
+
+test("a Chinese report is looked for in Chinese: only results with a Chinese title are handed over; a social network's page never is", options, async () => {
+  await seedSelected();
+  const search = fakeSearch((body) => [
+    { url: "https://www.medpagetoday.com/a", title: "Semaglutide and the kidney", engine: "deepseek" },
+    { url: "https://www.linkedin.com/posts/x", title: "司美格鲁肽 肾脏 帖子", engine: "deepseek" },
+    { url: `https://www.familydoctor.cn/${encodeURIComponent(body.query)}`, title: "司美格鲁肽改善肾脏结局：解读", engine: "deepseek" },
+  ]);
+  const { leads, plugin } = leadsWith({ search, now: EARLY });
+  await leads.tick();
+  const zh = plugin.posts.flat().filter((lead) => lead.trigger === "zh-report");
+  assert.deepEqual(zh.map((lead) => new URL(lead.url).hostname), ["www.familydoctor.cn"]);
+  assert.ok(plugin.posts.flat().every((lead) => !lead.url.includes("linkedin.com")));
 });

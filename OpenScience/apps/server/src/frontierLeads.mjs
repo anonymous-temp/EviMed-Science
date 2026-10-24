@@ -48,6 +48,7 @@ import {
   frontierIdentifierLeads,
   frontierLeadPlaces,
   frontierLeadQueryKey,
+  frontierLeadSkipHost,
   frontierMixGenre,
   frontierMixGroup,
 } from "@evimed/domain";
@@ -148,8 +149,10 @@ function clip(text, limit) {
 
 /**
  * @typedef {{ trigger: string, kind: "search", query: string, language: string | null, timeRange: "day" | "week",
- *   subject: Record<string, unknown>, excludeHost?: string | null } | { trigger: string, kind: "address", url: string,
+ *   subject: Record<string, unknown>, excludeHost?: string | null, chineseOnly?: boolean } | { trigger: string, kind: "address", url: string,
  *   subject: Record<string, unknown> }} FrontierLeadPlan
+ *   `chineseOnly`: hand over only results whose title is written in Chinese (a `zh-report` looks for a Chinese report; the
+ *   engines answer a Chinese query with English pages too — the trial searches of 2026-10-24).
  */
 
 export class FrontierLeads {
@@ -251,7 +254,7 @@ export class FrontierLeads {
       this.counters.results += rows.length;
       const engines = Array.isArray(answer?.data?.engines) ? answer.data.engines : [];
       await this.database.query("UPDATE evimed_frontier.leads SET status = 'searched', cost_cny = $2 WHERE id = $1", [lead.id, frontierLeadCost(engines)]);
-      sent += await this.#handOver(lead, plan.trigger, rows, plan.excludeHost ?? null);
+      sent += await this.#handOver(lead, plan.trigger, plan.chineseOnly ? rows.filter((row) => isChineseTitle(row?.title)) : rows, plan.excludeHost ?? null);
     }
     this.lastTick = { at: now.toISOString(), searched, sent };
     return { searched, addresses, sent };
@@ -326,7 +329,8 @@ export class FrontierLeads {
       const url = frontierLeadUrl(row?.url);
       if (!url || seen.has(url)) continue;
       seen.add(url);
-      if (excludeHost && new URL(url).hostname.replace(/^www\./, "") === excludeHost) continue;
+      const host = new URL(url).hostname;
+      if ((excludeHost && host.replace(/^www\./, "") === excludeHost) || frontierLeadSkipHost(host)) continue;
       fresh.push({ url, title: typeof row.title === "string" ? row.title.slice(0, 300) : null,
         snippet: typeof row.snippet === "string" ? row.snippet.slice(0, 700) : null,
         publishedDate: typeof row.publishedDate === "string" ? row.publishedDate : null });
@@ -436,7 +440,7 @@ export class FrontierLeads {
           JOIN evimed_frontier.items o ON o.id = other.item_id AND o.state = 'published' AND o.lang LIKE 'zh%' WHERE mine.item_id = i.id)
       ORDER BY i.score_total DESC NULLS LAST, i.id LIMIT 80`, [since])).rows;
     return rows.map((row) => ({ trigger: "zh-report", kind: /** @type {const} */ ("search"), query: clip(row.title_zh, TITLE_QUERY_CHARS),
-      language: "zh-CN", timeRange: /** @type {const} */ ("day"), subject: { item: row.public_id } })).filter((plan) => plan.query);
+      language: "zh-CN", timeRange: /** @type {const} */ ("day"), subject: { item: row.public_id }, chineseOnly: true })).filter((plan) => plan.query);
   }
 
   /** `hot-tag`: the tags of this week's 精选, the most frequent first. @param {Date} now @returns {Promise<FrontierLeadPlan[]>} */
