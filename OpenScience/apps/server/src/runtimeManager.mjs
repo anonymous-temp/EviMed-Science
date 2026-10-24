@@ -7763,8 +7763,9 @@ export class RuntimeManager {
    * session and endpoint policies. Capacity is reserved through socket close.
    * @param {any} req @param {any} socket @param {Buffer} head
    * @param {Record<string, any>} project @param {string} suffix
-   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void>, prepare?: (endpoint: string, payload?: any) => Promise<void>,
-   * projectItem?: (endpoint:string,payload:any,value:any)=>Promise<{forward:boolean,value?:any}>, onStreamClosed?: (endpoint:string)=>void,
+   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string,payload?:any,context?:{streamId:string,signal:AbortSignal}) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void>, prepare?: (endpoint: string, payload?: any) => Promise<void>,
+   * projectItem?: (endpoint:string,payload:any,value:any,context?:{streamId:string,signal:AbortSignal})=>Promise<{forward:boolean,value?:any}>, onStreamClosed?: (endpoint:string,streamId?:string)=>void,
+   * onProjectionDiscarded?: (endpoint:string,streamId?:string)=>void,
    * withAuthority?: (operation:()=>Promise<void>)=>Promise<void> }} policy
    */
   async proxyUpgrade(req, socket, head, project, suffix, policy) {
@@ -7789,7 +7790,7 @@ export class RuntimeManager {
         maxPayload: Math.max(1024, Number(this.config.maxJsonBytes) || 12 * 1024 * 1024),
         ...policy,
         admit: (endpoint, operation, payload) => {
-          if (endpoint !== "session/prompt") return operation();
+          if (endpoint !== "session/prompt") return policy.withAuthority ? policy.withAuthority(operation) : operation();
           const prompt = async () => {
             await this.assertPersonalSkillPromptGeneration(project, payload?.args?.request ?? {});
             return operation();
