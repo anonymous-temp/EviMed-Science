@@ -1002,8 +1002,20 @@
   "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
  },
  "prnewswire-health": {
+  "name": "PR Newswire 医药类新闻稿（制药、生物技术、临床试验、审批、医疗器械）",
   "enabled": true,
-  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json.",
+  "config": {
+   "url": "https://www.prnewswire.com/rss/health-latest-news/pharmaceuticals-list.rss",
+   "urls": [
+    "https://www.prnewswire.com/rss/health-latest-news/biotechnology-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/clinical-trials-medical-discoveries-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/fda-approval-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/international-medical-approval-list.rss",
+    "https://www.prnewswire.com/rss/health-latest-news/medical-equipment-list.rss"
+   ]
+  },
+  "_why_subfeeds_20261024": "ct-src: the all-health feed (health-latest-news) mixes fitness, dentistry, insurance and securities-lawsuit notices into 20 items covering ~19 hours; PR Newswire's own medical subject feeds (its RSS index, 2026-10-24) cover a day each, 71 distinct releases across these six against 12 medical ones in the all-health feed, and none of the lawsuit or lifestyle notices. medical-pharmaceuticals is left out: 16 of its 20 are in pharmaceuticals."
  },
  "campbell-collaboration": {
   "enabled": true,
@@ -3829,5 +3841,39 @@
    ],
    "_abstract_feed": "rt-papers 2026-10-22, AJRCCM is on Oxford Academic since 2026-01: OUP's feeds (ids from archived pages), measured through the plugin's fetcher: advanceAccess_4230.xml: 1/5 with text, median 2038; 4230.xml: 9/20 with text, median 752"
   }
+ },
+ "natcm-policy-interpretation": {
+  "launch_tier": "P1",
+  "enabled": true,
+  "config": {
+   "selectors": {
+    "item": "ul.lbbt li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  },
+  "_why_enabled_20261024": "ct-src: the selectors of natcm-notices (the same site template) read 22 dated items, newest 2026-10-14; three rows link to nhc.gov.cn pages (behind Ruishu, read by the NHC rows) and are dropped by the host rule. Replay case tests/fixtures/html-list/natcm-policy-interpretation.",
+  "_why_tier_20261024": "a list page with a configuration that reads it is a P1 list (the build's rule)"
+ },
+ "ndcpa-regulations": {
+  "launch_tier": "P1",
+  "enabled": true,
+  "config": {
+   "mode": "script-json",
+   "script_var": "itemObj",
+   "fields": {
+    "title": "aT",
+    "link": "aU.common",
+    "date": "aPd",
+    "summary": "saT",
+    "id": "id"
+   },
+   "link_base": "https://www.ndcpa.gov.cn/",
+   "max_items": 30
+  },
+  "_why_enabled_20261024": "ct-src: the script-json reading of ndcpa-notices (the same site template) reads 30 dated regulations, newest 2026-05-14 — a slow list of binding rules. Replay case tests/fixtures/html-list/ndcpa-regulations.",
+  "_why_tier_20261024": "a list page with a configuration that reads it is a P1 list (the build's rule)"
  }
 }

@@ -79,7 +79,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE` | unset | X through SocialData (`Authorization: Bearer`, added by the transport); unset or empty = no X |
 | `KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD` | `5` | the day's cap (Asia/Shanghai day) at `objects × US$0.0002`; reached = X waits until the next day |
 | `KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE` | unset | WeChat official accounts through Dajiala (its `key` query parameter, added by the transport); unset = no WeChat |
-| `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `30` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
+| `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `90` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL` | unset | the GEO module's six-platform crawler (production: the platform's `OPEN_SCIENCE_GEO_SOCIAL_URL`); unset = no monitoring |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S` | `120` / `150` | crawler requests a day, spread evenly; one request's deadline |
 | `KNOWLEDGE_PLUGIN_MEDIA_DIR` / `KNOWLEDGE_PLUGIN_MEDIA_CAP_MB` | unset / `3072` | the media store's writable volume and its cap (least recently served evicted first); unset = no images stored |
@@ -110,9 +110,14 @@ Shanghai day:
    medical basis is in data (a MEDLINE journal, a listed organisation, a request), else it waits up to seven more days.
 3. **Gather** candidates by line — `outbound` (sites linked from recent entries' pages), `journal` (MEDLINE journals
    from the literature streams, then the NLM catalogue in rotation), `directory` (`registry/discovery.json`),
-   `hot-origin` (the journals and sites of entries several publishers carried), `social` (quoted accounts, when the
-   social adapters store them), `request` (the source-request manifest, any lane but `ai`), `parent-feed`
-   (`medical_discovery.py`), `readmit` (retired sources due for a re-check).
+   `hot-origin` (the journals and sites of entries several publishers carried), `social` (quoted accounts, and the
+   WeChat accounts our WeChat bodies credit as their origin — 「来源：…」, 「本文转载自…」, a closed marker list —,
+   `social/wechat_discovery.py`), `request` (the source-request manifest, any lane but `ai`), `parent-feed`
+   (`medical_discovery.py`), `readmit` (retired sources due for a re-check). A WeChat candidate of any line (also a
+   lead's article link, `candidate_from_link`) is validated by one Dajiala call — `post_history` by its nickname (¥0.16)
+   or by the link (¥0.14), at most 20 a Shanghai day across lines: Dajiala names exactly that account, its posts carry one
+   `__biz` we do not read yet, and it posted within 30 days; it then goes on trial as an ordinary WeChat row (priority 4,
+   one read a day). X candidates wait without using the day's validations.
 4. **Validate** within each line's daily cap: reachable (direct, then the relay), robots allows it, an existing adapter
    reads it, an item dated within 30 days, MEDLINE for a journal (and at least eight Crossref articles in 30 days). A
    valid candidate becomes an ordinary registry row on trial (`mixed` lane, every 6–24 hours; journals every 12–24).
@@ -154,8 +159,11 @@ an identity key, polls in the fetch log, health by the same rule — but the sch
   account's watermark moved only to its own newest post; editorial accounts every 30 minutes, the rest hourly; quoted
   posts and X Articles kept; photos and video posters re-encoded into the media store (`pbs.twimg.com` through the Tokyo
   relay when configured).
-- **WeChat**: every account is re-resolved from an article verified to be its own before its first read (a saved id is
-  not trusted) and kept only when Dajiala names it as expected; then read by its original id at most twice a day,
+- **WeChat**: every account is re-resolved before its first read (a saved id is not trusted) — from an article verified
+  to be its own, or, when the list has no such link (a Sogou temporary link is never kept) or the link answers a code
+  that passes, by its nickname (`post_history`, ¥0.16, whose posts are then its first read) — and kept only when Dajiala
+  names it as expected and, for a lookup by name, every post carries the account's `biz` from the list (anything else
+  parks it for 30 days); then read by its original id at most twice a day,
   highest priority first; each new post's text bought once. A text that could not be bought with its post (a failure
   that passes, such as Dajiala's code 20002 while the balance runs low, or the cap) is bought when the platform asks
   `/text` for it — never read as a page: mp.weixin.qq.com refuses robots — at most six calls per entry with a doubling

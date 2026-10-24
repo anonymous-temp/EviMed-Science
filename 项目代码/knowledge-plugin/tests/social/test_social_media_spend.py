@@ -140,3 +140,16 @@ async def test_ledger_caps_by_the_shanghai_day_and_reports_health(pool):
     assert health[SOCIALDATA]["spend_24h"] == {"amount": 0.008, "currency": "USD"} and health[SOCIALDATA]["last_error"] == "http_402"
     assert health[SOCIAL_CRAWL]["remaining"] == {"amount": 119, "currency": "requests"}
     assert "last_error" not in health[DAJIALA]
+
+
+def test_the_dajiala_cap_is_ninety_yuan_a_day_and_the_deployment_forwards_it():
+    """The owner raised WeChat's daily cap to ¥90 on 2026-10-24: the default, and the compose overlay's fallback."""
+    from knowledge_plugin.settings import Settings
+
+    assert Settings(database_url="postgresql://unused").dajiala_daily_cny == 90.0
+    assert Settings.from_env({"KNOWLEDGE_PLUGIN_DATABASE_URL": "postgresql://unused"}).dajiala_daily_cny == 90.0
+    assert Settings.from_env({"KNOWLEDGE_PLUGIN_DATABASE_URL": "postgresql://unused",
+                              "KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY": "45"}).dajiala_daily_cny == 45.0
+    compose = Path(__file__).resolve().parents[4] / "OpenScience" / "deploy" / "web" / "docker-compose.knowledge.yml"
+    if compose.is_file():          # the plugin's own CI checks out the monorepo; a lone copy of the plugin has no overlay
+        assert "KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY: ${KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY:-90}" in compose.read_text()

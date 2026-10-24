@@ -1,0 +1,70 @@
+{
+ "case": "html-list/natcm-policy-interpretation",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-24T16:53:05+00:00",
+ "note": null,
+ "source": {
+  "id": "natcm-policy-interpretation",
+  "name": "国家中医药管理局 政策解读",
+  "homepage": "http://www.natcm.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家中医药管理局 NATCM",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "http://www.natcm.gov.cn/a/zcjd/",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.natcm.gov.cn"
+   ],
+   "selectors": {
+    "item": "ul.lbbt li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-24T16:53:03+00:00",
+ "request_budget": 1,
+ "parse_notes": [
+  "html_list_dropped_host=3"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "http://www.natcm.gov.cn/a/zcjd/",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "http://www.natcm.gov.cn/a/zcjd/",
+   "headers": {
+    "last-modified": "Fri, 23 Oct 2026 09:10:55 GMT",
+    "etag": "\"7d32-65e7e5b937477\"",
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-10-24T16:53:04+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 32050,
+   "sha256": "ca7376ab9887b7c86106361dea890a09e2f5fa861059628f391509c2b595e385"
+  }
+ ]
+}

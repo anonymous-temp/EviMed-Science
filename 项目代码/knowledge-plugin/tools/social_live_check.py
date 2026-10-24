@@ -5,8 +5,9 @@ Through the plugin's own code — the collector, the providers, the media store,
 
 - X: one shard search over the accounts named by ``--x`` (their rows from ``registry/social-sources.json``), their posts
   stored with media;
-- WeChat: the accounts named by ``--wechat`` re-resolved from their verified links (``article_detail``, ¥0.03 each), the
-  first of them read once (``post_history``, ¥0.14) with at most ``--wechat-bodies`` bodies bought;
+- WeChat: the accounts named by ``--wechat``, each read once through the collector — re-resolved from its verified link
+  (``article_detail``, ¥0.03, then ``post_history`` by id, ¥0.14) or, when the link cannot name it, by its name
+  (``post_history`` by nickname, ¥0.16, which is also the read) — with at most ``--wechat-bodies`` bodies bought each;
 - six platforms: one search (``--crawl-term`` on ``--crawl-platform``) when ``--crawl-url`` is given.
 
 Output is status lines only — counts, outcomes, field names, the ledger's spend — never a key and never a post's text.
@@ -47,7 +48,8 @@ async def main() -> int:
     parser.add_argument("--media-dir")
     parser.add_argument("--x", action="append", default=[])
     parser.add_argument("--wechat", action="append", default=[])
-    parser.add_argument("--wechat-bodies", type=int, default=1)
+    parser.add_argument("--wechat-bodies", type=int, default=0)
+    parser.add_argument("--dajiala-cap", type=float, default=1.0, help="this run's Dajiala cap in CNY")
     parser.add_argument("--crawl-url")
     parser.add_argument("--crawl-platform", default="zhihu")
     parser.add_argument("--crawl-term", default="司美格鲁肽")
@@ -58,7 +60,7 @@ async def main() -> int:
     settings = Settings(database_url=args.database_url, socialdata_key_file=args.socialdata_key_file,
                         dajiala_key_file=args.dajiala_key_file, media_dir=args.media_dir,
                         social_crawl_url=(args.crawl_url or "").rstrip("/") or None, socialdata_daily_usd=1.0,
-                        dajiala_daily_cny=1.0, social_crawl_daily=10)
+                        dajiala_daily_cny=args.dajiala_cap, social_crawl_daily=10)
     rows = {row.source.id: row for row in load_social_registry(ROOT / "registry" / "social-sources.json")}
     wanted = [rows[f"x-{handle.lower()}"] for handle in args.x] + [rows[source_id] for source_id in args.wechat]
     if args.crawl_url:
@@ -75,20 +77,16 @@ async def main() -> int:
         if args.x:
             print("x:", await collector.run_x(datetime.now(timezone.utc)))
         if args.wechat:
-            sources = await collector._rows("dajiala")
-            by_id = {row["id"]: row for row in sources}
+            # Each account through the collector's own read: resolution (by its verified link, else by its name — whose
+            # answer is the first read), then the read itself, with at most --wechat-bodies bodies bought.
             for source_id in args.wechat:
-                outcome, resolved = await collector.wechat_resolve(by_id[source_id], datetime.now(timezone.utc))
-                print(f"wechat resolve {source_id}: {outcome}"
-                      + (f" (nickname matches, ghid {'named' if resolved.get('ghid') else 'absent'}, alias "
-                         f"{'named' if resolved.get('alias') else 'absent'})" if resolved else ""))
-                if resolved:
-                    async with pool.connection() as conn:
-                        await conn.execute("UPDATE evimed_knowledge.sources SET cursor = cursor || %s::jsonb WHERE id = %s",
-                                           (json.dumps({"resolved": resolved}), source_id))
-            first = (await collector._rows("dajiala"))
-            first = next(row for row in first if row["id"] == args.wechat[0])
-            print(f"wechat read {first['id']}:", await collector._wechat_account(first, datetime.now(timezone.utc)))
+                current = next(row for row in await collector._rows("dajiala") if row["id"] == source_id)
+                outcome = await collector._wechat_account(current, datetime.now(timezone.utc))
+                after = next(row for row in await collector._rows("dajiala") if row["id"] == source_id)
+                resolved = (after["cursor"] or {}).get("resolved") or {}
+                print(f"wechat {source_id}: {outcome} last_error={after['last_error_code']}"
+                      + (f" via={resolved.get('via', 'link')} ghid={'named' if resolved.get('ghid') else 'absent'}"
+                         f" biz={'named' if resolved.get('biz') else 'absent'}" if resolved else ""))
         if args.crawl_url:
             print("crawl:", await collector.run_crawl(datetime.now(timezone.utc)))
         async with pool.connection() as conn:

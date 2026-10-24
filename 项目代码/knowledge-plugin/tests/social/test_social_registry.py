@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -15,10 +16,15 @@ from knowledge_plugin.model import SOCIAL_ACCESSES
 from knowledge_plugin.registry import RegistryError, parse_registry
 from knowledge_plugin.social.crawl import load_watch_list
 from knowledge_plugin.social.registry import load_social_registry, social_registry_path
+from knowledge_plugin.social.wechat import ask_name, temporary_link
 
 ROOT = Path(__file__).resolve().parents[2]
 SOCIAL = ROOT / "registry" / "social-sources.json"
 NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
+
+
+def row_dict(row) -> dict:
+    return {"name": row.source.name, "config": row.source.config}
 
 
 def test_the_committed_file_is_what_the_research_files_build():
@@ -38,9 +44,17 @@ def test_every_row_is_a_valid_social_row_and_the_lists_are_within_their_bounds()
         assert row.source.lane == "mixed" and row.source.config["user_id"].isdigit()
         assert row.source.config["mode"] in ("editorial", "signal") and row.source.id == "x-" + row.source.config["handle"].lower()
     for row in by_access["dajiala"]:
-        assert row.source.config["verified_url"].startswith("https://mp.weixin.qq.com/")
-        assert row.source.config["expected_names"] and row.source.config["priority"] in (1, 2, 3, 4)
-        assert "gh_" not in json.dumps(row.source.config), "a saved original id is never trusted"
+        config = row.source.config
+        if "verified_url" in config:
+            assert config["verified_url"].startswith("https://mp.weixin.qq.com/s")
+            assert not temporary_link(config["verified_url"]), "a Sogou temporary link names no account (ct-src)"
+        else:
+            assert ask_name(row_dict(row)) == config["expected_names"][0], "without a link the account is asked by name"
+        assert config["expected_names"] and config["priority"] in (1, 2, 3, 4)
+        assert config["polls_per_day"] == (2 if config["priority"] == 1 else 1)
+        assert re.fullmatch(r"M[A-Za-z0-9+/]{6,30}={0,2}", config.get("biz", "MzA5MjE3MzUxNA==")), "a biz is base64"
+        assert "gh_" not in json.dumps(config), "a saved original id is never trusted"
+    assert len({row.source.config["expected_names"][0] for row in by_access["dajiala"]}) == len(by_access["dajiala"])
     assert len(load_watch_list(str(SOCIAL))) >= 35
 
 
@@ -75,3 +89,48 @@ async def test_the_composition_adds_the_social_rows_and_retires_none_of_the_rest
         accesses = await (await conn.execute(
             "SELECT access, count(*) AS n FROM evimed_knowledge.sources WHERE retired_at IS NULL GROUP BY access")).fetchall()
     assert {row["access"]: row["n"] for row in accesses}["rss"] == 1
+
+
+def builder():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("build_social_registry", ROOT / "tools" / "build_social_registry.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_builder_names_a_wechat_row_by_its_article_its_biz_or_its_name_and_refuses_a_temporary_link(tmp_path, monkeypatch):
+    build = builder()
+    assert build.wechat_url({"verified_url": "https://mp.weixin.qq.com/s/abc", "biz": "MzA5", "expected_names": ["甲"]}) \
+        == "https://mp.weixin.qq.com/s/abc"
+    assert build.wechat_url({"biz": "MzA5MjE3MzUxNA==", "expected_names": ["甲"]}) \
+        == "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzA5MjE3MzUxNA=="
+    assert build.wechat_url({"expected_names": ["医学界"]}) == "https://weixin.sogou.com/weixin?type=1&query=%E5%8C%BB%E5%AD%A6%E7%95%8C"
+    account = {"id": "wx-a", "name": "甲", "expected_names": ["甲"], "group": "clinical", "category": "clinical",
+               "source_type": "media", "authority": 3, "owner_entity": "甲", "priority": 1}
+    research = tmp_path / "research"
+    research.mkdir()
+    monkeypatch.setattr(build, "RESEARCH", research)
+    (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [account]}))
+    (row,) = build.wechat_rows("2099-01-01")
+    assert row["config"]["polls_per_day"] == 2 and row["poll_floor_s"] == 43200, "tier 1 is read twice a day"
+    assert "verified_url" not in row["config"] and "biz" not in row["config"]
+    temporary = {**account, "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1&ver=1&signature=x"}
+    (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [temporary]}))
+    with pytest.raises(SystemExit, match="temporary link"):
+        build.wechat_rows("2099-01-01")
+    (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [{**account, "group": "misc"}]}))
+    with pytest.raises(SystemExit, match="group"):
+        build.wechat_rows("2099-01-01")
+
+
+def test_the_wechat_list_has_its_categories_and_tiers():
+    """S3 (ct-src 2026-10-24): 150–200 accounts, by group, regulators and societies first."""
+    document = json.loads(SOCIAL.read_text())
+    counts = document["counts"]
+    assert 150 <= counts["wechat"] <= 200
+    groups = counts["wechat_by_group"]
+    assert groups["industry"] >= 30 and groups["clinical"] >= 40 and groups["society-journal"] >= 25
+    assert groups["hospital"] >= 10 and groups["regulator"] >= 10
+    assert sum(counts["wechat_by_priority"].values()) == counts["wechat"]

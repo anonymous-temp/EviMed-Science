@@ -1,0 +1,3738 @@
+{
+ "_doc": "The WeChat account list (ct-src, 2026-10-24); supersedes wechat-accounts-2026-10-22.json, which stays as the record of that round. An account is re-resolved by Dajiala before its first read: from verified_url when it is a link that names the account (__biz or short /s/ form), else by its nickname — the first of expected_names — kept only when the answered nickname is expected and every post carries biz (when known). The 2026-10-22 seed links of 44 accounts were Sogou temporary links (src=11/src=3, timestamp, signature) that had expired before the first read; they are dropped (seed_link_expired) and those accounts resolve by name. group: industry, clinical, society-journal, hospital, regulator, research-media. priority 1 (regulators, journals, societies; read twice a day) is spent first, then 2 (clinical portals, hospitals), 3 (industry and research media), 4 (the rest).",
+ "supersedes": "wechat-accounts-2026-10-22.json",
+ "excluded": [
+  {
+   "name": "中国药审",
+   "reason": "owner_excluded: CDE sources are permanently excluded by the owner (2026-09-29); not re-added as a WeChat account without the owner saying so"
+  }
+ ],
+ "live_checks": [
+  {
+   "at": "2026-10-24T16:21Z",
+   "id": "wx-pharmcube",
+   "asked": "医药魔方",
+   "answered": "医药魔方",
+   "biz_matches": true,
+   "posts": 15,
+   "newest": "2026-10-24",
+   "cost_cny": 0.16,
+   "how": "tools probe (fixture tests/fixtures/dajiala/post-history-by-nickname-pharmcube.json)"
+  },
+  {
+   "at": "2026-10-24T17:3xZ",
+   "id": "wx-oncologynews",
+   "asked": "肿瘤资讯",
+   "answered": null,
+   "code": 107,
+   "cost_cny": 0.02,
+   "how": "tools/social_live_check.py; the research's proposed rename did not resolve"
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-anjiguancha",
+   "asked": "氨基观察",
+   "answered": "氨基观察",
+   "posts": 18,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-bmj-medicine",
+   "asked": "BMJ医学",
+   "answered": "BMJ医学",
+   "posts": 10,
+   "newest": "2026-10-22",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-caca",
+   "asked": "中国抗癌协会",
+   "answered": "中国抗癌协会",
+   "posts": 42,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-chinacdc",
+   "asked": "中国疾控中心",
+   "answered": "中国疾控中心",
+   "posts": 9,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-cjim",
+   "asked": "中华内科杂志",
+   "answered": "中华内科杂志",
+   "posts": 13,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-cma-anesth",
+   "asked": "中华医学会麻醉学分会",
+   "answered": "中华医学会麻醉学分会",
+   "posts": 11,
+   "newest": "2026-09-19",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-cmda",
+   "asked": "中国医师协会",
+   "answered": "中国医师协会",
+   "posts": 10,
+   "newest": "2026-10-13",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-cmde-official",
+   "asked": "中国器审",
+   "answered": "中国器审",
+   "posts": 10,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-cmi",
+   "asked": "中国医疗保险",
+   "answered": "中国医疗保险",
+   "posts": 36,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-cmj1887",
+   "asked": "CMJ1887",
+   "answered": "CMJ1887",
+   "posts": 11,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-csc",
+   "asked": "中华医学会心血管病学分会",
+   "answered": "中华医学会心血管病学分会",
+   "posts": 13,
+   "newest": "2026-10-22",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-csco-official",
+   "asked": "CSCO",
+   "answered": "CSCO",
+   "posts": 40,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-healthy-beijing",
+   "asked": "健康北京",
+   "answered": "健康北京",
+   "posts": 10,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-jianshiju",
+   "asked": "健识局",
+   "answered": "健识局",
+   "posts": 18,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-lancet",
+   "asked": "柳叶刀TheLancet",
+   "answered": "柳叶刀TheLancet",
+   "posts": 14,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-medlive",
+   "asked": "医脉通",
+   "answered": "医脉通",
+   "posts": 29,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-medlive-cardio",
+   "asked": "医脉通心血管",
+   "answered": "医脉通心血管",
+   "posts": 21,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-medlive-liver",
+   "asked": "医脉通肝脏科",
+   "answered": "医脉通肝脏科",
+   "posts": 27,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-nifdc",
+   "asked": "中国药检",
+   "answered": "中国药检",
+   "posts": 23,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-nmjc",
+   "asked": "中华医学杂志",
+   "answered": "中华医学杂志",
+   "posts": 18,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-nmpa",
+   "asked": "国家药监局",
+   "answered": "国家药监局",
+   "posts": 10,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-nsfc",
+   "asked": "国家自然科学基金委员会",
+   "answered": "国家自然科学基金委员会",
+   "posts": 11,
+   "newest": "2026-10-22",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:03Z",
+   "id": "wx-oncologynews",
+   "asked": "良医汇肿瘤资讯",
+   "answered": "良医汇肿瘤资讯",
+   "posts": 46,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-plagh-301",
+   "asked": "解放军总医院",
+   "answered": "解放军总医院",
+   "posts": 22,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-sinamed",
+   "asked": "新浪医药",
+   "answered": "新浪医药",
+   "posts": 80,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-sysucc",
+   "asked": "中山大学肿瘤防治中心订阅号",
+   "answered": "中山大学肿瘤防治中心订阅号",
+   "posts": 11,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:54Z",
+   "id": "wx-who",
+   "asked": "世界卫生组织",
+   "answered": "世界卫生组织",
+   "posts": 10,
+   "newest": "2026-10-15",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-wuxiapptec",
+   "asked": "药明康德",
+   "answered": "药明康德",
+   "posts": 22,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T17:02Z",
+   "id": "wx-xiangya",
+   "asked": "百年湘雅",
+   "answered": "百年湘雅",
+   "posts": 10,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": null
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-yanfake",
+   "asked": "研发客",
+   "answered": "研发客",
+   "posts": 11,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-yaopingzhongxin",
+   "asked": "药评中心",
+   "answered": "药评中心",
+   "posts": 20,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-yikahui",
+   "asked": "医咖会",
+   "answered": "医咖会",
+   "posts": 18,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-yxj-cardio",
+   "asked": "医学界心血管频道",
+   "answered": "医学界心血管频道",
+   "posts": 21,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  },
+  {
+   "at": "2026-10-24T16:30Z",
+   "id": "wx-yxj-neuro",
+   "asked": "医学界神经病学频道",
+   "answered": "医学界神经病学频道",
+   "posts": 31,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "how": "tools/social_live_check.py (the collector's own read)",
+   "biz_matches": true
+  }
+ ],
+ "not_listed_2026_10_24": [
+  {
+   "name": "中国政府网",
+   "reason": "general State Council feed, not health (the registry reads gov-cn-policy)"
+  },
+  {
+   "name": "中国疾控动态",
+   "reason": "already listed"
+  },
+  {
+   "name": "肿瘤资讯",
+   "reason": "already listed"
+  },
+  {
+   "name": "梅斯肿瘤新前沿",
+   "reason": "nickname not confirmed"
+  },
+  {
+   "name": "动脉橙产业智库",
+   "reason": "nickname not confirmed"
+  }
+ ],
+ "method": {
+  "how_names_were_found": [
+   "WeChat article pages (mp.weixin.qq.com/s/…): the page's nick_name and var biz — the 15 accounts with a biz here",
+   "Sogou WeChat article search (https://weixin.sogou.com/weixin?type=2&query=<name>): each result names its publishing account by its current name; confidence high when the exact name publishes most of the first page, medium when once or twice",
+   "organisations' own sites: natcm.gov.cn (official WeChat → 中国中医), chinacdc.cn, medlive.cn/weixin_list.php, cma.org.cn",
+   "media catalogue pages carrying an article link per account (chuanshenggang.com/media/detail/<id>)"
+  ],
+  "live": "every account is resolved again by Dajiala before its first read; 35 names were checked live on 2026-10-24 (live_checks)",
+  "not_confirmed": "accounts searched for and left out are under not_listed_2026_10_24 and in this list: 医学参考报, 八点健闻, JAMA, GRADE中国中心, 中华医学会 (main account), 国家药典委员会, 药物警戒, 中国药学会, 临床药师, 国家疾控局, 中华预防医学会, 返朴, 摩熵医药 (as 药融云 instead), 四川大学华西医院, 同济医院, 北京大学第一医院, 北京大学人民医院, 华山医院, 复旦大学附属肿瘤医院, 武汉协和医院, 中日友好医院, 国家癌症中心, 国家心血管病中心"
+ },
+ "accounts": [
+  {
+   "id": "wx-aiera",
+   "name": "新智元",
+   "expected_names": [
+    "新智元"
+   ],
+   "biz": "MzI3MTA0MTk1MA==",
+   "group": "research-media",
+   "category": "ai-tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "新智元",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-anjiguancha",
+   "name": "氨基观察",
+   "expected_names": [
+    "氨基观察"
+   ],
+   "biz": "MzIwMjU5Njk5NA==",
+   "group": "industry",
+   "category": "biotech-analysis",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "氨基观察",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-bioart",
+   "name": "BioArt",
+   "expected_names": [
+    "BioArt"
+   ],
+   "biz": "MzA3MzQyNjY1MQ==",
+   "group": "research-media",
+   "category": "paper-commentary",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "BioArt",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-bioartmed",
+   "name": "BioArtMED",
+   "expected_names": [
+    "BioArtMED"
+   ],
+   "biz": "MzU4OTY0NzE1NQ==",
+   "group": "research-media",
+   "category": "paper-commentary",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "BioArt",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-bioon",
+   "name": "生物谷",
+   "expected_names": [
+    "生物谷"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI2NjY1NjA5Mw==&mid=2247654807&idx=1&sn=15fe6e8337d7374df7f0f6d75935ec1d&chksm=eb5394f592082f639a299f8c80438a04194e03302c93f4ba813f4d0fb4c052fa76fdaebf5b84",
+   "biz": "MzI2NjY1NjA5Mw==",
+   "group": "research-media",
+   "category": "bio-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "生物谷",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-biopharma-xb",
+   "name": "生物制药小编",
+   "expected_names": [
+    "生物制药小编"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "生物制药小编（佰傲谷 BioValley 系）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=生物制药小编"
+   ]
+  },
+  {
+   "id": "wx-bmj-medicine",
+   "name": "BMJ医学",
+   "expected_names": [
+    "BMJ医学",
+    "BMJ"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "BMJ（英国医学杂志）中国",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=BMJ中国"
+   ]
+  },
+  {
+   "id": "wx-caca",
+   "name": "中国抗癌协会",
+   "expected_names": [
+    "中国抗癌协会"
+   ],
+   "biz": "MzAxMDAxMjcwOA==",
+   "group": "society-journal",
+   "category": "cancer-society",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国抗癌协会",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-cacm",
+   "name": "中华中医药学会",
+   "expected_names": [
+    "中华中医药学会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华中医药学会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华中医药学会"
+   ]
+  },
+  {
+   "id": "wx-camdi",
+   "name": "中国医疗器械行业协会",
+   "expected_names": [
+    "中国医疗器械行业协会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医疗器械行业协会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医疗器械行业协会"
+   ]
+  },
+  {
+   "id": "wx-cellpress",
+   "name": "CellPress细胞科学",
+   "expected_names": [
+    "CellPress细胞科学"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "Cell Press 细胞出版社",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=Cell Press细胞出版社"
+   ]
+  },
+  {
+   "id": "wx-cgp-journal",
+   "name": "中国全科医学杂志",
+   "expected_names": [
+    "中国全科医学杂志",
+    "中国全科医学"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "《中国全科医学》杂志社",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国全科医学杂志"
+   ]
+  },
+  {
+   "id": "wx-cha-hospital",
+   "name": "中国医院协会",
+   "expected_names": [
+    "中国医院协会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医院协会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医院协会"
+   ]
+  },
+  {
+   "id": "wx-chima",
+   "name": "CHIMA",
+   "expected_names": [
+    "CHIMA"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医院协会信息专业委员会（CHIMA）",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/ETrZC-vrA4Aap0eF-15EeQ",
+    "https://weixin.sogou.com/weixin?type=2&query=中国医院协会"
+   ],
+   "biz": "MzA4NzAwMjMyOQ=="
+  },
+  {
+   "id": "wx-chinacdc",
+   "name": "中国疾控中心",
+   "expected_names": [
+    "中国疾控中心",
+    "中国疾控动态"
+   ],
+   "biz": "MzA3MzU2MzIwMg==",
+   "group": "regulator",
+   "category": "china-cdc-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "中国疾病预防控制中心",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-chinese-stroke",
+   "name": "中国卒中学会",
+   "expected_names": [
+    "中国卒中学会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国卒中学会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国卒中学会"
+   ]
+  },
+  {
+   "id": "wx-cicams",
+   "name": "中国医学科学院肿瘤医院",
+   "expected_names": [
+    "中国医学科学院肿瘤医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医学科学院肿瘤医院（国家癌症中心）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医学科学院肿瘤医院"
+   ]
+  },
+  {
+   "id": "wx-cjc-cardiol",
+   "name": "中华心血管病杂志",
+   "expected_names": [
+    "中华心血管病杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社《中华心血管病杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华心血管病杂志"
+   ]
+  },
+  {
+   "id": "wx-cjc-circulation",
+   "name": "中国循环杂志",
+   "expected_names": [
+    "中国循环杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "《中国循环杂志》（阜外医院主办）",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=阜外医院"
+   ]
+  },
+  {
+   "id": "wx-cjd-diabetes",
+   "name": "中华糖尿病杂志",
+   "expected_names": [
+    "中华糖尿病杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社《中华糖尿病杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华糖尿病杂志"
+   ]
+  },
+  {
+   "id": "wx-cje-epi",
+   "name": "中华流行病学杂志",
+   "expected_names": [
+    "中华流行病学杂志",
+    "中华流行病学微平台"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社《中华流行病学杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华流行病学杂志"
+   ]
+  },
+  {
+   "id": "wx-cjebp",
+   "name": "中国循证儿科杂志",
+   "expected_names": [
+    "中国循证儿科杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "复旦大学附属儿科医院《中国循证儿科杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=GRADE中国中心"
+   ]
+  },
+  {
+   "id": "wx-cjem",
+   "name": "中华内分泌代谢杂志",
+   "expected_names": [
+    "中华内分泌代谢杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社《中华内分泌代谢杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=GRADE中国中心"
+   ]
+  },
+  {
+   "id": "wx-cjim",
+   "name": "中华内科杂志",
+   "expected_names": [
+    "中华内科杂志"
+   ],
+   "biz": "MzAxMjUyNzQzNA==",
+   "group": "society-journal",
+   "category": "journal-cma",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-cjn-neuro",
+   "name": "中华神经科杂志",
+   "expected_names": [
+    "中华神经科杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社《中华神经科杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华神经科杂志"
+   ]
+  },
+  {
+   "id": "wx-cjp-peds",
+   "name": "中华儿科杂志",
+   "expected_names": [
+    "中华儿科杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社《中华儿科杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华儿科杂志"
+   ]
+  },
+  {
+   "id": "wx-cjtrd",
+   "name": "中华结核和呼吸杂志",
+   "expected_names": [
+    "中华结核和呼吸杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社《中华结核和呼吸杂志》",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华结核和呼吸杂志"
+   ]
+  },
+  {
+   "id": "wx-cma-anesth",
+   "name": "中华医学会麻醉学分会",
+   "expected_names": [
+    "中华医学会麻醉学分会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华医学会麻醉学分会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华医学会 通知"
+   ]
+  },
+  {
+   "id": "wx-cma-diabetes",
+   "name": "中华医学会糖尿病学分会",
+   "expected_names": [
+    "中华医学会糖尿病学分会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华医学会糖尿病学分会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华医学会 通知"
+   ]
+  },
+  {
+   "id": "wx-cma-nephro",
+   "name": "中华医学会肾脏病学分会",
+   "expected_names": [
+    "中华医学会肾脏病学分会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华医学会肾脏病学分会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华医学会 通知"
+   ]
+  },
+  {
+   "id": "wx-cma-ophth",
+   "name": "中华医学会眼科学分会",
+   "expected_names": [
+    "中华医学会眼科学分会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华医学会眼科学分会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华医学会 通知"
+   ]
+  },
+  {
+   "id": "wx-cma-radiol",
+   "name": "中华医学会放射学分会",
+   "expected_names": [
+    "中华医学会放射学分会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华医学会放射学分会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华医学会 通知"
+   ]
+  },
+  {
+   "id": "wx-cmainfo",
+   "name": "中华医学信息导报",
+   "expected_names": [
+    "中华医学信息导报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA4Mzg4ODE3NA==&mid=2247588487&idx=2&sn=df081c560c65bec5e2d2e322b4f72689&chksm=9eb2ec8b8870c4c07656e1b3a7967c74006746143cb10985691542b1cd4daa43fb2efd6a83ca",
+   "biz": "MzA4Mzg4ODE3NA==",
+   "group": "clinical",
+   "category": "medical-society-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中华医学会",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-cmda",
+   "name": "中国医师协会",
+   "expected_names": [
+    "中国医师协会"
+   ],
+   "biz": "MjM5NTE4NTc3NA==",
+   "group": "society-journal",
+   "category": "physician-association",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医师协会",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-cmde-official",
+   "name": "中国器审",
+   "expected_names": [
+    "中国器审"
+   ],
+   "group": "regulator",
+   "category": "regulator",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家药品监督管理局医疗器械技术审评中心（CMDE）",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/8nXlXJbE95hp0gcqsqj3Sg"
+   ],
+   "biz": "MzY0MDg4NTcxMg=="
+  },
+  {
+   "id": "wx-cmi",
+   "name": "中国医疗保险",
+   "expected_names": [
+    "中国医疗保险"
+   ],
+   "biz": "MjM5ODQ4MjU4MQ==",
+   "group": "society-journal",
+   "category": "medical-insurance-policy",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "《中国医疗保险》杂志社",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-cmj1887",
+   "name": "CMJ1887",
+   "expected_names": [
+    "CMJ1887",
+    "CMJ中华医学杂志英文版"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会杂志社 Chinese Medical Journal",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=Chinese Medical Journal 中华医学杂志英文版"
+   ]
+  },
+  {
+   "id": "wx-cmt",
+   "name": "中国医学论坛报",
+   "expected_names": [
+    "中国医学论坛报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5OTEzOTUxOQ==&mid=2654394226&idx=2&sn=2c7a131c96a3ec274de30e6dbffb1874&chksm=bc8a979983608bf25b8187e50e658a304d36c1e53861b588f6f04670baad84918c3540f988ce",
+   "biz": "MjM5OTEzOTUxOQ==",
+   "group": "clinical",
+   "category": "clinical-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国医学论坛报社",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-cmt-cardio",
+   "name": "中国医学论坛报今日循环",
+   "expected_names": [
+    "中国医学论坛报今日循环"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国医学论坛报社",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医学论坛报今日循环"
+   ]
+  },
+  {
+   "id": "wx-cmt-dental",
+   "name": "中国医学论坛报今日口腔",
+   "expected_names": [
+    "中国医学论坛报今日口腔"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国医学论坛报社",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=爱思唯尔医学"
+   ]
+  },
+  {
+   "id": "wx-cmt-endo",
+   "name": "中国医学论坛报今日内分泌",
+   "expected_names": [
+    "中国医学论坛报今日内分泌"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国医学论坛报社",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医学论坛报今日糖尿病"
+   ]
+  },
+  {
+   "id": "wx-cmt-onco",
+   "name": "中国医学论坛报今日肿瘤",
+   "expected_names": [
+    "中国医学论坛报今日肿瘤"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国医学论坛报社",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医学论坛报今日肿瘤"
+   ]
+  },
+  {
+   "id": "wx-cmt-resp",
+   "name": "中国医学论坛报今日呼吸",
+   "expected_names": [
+    "中国医学论坛报今日呼吸"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国医学论坛报社",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医学论坛报今日呼吸"
+   ]
+  },
+  {
+   "id": "wx-cn-healthcare",
+   "name": "健康界",
+   "expected_names": [
+    "健康界"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NzUzODczMg==&mid=2650015996&idx=2&sn=d6a8437419b4c74b50667e9c9703fb20&chksm=bf090d24fbdb37f07541f982edb19a1cdff37c99154907ab3d5d5567235a53597d135185cbce",
+   "biz": "MjM5NzUzODczMg==",
+   "group": "industry",
+   "category": "healthcare-industry-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "健康界传媒",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-cna-nursing",
+   "name": "中华护理学会",
+   "expected_names": [
+    "中华护理学会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华护理学会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华护理学会"
+   ]
+  },
+  {
+   "id": "wx-cnpharm",
+   "name": "中国医药报",
+   "expected_names": [
+    "中国医药报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MzAxMzIzNA==&mid=2650210953&idx=1&sn=946d0a708269f8cf54e30b996ddeef7f&chksm=bf24e433d876abffa05ae28514f37c1bf6df8f1077a214958934a1c93ae9a49f29e70ff046b2",
+   "biz": "MjM5MzAxMzIzNA==",
+   "group": "industry",
+   "category": "pharma-regulatory-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国健康传媒集团",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-cntcm",
+   "name": "中国中医药报官方号",
+   "expected_names": [
+    "中国中医药报官方号"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzUyMjUzMjU2Mg==&mid=2247714992&idx=3&sn=26fb0852364b4d872b118b8211dfa3a3&chksm=f847def3bc763d2e781e67a69d1f8695c814adcd5e47383ec0fb8bd9e52afeb329a923a85b85",
+   "biz": "MzUyMjUzMjU2Mg==",
+   "group": "clinical",
+   "category": "tcm-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国中医药报社",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-cphi-online",
+   "name": "CPHI制药在线",
+   "expected_names": [
+    "CPHI制药在线"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "CPHI制药在线（英富曼）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=CPhI制药在线"
+   ]
+  },
+  {
+   "id": "wx-csc",
+   "name": "中华医学会心血管病学分会",
+   "expected_names": [
+    "中华医学会心血管病学分会"
+   ],
+   "biz": "MjM5NDE0NTUxNg==",
+   "group": "society-journal",
+   "category": "cardiology-society",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华医学会",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-csco-official",
+   "name": "CSCO",
+   "expected_names": [
+    "CSCO"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国临床肿瘤学会（CSCO）",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=CSCO年会"
+   ]
+  },
+  {
+   "id": "wx-denglingshe",
+   "name": "瞪羚社",
+   "expected_names": [
+    "瞪羚社"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "瞪羚社",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=瞪羚社"
+   ]
+  },
+  {
+   "id": "wx-dxy",
+   "name": "丁香园",
+   "expected_names": [
+    "丁香园"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MTg0MzMwODA0MQ==&mid=2653587995&idx=2&sn=ad0acea0a9b5dbcf620dfa3a0dd8f449&chksm=5f93cf43224d3d0d5f5a4dc29eee4d720bfbf409969f93def3d03de158d55ba48dc0392a8b91",
+   "biz": "MTg0MzMwODA0MQ==",
+   "group": "clinical",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "丁香园",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-dxy-derm",
+   "name": "丁香园皮肤时间",
+   "expected_names": [
+    "丁香园皮肤时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园皮肤时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-drugguide",
+   "name": "丁香园用药指南",
+   "expected_names": [
+    "丁香园用药指南"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园重症时间",
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园急诊时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-endo",
+   "name": "丁香园内分泌时间",
+   "expected_names": [
+    "丁香园内分泌时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/ZREQ2y0vKJ33oG3iGji5YA",
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园内分泌时间"
+   ],
+   "biz": "MjM5NDA1ODEzOA=="
+  },
+  {
+   "id": "wx-dxy-gensurg",
+   "name": "丁香园普外时间",
+   "expected_names": [
+    "丁香园普外时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园普外时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-gi",
+   "name": "丁香园消化时间",
+   "expected_names": [
+    "丁香园消化时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园消化时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-heart",
+   "name": "丁香园心血管时间",
+   "expected_names": [
+    "丁香园心血管时间"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA5MjE3MzUxNA==&mid=2651578464&idx=2&sn=71a77ace9d81ea98f628074d5c2c099e&chksm=8ac5930cdcc954018b536447487d8b5fb64e1073c76da8ecc1dafae62402aee00e2e55002dab",
+   "biz": "MzA5MjE3MzUxNA==",
+   "group": "clinical",
+   "category": "cardiology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "丁香园",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-dxy-hema",
+   "name": "丁香园血液时间",
+   "expected_names": [
+    "丁香园血液时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园血液时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-imaging",
+   "name": "丁香园影像时间",
+   "expected_names": [
+    "丁香园影像时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园影像时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-infect",
+   "name": "丁香园感染时间",
+   "expected_names": [
+    "丁香园感染时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园感染时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-insight-db",
+   "name": "丁香园 Insight 数据库",
+   "expected_names": [
+    "丁香园 Insight 数据库",
+    "Insight数据库"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/dDxBkE7w5fi_z8X7lM1PXg"
+   ],
+   "biz": "Mzk3NTA3Nzc2Ng=="
+  },
+  {
+   "id": "wx-dxy-nephro",
+   "name": "丁香园肾内时间",
+   "expected_names": [
+    "丁香园肾内时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园肾病时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-neuro",
+   "name": "丁香园神经时间",
+   "expected_names": [
+    "丁香园神经时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/mh9MS2mCU6KMJAz2mtuqVw",
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园神经时间"
+   ],
+   "biz": "Mzg4NjkzMzM1Nw=="
+  },
+  {
+   "id": "wx-dxy-obgyn",
+   "name": "丁香园妇产时间",
+   "expected_names": [
+    "丁香园妇产时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园妇产时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-onco",
+   "name": "丁香园肿瘤时间",
+   "expected_names": [
+    "丁香园肿瘤时间"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MzAwMjcyMA==&mid=2653549875&idx=3&sn=af442a93f5affceab79681767db1e313&chksm=bc8e233269c390cee774b6f32880a526bdd336db6db223689dc63433bcf8196393a992efd822",
+   "biz": "MjM5MzAwMjcyMA==",
+   "group": "clinical",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "丁香园",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-dxy-ortho",
+   "name": "丁香园骨科时间",
+   "expected_names": [
+    "丁香园骨科时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园骨科时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-peds",
+   "name": "丁香园儿科时间",
+   "expected_names": [
+    "丁香园儿科时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园儿科时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-psych",
+   "name": "丁香园精神时间",
+   "expected_names": [
+    "丁香园精神时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园精神时间"
+   ]
+  },
+  {
+   "id": "wx-dxy-resp",
+   "name": "丁香园呼吸时间",
+   "expected_names": [
+    "丁香园呼吸时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/gcGJoPX37NR8pc2u49AbFQ",
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园呼吸时间"
+   ],
+   "biz": "MzA5MjIxMzgxMg=="
+  },
+  {
+   "id": "wx-dxy-rheum",
+   "name": "丁香园风湿时间",
+   "expected_names": [
+    "丁香园风湿时间"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "杭州联科美讯生物医药技术有限公司（丁香园）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园风湿时间"
+   ]
+  },
+  {
+   "id": "wx-eyjlr",
+   "name": "E药经理人",
+   "expected_names": [
+    "E药经理人"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NzY2MDQwMg==&mid=2650436897&idx=1&sn=0ad2967cd12fb0b199684be9233eab55&chksm=bf6cc7fbadfdd946a0fcd3c5c9e0138d5b6015ff88192971335f51d078aad4e5dba9df4f4612",
+   "biz": "MjM5NzY2MDQwMg==",
+   "group": "industry",
+   "category": "pharma-business-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "E药经理人",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-fuwai",
+   "name": "中国医学科学院阜外医院",
+   "expected_names": [
+    "中国医学科学院阜外医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医学科学院阜外医院（国家心血管病中心）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/uQyfzou5QVzubzUrcmcwTw",
+    "https://mp.weixin.qq.com/s/g4hTk2A6ik1ZXcXvd9QrWA"
+   ],
+   "biz": "MjM5NjM0NjQyOA=="
+  },
+  {
+   "id": "wx-healthai",
+   "name": "医健AI掘金志",
+   "expected_names": [
+    "医健AI掘金志"
+   ],
+   "biz": "MzIxMTY1ODE1MA==",
+   "group": "industry",
+   "category": "medical-ai-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医健AI掘金志",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-healthy-beijing",
+   "name": "健康北京",
+   "expected_names": [
+    "健康北京"
+   ],
+   "group": "regulator",
+   "category": "regulator",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "北京市卫生健康委员会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=健康北京 北京市卫生健康委员会"
+   ]
+  },
+  {
+   "id": "wx-hit-expert",
+   "name": "HIT专家网官微",
+   "expected_names": [
+    "HIT专家网官微",
+    "HIT专家网"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "HIT专家网（医疗信息化媒体）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=HIT专家网"
+   ]
+  },
+  {
+   "id": "wx-huoshi",
+   "name": "火石创造",
+   "expected_names": [
+    "火石创造"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "火石创造（杭州火石创造）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=火石创造"
+   ]
+  },
+  {
+   "id": "wx-huxijie",
+   "name": "呼吸界",
+   "expected_names": [
+    "呼吸界"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "呼吸界（呼吸专科媒体）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/wpxX3ZaDzIDxQLrgMg2eyw"
+   ],
+   "biz": "MzU3NjA5MTM2OQ=="
+  },
+  {
+   "id": "wx-inature",
+   "name": "iNature",
+   "expected_names": [
+    "iNature"
+   ],
+   "biz": "MzU3MTE3MjUyOA==",
+   "group": "research-media",
+   "category": "paper-digest",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "iNature",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-jebm",
+   "name": "JEBM循证医学英文",
+   "expected_names": [
+    "JEBM循证医学英文",
+    "中国循证医学杂志"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "四川大学华西医院中国循证医学中心（JEBM / 中国循证医学杂志）",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国循证医学杂志"
+   ]
+  },
+  {
+   "id": "wx-jianshiju",
+   "name": "健识局",
+   "expected_names": [
+    "健识局"
+   ],
+   "biz": "MzIxMjYwMDI5Nw==",
+   "group": "industry",
+   "category": "health-policy-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "健识局",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-jieluoxuan",
+   "name": "解螺旋",
+   "expected_names": [
+    "解螺旋"
+   ],
+   "biz": "MzA5ODQ1NDIyMQ==",
+   "group": "research-media",
+   "category": "research-methods",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "解螺旋",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-jiqizhixin",
+   "name": "机器之心",
+   "expected_names": [
+    "机器之心"
+   ],
+   "biz": "MzA3MzI4MjgzMw==",
+   "group": "research-media",
+   "category": "ai-tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "北京机器之心科技",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-jkb",
+   "name": "健康报",
+   "expected_names": [
+    "健康报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NDg4OTEwMQ==&mid=2668799376&idx=1&sn=2cff5bd3caf881640df581ce4de2f4f9&chksm=bd27bb10129bfb0060a661e71c6711f1edaf747faadaa4f389865b54b9d33e3a3dc34a325aa7",
+   "biz": "MjM5NDg4OTEwMQ==",
+   "group": "clinical",
+   "category": "health-policy-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "健康报社",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-keyanquan",
+   "name": "环球科学科研圈",
+   "expected_names": [
+    "环球科学科研圈",
+    "科研圈"
+   ],
+   "biz": "MzA5NDkzNjIwMg==",
+   "group": "research-media",
+   "category": "science-news-translation",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "《环球科学》/ 科研圈",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-lancet",
+   "name": "柳叶刀TheLancet",
+   "expected_names": [
+    "柳叶刀TheLancet"
+   ],
+   "biz": "MzU0Njk0ODk4Mg==",
+   "group": "society-journal",
+   "category": "journal-chinese-edition",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "Elsevier",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-leiphone",
+   "name": "雷峰网",
+   "expected_names": [
+    "雷峰网"
+   ],
+   "biz": "MTM2ODM0ODYyMQ==",
+   "group": "research-media",
+   "category": "tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "雷峰网",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-liangyihui-hema",
+   "name": "血液肿瘤资讯",
+   "expected_names": [
+    "血液肿瘤资讯"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "良医汇（上海良医汇）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=良医汇肿瘤资讯",
+    "https://weixin.sogou.com/weixin?type=2&query=中华肿瘤杂志"
+   ]
+  },
+  {
+   "id": "wx-mdweekly",
+   "name": "医师报",
+   "expected_names": [
+    "医师报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA3NjA1MDkxMA==&mid=2651485438&idx=2&sn=f6c2cc631dc0dce1e2eae02ee4ea653c&chksm=85e0f4dd1d35738a051cfd498d77df0eff8af40ccc9c6c649a4ab6135b319eb7ed4c24c05d09",
+   "biz": "MzA3NjA1MDkxMA==",
+   "group": "clinical",
+   "category": "physician-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医师报社",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-mdweekly-onco",
+   "name": "医师报肿瘤频道",
+   "expected_names": [
+    "医师报肿瘤频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医师报社",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医师报 肿瘤"
+   ]
+  },
+  {
+   "id": "wx-medlive",
+   "name": "医脉通",
+   "expected_names": [
+    "医脉通"
+   ],
+   "biz": "MjM5OTA4MzA4MA==",
+   "group": "clinical",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京医脉互通科技",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-medlive-cardio",
+   "name": "医脉通心血管",
+   "expected_names": [
+    "医脉通心血管",
+    "医脉通心内科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通心内科"
+   ]
+  },
+  {
+   "id": "wx-medlive-endo",
+   "name": "医脉通内分泌科",
+   "expected_names": [
+    "医脉通内分泌科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通内分泌科"
+   ]
+  },
+  {
+   "id": "wx-medlive-gi",
+   "name": "医脉通消化科",
+   "expected_names": [
+    "医脉通消化科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通消化科"
+   ]
+  },
+  {
+   "id": "wx-medlive-guideline",
+   "name": "医脉通临床指南",
+   "expected_names": [
+    "医脉通临床指南",
+    "医脉通指南"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通心内科",
+    "https://www.medlive.cn/weixin_list.php"
+   ]
+  },
+  {
+   "id": "wx-medlive-hema",
+   "name": "医脉通血液科",
+   "expected_names": [
+    "医脉通血液科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通血液科"
+   ]
+  },
+  {
+   "id": "wx-medlive-liver",
+   "name": "医脉通肝脏科",
+   "expected_names": [
+    "医脉通肝脏科",
+    "医脉通肝病科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通肝病科"
+   ]
+  },
+  {
+   "id": "wx-medlive-nephro",
+   "name": "医脉通肾内频道",
+   "expected_names": [
+    "医脉通肾内频道",
+    "医脉通肾内科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通肾内科"
+   ]
+  },
+  {
+   "id": "wx-medlive-neuro",
+   "name": "医脉通神经科",
+   "expected_names": [
+    "医脉通神经科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通神经科",
+    "http://group.medlive.cn/topic/62056"
+   ]
+  },
+  {
+   "id": "wx-medlive-onco",
+   "name": "医脉通肿瘤科",
+   "expected_names": [
+    "医脉通肿瘤科"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MTAzNjUyMA==&mid=2652365073&idx=1&sn=7d7b825827e1445fd460947ec0d3701f&chksm=bc42041ce053bab9ca61df9bf747329f894d37ada2f076f4696dd8ac2c6944ab5c980ae6af9d",
+   "biz": "MjM5MTAzNjUyMA==",
+   "group": "clinical",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京医脉互通科技",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-medlive-peds",
+   "name": "医脉通儿科",
+   "expected_names": [
+    "医脉通儿科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通儿科"
+   ]
+  },
+  {
+   "id": "wx-medlive-psych",
+   "name": "医脉通精神科",
+   "expected_names": [
+    "医脉通精神科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通精神科"
+   ]
+  },
+  {
+   "id": "wx-medlive-resp",
+   "name": "医脉通呼吸频道",
+   "expected_names": [
+    "医脉通呼吸频道",
+    "医脉通呼吸科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医脉通呼吸科"
+   ]
+  },
+  {
+   "id": "wx-medlive-uro",
+   "name": "医脉通泌尿外科",
+   "expected_names": [
+    "医脉通泌尿外科"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京金叶天盛科技有限公司（医脉通）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华肿瘤杂志"
+   ]
+  },
+  {
+   "id": "wx-medsci",
+   "name": "梅斯医学",
+   "expected_names": [
+    "梅斯医学"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI0Njc5ODM4MQ==&mid=2247720580&idx=5&sn=1b97744667acacd3948e8a5a52253fc4&chksm=e8791f43968e3bc20cc2131d8e36456e8efd6517feeb069329ed4e9adfd75501b3bbcb55d35a",
+   "biz": "MzI0Njc5ODM4MQ==",
+   "group": "clinical",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "梅斯医学",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-medtrend",
+   "name": "MedTrend医趋势",
+   "expected_names": [
+    "MedTrend医趋势"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "MedTrend医趋势",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=MedTrend医趋势"
+   ]
+  },
+  {
+   "id": "wx-menet",
+   "name": "米内网",
+   "expected_names": [
+    "米内网"
+   ],
+   "biz": "MjM5NzQ4MTg2MQ==",
+   "group": "industry",
+   "category": "pharma-market-data",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "米内网",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-natcm-zgzy",
+   "name": "中国中医",
+   "expected_names": [
+    "中国中医",
+    "国家中医药管理局"
+   ],
+   "group": "regulator",
+   "category": "regulator",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家中医药管理局",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/-6SJxDj70fDwT5Wtgtcc-A",
+    "http://www.natcm.gov.cn/"
+   ],
+   "biz": "MzA3ODQwNzYzMg=="
+  },
+  {
+   "id": "wx-nature-portfolio",
+   "name": "Nature Portfolio",
+   "expected_names": [
+    "Nature Portfolio",
+    "Nature自然科研"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "Springer Nature（自然科研）",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=Nature Portfolio 自然科研"
+   ]
+  },
+  {
+   "id": "wx-nejm",
+   "name": "NEJM医学前沿",
+   "expected_names": [
+    "NEJM医学前沿"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzIxNTc4NzU0MQ==&mid=2247562533&idx=1&sn=bb65229f68df3bea7dacff60b14fc132&chksm=9677a76079906d3f21409b7ba58b8f333d74d4cfff3f58e1eefef660b180530e6abb1d58eefe",
+   "biz": "MzIxNTc4NzU0MQ==",
+   "group": "society-journal",
+   "category": "journal-chinese-edition",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "Massachusetts Medical Society",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-nhc-healthychina",
+   "name": "健康中国",
+   "expected_names": [
+    "健康中国"
+   ],
+   "group": "regulator",
+   "category": "regulator",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家卫生健康委员会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/nkCF941DQpx906GcZ5jjBw",
+    "https://mp.weixin.qq.com/s/aJOFQlaIKMlvDXICS87Naw",
+    "https://weixin.sogou.com/weixin?type=2&query=健康中国 国家卫生健康委"
+   ],
+   "biz": "MjM5NjI2ODA4Mw=="
+  },
+  {
+   "id": "wx-nhsa-gov",
+   "name": "国家医保局",
+   "expected_names": [
+    "国家医保局"
+   ],
+   "group": "regulator",
+   "category": "regulator",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家医疗保障局",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/aISiQ1B3fbtFAznF9sNeRg"
+   ],
+   "biz": "MzU2MzY3NTA2MQ=="
+  },
+  {
+   "id": "wx-nifdc",
+   "name": "中国药检",
+   "expected_names": [
+    "中国药检"
+   ],
+   "biz": "MzU3NzA0OTIxMg==",
+   "group": "regulator",
+   "category": "nifdc-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "中国食品药品检定研究院 NIFDC",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-nmjc",
+   "name": "中华医学杂志",
+   "expected_names": [
+    "中华医学杂志"
+   ],
+   "biz": "MjM5NTQ5NjMxMg==",
+   "group": "society-journal",
+   "category": "journal-cma",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-nmpa",
+   "name": "国家药监局",
+   "expected_names": [
+    "国家药监局"
+   ],
+   "biz": "MzA3Mzg0MTY1Nw==",
+   "group": "regulator",
+   "category": "nmpa-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家药品监督管理局",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-nsfc",
+   "name": "国家自然科学基金委员会",
+   "expected_names": [
+    "国家自然科学基金委员会"
+   ],
+   "biz": "MzI5NDU2MDc0OA==",
+   "group": "regulator",
+   "category": "funding-agency",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家自然科学基金委员会",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-nsfc-journal",
+   "name": "中国科学基金",
+   "expected_names": [
+    "中国科学基金"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s/9jkBYr7mpX9NTKEX-VskfA",
+   "biz": "Mzg5MTY5Mjg4Nw==",
+   "group": "society-journal",
+   "category": "funding-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "国家自然科学基金委员会",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-oncologynews",
+   "name": "良医汇肿瘤资讯",
+   "expected_names": [
+    "良医汇肿瘤资讯",
+    "肿瘤资讯"
+   ],
+   "biz": "MjM5Nzc4MDk2MA==",
+   "group": "clinical",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "良医汇",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-pharmcube",
+   "name": "医药魔方",
+   "expected_names": [
+    "医药魔方"
+   ],
+   "biz": "Mzg2OTY4MTEzMA==",
+   "group": "industry",
+   "category": "pharma-data-insight",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医药魔方",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-phirda",
+   "name": "中国医药创新促进会",
+   "expected_names": [
+    "中国医药创新促进会",
+    "中国药促会"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医药创新促进会（PhIRDA）",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国医药创新促进会",
+    "https://weixin.sogou.com/weixin?type=2&query=中国药促会"
+   ]
+  },
+  {
+   "id": "wx-plagh-301",
+   "name": "解放军总医院",
+   "expected_names": [
+    "解放军总医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国人民解放军总医院（301医院）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国研究型医院学会"
+   ]
+  },
+  {
+   "id": "wx-puh3",
+   "name": "北京大学第三医院",
+   "expected_names": [
+    "北京大学第三医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "北京大学第三医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=北京大学第三医院"
+   ]
+  },
+  {
+   "id": "wx-pumch-doctor",
+   "name": "协和医生说",
+   "expected_names": [
+    "协和医生说"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医学科学院北京协和医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/FvO4fFlq9G7fN0NTHw4eTw",
+    "https://weixin.sogou.com/weixin?type=2&query=协和医生说"
+   ],
+   "biz": "MzIwODc4ODYzNw=="
+  },
+  {
+   "id": "wx-pumch-journal",
+   "name": "协和医学杂志",
+   "expected_names": [
+    "协和医学杂志"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI3MzYzNTAwOA==&mid=2247580506&idx=1&sn=2b215aaaa0ca3b2b416cbd1d02df8697&chksm=ea0c82807e1b22018bb23a878a589282b3ebb03538ec902fef8a64b17b40bbc01bd2a34accf3",
+   "biz": "MzI3MzYzNTAwOA==",
+   "group": "society-journal",
+   "category": "journal-official",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中国医学科学院 / 北京协和医院",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-qbitai",
+   "name": "量子位",
+   "expected_names": [
+    "量子位"
+   ],
+   "biz": "MzIzNjc1NzUzMw==",
+   "group": "research-media",
+   "category": "ai-tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "量子位",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-qilu",
+   "name": "齐鲁医院",
+   "expected_names": [
+    "齐鲁医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "山东大学齐鲁医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=山东大学齐鲁医院"
+   ]
+  },
+  {
+   "id": "wx-qixie-zhijia",
+   "name": "器械之家",
+   "expected_names": [
+    "器械之家"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "器械之家",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=器械之家"
+   ]
+  },
+  {
+   "id": "wx-renji",
+   "name": "上海交通大学医学院附属仁济医院",
+   "expected_names": [
+    "上海交通大学医学院附属仁济医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "上海交通大学医学院附属仁济医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=上海交通大学医学院附属仁济医院"
+   ]
+  },
+  {
+   "id": "wx-ruijin",
+   "name": "上海交通大学医学院附属瑞金医院",
+   "expected_names": [
+    "上海交通大学医学院附属瑞金医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "上海交通大学医学院附属瑞金医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=上海瑞金医院",
+    "https://weixin.sogou.com/weixin?type=2&query=武汉同济医院 门诊"
+   ]
+  },
+  {
+   "id": "wx-saibailan",
+   "name": "赛柏蓝",
+   "expected_names": [
+    "赛柏蓝"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NTA4Mzc2Mg==&mid=2653427659&idx=7&sn=c6ab35828c265edfe95f6dad7e2fc2c1&chksm=bc53123fdc5e8bb6c451fccd483facb234f8ff628e0759f4bbcd41bb8ac23c768a27f31d56ce",
+   "biz": "MjM5NTA4Mzc2Mg==",
+   "group": "industry",
+   "category": "pharma-policy-market",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "北京赛柏蓝企业管理",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-saibailan-device",
+   "name": "赛柏蓝器械",
+   "expected_names": [
+    "赛柏蓝器械"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "赛柏蓝",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/sPQYspoeqSVwdTMSqBcgsQ"
+   ],
+   "biz": "MzA3MTIwODc3MQ=="
+  },
+  {
+   "id": "wx-saixiansheng",
+   "name": "赛先生",
+   "expected_names": [
+    "赛先生"
+   ],
+   "biz": "MzAwMzc2MTA4Ng==",
+   "group": "research-media",
+   "category": "science-commentary",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "赛先生",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-sciencenet",
+   "name": "科学网",
+   "expected_names": [
+    "科学网"
+   ],
+   "biz": "MzA5OTMxMTUzMw==",
+   "group": "research-media",
+   "category": "science-news-portal",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "中国科学报社",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-shanghai-12320",
+   "name": "健康上海12320",
+   "expected_names": [
+    "健康上海12320"
+   ],
+   "group": "regulator",
+   "category": "regulator",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "上海市卫生健康委员会",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=健康上海12320"
+   ]
+  },
+  {
+   "id": "wx-shenlan-guan",
+   "name": "深蓝观",
+   "expected_names": [
+    "深蓝观"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "深蓝观（医药产业媒体）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=深蓝观 创新药 Biotech"
+   ]
+  },
+  {
+   "id": "wx-sinamed",
+   "name": "新浪医药",
+   "expected_names": [
+    "新浪医药"
+   ],
+   "biz": "MzAxNjI5NzI4MA==",
+   "group": "industry",
+   "category": "pharma-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "新浪医药",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-siyumedtech",
+   "name": "思宇MedTech",
+   "expected_names": [
+    "思宇MedTech"
+   ],
+   "biz": "MzIyMTczMzk5OA==",
+   "group": "industry",
+   "category": "medtech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "思宇MedTech",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-sysucc",
+   "name": "中山大学肿瘤防治中心订阅号",
+   "expected_names": [
+    "中山大学肿瘤防治中心订阅号"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中山大学肿瘤防治中心",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中山大学肿瘤防治中心"
+   ]
+  },
+  {
+   "id": "wx-the-intellectual",
+   "name": "知识分子",
+   "expected_names": [
+    "知识分子"
+   ],
+   "group": "research-media",
+   "category": "research-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "知识分子（科学媒体）",
+   "priority": 4,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=知识分子"
+   ]
+  },
+  {
+   "id": "wx-tiantan",
+   "name": "北京天坛医院",
+   "expected_names": [
+    "北京天坛医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "首都医科大学附属北京天坛医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=北京天坛医院"
+   ]
+  },
+  {
+   "id": "wx-tongxieyi",
+   "name": "同写意",
+   "expected_names": [
+    "同写意"
+   ],
+   "biz": "MzA4MzgzMDM5Mg==",
+   "group": "industry",
+   "category": "pharma-rd-community",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "同写意",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-vcbeat",
+   "name": "动脉网",
+   "expected_names": [
+    "动脉网"
+   ],
+   "biz": "MjM5MTMyMDg0Ng==",
+   "group": "industry",
+   "category": "digital-health-venture",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "动脉网",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-wchscu-ebm",
+   "name": "华西循证",
+   "expected_names": [
+    "华西循证"
+   ],
+   "group": "society-journal",
+   "category": "society-journal",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "四川大学华西医院中国循证医学中心 / Cochrane中国中心",
+   "priority": 1,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国循证医学杂志",
+    "https://weixin.sogou.com/weixin?type=2&query=Cochrane中国"
+   ]
+  },
+  {
+   "id": "wx-who",
+   "name": "世界卫生组织",
+   "expected_names": [
+    "世界卫生组织"
+   ],
+   "biz": "MzA3ODU5NDY2NA==",
+   "group": "regulator",
+   "category": "who-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "World Health Organization",
+   "priority": 1,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-wuxiapptec",
+   "name": "药明康德",
+   "expected_names": [
+    "药明康德"
+   ],
+   "biz": "MzAwMDA5NTIxNQ==",
+   "group": "industry",
+   "category": "pharma-rd-news",
+   "source_type": "company",
+   "authority": 2,
+   "owner_entity": "药明康德 WuXi AppTec",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-xiangya",
+   "name": "百年湘雅",
+   "expected_names": [
+    "百年湘雅"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中南大学湘雅医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中南大学湘雅医院"
+   ]
+  },
+  {
+   "id": "wx-xiaohuajie",
+   "name": "消化界",
+   "expected_names": [
+    "消化界"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "消化界（消化专科媒体）",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中华消化杂志"
+   ]
+  },
+  {
+   "id": "wx-xieheba",
+   "name": "协和八",
+   "expected_names": [
+    "协和八"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzAxMDA4NjU3OA==&mid=2652601038&idx=1&sn=07dd37cc33f54f3de70e4822a7c5c3b1&chksm=81e8475bdc0b3fa4e5d28c27ed9ba192dcace06d6471d8b23110efd383f9b508faaaf6bb02d3",
+   "biz": "MzAxMDA4NjU3OA==",
+   "group": "research-media",
+   "category": "medical-education",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "协和八",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-xinkangjie",
+   "name": "新康界",
+   "expected_names": [
+    "新康界"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "新康界",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=新康界"
+   ]
+  },
+  {
+   "id": "wx-xueshujingwei",
+   "name": "学术经纬",
+   "expected_names": [
+    "学术经纬"
+   ],
+   "biz": "MzI5MDQzNjY2OA==",
+   "group": "research-media",
+   "category": "paper-digest",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "药明康德内容团队",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-yanfake",
+   "name": "研发客",
+   "expected_names": [
+    "研发客"
+   ],
+   "biz": "MzAwNzMyNzQzNg==",
+   "group": "industry",
+   "category": "pharma-rd-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "研发客",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-yaodu",
+   "name": "药渡",
+   "expected_names": [
+    "药渡"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "药渡（北京药渡）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=药渡 新药"
+   ]
+  },
+  {
+   "id": "wx-yaopingzhongxin",
+   "name": "药评中心",
+   "expected_names": [
+    "药评中心"
+   ],
+   "biz": "MzAwNDQwODY5Mw==",
+   "group": "clinical",
+   "category": "hospital-pharmacy",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "药评中心",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-yaorongyun",
+   "name": "药融云",
+   "expected_names": [
+    "药融云",
+    "摩熵医药"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "药融云 / 摩熵数科",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=摩熵医药"
+   ]
+  },
+  {
+   "id": "wx-yaoshidai",
+   "name": "药时代",
+   "expected_names": [
+    "药时代"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI5NzY0NDQyNQ==&mid=2247904030&idx=1&sn=2f9d6cc963b7d560de7d29f9fa0989f4&chksm=edbccb003f088bc2e8274cff50474f466aee7fd3f3c498f44bb2a0bb9d99a3e86f315d1075ad",
+   "biz": "MzI5NzY0NDQyNQ==",
+   "group": "industry",
+   "category": "pharma-rd-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "药时代",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-yaozh",
+   "name": "药智网",
+   "expected_names": [
+    "药智网"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "药智网（重庆药智网络科技）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=药智网 药智"
+   ]
+  },
+  {
+   "id": "wx-yigu",
+   "name": "医谷",
+   "expected_names": [
+    "医谷"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医谷（医疗健康产业媒体）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园眼科时间",
+    "https://weixin.sogou.com/weixin?type=2&query=火石创造"
+   ]
+  },
+  {
+   "id": "wx-yikahui",
+   "name": "医咖会",
+   "expected_names": [
+    "医咖会"
+   ],
+   "biz": "MzI2OTQyMzc5MA==",
+   "group": "clinical",
+   "category": "clinical-research-methods",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医咖会",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-yimaike",
+   "name": "医麦客",
+   "expected_names": [
+    "医麦客"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医麦客（细胞与基因治疗产业媒体）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医麦客 细胞治疗"
+   ]
+  },
+  {
+   "id": "wx-yiyao-dili",
+   "name": "医药地理",
+   "expected_names": [
+    "医药地理"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医药地理（运营主体未核实）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医药地理",
+    "https://weixin.sogou.com/weixin?type=2&query=中国药学会 通知"
+   ]
+  },
+  {
+   "id": "wx-yiyao-yao",
+   "name": "医曜",
+   "expected_names": [
+    "医曜"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医曜（运营主体未核实）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s/r2xq5daEkDEQBDC_JHSYQw",
+    "https://www.chuanshenggang.com/media/detail/133947"
+   ],
+   "biz": "Mzg3OTU4MTEwNA=="
+  },
+  {
+   "id": "wx-yiyaoguanlan",
+   "name": "医药观澜",
+   "expected_names": [
+    "医药观澜"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzUxMTY5MzM5OQ==&mid=2247579311&idx=2&sn=1e312ab55892e9c20ef2096a7b205e97&chksm=f8e0f53030976fa4546bf784ae51716cde3c690a952e288aaac345c2bc85a8ab455e3ed8f8da",
+   "biz": "MzUxMTY5MzM5OQ==",
+   "group": "industry",
+   "category": "drug-approval-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医药观澜",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-yxj",
+   "name": "医学界",
+   "expected_names": [
+    "医学界"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MDc3NjQwMA==&mid=2926906939&idx=1&sn=69212f871b65d0882889d9c25780c939&chksm=8c74daea81b00a6a9c15be58e96c51a6e9274503d6c8585a9a8b1dfbccd00257ebf664864b1d",
+   "biz": "MjM5MDc3NjQwMA==",
+   "group": "clinical",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-yxj-cardio",
+   "name": "医学界心血管频道",
+   "expected_names": [
+    "医学界心血管频道"
+   ],
+   "biz": "MzkyODU4OTIxOQ==",
+   "group": "clinical",
+   "category": "cardiology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-yxj-emicu",
+   "name": "医学界急诊与重症频道",
+   "expected_names": [
+    "医学界急诊与重症频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界急诊与重症频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-endo",
+   "name": "医学界内分泌频道",
+   "expected_names": [
+    "医学界内分泌频道"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzUxNzY3MDg4NQ==&mid=2247837581&idx=1&sn=3a4bde1d89003c89f944f6e16df12c49&chksm=f8010ed3b7618d4531273fe0a0d96b897803b21f8188d3c5d66bc5a8e8caf4e3ec9dc76a3713",
+   "biz": "MzUxNzY3MDg4NQ==",
+   "group": "clinical",
+   "category": "endocrinology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-yxj-gi",
+   "name": "医学界消化肝病频道",
+   "expected_names": [
+    "医学界消化肝病频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界消化肝病频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-hema",
+   "name": "医学界血液频道",
+   "expected_names": [
+    "医学界血液频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界血液频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-infect",
+   "name": "医学界感染频道",
+   "expected_names": [
+    "医学界感染频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界感染频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-lab",
+   "name": "医学界检验频道",
+   "expected_names": [
+    "医学界检验频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界肾病频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-nephro",
+   "name": "医学界肾病频道",
+   "expected_names": [
+    "医学界肾病频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界肾病频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-neuro",
+   "name": "医学界神经病学频道",
+   "expected_names": [
+    "医学界神经病学频道"
+   ],
+   "biz": "Mzk0ODYwMjgyMA==",
+   "group": "clinical",
+   "category": "neurology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-yxj-obgyn",
+   "name": "医学界妇产科频道",
+   "expected_names": [
+    "医学界妇产科频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界妇产科频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-onco",
+   "name": "医学界肿瘤频道",
+   "expected_names": [
+    "医学界肿瘤频道"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzU4MjQzNjAzMA==&mid=2247911776&idx=6&sn=a2df49fa531ca82db3bdeb7ec959c5fc&chksm=fc500bbbcade69f746f8f04a7ae0de8d00506fdf33ba2b992ac864bb087c3de498d3d92f5ff2",
+   "biz": "MzU4MjQzNjAzMA==",
+   "group": "clinical",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-yxj-peds",
+   "name": "医学界儿科频道",
+   "expected_names": [
+    "医学界儿科频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界儿科频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-psych",
+   "name": "医学界精神病学频道",
+   "expected_names": [
+    "医学界精神病学频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界精神病学频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-resp",
+   "name": "医学界呼吸频道",
+   "expected_names": [
+    "医学界呼吸频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界呼吸频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-rheum",
+   "name": "医学界风湿免疫频道",
+   "expected_names": [
+    "医学界风湿免疫频道"
+   ],
+   "group": "clinical",
+   "category": "clinical",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=医学界风湿免疫频道"
+   ]
+  },
+  {
+   "id": "wx-yxj-think",
+   "name": "医学界智库",
+   "expected_names": [
+    "医学界智库"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MDQyNDE3Mg==&mid=2650445929&idx=2&sn=4491f7a645719a65a06b033fc8f6b1fc&chksm=bfa7060a2532f66e7ab51a8fba1765ff3a686866f3b26cbc999452ce1bf403f914796964eee7",
+   "biz": "MjM5MDQyNDE3Mg==",
+   "group": "clinical",
+   "category": "health-policy",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "origin": "wechat-accounts-2026-10-22"
+  },
+  {
+   "id": "wx-yyjjb",
+   "name": "医药经济报",
+   "expected_names": [
+    "医药经济报"
+   ],
+   "biz": "MjM5MTcyMjYxMw==",
+   "group": "industry",
+   "category": "pharma-economics-newspaper",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医药经济报社",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-zgkxb",
+   "name": "中国科学报",
+   "expected_names": [
+    "中国科学报"
+   ],
+   "group": "research-media",
+   "category": "research-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "中国科学报社（中国科学院主管）",
+   "priority": 4,
+   "origin": "research-2026-10-24",
+   "confidence": "medium",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=中国科学报 记者 院士"
+   ]
+  },
+  {
+   "id": "wx-zhidx",
+   "name": "智东西",
+   "expected_names": [
+    "智东西"
+   ],
+   "biz": "MzA4MTQ4NjQzMw==",
+   "group": "research-media",
+   "category": "ai-industry-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "智东西",
+   "priority": 4,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-zhiyaoju",
+   "name": "智药局",
+   "expected_names": [
+    "智药局"
+   ],
+   "biz": "MzkzMDQyNTY0Mw==",
+   "group": "industry",
+   "category": "ai-drug-discovery-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "智药局",
+   "priority": 3,
+   "origin": "wechat-accounts-2026-10-22",
+   "seed_link_expired": true
+  },
+  {
+   "id": "wx-zju-fah",
+   "name": "浙大一院",
+   "expected_names": [
+    "浙大一院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "浙江大学医学院附属第一医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=浙大一院"
+   ]
+  },
+  {
+   "id": "wx-zjyj-capital",
+   "name": "中经医健资本圈",
+   "expected_names": [
+    "中经医健资本圈"
+   ],
+   "group": "industry",
+   "category": "industry",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "中国经营报系（中经传媒）",
+   "priority": 3,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://mp.weixin.qq.com/s?__biz=MzA3Mjg4OTI0Mw==&mid=2247508415&idx=1&sn=322100936b6539d3defeeea99e913179&chksm=9ec795ee477a664771fb189b8dddf2774c25fc495f16effc3431668cc79c4a76ae2839615bd6&scene=126",
+    "https://www.chuanshenggang.com/media/detail/133942"
+   ],
+   "biz": "MzA3Mjg4OTI0Mw=="
+  },
+  {
+   "id": "wx-zs-hospital",
+   "name": "复旦大学附属中山医院",
+   "expected_names": [
+    "复旦大学附属中山医院"
+   ],
+   "group": "hospital",
+   "category": "hospital",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "复旦大学附属中山医院",
+   "priority": 2,
+   "origin": "research-2026-10-24",
+   "confidence": "high",
+   "evidence": [
+    "https://weixin.sogou.com/weixin?type=2&query=复旦大学附属中山医院"
+   ]
+  }
+ ]
+}

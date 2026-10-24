@@ -68,6 +68,15 @@ class ProviderLedger:
                     WHERE provider = %s AND called_at >= %s""", (provider, start))).fetchone()
         return float(row["amount"])
 
+    async def calls_today(self, provider: str, purpose: str, now: datetime | None = None) -> int:
+        """The calls made today (Shanghai day) for one purpose, whatever they answered."""
+        start, _ = day_window(now or self._clock())
+        async with self._pool.connection() as conn:
+            row = await (await conn.execute(
+                """SELECT count(*) AS n FROM evimed_knowledge.provider_calls
+                    WHERE provider = %s AND purpose = %s AND called_at >= %s""", (provider, purpose[:60], start))).fetchone()
+        return int(row["n"])
+
     async def check(self, cap: Cap, estimate: float, now: datetime | None = None) -> None:
         """Raise ``SpendCapReached`` when ``estimate`` more would pass the cap today."""
         now = now or self._clock()

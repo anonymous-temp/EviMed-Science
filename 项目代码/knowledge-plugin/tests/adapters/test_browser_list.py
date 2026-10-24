@@ -36,7 +36,17 @@ RENDERED = {  # case -> items on the page as rendered on 2026-09-22
     "cde-breakthrough-therapy": 10,
     "cmde-guidance": 20,
     "nhc-policy-documents": 24,
+    # ct-src 2026-10-24 (rendered that day through Chrome's new headless mode on the dev box)
+    "nmpa-drug-approval-delivery": 20,
+    "nmpa-device-approval-delivery": 20,
+    "nmpa-drug-regulatory-work": 20,
+    "nmpa-device-regulatory-work": 20,
+    "nmpa-device-recalls": 20,
+    "nmpa-consultations": 19,
 }
+# A row on another publisher's site is dropped by the host rule, and said: 国家医保局's own consultation, listed by NMPA
+# too, is read by nhsa-consultations.
+NOTES = {"nmpa-consultations": ["html_list_dropped_host=1"]}
 
 
 def parsed(name):
@@ -76,7 +86,7 @@ def test_rendered_regulator_lists_parse(name):
     # 药审中心's rendered DOM keeps Ruishu's inline script, which the fetcher's marker rule still
     # reads as a challenge after the page passed: reported to the core (P2.log 2026-09-22T11:38:02Z)
     assert validate_config(case.source) == []
-    assert len(output.entries) == RENDERED[name] and output.notes == []
+    assert len(output.entries) == RENDERED[name] and output.notes == NOTES.get(name, [])
     hosts = set(case.source.config["allowed_hosts"])
     recorded_day = case.now.date()
     for entry in output.entries:
@@ -177,3 +187,16 @@ def test_link_template_replaces_the_link_selector_in_validation():
     constant = _row({"selectors": {"item": "tr", "title": "td"}, "link_template": "https://www.cde.org.cn/list"})
     assert any("every row would share one link" in p for p in validate_config(constant))
     assert any("selectors.link" in p for p in validate_config(_row({"selectors": {"item": "tr", "title": "td"}})))
+
+
+def test_nmpa_approval_delivery_notices_are_dated_daily_rows_linking_to_the_days_table():
+    """ct-src 2026-10-24: each row is one day's notice (「2026年10月23日药品批准证明文件送达信息」); its page is the day's
+    table of approvals (受理号, 药品名称, 申请人, 批准文号, 批准日期), read when the platform asks for the text."""
+    _, _, drugs = parsed("nmpa-drug-approval-delivery")
+    _, _, devices = parsed("nmpa-device-approval-delivery")
+    assert any(e.title.endswith("药品批准证明文件送达信息") for e in drugs.entries)
+    assert any(e.title.endswith("医疗器械批准证明文件送达信息") for e in devices.entries)
+    for entry in drugs.entries + devices.entries:
+        assert entry.url.startswith("https://www.nmpa.gov.cn/zwfw/sdxx/") and entry.published_at is not None
+    _, _, work = parsed("nmpa-drug-regulatory-work")
+    assert any("批准" in e.title and "上市" in e.title for e in work.entries), "approvals are announced in this column"
