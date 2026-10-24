@@ -308,7 +308,9 @@ import { FrontierTagStore } from "./frontierTags.mjs";
 import { FrontierTagUpkeep } from "./frontierTagUpkeep.mjs";
 import { FrontierService, frontierAudienceAllows, frontierDomainVocabulary, frontierMetricFamilies, frontierMetricsSnapshot,
   frontierReadiness } from "./frontierService.mjs";
-import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs";
+import { createFrontierRoutes, frontierEventsBeacon, frontierRoutePattern } from "./frontierRoutes.mjs";
+import { FrontierInteractions } from "./frontierInteractions.mjs";
+import { createFrontierReadingMetrics } from "./frontierReadingMetrics.mjs";
 import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
 import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
@@ -750,6 +752,7 @@ function routePattern(pathname) {
   if (pathname === "/api/ops/metrics") return pathname;
   if (pathname === "/api/ops/evidence-flywheel") return pathname;
   if (pathname === "/api/ops/frontier-usage") return pathname;
+  if (pathname === "/api/ops/frontier-reading") return pathname;
   if (pathname === ALERT_RECEIVER_PATH) return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
@@ -2117,7 +2120,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
    *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
-   *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage> } | null} */
+   *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage>, interactions: FrontierInteractions,
+   *   reading?: ReturnType<typeof createFrontierReadingMetrics> } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
     const client = new KnowledgePluginClient({
@@ -2156,7 +2160,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-monthly-") });
     const frontierNotifications = new FrontierNotifications({ database: productDatabase, jobs: productJobs,
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
-    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget, entityVocabulary,
+    // What each reader was served and did (frontierInteractions.mjs): list ids for every list answer, and the page's events.
+    const interactions = new FrontierInteractions({ database: productDatabase, config });
+    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget, entityVocabulary, tags: tagStore,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
       // background, a few readers a round, never on a request.
@@ -2179,7 +2185,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       } : null,
       ...(overrides.frontierPdfTransport ? { pdfTransport: overrides.frontierPdfTransport } : {}) });
     const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder, policies:evolutionModulePolicies,
-      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions, tags: tagStore, tagUpkeep });
+      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions, tags: tagStore, tagUpkeep, interactions });
     const composer = new FrontierComposer({ events, daily, weekly, monthly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
@@ -2208,13 +2214,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
-    frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
+    frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications,
+      interactions };
   }
   // The operators' figures for the feed (frontierUsage.mjs): readers, reads, notices, sources, discovery, providers and the model's spend per day.
   // They ride the module's switch and read tables it already has; the plugin's own blocks come from the ingest's last health read.
   if (frontier) {
     const { ingest: frontierIngest } = frontier;
     frontier.usage = createFrontierUsage({ database: productDatabase, config, plugin: () => frontierIngest.status() });
+    // What readers do with what they are served (frontierReadingMetrics.mjs): click-through by genre, slot, surface and position,
+    // dwell, the end reached, return on the next day and the seventh, onboarding — for the operator only.
+    frontier.reading = createFrontierReadingMetrics({ database: productDatabase, config });
   }
   // The evidence programme's day (evidenceBudget.mjs): the publisher account's `evidence` spend against its own budget, and its
   // concurrency. A reading is never taken while the programme's switch is off.
@@ -6448,6 +6458,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A device token (own-app reservation, off by default) is read here, so
       // the store's session and CSRF checks below recognise the request.
       await im.authenticateDevice(req, pathname);
+      // A closing page's beacon of frontier events cannot set the CSRF header: its token rides in the body and is moved into the
+      // header here, before the one CSRF check (frontierRoutes.mjs `frontierEventsBeacon`). Every other request is untouched.
+      await frontierEventsBeacon(req);
       await store.assertCsrf(req, pathname);
       if (maintenanceService && requestStartsMutation(req, pathname)) {
         releaseMutation = await maintenanceService.admitMutation();
@@ -6592,6 +6605,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const asked = new URL(req.url ?? "/", apiBaseFromRequest(req, config)).searchParams.get("days");
         res.setHeader("Cache-Control", "no-store");
         sendJson(res, 200, { data: await frontier.usage.snapshot(asked === null ? {} : { days: /^\d+$/.test(asked) ? Number(asked) : Number.NaN }) });
+        return;
+      }
+
+      // What readers do with what the feed serves them (frontierReadingMetrics.mjs): click-through by genre, slot, surface and position,
+      // dwell, reach-end, D1/D7 return and onboarding, per day. Behind the scrape token; with the frontier off it answers by name.
+      if (pathname === "/api/ops/frontier-reading" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!frontier?.reading) throw new HttpError(404, "frontier_not_enabled", "The frontier feed is not enabled.");
+        const asked = new URL(req.url ?? "/", apiBaseFromRequest(req, config)).searchParams.get("days");
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: await frontier.reading.snapshot(asked === null ? {} : { days: /^\d+$/.test(asked) ? Number(asked) : Number.NaN }) });
         return;
       }
 
@@ -10141,6 +10165,9 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // The feed's use and supply by day, for the operator (frontierUsage.mjs): today's and yesterday's readers, reads, notices, source states,
   // discovery, provider calls and spend. A figure that cannot be read has no series.
   if (frontier?.usage) for (const family of await frontier.usage.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The readers' events and what each list served (frontierInteractions.mjs), and today's and yesterday's reading figures (frontierReadingMetrics.mjs).
+  if (frontier?.interactions) for (const family of frontier.interactions.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  if (frontier?.reading) for (const family of await frontier.reading.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The platform's evidence programme (evidenceBudget.mjs): its switches, today's spend against its budget and its slots, and who paid
   // for the zone upkeep this process ran. No reading is taken while the programme is off.
   const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;

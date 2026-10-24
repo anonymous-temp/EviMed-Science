@@ -13,7 +13,8 @@
  *   precision of three of the figures, said here so a dashboard does not over-read them: a reader's `read_at` on an item is the *last* time
  *   they opened it (reading it again later moves it to the later day), a star taken back is not counted, and a follow taken back is not
  *   counted. A reader is "active" on a day when any of these happened that day: an item opened, starred, a follow made, an event page
- *   opened, the feed shown to them (`exposures`, kept 90 days), the daily notice opened. Operators' and test accounts are readers too.
+ *   opened, the feed shown to them (`exposures`, kept 90 days, and since 2026-10-24 any event their page reported, `interactions`), the
+ *   daily notice opened. Operators' and test accounts are readers too.
  * - **Opens of a notice are the inbox's `read_at`.** A Feishu card is a push: tapping it lands in the app, which marks the item read, so
  *   `feishu_opened` is an inbox item that was sent on Feishu and has been read, not a click measured on Feishu. Deliveries are the inbox
  *   rows (in-app always) and `channels_sent.feishu` (the push reached the channel).
@@ -139,8 +140,9 @@ export function createFrontierUsage({ database, config = {}, plugin = null, now 
   async function present() {
     const row = (await database.query(`SELECT to_regclass('evimed_frontier.event_reads') IS NOT NULL AS event_reads,
       to_regclass('evimed_frontier.exposures') IS NOT NULL AS exposures, to_regclass('evimed_inbox.notifications') IS NOT NULL AS inbox,
-      to_regclass('evimed_usage.model_requests') IS NOT NULL AS usage`)).rows[0] ?? {};
-    return { eventReads: row.event_reads === true, exposures: row.exposures === true, inbox: row.inbox === true, usage: row.usage === true };
+      to_regclass('evimed_usage.model_requests') IS NOT NULL AS usage, to_regclass('evimed_frontier.interactions') IS NOT NULL AS interactions`)).rows[0] ?? {};
+    return { eventReads: row.event_reads === true, exposures: row.exposures === true, inbox: row.inbox === true, usage: row.usage === true,
+      interactions: row.interactions === true };
   }
 
   /**
@@ -156,6 +158,8 @@ export function createFrontierUsage({ database, config = {}, plugin = null, now 
       `SELECT (created_at AT TIME ZONE $1)::date, user_id, 'follow' FROM evimed_frontier.user_follows WHERE created_at >= ${since}`,
       ...(tables.eventReads ? [`SELECT (read_at AT TIME ZONE $1)::date, user_id, 'event_read' FROM evimed_frontier.event_reads WHERE read_at >= ${since}`] : []),
       ...(tables.exposures ? [`SELECT (exposed_at AT TIME ZONE $1)::date, user_id, 'feed' FROM evimed_frontier.exposures WHERE exposed_at >= ${since}`] : []),
+      // ct-track 2026-10-24: the page's events (frontierInteractions.mjs) replace the exposure log as what "the feed shown" is.
+      ...(tables.interactions ? [`SELECT (client_at AT TIME ZONE $1)::date, user_id, 'feed' FROM evimed_frontier.interactions WHERE client_at >= ${since}`] : []),
       ...(tables.inbox ? [`SELECT (read_at AT TIME ZONE $1)::date, user_id, 'notice' FROM evimed_inbox.notifications WHERE source->>'id' LIKE 'frontier-daily:%' AND read_at >= ${since}`] : []),
     ].join("\nUNION ALL\n");
     const rows = (await database.query(`WITH activity AS (${activity}),

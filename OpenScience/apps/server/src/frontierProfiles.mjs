@@ -41,14 +41,25 @@
  *   every candidate of its event and, where there are vectors, every candidate
  *   whose cosine to it is at least `FRONTIER_FOR_YOU_HIDDEN_COSINE`. Items the
  *   reader already starred or opened are not recommended to them again.
- * - **Ranking.** Every published item of the window that passes the reader's
- *   hidden and muted filters is a candidate (the newest 300), not only the
- *   editor's best. An item scores its best phrase's cosine plus a tenth of its
- *   editorial score out of 100 — enough to order near-equals, never to carry
- *   an item past the 0.4 floor — and a phrase picks at most two items, so one
- *   interest never fills the block. Vectors, not the rerank service
- *   (§10.5.3): that service returns an order without scores and cannot say
- *   which phrase matched.
+ * - **Ranking (ct-track, 2026-10-24).** Every published item of the window that passes the reader's hidden and muted
+ *   filters is a candidate (the newest 300). Its reasons are the profile's phrases (a phrase vector's cosine, at or above
+ *   the 0.4 floor; or a keyword hit), what the reader told onboarding (a tag or entity key of interest), what they follow
+ *   (a positive follow's predicate), and their specialties (onboarding's, else the ones the model extracted — finally
+ *   used — matching items of 精选 quality). An (item, reason) pair ranks by its match, plus an editorial share of the
+ *   item's score out of 100 that shrinks with the reader's visit days (0.3 for a newcomer, 0.2 at five, toward 0.1: the
+ *   editor beats the algorithm for a reader the platform barely knows, Claussen, Peukert & Sen), plus the reader's genre
+ *   affinity (Beta-smoothed opens and satisfied reads over seen impressions, a hide an extra failure, priors by role —
+ *   a pharmacist leans to safety, approval, policy and guideline). A reason picks at most two items (a specialty four),
+ *   so one interest never fills the block. Vectors, not the rerank service (§10.5.3): that service returns an order
+ *   without scores and cannot say which phrase matched. Every constant is in `FRONTIER_RANKING`.
+ * - **Slots.** Up to two `must-see` entries first — a safety alert of the last 72 hours that names one of the reader's
+ *   specialties or none, then a selected guideline or approval in their specialties; then the `personal` entries; then,
+ *   while fewer than seven, the editor's (`editorial`, 精选 by score); and one `explore` entry, drawn uniformly at random from
+ *   the best items the profile matched nothing of, at the first group boundary from the fourth place, with its
+ *   propensity (1 / the pool's size) recorded so the ranking can be evaluated off-policy. A reader with nothing at all is
+ *   served 精选 (and the exploration entry), never an empty block.
+ * - **Served in display order.** The block groups entries under their reason's topic; the server orders entries so each
+ *   topic's run is contiguous, so an entry's index in the answer is the position it is displayed at (contract C).
  * - **Without vectors it says so.** No embedder, no pgvector, or no phrase
  *   vector: the phrases are matched as keywords against the items' own search
  *   lexemes, and the answer's `basis` is `tags` — never a ranking that
@@ -68,18 +79,27 @@
  *   read — the page says 「暂时不可用」 and the rest goes on (§10.5.3). Nothing
  *   to show yet is `available` with no items. Never a guessed hit.
  * - **The read path makes no model call and no embedding call.** A reader
- *   whose profile is not computed yet sees nothing until the composer's next
- *   round computes it; a cached ranking older than six hours, or dropped by a
- *   hide, is recomputed in SQL alone.
+ *   whose profile is not computed yet is ranked from what SQL knows (onboarding,
+ *   follows, specialties, 精选) until the composer's next round computes it; a
+ *   cached ranking older than six hours, or dropped by a hide, a follow or a
+ *   saved onboarding answer, is recomputed in SQL alone.
+ * - **Onboarding (ct-track).** `prefs` / `savePrefs`: a role, one to three specialties, up to ten interests (tag slugs or
+ *   entity keys), and when it was finished or skipped. The answer of `forYou` says `onboarding: true` while the reader has
+ *   neither answered nor skipped and the platform knows too little of them (no phrase and fewer than five opened items);
+ *   the page shows its skippable card then, and never again once it is answered or skipped.
  *
  * @module frontierProfiles
  */
 
-import { FRONTIER_SPECIALTIES } from "@evimed/domain";
-import { splitKeys } from "@evimed/domain/entity-keys";
+import { FRONTIER_DWELL, FRONTIER_GENRE_LABELS_ZH, FRONTIER_GENRES, FRONTIER_ONBOARDING_LIMITS, FRONTIER_READER_ROLES, FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH,
+  frontierSpecialtyKey, isFrontierGenre } from "@evimed/domain";
+import { isEntityKey, splitKeys } from "@evimed/domain/entity-keys";
 import { FrontierSubscriptions, frontierFollowPredicate } from "./frontierSubscriptions.mjs";
 import { FRONTIER_PHRASE_LIMITS } from "./frontierEditor.mjs";
+import { FRONTIER_GENRE_COLUMNS, frontierItemGenre } from "./frontierInteractions.mjs";
 import { migrateFrontier } from "./frontierPersistence.mjs";
+import { frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { HttpError } from "./security.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { tsqueryLiteral } from "./kbChunker.mjs";
 
@@ -207,6 +227,8 @@ export function frontierProfileQuestions(entries, { since = new Date(0), pausedP
  */
 export function frontierReasonText(phrase) {
   const kind = String(phrase.kind ?? "");
+  // An entry with no reason of the reader's — the editor's pick, a must-see, the exploration entry — is named by its topic alone.
+  if (kind === "editorial" || kind === "must-see" || kind === "explore") return String(phrase.text);
   const lead = WORK_KINDS.has(kind) ? "因为你在做" : kind === "question" ? "因为你问过" : kind === "zone" ? "因为你关注的专区涉及"
     : kind === "library" ? "因为你的知识库里有" : "因为你关注";
   return `${lead}：${phrase.text}`;
@@ -220,6 +242,19 @@ export function frontierReasonText(phrase) {
 export function frontierPhraseSource(entry) {
   const source = entry?.source;
   return source === "question" || source === "frontier-item" || source === "zone" || source === "library" ? source : "memory";
+}
+
+/** Where a cached entry's reason came from: a profile phrase's source, or what the reader stated, or no reason of theirs. */
+const STATED_SOURCES = new Set(["interest", "follow", "specialty", "editorial", "must-see", "explore"]);
+
+/**
+ * Where a cached entry of the block came from: a phrase's sources (`frontierPhraseSource`), what the reader stated (`interest`,
+ * `follow`, `specialty`) or no reason of theirs (`editorial`, `must-see`, `explore`).
+ * @param {{ source?: unknown, memoryId?: unknown }} entry
+ * @returns {"memory" | "question" | "frontier-item" | "zone" | "library" | "interest" | "follow" | "specialty" | "editorial" | "must-see" | "explore"}
+ */
+export function frontierReasonSource(entry) {
+  return typeof entry?.source === "string" && STATED_SOURCES.has(entry.source) ? /** @type {any} */ (entry.source) : frontierPhraseSource(entry);
 }
 
 /**
@@ -256,40 +291,179 @@ export function decodeVector(value, dimension) {
   return vector.every(Number.isFinite) ? vector : null;
 }
 
+// ───────────────────────── the ranking's constants and its pure parts (ct-track) ─────────────────────────
+
 /**
- * The block from per-phrase scores. Every (item, phrase) pair at or above the
- * floor is ordered by its score plus `editorial` × the item's editorial score
- * out of 100, and taken greedily: an item once, a phrase at most `perPhrase`
- * times, at most `size` items. An item whose best phrase is full may still
- * come in under its next phrase above the floor — which is how one phrase
- * stops filling the block while each item keeps a reason that holds.
- * @param {Array<{ itemId: string, phrase: number, score: number, weight?: number }>} matches
- * @param {{ minScore?: number, editorial?: number, size?: number, perPhrase?: number }} [options]
- * @returns {Array<{ itemId: string, phrase: number, score: number }>}
+ * Every constant of 与我相关's ranking, in one place. Each is a starting point to be read against the measured distribution
+ * (`/api/ops/frontier-reading`), as the selection threshold is; none was fitted, because 1–4 readers a day fit nothing yet.
+ *
+ * - `match`: what a non-phrase reason scores, on the cosine scale a phrase vector's cosine is on (floor 0.4). A stated interest
+ *   or a follow is stronger than a weak cosine (0.6); a keyword hit (no vectors) is moderate (0.5, plus its rank); a specialty is
+ *   broad and only just above the floor (0.42), and matches items of 精选 quality only.
+ * - `editorial`: the share of the editorial score (out of 100) added to a match — `ceiling` for a reader with no visit day,
+ *   halfway to `floor` at `visitsHalf` visit days (in 60 days). The editor beats the algorithm for a reader the platform barely
+ *   knows (Claussen, Peukert & Sen, NBER field experiment: the algorithm led from about five visits).
+ * - `genre`: Beta smoothing of a reader's per-genre success rate: `strength` virtual impressions at the prior mean — `lean` for
+ *   the genres the reader's role leans to, `base` for the rest (Liu, Dolan & Pedersen's 10 virtual clicks) — an open counts
+ *   `openWeight`, a satisfied read (`FRONTIER_DWELL.satisfiedMs`, the end reached, a star, a save, a share, a research) 1, a hide
+ *   one extra failure; the term added is `share` × log2(mean / base), clipped to ±1.
+ * - `mustSee`: at most `max` entries; a safety alert counts within `safetyHours`.
+ * - `explore`: `slots` entries drawn from at most `poolMax` of the best unmatched items, placed at the first group boundary at
+ *   or after index `position`.
+ * - `perReason`: how many items one reason may pick. `follows`: the positive follows read, most recent first.
+ * - `onboardingOpens`: a reader with this many opened items is known enough not to be asked.
  */
-export function frontierForYouRanking(matches, { minScore = -Infinity, editorial = 0, size = FRONTIER_FOR_YOU_SIZE,
-  perPhrase = FRONTIER_FOR_YOU_PER_PHRASE } = {}) {
-  const pairs = matches
-    .filter((match) => Number.isFinite(match.score) && match.score >= minScore)
-    .map((match) => {
-      const weight = Number(match.weight ?? 0) || 0;
-      return { itemId: match.itemId, phrase: match.phrase, score: match.score, weight, rank: match.score + editorial * weight / 100 };
-    })
-    .sort((left, right) => right.rank - left.rank || right.weight - left.weight || left.phrase - right.phrase
-      || left.itemId.localeCompare(right.itemId));
-  const taken = new Set();
-  /** @type {Map<number, number>} */
-  const perPhraseTaken = new Map();
-  /** @type {Array<{ itemId: string, phrase: number, score: number }>} */
-  const ranked = [];
-  for (const pair of pairs) {
-    if (ranked.length >= size) break;
-    if (taken.has(pair.itemId) || (perPhraseTaken.get(pair.phrase) ?? 0) >= perPhrase) continue;
-    taken.add(pair.itemId);
-    perPhraseTaken.set(pair.phrase, (perPhraseTaken.get(pair.phrase) ?? 0) + 1);
-    ranked.push({ itemId: pair.itemId, phrase: pair.phrase, score: pair.score });
+export const FRONTIER_RANKING = Object.freeze({
+  policy: "for-you-2026-10-24.1",
+  match: Object.freeze({ interest: 0.6, follow: 0.6, keyword: 0.5, specialty: 0.42 }),
+  editorial: Object.freeze({ ceiling: 0.3, floor: 0.1, visitsHalf: 5 }),
+  genre: Object.freeze({ share: 0.05, base: 0.08, lean: 0.12, strength: 10, windowDays: 60, openWeight: 0.5 }),
+  roleLeans: Object.freeze({
+    clinician: Object.freeze(["guideline", "paper", "safety", "conference"]),
+    pharmacist: Object.freeze(["safety", "approval", "policy", "guideline"]),
+    researcher: Object.freeze(["paper", "preprint", "trial", "conference"]),
+    industry: Object.freeze(["industry", "approval", "policy", "trial"]),
+    student: Object.freeze(["paper", "guideline", "commentary", "news"]),
+    other: Object.freeze([]),
+  }),
+  mustSee: Object.freeze({ max: 2, safetyHours: 72 }),
+  explore: Object.freeze({ slots: 1, position: 3, poolMax: 30 }),
+  perReason: Object.freeze({ phrase: FRONTIER_FOR_YOU_PER_PHRASE, interest: 2, follow: 2, specialty: 4 }),
+  follows: 30,
+  onboardingOpens: 5,
+});
+
+/** The topics of the entries that have no reason of the reader's: the editor's pick, and the exploration entry. */
+export const FRONTIER_FOR_YOU_TOPICS = Object.freeze({ editorial: "精选", explore: "其他领域精选" });
+
+/**
+ * The editorial share for a reader with this many visit days: `ceiling` at none, halfway to `floor` at `visitsHalf`.
+ * @param {number} visits @param {typeof FRONTIER_RANKING.editorial} [rule]
+ */
+export function frontierEditorialShare(visits, rule = FRONTIER_RANKING.editorial) {
+  const days = Number.isFinite(visits) && visits > 0 ? visits : 0;
+  return rule.floor + (rule.ceiling - rule.floor) * (rule.visitsHalf / (rule.visitsHalf + days));
+}
+
+/**
+ * A reader's affinity for each genre, from what they were shown and did (per item: seen, opened, satisfied, hidden), smoothed
+ * toward their role's priors. Pure.
+ * @param {Array<{ genre: string, seen?: boolean, opened?: boolean, satisfied?: boolean, hidden?: boolean }>} outcomes one per item
+ * @param {string | null} role @param {typeof FRONTIER_RANKING.genre} [rule]
+ * @returns {Record<string, { trials: number, successes: number, mean: number, term: number }>}
+ */
+export function frontierGenreAffinity(outcomes, role, rule = FRONTIER_RANKING.genre) {
+  const leans = new Set(role && Object.hasOwn(FRONTIER_RANKING.roleLeans, role) ? /** @type {Record<string, readonly string[]>} */ (FRONTIER_RANKING.roleLeans)[role] : []);
+  /** @type {Record<string, { trials: number, successes: number }>} */
+  const counts = Object.fromEntries(FRONTIER_GENRES.map((genre) => [genre, { trials: 0, successes: 0 }]));
+  for (const outcome of Array.isArray(outcomes) ? outcomes : []) {
+    const count = counts[outcome?.genre];
+    if (!count) continue;
+    const opened = outcome.opened === true;
+    if (outcome.seen === true || opened || outcome.hidden === true) count.trials += 1;
+    if (opened) count.successes += outcome.satisfied === true ? 1 : rule.openWeight;
+    // A hide is a stronger "no" than a card scrolled past: one more failure.
+    if (outcome.hidden === true) count.trials += 1;
   }
-  return ranked;
+  return Object.fromEntries(FRONTIER_GENRES.map((genre) => {
+    const { trials, successes } = counts[genre];
+    const prior = leans.has(genre) ? rule.lean : rule.base;
+    const mean = (successes + rule.strength * prior) / (trials + rule.strength);
+    const term = rule.share * Math.max(-1, Math.min(1, Math.log2(mean / rule.base)));
+    return [genre, { trials, successes: Math.round(successes * 100) / 100, mean: Math.round(mean * 10_000) / 10_000, term: Math.round(term * 10_000) / 10_000 }];
+  }));
+}
+
+/**
+ * @typedef {{ id: string, publicId: string, weight: number, selected: boolean, safetyAlert: boolean, genre: string, specialties: string[],
+ *   visibleAt: number }} RankCandidate
+ * @typedef {{ topic: string, kind: string, cap: number }} RankReason
+ * @typedef {{ itemId: string, reason: number, score: number }} RankPair
+ * @typedef {{ itemId: string, slot: "must-see" | "personal" | "editorial" | "explore", reason: number | null, topic: string, kind: string, score: number,
+ *   propensity: number }} RankEntry
+ */
+
+/**
+ * The block from its parts, in display order (pure; the integration test drives it through SQL). `pairs` are the (item, reason)
+ * matches already above their floor; `terms` the genre terms; `random` returns [0, 1).
+ * @param {{ candidates: RankCandidate[], reasons: RankReason[], pairs: RankPair[], readerSpecialties: string[], editorialShare: number,
+ *   terms: Record<string, { term: number }>, now: number, selectThreshold: number, random?: () => number, size?: number,
+ *   ranking?: typeof FRONTIER_RANKING }} input
+ * @returns {RankEntry[]}
+ */
+export function frontierForYouBlock({ candidates, reasons, pairs, readerSpecialties, editorialShare, terms, now, selectThreshold,
+  random = Math.random, size = FRONTIER_FOR_YOU_SIZE, ranking = FRONTIER_RANKING }) {
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const own = new Set(readerSpecialties);
+  const overlaps = (/** @type {RankCandidate} */ candidate) => candidate.specialties.some((key) => own.has(key));
+  const boost = (/** @type {RankCandidate} */ candidate) => editorialShare * candidate.weight / 100 + (terms[candidate.genre]?.term ?? 0);
+  const label = (/** @type {string} */ genre) => /** @type {Record<string, string>} */ (FRONTIER_GENRE_LABELS_ZH)[genre] ?? genre;
+  /** @type {RankEntry[]} */
+  const mustSee = [];
+  const safety = candidates.filter((candidate) => candidate.safetyAlert && now - candidate.visibleAt <= ranking.mustSee.safetyHours * 3_600_000
+    && (!own.size || !candidate.specialties.length || overlaps(candidate)))
+    .sort((left, right) => right.visibleAt - left.visibleAt || left.id.localeCompare(right.id));
+  const major = own.size ? candidates.filter((candidate) => !candidate.safetyAlert && candidate.selected && (candidate.genre === "guideline" || candidate.genre === "approval")
+    && overlaps(candidate)).sort((left, right) => right.weight - left.weight || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)) : [];
+  for (const candidate of [...safety, ...major].slice(0, ranking.mustSee.max)) {
+    mustSee.push({ itemId: candidate.id, slot: "must-see", reason: null, topic: label(candidate.genre), kind: "must-see", score: candidate.weight / 100, propensity: 1 });
+  }
+  const taken = new Set(mustSee.map((entry) => entry.itemId));
+  const exploreSlots = ranking.explore.slots;
+  const room = Math.max(0, size - mustSee.length - exploreSlots);
+  /** @type {RankEntry[]} */
+  const chosen = [];
+  const matched = new Set(pairs.map((pair) => pair.itemId));
+  const ranked = pairs.filter((pair) => byId.has(pair.itemId)).map((pair) => {
+    const candidate = /** @type {RankCandidate} */ (byId.get(pair.itemId));
+    return { ...pair, rank: pair.score + boost(candidate), weight: candidate.weight };
+  }).sort((left, right) => right.rank - left.rank || right.weight - left.weight || left.reason - right.reason || left.itemId.localeCompare(right.itemId));
+  /** @type {Map<number, number>} */
+  const perReason = new Map();
+  for (const pair of ranked) {
+    if (chosen.length >= room) break;
+    const reason = reasons[pair.reason];
+    if (!reason || taken.has(pair.itemId) || (perReason.get(pair.reason) ?? 0) >= reason.cap) continue;
+    taken.add(pair.itemId);
+    perReason.set(pair.reason, (perReason.get(pair.reason) ?? 0) + 1);
+    chosen.push({ itemId: pair.itemId, slot: "personal", reason: pair.reason, topic: reason.topic, kind: reason.kind, score: Math.round(pair.rank * 10_000) / 10_000, propensity: 1 });
+  }
+  // While the reader's own reasons leave room, the editor's: 精选 by score.
+  const editorial = candidates.filter((candidate) => candidate.selected && !taken.has(candidate.id))
+    .sort((left, right) => right.weight - left.weight || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id));
+  for (const candidate of editorial) {
+    if (chosen.length >= room) break;
+    taken.add(candidate.id);
+    chosen.push({ itemId: candidate.id, slot: "editorial", reason: null, topic: FRONTIER_FOR_YOU_TOPICS.editorial, kind: "editorial",
+      score: Math.round(boost(candidate) * 10_000) / 10_000, propensity: 1 });
+  }
+  // Groups in the order of their best entry; each topic's entries together.
+  /** @type {string[]} */
+  const order = [];
+  for (const entry of chosen) if (!order.includes(entry.topic)) order.push(entry.topic);
+  const grouped = order.flatMap((topic) => chosen.filter((entry) => entry.topic === topic));
+  const block = [...mustSee, ...grouped];
+  // The exploration entry: one of the best items the reader's reasons matched nothing of, drawn uniformly, its probability kept.
+  const pool = candidates.filter((candidate) => !taken.has(candidate.id) && !matched.has(candidate.id) && (candidate.selected || candidate.weight >= selectThreshold))
+    .sort((left, right) => right.weight - left.weight || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)).slice(0, ranking.explore.poolMax);
+  for (let slot = 0; slot < exploreSlots && pool.length; slot += 1) {
+    const draw = Math.min(pool.length - 1, Math.floor(Math.max(0, random()) * pool.length));
+    const propensity = 1 / pool.length;
+    const [candidate] = pool.splice(draw, 1);
+    // With no reason of the reader's at all, every entry is the editor's, and the drawn one joins their group.
+    const topic = chosen.some((entry) => entry.slot === "personal") ? FRONTIER_FOR_YOU_TOPICS.explore : FRONTIER_FOR_YOU_TOPICS.editorial;
+    const entry = /** @type {RankEntry} */ ({ itemId: candidate.id, slot: "explore", reason: null, topic, kind: "explore",
+      score: Math.round(boost(candidate) * 10_000) / 10_000, propensity: Math.round(propensity * 1_000_000) / 1_000_000 });
+    let at = block.length;
+    for (let index = Math.min(ranking.explore.position, block.length); index <= block.length; index += 1) {
+      // A boundary: the start, the end, or between two topics — or inside the run of its own topic.
+      const before = block[index - 1];
+      const after = block[index];
+      if (!before || !after || before.topic !== after.topic || before.topic === topic) { at = index; break; }
+    }
+    block.splice(at, 0, entry);
+  }
+  return block.slice(0, size);
 }
 
 /** @param {unknown} error */
@@ -307,16 +481,19 @@ export class FrontierProfiles {
    *           conversations?: ((userId: string) => Promise<Array<{ projectId: string, run: Record<string, any> }>>) | null,
    *           entityVocabulary?: { enabled?: boolean, keysForText: (input: { texts: string[] }) => Promise<string[]>,
    *             tag?: (input: { texts: string[] }) => Promise<string[] | null>,
-   *             describe: (keys: string[]) => Promise<Array<{ key: string, label: string }>> } | null }} options
+   *             describe: (keys: string[]) => Promise<Array<{ key: string, label: string }>> } | null,
+   *           tags?: { filter: (slug: string) => Promise<{ ids: Iterable<number | string>, tag: { slug: string, name: string } } | null> } | null,
+   *           random?: () => number, ranking?: typeof FRONTIER_RANKING }} options
    *   `researchMemory` the account memory store (`listAllRecords`, `settings`),
    *   `editor` a `FrontierEditor` (`extractProfile`), `embedder` the feed's,
    *   `conversations` a reader's own runs across their projects (the run ledger's
    *   `researcherRuns`, composed in `server.mjs`); without it no question is read,
    *   `entityVocabulary` the platform's one vocabulary (`entityVocabulary.mjs`); without it the followed zones and
-   *   the library are not read.
+   *   the library are not read, `tags` the tag tree (`FrontierTagStore`; without it an interest tag is not matched),
+   *   `random` the exploration draw's source of [0, 1), `ranking` the constants (`FRONTIER_RANKING`; a test narrows them).
    */
   constructor({ database, researchMemory = null, editor = null, embedder = null, config = {}, budget = null,
-    now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null }) {
+    now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null, tags = null, random = Math.random, ranking = FRONTIER_RANKING }) {
     if (!database) throw new TypeError("The frontier profiles need the product database.");
     this.database = database;
     this.subscriptions = new FrontierSubscriptions({ database });
@@ -328,6 +505,11 @@ export class FrontierProfiles {
     this.now = now;
     this.conversations = typeof conversations === "function" ? conversations : null;
     this.entityVocabulary = entityVocabulary?.enabled === false ? null : entityVocabulary;
+    this.tags = tags;
+    this.random = random;
+    this.ranking = ranking;
+    /** The feed's own day, for a reader's visit days. */
+    this.timeZone = String(this.config.frontierTimeZone || "Asia/Shanghai");
     this.dimension = Number(this.config.kbEmbeddingDimension) || Number(embedder?.dimension) || dimension;
     /** @type {Map<string, number>} reader → when their last refresh failed */
     this.failures = new Map();
@@ -339,7 +521,8 @@ export class FrontierProfiles {
     this.memoryFailedAt = null;
     /** Observable counters (principle 15). */
     this.counters = { refreshed: 0, empty: 0, paused: 0, failures: 0, ranked: 0, embedded: 0, embedFailures: 0, reasonsDropped: 0, reads: 0,
-      staleMarks: 0, staleMarkFailures: 0, visitFailures: 0, questionFailures: 0, hiddenDropped: 0, entityPhrases: 0, entityFailures: 0 };
+      staleMarks: 0, staleMarkFailures: 0, visitFailures: 0, questionFailures: 0, hiddenDropped: 0, entityPhrases: 0, entityFailures: 0,
+      signalFailures: 0, statedFailures: 0, prefsSaved: 0 };
     /** @type {string | null} */
     this.lastError = null;
   }
@@ -391,7 +574,7 @@ export class FrontierProfiles {
       LEFT JOIN evimed_frontier.user_profiles pr ON pr.user_id = up.user_id
       WHERE up.last_seen_at >= $1::timestamptz AND ($3::text[] IS NULL OR up.user_id = ANY($3::text[]))
         AND (pr.user_id IS NULL OR pr.computed_at < $2::timestamptz OR pr.inputs_version > pr.computed_inputs_version
-          OR (pr.for_you->>'state' = 'off' AND up.for_you_seen_at > pr.computed_at))
+          OR (jsonb_array_length(pr.phrases) = 0 AND up.for_you_seen_at > pr.computed_at))
       ORDER BY (up.for_you_seen_at IS NOT NULL AND (pr.user_id IS NULL OR up.for_you_seen_at > pr.computed_at)) DESC,
         (pr.inputs_version > pr.computed_inputs_version) DESC NULLS LAST,
         pr.computed_at NULLS FIRST, up.last_seen_at DESC LIMIT 100`,
@@ -758,16 +941,18 @@ export class FrontierProfiles {
    * The candidates for one reader since `since`: published items of enabled
    * sources, newest first, at most 300 — none the reader hid, starred or
    * opened, none of an event they hid an item of, none from a source or
-   * specialty they muted.
+   * specialty they muted — with what the block reads of each: the editorial
+   * score, 精选, the safety flag, the specialties and the genre's columns.
    * @param {string} userId @param {Date} since
-   * @returns {Promise<Array<{ id: string, public_id: string, weight: number }>>}
+   * @returns {Promise<any[]>}
    */
   async #candidates(userId, since) {
     const { muted } = await this.subscriptions.read(userId);
     const values = /** @type {any[]} */ ([since, userId]);
     const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
     const muteFilter = muted.map((follow) => `NOT coalesce((${frontierFollowPredicate(follow, param)}),false)`).join(" AND ") || "TRUE";
-    return (await this.database.query(`SELECT i.id, i.public_id, coalesce(i.score_total, 0) AS weight
+    return (await this.database.query(`SELECT i.id, i.public_id, coalesce(i.score_total, 0) AS weight, i.selected, i.specialties, i.visible_at,
+        ${FRONTIER_GENRE_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $1::timestamptz
         AND NOT EXISTS (SELECT 1 FROM evimed_frontier.user_state us WHERE us.user_id = $2 AND us.item_id = i.id
@@ -799,29 +984,175 @@ export class FrontierProfiles {
   }
 
   /**
-   * Rank the window for one reader from their stored profile and cache it
-   * (`user_profiles.for_you`). Never a model call and never an embedding
-   * call: the phrase vectors are stored with the profile.
+   * What the reader was shown and did in the genre window, one outcome per item — impressions, opens, dwell, the end reached,
+   * the keeping actions and hides from `interactions`; reads, stars and hides from `user_state`, which came before it — and
+   * their visit days. A signal that cannot be read is empty (counted): the ranking falls back to the role's priors.
+   * @param {string} userId @param {Date} now
+   * @returns {Promise<{ outcomes: Array<{ genre: string, seen: boolean, opened: boolean, satisfied: boolean, hidden: boolean }>, opens: number, visits: number }>}
+   */
+  async #readingSignal(userId, now) {
+    const since = new Date(now.getTime() - this.ranking.genre.windowDays * DAY);
+    try {
+      const rows = (await this.database.query(`WITH acts AS (
+          SELECT x.item_id, min(x.genre) AS logged_genre, bool_or(x.type = 'impression') AS seen, bool_or(x.type = 'open') AS opened,
+            coalesce(sum(x.value) FILTER (WHERE x.type = 'dwell'), 0) AS dwell, bool_or(x.type = 'reach-end') AS reached,
+            bool_or(x.type IN ('star', 'save', 'share', 'research')) AS kept, bool_or(x.type = 'hide') AS hid
+          FROM evimed_frontier.interactions x WHERE x.user_id = $1 AND x.item_id IS NOT NULL AND x.client_at >= $2 GROUP BY x.item_id
+        ), marks AS (
+          SELECT us.item_id, coalesce(us.read_at >= $2, false) AS read, coalesce(us.starred_at >= $2, false) AS starred,
+            coalesce(us.hidden_at >= $2, false) AS hidden
+          FROM evimed_frontier.user_state us WHERE us.user_id = $1 AND (us.read_at >= $2 OR us.starred_at >= $2 OR us.hidden_at >= $2)
+        )
+        SELECT a.logged_genre, ${FRONTIER_GENRE_COLUMNS}, coalesce(a.seen, false) AS seen, coalesce(a.opened, false) AS opened,
+          coalesce(a.dwell, 0) AS dwell, coalesce(a.reached, false) AS reached, coalesce(a.kept, false) AS kept, coalesce(a.hid, false) AS hid,
+          coalesce(m.read, false) AS read, coalesce(m.starred, false) AS starred, coalesce(m.hidden, false) AS hidden
+        FROM acts a FULL JOIN marks m ON m.item_id = a.item_id
+        JOIN evimed_frontier.items i ON i.id = coalesce(a.item_id, m.item_id) LIMIT 5000`, [userId, since])).rows ?? [];
+      const outcomes = rows.map((/** @type {any} */ row) => ({
+        genre: isFrontierGenre(row.logged_genre) ? row.logged_genre : frontierItemGenre(row),
+        seen: row.seen === true, opened: row.opened === true || row.read === true,
+        satisfied: Number(row.dwell) >= FRONTIER_DWELL.satisfiedMs || row.reached === true || row.kept === true || row.starred === true,
+        hidden: row.hid === true || row.hidden === true,
+      }));
+      const visits = Number((await this.database.query(`SELECT count(*)::integer AS days FROM (
+          SELECT (client_at AT TIME ZONE $3)::date AS day FROM evimed_frontier.interactions WHERE user_id = $1 AND client_at >= $2
+          UNION SELECT (read_at AT TIME ZONE $3)::date FROM evimed_frontier.user_state WHERE user_id = $1 AND read_at >= $2) AS days`,
+      [userId, since, this.timeZone])).rows?.[0]?.days ?? 0);
+      return { outcomes, opens: outcomes.filter((outcome) => outcome.opened).length, visits };
+    } catch (error) {
+      this.counters.signalFailures += 1;
+      this.lastError = codeOf(error);
+      return { outcomes: [], opens: 0, visits: 0 };
+    }
+  }
+
+  /**
+   * The reader's onboarding answer as stored, with closed words re-checked (a specialty retired since reads as its successor).
+   * @param {string} userId
+   * @returns {Promise<{ role: string | null, specialties: string[], interests: string[], onboardedAt: string | null, skippedAt: string | null }>}
+   */
+  async #prefsRow(userId) {
+    const row = (await this.database.query(`SELECT role, specialties, interests, onboarded_at, onboarding_skipped_at FROM evimed_frontier.user_prefs
+      WHERE user_id = $1`, [userId])).rows?.[0];
+    const iso = (/** @type {unknown} */ value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : null);
+    return {
+      role: typeof row?.role === "string" && FRONTIER_READER_ROLES.includes(row.role) ? row.role : null,
+      specialties: [...new Set((row?.specialties ?? []).map((/** @type {string} */ key) => frontierSpecialtyKey(key)).filter(Boolean))].map(String),
+      interests: (row?.interests ?? []).map(String),
+      onboardedAt: iso(row?.onboarded_at), skippedAt: iso(row?.onboarding_skipped_at),
+    };
+  }
+
+  /**
+   * The reasons a reader stated, beside the profile's phrases, and their matches among the candidates: onboarding's interests
+   * (a tag through the tree — itself, what was folded into it, its narrower tags — or an entity key), the positive follows (the
+   * most recent, a tag follow an interest already names left out) and the specialties, which match items of 精选 quality only.
+   * A piece that cannot be read is left out (counted), never faked.
+   * @param {string} userId @param {{ interests: string[] }} prefs @param {string[]} specialties @param {any[]} candidates @param {number} threshold
+   * @returns {Promise<{ reasons: Array<{ text: string, source: string, memoryId: string, kind: string, cap: number }>, pairs: Array<{ itemId: string, reason: number, score: number }> }>}
+   */
+  async #statedReasons(userId, prefs, specialties, candidates, threshold) {
+    /** @type {Array<{ text: string, source: string, memoryId: string, kind: string, cap: number }>} */
+    const reasons = [];
+    /** @type {Array<{ itemId: string, reason: number, score: number }>} */
+    const pairs = [];
+    const ids = candidates.map((row) => String(row.id));
+    if (!ids.length) return { reasons, pairs };
+    const { match, perReason } = this.ranking;
+    try {
+      /** @type {Array<{ tagId: string, reason: number }>} */
+      const tagIds = [];
+      /** @type {Array<{ key: string, reason: number }>} */
+      const entityKeys = [];
+      const interestSlugs = new Set();
+      const entityNames = new Map();
+      const keyed = prefs.interests.filter((key) => isEntityKey(key));
+      if (keyed.length && this.entityVocabulary) {
+        for (const entry of await this.entityVocabulary.describe(keyed).catch(() => [])) entityNames.set(entry.key, String(entry.label ?? "").trim());
+      }
+      for (const key of prefs.interests) {
+        if (isEntityKey(key)) {
+          const text = entityNames.get(key) || key.slice(key.indexOf(":") + 1);
+          entityKeys.push({ key, reason: reasons.push({ text, source: "interest", memoryId: "", kind: "interest", cap: perReason.interest }) - 1 });
+          continue;
+        }
+        const found = this.tags ? await this.tags.filter(key) : null;
+        if (!found) continue;
+        interestSlugs.add(found.tag.slug);
+        const reason = reasons.push({ text: String(found.tag.name), source: "interest", memoryId: "", kind: "interest", cap: perReason.interest }) - 1;
+        for (const id of found.ids) tagIds.push({ tagId: String(id), reason });
+      }
+      if (tagIds.length) {
+        const rows = (await this.database.query(`SELECT it.item_id, x.idx FROM evimed_frontier.item_tags it
+          JOIN unnest($1::bigint[], $2::integer[]) AS x(tag_id, idx) ON x.tag_id = it.tag_id WHERE it.item_id = ANY($3::bigint[])`,
+        [tagIds.map((entry) => entry.tagId), tagIds.map((entry) => entry.reason), ids])).rows ?? [];
+        for (const row of rows) pairs.push({ itemId: String(row.item_id), reason: Number(row.idx), score: match.interest });
+      }
+      if (entityKeys.length) {
+        const rows = (await this.database.query(`SELECT i.id, x.idx FROM evimed_frontier.items i
+          JOIN unnest($1::text[], $2::integer[]) AS x(key, idx) ON x.key = ANY(i.entity_keys) WHERE i.id = ANY($3::bigint[])`,
+        [entityKeys.map((entry) => entry.key), entityKeys.map((entry) => entry.reason), ids])).rows ?? [];
+        for (const row of rows) pairs.push({ itemId: String(row.id), reason: Number(row.idx), score: match.interest });
+      }
+      const { follows } = await this.subscriptions.read(userId);
+      const positive = follows.filter((follow) => !follow.muted && !(follow.kind === "tag" && interestSlugs.has(follow.key)))
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))).slice(0, this.ranking.follows);
+      if (positive.length) {
+        const values = /** @type {any[]} */ ([ids]);
+        const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
+        const first = reasons.length;
+        for (const follow of positive) reasons.push({ text: String(follow.label), source: "follow", memoryId: "", kind: "follow", cap: perReason.follow });
+        const hits = positive.map((follow, index) => `CASE WHEN coalesce((${frontierFollowPredicate(follow, param)}), false) THEN ${first + index} END`);
+        const rows = (await this.database.query(`SELECT i.id, array_remove(ARRAY[${hits.join(", ")}]::integer[], NULL) AS hits
+          FROM evimed_frontier.items i WHERE i.id = ANY($1::bigint[])`, values)).rows ?? [];
+        for (const row of rows) for (const hit of row.hits ?? []) pairs.push({ itemId: String(row.id), reason: Number(hit), score: match.follow });
+      }
+    } catch (error) {
+      this.counters.statedFailures += 1;
+      this.lastError = codeOf(error);
+    }
+    for (const key of specialties) {
+      const reason = reasons.push({ text: FRONTIER_SPECIALTY_LABELS_ZH[key] ?? key, source: "specialty", memoryId: "", kind: "specialty", cap: perReason.specialty }) - 1;
+      for (const row of candidates) {
+        if ((row.specialties ?? []).includes(key) && (row.selected === true || Number(row.weight) >= threshold)) {
+          pairs.push({ itemId: String(row.id), reason, score: match.specialty });
+        }
+      }
+    }
+    return { reasons, pairs };
+  }
+
+  /**
+   * Rank the window for one reader and cache it (`user_profiles.for_you`): their phrases, what they stated (onboarding, follows,
+   * specialties), their genre affinity and visit days, the must-see and the exploration entry (`frontierForYouBlock`). Never a
+   * model call and never an embedding call: the phrase vectors are stored with the profile. A reader with nothing is ranked too
+   * — 精选 and the exploration entry.
    * @param {string} userId
    */
   async rank(userId) {
     const capabilities = await this.ready();
     const now = this.now();
-    const profile = (await this.database.query(`SELECT phrases FROM evimed_frontier.user_profiles WHERE user_id = $1`, [userId])).rows?.[0];
+    const profile = (await this.database.query(`SELECT phrases, specialties FROM evimed_frontier.user_profiles WHERE user_id = $1`, [userId])).rows?.[0];
     const phrases = Array.isArray(profile?.phrases) ? profile.phrases : [];
-    if (!profile || !phrases.length) return null;
+    const prefs = await this.#prefsRow(userId);
     const vectors = phrases.map((phrase) => decodeVector(phrase.vector, this.dimension));
-    const useVectors = Boolean(capabilities.vector && this.embedder?.configured) && vectors.some(Boolean);
+    const vectorsHere = Boolean(capabilities.vector && this.embedder?.configured);
+    const useVectors = vectorsHere && vectors.some(Boolean);
     let candidates = await this.#candidates(userId, new Date(now.getTime() - FRONTIER_FOR_YOU_WINDOW_MS));
     if (candidates.length < FRONTIER_FOR_YOU_MIN_CANDIDATES) {
       candidates = await this.#candidates(userId, new Date(now.getTime() - FRONTIER_FOR_YOU_WIDE_WINDOW_MS));
     }
+    // The same story as something the reader hid, by meaning, is no candidate at all — for a phrase, a follow or the editor.
+    if (vectorsHere && candidates.length) {
+      const near = await this.#nearHidden(userId, candidates.map((row) => String(row.id)));
+      this.counters.hiddenDropped += near.size;
+      if (near.size) candidates = candidates.filter((row) => !near.has(String(row.id)));
+    }
     const ids = candidates.map((row) => String(row.id));
-    const weights = new Map(candidates.map((row) => [String(row.id), Number(row.weight)]));
     const publicIds = new Map(candidates.map((row) => [String(row.id), row.public_id]));
-    /** @type {Array<{ itemId: string, phrase: number, score: number, weight: number }>} */
-    let matches = [];
-    let basis = /** @type {"vector" | "tags"} */ ("tags");
+    /** @type {Array<{ itemId: string, reason: number, score: number }>} */
+    let phrasePairs = [];
+    let basis = /** @type {"vector" | "tags" | null} */ (phrases.length ? "tags" : null);
     if (useVectors && ids.length) {
       const type = capabilities.halfvec ? "halfvec" : "vector";
       const literals = vectors.map((vector) => (vector ? `[${vector.join(",")}]` : null));
@@ -833,10 +1164,8 @@ export class FrontierProfiles {
       [indexes.map((index) => literals[index]), indexes, ids, String(this.embedder.modelKey)])).rows ?? [];
       if (rows.length) {
         basis = "vector";
-        const near = await this.#nearHidden(userId, ids);
-        this.counters.hiddenDropped += near.size;
-        matches = rows.filter((row) => !near.has(String(row.item_id)))
-          .map((row) => ({ itemId: String(row.item_id), phrase: Number(row.idx), score: Number(row.cosine), weight: weights.get(String(row.item_id)) ?? 0 }));
+        phrasePairs = rows.map((row) => ({ itemId: String(row.item_id), reason: Number(row.idx), score: Number(row.cosine) }))
+          .filter((pair) => Number.isFinite(pair.score) && pair.score >= FRONTIER_FOR_YOU_MIN_COSINE);
       }
     }
     if (basis === "tags" && ids.length) {
@@ -846,41 +1175,68 @@ export class FrontierProfiles {
           FROM evimed_frontier.items i CROSS JOIN unnest($1::text[], $2::integer[]) AS p(q, idx)
           WHERE i.id = ANY($3::bigint[]) AND i.lexemes @@ p.q::tsquery`,
         [queries.map((entry) => entry.query), queries.map((entry) => entry.index), ids])).rows ?? [];
-        matches = rows.map((row) => ({ itemId: String(row.id), phrase: Number(row.idx), score: Number(row.rank), weight: weights.get(String(row.id)) ?? 0 }));
+        // A keyword hit is no cosine: a moderate match, ordered among hits by its rank.
+        phrasePairs = rows.map((row) => ({ itemId: String(row.id), reason: Number(row.idx), score: this.ranking.match.keyword + Math.min(0.1, Number(row.rank) || 0) }));
       }
     }
-    // Keyword ranks are not cosines: no floor and no editorial share for
-    // them, the editorial score only breaks their ties.
-    const ranked = basis === "vector"
-      ? frontierForYouRanking(matches, { minScore: FRONTIER_FOR_YOU_MIN_COSINE, editorial: FRONTIER_FOR_YOU_EDITORIAL_SHARE })
-      : frontierForYouRanking(matches);
-    const items = ranked.map((match) => {
-      const phrase = phrases[match.phrase] ?? {};
-      const source = frontierPhraseSource(phrase);
-      return { itemId: publicIds.get(match.itemId), text: String(phrase.text ?? ""), source,
-        memoryId: source === "memory" ? String(phrase.memoryId ?? "") : "", kind: String(phrase.kind ?? "profile") };
+    // The reader's own specialties win over the ones the model read off their memory (principle 18: a statement over an inference).
+    const readerSpecialties = prefs.specialties.length ? prefs.specialties
+      : (Array.isArray(profile?.specialties) ? profile.specialties : []).filter((key) => FRONTIER_SPECIALTIES.includes(/** @type {any} */ (key)));
+    const threshold = frontierSelectThreshold(this.config);
+    const stated = await this.#statedReasons(userId, prefs, readerSpecialties, candidates, threshold);
+    const reasons = [
+      ...phrases.map((phrase) => {
+        const source = frontierPhraseSource(phrase);
+        return { text: String(phrase.text ?? ""), source, memoryId: source === "memory" ? String(phrase.memoryId ?? "") : "", kind: String(phrase.kind ?? "profile"),
+          cap: this.ranking.perReason.phrase };
+      }),
+      ...stated.reasons,
+    ];
+    const pairs = [...phrasePairs, ...stated.pairs.map((pair) => ({ ...pair, reason: pair.reason + phrases.length }))]
+      .filter((pair) => reasons[pair.reason]?.text && (reasons[pair.reason].source !== "memory" || reasons[pair.reason].memoryId));
+    const signal = await this.#readingSignal(userId, now);
+    const block = frontierForYouBlock({
+      candidates: candidates.map((row) => ({ id: String(row.id), publicId: String(row.public_id), weight: Number(row.weight) || 0, selected: row.selected === true,
+        safetyAlert: row.safety_alert === true, genre: frontierItemGenre(row), specialties: (row.specialties ?? []).map(String),
+        visibleAt: row.visible_at ? new Date(row.visible_at).getTime() : 0 })),
+      reasons: reasons.map((reason) => ({ topic: reason.text, kind: reason.kind, cap: reason.cap })),
+      pairs, readerSpecialties, editorialShare: frontierEditorialShare(signal.visits, this.ranking.editorial),
+      terms: frontierGenreAffinity(signal.outcomes, prefs.role, this.ranking.genre), now: now.getTime(), selectThreshold: threshold,
+      random: this.random, ranking: this.ranking,
+    });
+    const items = block.map((entry) => {
+      const reason = entry.reason === null ? null : reasons[entry.reason];
+      const source = reason ? reason.source : entry.kind;
+      return { itemId: publicIds.get(entry.itemId), text: reason ? reason.text : entry.topic, source, memoryId: source === "memory" ? reason?.memoryId ?? "" : "",
+        kind: reason ? reason.kind : entry.kind, slot: entry.slot, score: entry.score, propensity: entry.propensity };
     }).filter((entry) => entry.itemId && entry.text && (entry.source !== "memory" || entry.memoryId));
     this.counters.ranked += 1;
-    return this.#cache(userId, { state: "available", basis, items }, now);
+    return this.#cache(userId, { state: "available", basis, policy: this.ranking.policy, signal: { opens: signal.opens, visits: signal.visits }, items }, now);
   }
 
-  /** @param {string} userId @param {{ state: string, basis: string, items: any[] }} forYou @param {Date} now */
+  /**
+   * Cache a ranking. A reader with no profile row yet gets one whose profile is due at once (`computed_at` at the epoch):
+   * caching a ranking is not computing a profile.
+   * @param {string} userId @param {Record<string, any>} forYou @param {Date} now
+   */
   async #cache(userId, forYou, now) {
     const value = { ...forYou, computedAt: now.toISOString() };
-    await this.database.query(`UPDATE evimed_frontier.user_profiles SET for_you = $2::jsonb, for_you_at = $3 WHERE user_id = $1`,
-      [userId, JSON.stringify(value), now]);
+    await this.database.query(`INSERT INTO evimed_frontier.user_profiles (user_id, for_you, for_you_at, computed_at) VALUES ($1, $2::jsonb, $3, 'epoch')
+      ON CONFLICT (user_id) DO UPDATE SET for_you = EXCLUDED.for_you, for_you_at = EXCLUDED.for_you_at`, [userId, JSON.stringify(value), now]);
     return value;
   }
 
   /**
    * The block for one reader (the read path): the cached ranking, recomputed
-   * in SQL when older than six hours or dropped, each memory reason checked
-   * against the memory it names; items hydrated by `hydrate` (the service's,
-   * with the reader's own state), hidden ones left out.
+   * in SQL when older than six hours, dropped, or made under another policy;
+   * each memory reason checked against the memory it names; items hydrated by
+   * `hydrate` (the service's, with the reader's own state), hidden ones left
+   * out. Each entry says its `slot`, `score` and `propensity`; the answer says
+   * the ranking's `policy` and whether to show onboarding (`onboarding`).
    * @param {{ id: string }} user
    * @param {(user: { id: string }, publicIds: string[]) => Promise<Map<string, any>>} hydrate
-   * @returns {Promise<{ state: "available" | "unavailable" | "off", basis: "vector" | "tags" | null, paused?: true,
-   *   items: Array<{ item: any, reason: { text: string, topic: string, memoryId: string | null, source: string } }> }>}
+   * @returns {Promise<{ state: "available" | "unavailable" | "off", basis: "vector" | "tags" | null, paused?: true, policy?: string, onboarding?: boolean,
+   *   items: Array<{ item: any, reason: { text: string, topic: string, memoryId: string | null, source: string }, slot: string, score: number | null, propensity: number | null }> }>}
    */
   async forYou(user, hydrate) {
     this.counters.reads += 1;
@@ -902,12 +1258,15 @@ export class FrontierProfiles {
     const phrases = Array.isArray(profile?.phrases) ? profile.phrases : [];
     let forYou = profile?.for_you ?? null;
     const stale = !profile?.for_you_at || this.now().getTime() - new Date(profile.for_you_at).getTime() > FRONTIER_FOR_YOU_TTL_MS;
-    if (phrases.length && (stale || forYou?.state !== "available")) forYou = await this.rank(user.id);
+    if (stale || forYou?.state !== "available" || forYou?.policy !== this.ranking.policy) forYou = await this.rank(user.id);
+    const prefs = await this.#prefsRow(user.id);
+    // Asked while the reader has neither answered nor skipped and the platform knows too little of them.
+    const onboarding = !prefs.onboardedAt && !prefs.skippedAt && !phrases.length && !prefs.specialties.length && !prefs.interests.length
+      && Number(forYou?.signal?.opens ?? 0) < this.ranking.onboardingOpens;
+    const policy = String(forYou?.policy ?? this.ranking.policy);
     const entries = forYou?.state === "available" && Array.isArray(forYou.items) ? forYou.items : [];
-    // Nothing yet — no profile, nothing to read one from, nothing in the
-    // window — is not a state of its own: the next round may have something.
-    if (!entries.length) return { state: deployment, basis: forYou?.basis ?? null, items: [] };
-    const remembered = [...new Set(entries.filter((/** @type {any} */ entry) => frontierPhraseSource(entry) === "memory")
+    if (!entries.length) return { state: deployment, basis: forYou?.basis ?? null, policy, onboarding, items: [] };
+    const remembered = [...new Set(entries.filter((/** @type {any} */ entry) => frontierReasonSource(entry) === "memory")
       .map((/** @type {any} */ entry) => String(entry.memoryId)))];
     /** @type {Set<string>} */
     let alive = new Set();
@@ -924,24 +1283,103 @@ export class FrontierProfiles {
         return { state: "unavailable", basis: null, items: [] };
       }
     }
-    const kept = entries.filter((/** @type {any} */ entry) => frontierPhraseSource(entry) !== "memory" || alive.has(String(entry.memoryId)));
+    const kept = entries.filter((/** @type {any} */ entry) => frontierReasonSource(entry) !== "memory" || alive.has(String(entry.memoryId)));
     this.counters.reasonsDropped += entries.length - kept.length;
     const ids = kept.map((/** @type {any} */ entry) => String(entry.itemId));
     const muted = await this.subscriptions.mutedPublicIds(user.id, ids);
     const items = await hydrate(user, ids);
     return {
       state: "available",
-      basis: forYou?.basis === "vector" ? "vector" : "tags",
+      basis: forYou?.basis === "vector" ? "vector" : forYou?.basis === "tags" ? "tags" : null,
+      policy,
+      onboarding,
       items: kept.flatMap((/** @type {any} */ entry) => {
         const item = items.get(String(entry.itemId));
         if (!item || item.state?.hidden || muted.has(String(entry.itemId))) return [];
-        const source = frontierPhraseSource(entry);
+        const source = frontierReasonSource(entry);
         // `topic` is the phrase alone — what 「与我相关」 groups by and heads a
         // group with (plan 2026-09-23 §6.2), without the 「因为你在做」 before it.
         return [{ item, reason: { text: frontierReasonText({ text: String(entry.text), kind: entry.kind }), topic: String(entry.text),
-          memoryId: source === "memory" ? String(entry.memoryId) : null, source } }];
+          memoryId: source === "memory" ? String(entry.memoryId) : null, source },
+        slot: typeof entry.slot === "string" ? entry.slot : "personal", score: Number.isFinite(entry.score) ? entry.score : null,
+        propensity: Number.isFinite(entry.propensity) ? entry.propensity : null }];
       }).slice(0, FRONTIER_FOR_YOU_SIZE),
     };
+  }
+
+  /**
+   * 与我相关's onboarding answer (`GET /api/frontier/prefs`): the role, the specialties, the interests — with the tags among them
+   * named as the tree names them now — and when it was finished or skipped.
+   * @param {string} userId
+   */
+  async prefs(userId) {
+    await this.ready();
+    const prefs = await this.#prefsRow(userId);
+    /** @type {Array<{ slug: string, name: string }>} */
+    const interestTags = [];
+    for (const key of prefs.interests) {
+      if (isEntityKey(key) || !this.tags) continue;
+      const found = await this.tags.filter(key).catch(() => null);
+      if (found) interestTags.push({ slug: String(found.tag.slug), name: String(found.tag.name) });
+    }
+    return { ...prefs, interestTags };
+  }
+
+  /**
+   * Save the onboarding answer (`PUT /api/frontier/prefs`): `role` (a `FRONTIER_READER_ROLES` word or null), `specialties`
+   * (at most three; finishing needs one), `interests` (at most ten tag slugs of the tree or entity keys; a tag is kept by the
+   * address that stands for it now), `done` (finished now) or `skipped` (skipped now). A field not sent is left as it is. The
+   * cached ranking is dropped, so the next read ranks with the answer.
+   * @param {string} userId @param {Record<string, unknown>} body
+   */
+  async savePrefs(userId, body) {
+    const invalid = (/** @type {string} */ message) => new HttpError(400, "frontier_prefs_invalid", message);
+    await this.ready();
+    const current = await this.#prefsRow(userId);
+    /** @type {Record<string, unknown>} */
+    const set = {};
+    if (body.role !== undefined) {
+      if (body.role !== null && (typeof body.role !== "string" || !FRONTIER_READER_ROLES.includes(body.role))) throw invalid("The role is not one of the roles.");
+      set.role = body.role;
+    }
+    if (body.specialties !== undefined) {
+      if (!Array.isArray(body.specialties) || body.specialties.some((key) => typeof key !== "string")) throw invalid("The specialties must be a list of keys.");
+      const keys = [...new Set(body.specialties.map((key) => frontierSpecialtyKey(String(key))))];
+      if (keys.some((key) => !key) || keys.length > FRONTIER_ONBOARDING_LIMITS.specialtiesMax) throw invalid(`At most ${FRONTIER_ONBOARDING_LIMITS.specialtiesMax} known specialties.`);
+      set.specialties = keys;
+    }
+    if (body.interests !== undefined) {
+      if (!Array.isArray(body.interests) || body.interests.length > FRONTIER_ONBOARDING_LIMITS.interestsMax || body.interests.some((key) => typeof key !== "string" || key.length > 200)) {
+        throw invalid(`At most ${FRONTIER_ONBOARDING_LIMITS.interestsMax} interests.`);
+      }
+      /** @type {string[]} */
+      const keys = [];
+      for (const key of body.interests) {
+        if (isEntityKey(key)) { keys.push(key); continue; }
+        const found = this.tags && /^[a-z0-9][a-z0-9-]{1,79}$/.test(key) ? await this.tags.filter(key) : null;
+        if (!found) throw invalid("An interest is neither a tag nor an entity key.");
+        keys.push(String(found.tag.slug));
+      }
+      set.interests = [...new Set(keys)];
+    }
+    for (const flag of ["done", "skipped"]) if (body[flag] !== undefined && typeof body[flag] !== "boolean") throw invalid(`${flag} must be a boolean.`);
+    if (body.done === true && body.skipped === true) throw invalid("An answer is finished or skipped, not both.");
+    const specialties = /** @type {string[]} */ (set.specialties ?? current.specialties);
+    if (body.done === true && specialties.length < FRONTIER_ONBOARDING_LIMITS.specialtiesMin) throw invalid("Finishing needs at least one specialty.");
+    const at = this.now();
+    await this.database.query(`INSERT INTO evimed_frontier.user_prefs (user_id, role, specialties, interests, onboarded_at, onboarding_skipped_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id) DO UPDATE SET
+        role = CASE WHEN $7 THEN EXCLUDED.role ELSE evimed_frontier.user_prefs.role END,
+        specialties = CASE WHEN $8 THEN EXCLUDED.specialties ELSE evimed_frontier.user_prefs.specialties END,
+        interests = CASE WHEN $9 THEN EXCLUDED.interests ELSE evimed_frontier.user_prefs.interests END,
+        onboarded_at = coalesce(EXCLUDED.onboarded_at, evimed_frontier.user_prefs.onboarded_at),
+        onboarding_skipped_at = coalesce(EXCLUDED.onboarding_skipped_at, evimed_frontier.user_prefs.onboarding_skipped_at)`,
+    [userId, set.role ?? current.role, specialties, set.interests ?? current.interests, body.done === true ? at : null, body.skipped === true ? at : null,
+      "role" in set, "specialties" in set, "interests" in set]);
+    await this.database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [userId]);
+    this.counters.prefsSaved += 1;
+    return this.prefs(userId);
   }
 
   status() {

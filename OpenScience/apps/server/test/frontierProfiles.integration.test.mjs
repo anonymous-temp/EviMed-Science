@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
-import { FrontierProfiles, encodeVector } from "../src/frontierProfiles.mjs";
+import { FRONTIER_RANKING, FrontierProfiles, encodeVector } from "../src/frontierProfiles.mjs";
 import { ResearchMemoryStore } from "../src/researchMemory.mjs";
 import { insertSource } from "./helpers/frontierFixtures.mjs";
 import { insertComposedItem, resetFrontier, testEmbedder, vectorAt } from "./helpers/frontierComposeFixtures.mjs";
@@ -102,7 +102,8 @@ function profiles({ embedder = { ...testEmbedder, embedQuery: async (text) => PH
           memoryId: phrase.source === "memory" ? memories[phrase.memory].id : "" })) };
     },
   };
-  return { calls, profiles: new FrontierProfiles({ database, researchMemory, editor, embedder, config: CONFIG, budget, now,
+  // The exploration draw takes the first of its pool, so a test knows which item it is.
+  return { calls, profiles: new FrontierProfiles({ database, researchMemory, editor, embedder, config: CONFIG, budget, now, random: () => 0,
     conversations: async (userId) => RUNS[userId] ?? [] }) };
 }
 
@@ -170,11 +171,17 @@ test("a profile from memory of every provenance, the reader's questions and what
   assert.deepEqual(answer.items.map((entry) => [entry.item.title, entry.reason.topic, entry.reason.source]), [
     ["Tirzepatide HFpEF", "替尔泊肽与心衰", "question"],
     ["SGLT2 in HF", "SGLT2 抑制剂与心衰", "memory"],
-    ["Clinic", "心内科临床", "memory"],
     ["Oncology", "SGLT2 抑制剂与心衰", "memory"],
+    ["Clinic", "心内科临床", "memory"],
     ["Between", "心内科临床", "memory"],
-  ], "by cosine with a tenth of the editorial score; another specialty's item is a candidate; the first phrase full, Kidney is left out; "
-    + "far, muted, older than seven days, starred and opened left out");
+    ["Far", "心血管", "specialty"],
+  ], "by cosine with the editorial share; another specialty's item is a candidate; the first phrase full, Kidney is left out; each topic's "
+    + "entries together, in the order of its best; the specialty the model read (心血管, finally used) brings in Far, of 精选 quality, which no "
+    + "phrase is near; muted, older than seven days, starred and opened left out");
+  assert.deepEqual(answer.items.map((entry) => entry.slot), ["personal", "personal", "personal", "personal", "personal", "personal"],
+    "nothing outside the profile is good enough to explore with, and no safety alert is in the window");
+  assert.equal(answer.policy, FRONTIER_RANKING.policy);
+  assert.equal(answer.onboarding, false, "a reader the platform knows is not asked");
   assert.equal(answer.items[0].reason.memoryId, null, "a question names no memory");
   assert.equal(answer.items[1].reason.memoryId, memories.project.id);
 });
@@ -210,7 +217,7 @@ test("a reason whose memory is gone takes its item with it at once; a question's
     summary: "心内科主治医师", origin: "explicit", status: "archived", confidence: 1, importance: 0.8 }, null, { expectedVersion: memories.profile.version });
   assert.equal(doomed.status, "archived");
   const answer = await reader.forYou({ id: users.reader }, hydrate);
-  assert.deepEqual(answer.items.map((entry) => entry.item.title), ["Tirzepatide HFpEF", "SGLT2 in HF", "Oncology"]);
+  assert.deepEqual(answer.items.map((entry) => entry.item.title), ["Tirzepatide HFpEF", "SGLT2 in HF", "Oncology", "Far"]);
   assert.equal(reader.counters.reasonsDropped, 2);
   // Put it back for the tests after this one.
   memories.profile = await memory.upsertRecord(users.reader, { scope: "user", kind: "profile", key: "profile.department", value: "心内科主治医师",
@@ -230,8 +237,11 @@ test("off for a reader who paused recall; nothing yet for one with nothing to re
   assert.deepEqual(await reader.refreshUser(users.paused), { state: "off", reason: "recall-paused" });
   assert.deepEqual(await reader.forYou({ id: users.paused }, hydrate), { state: "off", basis: null, paused: true, items: [] });
   assert.deepEqual(await reader.refreshUser(users.empty), { state: "off", reason: "no-signal" });
-  assert.deepEqual(await reader.forYou({ id: users.empty }, hydrate), { state: "available", basis: null, items: [] },
-    "nothing yet is not a state of its own");
+  const nothing = await reader.forYou({ id: users.empty }, hydrate);
+  assert.deepEqual([nothing.state, nothing.basis, nothing.onboarding], ["available", null, true],
+    "nothing yet is not a state of its own, and a reader the platform knows nothing of is asked");
+  assert.deepEqual(nothing.items.map((entry) => [entry.item.title, entry.slot, entry.reason.topic, entry.propensity]), [["Muted", "explore", "精选", 0.333333]],
+    "no item of the window is 精选, so the block is the exploration entry alone: the best of three items of 精选 quality, drawn with its probability");
   assert.equal(calls.length, 0, "no model call for a reader with nothing to read");
   // A reader with no memory and no conversation, who starred one item.
   await mark(users.fresh, items.starred.id, "starred_at");
@@ -243,7 +253,13 @@ test("off for a reader who paused recall; nothing yet for one with nothing to re
     listAllRecords: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); } } }).profiles;
   await assert.rejects(broken.refreshUser(users.reader), { code: "memory_unavailable" });
   assert.equal(broken.state(), "unavailable");
-  assert.deepEqual(await broken.forYou({ id: users.reader }, hydrate), { state: "unavailable", basis: null, items: [] });
+  // What does not come from memory is still served while the store is down: the editor's and the exploration entry.
+  const degraded = await broken.forYou({ id: users.reader }, hydrate);
+  assert.deepEqual([degraded.state, degraded.items.map((entry) => entry.slot)], ["available", ["explore"]]);
+  // A store that cannot say whether the reader paused recall answers nothing it cannot stand behind.
+  const silent = profiles({ researchMemory: { configured: true, settings: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); },
+    listAllRecords: async () => [] } }).profiles;
+  assert.deepEqual(await silent.forYou({ id: users.reader }, hydrate), { state: "unavailable", basis: null, items: [] });
   const modelless = new FrontierProfiles({ database, researchMemory: memory, config: { frontierAudience: "all" } });
   assert.equal(modelless.state(), "off");
   assert.deepEqual(await modelless.forYou({ id: users.reader }, hydrate), { state: "off", basis: null, items: [] });
@@ -259,7 +275,8 @@ test("without vectors the phrases are matched as keywords and the answer says so
   await reader.refreshUser(users.reader);
   const first = await reader.forYou({ id: users.reader }, hydrate);
   assert.equal(first.basis, "tags");
-  assert.deepEqual(first.items.map((entry) => [entry.item.title, entry.reason.memoryId]), [["HF", memories.project.id]]);
+  assert.deepEqual(first.items.map((entry) => [entry.item.title, entry.reason.memoryId, entry.reason.source]),
+    [["HF", memories.project.id, "memory"], ["Other", null, "specialty"]], "a keyword hit, then the specialty's item of 精选 quality");
   const before = (await database.query("SELECT for_you_at FROM evimed_frontier.user_profiles WHERE user_id = $1", [users.reader])).rows[0].for_you_at;
   now = new Date(NOW.getTime() + 7 * 3_600_000);
   await insertComposedItem(database, { specialties: ["cardiology"], sourceId: "stat", sourceType: "media", title: "New", titleZh: "心衰新药上市",
@@ -345,12 +362,17 @@ test("a profile stored before the other signals existed reads as memory reasons,
   await database.query(`INSERT INTO evimed_frontier.user_profiles (user_id, specialties, phrases, for_you, computed_at, for_you_at)
     VALUES ($1, '{cardiology}', $2::jsonb, $3::jsonb, $4, $4)`, [users.reader,
     JSON.stringify([{ text: "SGLT2 抑制剂与心衰", memoryId: memories.project.id, kind: "project_fact", vector: encodeVector(vectorAt(1)) }]),
-    JSON.stringify({ state: "available", basis: "vector", items: [{ itemId: items.exact.publicId, text: "SGLT2 抑制剂与心衰", memoryId: memories.project.id,
-      kind: "project_fact" }], computedAt: NOW.toISOString() }), NOW]);
+    JSON.stringify({ state: "available", basis: "vector", policy: FRONTIER_RANKING.policy, items: [{ itemId: items.exact.publicId, text: "SGLT2 抑制剂与心衰",
+      memoryId: memories.project.id, kind: "project_fact" }], computedAt: NOW.toISOString() }), NOW]);
   const { profiles: reader } = profiles();
   const answer = await reader.forYou({ id: users.reader }, hydrate);
-  assert.deepEqual(answer.items.map((entry) => [entry.item.title, entry.reason.memoryId, entry.reason.source]),
-    [["SGLT2 in HF", memories.project.id, "memory"]]);
+  assert.deepEqual(answer.items.map((entry) => [entry.item.title, entry.reason.memoryId, entry.reason.source, entry.slot]),
+    [["SGLT2 in HF", memories.project.id, "memory", "personal"]], "a cached entry with no source or slot reads as a memory reason, personal");
+  // A ranking cached under another policy (or none) is ranked again at once, so a list is never recorded under a policy that did not make it.
+  await database.query("UPDATE evimed_frontier.user_profiles SET for_you = for_you - 'policy' WHERE user_id = $1", [users.reader]);
+  const reranked = await reader.forYou({ id: users.reader }, hydrate);
+  assert.equal(reranked.policy, FRONTIER_RANKING.policy);
+  assert.ok(reranked.items.length > 1, "ranked again with the current policy");
   const round = profiles();
   await round.profiles.refreshDue();
   assert.equal(round.calls.length, 1, "no mark yet: due at the first round");

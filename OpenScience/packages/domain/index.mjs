@@ -1349,6 +1349,7 @@ export {
 // frontierInteractions — what a 前沿动态 reader did, as the browser sends it and the control plane keeps it: closed event types,
 // surfaces, slots, hide reasons, roles, the seen/dwell/session definitions and the one validator both sides use (ct-track 2026-10-24).
 export {
+  FRONTIER_DEVICE_CLASSES,
   FRONTIER_DWELL,
   FRONTIER_FILTER_CONTROLS,
   FRONTIER_HIDE_REASON_LABELS_ZH,
@@ -1371,6 +1372,7 @@ export {
   frontierInteraction,
   isFrontierInteractionType,
 } from './src/frontierInteractions.mjs'
+/** @typedef {import('./src/frontierInteractions.mjs').FrontierInteraction} FrontierInteraction */
 // frontierGenres — 8 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
 // the genres code is sure of, and code's fallback and decision over the editor model's genre.
 export {

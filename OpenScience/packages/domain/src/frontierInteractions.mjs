@@ -16,7 +16,9 @@
  * - **Dwell is visible, engaged time.** The page reports milliseconds the reader tab was visible and not idle
  *   (`FRONTIER_DWELL.idleMs`) since its last report, on hide, on page hide and on leaving; the server sums by view.
  * - **Nothing personal travels.** No URL, no query text, no free text, no IP or device string: closed words, public ids,
- *   numbers. The account is the server's session; the `session` id is a random token a tab rotates after 30 idle minutes.
+ *   numbers. The account is the server's session; the `session` id is a random token a tab rotates after 30 idle minutes;
+ *   `device` is the layout class only (`narrow` under 1024 px, `wide` from it), because position bias and dwell differ by
+ *   layout (Yi et al. 2014 normalise dwell per device).
  * - One validator (`frontierInteraction`) for both sides: the page drops what it would be refused for, and the server
  *   keeps what passes and counts each drop by its reason. An unknown type is dropped, never stored under a guess.
  *
@@ -107,6 +109,9 @@ export const FRONTIER_READER_ROLE_LABELS_ZH = /** @type {Readonly<Record<string,
 /** What onboarding takes: one role, one to three specialties, up to ten interests (tag slugs or entity keys). */
 export const FRONTIER_ONBOARDING_LIMITS = Object.freeze({ specialtiesMin: 1, specialtiesMax: 3, interestsMax: 10 })
 
+/** The layout an event happened in: the reader page's two columns start at 1024 px (`useWide`). */
+export const FRONTIER_DEVICE_CLASSES = Object.freeze(['narrow', 'wide'])
+
 /** The read-depth milestones of a reading page's body, in percent. */
 export const FRONTIER_READ_DEPTHS = Object.freeze([25, 50, 75, 100])
 
@@ -134,13 +139,13 @@ export const FRONTIER_INTERACTION_CLOCK = Object.freeze({ pastMs: 24 * 3_600_000
 
 /** Why an event is dropped: the server counts each (`open_science_frontier_events_total{outcome}`). */
 export const FRONTIER_INTERACTION_DROP_REASONS = Object.freeze(['not-an-object', 'unknown-type', 'bad-id', 'bad-surface', 'bad-target',
-  'bad-list', 'bad-slot', 'bad-position', 'bad-value', 'bad-detail', 'bad-session', 'bad-view', 'stale', 'unexpected-field'])
+  'bad-list', 'bad-slot', 'bad-position', 'bad-value', 'bad-detail', 'bad-session', 'bad-view', 'bad-device', 'stale', 'unexpected-field'])
 
 const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/
 const ITEM_ID = /^[a-z0-9]{12,32}$/
 const EVENT_ID = /^[a-z0-9][a-z0-9-]{2,63}$/
 const LIST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-const FIELDS = new Set(['id', 'type', 'at', 'surface', 'item', 'event', 'list', 'slot', 'position', 'value', 'detail', 'session', 'view'])
+const FIELDS = new Set(['id', 'type', 'at', 'surface', 'item', 'event', 'list', 'slot', 'position', 'value', 'detail', 'session', 'view', 'device'])
 /** The most entries a list position can name: a feed of twenty pages of fifty. */
 const MAX_POSITION = 999
 
@@ -176,7 +181,7 @@ export const FRONTIER_INTERACTION_RULES = Object.freeze({
 /**
  * @typedef {{ id: string, type: FrontierInteractionType, at: number, surface: FrontierSurface, item: string | null, event: string | null,
  *   list: string | null, slot: FrontierSlot | null, position: number | null, value: number | null, detail: string | null, session: string,
- *   view: string | null }} FrontierInteraction
+ *   view: string | null, device: 'narrow' | 'wide' | null }} FrontierInteraction
  */
 
 /** @param {unknown} value @returns {value is FrontierInteractionType} */
@@ -233,6 +238,8 @@ export function frontierInteraction(raw, { now }) {
   if (view === null ? rule.view === true : rule.target === 'none' || typeof view !== 'string' || !CLIENT_ID.test(view)) {
     return { ok: false, reason: 'bad-view' }
   }
+  const device = present('device') ? input.device : null
+  if (device !== null && (typeof device !== 'string' || !FRONTIER_DEVICE_CLASSES.includes(device))) return { ok: false, reason: 'bad-device' }
   return {
     ok: true,
     event: {
@@ -240,7 +247,7 @@ export function frontierInteraction(raw, { now }) {
       item: /** @type {string | null} */ (item), event: /** @type {string | null} */ (event),
       list: /** @type {string | null} */ (list), slot: /** @type {FrontierSlot | null} */ (slot), position: /** @type {number | null} */ (position),
       value: /** @type {number | null} */ (value), detail: /** @type {string | null} */ (detail), session: input.session,
-      view: /** @type {string | null} */ (view),
+      view: /** @type {string | null} */ (view), device: /** @type {'narrow' | 'wide' | null} */ (device),
     },
   }
 }

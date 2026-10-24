@@ -1,4 +1,6 @@
+import { FRONTIER_INTERACTION_BATCH } from "@evimed/domain";
 import { recordFrontierExposure } from "./frontierEvolution.mjs";
+import { FRONTIER_EVENTS_PATH } from "./frontierInteractions.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
@@ -30,6 +32,10 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  * - A route of the second wave whose module is not composed answers 404
  *   `not_found`, which the page reads as 「还在准备」 and `/status`
  *   `capabilities` already told it.
+ * - `POST /api/frontier/events` takes a batch of what the reader's page saw and did (`frontierInteractions.mjs`), as
+ *   `application/json` or as the `text/plain` a closing page's `navigator.sendBeacon` sends; a beacon cannot set the CSRF
+ *   header, so its token rides in the body and `frontierEventsBeacon` — called by the dispatch before the one CSRF check —
+ *   moves it into the header that check reads. `GET`/`PUT /api/frontier/prefs` is 与我相关's onboarding answer.
  *
  * @module frontierRoutes
  */
@@ -53,7 +59,7 @@ export function frontierRoutePattern(pathname) {
   }
   if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : "/api/frontier/follows/:id";
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
-  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
+  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media", "prefs"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";
 }
 
@@ -64,6 +70,24 @@ async function bodyOf(req, limit, allowed) {
     throw new HttpError(400, "frontier_payload_invalid", "The frontier request has unsupported fields.");
   }
   return body;
+}
+
+/** The fields an events batch may carry: the events, and the CSRF token a beacon brings in its body. */
+const EVENT_BATCH_FIELDS = Object.freeze(["events", "csrf"]);
+
+/**
+ * A closing page's beacon: before the dispatch's CSRF check, read the batch (at most the beacon's 64 KiB) and, when it carries
+ * its token in the body, put it where the one CSRF check reads it. The parsed batch is kept on the request for the route, since
+ * the body can be read once. A request with the header already set is left alone (the page's own `fetch` sends it).
+ * @param {any} req
+ * @returns {Promise<void>}
+ */
+export async function frontierEventsBeacon(req) {
+  const url = new URL(req.url ?? "/", "http://evimed.local");
+  if (url.pathname !== FRONTIER_EVENTS_PATH || (req.method ?? "GET") !== "POST" || req.headers["x-open-science-csrf"]) return;
+  const body = await readJson(req, FRONTIER_INTERACTION_BATCH.maxBytes);
+  req.frontierEventsBody = body;
+  if (typeof body.csrf === "string" && body.csrf.length > 0 && body.csrf.length <= 200) req.headers["x-open-science-csrf"] = body.csrf;
 }
 
 /**
@@ -95,6 +119,20 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       sendJson(res, 200, { data: result.body }, headers);
       return true;
     };
+    // What the reader's page saw and did (frontierInteractions.mjs): a batch of at most 50 events, idempotent on each event's id.
+    if (parts.length === 1 && parts[0] === "events" && method === "POST") {
+      if (!service.interactions) throw new HttpError(404, "not_found", "Frontier route not found.");
+      const body = req.frontierEventsBody ?? await readJson(req, FRONTIER_INTERACTION_BATCH.maxBytes);
+      if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => !EVENT_BATCH_FIELDS.includes(key))) {
+        throw new HttpError(400, "frontier_payload_invalid", "The frontier request has unsupported fields.");
+      }
+      return reply(await service.interactions.record(user, body));
+    }
+    // 与我相关's onboarding answer: the reader's role, specialties and interests, and whether they finished or skipped it.
+    if (parts.length === 1 && parts[0] === "prefs") {
+      if (method === "GET") return reply(await service.prefs(user));
+      if (method === "PUT") return reply(await service.savePrefs(user, await bodyOf(req, maxJsonBytes, ["role", "specialties", "interests", "done", "skipped"])));
+    }
     if (parts[0] === "exposures" && parts.length === 1 && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["token", "items"]);
       await service.ready();
@@ -150,7 +188,7 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     }
     if (parts.length === 1 && parts[0] === "hot" && method === "GET") {
       // `?window=week|month`: that window's ranking instead of the current list.
-      return reply(await service.hot(url.searchParams));
+      return reply(await service.hot(url.searchParams, user));
     }
     if (parts.length === 3 && parts[0] === "events" && parts[2] === "read" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["mark"]);

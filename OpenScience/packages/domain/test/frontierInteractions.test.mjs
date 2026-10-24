@@ -31,7 +31,7 @@ test('an impression from a list keeps its list, slot and position; absent option
   const result = check({ ...base, type: 'impression', surface: 'for-you', item: 'abcdef123456', list: LIST, slot: 'explore', position: 3, value: 1_200 })
   assert.equal(result.ok, true)
   assert.deepEqual(result.ok && result.event, { ...base, type: 'impression', surface: 'for-you', item: 'abcdef123456', event: null, list: LIST,
-    slot: 'explore', position: 3, value: 1_200, detail: null, view: null })
+    slot: 'explore', position: 3, value: 1_200, detail: null, view: null, device: null })
   // A hot list's entry is an event.
   assert.equal(check({ ...base, type: 'impression', surface: 'hot', event: '9f3c2a1b4d5e6f70', list: LIST, position: 0 }).ok, true)
 })
@@ -83,6 +83,8 @@ test('what is not the vocabulary is dropped with its reason: a type, a field, an
   assert.deepEqual(check({ ...ok, list: 'not-a-list' }), { ok: false, reason: 'bad-list' })
   assert.deepEqual(check({ ...ok, item: 'ABC' }), { ok: false, reason: 'bad-target' })
   assert.deepEqual(check({ ...ok, surface: 'home' }), { ok: false, reason: 'bad-surface' })
+  assert.equal(check({ ...ok, device: 'narrow' }).ok, true)
+  assert.deepEqual(check({ ...ok, device: 'iPhone 15' }), { ok: false, reason: 'bad-device' })
   assert.deepEqual(frontierInteraction(null, { now: NOW }), { ok: false, reason: 'not-an-object' })
   for (const raw of [{ ...ok, type: 'scroll' }, { ...ok, url: 'x' }, { ...ok, id: 'x' }]) {
     const result = check(raw)

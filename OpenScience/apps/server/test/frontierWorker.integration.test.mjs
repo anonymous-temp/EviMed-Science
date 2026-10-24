@@ -91,14 +91,23 @@ test("the retention pass removes what produced nothing after 30 days and the log
     await database.query(`INSERT INTO evimed_frontier.exposures (user_id, surface, policy_revision_id, items, candidate_ids, exposed_at)
       VALUES ($1, 'feed', 'default:test', '[]'::jsonb, '[]'::jsonb, $2), ($1, 'feed', 'default:test', '[]'::jsonb, '[]'::jsonb, $3)`, [reader, daysAgo(91), daysAgo(89)]);
     const worker = new FrontierWorker({ ingest: { plugin: { configured: false } }, database, now: () => new Date(now) });
-    assert.deepEqual(await worker.cleanup(), { entries: 4, itemChanges: 1, hotSnapshots: 1, exposures: 1 });
+    // What a reader was served and did is kept 180 days (ct-track 2026-10-24).
+    await database.query(`INSERT INTO evimed_frontier.list_serves (list_id, user_id, surface, policy, entries, served_at)
+      VALUES (gen_random_uuid(), $1, 'feed', 'feed:selected:timeline', '[]'::jsonb, $2), (gen_random_uuid(), $1, 'feed', 'feed:selected:timeline', '[]'::jsonb, $3)`,
+    [reader, daysAgo(181), daysAgo(179)]);
+    await database.query(`INSERT INTO evimed_frontier.interactions (user_id, client_id, type, surface, session_id, client_at)
+      VALUES ($1, 'evt_old_00000001', 'filter-change', 'feed', 'ses_00000001', $2), ($1, 'evt_new_00000001', 'filter-change', 'feed', 'ses_00000001', $3)`,
+    [reader, daysAgo(181), daysAgo(179)]);
+    assert.deepEqual(await worker.cleanup(), { entries: 4, itemChanges: 1, hotSnapshots: 1, exposures: 1, interactions: 1, listServes: 1 });
+    assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.interactions WHERE user_id = $1", [reader])).rows[0].n, 1,
+      "the event within 180 days stays");
     assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.exposures WHERE user_id = $1", [reader])).rows[0].n, 1, "the one within ninety days stays");
     assert.equal(worker.status().retention.exposures, 1);
     const left = (await database.query("SELECT state, count(*)::integer AS n FROM evimed_frontier.entries GROUP BY state ORDER BY state")).rows;
     assert.deepEqual(Object.fromEntries(left.map((row) => [row.state, row.n])),
       { backfill: 1, dropped: 1, failed: 1, held: 1, merged: 1, promoted: 1, received: 1, "screened-out": 1 },
       "young rows and every row behind an item stay");
-    assert.deepEqual(await worker.cleanup(), { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0 }, "a second pass finds nothing left");
+    assert.deepEqual(await worker.cleanup(), { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0, interactions: 0, listServes: 0 }, "a second pass finds nothing left");
   } finally {
     await database.query("DELETE FROM evimed_control.users WHERE id = $1", [reader]);
   }
