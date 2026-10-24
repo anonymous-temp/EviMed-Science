@@ -57,6 +57,15 @@ export class NativeUiScope {
   /** Keep proof registries no longer than their actual transport generation. */
   closeEvents() { this.clientId = null; this.interactions.clear(); }
   dispose() { this.closeEvents(); this.jobs.clear(); this.children.clear(); this.workspaces.clear(); }
+  /** The pinned gateway removes the answering peer before broadcasting cancel
+   * to other peers. Only a confirmed successful response consumes this proof.
+   * @param {string} method @param {any} payload */
+  complete(method, payload) {
+    if (method === '$events/result' && payload?.args?.clientId === this.clientId) this.interactions.delete(payload.args.eventId);
+    if (method === 'userQuestions/answer') for (const [id, item] of this.interactions) {
+      if (item.agentId === payload?.args?.agentId && item.callId === payload?.args?.callId) this.interactions.delete(id);
+    }
+  }
 
   /** Authorization ceiling, additional to ordinary hosted methods/path/body limits. @param {string} method @param {any} payload */
   permits(method, payload) {

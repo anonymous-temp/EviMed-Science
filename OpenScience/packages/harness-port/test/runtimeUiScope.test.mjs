@@ -83,6 +83,19 @@ test('known cancellation clears interaction authority and global emits are never
   assert.equal(s.project('$events', { args: {} }, { type: 'emit', event: 'api-session/status', args: ['root', true] }).forward, true);
 });
 
+test('the answering peer clears a settled question without expecting the kernel to echo cancel', () => {
+  const s = scope(); s.project('$events', { args: {} }, { type: 'ready', clientId: 'c', host: { home: '/' } });
+  for (let index = 0; index < 300; index++) {
+    const eventId = `q-${index}`;
+    s.project('$events', { args: {} }, { type: 'waterfall', event: 'user-questions/request', eventId, agentId: 'root', request: { questions: [] } });
+    const payload = { args: { clientId: 'c', eventId, outcome: { kind: 'result', value: { answers: [] } } } };
+    assert.equal(s.permits('$events/result', payload), true);
+    s.complete('$events/result', payload);
+    assert.equal(s.permits('$events/result', payload), false);
+  }
+  assert.equal(s.interactions.size, 0);
+});
+
 test('job list excludes unowned jobs and strips spill paths; actions require its proven roster', () => {
   const s = scope(); const request = call({ sessionId: 'root' });
   const job = { id: 'j', owner: 'root', status: 'running', output: { total: 3, earliest: 0, spillPaths: ['/private'] } };

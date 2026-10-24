@@ -15,6 +15,7 @@ import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { MODEL_REASONING_EFFORTS } from "../src/modelReasoningPolicy.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
+import { GeoNativeFramePolicy } from "../src/geoNativeFramePolicy.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
 import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
@@ -31,7 +32,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, beforeDataCleanup = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, beforeDataCleanup = null, shared = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const peers = new Set(), clients = new Set();
   let upstream, wss, ui;
@@ -59,7 +60,12 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
   const res = { getHeader() { return undefined; }, setHeader(_name, value) { cookie = String(value).split(";")[0]; } };
   const session = await store.createSession(user, req, res);
   const loginCookie = cookie;
-  const frame = issueRuntimeUiFrame({ config, req: { headers: { cookie } }, user, session, project: await store.requireProject(user, "default") });
+  if (shared) await store.createUser('geo-owner', 'local-fixture-password', 'Owner');
+  const owner = shared ? await store.userById('geo-owner') : user;
+  const project = await store.requireProject(owner, 'default');
+  const delegation = shared ? { kind: 'geo', actorId: user.id, ownerId: owner.id, controlProjectId: project.id, geoProjectId: 'geo-shared', rootSessionId: 'shared-root',
+    actorCreatedAt: '2026-01-01', ownerCreatedAt: '2026-01-01', projectCreatedAt: '2026-01-01', geoCreatedAt: '2026-01-01', membershipEpoch: 'a'.repeat(64) } : null;
+  const frame = issueRuntimeUiFrame({ config, req: { headers: { cookie } }, user, session, project, delegation });
   cookie += `; ${frame.cookie.split(";")[0]}`;
   const received = [];
   const handshakes = [];
@@ -91,7 +97,25 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt });
+  const resolveDelegatedFrame = shared ? async (actor, principal) => {
+    if (!shared.allowed || actor.id !== user.id || JSON.stringify(principal) !== JSON.stringify(delegation)) throw new HttpError(403, 'geo_member_forbidden', 'Membership changed');
+    return { project, principal };
+  } : null;
+  if (shared) { manager.subagentCatalogue = async () => shared.children ?? []; manager.runtimeGeneration = () => 'generation'; }
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt,
+    resolveDelegatedFrame,
+    createDelegatedPolicy: shared ? async identity => new GeoNativeFramePolicy({ ...identity, config, runtimeManager: manager,
+      authority: { withFrame: async (actor, claims, operation) => {
+        const resolved = await resolveDelegatedFrame(actor, claims);
+        shared.locked = true;
+        try { return await operation(resolved); } finally { shared.locked = false; }
+      } },
+      acceptInput: async (actor, owned, _principal, request) => {
+        assert.equal(shared.locked, true, 'shared attribution belongs to admitted operation');
+        shared.inputs.push({ actor: actor.id, owner: owned.userId, sessionId: request.sessionId, requestId: request.requestId });
+      },
+    }) : null,
+  });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -121,10 +145,80 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
       send: (frame) => ws.send(JSON.stringify(frame)),
     };
   }
-  return { config, store, user, session, cookie, loginCookie, frame, origin, received, peers, handshakes, connect, base, dataDir, started, ui, manager, upstream };
+  return { config, store, user, owner, project, session, cookie, loginCookie, frame, origin, received, peers, handshakes, connect, base, dataDir, started, ui, manager, upstream };
 }
 
 const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpoint, payload: { args } });
+
+test('signed shared native HTTP keeps owner workspace and actor admission while projecting unrelated sessions', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const reached = [];
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on('request', (req, res) => {
+    if (req.method === 'GET') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end('private owner event'); return; }
+    const parts = []; req.on('data', part => parts.push(part));
+    req.on('end', () => {
+      const body = JSON.parse(Buffer.concat(parts).toString()); reached.push(body.method);
+      assert.equal(shared.locked, true);
+      const value = body.method === 'session/list' ? { items: [{ sessionId: 'shared-root', agentAvailable: true, updatedAt: 1, running: false, blank: false }, { sessionId: 'private-owner', agentAvailable: true, updatedAt: 1, running: false, blank: false }] } : { accepted: true };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: true, value } }));
+    });
+  });
+  const rpc = (method, args) => fetch(`${f.base}/api/${method}`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: `rpc-${reached.length}`, method, payload: { args } }) });
+  const list = await rpc('session/list', { _request: {} });
+  assert.equal(list.status, 200); assert.deepEqual((await list.json()).result.value.items.map(item => item.sessionId), ['shared-root']);
+  for (const [method, args] of [['session/page', { request: { address: { kind: 'session', sessionId: 'private-owner' } } }], ['session/selectModel', { request: { sessionId: 'shared-root', provider: 'deepseek-official', model: f.config.deepseekModel } }]]) {
+    assert.equal((await rpc(method, args)).status, 403);
+  }
+  assert.equal(reached.length, 1);
+  const prompt = await rpc('session/prompt', { request: { sessionId: 'shared-root', requestId: 'request-shared', mode: 'queue', content: [{ type: 'text', text: 'Revise the project draft.' }] } });
+  assert.equal(prompt.status, 200);
+  assert.deepEqual(shared.inputs, [{ actor: f.user.id, owner: f.owner.id, sessionId: 'shared-root', requestId: 'request-shared' }]);
+  assert.equal(f.project.userId, f.owner.id); assert.notEqual(f.owner.id, f.user.id);
+  const bootstrap = await fetch(`${f.base}/__evimed_bootstrap.js`, { headers: { cookie: f.cookie } });
+  const source = await bootstrap.text(); assert.equal(bootstrap.status, 200);
+  assert.ok(source.includes('"owner":false')); assert.equal(source.includes('"assets":"/__evimed/k/"'), false);
+  const hiddenStream = await fetch(`${f.base}/plugins/events?rev=abcdef12`, { headers: { cookie: f.cookie } });
+  assert.equal(hiddenStream.status, 403); assert.equal((await hiddenStream.text()).includes('private owner event'), false);
+  assert.equal((await fetch(`${f.base}/assets/fixture-abcdefgh.js`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN } })).status, 403);
+  shared.allowed = false;
+  assert.equal((await rpc('session/list', { _request: {} })).status, 403);
+  assert.equal(reached.length, 2);
+});
+
+test('shared native question answers correlate to delivered carrier and stop after cancellation or replacement', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  peer.on('message', raw => {
+    const call = JSON.parse(raw.toString());
+    if (call.type === 'open' && call.endpoint === '$events') peer.send(JSON.stringify({ type: 'item', streamId: call.streamId, value: { type: 'ready', clientId: 'native-client', host: { home: '/private' } } }));
+  });
+  c.send(open('events', '$events')); assert.equal((await c.next()).value.host.home, f.manager.runtimeWorkspaceRoot(f.project));
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  let answered = 0;
+  f.upstream.on('request', (req, res) => { const chunks = []; req.on('data', part => chunks.push(part)); req.on('end', () => {
+    const body = JSON.parse(Buffer.concat(chunks).toString()); answered++;
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: true } }));
+  }); });
+  const answer = id => fetch(`${f.base}/api/$events/result`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: 'answer', method: '$events/result', payload: { args: { clientId: 'native-client', eventId: id, outcome: { kind: 'result', value: { answers: [] } } } } }) });
+  assert.equal((await answer('not-delivered')).status, 403);
+  const question = { type: 'waterfall', event: 'user-questions/request', eventId: 'question', agentId: 'shared-root', request: { questions: [] } };
+  peer.send(JSON.stringify({ type: 'item', streamId: 'events', value: question })); assert.equal((await c.next()).value.eventId, 'question');
+  assert.equal((await answer('question')).status, 200); assert.equal(answered, 1);
+  c.send({ type: 'cancel', streamId: 'events' }); await delay(30);
+  assert.equal((await answer('question')).status, 403);
+  c.send(open('events-again', '$events')); await c.next();
+  peer.send(JSON.stringify({ type: 'item', streamId: 'events-again', value: { ...question, eventId: 'question-two' } })); await c.next();
+  const next = f.connect(); assert.equal(await next.opened, 101);
+  assert.equal((await answer('question-two')).status, 403);
+  assert.equal(answered, 1);
+});
 
 test('scoped response projections retain their original stream identity and native error/end ordering', { timeout: 5000 }, async t => {
   const projected = [], ended = [];
@@ -201,6 +295,22 @@ test('native cancel without end and failure without end release scoped active ca
   c.send(open('still-available', 'session/page'));
   assert.equal((await c.next()).value.id, 'still-available');
   assert.equal(ended.length, 600);
+});
+
+test('a queued normal terminal cannot transfer its stream id to a new endpoint', { timeout: 5000 }, async t => {
+  let enter, release;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => { enter(); await barrier; return { forward: true, value }; } });
+  t.after(() => release());
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('same-id', 'session/page')); await entered;
+  const peer = [...f.peers][0];
+  peer.send(JSON.stringify({ type: 'end', streamId: 'same-id' })); await delay(20);
+  const closed = once(c.ws, 'close'); c.send(open('same-id', 'session/modelCatalog'));
+  assert.equal((await closed)[0], 1008);
+  assert.equal(f.received.filter(item => item.type === 'open').length, 1);
+  release();
 });
 
 test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
@@ -1872,20 +1982,4 @@ test("maintenance rejects cold native frame GET and WebSocket starts while warm 
   assert.equal(await f.connect().opened, 101);
   assert.equal(creations, 1);
   assert.equal(admissions, 3, 'warm GET and WebSocket reads do not request creation admission');
-});
-
-test('a queued normal terminal cannot transfer its stream id to a new endpoint', { timeout: 5000 }, async t => {
-  let enter, release;
-  const entered = new Promise(resolve => { enter = resolve; });
-  const barrier = new Promise(resolve => { release = resolve; });
-  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => { enter(); await barrier; return { forward: true, value }; } });
-  t.after(() => release());
-  const c = f.connect(); assert.equal(await c.opened, 101);
-  c.send(open('same-id', 'session/page')); await entered;
-  const peer = [...f.peers][0];
-  peer.send(JSON.stringify({ type: 'end', streamId: 'same-id' })); await delay(20);
-  const closed = once(c.ws, 'close'); c.send(open('same-id', 'session/modelCatalog'));
-  assert.equal((await closed)[0], 1008);
-  assert.equal(f.received.filter(item => item.type === 'open').length, 1);
-  release();
 });
