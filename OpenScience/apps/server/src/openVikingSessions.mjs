@@ -122,6 +122,7 @@ function namespaceClient(client, namespace) {
     get configured() { return client.configured; },
     get account() { return client.account; },
     async request(input) {
+      if (input.authenticated !== undefined && typeof input.authenticated !== 'boolean') throw new HttpError(403, 'memory_scope_denied', 'Authentication must be explicit and boolean.');
       if (input.authenticated === false) {
         if (input.path !== '/health') throw new HttpError(403, 'memory_scope_denied', 'Only engine health is unauthenticated.');
         return client.request(input);
@@ -132,6 +133,7 @@ function namespaceClient(client, namespace) {
     },
     async remove(userId, uri, options = {}) {
       assertOwner(userId);
+      if (options.openVikingUser != null && options.openVikingUser !== namespace.engineUser) throw new HttpError(403, 'memory_scope_denied', 'The project memory identity cannot be replaced.');
       return client.remove(userId, uri, { ...options, openVikingUser: namespace.engineUser });
     },
   };

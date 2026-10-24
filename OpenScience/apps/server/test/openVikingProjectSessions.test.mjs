@@ -67,3 +67,16 @@ test('a bound facade refuses other owners or forged namespace identities before 
   assert.throws(() => scoped.userRoot('other'));
   assert.deepEqual(calls, []);
 });
+
+test('bound client identity conflicts and non-boolean authentication never reach HTTP', async () => {
+  const calls = [];
+  const client = { configured: true, account: 'evimed', request: async input => { calls.push(input); return {}; }, remove: async (...input) => { calls.push(input); return true; } };
+  const scoped = new OpenVikingSessions(client).forNamespace(projectNativeMemoryNamespace(basis));
+  await assert.rejects(scoped.client.remove('owner', `${scoped.memoryRoot('owner')}/x.md`, { openVikingUser: 'foreign' }), error => error.code === 'memory_scope_denied');
+  for (const authenticated of [null, 0, '', 'true', {}, []]) {
+    await assert.rejects(scoped.client.request({ path: '/api/v1/fs/ls', userId: 'owner', authenticated }), error => error.code === 'memory_scope_denied');
+  }
+  assert.deepEqual(calls, []);
+  await scoped.health();
+  assert.equal(calls.length, 1); assert.equal(calls[0].path, '/health'); assert.equal(calls[0].authenticated, false);
+});
