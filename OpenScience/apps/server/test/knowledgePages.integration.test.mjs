@@ -153,6 +153,14 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     let status = await api(`/api/knowledge-pages?projectId=${project.id}`);
     assert.equal(status.status, 200);
     assert.deepEqual([status.body.data.enabled, status.body.data.state, status.body.data.pending, status.body.data.readable], [true, "queued", 3, 3]);
+    const reconcileProject = app.sourceSync.reconcileProject.bind(app.sourceSync);
+    app.sourceSync.reconcileProject = async (...args) => ({ ...(await reconcileProject(...args)), failed: [{ sourceId: ids["alpha.md"], code: "one_copy_failed" }] });
+    try {
+      const waiting = await app.knowledgePagesWorker.tick();
+      assert.equal(waiting?.defer?.code, "knowledge_source_sync_pending", "a partial sync must not start Compile");
+      assert.equal(compiles.length, 0);
+      assert.equal((await api(`/api/knowledge-pages?projectId=${project.id}`)).body.data.pending, 3);
+    } finally { app.sourceSync.reconcileProject = reconcileProject; }
     const first = await compileRound();
     assert.equal(first.wiki.status, "completed");
     assert.deepEqual([first.wiki.created, first.wiki.typed, first.kg.created, first.kg.typed], [3, 3, 3, 2]);
@@ -198,7 +206,9 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     const pageLink = page.links.find((/** @type {any} */ link) => link.kind === "page");
     assert.deepEqual([pageLink.path, pageLink.exists, pageLink.title], ["entity/Beta网关.md", true, "Beta 网关"]);
     assert.deepEqual(page.sources.map((/** @type {any} */ entry) => [entry.sourceId, entry.available]), [[ids["alpha.md"], true]]);
-    assert.deepEqual(page.quotations, { present: 2, absent: 1, none: 0, sourceMissing: 0 });
+    const { checkedAt, ...quotationCounts } = page.quotations;
+    assert.ok(Number.isFinite(Date.parse(checkedAt)), "quotation labels name their verification time");
+    assert.deepEqual(quotationCounts, { present: 2, absent: 1, none: 0, sourceMissing: 0 });
     // The same page by the path a link inside another page names; and a link that lost its `.md` still names its document.
     const byPath = await api(`/api/knowledge-pages/page?projectId=${project.id}&tree=wiki&path=${encodeURIComponent("entity/Beta网关.md")}`);
     assert.deepEqual(byPath.body.data.links.filter((/** @type {any} */ link) => link.kind === "source").map((/** @type {any} */ link) => [link.sourceId, link.status]),

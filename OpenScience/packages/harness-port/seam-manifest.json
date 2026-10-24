@@ -458,13 +458,15 @@
         "request"
       ],
       "evimedSkills/list": [
-        "request"
+        "sessionId"
       ],
       "evimedSkills/read": [
-        "request"
+        "sessionId",
+        "key"
       ],
       "evimedSkills/snapshotBuiltin": [
-        "request"
+        "sessionId",
+        "key"
       ]
     },
     "mux": "/api/remote.mux",

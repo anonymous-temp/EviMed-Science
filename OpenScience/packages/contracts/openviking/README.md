@@ -17,6 +17,30 @@ two official Compile skills `llm-wiki` and `knowledge-graph` (upstream sha256, a
 re-wraps the frontmatter — the one the control plane compares). The server is AGPL-3.0 and runs unmodified as its own
 service; the plugin, the skills and the examples are Apache-2.0.
 
+## Candidate rehearsal (2026-10-23; not admitted)
+
+The official `v0.5.1.1` candidate was run in the isolated
+`colima-evimed-extension-acceptance` engine with synthetic documents and a
+bounded deterministic model provider. `fixtures/candidate-0511-fixture.json`
+records this limited result, separate from the production-pin fixtures below.
+Resource push/read/list/grep, replacement, tags, the eight configured memory
+types, cross-user rejection and task ownership passed. Compile cancellation
+reached `cancelled`. A frozen fresh `v0.5.0` fixture volume copied to a new
+volume remained readable under the candidate; its session gained the empty
+`last_idle_commit_accepted_at` field and its preserved fields matched.
+
+This is transport and storage-shape evidence only. All three session commits
+were accepted and then failed extraction because the fixture model deliberately
+does not generate memory operations; no searchable native memories were
+produced. Real-model three-commit retrieval, successful native Compile, a
+production-volume restore and the page-limit/race matrix remain open. The
+production pin, source limits and identity shim remain unchanged. The candidate
+is **not admitted** until those gates pass.
+
+The client now applies `timeoutSeconds` as an HTTP deadline instead of sending
+the removed content-write body `timeout`; this remains compatible with the
+pinned engine. An aborted request does not cancel accepted background work.
+
 ## Division of labour
 
 On 2026-10-12 this file reconciled the upstream capability list and said extraction, VikingBot, Compile and the VLM
@@ -173,3 +197,43 @@ compile's result, `last_idle_commit_accepted_at` on a session, a user deleted a 
 A find score is `(cosine + 1) / 2` since v0.4.22 and unchanged at v0.5.1.1 (the same four records score the same four numbers as
 on v0.5.0; the production volume rehearsed under v0.5.0 on 2026-10-12 gave every score `(old + 1) / 2`), so
 `OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE` stays 0.75.
+
+### Search mode boundary (native v0.5.0 and v0.5.1.1)
+
+`exclude_uris` and `query_expansion` are context-mode arguments; context mode
+forbids `target_uri`. Sending a default list search with context-only arguments
+is rejected by the pinned native engine. The memory gateway therefore keeps
+native automatic recall on the context contract, while model search and REST
+list search use native structured REST list results with an explicit own-space
+target. They never parse the MCP tool's human-readable response. The gateway
+filters each hit against the caller, requested target, derived index and
+sensitive-file exclusions before serializing a whitelisted result and its
+visible count. Hidden targets are empty, and exclusion lookup failure fails
+closed. The protocol stub rejects the incompatible mode/argument combinations;
+this stub check is separate from the recorded-response fixtures above.
+
+Sensitive URI enumeration is complete up to a bounded 10,000-file set; an
+additional row makes the lookup fail closed. Context search refuses dispatch
+when the complete mandatory and requested exclusion set exceeds the native
+200-URI limit. Caller exclusions never displace derived or sensitive prefixes.
+Structured list filtering uses the complete local set rather than this upstream
+context limit. A real PostgreSQL overlay test covers the 201st sensitive file.
+
+The memory boundary does not expose the caller's knowledge-resource tree.
+Model search requests native list level 2 and still admits only files accepted
+by `nativeMemoryFile`, so ancestor L0/L1 sidecars cannot disclose sensitive
+child summaries. Read and listing routes stay inside native memories; user-root
+discovery reveals only the memories directory. MCP listing uses the same
+structured native HTTP listing and whitelists visible entry metadata, without
+directory size/timestamps or aggregate prose. A truncated native listing leaves
+continuation unknown (`pagination: "unknown"` and no `has_more`) rather than
+inventing false completion or exposing whether hidden rows continue. A native
+`has_more: false` remains known exhaustion. This thin boundary does not create
+a new cursor or page through hidden results.
+
+Context mode ignores `level` in the pinned engine. Instead, before native
+context gathering, exclusions include the own resource subtree and exact
+`.abstract.md`/`.overview.md` sidecars for ancestors of protected prefixes up to
+the user root. Native context assembly remains upstream; the gateway does not
+parse or redact a rendered context string. Its 200-exclusion bound still fails
+closed, including these mandatory ancestor exclusions.

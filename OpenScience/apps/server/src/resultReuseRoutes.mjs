@@ -1,4 +1,4 @@
-import { HttpError, readJson, sendJson } from "./security.mjs";
+import { attachmentDisposition, HttpError, readJson, sendJson } from "./security.mjs";
 
 export function createResultReuseRoutes({ store, exporter, revisions }) {
   return async (req, res) => {
@@ -11,7 +11,7 @@ export function createResultReuseRoutes({ store, exporter, revisions }) {
       if (!exporter) throw new HttpError(503, "result_storage_unavailable", "Result export is unavailable.");
       const file = await exporter.export(user.id, url.searchParams.get("projectId"), matched[1]);
       res.writeHead(200, { "Content-Type": file.mimeType, "Content-Length": file.bytes.length,
-        "Content-Disposition": `attachment; filename="${file.filename}"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+        "Content-Disposition": attachmentDisposition(file.filename), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(file.bytes); return true;
     }
     if (matched[2] === "revisions" && req.method === "POST") {

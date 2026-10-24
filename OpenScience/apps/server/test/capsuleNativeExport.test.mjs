@@ -136,6 +136,17 @@ test("an edit to a migrated profile line does not adopt the other statements in 
   assert.equal(preview.empty, true);
 });
 
+test("native capsule snapshot refuses a body changed while the database snapshot is assembled", async () => {
+  const { service, nativeMemory } = fixture();
+  const original = service.documents.database.transaction;
+  service.documents.database.transaction = async callback => {
+    const value = await original(callback);
+    const read = nativeMemory.sessions.read;
+    nativeMemory.sessions.read = async (owner, uri) => `${await read(owner, uri)} changed concurrently`;
+    return value;
+  };
+  await assert.rejects(service.exportPreview(userId, "own-capsule"), { code: "capsule_native_snapshot_changed" });
+});
 
 const BACK_OFFICE = /origin|inferred|provenance|migration|migrat|replay|revision|uri|sha256|engine|引擎|迁移|血统/i;
 
@@ -249,4 +260,5 @@ test("the domain's share scopes and paths are exactly what the transfer service 
       }
     }
   }
+
 });

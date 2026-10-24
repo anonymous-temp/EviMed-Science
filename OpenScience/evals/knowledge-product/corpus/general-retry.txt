@@ -1,0 +1,3 @@
+Benchmark fixture only; not real organizational policy or clinical evidence.
+Topic: retry.
+What is the retry limit? Answer: three attempts.

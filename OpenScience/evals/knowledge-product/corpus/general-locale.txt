@@ -1,0 +1,3 @@
+Benchmark fixture only; not real organizational policy or clinical evidence.
+Topic: locale.
+Which locales does the pilot support? Answer: English and Japanese.

@@ -6,6 +6,18 @@ import path from "node:path";
 
 import { ERROR_DETAIL_FIELDS } from "@evimed/domain";
 
+/** An attachment header with a conservative ASCII fallback and an RFC 8187 Unicode name.
+ * @param {string} filename @returns {string} */
+export function attachmentDisposition(filename) {
+  // eslint-disable-next-line no-control-regex -- discard header controls and quoted-string escapes
+  const name = Buffer.from(String(filename), "utf8").toString("utf8").replace(/[\x00-\x1f\x7f"\\/]/g, "_").trim() || "download";
+  const fallback = name.replace(/[^\x20-\x7e]/g, "_");
+  const quoted = `attachment; filename="${fallback}"`;
+  if (name === fallback) return quoted;
+  const encoded = encodeURIComponent(name).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `${quoted}; filename*=UTF-8''${encoded}`;
+}
+
 /** Accept a finite number, or nothing.
  *  `kind` is read by `test/security.test.mjs`, which asserts that every
  *  acceptor in the table below is one of the two vocabularies this module

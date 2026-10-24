@@ -7,7 +7,7 @@ import {
 import { compileIdempotencyKey } from "./openVikingResources.mjs";
 import { isCompiledPage } from "./openVikingSourceSync.mjs";
 import { HttpError } from "./security.mjs";
-import { projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
+import { projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 
 /**
  * 「知识页」: a project's documents compiled into a linked wiki and a knowledge graph by OpenViking's own Compile, and
@@ -84,6 +84,8 @@ const LANGUAGE_NAMES = new Map([["zh", "Simplified Chinese"], ["zh-cn", "Simplif
 
 /** @param {string | Buffer} bytes @returns {string} */
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+/** @param {Iterable<string>} ids @param {Map<string, { basis: string }>} details */
+const sourceBasis = (ids, details) => sha256(JSON.stringify([...new Set(ids)].sort().map((id) => [id, details.get(id)?.basis ?? null])));
 /** @param {unknown} error @returns {string} */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(/** @type {any} */ (error).code) ? /** @type {any} */ (error).code : "knowledge_pages_failed");
 /** @param {string} projectId */ const stateId = (projectId) => `wiki:state:${projectId}`;
@@ -228,10 +230,10 @@ export class KnowledgePageService {
   // What the project's documents do to the queue
 
   /**
-   * A document became readable: the project has something new to compile. Never throws; a page is not a document to compile.
+   * A document became readable: a page is not a document to compile. Durable callers request strict failure propagation.
    * @param {string} userId @param {string} projectId @param {string} sourceId
    */
-  async noteSourceReady(userId, projectId, sourceId) {
+  async noteSourceReady(userId, projectId, sourceId, { strict = false } = {}) {
     if (!this.enabled) return;
     try {
       const source = await this.sources.get(userId, sourceId);
@@ -247,7 +249,7 @@ export class KnowledgePageService {
         return value;
       });
       if (changed.pending[sourceId]) await this.schedule(userId, projectId);
-    } catch (error) { this.report(codeOf(error)); }
+    } catch (error) { this.report(codeOf(error)); if (strict) throw error; }
   }
 
   /**
@@ -256,7 +258,7 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId @param {Array<{ sourceId: string, reason: "changed" | "retracted" | "removed" }>} changes
    * @returns {Promise<{ pages: number }>}
    */
-  async noteSourcesChanged(userId, projectId, changes) {
+  async noteSourcesChanged(userId, projectId, changes, { strict = false } = {}) {
     try {
       const labelled = new Set();
       for (const change of changes) {
@@ -280,7 +282,54 @@ export class KnowledgePageService {
       });
       await this.schedule(userId, projectId);
       return { pages: labelled.size };
-    } catch (error) { this.report(codeOf(error)); return { pages: 0 }; }
+    } catch (error) { this.report(codeOf(error)); if (strict) throw error; return { pages: 0 }; }
+  }
+
+  /** A personal-library mutation reaches existing compiled projects, including aliases of the same bytes.
+   * A project's own readable copy remains authorized when its personal-library copy is removed.
+   * @param {string} userId @param {string} sourceId @param {"changed" | "removed"} reason */
+  async noteLibraryChanged(userId, sourceId, reason) {
+    if (!SOURCE_ID.test(sourceId)) return { projects: 0, pages: 0 };
+    const aliases = new Set([sourceId]);
+    const origin = this.sources.documents?.get
+      ? await this.sources.documents.get(userId, "source", sourceId, { includeDeleted: true })
+      : await this.sources.get(userId, sourceId).catch((/** @type {any} */ error) => { if (error?.status === 404) return null; throw error; });
+    const digest = origin?.payload?.fingerprint?.sha256;
+    if (typeof digest === "string") {
+      for (const deleted of [false, true]) {
+        let cursor = null;
+        do {
+          const page = await this.documents.list(userId, "source", { deleted, filter: { fingerprint: { sha256: digest } }, limit: 100, cursor });
+          for (const row of page.items) if (SOURCE_ID.test(row.id)) aliases.add(row.id);
+          cursor = page.nextCursor ?? null;
+        } while (cursor);
+      }
+    }
+    /** @type {Map<string, any>} */ const sourceRecords = new Map();
+    /** @type {Map<string, Set<string>>} */ const targets = new Map();
+    let cursor = null;
+    do {
+      const page = await this.documents.list(userId, "knowledge", { filter: { recordType: PAGE_RECORD }, limit: 100, cursor });
+      for (const row of page.items) {
+        const projectId = row.projectId ?? row.payload.projectId;
+        if (!projectId || row.payload.retired) continue;
+        const dependencies = reason === "removed" ? (row.payload.dependsOn ?? []).filter((/** @type {any} */ id) => aliases.has(id)) : [sourceId];
+        for (const id of dependencies) {
+          if (!sourceRecords.has(id)) sourceRecords.set(id, await this.sources.get(userId, id).catch((/** @type {any} */ error) => { if (error?.status === 404) return null; throw error; }));
+          const own = sourceRecords.get(id);
+          if (own && own.projectId === projectId && !own.deletedAt && sourceReadable(own.payload)) continue;
+          if (!targets.has(projectId)) targets.set(projectId, new Set());
+          targets.get(projectId)?.add(id);
+        }
+      }
+      cursor = page.nextCursor ?? null;
+    } while (cursor);
+    let pages = 0;
+    for (const [projectId, ids] of targets) {
+      const result = await this.noteSourcesChanged(userId, projectId, [...ids].map((id) => ({ sourceId: id, reason })), { strict: true });
+      pages += result.pages;
+    }
+    return { projects: targets.size, pages };
   }
 
   /** The project's documents that carry a DOI in their parsed metadata. @param {string} userId @param {string} projectId @param {string} doi */
@@ -491,18 +540,37 @@ export class KnowledgePageService {
     return cache;
   }
 
-  /** Titles of documents by id, for a list that only names them. @param {string} userId @param {string} projectId @param {Iterable<string>} ids */
-  async #titles(userId, projectId, ids) {
-    /** @type {Map<string, string>} */
-    const titles = new Map();
+  /** Current authorized source facts; a personal-library copy has its own availability and may outlive the project.
+   * @param {string} userId @param {string} projectId @param {Iterable<string>} ids */
+  async #sourceDetails(userId, projectId, ids) {
+    /** @type {Map<string, {title: string, available: boolean, sourceVersion: number | null, basis: string}>} */
+    const details = new Map();
     for (const id of new Set(ids)) {
       if (!SOURCE_ID.test(id)) continue;
       try {
-        const source = await this.sources.get(userId, id);
-        if (source && source.projectId === projectId && !source.deletedAt) titles.set(id, projectSourceManifestRecord(source).display.title);
-      } catch { /* a document that is gone has no title to show */ }
+        const source = await this.sources.get(userId, id).catch(() => null);
+        if (source && source.projectId === projectId && !source.deletedAt && sourceReadable(source.payload)) {
+          details.set(id, { title: projectSourceManifestRecord(source).display.title, available: true,
+            sourceVersion: Number.isSafeInteger(source.payload.version) ? source.payload.version : null,
+            basis: sha256(JSON.stringify([source.revision, source.payload.generation, source.payload.analysis?.textSha256 ?? null])) });
+          continue;
+        }
+        const copy = this.libraryText ? await this.libraryText(userId, id).catch(() => null) : null;
+        if (copy) details.set(id, { title: /^#[ \t]+(.+)$/m.exec(copy)?.[1]?.trim() ?? id, available: true, sourceVersion: null, basis: sha256(copy) });
+      } catch { /* Unavailable source metadata never certifies availability. */ }
     }
-    return titles;
+    return details;
+  }
+
+  /** Runtime browsing uses current source authority; the historical UI reader may still show a stale page.
+   * @param {string} userId @param {string} projectId @param {string} tree @param {string} rel */
+  async browseEligibility(userId, projectId, tree, rel) {
+    if (!KNOWLEDGE_TREES.includes(tree)) return { allowed: false, sourceIds: [], code: "knowledge_tree_invalid" };
+    const record = (await this.#pageRecords(userId, projectId, { tree })).find((row) => row.payload.path === rel);
+    if (!record) return { allowed: false, sourceIds: [], code: "knowledge_page_not_mirrored" };
+    const sourceIds = /** @type {string[]} */ ([...new Set((record.payload.dependsOn ?? []).filter((/** @type {any} */ id) => SOURCE_ID.test(id)))]);
+    const details = await this.#sourceDetails(userId, projectId, sourceIds);
+    return { allowed: sourceIds.every((id) => details.has(id)), sourceIds };
   }
 
   // -------------------------------------------------------------------------------------------------------------------
@@ -536,7 +604,8 @@ export class KnowledgePageService {
       const listed = (/** @type {string} */ status) => checked.records.filter((record) => record.inSourceList && record.quote && record.status === status).length;
       const counts = { ...checked.summary, present: checked.summary.present + listed("present"), absent: checked.summary.absent + listed("absent") };
       this.counters.quotationsPresent += counts.present; this.counters.quotationsAbsent += counts.absent;
-      quotations = { checkedSha256: sha256(content), checkedAt: this.now().toISOString(), counts,
+      const basis = sourceBasis(/** @type {string[]} */ (dependsOn), await this.#sourceDetails(userId, projectId, /** @type {string[]} */ (dependsOn)));
+      quotations = { checkedSha256: sha256(content), sourceBasis: basis, checkedAt: this.now().toISOString(), counts,
         records: checked.records.slice(0, QUOTATIONS_KEPT).map((record) => ({ sourceId: record.sourceId, quote: record.quote?.slice(0, 600) ?? null, status: record.status, inSourceList: record.inSourceList, index: record.index })),
         truncated: Math.max(0, checked.records.length - QUOTATIONS_KEPT) };
     }
@@ -780,8 +849,20 @@ export class KnowledgePageService {
       if (over) return defer("usage_budget_exceeded", over === "day" ? 3_600_000 : 6 * 3_600_000);
       // The engine's copy of the documents is made to agree with PostgreSQL before anything reads it.
       if (this.sourceSync) {
-        await this.sourceSync.reconcileProject(userId, projectId);
-        await this.sourceSync.reconcileLibrary(userId).catch((error) => this.report(codeOf(error)));
+        try {
+          const projectSync = await this.sourceSync.reconcileProject(userId, projectId);
+          const librarySync = await this.sourceSync.reconcileLibrary(userId);
+          if (projectSync.failed.length || librarySync.failed.length) return defer("knowledge_source_sync_pending", 30_000);
+          const verified = await this.sourceSync.reconcileProject(userId, projectId, { apply: false });
+          if (verified.missing.length || verified.stale.length || verified.extra.length) return defer("knowledge_source_sync_pending", 30_000);
+          const current = await this.sourceSync.expected(userId, projectId);
+          if (current.size !== Object.keys(taken).length || [...current].some(([id, value]) => taken[id] !== value.sha)) {
+            return defer("knowledge_source_sync_pending", 30_000);
+          }
+        } catch (error) {
+          this.report(codeOf(error));
+          return defer("knowledge_source_sync_pending", 30_000);
+        }
       }
       // What the engine holds is in the ledger before a compile may touch it, and nothing a person saved is still waiting.
       await this.#flushWriteBacks(user, project);
@@ -1012,11 +1093,13 @@ export class KnowledgePageService {
     // The labels of this text: the stored ones when they were computed for these bytes, else computed now.
     const digest = sha256(markdown);
     const texts = new Map();
-    const quotations = ledger?.quotations?.checkedSha256 === digest ? ledger.quotations
+    const cited = [...new Set(page.links.filter((link) => link.kind === "source").map((link) => knowledgeSourceIdOfUri(link.uri)).filter(Boolean))];
+    const dependencyIds = /** @type {string[]} */ ([...new Set([...cited,
+      ...(Array.isArray(page.frontmatter.sources) ? page.frontmatter.sources : []).map((uri) => knowledgeSourceIdOfUri(uri))].filter(Boolean))]);
+    const details = await this.#sourceDetails(userId, project.id, dependencyIds);
+    const quotations = ledger?.quotations?.checkedSha256 === digest && ledger.quotations.sourceBasis === sourceBasis(dependencyIds, details) ? ledger.quotations
       : (await this.#describe(userId, project.id, where.tree, where.rel, markdown, texts)).quotations;
     const labelAt = new Map((quotations?.records ?? []).map((/** @type {any} */ record) => [record.index, record]));
-    const cited = [...new Set(page.links.filter((link) => link.kind === "source").map((link) => knowledgeSourceIdOfUri(link.uri)).filter(Boolean))];
-    const titles = await this.#titles(userId, project.id, /** @type {string[]} */ (cited));
     const links = page.links.map((link) => {
       if (link.kind === "page") {
         const target = byPath.get(/** @type {string} */ (link.path));
@@ -1025,7 +1108,8 @@ export class KnowledgePageService {
       if (link.kind === "source") {
         const sourceId = knowledgeSourceIdOfUri(link.uri);
         const label = labelAt.get(link.index);
-        return { kind: "source", text: link.text, sourceId, title: sourceId ? titles.get(sourceId) ?? null : null, available: Boolean(sourceId && titles.has(sourceId)),
+        return { kind: "source", text: link.text, sourceId, title: sourceId ? details.get(sourceId)?.title ?? null : null, available: Boolean(sourceId && details.has(sourceId)),
+          sourceVersion: sourceId ? details.get(sourceId)?.sourceVersion ?? null : null, checkedAt: quotations?.checkedAt ?? null,
           quote: link.quote, status: label?.status ?? (link.quote ? "source_missing" : "no_quotation"), inSourceList: label?.inSourceList ?? false, index: link.index, end: link.end };
       }
       return { kind: "external", text: link.text, href: link.target, index: link.index, end: link.end };
@@ -1051,8 +1135,8 @@ export class KnowledgePageService {
     return {
       sourceId: source.id, tree: where.tree, path: where.rel, slug: where.rel, type: page.type, title: page.title, description: page.description, tags: page.tags,
       markdown, sha256: digest, frontmatter: page.frontmatter, body: page.body, links,
-      sources: cited.map((id) => ({ sourceId: id, title: titles.get(/** @type {string} */ (id)) ?? null, available: titles.has(/** @type {string} */ (id)) })),
-      quotations: quotations?.counts ? { present: quotations.counts.present, absent: quotations.counts.absent, none: quotations.counts.noQuotation, sourceMissing: quotations.counts.sourceMissing } : null,
+      sources: cited.map((id) => ({ sourceId: id, title: details.get(/** @type {string} */ (id))?.title ?? null, available: details.has(/** @type {string} */ (id)), sourceVersion: details.get(/** @type {string} */ (id))?.sourceVersion ?? null })),
+      quotations: quotations?.counts ? { present: quotations.counts.present, absent: quotations.counts.absent, none: quotations.counts.noQuotation, sourceMissing: quotations.counts.sourceMissing, checkedAt: quotations.checkedAt ?? null } : null,
       userEdited: Boolean(ledger?.userEdits && (ledger.userEdits.blocks?.length || ledger.userEdits.removed?.length || Object.keys(ledger.userEdits.frontmatter ?? {}).length)),
       userBlocks: (ledger?.userEdits?.blocks ?? []).map((/** @type {any} */ block) => ({ id: block.id, text: block.text, heading: block.heading })),
       restored: ledger?.restored ?? null, editable: /\.md$/i.test(where.rel), updatedAt: ledger?.updatedAt ?? null,
@@ -1086,21 +1170,21 @@ export class KnowledgePageService {
     const documentOf = (/** @type {string} */ uri) => knowledgeSourceIdOfUri(uri);
     if (kind === "wiki") {
       const graph = wikiPagesToGraph(files, { root: this.resources.treeUri(userId, project.id, "wiki") });
-      const titles = await this.#titles(userId, project.id, graph.nodes.flatMap((node) => node.sources.map((source) => documentOf(source.uri) ?? "")));
+      const details = await this.#sourceDetails(userId, project.id, graph.nodes.flatMap((node) => node.sources.map((source) => documentOf(source.uri) ?? "")));
       return {
         kind, nodes: graph.nodes.map((node) => {
           const record = byPath.get(node.path);
           const cited = [...new Set(node.sources.map((source) => documentOf(source.uri)).filter(Boolean))];
           return { id: node.id, path: node.path, title: node.title, type: node.type, description: node.description, tags: node.tags, degree: node.degree, sourceId: record?.pageSourceId ?? null,
-            stale: record?.stale?.sources ?? [], userEdited: Boolean(record?.userEdits?.blocks?.length), sources: cited.map((id) => ({ sourceId: id, title: titles.get(/** @type {string} */ (id)) ?? null })) };
+            stale: record?.stale?.sources ?? [], userEdited: Boolean(record?.userEdits?.blocks?.length), sources: cited.map((id) => ({ sourceId: id, title: details.get(/** @type {string} */ (id))?.title ?? null, sourceVersion: details.get(/** @type {string} */ (id))?.sourceVersion ?? null, available: details.has(/** @type {string} */ (id)) })) };
         }),
         links: graph.links, unresolved: graph.unresolved.length, problems: [],
       };
     }
     const graph = knowledgeGraphToGraph(files);
     const named = [...graph.nodes.flatMap((node) => node.sources), ...graph.links.flatMap((link) => link.evidence)].map((uri) => documentOf(uri) ?? "");
-    const titles = await this.#titles(userId, project.id, named);
-    const map = (/** @type {string[]} */ uris) => [...new Set(uris.map((uri) => documentOf(uri)).filter(Boolean))].map((id) => ({ sourceId: id, title: titles.get(/** @type {string} */ (id)) ?? null }));
+    const details = await this.#sourceDetails(userId, project.id, named);
+    const map = (/** @type {string[]} */ uris) => [...new Set(uris.map((uri) => documentOf(uri)).filter(Boolean))].map((id) => ({ sourceId: id, title: details.get(/** @type {string} */ (id))?.title ?? null, sourceVersion: details.get(/** @type {string} */ (id))?.sourceVersion ?? null, available: details.has(/** @type {string} */ (id)), locator: null, quote: null }));
     return {
       kind, nodes: graph.nodes.map((node) => ({ id: node.id, path: node.path, title: node.title, entityType: node.entityType, description: node.description, aliases: node.aliases,
         degree: node.degree, sourceId: byPath.get(node.path)?.pageSourceId ?? null, stale: byPath.get(node.path)?.stale?.sources ?? [], sources: map(node.sources) })),

@@ -426,6 +426,9 @@ test("the version chain is a real read route scoped to the source's project", as
   assert.equal(response.status, 200);
   assert.equal((await response.json()).data.familyId, "fam_one");
   assert.deepEqual(calls.find(call => call.method === "family"), { method: "family", userId: "owner", id: "source-one", options: { limit: 7 } });
+  const selectedFamily = await fetch(`${base}/api/sources/source-one/family?limit=7&familyId=fam_selected`, { headers });
+  assert.equal(selectedFamily.status, 200);
+  assert.deepEqual(calls.filter(call => call.method === "family").at(-1).options, { limit: 7, familyId: "fam_selected" });
   const filtered = await fetch(`${base}/api/sources?projectId=owned-project&familyId=fam_one`, { headers });
   assert.equal(filtered.status, 200);
   assert.equal(calls.find(call => call.method === "list").options.familyId, "fam_one");

@@ -4,7 +4,7 @@
  * The API knew one engine. On a native account `/episodes` answered 202 over nothing, `/recall` read stale PostgreSQL copies, and a
  * forget through `/records` changed rows the engine never reads. These cases drive the real routes with doubles that count what
  * they were asked, so "the legacy rows were not read" is asserted on the double's side: the dashboard, the list, the recall and
- * every record act go to the store the memory page uses, `/episodes` is refused by name before any subject account is made, and an
+ * every record act go to the store the memory page uses, `/episodes` stages a candidate without extraction before explicit confirmation, and an
  * account on the other engine is answered exactly as before.
  */
 import assert from "node:assert/strict";
@@ -35,15 +35,15 @@ const nativeRecord = (overrides = {}) => ({
 });
 
 /**
- * @param {{ engine?: "native" | "legacy", configured?: boolean, subjects?: boolean, knownSubjects?: string[], native?: any, config?: any }} [options]
+ * @param {{ engine?: "native" | "legacy", configured?: boolean, subjects?: boolean, knownSubjects?: string[], native?: any, config?: any, engineFailure?: boolean, projectId?: string | null, candidateProjectId?: string | null }} [options]
  */
-function fixture({ engine = "native", configured = true, subjects = false, knownSubjects = [], native = {}, config = {} } = {}) {
+function fixture({ engine = "native", configured = true, subjects = false, knownSubjects = [], native = {}, config = {}, engineFailure = false, projectId = null, candidateProjectId = null } = {}) {
   /** @type {any[][]} */
   const calls = [];
   const apiKeys = {
     async resolve(token) {
       if (token !== "evk_good") throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
-      return { userId: "u1", keyId: "agk_1", projectId: null, scopes: [...AGENT_KEY_SCOPES], subjects };
+      return { userId: "u1", keyId: "agk_1", projectId, scopes: [...AGENT_KEY_SCOPES], subjects };
     },
     async subjectAccount(owner, subject) { calls.push(["subjectAccount", owner, subject]); return { userId: `subj_${subject}`, created: true }; },
     async findSubjectAccount(_owner, subject) { return knownSubjects.includes(subject) ? `subj_${subject}` : null; },
@@ -57,14 +57,15 @@ function fixture({ engine = "native", configured = true, subjects = false, known
     async active() { return { record: null, items: [] }; },
     async entries() { return { items: [], nextCursor: null }; },
     async get() { throw new HttpError(404, "capsule_not_found", "The capsule is unavailable."); },
-    async note(userId, projectId, input) { calls.push(["note", userId, projectId, input]); return { id: "entry_1", ...input }; },
-    documents: { async list() { return { items: [] }; }, async get() { return null; } },
+    async note(userId, projectId, input) { calls.push(["note", userId, projectId, input]); return { id: "entry_1", revision: 1, payload: { ...input, status: "candidate" } }; },
+    async updateEntry(_user,_capsule,id,input){calls.push(["candidate.update",id,input]);return {id,revision:2,payload:{status:input.status}};},
+    documents: { async list() { return { items: [] }; }, async get() { return candidateProjectId ? {id:"note-owned",projectId:candidateProjectId,revision:1,payload:{status:"candidate",capsuleId:"capsule",content:"Project fact"}} : null; } },
   };
   const researchMemory = {
     configured: true,
-    async memoryEngine(userId) { calls.push(["memoryEngine", userId]); return engine; },
-    async listRecords(userId) { calls.push(["legacy.listRecords", userId]); return [{ id: "legacy_row" }]; },
-    async settings() { return { learningPaused: false, recallPaused: false }; },
+    async memoryEngine(userId) { calls.push(["memoryEngine", userId]); if(engineFailure)throw Error("engine lookup unavailable"); return engine; },
+    async listRecords(userId, filters) { calls.push(["legacy.listRecords", userId, filters]); return filters?.statuses?.includes("pending") ? [] : [{ id: "legacy_row" }]; },
+    async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
     async updateSettings(userId, input) { calls.push(["updateSettings", userId, input]); return { learningPaused: Boolean(input.learningPaused), recallPaused: Boolean(input.recallPaused) }; },
     async recordUsage() { calls.push(["legacy.recordUsage"]); return {}; },
     async recentChanges() { calls.push(["legacy.recentChanges"]); return []; },
@@ -75,6 +76,7 @@ function fixture({ engine = "native", configured = true, subjects = false, known
   const memorySubstrate = { recallEnabled: true, async recall() { calls.push(["legacy.substrateRecall"]); return [{ id: "stale", content: "stale copy", kind: "preference", scope: "user" }]; } };
   const nativeMemory = {
     configured,
+    async admitCandidate(userId,input){calls.push(["native.admit",userId,input]);return {state:"pending",taskId:"task-owned"};},
     async search(userId, query) {
       calls.push(["native.search", userId, query]);
       return { items: [nativeRecord(), nativeRecord({ id: "nm_secret", sensitive: true, value: "- 隐私" }),
@@ -101,24 +103,12 @@ function fixture({ engine = "native", configured = true, subjects = false, known
 const called = (calls, name) => calls.filter((entry) => entry[0] === name);
 const rejected = async (promise) => promise.then(() => null, (error) => error);
 
-test("an episode for a native account is refused by name, before a subject's account is made, and nothing is extracted", async () => {
-  const { run, calls } = fixture({ subjects: true });
-  const error = await rejected(run(`${AGENT_MEMORY_PATH}/episodes`, { messages: [{ role: "user", text: "我吃素" }] }, "POST", { "x-subject": "doctor-1" }));
-  assert.equal(error.status, 400);
-  assert.equal(error.code, "memory_engine_unsupported");
-  assert.match(error.message, /POST \/note/);
-  assert.equal(called(calls, "recordRun").length, 0);
-  assert.equal(called(calls, "subjectAccount").length, 0, "a refused call makes no account");
-  // The same call for the institution's own native account is refused the same way.
-  const own = fixture();
-  assert.equal((await rejected(own.run(`${AGENT_MEMORY_PATH}/episodes`, { messages: [{ role: "user", text: "我吃素" }] }, "POST")))?.code, "memory_engine_unsupported");
-  // An account on the other engine is extracted as before, and says which engine it is.
-  const legacy = fixture({ engine: "legacy" });
-  const done = await legacy.run(`${AGENT_MEMORY_PATH}/episodes`, { projectId: "p1", messages: [{ role: "user", text: "我吃素" }] }, "POST");
-  assert.equal(done.status, 202);
-  assert.equal(done.body.data.engine, "legacy");
-  assert.equal(done.headers["X-Memory-Engine"], "legacy");
-  assert.equal(called(legacy.calls, "recordRun").length, 1);
+test("native episodes stage a pending candidate and never extract before confirmation", async()=>{
+ const {run,calls}=fixture({subjects:true});
+ const response=await run(`${AGENT_MEMORY_PATH}/episodes`,{messages:[{role:"user",text:"我吃素"}]},"POST",{"x-subject":"doctor-1"});
+ assert.equal(response.status,202);assert.equal(response.body.data.state,"pending_confirmation");
+ assert.equal(response.body.data.extracted,0);assert.equal(response.body.data.activated,0);assert.equal(response.body.data.pending,1);
+ assert.equal(response.body.data.confirm.expectedRevision,1);assert.equal(called(calls,"recordRun").length,0);assert.equal(called(calls,"note").length,1);
 });
 
 test("a recall of a native account reads the engine's files and not the PostgreSQL copies, in the account's own scope", async () => {
@@ -154,7 +144,7 @@ test("the adapter hands recall the engine's memories as records: no sensitive on
   assert.deepEqual((await source.recall("u1", "q", { projectId: null })).map((memo) => memo.id), ["nm_0123456789abcdef01234567"], "no project named: the account's own only");
 });
 
-test("the list and the dashboard of a native account are the engine's, with no usage counts and no pending records", async () => {
+test("the list and the dashboard of a native account are the engine's, without measured usage counts and with pending candidates kept separate", async () => {
   const { run, calls } = fixture();
   const list = await run(`${AGENT_MEMORY_PATH}/records?kind=preference&scope=user&query=AMA&pageSize=5`);
   assert.equal(list.headers["X-Memory-Engine"], "native");
@@ -173,7 +163,8 @@ test("the list and the dashboard of a native account are the engine's, with no u
   assert.deepEqual(board.body.data.records.map((row) => [row.id, row.source, row.usage.count]), [["nm_0123456789abcdef01234567", "self", 0]]);
   assert.deepEqual(board.body.data.pending, []);
   assert.deepEqual(board.body.data.recentChanges.map((change) => [change.recordId, change.undo.path, change.undo.expectedVersion]), [["nm_0123456789abcdef01234567", "records/nm_0123456789abcdef01234567/undo", 77]]);
-  for (const name of ["legacy.listRecords", "legacy.recordUsage", "legacy.recentChanges"]) assert.equal(called(calls, name).length, 0, name);
+  assert.deepEqual(called(calls, "legacy.listRecords").map(call => call[2]?.statuses), [["pending"]], "only uncommitted candidates may come from the pending ledger");
+  for (const name of ["legacy.recordUsage", "legacy.recentChanges"]) assert.equal(called(calls, name).length, 0, name);
 
   const legacy = fixture({ engine: "legacy" });
   const old = await legacy.run(`${AGENT_MEMORY_PATH}/dashboard`);
@@ -241,7 +232,7 @@ test("a native account in a deployment that cannot reach the engine is told so, 
   assert.deepEqual([recall.status, recall.body.data.items], [200, []]);
 });
 
-test("the description names the engine: a schema, a header, the episode refusal, and a rule of its own", () => {
+test("the description names the engine: a schema, a header, the staged episode contract, and a rule of its own", () => {
   const document = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 });
   assert.match(document.info.description, /^Three rules hold everywhere/m);
   assert.match(document.info.description, /3\. An account's memory is on one of two engines/);
@@ -249,5 +240,27 @@ test("the description names the engine: a schema, a header, the episode refusal,
   assert.equal(document.components.schemas.RecallResponse.properties.data.properties.engine.$ref, "#/components/schemas/Engine");
   assert.equal(document.components.schemas.Dashboard.properties.data.properties.engine.$ref, "#/components/schemas/Engine");
   assert.equal(document.paths["/records"].get.responses[200].headers["X-Memory-Engine"].$ref, "#/components/headers/MemoryEngine");
-  assert.match(document.paths["/episodes"].post.responses[400].description, /memory_engine_unsupported/);
+  assert.match(document.paths["/episodes"].post.responses[202].description, /pending_confirmation/);
+  assert.doesNotMatch(document.paths["/episodes"].post.responses[400].description, /native memory engine.*unsupported/);
+});
+
+test("engine identity lookup failure never routes to legacy reads or writes",async()=>{
+ for(const [route,body,method] of [["/episodes",{projectId:"p1",messages:[{role:"user",text:"AMA"}]},"POST"],["/records",undefined,"GET"],["/recall",{query:"AMA"},"POST"],["/dashboard",undefined,"GET"],["/settings",{learningPaused:true},"PUT"],["/records/nm_0123456789abcdef01234567/forget",{expectedVersion:77},"POST"]]){
+  const {run,calls}=fixture({engineFailure:true});const error=await rejected(run(AGENT_MEMORY_PATH+route,body,method));
+  assert.equal(error?.status,503,route);assert.equal(error?.code,"memory_engine_unavailable",route);
+  assert.equal(calls.filter(c=>c[0].startsWith("legacy.")||["recordRun","updateSettings","native.update"].includes(c[0])).length,0,route);
+ }
+});
+
+for(const engine of ['native','legacy'])test(engine+' note mutations respect project-bound key before admission',async()=>{
+ for(const action of ['confirm','reject']){
+  const cross=fixture({engine,projectId:'project-a',candidateProjectId:'project-b'});
+  const error=await rejected(cross.run(`${AGENT_MEMORY_PATH}/notes/note-owned/${action}`,{expectedRevision:1}));
+  assert.equal(error?.status,403);assert.equal(error?.code,'agent_key_project_denied');
+  assert.equal(cross.calls.filter(c=>['native.admit','candidate.update'].includes(c[0])).length,0);
+  const same=fixture({engine,projectId:'project-a',candidateProjectId:'project-a'});
+  const response=await same.run(`${AGENT_MEMORY_PATH}/notes/note-owned/${action}`,{expectedRevision:1});
+  assert.equal(response.status,200);
+  assert.equal(same.calls.filter(c=>['native.admit','candidate.update'].includes(c[0])).length,1);
+ }
 });

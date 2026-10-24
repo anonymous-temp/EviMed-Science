@@ -51,6 +51,7 @@ services:
       # The web service's own fallbacks. `${KEY:-}` delivered an empty string,
       # which `loadConfig` keeps (it is not nullish): unset in .env, the gate
       # read a model gateway URL of "" and `new URL("")` threw before minting.
+      OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-release-receipt:8798/internal/model/v1}
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/model/v1}
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-flash}
       OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
@@ -144,6 +145,11 @@ services:
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=64m
     restart: unless-stopped
+
+  # The existing receipt service owns the counter; ordinary web keeps its gateway.
+  open-science-runtime-controller:
+    environment:
+      OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-release-receipt:8798/internal/model/v1}
 
 # Only the volume this overlay introduces. `open-science-data`,
 # `open-science-runtime-control` and the `runtime-internal` network are declared

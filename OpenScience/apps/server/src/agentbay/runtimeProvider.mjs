@@ -367,13 +367,12 @@ export class AgentBayRuntimeProvider {
 
   /** The host directories a session's Contexts carry, and how. */
   views(project) {
-    const inBase = Boolean(project.baseDir) && path.resolve(String(project.workspaceDir)) === path.resolve(String(project.baseDir));
     const hostDshHome = path.join(project.runtimeDir, "container-runtime", "dsh-home");
     return {
       workspace: { host: project.workspaceDir, mount: SESSION_PATHS.workspace, exclude: READ_ONLY_VIEWS, upload: true },
       sessions: { host: path.join(hostDshHome, "sessions"), mount: SESSION_PATHS.sessions, exclude: [], upload: true },
       storages: { host: path.join(hostDshHome, "storages"), mount: SESSION_PATHS.storages, exclude: [], upload: true },
-      ...(inBase ? { kb: { host: path.join(project.baseDir, "knowledge-base"), mount: SESSION_PATHS.knowledgeBase, exclude: [], upload: false } } : {}),
+      ...(project.baseDir ? { kb: { host: path.join(project.baseDir, "knowledge-base"), mount: SESSION_PATHS.knowledgeBase, exclude: [], upload: false } } : {}),
       library: { host: personalLibraryDir(this.config, project.userId), mount: SESSION_PATHS.library, exclude: [], upload: false, account: true },
     };
   }
@@ -840,6 +839,25 @@ export class AgentBayRuntimeProvider {
     ].join(" && ") + `; rc=$?; rm -f ${quote(staged)}; exit $rc`);
     if (!done.ok) throw new HttpError(502, "agentbay_upload_mirror_failed", "The session did not take the uploaded file.");
     return true;
+  }
+
+  mirrorUploadIdentity(project) { return this.live.get(this.manager.key(project))?.sessionId ?? null; }
+
+  /** A receipt names the exact live session and verifies its installed bytes. */
+  async mirrorUploadReceipt(project, relative, content) {
+    const sha256 = createHash("sha256").update(content).digest("hex");
+    const live = this.live.get(this.manager.key(project));
+    if (!live) return { state: "deferred", code: "runtime_replica_not_active", runtimeIdentity: null, sha256 };
+    const runtimeIdentity = live.sessionId;
+    const base = { runtimeIdentity, sha256 };
+    try {
+      if (!await this.mirrorUpload(project, relative, content)) return { ...base, state: "retryable-failure", code: "runtime_replica_upload_failed" };
+      const target = `${SESSION_PATHS.workspace}/${relative}`;
+      const verified = await this.command(live.session, `sha256sum '${target.replace(/'/g, "'\\''")}'`);
+      if (this.live.get(this.manager.key(project)) !== live) return { ...base, state: "retryable-failure", code: "runtime_replica_changed" };
+      if (!verified.ok || verified.stdout.trim().split(/\s+/)[0] !== sha256) return { ...base, state: "retryable-failure", code: "runtime_replica_digest_mismatch" };
+      return { ...base, state: "acknowledged" };
+    } catch { return { ...base, state: "retryable-failure", code: "runtime_replica_upload_failed" }; }
   }
 
   /**

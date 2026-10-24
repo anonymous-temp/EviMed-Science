@@ -199,3 +199,37 @@ test("a stale list projection cannot create an impact after the matching source 
   assert.equal(f.notices.size, 0);
   assert.equal(f.calls.length, 0);
 });
+
+test("binding replacements affect only the exact path and digest, retain source-only memory, and distinguish occurrences", async () => {
+  const f = await fixture();
+  const sha = "a".repeat(64), sourceId = `src_${"a".repeat(32)}`;
+  f.versions.splice(0, f.versions.length, ...[
+    { versionId: "original", inputs: [{ kind: "data", path: "knowledge-base/original.txt", id: "original", digest: sha }] },
+    { versionId: "copy", inputs: [{ kind: "data", path: "knowledge-base/copy.txt", id: "copy", digest: sha }] },
+    { versionId: "content", inputs: [{ kind: "source", id: sourceId, digest: sha }] },
+    { versionId: "wrong-digest", inputs: [{ kind: "data", path: "knowledge-base/original.txt", id: "wrong", digest: "b".repeat(64) }] },
+  ].map(row => ({ ...row, projectId: "p", findings: [] })));
+  f.service.results.query = async (_user, projectId) => ({ items: projectId === "p" ? f.versions : [], nextCursor: null });
+  let memoryCalls = 0;
+  f.service.knowledge = { memories: async () => { memoryCalls++; return { items: [] }; }, pages: async () => { throw Error("content pages must remain current"); }, methodsFor: async () => ({ items: [] }) };
+  const event = { projectId: "p", logicalPath: "knowledge-base/original.txt", familyId: "fam-original", sourceRetired: false,
+    replaced: { sourceId, sha256: sha, version: 1 }, by: { sourceId: `src_${"b".repeat(32)}`, version: 2 } };
+  const first = await f.service.reconcileReplacement("alice", event);
+  assert.deepEqual(first.items.map(row => row.payload.versionId), ["original"]);
+  assert.equal(memoryCalls, 0);
+  assert.equal((await f.service.reconcileReplacement("alice", event)).items[0].id, first.items[0].id);
+  const next = await f.service.reconcileReplacement("alice", { ...event, by: { ...event.by, version: 4 } });
+  assert.notEqual(next.items[0].id, first.items[0].id);
+  await assert.rejects(f.service.reconcileReplacement("alice", { ...event, projectId: "other-project" }), /scope denied/);
+});
+
+test("durable replacements propagate failed page persistence instead of completing an advisory lookup", async () => {
+  const f = await fixture();
+  f.service.results.query = async () => ({ items: [], nextCursor: null });
+  f.service.knowledge = { memories: async () => ({ items: [] }), pages: async () => ({ unknown: "lookup_failed" }) };
+  await assert.rejects(f.service.reconcileReplacement("alice", { projectId: "p", replaced: { sourceId: "source-0", sha256: "a".repeat(64) } }), { code: "source_replacement_pages_unavailable" });
+  f.service.knowledge.pages = async () => { throw Error("page scheduling failed"); };
+  await assert.rejects(f.service.reconcileReplacement("alice", { projectId: "p", replaced: { sourceId: "source-0", sha256: "a".repeat(64) } }), /page scheduling failed/);
+  // Other source-update checks retain the existing advisory lookup policy.
+  await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: "missing" }, status: change() });
+});

@@ -98,6 +98,13 @@ describe("KnowledgePageView", () => {
     expect(screen.getByRole("note")).toHaveTextContent(`“${lost && lost.kind === "source" ? lost.quote : ""}”`);
   });
 
+  it("labels the historical source version and check time independently of present availability", async () => {
+    mocks.page.mockResolvedValue({ ...absent, links: absent.links.map((link) => link.kind === "source" ? { ...link, checkedAt: "2026-10-20T10:00:00Z", sourceVersion: 3, available: false } : link) });
+    renderView(absent);
+    expect((await screen.findAllByText(/曾核对于.*来源第 3 版，当前不可读取/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("img", { name: "原文里找到了这句引文" })).toBeNull();
+  });
+
   it("opens the document at the quotation", async () => {
     mocks.locate.mockResolvedValueOnce({ status: "verified", start: 12, end: 20, page: 3, textSha256: "d".repeat(64) });
     renderView(absent);
@@ -166,17 +173,23 @@ describe("editing a page", () => {
     await waitFor(() => expect(screen.getByTestId("where").textContent).toBe(`/app/files/${saved.sourceId}?scope=p1&kind=wiki`));
   });
 
-  it("takes the newer version in when a compile rewrote the page, and says so in one sentence", async () => {
+  it.each([409, 404])("preserves the draft and offers the newer version separately after status %i", async (status) => {
     const newer = { ...mine, sha256: "e".repeat(64), markdown: "---\ntype: analysis\ntitle: x\n---\n\n新的整理结果。" };
-    mocks.save.mockRejectedValue(new WebApiError("changed", { status: 409, code: "knowledge_page_changed" }));
+    mocks.save.mockRejectedValue(new WebApiError("changed", { status, code: status === 409 ? "knowledge_page_changed" : "source_not_found" }));
     mocks.pageAt.mockResolvedValue(newer);
     renderView(mine);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "编辑" }));
     await user.type(await screen.findByLabelText("页面全文"), "x");
     await user.click(screen.getByRole("button", { name: "保存" }));
-    expect(await screen.findByText(/这一页刚被重新整理过，已换成最新的版本/)).toBeInTheDocument();
+    expect(await screen.findByText(/你的修改已保留/)).toBeInTheDocument();
     expect(mocks.pageAt).toHaveBeenCalledWith("p1", "wiki", mine.path);
-    expect(screen.getByLabelText("页面全文")).toHaveValue(newer.markdown);
+    expect((screen.getByLabelText("页面全文") as HTMLTextAreaElement).value).toMatch(/x$/);
+    expect(screen.getByLabelText("最新版本")).toHaveValue(newer.markdown);
+    expect(screen.getByRole("button", { name: "复制我的修改" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "以我的修改继续编辑" }));
+    mocks.save.mockResolvedValue({ changed: true, writeBack: "written", userBlocks: 1, page: newer });
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenLastCalledWith({ sourceId: newer.sourceId, markdown: `${mine.markdown}x`, baseSha256: newer.sha256 }));
   });
 });

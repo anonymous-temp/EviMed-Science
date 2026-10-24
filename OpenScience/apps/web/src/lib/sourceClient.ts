@@ -153,6 +153,7 @@ export interface SourceDisplay {
 /** How many documents fall under each chip, over the whole scope and the search — not over the page. */
 export type SourceCounts = Record<"all" | SourceKind, number>;
 export interface SourcePayload {
+  publication?: { current: boolean; legacyAmbiguous?: boolean; bindings?: Record<string, { logicalPath: string; current: boolean; publicationRevision: number }> };
   paths: string[];
   /** The title a note or a saved page was filed under. */
   title?: string;
@@ -426,8 +427,8 @@ export interface DuplicateGroup {
   decision: { decision: "linked" | "dismissed"; note: string; at: string } | null;
 }
 
-export function getSourceFamily(id: string) {
-  return productRequest<SourceFamily>(`/sources/${encodeURIComponent(id)}/family`);
+export function getSourceFamily(id: string, familyId?: string) {
+  return productRequest<SourceFamily>(`/sources/${encodeURIComponent(id)}/family${familyId ? `?familyId=${encodeURIComponent(familyId)}` : ""}`);
 }
 export function listSourceFolders(projectId: string) {
   const query = new URLSearchParams({ projectId });
@@ -539,6 +540,7 @@ export interface KnowledgeTree {
 export type KnowledgePageLink =
   | { kind: "page"; text: string; path: string; sourceId: string | null; title: string | null; exists: boolean; index: number; end: number }
   | { kind: "source"; text: string; sourceId: string; title: string | null; available: boolean; quote: string | null;
+      checkedAt?: string | null; sourceVersion?: number | null;
       status: "present" | "absent" | "no_quotation" | "source_missing"; inSourceList: boolean; index: number; end: number }
   | { kind: "external"; text: string; href: string; index: number; end: number };
 export interface KnowledgePage {
@@ -565,7 +567,15 @@ export interface KnowledgePage {
   basis: "compiler" | "user";
   stale: Array<{ sourceId: string; reason: KnowledgeStaleReason }>;
 }
-export interface KnowledgeGraphSource { sourceId: string; title: string | null }
+export interface KnowledgeGraphSource {
+  sourceId: string;
+  title: string | null;
+  sourceVersion?: number | null;
+  available?: boolean;
+  checkedAt?: string | null;
+  quote?: string | null;
+  locator?: { page?: number | null; sheet?: string | null; cell?: string | null; start?: number | null; end?: number | null } | null;
+}
 /** One mark of either graph. A wiki node has a `type`, a graph node an `entityType` (open, snake_case upstream). */
 export interface KnowledgeGraphNode {
   id: string;

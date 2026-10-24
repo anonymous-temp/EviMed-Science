@@ -70,7 +70,7 @@ export function productDocumentsDouble() {
     },
     // `telemetry` as the real store reads it: the revision moves, no history
     // row is saved and `updatedAt` stays where it was.
-    async put(userId, kind, id, payload, { expectedRevision, projectId = null, telemetry = false }) {
+    async put(userId, kind, id, payload, { expectedRevision, projectId = null, telemetry = false, restoreDeleted = false }) {
       const key = keyOf(userId, kind, id);
       const current = rows.get(key);
       if (expectedRevision === 0) {
@@ -82,9 +82,10 @@ export function productDocumentsDouble() {
         saveRevision(key, row);
         return publicRow(row);
       }
-      if (!current || current.deletedAt || current.revision !== expectedRevision) {
+      if (!current || (current.deletedAt && !restoreDeleted) || current.revision !== expectedRevision) {
         throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
       }
+      if (restoreDeleted) current.deletedAt = null;
       current.payload = structuredClone(payload);
       current.revision += 1;
       if (!telemetry) {

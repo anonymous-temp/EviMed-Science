@@ -1,0 +1,1199 @@
+{
+  "kind": "real-product-http-lifecycle-only",
+  "qualityEligible": false,
+  "nativeRequirements": {
+    "runtimeMode": "mock",
+    "requiredApis": [
+      "/api/memory/settings",
+      "/api/memory/profile",
+      "/api/memory/remember",
+      "/api/knowledge-pages",
+      "/api/knowledge-pages/compile",
+      "/api/knowledge-pages/tree",
+      "/api/agent-keys",
+      "/api/agent-memory/v1/recall",
+      "/api/capsules/transfers/preview",
+      "/api/capsules/transfers/import",
+      "/api/agent-runs/dispatch"
+    ],
+    "ready": false,
+    "reason": "Mock HTTP runtime cannot establish native lifecycle acceptance"
+  },
+  "coverage": "Actual HTTP authorization plus required native engine/runtime, signed import, expiry and exact restoration probes",
+  "runId": "kbeval_6b75f82ebe70",
+  "denominator": 30,
+  "counts": {
+    "pass": 23,
+    "blocked": 7,
+    "fail": 0
+  },
+  "rows": [
+    {
+      "caseId": "lifecycle-cross-account",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources/src_b0e4bcf2b6eb02f94b19074806603f31",
+          "status": 404,
+          "body": {
+            "error": "The source is unavailable.",
+            "code": "source_not_found",
+            "requestId": "req_b5cbdb9e80ff763a1a25f17d492b0b4c"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-cross-project",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources?projectId=kbeval_6b75f82ebe70_alpha_-beta",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [],
+              "counts": {
+                "all": 0,
+                "literature": 0,
+                "table": 0,
+                "document": 0,
+                "page": 0,
+                "note": 0,
+                "image": 0,
+                "wiki": 0
+              },
+              "nextCursor": null
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-deleted",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "DELETE",
+          "url": "/api/sources/src_8cd04487918cfb31a6f7c3a84b333b7b",
+          "status": 200,
+          "body": {
+            "data": {
+              "id": "src_8cd04487918cfb31a6f7c3a84b333b7b",
+              "kind": "source",
+              "projectId": "kbeval_6b75f82ebe70_alpha_alpha",
+              "payload": {
+                "depth": "structured",
+                "paths": [
+                  "knowledge-base/notes/.evimed-revisions/a5f2695c171ea026d877bb1e5a9f77ebd9072410e13619a2b363c5c4de83b491/probe-deleted-27a37c94-bc98a2.md"
+                ],
+                "title": "probe-deleted-27a37c94",
+                "status": "queued",
+                "docType": "note-memo",
+                "reasons": [
+                  "A note written in the knowledge base."
+                ],
+                "version": 1,
+                "coverage": null,
+                "deletion": {
+                  "jobId": "9879b7d1-5b4f-45ce-b5e8-c5481e1f1c98",
+                  "status": "pending",
+                  "revision": 2,
+                  "requestedAt": "2026-10-23T13:47:24.091Z",
+                  "sourceGeneration": 2,
+                  "requestedRevision": 1
+                },
+                "familyId": "fam_04110ff1ffecb3bbef542ea639ebac6c",
+                "override": null,
+                "connector": {
+                  "id": "kbeval_6b75f82ebe70_alpha_alpha-library",
+                  "type": "upload"
+                },
+                "createdAt": "2026-10-23T13:47:24.060Z",
+                "updatedAt": "2026-10-23T13:47:24.091Z",
+                "generation": 2,
+                "fingerprint": {
+                  "size": 65,
+                  "mtime": "2026-10-23T13:47:24.058Z",
+                  "sha256": "a5f2695c171ea026d877bb1e5a9f77ebd9072410e13619a2b363c5c4de83b491",
+                  "mimeType": "text/plain; charset=utf-8",
+                  "providerHash": null
+                },
+                "logicalPath": "knowledge-base/notes/probe-deleted-27a37c94-bc98a2.md",
+                "valueVector": {
+                  "risk": 0,
+                  "dataValue": 0.1,
+                  "methodValue": 0.3,
+                  "profileValue": 0.2,
+                  "evidenceValue": 0.4,
+                  "knowledgeValue": 0.6
+                },
+                "schemaVersion": 1,
+                "extractorVersion": "evimed-analysis-1.0.0",
+                "outputs": {}
+              },
+              "revision": 2,
+              "createdAt": "2026-10-23T13:47:24.061Z",
+              "updatedAt": "2026-10-23T13:47:24.091Z",
+              "deletedAt": "2026-10-23T13:47:24.091Z",
+              "readable": false,
+              "display": {
+                "title": "probe-deleted-27a37c94",
+                "gist": null,
+                "docType": "note-memo",
+                "typeLabel": "笔记或备忘",
+                "typeShort": "笔记",
+                "kind": "note",
+                "origin": "note",
+                "format": "md",
+                "pages": null,
+                "size": 65,
+                "site": null,
+                "url": null,
+                "shared": null
+              }
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/sources/src_8cd04487918cfb31a6f7c3a84b333b7b",
+          "status": 404,
+          "body": {
+            "error": "The source is unavailable.",
+            "code": "source_not_found",
+            "requestId": "req_e4467cc498ce6a967670264fd274460a"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-revoked",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "POST",
+          "url": "/api/library",
+          "status": 201,
+          "body": {
+            "data": {
+              "sourceId": "src_b5eb99ca7547dad1380936a2bdd0fdcc",
+              "title": "probe-revoked-7638cf7f-9b5d65.md",
+              "kind": "note-memo",
+              "format": "md",
+              "addedAt": "2026-10-23T13:47:24.205Z",
+              "projects": [
+                "kbeval_6b75f82ebe70_alpha_alpha"
+              ],
+              "sourceIds": [
+                "src_b5eb99ca7547dad1380936a2bdd0fdcc"
+              ],
+              "status": "processing"
+            }
+          }
+        },
+        {
+          "method": "DELETE",
+          "url": "/api/library/src_b5eb99ca7547dad1380936a2bdd0fdcc",
+          "status": 200,
+          "body": {
+            "data": {
+              "sourceId": "src_b5eb99ca7547dad1380936a2bdd0fdcc",
+              "removed": true
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/library",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [],
+              "maxItems": 1000
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-superseded",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "PUT",
+          "url": "/api/sources/src_559dfb8bb6c184c4b8753063795fe739/note",
+          "status": 200,
+          "body": {
+            "data": {
+              "source": {
+                "id": "src_5a516d87ff1d9e5f95e6b04c821ef7f3",
+                "kind": "source",
+                "projectId": "kbeval_6b75f82ebe70_alpha_alpha",
+                "payload": {
+                  "depth": "structured",
+                  "paths": [
+                    "knowledge-base/notes/.evimed-revisions/4acba242c72fcf185e03718482d084e8cd21b04de706804b2cce7adbbba53f12/probe-superseded-1c1391f8-bc5fad.md"
+                  ],
+                  "title": "Revision two",
+                  "status": "queued",
+                  "docType": "note-memo",
+                  "reasons": [
+                    "A note written in the knowledge base."
+                  ],
+                  "version": 2,
+                  "coverage": null,
+                  "familyId": "fam_8f0a1829d40d1e9eff7b40a477905321",
+                  "override": null,
+                  "connector": {
+                    "id": "kbeval_6b75f82ebe70_alpha_alpha-library",
+                    "type": "upload"
+                  },
+                  "createdAt": "2026-10-23T13:47:24.316Z",
+                  "updatedAt": "2026-10-23T13:47:24.316Z",
+                  "generation": 1,
+                  "fingerprint": {
+                    "size": 56,
+                    "mtime": "2026-10-23T13:47:24.314Z",
+                    "sha256": "4acba242c72fcf185e03718482d084e8cd21b04de706804b2cce7adbbba53f12",
+                    "mimeType": "text/plain; charset=utf-8",
+                    "providerHash": null
+                  },
+                  "logicalPath": "knowledge-base/notes/probe-superseded-1c1391f8-bc5fad.md",
+                  "valueVector": {
+                    "risk": 0,
+                    "dataValue": 0.1,
+                    "methodValue": 0.3,
+                    "profileValue": 0.2,
+                    "evidenceValue": 0.4,
+                    "knowledgeValue": 0.6
+                  },
+                  "schemaVersion": 1,
+                  "extractorVersion": "evimed-analysis-1.0.0",
+                  "outputs": {}
+                },
+                "revision": 1,
+                "createdAt": "2026-10-23T13:47:24.316Z",
+                "updatedAt": "2026-10-23T13:47:24.316Z",
+                "deletedAt": null,
+                "readable": false,
+                "display": {
+                  "title": "Revision two",
+                  "gist": null,
+                  "docType": "note-memo",
+                  "typeLabel": "笔记或备忘",
+                  "typeShort": "笔记",
+                  "kind": "note",
+                  "origin": "note",
+                  "format": "md",
+                  "pages": null,
+                  "size": 56,
+                  "site": null,
+                  "url": null,
+                  "shared": null
+                }
+              },
+              "duplicate": false,
+              "changed": true
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/sources/src_559dfb8bb6c184c4b8753063795fe739",
+          "status": 404,
+          "body": {
+            "error": "The source is unavailable.",
+            "code": "source_not_found",
+            "requestId": "req_794d0e41f73b7427757cbf5d7bb090e3"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-stale-page",
+      "status": "blocked",
+      "blocked": "Real native engine/runtime required; mock HTTP is not native acceptance",
+      "receipts": [],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-revoked-page",
+      "status": "blocked",
+      "blocked": "Real native engine/runtime required; mock HTTP is not native acceptance",
+      "receipts": [],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-other-search",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources?projectId=kbeval_6b75f82ebe70_-beta_alpha&q=BENCH_CANARY_4c6a",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [],
+              "counts": {
+                "all": 0,
+                "literature": 0,
+                "table": 0,
+                "document": 0,
+                "page": 0,
+                "note": 0,
+                "image": 0,
+                "wiki": 0
+              },
+              "nextCursor": null
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-other-browse",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources/src_a00786256e18a35a840fa9f65c181f3b/note",
+          "status": 404,
+          "body": {
+            "error": "The source is unavailable.",
+            "code": "source_not_found",
+            "requestId": "req_77c3d5fa5e1faca4df72663575e16af2"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-other-graph",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/knowledge-pages/graph?projectId=kbeval_6b75f82ebe70_alpha_alpha",
+          "status": 404,
+          "body": {
+            "error": "Project not found.",
+            "code": "project_not_found",
+            "requestId": "req_b03fa1400216d78c67ed0d240a2df3d7"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-other-wiki",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/knowledge-pages/tree?projectId=kbeval_6b75f82ebe70_alpha_alpha",
+          "status": 404,
+          "body": {
+            "error": "Project not found.",
+            "code": "project_not_found",
+            "requestId": "req_2380d3edc707a4c1446c01bb6586c4aa"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-other-memory",
+      "status": "blocked",
+      "blocked": "Real native engine/runtime required; mock HTTP is not native acceptance",
+      "receipts": [],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-expiry",
+      "status": "blocked",
+      "blocked": "Real native engine/runtime required; mock HTTP is not native acceptance",
+      "receipts": [],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-detach",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "POST",
+          "url": "/api/library",
+          "status": 201,
+          "body": {
+            "data": {
+              "sourceId": "src_a538e4a3546165bc35804c374b4425b9",
+              "title": "probe-detach-65926e3e-043f21.md",
+              "kind": "note-memo",
+              "format": "md",
+              "addedAt": "2026-10-23T13:47:24.645Z",
+              "projects": [
+                "kbeval_6b75f82ebe70_alpha_alpha"
+              ],
+              "sourceIds": [
+                "src_a538e4a3546165bc35804c374b4425b9"
+              ],
+              "status": "processing"
+            }
+          }
+        },
+        {
+          "method": "DELETE",
+          "url": "/api/library/src_a538e4a3546165bc35804c374b4425b9",
+          "status": 200,
+          "body": {
+            "data": {
+              "sourceId": "src_a538e4a3546165bc35804c374b4425b9",
+              "removed": true
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/library",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [],
+              "maxItems": 1000
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-restore",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "DELETE",
+          "url": "/api/sources/src_0731601447b049a523eb36852811ca1a",
+          "status": 200,
+          "body": {
+            "data": {
+              "id": "src_0731601447b049a523eb36852811ca1a",
+              "kind": "source",
+              "projectId": "kbeval_6b75f82ebe70_alpha_alpha",
+              "payload": {
+                "depth": "structured",
+                "paths": [
+                  "knowledge-base/notes/.evimed-revisions/94d9bf1801dbf8c9aab8fced80fbe3dba54c80297b1f796456f3a2882e387431/probe-restore-b10e3894-30de37.md"
+                ],
+                "title": "probe-restore-b10e3894",
+                "status": "queued",
+                "docType": "note-memo",
+                "reasons": [
+                  "A note written in the knowledge base."
+                ],
+                "version": 1,
+                "coverage": null,
+                "deletion": {
+                  "jobId": "afd8f776-aa38-4628-8191-537399ae5e97",
+                  "status": "pending",
+                  "revision": 2,
+                  "requestedAt": "2026-10-23T13:47:24.714Z",
+                  "sourceGeneration": 2,
+                  "requestedRevision": 1
+                },
+                "familyId": "fam_32e1cd5e88bd565e6ca89d31c3692f9d",
+                "override": null,
+                "connector": {
+                  "id": "kbeval_6b75f82ebe70_alpha_alpha-library",
+                  "type": "upload"
+                },
+                "createdAt": "2026-10-23T13:47:24.679Z",
+                "updatedAt": "2026-10-23T13:47:24.714Z",
+                "generation": 2,
+                "fingerprint": {
+                  "size": 65,
+                  "mtime": "2026-10-23T13:47:24.677Z",
+                  "sha256": "94d9bf1801dbf8c9aab8fced80fbe3dba54c80297b1f796456f3a2882e387431",
+                  "mimeType": "text/plain; charset=utf-8",
+                  "providerHash": null
+                },
+                "logicalPath": "knowledge-base/notes/probe-restore-b10e3894-30de37.md",
+                "valueVector": {
+                  "risk": 0,
+                  "dataValue": 0.1,
+                  "methodValue": 0.3,
+                  "profileValue": 0.2,
+                  "evidenceValue": 0.4,
+                  "knowledgeValue": 0.6
+                },
+                "schemaVersion": 1,
+                "extractorVersion": "evimed-analysis-1.0.0",
+                "outputs": {}
+              },
+              "revision": 2,
+              "createdAt": "2026-10-23T13:47:24.680Z",
+              "updatedAt": "2026-10-23T13:47:24.715Z",
+              "deletedAt": "2026-10-23T13:47:24.715Z",
+              "readable": false,
+              "display": {
+                "title": "probe-restore-b10e3894",
+                "gist": null,
+                "docType": "note-memo",
+                "typeLabel": "笔记或备忘",
+                "typeShort": "笔记",
+                "kind": "note",
+                "origin": "note",
+                "format": "md",
+                "pages": null,
+                "size": 65,
+                "site": null,
+                "url": null,
+                "shared": null
+              }
+            }
+          }
+        },
+        {
+          "operation": "exact-original-restoration",
+          "beforeId": "src_0731601447b049a523eb36852811ca1a",
+          "afterId": "src_0731601447b049a523eb36852811ca1a",
+          "beforeGeneration": 1,
+          "afterGeneration": 3,
+          "sha256": "94d9bf1801dbf8c9aab8fced80fbe3dba54c80297b1f796456f3a2882e387431"
+        },
+        {
+          "method": "GET",
+          "url": "/api/sources/src_0731601447b049a523eb36852811ca1a",
+          "status": 200,
+          "body": {
+            "data": {
+              "id": "src_0731601447b049a523eb36852811ca1a",
+              "kind": "source",
+              "projectId": "kbeval_6b75f82ebe70_alpha_alpha",
+              "payload": {
+                "depth": "structured",
+                "paths": [
+                  "knowledge-base/notes/.evimed-revisions/94d9bf1801dbf8c9aab8fced80fbe3dba54c80297b1f796456f3a2882e387431/probe-restore-b10e3894-30de37.md"
+                ],
+                "status": "queued",
+                "docType": "note-memo",
+                "reasons": [
+                  "A note written in the knowledge base."
+                ],
+                "version": 2,
+                "coverage": null,
+                "deletion": null,
+                "familyId": "fam_32e1cd5e88bd565e6ca89d31c3692f9d",
+                "override": null,
+                "connector": {
+                  "id": "kbeval_6b75f82ebe70_alpha_alpha-library",
+                  "type": "upload"
+                },
+                "createdAt": "2026-10-23T13:47:24.744Z",
+                "updatedAt": "2026-10-23T13:47:24.744Z",
+                "generation": 3,
+                "fingerprint": {
+                  "size": 65,
+                  "mtime": "2026-10-23T13:47:24.742Z",
+                  "sha256": "94d9bf1801dbf8c9aab8fced80fbe3dba54c80297b1f796456f3a2882e387431",
+                  "mimeType": "text/plain; charset=utf-8",
+                  "providerHash": null
+                },
+                "logicalPath": "knowledge-base/notes/probe-restore-b10e3894-30de37.md",
+                "valueVector": {
+                  "risk": 0,
+                  "dataValue": 0.1,
+                  "methodValue": 0.3,
+                  "profileValue": 0.2,
+                  "evidenceValue": 0.4,
+                  "knowledgeValue": 0.6
+                },
+                "schemaVersion": 1,
+                "extractorVersion": "evimed-analysis-1.0.0",
+                "outputs": {}
+              },
+              "revision": 3,
+              "createdAt": "2026-10-23T13:47:24.680Z",
+              "updatedAt": "2026-10-23T13:47:24.745Z",
+              "deletedAt": null,
+              "readable": false,
+              "display": {
+                "title": "probe-restore-b10e3894-30de37.md",
+                "gist": null,
+                "docType": "note-memo",
+                "typeLabel": "笔记或备忘",
+                "typeShort": "笔记",
+                "kind": "note",
+                "origin": "note",
+                "format": "md",
+                "pages": null,
+                "size": 65,
+                "site": null,
+                "url": null,
+                "shared": false
+              }
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-active",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources/src_a11c7ac042f909be65b26ece009aca76/note",
+          "status": 200,
+          "body": {
+            "data": {
+              "title": "probe-active-aaa4b793",
+              "body": "Revision one secret BENCH_CANARY_4c6a."
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-share",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "POST",
+          "url": "/api/library",
+          "status": 201,
+          "body": {
+            "data": {
+              "sourceId": "src_b2fcadfb9b5ca356f6c7019771194d42",
+              "title": "probe-share-15f4ce6c-d2d94c.md",
+              "kind": "note-memo",
+              "format": "md",
+              "addedAt": "2026-10-23T13:47:24.997Z",
+              "projects": [
+                "kbeval_6b75f82ebe70_alpha_alpha"
+              ],
+              "sourceIds": [
+                "src_b2fcadfb9b5ca356f6c7019771194d42"
+              ],
+              "status": "processing"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/library",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [
+                {
+                  "sourceId": "src_b2fcadfb9b5ca356f6c7019771194d42",
+                  "title": "probe-share-15f4ce6c-d2d94c.md",
+                  "kind": "note-memo",
+                  "format": "md",
+                  "addedAt": "2026-10-23T13:47:24.997Z",
+                  "projects": [
+                    "kbeval_6b75f82ebe70_alpha_alpha"
+                  ],
+                  "sourceIds": [
+                    "src_b2fcadfb9b5ca356f6c7019771194d42"
+                  ],
+                  "status": "processing"
+                }
+              ],
+              "maxItems": 1000
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-private",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "POST",
+          "url": "/api/library",
+          "status": 201,
+          "body": {
+            "data": {
+              "sourceId": "src_1249cd1c6f14a28ac43b1710ae32fd80",
+              "title": "probe-private-c8f81053-faa7e4.md",
+              "kind": "note-memo",
+              "format": "md",
+              "addedAt": "2026-10-23T13:47:25.273Z",
+              "projects": [
+                "kbeval_6b75f82ebe70_alpha_alpha"
+              ],
+              "sourceIds": [
+                "src_1249cd1c6f14a28ac43b1710ae32fd80"
+              ],
+              "status": "processing"
+            }
+          }
+        },
+        {
+          "method": "DELETE",
+          "url": "/api/library/src_1249cd1c6f14a28ac43b1710ae32fd80",
+          "status": 200,
+          "body": {
+            "data": {
+              "sourceId": "src_1249cd1c6f14a28ac43b1710ae32fd80",
+              "removed": true
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/library",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [
+                {
+                  "sourceId": "src_b2fcadfb9b5ca356f6c7019771194d42",
+                  "title": "probe-share-15f4ce6c-d2d94c.md",
+                  "kind": "note-memo",
+                  "format": "md",
+                  "addedAt": "2026-10-23T13:47:24.997Z",
+                  "projects": [
+                    "kbeval_6b75f82ebe70_alpha_alpha"
+                  ],
+                  "sourceIds": [
+                    "src_b2fcadfb9b5ca356f6c7019771194d42"
+                  ],
+                  "status": "processing"
+                }
+              ],
+              "maxItems": 1000
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-path",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/files/content?root=base&path=..%2Fsecret.txt",
+          "status": 404,
+          "body": {
+            "error": "Route not found.",
+            "code": "not_found",
+            "requestId": "req_f15136a104348f1e78d249fdfc132532"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-encoded",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/files/content?root=base&path=%252e%252e%2Fsecret.txt",
+          "status": 404,
+          "body": {
+            "error": "Route not found.",
+            "code": "not_found",
+            "requestId": "req_81a49b95f16ee386cfa659baa850c5f8"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-spoof-user",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources/src_6b3ee264f7eceda45693dc6e7588a3b2?userId=kbeval_6b75f82ebe70_alpha",
+          "status": 404,
+          "body": {
+            "error": "The source is unavailable.",
+            "code": "source_not_found",
+            "requestId": "req_76f777ff4235fbd41011b52e738beeff"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-spoof-project",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources?projectId=kbeval_6b75f82ebe70_alpha_alpha",
+          "status": 404,
+          "body": {
+            "error": "Project not found.",
+            "code": "project_not_found",
+            "requestId": "req_008a8aa894ee6bd4f273c0f5510c53ac"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-capsule",
+      "status": "blocked",
+      "blocked": "Real native engine/runtime required; mock HTTP is not native acceptance",
+      "receipts": [],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-history",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "PUT",
+          "url": "/api/sources/src_704fa0d124adad7f7fe9baa0a8e157b1/note",
+          "status": 200,
+          "body": {
+            "data": {
+              "source": {
+                "id": "src_cd3a11593a57e2202ac1902e370062fd",
+                "kind": "source",
+                "projectId": "kbeval_6b75f82ebe70_alpha_alpha",
+                "payload": {
+                  "depth": "structured",
+                  "paths": [
+                    "knowledge-base/notes/.evimed-revisions/4acba242c72fcf185e03718482d084e8cd21b04de706804b2cce7adbbba53f12/probe-history-a7f04b77-3c84c7.md"
+                  ],
+                  "title": "Revision two",
+                  "status": "queued",
+                  "docType": "note-memo",
+                  "reasons": [
+                    "A note written in the knowledge base."
+                  ],
+                  "version": 2,
+                  "coverage": null,
+                  "familyId": "fam_e590ff8c52a96744b83443fb51315186",
+                  "override": null,
+                  "connector": {
+                    "id": "kbeval_6b75f82ebe70_alpha_alpha-library",
+                    "type": "upload"
+                  },
+                  "createdAt": "2026-10-23T13:47:25.953Z",
+                  "updatedAt": "2026-10-23T13:47:25.953Z",
+                  "generation": 1,
+                  "fingerprint": {
+                    "size": 56,
+                    "mtime": "2026-10-23T13:47:25.951Z",
+                    "sha256": "4acba242c72fcf185e03718482d084e8cd21b04de706804b2cce7adbbba53f12",
+                    "mimeType": "text/plain; charset=utf-8",
+                    "providerHash": null
+                  },
+                  "logicalPath": "knowledge-base/notes/probe-history-a7f04b77-3c84c7.md",
+                  "valueVector": {
+                    "risk": 0,
+                    "dataValue": 0.1,
+                    "methodValue": 0.3,
+                    "profileValue": 0.2,
+                    "evidenceValue": 0.4,
+                    "knowledgeValue": 0.6
+                  },
+                  "schemaVersion": 1,
+                  "extractorVersion": "evimed-analysis-1.0.0",
+                  "outputs": {}
+                },
+                "revision": 1,
+                "createdAt": "2026-10-23T13:47:25.954Z",
+                "updatedAt": "2026-10-23T13:47:25.954Z",
+                "deletedAt": null,
+                "readable": false,
+                "display": {
+                  "title": "Revision two",
+                  "gist": null,
+                  "docType": "note-memo",
+                  "typeLabel": "笔记或备忘",
+                  "typeShort": "笔记",
+                  "kind": "note",
+                  "origin": "note",
+                  "format": "md",
+                  "pages": null,
+                  "size": 56,
+                  "site": null,
+                  "url": null,
+                  "shared": null
+                }
+              },
+              "duplicate": false,
+              "changed": true
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/sources/src_704fa0d124adad7f7fe9baa0a8e157b1",
+          "status": 404,
+          "body": {
+            "error": "The source is unavailable.",
+            "code": "source_not_found",
+            "requestId": "req_d9c85b62c2775e3e1ac2ffaa8a58a08b"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-delete-memory",
+      "status": "blocked",
+      "blocked": "Real native engine/runtime required; mock HTTP is not native acceptance",
+      "receipts": [],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-revoke-recall",
+      "status": "blocked",
+      "blocked": "Real native engine/runtime required; mock HTTP is not native acceptance",
+      "receipts": [],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-isolate-session",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "PUT",
+          "url": "/api/research-sessions/kbeval_6b75f82ebe70_session",
+          "status": 200,
+          "body": {
+            "data": {
+              "sessionId": "kbeval_6b75f82ebe70_session",
+              "mode": "open-domain",
+              "agentId": null,
+              "agentVersion": null,
+              "runtimeAgent": null,
+              "originReference": null,
+              "sourceScope": null,
+              "createdAt": "2026-10-23T13:47:26.080Z",
+              "updatedAt": "2026-10-23T13:47:26.080Z"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/research-sessions",
+          "status": 200,
+          "body": {
+            "data": []
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-reattach",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "POST",
+          "url": "/api/library",
+          "status": 201,
+          "body": {
+            "data": {
+              "sourceId": "src_4a26cd60e6579fbeec9b9e4185711fd8",
+              "title": "probe-reattach-e8258a6e-592ee1.md",
+              "kind": "note-memo",
+              "format": "md",
+              "addedAt": "2026-10-23T13:47:26.189Z",
+              "projects": [
+                "kbeval_6b75f82ebe70_alpha_alpha"
+              ],
+              "sourceIds": [
+                "src_4a26cd60e6579fbeec9b9e4185711fd8"
+              ],
+              "status": "processing"
+            }
+          }
+        },
+        {
+          "method": "DELETE",
+          "url": "/api/library/src_4a26cd60e6579fbeec9b9e4185711fd8",
+          "status": 200,
+          "body": {
+            "data": {
+              "sourceId": "src_4a26cd60e6579fbeec9b9e4185711fd8",
+              "removed": true
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/library",
+          "status": 201,
+          "body": {
+            "data": {
+              "sourceId": "src_4a26cd60e6579fbeec9b9e4185711fd8",
+              "title": "probe-reattach-e8258a6e-592ee1.md",
+              "kind": "note-memo",
+              "format": "md",
+              "addedAt": "2026-10-23T13:47:26.196Z",
+              "projects": [
+                "kbeval_6b75f82ebe70_alpha_alpha"
+              ],
+              "sourceIds": [
+                "src_4a26cd60e6579fbeec9b9e4185711fd8"
+              ],
+              "status": "processing"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/library",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [
+                {
+                  "sourceId": "src_4a26cd60e6579fbeec9b9e4185711fd8",
+                  "title": "probe-reattach-e8258a6e-592ee1.md",
+                  "kind": "note-memo",
+                  "format": "md",
+                  "addedAt": "2026-10-23T13:47:26.196Z",
+                  "projects": [
+                    "kbeval_6b75f82ebe70_alpha_alpha"
+                  ],
+                  "sourceIds": [
+                    "src_4a26cd60e6579fbeec9b9e4185711fd8"
+                  ],
+                  "status": "processing"
+                },
+                {
+                  "sourceId": "src_b2fcadfb9b5ca356f6c7019771194d42",
+                  "title": "probe-share-15f4ce6c-d2d94c.md",
+                  "kind": "note-memo",
+                  "format": "md",
+                  "addedAt": "2026-10-23T13:47:24.997Z",
+                  "projects": [
+                    "kbeval_6b75f82ebe70_alpha_alpha"
+                  ],
+                  "sourceIds": [
+                    "src_b2fcadfb9b5ca356f6c7019771194d42"
+                  ],
+                  "status": "processing"
+                }
+              ],
+              "maxItems": 1000
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-source-link",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources/src_46a1705813ec8a35ce5ccb96f16ba7cf",
+          "status": 404,
+          "body": {
+            "error": "The source is unavailable.",
+            "code": "source_not_found",
+            "requestId": "req_cbd3654ce915d18c68021ffa846fdd72"
+          }
+        }
+      ],
+      "qualityRun": false
+    },
+    {
+      "caseId": "lifecycle-empty-project",
+      "status": "pass",
+      "blocked": null,
+      "receipts": [
+        {
+          "method": "GET",
+          "url": "/api/sources?projectId=kbeval_6b75f82ebe70_alpha_-beta",
+          "status": 200,
+          "body": {
+            "data": {
+              "items": [],
+              "counts": {
+                "all": 0,
+                "literature": 0,
+                "table": 0,
+                "document": 0,
+                "page": 0,
+                "note": 0,
+                "image": 0,
+                "wiki": 0
+              },
+              "nextCursor": null
+            }
+          }
+        }
+      ],
+      "qualityRun": false
+    }
+  ],
+  "sourceBindings": 54,
+  "runtimeMode": "mock",
+  "modelSpendCny": 0,
+  "originalRoundTrips": [
+    {
+      "sourceId": "general-support",
+      "format": "pdf",
+      "status": 200,
+      "sha256": "293a189bb4c2f7c55956385dcda488a4339bc79355bd32d468e17b35c52cd1d9",
+      "bytes": 759,
+      "parserExecuted": false,
+      "qualityClaim": false
+    },
+    {
+      "sourceId": "general-budget",
+      "format": "zip-original-only",
+      "status": 200,
+      "sha256": "50ae05acd55c90c2ca3adc4b04747fb7896acbbdc9e1254f8ebd3529a57404d5",
+      "bytes": 264,
+      "parserExecuted": false,
+      "qualityClaim": false
+    }
+  ],
+  "officialCPreflight": {
+    "status": "blocked",
+    "reason": "Official engine unavailable: disabled/not-ready",
+    "trees": 0
+  }
+}

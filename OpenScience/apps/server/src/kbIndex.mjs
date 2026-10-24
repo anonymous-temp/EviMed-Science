@@ -60,7 +60,7 @@ const REVISION_SQL = `coalesce(d.payload->'analysis'->>'parserRevision',
   (d.payload->'analysis'->'extractor'->>'name') || '@' || (d.payload->'analysis'->'extractor'->>'version'))`;
 
 /** An index document some live source can re-derive. */
-const DERIVABLE_SQL = `EXISTS (SELECT 1 FROM evimed_product.documents d WHERE d.user_id=k.user_id AND d.kind='source' AND d.deleted_at IS NULL
+const DERIVABLE_SQL = `EXISTS (SELECT 1 FROM evimed_product.documents d WHERE d.user_id=k.user_id AND d.kind='source' AND d.deleted_at IS NULL AND ${SOURCE_READABLE_SQL}
   AND d.payload->'fingerprint'->>'sha256'=k.sha256 AND d.payload->'analysis'->>'textSha256'=k.text_sha256
   AND ${REVISION_SQL}=k.parser_revision)`;
 

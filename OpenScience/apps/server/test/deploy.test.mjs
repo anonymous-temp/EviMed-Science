@@ -2630,3 +2630,24 @@ test("every workspace package the runtime's frame bundle imports is packed into 
     assert.deepEqual(missing, [], `${dockerfile} does not pack: ${missing.join(", ")}`);
   }
 });
+
+test("receipt counter endpoint is a service overlay shared only with the runtime controller", async () => {
+  const base = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
+  const overlay = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.receipt.yml"), "utf8"));
+  const key = "OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL";
+  const receipt = overlay.services["open-science-release-receipt"];
+  const controller = overlay.services["open-science-runtime-controller"];
+  assert.ok(controller?.environment, "controller configuration must belong to services, never volumes");
+  assert.deepEqual(Object.keys(overlay.volumes), ["open-science-receipts"]);
+  assert.equal(controller.environment[key], receipt.environment[key]);
+  assert.equal(receipt.environment[key], "${OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-release-receipt:8798/internal/model/v1}");
+  const mergedController = { ...base.services["open-science-runtime-controller"],
+    ...controller, environment: { ...base.services["open-science-runtime-controller"].environment, ...controller.environment } };
+  assert.ok(mergedController.image);
+  assert.ok(mergedController.volumes.length > 0);
+  assert.equal(mergedController.environment[key], receipt.environment[key]);
+  assert.equal(mergedController.environment.OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL,
+    receipt.environment.OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL);
+  assert.equal(base.services["open-science-web"].environment[key], undefined);
+  assert.equal(overlay.services["open-science-web"], undefined);
+});

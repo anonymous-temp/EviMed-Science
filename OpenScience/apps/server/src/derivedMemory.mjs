@@ -180,7 +180,7 @@ export async function withdrawDerivedMemory(client, userId, { sourceIds = [], pr
   const entries = await client.query(`WITH targets AS (${TARGET_ENTRIES} ORDER BY d.id FOR UPDATE),
     changed AS (
       UPDATE evimed_product.documents d SET
-        payload=d.payload || jsonb_build_object('status','retired','withdrawn',$6::jsonb || jsonb_build_object('at',clock_timestamp())),
+        payload=d.payload || jsonb_build_object('status','retired','withdrawn',$6::jsonb || jsonb_build_object('at',clock_timestamp(),'userSuppressed',d.payload->>'status'='retired' OR d.payload ? 'correctedAt')),
         deleted_at=clock_timestamp(),revision=d.revision+1,updated_at=clock_timestamp()
         FROM targets WHERE d.user_id=$1 AND d.kind='fact' AND d.id=targets.id
         RETURNING d.user_id,d.kind,d.id,d.revision,d.payload,d.deleted_at

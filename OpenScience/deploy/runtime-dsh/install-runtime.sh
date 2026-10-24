@@ -593,6 +593,15 @@ profile_seed() {
   # The plugin manager writes this image-owned manifest with mode 0600.
   # Runtime users must be able to read it before the seed becomes read-only.
   chmod 0644 "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
+  # pnpm's file: installation hardlinks these source bytes into its profile store.
+  # The catalogue deliberately exports only single-link files; detach the trusted
+  # source tree after installation without weakening that runtime guard.
+  skill_source=/opt/evimed/socket/presets/evimed-universal/skills
+  detached_skills="$(mktemp -d /opt/evimed/socket/presets/evimed-universal/.skills-detached.XXXXXX)"
+  cp -a --no-preserve=links "${skill_source}/." "${detached_skills}/"
+  chmod -R a+rX,a-w "${detached_skills}"
+  rm -rf "${skill_source}"
+  mv "${detached_skills}" "${skill_source}"
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime
   chmod -R a-w "${DSH_HOME_SEED}"
 }

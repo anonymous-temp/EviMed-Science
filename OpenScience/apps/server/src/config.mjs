@@ -2523,6 +2523,7 @@ export function loadConfig(overrides = {}) {
     publicSourceCredentialErrors: Object.fromEntries(
       Object.entries(publicSourceCredentialSecrets).map(([profile, secret]) => [profile, secret.error]),
     ),
+    releaseGateModelGatewayInternalUrl: overrides.releaseGateModelGatewayInternalUrl ?? process.env.OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL ?? "",
     modelGatewayInternalUrl:
       overrides.modelGatewayInternalUrl ??
       process.env.OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL ??

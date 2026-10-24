@@ -31,6 +31,7 @@ export function NoteEditor({ source, onSaved }: { source: SourceRecord; onSaved:
   }, [source.id, attempt]);
   if (error && !stored) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
   if (!stored) return <p role="status" className="text-ui text-text-3">正在打开</p>;
+  const historical = source.payload.publication?.current === false;
   const changed = title.trim() !== stored.title || body !== stored.body;
   const save = async () => {
     setSaving(true);
@@ -47,11 +48,12 @@ export function NoteEditor({ source, onSaved }: { source: SourceRecord; onSaved:
     }
   };
   return (
-    <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (changed && title.trim() && !saving) void save(); }}>
-      <Input label="标题" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} disabled={saving} autoComplete="off" />
-      <Textarea label="正文" value={body} rows={14} onChange={(event) => setBody(event.target.value)} disabled={saving} error={error} />
+    <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!historical && changed && title.trim() && !saving) void save(); }}>
+      {historical && <p className="text-ui text-text-3">历史版本，仅供查看。</p>}
+      <Input readOnly={historical} label="标题" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} disabled={saving} autoComplete="off" />
+      <Textarea readOnly={historical} label="正文" value={body} rows={14} onChange={(event) => setBody(event.target.value)} disabled={saving} error={error} />
       <div className="flex justify-end">
-        <Button type="submit" loading={saving} disabled={!changed || !title.trim()}>保存</Button>
+        <Button type="submit" loading={saving} disabled={historical || !changed || !title.trim()}>保存</Button>
       </div>
     </form>
   );

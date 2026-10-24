@@ -186,9 +186,11 @@ test("taking a stop back is the ledger's rollback from where the method stands, 
 test("a proposed note is confirmed or rejected as the capsule entry it is, and nothing else is", async () => {
   const updates = [];
   const capsules = {
-    documents: { async get(_userId, _kind, id) { return id === "n1" ? { id, payload: { capsuleId: "c1", status: "candidate" } } : null; } },
+    documents: { async get(_userId, _kind, id) { return id === "n1" ? { id, revision: 1, payload: { capsuleId: "c1", status: "candidate" } } : null; } },
     async updateEntry(userId, capsuleId, entryId, input) { updates.push([capsuleId, entryId, input]); return { id: entryId, revision: 2, payload: { status: input.status } }; },
   };
+  await assert.rejects(() => noteAction({ capsules }, { id: "u1" }, "n1", "confirm", { expectedRevision: 2 }), { code: "product_revision_conflict" });
+  assert.equal(updates.length, 0, "a stale confirmation cannot update the candidate");
   await noteAction({ capsules }, { id: "u1" }, "n1", "confirm", { expectedRevision: 1 });
   await noteAction({ capsules }, { id: "u1" }, "n1", "reject", { expectedRevision: 1 });
   assert.deepEqual(updates.map((entry) => entry[2].status), ["approved", "retired"]);

@@ -771,12 +771,24 @@ describe("the actions on a card", () => {
   });
 
   it("shows 「AI 评分」 and never a number the contract does not send", async () => {
+    const timelineAt = new Date(new Date().setHours(17, 23, 0, 0)).toISOString();
+    const title = "87 项研究中的 RCT";
+    const summary = "29 个中心纳入 17 至 87 岁患者，随访 13 个月。";
+    feed = async () => page([frontierItem({ ...today, title, summary, timelineAt })]);
     renderPage();
-    const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
+    const card = await screen.findByRole("article", { name: title });
+    expect(within(card).getByText("17:23")).toBeInTheDocument();
+    expect(within(card).getByText(summary)).toBeInTheDocument();
     expect(card.querySelector("[data-score]")).toHaveTextContent(/^AI 评分\s*86$/);
     expect(card).not.toHaveTextContent("编辑评分");
-    // The fixture carries scoreTotal 87 and scores 29 / 17 / 13, which the contract never sends.
-    for (const number of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(number);
+    expect(card.querySelectorAll("[data-score]")).toHaveLength(1);
+    // Numbers in source metadata and editorial content are not scores. Check every
+    // other part of the card for leakage of the fixture's private score fields.
+    const scoreContent = card.cloneNode(true) as HTMLElement;
+    scoreContent.querySelectorAll("time, [data-row-title]").forEach((element) => element.remove());
+    within(scoreContent).getByText("17:23").remove();
+    within(scoreContent).getByText(summary).remove();
+    for (const number of ["87", "29", "17", "13"]) expect(scoreContent.textContent).not.toContain(number);
   });
 });
 

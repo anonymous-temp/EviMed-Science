@@ -305,6 +305,11 @@ test("the source-scope route refuses what it cannot check, and clears with an em
       method: "PUT", headers: { "Content-Type": "application/json", "X-Open-Science-Project": "default" }, body: JSON.stringify(body),
     });
     assert.equal((await put({ sourceIds: [] })).status, 200);
+    const selected = await put({ sourceIds: [], sourceScopeMode: "selected" });
+    assert.equal(selected.status, 200);
+    assert.deepEqual((await selected.json()).data.sourceScope, []);
+    const selectedGet = await fetch(`${base}/api/research-sessions/ses_route/source-scope`, { headers: { "X-Open-Science-Project": "default" } });
+    assert.equal((await selectedGet.json()).data.sourceScopeMode, "selected");
     const cleared = (await (await put({ sourceIds: null })).json()).data;
     assert.deepEqual([cleared.sessionId, cleared.mode, cleared.sourceScope], ["ses_route", "open-domain", null]);
     // Only one field, and ids of the shape the knowledge base's own are.
@@ -316,4 +321,16 @@ test("the source-scope route refuses what it cannot check, and clears with an em
     assert.equal((await putBinding(base, "ses_route", { mode: "open-domain" })).status, 200);
     assert.equal((await listBindings(base)).body.data.find((entry) => entry.sessionId === "ses_route").sourceScope, null);
   });
+});
+
+test("explicit selected-empty scope survives persistence and project mode clears it", async () => {
+  const { ResearchSessionStore } = await import("../src/researchSessions.mjs");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-selected-empty-"));
+  const project = { id: "default", metaDir: dataDir };
+  try {
+    const sessions = new ResearchSessionStore();
+    assert.deepEqual((await sessions.setSourceScope(project, "ses_empty", [], "selected")).sourceScope, []);
+    assert.deepEqual((await sessions.get(project, "ses_empty")).sourceScope, []);
+    assert.equal((await sessions.setSourceScope(project, "ses_empty", [], "project")).sourceScope, null);
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
 });

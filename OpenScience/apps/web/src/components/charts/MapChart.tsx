@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import type { EChartsCoreOption } from "echarts/core";
+import type { ReactNode, MutableRefObject } from "react";
+import type { EChartsCoreOption, EChartsType } from "echarts/core";
 import { canPaintChart, useEChart, type ChartEvents } from "./echartsBase";
 import "./map/register";
 
@@ -8,8 +8,9 @@ import "./map/register";
  * canvas cannot be painted (a test, a printed page) it says what the figure shows instead — the page's list under it is the same
  * marks in words, which is also what a screen reader is given (`aria-label` names the figure; the list is its text).
  */
-export function MapChart({ option, label, height, on, unpainted, kind }: {
+export function MapChart({ option, label, height, on, unpainted, kind, chart }: {
   option: EChartsCoreOption | null;
+  chart?: MutableRefObject<EChartsType | null>;
   label: string;
   height: number;
   on?: ChartEvents;
@@ -18,7 +19,7 @@ export function MapChart({ option, label, height, on, unpainted, kind }: {
   /** A name for the figure in the document (`data-chart`). */
   kind: string;
 }) {
-  const host = useEChart(option, { on });
+  const host = useEChart(option, { on, chart });
   return (
     <figure data-chart={kind} className="m-0 min-w-0">
       <div ref={host} role="img" aria-label={label} style={{ height }} className="w-full" />

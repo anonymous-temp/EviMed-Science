@@ -129,7 +129,7 @@ export function createKbSearchGatewayHandler(config, runtimeManager, { index, ev
       const { sessionId, ...request } = validatedRequest(await readJsonBody(req, 16 * 1024));
       // Intersect before the index chooses its small-library shortcut too. An empty intersection is empty,
       // never an invitation to read all documents. Failure to read a saved scope must not broaden it.
-      if (sessionId && sourceScope) {
+      if (sourceScope) {
         const selected = await sourceScope(identity, sessionId);
         if (selected) request.sourceIds = request.sourceIds
           ? request.sourceIds.filter(id => selected.includes(id)) : [...selected];

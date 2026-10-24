@@ -12,16 +12,19 @@ const STATUS_POLL_MS = 5000;
 export function useKnowledgeStatus(projectId: string | null, enabled: boolean) {
   const [status, setStatus] = useState<KnowledgeStatus | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [pending, setPending] = useState(false);
   useEffect(() => { setStatus(null); }, [projectId]);
   const busy = statusLine(status)?.busy ?? false;
   useEffect(() => {
     if (!projectId || !enabled) return undefined;
     let active = true;
-    getKnowledgeStatus(projectId).then((value) => { if (active) setStatus(value); }, () => { /* the page stands without it */ });
+    setPending(true);
+    getKnowledgeStatus(projectId).then((value) => { if (active) setStatus(value); }, () => { /* the page stands without it */ })
+      .finally(() => { if (active) setPending(false); });
     return () => { active = false; };
   }, [projectId, enabled, attempt]);
   useEffect(() => {
-    if (!busy || !enabled) return undefined;
+    if (!busy || !enabled || pending) return undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = () => {
       clearTimeout(timer);
@@ -30,7 +33,7 @@ export function useKnowledgeStatus(projectId: string | null, enabled: boolean) {
     schedule();
     document.addEventListener("visibilitychange", schedule);
     return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", schedule); };
-  }, [busy, enabled, status]);
+  }, [busy, enabled, status, attempt, pending]);
   const refresh = useCallback(() => setAttempt((value) => value + 1), []);
   return { status, setStatus, refresh };
 }
@@ -45,6 +48,7 @@ export function useKnowledgeTree(projectId: string | null, enabled: boolean, ver
   const [tree, setTree] = useState<KnowledgeTree | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  useEffect(() => { setTree(null); setFailed(false); }, [projectId, enabled]);
   useEffect(() => {
     if (!projectId || !enabled) return undefined;
     let active = true;

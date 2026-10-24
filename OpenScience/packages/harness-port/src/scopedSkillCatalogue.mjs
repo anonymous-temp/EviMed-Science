@@ -157,18 +157,18 @@ export function createScopedSkillCatalogue(ctx, { roots = SCOPED_SKILL_ROOTS } =
 }
 
 /** Fixed owned remote methods; no path, root, provider, command or plugin-selection argument.
- * @param {any} ctx */
-export async function registerScopedSkillCatalogue(ctx) {
-  const api = createScopedSkillCatalogue(ctx), { TypertRemoteService, Remote } = await loadHarnessModule('@deepseek-ai/dsh-typert-protocol')
+ * @param {any} ctx @param {{roots?:readonly any[]}} [options] */
+export async function registerScopedSkillCatalogue(ctx, options) {
+  const api = createScopedSkillCatalogue(ctx, options), { TypertRemoteService, Remote } = await loadHarnessModule('@deepseek-ai/dsh-typert-protocol')
   /** @type {((this:any)=>void)[]} */ const initializers = []
   class ScopedCatalogue extends TypertRemoteService {
     constructor() { super(ctx, 'evimedSkills'); for (const initialize of initializers) initialize.call(this) }
-    /** @param {any} request @param {AbortSignal} [signal] */
-    async list(request, signal) { return api.list(request, signal) }
-    /** @param {any} request @param {AbortSignal} [signal] */
-    async read(request, signal) { return api.read(request, signal) }
-    /** @param {any} request @param {AbortSignal} [signal] */
-    async snapshotBuiltin(request, signal) { return api.snapshotBuiltin(request, signal) }
+    /** @param {string} sessionId @param {AbortSignal} [signal] */
+    async list(sessionId, signal) { return api.list({ sessionId }, signal) }
+    /** @param {string} sessionId @param {string} key @param {AbortSignal} [signal] */
+    async read(sessionId, key, signal) { return api.read({ sessionId, key }, signal) }
+    /** @param {string} sessionId @param {string} key @param {AbortSignal} [signal] */
+    async snapshotBuiltin(sessionId, key, signal) { return api.snapshotBuiltin({ sessionId, key }, signal) }
   }
   for (const method of ['list', 'read', 'snapshotBuiltin']) Remote(ScopedCatalogue.prototype[method], {
     kind: 'method', name: method, static: false, private: false, addInitializer: (/** @type {(this:any)=>void} */ initialize) => initializers.push(initialize),

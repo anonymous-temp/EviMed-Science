@@ -118,7 +118,7 @@ export function extractionFacts(diff, task = null) {
 export class NativeMemoryWorker {
   /**
    * @param {{ config: any, researchMemory: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
-   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, runtimeManager?: any,
+   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, runtimeManager?: any, nativeMemory?: any,
    *   projectOfSession?: ((userId: string, sessionId: string) => Promise<string | null>) | null,
    *   rejectionJudge?: ReturnType<typeof import("./nativeMemoryRejections.mjs").createRejectionJudge> | null,
    *   now?: () => Date, report?: (line: string) => void }} dependencies
@@ -126,12 +126,13 @@ export class NativeMemoryWorker {
    *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
    *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, researchMemory, sessions, overlay, runtimeManager = null, projectOfSession = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, researchMemory, sessions, overlay, runtimeManager = null, nativeMemory = null, projectOfSession = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
     this.config = config ?? {};
     this.researchMemory = researchMemory;
     this.sessions = sessions;
     this.overlay = overlay;
     this.runtimeManager = runtimeManager;
+    this.nativeMemory = nativeMemory;
     this.projectOfSession = projectOfSession;
     this.rejectionJudge = rejectionJudge;
     /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {{ tick: (userId: string) => Promise<string> } | null} */
@@ -187,6 +188,7 @@ export class NativeMemoryWorker {
           await this.#register(userId);
           await this.scanArchives(userId);
           commits += await this.processCommits({ userId });
+          await this.nativeMemory?.processAdmissions(userId);
           // The weekly consolidation of the account's memories, where it is switched on (`nativeMemoryConsolidation.mjs`).
           await this.consolidation?.tick(userId);
         } catch (error) {
@@ -357,6 +359,16 @@ export class NativeMemoryWorker {
    */
   async #replay(commit) {
     const userId = commit.userId;
+    const external = typeof this.overlay.admissionOfCommit === "function" ? await this.overlay.admissionOfCommit(userId, commit) : null;
+    const authorized = async () => {
+      if (!external) return true;
+      const policy = await this.overlay.admissionAuthority(userId, external);
+      if (policy.allowed) return true;
+      await this.overlay.updateAdmission(userId, external.candidateId, external.revision, { state: policy.state, error: policy.reason, release: true });
+      if (policy.state === "cancelled") await this.overlay.abandonCommit(userId, commit.archiveUri, policy.reason);
+      return false;
+    };
+    if (!await authorized()) return false;
     if (await this.researchMemory.memoryEngine(userId) !== "native") {
       await this.overlay.abandonCommit(userId, commit.archiveUri, "the account is no longer on the native engine");
       recordNativeCommit("abandoned");
@@ -392,10 +404,15 @@ export class NativeMemoryWorker {
     }
     const session = `evimed-replay-${createHash("sha256").update(commit.archiveUri).digest("hex").slice(0, 16)}-${commit.attempts + 1}`;
     try {
+      if (!await authorized()) return false;
       await this.sessions.createSession(userId, session, { timeoutMs: this.sessions.timeoutMs });
       const state = await this.sessions.readSession(userId, session).catch(() => null);
       // A replay session that already holds the messages (an earlier attempt that failed after writing them) is committed as it is.
-      if (!(Number(state?.result?.message_count) > 0)) for (const message of messages) await this.sessions.addMessage(userId, session, message);
+      if (!(Number(state?.result?.message_count) > 0)) for (const message of messages) {
+        if (!await authorized()) return false;
+        await this.sessions.addMessage(userId, session, message);
+      }
+      if (!await authorized()) return false;
       const answer = await this.sessions.commit(userId, session);
       const result = answer?.result ?? {};
       if (result.status !== "accepted" || typeof result.archive_uri !== "string") throw Object.assign(new Error("the replay commit was not accepted"), { code: "native_replay_not_accepted" });

@@ -280,10 +280,22 @@ const TASK_COMMAND_ALLOWLIST = new Set([
   "write_workspace_file",
 ]);
 
+/** A publisher's committed file, preserving the requested display filename when content was deduplicated. */
+function publishedSourcePath(registered, requested) {
+  const payload = registered?.source?.payload;
+  const paths = payload?.paths ?? [];
+  const immutable = paths.find(candidate => typeof candidate === "string"
+    && candidate.includes(`/.evimed-revisions/${payload.fingerprint?.sha256}/`)
+    && path.posix.basename(candidate) === path.posix.basename(requested));
+  const published = immutable ?? paths.find(candidate => candidate === requested && /^knowledge-base\/(wiki|kg)\//.test(candidate));
+  if (!published) throw new HttpError(503, "source_state_unavailable", "The published source file is unavailable.");
+  return published;
+}
+
 /**
  * @param {{ config: any, runtimeManager: any, sourceUpdates?: { lookup: (dois: readonly string[], options?: { signal?: AbortSignal }) => Promise<Map<string, any[]>> } | null,
  *   resultImpacts?: { reconcileVerification: (userId:string, projectId:string, verdict:any) => Promise<any> } | null,
- *   knowledgeBaseUploads?: { covers: (root: string, rel: string) => boolean, admit: (rel: string) => void, register: (ctx: any, rel: string, buffer: Buffer) => Promise<any> } | null }} dependencies
+ *   knowledgeBaseUploads?: { covers: (root: string, rel: string) => boolean, admit: (rel: string) => void, register: (ctx: any, rel: string, buffer: Buffer) => Promise<any>, publish?: (ctx: any, rel: string, buffer: Buffer) => Promise<any> } | null }} dependencies
  *   `sourceUpdates`: the Crossref notice lookup (sourceUpdates.mjs); null when switched off.
  *   `knowledgeBaseUploads`: turns an `upload_file` into the knowledge base into a source; null without the source service.
  */
@@ -381,6 +393,10 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       // and what is written becomes a source (see `knowledgeBaseUploads`).
       const knowledge = Boolean(knowledgeBaseUploads?.covers(root, rel));
       if (knowledge) knowledgeBaseUploads.admit(rel);
+      if (knowledge && knowledgeBaseUploads.publish) {
+        const registered = await knowledgeBaseUploads.publish(ctx, rel, buffer);
+        return publishedSourcePath(registered, rel);
+      }
       await withProjectStorageMutation(ctx.project, async () => {
         await assertProjectCapacity(ctx.project, full, buffer.length, ctx.config);
         await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
@@ -418,6 +434,10 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       const destination = resolveScopedPath(ctx.project.baseDir, target);
       // The knowledge base's own admission: a format it cannot read is refused by name before a byte is written.
       knowledgeBaseUploads.admit(target);
+      if (knowledgeBaseUploads.publish) {
+        const registered = await knowledgeBaseUploads.publish(ctx, target, buffer);
+        return { path: publishedSourcePath(registered, target), duplicate: Boolean(registered?.duplicate), sourceId: registered?.source?.id ?? null };
+      }
       await withProjectStorageMutation(ctx.project, async () => {
         await assertProjectCapacity(ctx.project, destination, buffer.length, ctx.config);
         await writeFileAtomicNoFollow(ctx.project.baseDir, destination, buffer, { mode: 0o600 });

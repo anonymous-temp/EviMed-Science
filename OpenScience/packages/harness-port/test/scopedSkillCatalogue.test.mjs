@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { catalogueWireArgs } from '../../../apps/server/test/fixtures/catalogueWireArgs.mjs'
 import test from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -9,7 +10,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { SkillRegistry } from '@deepseek-ai/dsh-skill'
 import { FileSystemSkillProvider } from '@deepseek-ai/dsh-skill-filesystem'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import { createScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from '../src/scopedSkillCatalogue.mjs'
+import { createScopedSkillCatalogue, registerScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from '../src/scopedSkillCatalogue.mjs'
 
 /** Real native registry/provider with public scope primitives; synthetic agent identity is a code control, not serving qualification.
  * @param {import('node:test').TestContext} t */
@@ -77,3 +78,70 @@ test('the private method pack is a known built-in root: its skills read with a r
   const strange=(await unknown.list({sessionId:f.agent.id})).items.find(item=>item.name==='builtin-review');assert.ok(strange);assert.equal(strange.source,'unknown');
   await assert.rejects(unknown.read({sessionId:f.agent.id,key:strange.key}));
 });
+
+// SRC Remote binding uses prototype parameter names as named wire fields.
+// Internal request-object API tests cannot exercise this boundary.
+test('registered catalogue exposes caller wire fields and separate cancellation', async t => {
+  const f = await fixture(t), service = await registerScopedSkillCatalogue(f.ctx)
+  const { remoteMethods } = await import('@deepseek-ai/dsh-typert-protocol')
+  assert.deepEqual(remoteMethods(service).map(item => item.method), ['list', 'read', 'snapshotBuiltin'])
+  const expected = { list: ['sessionId', 'signal'], read: ['sessionId', 'key', 'signal'], snapshotBuiltin: ['sessionId', 'key', 'signal'] }
+  for (const [method, names] of Object.entries(expected)) {
+    const source = Function.prototype.toString.call(Object.getPrototypeOf(service)[method])
+    assert.deepEqual(source.slice(source.indexOf('(') + 1, source.indexOf(')')).split(',').map(value => value.trim()), names)
+  }
+  const listed = await service.list(f.agent.id)
+  assert.equal(listed.complete, true)
+  // Fixture roots are unknown to the production service, so detail fails closed.
+  await assert.rejects(service.read(f.agent.id, listed.items[0].key), /skill_catalogue_unavailable/)
+  await assert.rejects(service.snapshotBuiltin(f.agent.id, listed.items[0].key), /skill_catalogue_unavailable/)
+})
+
+test('extension catalogue fixture flattens catalogue calls without changing kernel session envelopes', () => {
+  const input = { sessionId: 'fixture-session', key: 'builtin:example' }
+  for (const method of ['list', 'read', 'snapshotBuiltin']) assert.equal(catalogueWireArgs('evimedSkills/' + method, input), input)
+  assert.deepEqual(catalogueWireArgs('session/list', null), { _request: {} })
+  assert.deepEqual(catalogueWireArgs('session/create', input), { request: input })
+  assert.deepEqual(catalogueWireArgs('evimedSkills/futureMethod', input), { request: input })
+})
+
+// Supply a qualified seed's profile/node_modules directory; no kernel binary or provider is started.
+test('pinned gateway dispatch accepts flat catalogue arguments', { skip: !process.env.EVIMED_TEST_SEED_MODULES }, async t => {
+  const { createRequire } = await import('node:module')
+  const seedModules = process.env.EVIMED_TEST_SEED_MODULES
+  assert.ok(seedModules)
+  const requireSeed = createRequire(path.join(seedModules, '../package.json'))
+  const { TypertRegistry } = await import(requireSeed.resolve('@deepseek-ai/dsh-typert-registry'))
+  const { TypertGatewayService } = await import(requireSeed.resolve('@deepseek-ai/dsh-api-gateway'))
+  const f = await fixture(t)
+  new TypertRegistry(f.ctx)
+  const gateway = new TypertGatewayService(f.ctx, {})
+  await registerScopedSkillCatalogue(f.ctx, { roots: [{ root: f.builtin, source: 'builtin', duplicate: true }, { root: f.community, source: 'community', duplicate: true }] })
+  const peer = { principal: { kind: 'owner' }, signal: new globalThis.AbortController().signal }
+  const call = (/** @type {string} */ method, /** @type {any} */ args) => gateway.invoke({ namespace: 'evimedSkills', method, args: catalogueWireArgs('evimedSkills/' + method, args), peer })
+  assert.deepEqual(gateway.resolveDescriptor('evimedSkills', 'list', 'evimedSkills/list').parameters.map((/** @type {any} */ item) => item.wire), ['sessionId'])
+  const listed = await call('list', { sessionId: f.agent.id })
+  assert.equal(listed.complete, true)
+  for (const method of ['read', 'snapshotBuiltin']) {
+    const descriptor = gateway.resolveDescriptor('evimedSkills', method, 'evimedSkills/' + method)
+    assert.deepEqual(descriptor.parameters.map((/** @type {any} */ item) => item.wire), ['sessionId', 'key'])
+    const detail = await call(method, { sessionId: f.agent.id, key: listed.items[0].key })
+    assert.equal(detail.instructions, 'Use [resource](资料/证据.csv).')
+    if (method === 'snapshotBuiltin') assert.ok(detail.entries.some((/** @type {any} */ item) => item.path === 'SKILL.md'))
+  }
+  const snapshot = f.ctx.skills.snapshot.bind(f.ctx.skills)
+  const controller = new globalThis.AbortController()
+  let observedCancellation = false
+  f.ctx.skills.snapshot = async lookup => {
+    assert.ok(lookup?.signal)
+    controller.abort()
+    observedCancellation = lookup.signal.aborted
+    return snapshot(lookup)
+  }
+  await assert.rejects(gateway.invoke({ namespace: 'evimedSkills', method: 'list', args: { sessionId: f.agent.id }, peer, signal: controller.signal }))
+  assert.equal(observedCancellation, true)
+  f.ctx.skills.snapshot = snapshot
+  const stopped = AbortSignal.abort()
+  await assert.rejects(gateway.invoke({ namespace: 'evimedSkills', method: 'list', args: { sessionId: f.agent.id }, peer: { ...peer, signal: stopped } }), error => error instanceof Error && Reflect.get(error, 'code') === 'gateway/peer-disposed')
+  await assert.rejects(call('list', { request: { sessionId: f.agent.id } }), error => error instanceof Error && Reflect.get(error, 'code') === 'gateway/arguments-invalid')
+})

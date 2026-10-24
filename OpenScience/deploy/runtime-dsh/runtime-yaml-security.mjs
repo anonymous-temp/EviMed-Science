@@ -1,4 +1,4 @@
-/** Build-only YAML4 security backport. No serving or customer-controlled entry point. */
+/** Build-only official YAML4/Zod4 security backports. No serving or customer-controlled entry point. */
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
@@ -16,33 +16,39 @@ const seedHome = '/opt/evimed/dsh-home-seed';
 const profile = 'evimed-runtime';
 const fail = message => { throw new Error('runtime_yaml_security: ' + message); };
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+const ownedPin = pin => { if (!['js-yaml','zod'].includes(pin?.name) || !/^4\.\d+\.\d+$/.test(pin?.version ?? '')) fail('unsupported security package'); };
 const canonical = value => JSON.stringify(Object.fromEntries(Object.entries(value ?? {}).sort(([a], [b]) => a.localeCompare(b))));
 
 /** Only the explicitly owned parser package participates. @param {string} file */
-export function securityYamlPin(file) {
-  const policy = json(file), pin = policy.$runtimeSecurity?.['js-yaml'];
-  if (Object.keys(policy.$runtimeSecurity ?? {}).join(',') !== 'js-yaml' || !/^4\.\d+\.\d+$/.test(pin?.version ?? '')
-    || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(pin?.integrity ?? '')) fail('invalid single-source pin');
-  return { name: 'js-yaml', version: pin.version, integrity: pin.integrity };
+export function securityPackagePins(file) {
+  const policy = json(file), entries = policy.$runtimeSecurity ?? {};
+  if (!entries['js-yaml'] || !entries.zod || Object.keys(entries).some(name => !['js-yaml', 'zod'].includes(name))) fail('invalid single-source pin');
+  return Object.entries(entries).map(([name,pin]) => {
+    if (!/^4\.\d+\.\d+$/.test(pin?.version ?? '') || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(pin?.integrity ?? '')) fail('invalid single-source pin');
+    return {name,version:pin.version,integrity:pin.integrity};
+  });
 }
+export function securityYamlPin(file) { return securityPackagePins(file).find(pin => pin.name === 'js-yaml'); }
 
 /** Integrity precedes decompression; the maintained stdlib decoder bounds the entire expanded stream before tar parsing.
  * @param {string} archive @param {any} pin @param {string} destination */
 export function extractVerifiedYamlPackage(archive, pin, destination) {
+  ownedPin(pin);
   try { fs.lstatSync(destination);fail('fresh extraction required'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const stat = fs.lstatSync(archive);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > MAX_ARCHIVE) fail('archive size/type');
   const integrity = 'sha512-' + createHash('sha512').update(fs.readFileSync(archive)).digest('base64');
   if (integrity !== pin.integrity) fail('archive integrity');
   const decoder = `import gzip,io,json,pathlib,tarfile,sys,re
-archive,destination=sys.argv[1:]
-with gzip.open(archive,'rb') as f: data=f.read(4*1024*1024+1)
-if len(data)>4*1024*1024: raise ValueError('expanded archive exceeds bound')
+archive,destination,name=sys.argv[1:]
+expanded,total_limit,entry_limit=(8*1024*1024,8*1024*1024,1024) if name=="zod" else (4*1024*1024,2*1024*1024,128)
+with gzip.open(archive,'rb') as f: data=f.read(expanded+1)
+if len(data)>expanded: raise ValueError('expanded archive exceeds bound')
 root=pathlib.Path(destination)
 if root.exists(): raise ValueError('fresh extraction required')
 with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as tar:
  entries=tar.getmembers()
- if len(entries)>128: raise ValueError('entry bound')
+ if len(entries)>entry_limit: raise ValueError('entry bound')
  total=0;seen=set()
  for entry in entries:
   parts=entry.name.split('/')
@@ -52,7 +58,7 @@ with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as tar:
   if any(not re.fullmatch(r'[A-Za-z0-9_.-]+',p) for p in parts): raise ValueError('package path spelling')
   if key in seen or not (entry.isfile() or entry.isdir()): raise ValueError('duplicate/link/special archive entry')
   seen.add(key);total+=entry.size
-  if entry.size>512*1024 or total>2*1024*1024: raise ValueError('file/total bound')
+  if entry.size>512*1024 or total>total_limit: raise ValueError('file/total bound')
  root.mkdir()
  for entry in entries:
   target=root.joinpath(*entry.name.split('/')[1:])
@@ -60,15 +66,15 @@ with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as tar:
   else:
    target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(tar.extractfile(entry).read());target.chmod(0o555 if entry.mode&0o111 else 0o444)
 `;
-  try { execFileSync('python3', ['-c', decoder, archive, destination], { timeout: 5000, maxBuffer: 65536 }); }
+  try { execFileSync('python3', ['-c', decoder, archive, destination, pin.name], { timeout: 5000, maxBuffer: 65536 }); }
   catch { fs.rmSync(destination, { recursive: true, force: true }); fail('archive decoder refused'); }
   const manifest = json(path.join(destination, 'package.json'));
-  if (manifest.name !== pin.name || manifest.version !== pin.version || canonical(manifest.dependencies) !== canonical({ argparse: '^2.0.1' })) fail('official package identity/dependencies');
+  if (manifest.name !== pin.name || manifest.version !== pin.version || canonical(manifest.dependencies) !== canonical(pin.name === 'js-yaml' ? { argparse: '^2.0.1' } : {})) fail('official package identity/dependencies');
 }
 
 /** Physical package directories are visited once; pnpm links resolve through their containing immutable installation.
  * @param {string} root */
-export function yamlInstallation(root) {
+export function yamlInstallation(root, name = 'js-yaml') {
   const base = fs.realpathSync(root), packages = []; let entries = 0;
   function visit(dir, depth) {
     if (depth > 24) fail('installation depth');
@@ -87,7 +93,7 @@ export function yamlInstallation(root) {
   visit(base, 0);
   const native = packages.filter(p => p.manifest.name.startsWith('@deepseek-ai/')).map(p => [p.file, p.manifest.name, p.manifest.version, createHash('sha256').update(fs.readFileSync(p.file)).digest('hex')]);
   native.sort((a,b)=>a[0].localeCompare(b[0]));
-  return { base, packages, native, yaml: packages.filter(p => p.manifest.name === 'js-yaml') };
+  return { base, packages, native, yaml: packages.filter(p => p.manifest.name === name) };
 }
 
 function packageBytes(root) {
@@ -107,13 +113,14 @@ function packageBytes(root) {
 /** Replace the complete official package; nested dependency providers retain their original resolution.
  * @param {string} root @param {string} official @param {any} pin */
 export function patchYamlInstallation(root, official, pin) {
-  const before = yamlInstallation(root);
+  ownedPin(pin);
+  const before = yamlInstallation(root, pin.name);
   if (!before.yaml.length) fail('no installed YAML parser');
   const dependencies = canonical(json(path.join(official, 'package.json')).dependencies);
   const providers = new Map();
   for (const target of before.yaml) {
     if (!/^4\./.test(target.manifest.version) || canonical(target.manifest.dependencies) !== dependencies) fail('unsupported original parser dependency semantics');
-    providers.set(target.dir, createRequire(target.file).resolve('argparse/package.json'));
+    if (pin.name === 'js-yaml') providers.set(target.dir, createRequire(target.file).resolve('argparse/package.json'));
   }
   for (const target of before.yaml) {
     if (target.manifest.version === pin.version && packageBytes(target.dir) === packageBytes(official)) continue;
@@ -133,10 +140,10 @@ export function patchYamlInstallation(root, official, pin) {
     }
     try { fs.renameSync(stage, target.dir); }
     catch (error) { fs.renameSync(backup, target.dir); throw error; }
-    if (createRequire(path.join(target.dir, 'package.json')).resolve('argparse/package.json') !== originalProvider) fail('dependency provider drift');
+    if (pin.name === 'js-yaml' && createRequire(path.join(target.dir, 'package.json')).resolve('argparse/package.json') !== originalProvider) fail('dependency provider drift');
     fs.rmSync(backup, { recursive: true });
   }
-  const after = yamlInstallation(root);
+  const after = yamlInstallation(root, pin.name);
   if (JSON.stringify(before.native) !== JSON.stringify(after.native)) fail('native namespace drift');
   return verifyYamlInstallation(root, official, pin);
 }
@@ -144,15 +151,23 @@ export function patchYamlInstallation(root, official, pin) {
 /** Verify every physical parser and every installed consumer's actual require resolution.
  * @param {string} root @param {string} official @param {any} pin */
 export function verifyYamlInstallation(root, official, pin) {
-  const inventory = yamlInstallation(root), expected = packageBytes(official), resolved = new Set();
+  ownedPin(pin);
+  const inventory = yamlInstallation(root, pin.name), expected = packageBytes(official), resolved = new Set();
   if (!inventory.yaml.length) fail('no installed YAML parser');
   for (const installed of inventory.yaml) {
     if (installed.manifest.version !== pin.version || packageBytes(installed.dir) !== expected) fail('parser version/full bytes mismatch');
     resolved.add(fs.realpathSync(installed.dir));
   }
-  const consumers = inventory.packages.filter(p => Object.hasOwn(p.manifest.dependencies ?? {}, pin.name));
+  const consumers = inventory.packages.filter(p => ['dependencies','peerDependencies','optionalDependencies'].some(field => Object.hasOwn(p.manifest[field] ?? {}, pin.name)));
   for (const consumer of consumers) {
-    const actual = fs.realpathSync(createRequire(consumer.file).resolve('js-yaml/package.json'));
+    let actual;
+    try { actual = fs.realpathSync(createRequire(consumer.file).resolve(pin.name + '/package.json')); }
+    catch (error) {
+      const optional = Object.hasOwn(consumer.manifest.optionalDependencies ?? {}, pin.name)
+        || (!Object.hasOwn(consumer.manifest.dependencies ?? {}, pin.name) && consumer.manifest.peerDependenciesMeta?.[pin.name]?.optional === true);
+      if (optional && error.code === 'MODULE_NOT_FOUND') continue;
+      throw error;
+    }
     if (!resolved.has(path.dirname(actual))) fail('consumer resolves outside verified parser closure');
   }
   return { roots: inventory.base, version: pin.version, copies: resolved.size, consumers: consumers.length, native: inventory.native };
@@ -160,12 +175,12 @@ export function verifyYamlInstallation(root, official, pin) {
 
 /** Trusted build/probe configuration only; neither path is a serving request.
  * @param {string} policyFile @param {string} storageRoot */
-export async function officialYamlPackage(policyFile, storageRoot) {
-  const pin = securityYamlPin(policyFile);fs.mkdirSync(storageRoot, { recursive: true });
-  const archive = path.join(storageRoot, 'js-yaml.tgz'), official = path.join(storageRoot, 'js-yaml');
+export async function officialYamlPackage(policyFile, storageRoot, name = 'js-yaml') {
+  const pin = securityPackagePins(policyFile).find(pin => pin.name === name);if (!pin) fail('missing official package pin');fs.mkdirSync(storageRoot, { recursive: true });
+  const archive = path.join(storageRoot, name + '.tgz'), official = path.join(storageRoot, name);
   if (!fs.existsSync(archive)) {
     const bytes = await new Promise((resolve, reject) => {
-      const request = https.get(`https://registry.npmjs.org/js-yaml/-/js-yaml-${pin.version}.tgz`, { signal: AbortSignal.timeout(30000) }, response => {
+      const request = https.get(`https://registry.npmjs.org/${name}/-/${name}-${pin.version}.tgz`, { signal: AbortSignal.timeout(30000) }, response => {
         if (response.statusCode !== 200) { response.resume(); reject(new Error('official registry response')); return; }
         const chunks = []; let size = 0;
         response.on('data', chunk => { size += chunk.length;if (size > MAX_ARCHIVE) request.destroy(new Error('archive bound'));else chunks.push(chunk); });
@@ -191,10 +206,14 @@ function assertKernelClosure(root, policy) {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const mode = process.argv[2];if (process.argv.length !== 3 || !['global', 'verify'].includes(mode)) fail('usage: runtime-yaml-security.mjs global|verify');
   const policy = json(metadataFile);assertKernelClosure(globalRoot, policy);
-  const { pin, official } = await officialYamlPackage(metadataFile, cacheRoot);
-  if (mode === 'verify') assertKernelClosure(path.join(seedHome, 'profiles', profile, 'node_modules'), policy);
-  const result = mode === 'global' ? patchYamlInstallation(globalRoot, official, pin)
-    : [verifyYamlInstallation(globalRoot, official, pin), verifyYamlInstallation(path.join(seedHome, 'profiles', profile, 'node_modules'), official, pin)];
+  const results = [];
+  for (const selected of securityPackagePins(metadataFile)) {
+    const { pin, official } = await officialYamlPackage(metadataFile, cacheRoot, selected.name);
+    if (mode === 'verify') assertKernelClosure(path.join(seedHome, 'profiles', profile, 'node_modules'), policy);
+    const result = mode === 'global' ? patchYamlInstallation(globalRoot, official, pin)
+      : [verifyYamlInstallation(globalRoot, official, pin), verifyYamlInstallation(path.join(seedHome, 'profiles', profile, 'node_modules'), official, pin)];
+    results.push({package:pin.name,version:pin.version,result});
+  }
   if (mode === 'verify') {
     const oldSeal = json(path.join(seedHome, '.evimed-profile-seed.json'));
     const temporary = fs.mkdtempSync(path.join(cacheRoot, 'seal-check-'));
@@ -204,5 +223,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       if (calculated.digest !== oldSeal.digest) fail('profile seal mismatch');
     } finally { fs.rmSync(temporary, { recursive: true }); }
   }
-  console.log(JSON.stringify({ package: pin.name, version: pin.version, result }));
+  console.log(JSON.stringify(results));
 }

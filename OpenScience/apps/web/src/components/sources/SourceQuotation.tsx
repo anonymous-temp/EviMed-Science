@@ -1,13 +1,16 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { getSourceQuoteExcerpt, type SourceQuoteExcerpt, type SourceRecord } from "@/lib/sourceClient";
+import { Button } from "@/components/ui/Button";
 import { SourceOriginal } from "./SourceOriginal";
 import { originalPathOf } from "./sourceView";
 
 const SourcePdf = lazy(() => import("./SourcePdf").then(module => ({ default: module.SourcePdf })));
 export interface QuotationSpan { start: number; end: number; sha: string }
 
-export function SourceQuotation({ source, span, page, onNoteSaved }: {
-  source: SourceRecord; span: QuotationSpan; page?: number; onNoteSaved: (source: SourceRecord) => void;
+export interface ConversationExcerpt { text: string; start: number; end: number; textSha256: string; page: number | null }
+
+export function SourceQuotation({ source, span, page, onNoteSaved, onUseExcerpt }: {
+  source: SourceRecord; span: QuotationSpan; page?: number; onNoteSaved: (source: SourceRecord) => void; onUseExcerpt?: (excerpt: ConversationExcerpt) => void;
 }) {
   const [excerpt, setExcerpt] = useState<SourceQuoteExcerpt | null>(null);
   const [error, setError] = useState(false);
@@ -24,6 +27,7 @@ export function SourceQuotation({ source, span, page, onNoteSaved }: {
     <div className="shrink-0 border-b border-border bg-surface p-4 text-ui text-text" aria-label="引用原文">
       {available ? <p className="whitespace-pre-wrap break-words">{excerpt.text!.slice(0, excerpt.start!)}<mark className="bg-accent-soft text-text">{excerpt.text!.slice(excerpt.start!, excerpt.end!)}</mark>{excerpt.text!.slice(excerpt.end!)}</p>
         : <p className="text-caption text-text-2">{error ? "引文暂时无法读取" : excerpt ? "资料版本已变化，原引文位置暂时无法显示" : "正在定位引文"}</p>}
+      {available && onUseExcerpt && <Button variant="secondary" size="sm" className="mt-3" onClick={() => onUseExcerpt({ text: excerpt.text!.slice(excerpt.start!, excerpt.end!), start, end, textSha256: sha, page: excerpt.page ?? page ?? null })}>在对话中使用这段原文</Button>}
     </div>
     <div className="min-h-0 flex-1 overflow-y-auto">
       {available && path?.toLowerCase().endsWith(".pdf")

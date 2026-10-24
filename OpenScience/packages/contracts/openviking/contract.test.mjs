@@ -211,6 +211,7 @@ test("a derived record costs an embedding and no model call, with a language mod
     // The recording was taken on v0.5.0, whose body still carried `timeout`; v0.5.1.1 refuses that field
     // (`extra="forbid"`), so the client no longer sends it and the rest of the body is what was recorded.
     assert.deepEqual(Object.keys(seen[0].body).sort(), Object.keys(recorded.requestBody).filter((key) => key !== "timeout").sort());
+    assert.equal(Object.hasOwn(seen[0].body, "timeout"), false);
     assert.equal(seen[0].body.mode, "replace");
   });
 });

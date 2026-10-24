@@ -242,13 +242,24 @@ test("the knowledge base and the personal library reach a Docker runtime read-on
   plan = buildRuntimeLaunchPlan({ ...docker, runtimeDataVolume: "open-science-data" }, base, 4096);
   assert.ok(mounts(plan).includes(`type=volume,src=open-science-data,dst=${RUNTIME_KNOWLEDGE_BASE_DIR},volume-subpath=users/alice/projects/paper1/workspace/knowledge-base,readonly`));
 
-  // A scratch sub-workspace never contained the knowledge base and gains no
-  // view of it; the account's library is still its own.
+  // A scratch workspace receives the same project's base knowledge view, still
+  // read-only; changing the active workspace never changes its account or project.
   const scratch = { ...base, workspaceDir: path.join(baseDir, "session_2026") };
   await mkdir(scratch.workspaceDir, { recursive: true });
   plan = buildRuntimeLaunchPlan(docker, scratch, 4096);
-  assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_KNOWLEDGE_BASE_DIR)), false);
-  assert.ok(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)));
+  assert.ok(mounts(plan).includes(`type=bind,src=${path.join(baseDir, "knowledge-base")},dst=${RUNTIME_KNOWLEDGE_BASE_DIR},readonly`));
+  assert.ok(mounts(plan).includes(`type=bind,src=${personalLibraryDir(docker, "alice")},dst=${RUNTIME_LIBRARY_DIR},readonly`));
+  assert.equal(mounts(plan).some((mount) => mount.includes(path.join(scratch.workspaceDir, "knowledge-base"))), false);
+
+  const otherRoot = path.join(dataDir, "users", "bob", "projects", "other");
+  const otherBase = path.join(otherRoot, "workspace");
+  await mkdir(path.join(otherBase, "knowledge-base"), { recursive: true });
+  await mkdir(personalLibraryDir(docker, "bob"), { recursive: true });
+  assert.equal(mounts(plan).some((mount) => mount.includes(otherRoot) || mount.includes(personalLibraryDir(docker, "bob"))), false);
+  const otherPlan = buildRuntimeLaunchPlan(docker, { id: "other", userId: "bob", rootDir: otherRoot, baseDir: otherBase,
+    workspaceDir: path.join(otherBase, "scratch"), runtimeDir: path.join(otherRoot, "runtime") }, 4096);
+  assert.ok(mounts(otherPlan).includes(`type=bind,src=${path.join(otherBase, "knowledge-base")},dst=${RUNTIME_KNOWLEDGE_BASE_DIR},readonly`));
+  assert.equal(mounts(otherPlan).some((mount) => mount.includes(baseDir) || mount.includes(personalLibraryDir(docker, "alice"))), false);
 
   // A library that is a symlink is a way out of the account, not a library.
   await rm(personalLibraryDir(docker, "alice"), { recursive: true });

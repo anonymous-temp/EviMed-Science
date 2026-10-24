@@ -44,7 +44,7 @@ overrides:
   pptx-preview>echarts: 6.1.0
   pptx-preview>uuid: 11.1.1
   js-yaml: 4.3.2
-  zod@4.4.3: 4.6.7
+  zod@>=4 <5: 4.6.7
 
 importers:
 

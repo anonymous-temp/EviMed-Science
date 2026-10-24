@@ -93,3 +93,11 @@ test("security override pins only the parser without activating or changing kern
     { "js-yaml": "4.3.0" }, { "js-yaml": security["js-yaml"].version }), /weaken runtime security/);
   assert.deepEqual(JSON.parse(readFileSync(path.join(other.profileDir, "package.json"))), other.manifest);
 });
+
+test("Zod4 security selector overrides only its major without changing kernel bundles", t => {
+  const f=fixture(t),security=JSON.parse(readFileSync(new URL("../../../deps-version.json",import.meta.url))).$runtimeSecurity;
+  seedProfileKernelPins(f.cli,f.profileDir,policyUrl,pin,cordis,{}, {"zod@>=4 <5":security.zod.version});
+  assert.ok(readFileSync(path.join(f.profileDir,"pnpm-workspace.yaml"),"utf8").includes('"zod@>=4 <5": "'+security.zod.version+'"'));
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.profileDir,"package.json"))).dsh,f.manifest.dsh);
+  const other=fixture(t);assert.throws(()=>seedProfileKernelPins(other.cli,other.profileDir,policyUrl,pin,cordis,{zod:"4.4.3"},{"zod@>=4 <5":security.zod.version}),/weaken runtime security/);
+});

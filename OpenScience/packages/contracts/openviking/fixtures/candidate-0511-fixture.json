@@ -1,0 +1,163 @@
+{
+  "recordedAt": "2026-10-23",
+  "candidate": "v0.5.1.1",
+  "candidateArm64Manifest": "sha256:2dd09ae1cedffbadb711c0adbc2979992d7049884423fdc7e4729944edf90c8a",
+  "baseline": "v0.5.0",
+  "baselineArm64Manifest": "sha256:9e0a87c15ded8f8d7eca68d8b7213c8f54e258caa2f7d04e54ceb995fcc8b31e",
+  "environment": "isolated colima-evimed-extension-acceptance; synthetic data and bounded deterministic model provider",
+  "realModel": false,
+  "costCny": 0,
+  "admitted": false,
+  "resourceChecks": {
+    "push": {
+      "uri": "viking://user/u-4e3dad5b53793a2a76cf36c7/resources/p/p-7037575e79eec2a8c69025f4/sources/src_00000000000000000000000000000001.md",
+      "bytes": 48
+    },
+    "read": "# Fixture source\n\nKestrel protocol port is 4123.",
+    "tags": {
+      "src": "src_00000000000000000000000000000001",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "doctype": "other"
+    },
+    "list": [
+      {
+        "uri": "viking://user/u-4e3dad5b53793a2a76cf36c7/resources/p/p-7037575e79eec2a8c69025f4/sources/src_00000000000000000000000000000001.md",
+        "size": 48,
+        "isDir": false,
+        "modTime": "2026-10-23T10:03:21.000Z",
+        "abstract": ""
+      }
+    ],
+    "grep": {
+      "matches": [
+        {
+          "line": 3,
+          "uri": "viking://user/u-4e3dad5b53793a2a76cf36c7/resources/p/p-7037575e79eec2a8c69025f4/sources/src_00000000000000000000000000000001.md",
+          "content": "Kestrel protocol port is 4123."
+        }
+      ],
+      "filesScanned": 1
+    },
+    "replace": {
+      "uri": "viking://user/u-4e3dad5b53793a2a76cf36c7/resources/p/p-7037575e79eec2a8c69025f4/sources/src_00000000000000000000000000000001.md",
+      "bytes": 48
+    },
+    "replacedRead": "# Fixture source\n\nKestrel protocol port is 4124.",
+    "crossUserRead": {
+      "rejected": "memory_index_auth_failed"
+    },
+    "settings": {
+      "learning": true,
+      "memoryTypes": [
+        "corrections",
+        "decisions",
+        "entities",
+        "follow_ups",
+        "preferences",
+        "profile",
+        "project_context",
+        "project_facts"
+      ]
+    },
+    "compile": {
+      "taskId": "cmp_66d4508721c7d442dedd0321c606db99a0e6df71a83fc9d094d439997df525d1",
+      "status": "pending",
+      "stage": "queued",
+      "terminal": false,
+      "error": null,
+      "processingSeconds": 0,
+      "usage": null,
+      "result": null
+    },
+    "otherUserTask": {
+      "value": null
+    },
+    "cancel": {
+      "taskId": "cmp_66d4508721c7d442dedd0321c606db99a0e6df71a83fc9d094d439997df525d1",
+      "status": "cancelling",
+      "stage": "queued",
+      "terminal": false,
+      "error": null,
+      "processingSeconds": 0,
+      "usage": null,
+      "result": null
+    }
+  },
+  "terminalCancellation": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "result": {
+        "task_id": "cmp_66d4508721c7d442dedd0321c606db99a0e6df71a83fc9d094d439997df525d1",
+        "task_type": "compile",
+        "status": "cancelled",
+        "created_at": 1792749803.021277,
+        "updated_at": 1792749803.7363725,
+        "processing_seconds": null,
+        "resource_id": "viking://user/u-4e3dad5b53793a2a76cf36c7/resources/p/p-7037575e79eec2a8c69025f4/sources",
+        "meta": {
+          "request": {
+            "from": [
+              "viking://user/u-4e3dad5b53793a2a76cf36c7/resources/p/p-7037575e79eec2a8c69025f4/sources"
+            ],
+            "to": "viking://user/u-4e3dad5b53793a2a76cf36c7/resources/p/p-7037575e79eec2a8c69025f4/wiki",
+            "skill": "viking://agent/skills/llm-wiki"
+          }
+        },
+        "stage": "cancelled",
+        "result": null,
+        "error": null,
+        "created_at_iso": "2026-10-23T10:03:23.021277+00:00",
+        "updated_at_iso": "2026-10-23T10:03:23.736372+00:00"
+      },
+      "error": null,
+      "telemetry": null,
+      "profile": null
+    }
+  },
+  "commits": [
+    {
+      "archive": "viking://user/u-4e3dad5b53793a2a76cf36c7/sessions/dsh-session_lab_20261023/history/archive_004",
+      "accepted": "accepted",
+      "terminal": "failed",
+      "error": "Final response could not be parsed as operations after 4 iterations (failure_kind=parse_error)"
+    },
+    {
+      "archive": "viking://user/u-4e3dad5b53793a2a76cf36c7/sessions/dsh-session_lab_20261023/history/archive_005",
+      "accepted": "accepted",
+      "terminal": "failed",
+      "error": "Final response could not be parsed as operations after 4 iterations (failure_kind=parse_error)"
+    },
+    {
+      "archive": "viking://user/u-4e3dad5b53793a2a76cf36c7/sessions/dsh-session_lab_20261023/history/archive_006",
+      "accepted": "accepted",
+      "terminal": "failed",
+      "error": "Final response could not be parsed as operations after 4 iterations (failure_kind=parse_error)"
+    }
+  ],
+  "migration": {
+    "fixtureOnly": true,
+    "productionVolume": false,
+    "checks": {
+      "content": true,
+      "tags": true,
+      "settings": true,
+      "session": true,
+      "tree": true,
+      "grep": true,
+      "otherUser": true
+    },
+    "newSessionDefaults": {
+      "last_idle_commit_accepted_at": ""
+    },
+    "nativeExtractedMemoryFiles": 0,
+    "candidateAdmitted": false
+  },
+  "unproved": [
+    "Real-model extraction and searchable results from three successive commits",
+    "Successful native Compile with identity forwarding and useful pages",
+    "Production-volume restore, original bytes, tags and native memories",
+    "100/128/129+ typed pages and user-edit/Compile races",
+    "Plugin and official-skill candidate compatibility"
+  ]
+}

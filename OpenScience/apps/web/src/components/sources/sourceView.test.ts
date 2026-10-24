@@ -19,7 +19,7 @@ describe("a row's meta line", () => {
     expect(metaLine(source({}, { pages: null, size: 2_200_000, typeShort: "文档", kind: "document", origin: "drive" }))).toBe("文档 · 2.1 MB · 网盘");
     expect(metaLine(source({}, { typeShort: "网页", kind: "page", origin: "link", site: "nmpa.gov.cn", pages: null }))).toBe("网页 · nmpa.gov.cn · 链接");
     expect(metaLine(source({}, { typeShort: "数据表", kind: "table", origin: "conversation", pages: null, size: null, shared: true }))).toBe("数据表 · 对话产出 · 所有项目可用");
-    expect(metaLine(source({}, { typeShort: "笔记", kind: "note", origin: "note", pages: null, size: null }))).toBe("笔记 · 笔记");
+    expect(metaLine(source({}, { typeShort: "笔记", kind: "note", origin: "note", pages: null, size: null }))).toBe("笔记");
     expect(metaLine(source({}, { origin: "frontier" }))).toBe("指南 · 18 页 · 前沿动态");
   });
 
@@ -42,7 +42,7 @@ describe("a document page's meta line", () => {
   });
 
   it("leaves out what is not known, and is never an id or a status word", () => {
-    expect(readerMeta(source({ status: "needs_attention" }, { typeShort: "笔记", kind: "note", origin: "note", pages: null, size: null }, earlier))).toBe("笔记 · 笔记 · 2020-10-03");
+    expect(readerMeta(source({ status: "needs_attention" }, { typeShort: "笔记", kind: "note", origin: "note", pages: null, size: null }, earlier))).toBe("笔记 · 2020-10-03");
   });
 });
 

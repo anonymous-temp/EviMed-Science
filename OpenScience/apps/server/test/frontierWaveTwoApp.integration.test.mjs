@@ -4,7 +4,7 @@
 // two reader actions through the upload's own path, and the upload route
 // itself after it gave that path up to a shared helper.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -244,9 +244,21 @@ test("存入知识库 through the upload's own path: the open-access PDF, or a r
   const kept = await readFile(path.join(project.baseDir, record.path), "utf8");
   assert.match(kept, /闭源论文导读/);
   assert.match(kept, /^来源：FDA（监管）$/m, "the institution, never 「openFDA 药品召回（enforcement）API」");
-  const sources = (await database.query(`SELECT payload->'paths'->>0 AS path FROM evimed_product.documents WHERE user_id = $1 AND kind = 'source' AND deleted_at IS NULL`,
-    [accounts.reader])).rows.map((row) => row.path).sort();
-  assert.deepEqual(sources, [record.path, saved.path].sort(), "both saves became knowledge-base sources, as an upload does");
+  const sources = (await database.query(`SELECT id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='source' AND deleted_at IS NULL`,
+    [accounts.reader])).rows;
+  assert.deepEqual(sources.map(row => row.payload.logicalPath).sort(), [record.path, saved.path].sort(),
+    "both saved items retain their logical document names");
+  for (const source of sources) {
+    const immutable = source.payload.paths[0];
+    assert.ok(immutable.includes(`/.evimed-revisions/${source.payload.fingerprint.sha256}/`));
+    const bytes = await readFile(path.join(project.baseDir, immutable));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), source.payload.fingerprint.sha256);
+    const original = source.payload.logicalPath === saved.path ? PDF : Buffer.from(kept);
+    assert.deepEqual(bytes, original, "the committed source preserves the exact saved bytes");
+    const preview = await fetch(`${base}/api/files/preview/${encodeURIComponent(immutable)}?root=base`, { headers: sessions.reader });
+    assert.equal(preview.status, 200);
+    assert.deepEqual(Buffer.from(await preview.arrayBuffer()), original, "the native file preview reads the committed version");
+  }
 
   const internal = await fetch(`${base}/api/frontier/items/${closed.publicId}/save-to-library`, { method: "POST", headers: sessions.reader,
     body: JSON.stringify({ projectId: "evimed-frontier" }) });
