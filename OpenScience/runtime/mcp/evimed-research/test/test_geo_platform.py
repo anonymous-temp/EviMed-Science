@@ -120,6 +120,8 @@ class GeoReadTests(_GatewayCase):
         for selector in [
             {"viewId": "V17", "sourceType": "unknown", "sourceRelationship": "wrong", "topN": 1},
             {"viewId": "V18", "sourceLevel": "page", "sourceSearch": "portal?doc=001", "sourceRelationship": "mentions", "topN": 50},
+            {"viewId": "V19", "sourceLevel": "page", "sourceFacet": "group", "topN": 10},
+            {"viewId": "V22", "sourceLevel": "page"},
         ]:
             result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
             self.assertEqual(result["status"], "success")
@@ -127,7 +129,7 @@ class GeoReadTests(_GatewayCase):
         sent = len(_Gateway.seen)
         for field, value in [("sourceType", ""), ("sourceType", "x" * 101), ("sourceSearch", "x" * 301),
                              ("sourceRelationship", "owned"), ("sourceLevel", "host"), ("topN", 0),
-                             ("topN", 51), ("topN", 1.5), ("topN", "15")]:
+                             ("topN", 51), ("topN", 1.5), ("topN", "15"), ("sourceFacet", "audience")]:
             result = self.server.call_tool("geo_read", {"what": "analysis", "filter": {"viewId": "V18", field: value}})
             self.assertEqual(result["status"], "error")
         self.assertEqual(len(_Gateway.seen), sent)

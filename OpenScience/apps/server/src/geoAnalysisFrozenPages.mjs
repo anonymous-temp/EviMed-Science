@@ -106,7 +106,7 @@ export function freezeGeoAnalysisPages(
   // Source charts have at most topN (<=50) plus one union remainder. If their
   // actual text exceeds the summary bound, refuse breadth rather than discard
   // an independently computed aggregate. Other small charts are retained too.
-  const retainChart = analysis.chart && (analysis.chart.kind === 'sources'
+  const retainChart = analysis.chart && (['sources', 'source_facets'].includes(analysis.chart.kind)
     || bytes(analysis.chart) <= GEO_FROZEN_ANALYSIS_LIMITS.chartBytes);
   const compact = {
     ...analysis,
