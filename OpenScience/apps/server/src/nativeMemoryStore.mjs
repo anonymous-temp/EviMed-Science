@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
-import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
-import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile } from "./openVikingSessions.mjs";
+import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
+import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -141,11 +141,12 @@ export class NativeMemoryStore {
 
   /**
    * @param {{ sessions: import("./openVikingSessions.mjs").OpenVikingSessions, overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
-   *   now?: () => Date }} dependencies
+   *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null, now?: () => Date }} dependencies
    */
-  constructor({ sessions, overlay, now = () => new Date() }) {
+  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date() }) {
     this.sessions = sessions;
     this.overlay = overlay;
+    this.memoryContexts = memoryContexts;
     this.now = now;
   }
 
@@ -162,6 +163,32 @@ export class NativeMemoryStore {
     try { return await fn(); } catch (error) { throw engineFailure(error); }
   }
 
+  #personalContext(userId) {
+    return { kind: 'owned', ownerId: userId, namespaceId: this.sessions.engineUser(userId), projectId: null,
+      userRoot: this.sessions.userRoot(userId), sessions: this.sessions };
+  }
+
+  async #contexts(userId) {
+    return this.memoryContexts ? this.memoryContexts.all(userId) : [this.#personalContext(userId)];
+  }
+
+  async #projectContext(userId, projectId) {
+    return this.memoryContexts && projectId ? this.memoryContexts.forProject({ userId, id: projectId }) : this.#personalContext(userId);
+  }
+
+  async #fileContext(userId, uri) {
+    const context = this.memoryContexts ? await this.memoryContexts.forUri(userId, uri) : this.#personalContext(userId);
+    const file = nativeMemoryFile(uri, context.sessions.memoryRoot(userId));
+    if (!file || context.kind === 'geo-project' && !context.sessions.memoryTypes.includes(file.type)) {
+      throw new HttpError(403, 'memory_scope_denied', 'The file is outside the registered memory context.');
+    }
+    return context;
+  }
+
+  #rejectionType(context, type) {
+    return nativeMemoryRejectionType(type, context.kind === 'geo-project' ? context.namespaceId : null);
+  }
+
   // ----------------------------------------------------------------- reading
 
   /** The account's own writes: its cached bodies and any read begun before now are not to be trusted after this. @param {string} userId */
@@ -173,10 +200,15 @@ export class NativeMemoryStore {
 
   /**
    * Every memory file of the account, with its body, type, project and what the overlay knows of it.
-   * @param {string} userId
+   * @param {string} userId @param {{ context?: any }} [options]
    */
-  async files(userId) {
+  async files(userId, { context = null } = {}) {
     this.#assertConfigured();
+    if (context) {
+      if (!this.memoryContexts || context.ownerId !== userId) throw new HttpError(403, 'memory_scope_denied', 'The memory context is unavailable.');
+      await this.memoryContexts.assertKnown(context);
+      return this.#readFiles(userId, this.#epochs.get(userId) ?? 0, [context]);
+    }
     const epoch = this.#epochs.get(userId) ?? 0;
     const running = this.#reading.get(userId);
     if (running && running.epoch === epoch) return running.promise;
@@ -188,28 +220,39 @@ export class NativeMemoryStore {
     return promise;
   }
 
-  /** @param {string} userId @param {number} epoch */
-  async #readFiles(userId, epoch) {
-    const root = this.sessions.memoryRoot(userId);
-    const nodes = await this.#engine(() => this.sessions.tree(userId, root, { levelLimit: 8 }));
+  /** @param {string} userId @param {number} epoch @param {any[] | null} scoped */
+  async #readFiles(userId, epoch, scoped = null) {
+    const contexts = scoped ?? await this.#contexts(userId);
+    const listings = await mapLimit(contexts, 4, async context => {
+      if (context.kind === 'geo-project') await this.#engine(() => this.memoryContexts.configure(context));
+      const root = context.sessions.memoryRoot(userId);
+      const nodes = await this.#engine(() => context.sessions.tree(userId, root, { levelLimit: 8 }));
+      return nodes.filter(node => !node.isDir).map(node => {
+        if (this.memoryContexts) this.memoryContexts.assertUri(context, node.uri);
+        const file = nativeMemoryFile(node.uri, root);
+        return { context, node, file: file && (context.kind !== 'geo-project' || context.sessions.memoryTypes.includes(file.type)) ? file : null };
+      }).filter(entry => entry.file);
+    });
     const known = await this.overlay.files(userId);
-    const listed = nodes.filter((node) => !node.isDir).map((node) => ({ node, file: nativeMemoryFile(node.uri, root) })).filter((entry) => entry.file);
-    const kept = this.#bodies.get(userId) ?? new Map();
-    const files = await mapLimit(listed, 8, async ({ node, file }) => {
+    const listed = listings.flat();
+    const kept = new Map(this.#bodies.get(userId) ?? []);
+    const files = await mapLimit(listed, 8, async ({ context, node, file }) => {
       const cached = node.modTime ? kept.get(node.uri) : undefined;
       const body = cached && cached.modTime === node.modTime && cached.size === node.size
         ? cached.body
-        : (await this.#engine(() => this.sessions.read(userId, node.uri))) ?? "";
+        : (await this.#engine(() => context.sessions.read(userId, node.uri))) ?? "";
       if (node.modTime && !(cached && cached.body === body)) kept.set(node.uri, { modTime: node.modTime, size: node.size, body });
       const held = known.get(node.uri) ?? null;
       const tag = node.tags.find((item) => item.startsWith("project="))?.slice("project=".length) ?? null;
       return {
         uri: node.uri, relPath: /** @type {any} */ (file).relPath, type: /** @type {any} */ (file).type, body, hash: contentHash(body),
-        projectId: tag ?? held?.projectId ?? null, sensitive: held?.sensitive === true, labels: held?.labels ?? [], modTime: node.modTime,
+        projectId: context.kind === 'geo-project' ? context.projectId : tag ?? held?.projectId ?? null,
+        namespaceId: context.kind === 'geo-project' ? context.namespaceId : null,
+        sensitive: held?.sensitive === true, labels: held?.labels ?? [], modTime: node.modTime,
       };
     });
     // Only what is still true: a write since this read began has made these bodies old, and the listing is the engine's, not the cache's.
-    if ((this.#epochs.get(userId) ?? 0) === epoch) {
+    if (!scoped && (this.#epochs.get(userId) ?? 0) === epoch) {
       const present = new Set(listed.map(({ node }) => node.uri));
       for (const uri of kept.keys()) if (!present.has(uri)) kept.delete(uri);
       while (kept.size > BODIES_PER_ACCOUNT) kept.delete(/** @type {string} */ (kept.keys().next().value));
@@ -223,10 +266,10 @@ export class NativeMemoryStore {
   /**
    * The account's memories as records (`publicRecord`'s shape plus `engine`, `nativeType`, `uri`, `contentHash` and, for a
    * profile line, `document`), newest change first.
-   * @param {string} userId @param {{ files?: any[] }} [options]
+   * @param {string} userId @param {{ files?: any[], context?: any }} [options]
    */
-  async records(userId, { files = undefined } = {}) {
-    const held = files ?? await this.files(userId);
+  async records(userId, { files = undefined, context = null } = {}) {
+    const held = files ?? await this.files(userId, { context });
     const revisions = await this.overlay.revisionsOfMany(userId, held.map((file) => file.uri));
     const sources = await this.overlay.sources(userId, held.map((file) => file.uri));
     /** @type {any[]} */
@@ -254,7 +297,7 @@ export class NativeMemoryStore {
     const first = history[0] ?? null;
     const last = history.at(-1) ?? null;
     const updatedAt = last?.changedAt ?? file.modTime ?? null;
-    const projectScoped = PROJECT_MEMORY_TYPES.includes(file.type) && Boolean(file.projectId);
+    const projectScoped = (file.namespaceId || PROJECT_MEMORY_TYPES.includes(file.type)) && Boolean(file.projectId);
     return {
       id: nativeFileId(file.uri),
       scope: projectScoped ? "project" : "user",
@@ -349,7 +392,8 @@ export class NativeMemoryStore {
    */
   async listRecords(userId, { scopes = [], kinds = [], scopeId = "", query = "", pageSize = 100 } = {}) {
     const words = String(query ?? "").trim().toLowerCase();
-    return (await this.records(userId))
+    const view = scopeId ? await this.#projectContext(userId, scopeId) : null;
+    return (await this.records(userId, { context: view?.kind === 'geo-project' ? view : null }))
       .filter((record) => !scopes.length || scopes.includes(record.scope))
       .filter((record) => !kinds.length || kinds.includes(record.kind))
       .filter((record) => !scopeId || record.scopeId === scopeId)
@@ -370,7 +414,9 @@ export class NativeMemoryStore {
     const seen = new Set(items.map((record) => record.id));
     let semantic = 0;
     if (text) {
-      const hits = await this.#engine(() => this.sessions.find(userId, text, { target: this.sessions.memoryRoot(userId), limit: 25 })).catch(() => []);
+      const views = await this.#contexts(userId);
+      const hits = (await mapLimit(views, 4, context => this.#engine(() => context.sessions.find(userId, text,
+        { target: context.sessions.memoryRoot(userId), limit: 25 })).catch(() => []))).flat();
       const words = lower.split(/\s+/).filter((word) => word.length >= 2);
       for (const hit of hits) {
         for (const record of records.filter((candidate) => candidate.uri === hit.uri)) {
@@ -392,7 +438,9 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} projectId
    */
   async projectCard(userId, projectId) {
-    const records = (await this.records(userId)).filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
+    const context = await this.#projectContext(userId, projectId);
+    const records = (await this.records(userId, { context: context.kind === 'geo-project' ? context : null }))
+      .filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
     // The labels the template has the engine write: Chinese in a Chinese conversation, these English ones in an English one
     // (`project_context.yaml`). Any other language writes translations of them, which this closed list does not read: that card
     // shows as the file it is, in full, on the memory page, and has no slots here.
@@ -432,7 +480,8 @@ export class NativeMemoryStore {
    * @param {string} userId @param {{ projectId?: string, limit?: number }} [options]
    */
   async timelineRecords(userId, { projectId = "", limit = 1000 } = {}) {
-    return (await this.records(userId))
+    const context = projectId ? await this.#projectContext(userId, projectId) : null;
+    return (await this.records(userId, { context: context?.kind === 'geo-project' ? context : null }))
       .filter((record) => !record.sensitive && (record.scope === "user" || !projectId || record.scopeId === projectId))
       .slice(0, Math.max(1, Math.min(5_000, Math.trunc(Number(limit)) || 1000)))
       // A file's name is not what changed: the timeline says the words the file held, as a revision's own states do.
@@ -465,12 +514,14 @@ export class NativeMemoryStore {
   /**
    * What changed by itself since a moment (「刚记住了」), in the legacy change shape: each item carries the version its
    * one-click undo names.
-   * @param {string} userId @param {{ since?: string | null, sessionId?: string | null, limit?: number }} options
+   * @param {string} userId @param {{ since?: string | null, sessionId?: string | null, projectId?: string | null, limit?: number }} options
    */
-  async changes(userId, { since = null, sessionId = null, limit = 20 } = {}) {
+  async changes(userId, { since = null, sessionId = null, projectId = null, limit = 20 } = {}) {
     if (since && !Number.isFinite(Date.parse(since))) throw new HttpError(400, "memory_payload_invalid", "since is invalid.");
     if (sessionId && !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new HttpError(400, "memory_payload_invalid", "sessionId is invalid.");
-    const revisions = await this.overlay.recentRevisions(userId, { since, engineSession: sessionId ? `dsh-${sessionId}` : null, actors: ["engine"], limit: 50 });
+    const context = projectId ? await this.#projectContext(userId, projectId) : null;
+    const revisions = await this.overlay.recentRevisions(userId, { since, engineSession: sessionId ? `dsh-${sessionId}` : null,
+      ...(context?.kind === 'geo-project' ? { userRoot: context.userRoot } : {}), actors: ["engine"], limit: 50 });
     const files = await this.overlay.files(userId);
     /** @type {Set<string>} */
     const seen = new Set();
@@ -479,12 +530,14 @@ export class NativeMemoryStore {
       if (revision.change === "deleted" || seen.has(revision.uri)) continue;
       const file = files.get(revision.uri);
       if (!file?.contentHash) continue;
+      const view = await this.#fileContext(userId, revision.uri);
       seen.add(revision.uri);
-      const projectScoped = PROJECT_MEMORY_TYPES.includes(revision.memoryType) && Boolean(file.projectId);
+      const scopedProject = view.kind === 'geo-project' ? view.projectId : file.projectId;
+      const projectScoped = (view.kind === 'geo-project' || PROJECT_MEMORY_TYPES.includes(revision.memoryType)) && Boolean(scopedProject);
       out.push({
         id: nativeFileId(revision.uri), key: revision.uri.slice(revision.uri.indexOf("/memories/") + "/memories/".length),
         kind: /** @type {Record<string, string>} */ (LEGACY_KIND_OF_TYPE)[revision.memoryType] ?? "project_fact",
-        scope: projectScoped ? "project" : "user", scopeId: projectScoped ? file.projectId : "",
+        scope: projectScoped ? "project" : "user", scopeId: projectScoped ? scopedProject : "",
         summary: String(revision.after ?? "").replace(/\s+/g, " ").trim().slice(0, 200), status: "active",
         change: revision.change === "added" ? "created" : "updated", changedAt: revision.changedAt, version: versionOfHash(file.contentHash),
       });
@@ -543,17 +596,19 @@ export class NativeMemoryStore {
    * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string }} how
    */
   async #write(userId, file, next, { actor, reason, change = "updated" }) {
+    const context = await this.#fileContext(userId, file.uri);
+    const rejectionType = this.#rejectionType(context, file.type);
     this.#touch(userId);
-    await this.#engine(() => this.sessions.replace(userId, file.uri, next));
+    await this.#engine(() => context.sessions.replace(userId, file.uri, next));
     const before = statements(file.body);
     const after = statements(next);
     const kept = new Set(after.map(lineFingerprint));
     if (actor === "user") {
-      await this.overlay.reject(userId, file.type, file.uri, before.filter((text) => !kept.has(lineFingerprint(text))));
-      await this.overlay.unreject(userId, file.type, after);
+      await this.overlay.reject(userId, rejectionType, file.uri, before.filter((text) => !kept.has(lineFingerprint(text))));
+      await this.overlay.unreject(userId, rejectionType, after);
     }
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId });
-    await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next });
+    await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
     this.#touch(userId);
   }
@@ -606,9 +661,10 @@ export class NativeMemoryStore {
 
   /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string }} [options] */
   async forgetFile(userId, file, { keepText = false, actor = "user", reason = "" } = {}) {
+    const context = await this.#fileContext(userId, file.uri);
     this.#touch(userId);
-    const removed = await this.#engine(() => this.sessions.remove(userId, file.uri));
-    await this.overlay.reject(userId, file.type, file.uri, statements(file.body));
+    const removed = await this.#engine(() => context.sessions.remove(userId, file.uri));
+    await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, statements(file.body));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
       reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, projectId: file.projectId });
     if (!keepText) await this.overlay.forgetText(userId, file.uri);
@@ -620,10 +676,21 @@ export class NativeMemoryStore {
   /**
    * The conversation's `forget` tool, through the memory gateway (`memoryTool.forget`): the same forget as the page's, by URI,
    * with its undo — what the person asked a conversation to forget they can bring back from the page.
-   * @param {any} user @param {any} _project @param {string} uri
+   * @param {any} user @param {any} project @param {string} uri @param {{ context?: any }} [options]
    */
-  async forget(user, _project, uri) {
-    const files = await this.files(String(user.id));
+  async forget(user, project, uri, { context = null } = {}) {
+    const actual = await this.#fileContext(String(user.id), uri);
+    if (context) {
+      if (!this.memoryContexts || context.ownerId !== user.id || project?.userId !== user.id || context.projectId !== project.id) {
+        throw new HttpError(403, 'memory_scope_denied', 'The conversation memory context does not match.');
+      }
+      await this.memoryContexts.assertLive(context);
+      if (actual.namespaceId !== context.namespaceId) throw new HttpError(403, 'memory_scope_denied', 'The file is outside this conversation.');
+    } else if (this.memoryContexts) {
+      const selected = await this.#projectContext(String(user.id), project?.id);
+      if (selected.namespaceId !== actual.namespaceId) throw new HttpError(403, 'memory_scope_denied', 'The file is outside this conversation.');
+    }
+    const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null });
     const file = files.find((candidate) => candidate.uri === uri);
     if (!file) return { removed: false };
     await this.forgetFile(String(user.id), file, { keepText: true, actor: "conversation", reason: "forgotten in a conversation" });
@@ -648,18 +715,21 @@ export class NativeMemoryStore {
     }
     const uri = live?.uri ?? (await this.#uriOfId(userId, fileId));
     if (!uri) throw new HttpError(404, "memory_not_found", "Memory not found.");
+    const context = await this.#fileContext(userId, uri);
     const last = (await this.overlay.revisionsOf(userId, uri, { limit: 20 })).find((revision) => !revision.undoneAt);
     if (!last) throw new HttpError(409, "memory_conflict", "There is no change of this memory to undo.");
     const memoryType = last.memoryType;
+    const rejectionType = this.#rejectionType(context, memoryType);
+    const projectId = context.kind === 'geo-project' ? context.projectId : last.projectId;
     if (last.change === "deleted") {
       if (last.before === null) throw new HttpError(409, "memory_conflict", "A deleted memory keeps no text to restore.");
-      if (live) await this.#engine(() => this.sessions.replace(userId, uri, String(last.before)));
-      else await this.#engine(() => this.sessions.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: 20_000,
+      if (live) await this.#engine(() => context.sessions.replace(userId, uri, String(last.before)));
+      else await this.#engine(() => context.sessions.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: 20_000,
         body: { uri, content: String(last.before), mode: "create", wait: true } }));
-      await this.overlay.unreject(userId, memoryType, statements(String(last.before)));
-      await this.overlay.upsertFile({ userId, uri, memoryType, body: String(last.before), projectId: last.projectId ?? undefined });
-      if (last.projectId) await this.#engine(() => this.sessions.setTags(userId, uri, [`project=${last.projectId}`])).catch(() => {});
-      await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason: "undo", before: null, after: String(last.before), projectId: last.projectId });
+      await this.overlay.unreject(userId, rejectionType, statements(String(last.before)));
+      await this.overlay.upsertFile({ userId, uri, memoryType, body: String(last.before), projectId: projectId ?? undefined });
+      if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
+      await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason: "undo", before: null, after: String(last.before), projectId });
       await this.overlay.markUndone(userId, last.id);
       return { undone: "restored", record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [] };
     }
@@ -672,11 +742,11 @@ export class NativeMemoryStore {
     // An update: back to what it said, the lines the change brought rejected and the lines it took away the person's again.
     const before = String(last.before);
     const had = new Set(statements(before).map(lineFingerprint));
-    await this.overlay.reject(userId, memoryType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
-    await this.overlay.unreject(userId, memoryType, statements(before));
-    await this.#engine(() => this.sessions.replace(userId, uri, before));
+    await this.overlay.reject(userId, rejectionType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
+    await this.overlay.unreject(userId, rejectionType, statements(before));
+    await this.#engine(() => context.sessions.replace(userId, uri, before));
     await this.overlay.addRevision({ userId, uri, memoryType, change: "updated", actor: "user", reason: "undo", before: live.body, after: before, projectId: live.projectId });
-    await this.overlay.upsertFile({ userId, uri, memoryType, body: before });
+    await this.overlay.upsertFile({ userId, uri, memoryType, body: before, projectId });
     await this.overlay.markUndone(userId, last.id);
     return { undone: "restored", record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [] };
   }
@@ -702,15 +772,24 @@ export class NativeMemoryStore {
     const words = String(text ?? "").trim();
     if (!words || words.length > 2_000) throw new HttpError(400, "memory_payload_invalid", "What to remember must be 1 to 2000 characters.");
     if (identifierShapesIn(words).length) throw new HttpError(400, "memory_content_refused", "A memory cannot carry a credential or a personal identifier.");
+    const context = await this.#projectContext(userId, projectId);
+    const sessions = context.sessions;
     const session = `evimed-page-${randomUUID().replace(/-/g, "")}`;
     await this.#engine(async () => {
-      await this.sessions.register(userId).catch(() => false);
-      await this.sessions.createSession(userId, session, { timeoutMs: this.sessions.timeoutMs });
-      await this.sessions.addMessage(userId, session, { role: "user", parts: [{ type: "text", text: `请记住：${maskIdentifiers(words)}` }] });
+      if (context.kind === 'geo-project') {
+        await this.memoryContexts.configure(context);
+        await this.memoryContexts.noteInternal(context, session, { kind: 'page', operationRef: session });
+      } else await sessions.register(userId).catch(() => false);
+      await sessions.createSession(userId, session, { timeoutMs: sessions.timeoutMs });
+      await sessions.addMessage(userId, session, { role: "user", parts: [{ type: "text", text: `请记住：${maskIdentifiers(words)}` }] });
     });
-    const answer = await this.#engine(() => this.sessions.commit(userId, session));
+    const answer = await this.#engine(() => sessions.commit(userId, session));
     const result = answer?.result ?? {};
     if (result.status !== "accepted" || typeof result.archive_uri !== "string") throw new HttpError(503, "memory_engine_unavailable", "The memory service did not accept it.");
+    const archive = parseArchiveUri(result.archive_uri);
+    if (!archive || archive.rest || archive.userRoot !== context.userRoot || archive.session !== session) {
+      throw new HttpError(403, 'memory_scope_denied', 'The memory archive does not match its page request.');
+    }
     const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId, origin: "page",
       taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText: words });
     return { pending: { id: commit.archiveUri, text: words, at: commit.createdAt, state: "pending" } };
@@ -723,7 +802,14 @@ export class NativeMemoryStore {
    */
   async setLearning(userId, learning) {
     this.#assertConfigured();
-    return this.#engine(() => this.sessions.setLearning(userId, learning));
+    const views = await this.#contexts(userId);
+    let personal;
+    for (const context of views) {
+      const applied = await this.#engine(() => context.kind === 'geo-project'
+        ? this.memoryContexts.configure(context, { learning }) : context.sessions.setLearning(userId, learning));
+      if (context.kind === 'owned') personal = applied;
+    }
+    return personal;
   }
 
   // ------------------------------------------------------------ whole account
