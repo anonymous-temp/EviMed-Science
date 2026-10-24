@@ -67,16 +67,20 @@ function fillTierNotes(held, given, notice) {
     if (!other) return tier;
     const { targets: incoming, ...words } = other;
     const merged = /** @type {any} */ (fillValue(tier, words));
-    if (!Array.isArray(tier.targets) || !tier.targets.length) return { ...merged, ...(incoming ? { targets: incoming } : {}) };
     if (!Array.isArray(incoming)) return merged;
-    const targets = tier.targets.map(target => {
-      const added = incoming.find(candidate => key(candidate) === key(target));
-      if (!added?.note) return target;
-      if (isEmptyValue(target.note)) return { ...target, note: added.note };
-      if (target.note !== added.note) notice(`geo_strategy_qualification_not_stored:tier=${tier.tier},metricId=${target.metricId},pool=${target.pool ?? "unknown"}: held note preserved; extra qualification remains in the original file.`);
-      return target;
-    });
-    for (const target of incoming) if (!tier.targets.some(candidate => key(candidate) === key(target))) targets.push(target);
+    const targets = (Array.isArray(tier.targets) ? tier.targets : []).map(target => ({ ...target }));
+    const omitted = new Set();
+    for (const [position, added] of incoming.entries()) {
+      const matches = targets.filter(target => key(target) === key(added));
+      if (!matches.length) { targets.push({ ...added }); continue; }
+      if (isEmptyValue(added.note) || matches.some(target => target.note === added.note)) continue;
+      const missing = matches.find(target => isEmptyValue(target.note));
+      if (missing) { missing.note = added.note; continue; }
+      const identity = JSON.stringify([key(added), added.note]);
+      if (omitted.has(identity)) continue;
+      omitted.add(identity);
+      notice(`geo_strategy_qualification_not_stored:tier=${tier.tier},metricId=${added.metricId},pool=${added.pool ?? "unknown"},targets[${position}]: held note preserved; extra qualification remains in the original file.`);
+    }
     return { ...merged, targets };
   });
   for (const tier of given) if (!held.some(candidate => String(candidate?.tier) === String(tier?.tier))) out.push(tier);
@@ -541,7 +545,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       }
       if (gated) report(`article gates refreshed ${gated}`);
     }
-    return { imported, issues, located, gated, ...(refreshCards ? { carded } : {}), ...(files.strategies || files.articles ? { files } : {}) };
+    return { imported, issues, located, gated, ...(refreshCards ? { carded } : {}), ...(files.strategies || files.articles || files.dropped.length || files.notices?.length ? { files } : {}) };
   };
 
   /**
@@ -558,22 +562,21 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       if (!trustedContext) return;
       failed.push("geo_plan_output_unavailable"); out.unavailable.push(path); out.refused += 1; report(`geo_plan_output_unavailable:${path}`);
     };
+    const optionalAliasNotice = (/** @type {any} */ issue, /** @type {string} */ relative, prefix = "") => {
+      // Optional narrative aliases cannot make the valid canonical strategy unavailable. Keep the exact omission visible.
+      const optionalAlias = !prefix && relative.endsWith("/strategy.json")
+        && ["alias_invalid", "alias_empty", "alias_too_long"].includes(issue.code)
+        && /^tiers(?:\.targets\[\d+\])?\.basis$/.test(String(issue.field ?? ""));
+      if (!optionalAlias) return false;
+      const path = `${relative}#${issue.index == null ? "" : `[${issue.index}]`}${issue.field}`;
+      if (!notices.some(notice => notice.path === path && notice.code === issue.code)) {
+        notices.push({ path, code: issue.code, message: issue.message });
+        report(`geo_strategy_optional_alias:${issue.code}:${path}: ${issue.message}`);
+      }
+      return true;
+    };
     const refusals = (/** @type {any[]} */ issues, /** @type {string} */ relative, prefix = "", offset = 0) => {
-      const real = issues.filter(issue => {
-        // Optional narrative aliases cannot make the valid canonical strategy unavailable. Keep the exact omission visible.
-        const optionalAlias = !prefix && relative.endsWith("/strategy.json")
-          && ["alias_invalid", "alias_empty", "alias_too_long"].includes(issue.code)
-          && /^tiers(?:\.targets\[\d+\])?\.basis$/.test(String(issue.field ?? ""));
-        if (optionalAlias) {
-          const path = `${relative}#${issue.index == null ? "" : `[${issue.index}]`}${issue.field}`;
-          if (!notices.some(notice => notice.path === path && notice.code === issue.code)) {
-            notices.push({ path, code: issue.code, message: issue.message });
-            report(`geo_strategy_optional_alias:${issue.code}:${path}: ${issue.message}`);
-          }
-          return false;
-        }
-        return !["notice", "ignored_fields", "declined_fields"].includes(issue.code);
-      });
+      const real = issues.filter(issue => !optionalAliasNotice(issue, relative, prefix) && !["notice", "ignored_fields", "declined_fields"].includes(issue.code));
       if (!trustedContext) { out.refused += real.length; return; }
       for (const issue of real) {
         const field = `${prefix}${issue.index == null ? "" : `[${issue.index + offset}]`}${prefix ? "." : ""}${issue.field ?? "write"}`;
@@ -606,6 +609,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       const originatingContext = trustedContext;
       const relative = `${deliverableDir(id)}/strategy.json`;
       const draft = geoStrategyDraft(fileData);
+      // Preserve input diagnostics before normalization and semantic fill, including an unchanged unbound import.
+      for (const issue of draft.issues) optionalAliasNotice(issue, relative);
       if (originatingContext) refusals(draft.issues, relative);
       if (originatingContext && !Object.keys(fileData).length) { unavailable(`${deliverableDir(id)}/strategy.json`); continue; }
       const stored = await store.latestStrategy(geoProject.id, { scopeKey: originatingContext?.scopeKey ?? null });
@@ -698,7 +703,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
         }
       }
     }
-    if (out.strategies || out.articles) {
+    if (out.strategies || out.articles || out.dropped.length || notices.length) {
       report(`run files imported: strategy ${out.strategies} (gaps ${out.gaps}, actions ${out.actions}, sources ${out.sources}, refused ${out.refused}), `
         + `articles ${out.articles} (enriched ${out.enriched}, registered ${out.registered}, skipped ${out.skipped}), declined ${out.declined}, dropped ${out.dropped.length}`);
     }

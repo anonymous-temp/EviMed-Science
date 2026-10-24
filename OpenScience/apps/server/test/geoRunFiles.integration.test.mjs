@@ -827,3 +827,91 @@ for (const invalid of ["canonical", "gaps", "source"]) test(`optional narrative 
   assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).summary, "Usable strategy");
   if (invalid === "source") assert.deepEqual((await store.listSources(geo.id)).map(source => source.domain), ["valid.example"]);
 });
+
+
+for (const scenario of [
+  { name: "populated held note", held: "First qualification", incoming: ["First qualification", "Second qualification", "Second qualification", "Third qualification"], expected: "First qualification", extra: [1, 3] },
+  { name: "empty held and first incoming notes", held: null, incoming: [null, "First qualification", "First qualification", "Second qualification"], expected: "First qualification", extra: [3] },
+  { name: "equal repeated incoming notes", held: null, incoming: [null, null, "First qualification", "First qualification"], expected: "First qualification", extra: [] },
+]) test(`every duplicate compound target qualification is accounted for with ${scenario.name}`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `duplicate-${geo.id}`, relative = "deliverables/duplicates/strategy.json";
+  const context = { mode: "strategy", runId, scopeKey: "duplicate-notes", basis: { targets: { version: null, rows: [] } } };
+  const held = { tiers: [{ tier: "1", targets: [{ metricId: "M-06", pool: "P2", level: "Held", ...(scenario.held ? { note: scenario.held } : {}) },
+    { metricId: "M-06", pool: "P3", note: "Other pool" }] }], runId, scopeKey: context.scopeKey, basis: context.basis };
+  await store.writeStrategy(USER, geo.id, held);
+  const before = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  const input = { tiers: [{ tier: 1, targets: [...scenario.incoming.map(note => ({ metricId: "M-06", pool: "P2", ...(note ? { basis: note } : {}) })),
+    { metricId: "M-06", pool: "P3", basis: "Other pool" }, { metricId: "M-06", pool: "P3", basis: "Other pool" },
+    { metricId: "M-06", pool: "P3", basis: "Distinct other pool qualification" }] }] };
+  const original = JSON.stringify(input);
+  assert.equal(geoStrategyDraft(input).issues.length, 0);
+  const make = () => importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => original });
+  const { importDelivery, reports } = make(), produced = { id: runId, status: "succeeded", artifacts: [relative] };
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined); assert.equal(result.files.refused, 0);
+  const next = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.equal(next.tiers[0].targets.length, 2, "equal duplicate descriptions do not create duplicate stored notes");
+  assert.equal(next.tiers[0].targets[0].note, scenario.expected); assert.equal(next.tiers[0].targets[0].level, "Held");
+  assert.equal(next.tiers[0].targets[1].note, "Other pool"); assert.equal(next.version, before.version + (scenario.held ? 0 : 1));
+  const omitted = reports.filter(report => report.includes("qualification_not_stored"));
+  assert.equal(omitted.length, scenario.extra.length + 1, "each distinct extra qualification has one original-only diagnostic");
+  for (const index of scenario.extra) assert.ok(omitted.some(report => report.includes("pool=P2") && report.includes(`targets[${index}]`)));
+  assert.equal(omitted.filter(report => report.includes("pool=P3")).length, 1);
+  for (const report of omitted) assert.match(report, /original file/);
+  const replay = make(); await replay.importDelivery(control, produced, { recovery: true });
+  assert.deepEqual(replay.reports.filter(report => report.includes("qualification_not_stored")), omitted);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, next.version);
+  assert.deepEqual(next.basis, context.basis); assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []);
+  assert.equal(JSON.stringify(input), original);
+});
+
+test("compound qualification accounting is immutable for missing target lists and prototype-looking identities", () => {
+  const input = { tiers: [{ tier: "1", targets: [{ metricId: "__proto__", pool: "constructor" }, { metricId: "__proto__", pool: "constructor", note: "First" },
+    { metricId: "__proto__", pool: "constructor", note: "First" }, { metricId: "__proto__", pool: "constructor", note: "Second" }] }] };
+  const held = { tiers: [{ tier: "1" }] }, original = JSON.stringify({ held, input }), notices = [];
+  const filled = fillStrategy(held, input, notice => notices.push(notice));
+  assert.equal(filled.tiers[0].targets.length, 1); assert.equal(filled.tiers[0].targets[0].note, "First");
+  assert.equal(notices.length, 1); assert.match(notices[0], /targets\[3\]/);
+  assert.equal(Object.prototype.polluted, undefined); assert.equal(JSON.stringify({ held, input }), original);
+});
+
+for (const held of [false, true]) for (const alias of [
+  { name: "wrong-type", value: {}, targetValue: {}, code: "alias_invalid" },
+  { name: "blank", value: " \n\u0000 ", targetValue: " \t\u0000 ", code: "alias_empty" },
+  { name: "too-long", value: "😀".repeat(601), targetValue: "😀".repeat(501), code: "alias_too_long" },
+  { name: "canonical-plus-alias-overflow", value: "Extra", targetValue: "Extra", summary: "😀".repeat(600), note: "😀".repeat(500), code: "alias_too_long" },
+]) test(`unbound ${held ? "same-run" : "first"} import preserves ${alias.name} alias diagnostics through semantic replay`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `unbound-advisory-${geo.id}`, relative = "deliverables/unbound-advisory/strategy.json";
+  const input = { tiers: [{ tier: 1, summary: alias.summary ?? "Held summary", basis: alias.value,
+    targets: [{ metricId: "M-06", pool: "P2", note: alias.note ?? "Held note", basis: alias.targetValue }] }] };
+  const expected = geoStrategyDraft(input).strategy.tiers, original = JSON.stringify(input);
+  if (held) await store.writeStrategy(USER, geo.id, { tiers: expected, runId });
+  const make = () => importerOf(new Map([[relative, original]]), { listDeliverableFolders: async () => [] });
+  const { importDelivery, reports } = make();
+  const produced = { id: runId, status: "succeeded", startedAt: "2000-01-01T00:00:00Z", deliverables: [{ id: "unbound-advisory", capability: "geo-strategy" }] };
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined); assert.ok(result.files, "an unchanged strategy still returns file diagnostics");
+  assert.equal(result.files.strategies, held ? 0 : 1); assert.equal(result.files.refused, 0);
+  assert.deepEqual(result.files.notices.map(notice => [notice.path, notice.code]), [
+    [`${relative}#[0]tiers.basis`, alias.code], [`${relative}#[0]tiers.targets[0].basis`, alias.code],
+  ]);
+  assert.deepEqual(result.files.dropped, ["unbound-advisory:tiers[0].basis", "unbound-advisory:tiers[0].targets[0].basis"]);
+  for (const notice of result.files.notices) {
+    assert.match(notice.message, /kept only in the original file/); assert.ok(reports.some(report => report.includes(notice.path) && report.includes(notice.code)));
+  }
+  const next = await store.latestStrategy(geo.id); assert.deepEqual(next.tiers, expected);
+  const replay = await make().importDelivery(control, produced, { recovery: true });
+  assert.deepEqual(replay.files.notices, result.files.notices); assert.deepEqual(replay.files.dropped, result.files.dropped);
+  assert.equal((await store.latestStrategy(geo.id)).version, next.version); assert.equal(JSON.stringify(input), original);
+});
+
+test("unchanged unbound files still expose unrelated dropped fields", options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const tiers = [{ tier: "1", summary: "Held summary" }]; await store.writeStrategy(USER, geo.id, { tiers });
+  const relative = "deliverables/drop-only/strategy.json";
+  const { importDelivery } = importerOf(new Map([[relative, JSON.stringify({ tiers: [{ ...tiers[0], unexpectedField: "Original-only" }] })]]), { listDeliverableFolders: async () => [] });
+  const result = await importDelivery(control, { id: `drop-only-${geo.id}`, status: "succeeded", startedAt: "2000-01-01T00:00:00Z", deliverables: [{ id: "drop-only", capability: "geo-strategy" }] });
+  assert.deepEqual(result.files?.dropped, ["drop-only:tiers[0].unexpectedField"]); assert.equal(result.files?.strategies, 0);
+});
