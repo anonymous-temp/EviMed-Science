@@ -348,7 +348,10 @@ export function refetchSource(id: string) {
  * path is the file's, relative to the project's workspace; the destination is the control plane's.
  */
 export function saveToKnowledgeBase(path: string, options?: { projectId?: string }) {
-  return invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path }, options);
+  // A save names a project only when the caller holds one (a module conversation saves into its project's knowledge base).
+  return options
+    ? invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path }, options)
+    : invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path });
 }
 export function retrySource(id: string, expectedRevision: number) {
   return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}/retry`, "POST", { expectedRevision });
