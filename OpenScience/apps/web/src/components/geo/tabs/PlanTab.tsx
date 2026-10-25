@@ -16,6 +16,7 @@ import { useGeoStrategy } from "../geoProjectData";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { TabError, TabSkeleton } from "./geoTabKit";
+import { yuan } from "./geoTabText";
 import { Assumptions, Battlefield, ClientToDos, EnginePromises, Targets } from "./PlanStrategy";
 
 /** Shared contextual plan composition, including the legacy plan destination. */
@@ -65,7 +66,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
           <p className="text-ui">{action.sequence != null ? `${action.sequence}. ` : ""}{action.what.title || action.need.judgment || "内容行动"}</p>
           <PlanActionFacts action={action} basis={plan.basis} />
           {action.need.judgment && <p className="max-w-measure text-ui">{action.need.judgment}</p>}
-          {action.sources.map(source => <p key={source.domain ?? source.channel} className="max-w-measure text-caption">{source.url || source.domain || source.name} · {source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "候选渠道"}{source.why ? ` · ${source.why}` : ""}</p>)}
+          {action.sources.map(source => <p key={source.domain ?? source.channel} className="max-w-measure text-caption">{source.url || source.domain || source.name} · {source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "可选渠道"}{source.why ? ` · ${source.why}` : ""}</p>)}
 
           {mayConverse && <Button disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>}
         </div>)}
@@ -97,6 +98,6 @@ function PlanActionFacts({action,basis}:{action:GeoImplementationAction;basis:Ge
     {label:"产出",value:action.work?.outputs?.join("、") || "产出待明确"},
     {label:"预计时间",value:timing ? <>{timing.durationDays ? `${timing.durationDays.low}–${timing.durationDays.high}天` : ""}{timing.earliest || timing.latest ? ` ${timing.earliest || "开始待定"} 至 ${timing.latest || "结束待定"}` : ""} · 依据：{timing.basis}</> : "时间未估"},
     {label:"预计工作量",value:effort ? <>{effort.low}–{effort.high}{effort.unit === "hours" ? "小时" : "天"} · 估计依据：{effort.basis}</> : "工作量未估"},
-    {label:"预计费用",value:estimate ? <>¥{estimate.low}–{estimate.high} · 费用依据：{references}{estimate.assumption ? ` · 假设：${estimate.assumption}` : ""}{estimate.observedAt ? ` · 报价日期：${estimate.observedAt.slice(0,10)}` : ""}</> : "金额未估"},
+    {label:"预计费用",value:estimate ? <>{estimate.low.toLocaleString("zh-CN")}–{yuan(estimate.high)} · 费用依据：{references}{estimate.assumption ? ` · 假设：${estimate.assumption}` : ""}{estimate.observedAt ? ` · 报价日期：${estimate.observedAt.slice(0,10)}` : ""}</> : "金额未估"},
   ]} />;
 }

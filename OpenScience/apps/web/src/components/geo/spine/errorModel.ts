@@ -224,7 +224,7 @@ export function correctionSentence(claim: Pick<ClaimRow, "engines" | "statement"
 export function correctionBrief(claim: Pick<ClaimRow, "engines" | "statement" | "evidenceQuote"> & Partial<Pick<ClaimRow, "rows">>, product: string, action: "article" | "conclusion" | "treatment" = "article"): string {
   const context = claim.rows?.map(row => ({ errorId: row.id, snapshotId: row.firstSnapshotId ?? row.snapshotId, latestSnapshotId: row.snapshotId, questionId: row.questionId ?? null, claimId: row.claimId ?? null, claimVersion: row.originalErrorAssessment ? row.claimVersion ?? null : null, applicability: row.originalErrorAssessment ? row.applicability ?? null : null, originalContextState: row.originalErrorAssessment ? "preserved" : "unknown" })) ?? [];
   const limitation = context.some(row => row.originalContextState === "unknown" || row.claimVersion == null || row.applicability == null)
-    ? "部分原始判定依据未保留，请先核实当时的主张版本及适用条件；不得用当前主张冒充原始依据。" : "";
+    ? "部分原始判定依据未保留，请先核实当时的结论版本及适用条件；不得用当前结论冒充原始依据。" : "";
   return zh`${correctionSentence(claim, product, action)}${limitation}提交任务与输出时绑定这些原始对象：${JSON.stringify(context)}`;
 }
 
