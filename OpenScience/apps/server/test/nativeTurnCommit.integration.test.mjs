@@ -62,7 +62,6 @@ test("a short exchange is learned from while the runtime lives: ledger row, proj
   const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
   const overlay = new NativeMemoryOverlay({ database });
   const memorySettings = new MemorySettingsStore(config, { database });
-  assert.equal(await memorySettings.memoryEngine(userId), "native");
   const runs = [];
   const conversations = {
     running: async () => runs.filter((run) => run.status === "running"),
@@ -166,8 +165,6 @@ test("an account deleted while its turn's commit waited commits nothing, writes 
   assert.equal(commits, 0);
   assert.equal(reads, 0, "the engine is not asked about a conversation of an account that is gone");
   assert.equal(nativeMemoryCounters().turnCommits.not_learning, 1);
-  assert.equal(await memorySettings.memoryEngine(userId), "legacy", "an account that is gone is on no engine");
   const rows = await database.query("SELECT 1 FROM evimed_memory.settings WHERE user_id=$1", [userId]);
   assert.equal(rows.rowCount, 0, "and nothing is written for it");
-  await assert.rejects(memorySettings.setMemoryEngine(userId, "native"), { code: "memory_engine_invalid" });
 });

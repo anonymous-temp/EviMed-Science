@@ -198,7 +198,6 @@ test("what a consolidation writes is held to the checks after the fact: an ident
 test("the worker's own pass asks it for every native account, and a pass with it off asks nothing", options, async (t) => {
   const f = await account(t, { consolidate: ({ user }) => ({ updates: [{ uri: `viking://user/${user}/memories/entities/person/p0.md`, text: "Fact number 0, tightened." }] }) });
   f.worker.consolidation = f.consolidation;
-  assert.equal(await f.memorySettings.memoryEngine(f.userId), "native", "an account's engine is decided the first time anything asks");
   await f.worker.pass();
   assert.equal(compile(f.stub).length, 1, "the pass submitted this account's consolidation");
   await f.worker.pass();
@@ -206,7 +205,6 @@ test("the worker's own pass asks it for every native account, and a pass with it
   assert.equal(nativeMemoryCounters().consolidations.completed, 1);
   const off = await account(t, { config: { nativeMemoryConsolidationEnabled: false } });
   off.worker.consolidation = off.consolidation;
-  await off.memorySettings.memoryEngine(off.userId);
   await off.worker.pass();
   assert.equal(compile(off.stub).length, 0);
 });

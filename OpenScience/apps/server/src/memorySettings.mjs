@@ -234,6 +234,17 @@ export class MemorySettingsStore {
   }
 
   /**
+   * Whether the account still exists. A debounced commit of a conversation fires seconds after its turn, and an account deleted in
+   * between (a throwaway account of an acceptance run) must cost the engine nothing: settings alone cannot say, because an account that
+   * never changed a switch has no row either way.
+   * @param {string} userId
+   */
+  async accountExists(userId) {
+    const result = await this.#query("SELECT 1 FROM evimed_control.users WHERE id=$1", [assertUserId(userId)]);
+    return result.rows.length === 1;
+  }
+
+  /**
    * Change some switches and leave the rest as they are, in one statement: two
    * tabs flipping different switches at once must both win.
    * @param {string} userId

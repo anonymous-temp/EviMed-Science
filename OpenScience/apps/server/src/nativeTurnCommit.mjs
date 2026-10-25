@@ -187,6 +187,8 @@ export class NativeTurnCommit {
     // A turn that was over before the account reset its memory is not committed after it: the reset deleted the engine's sessions
     // (and with them what was pending), and the plugin's replay of an old message must not make a session to commit from.
     if (await this.#endedBeforeReset(entry)) { recordTurnCommit("before_reset"); return; }
+    // An account deleted while its turn waited has nothing to learn from and no settings to write: the engine is not asked about it.
+    if (typeof this.memorySettings.accountExists === "function" && !(await this.memorySettings.accountExists(entry.userId))) { recordTurnCommit("not_learning"); return; }
     const user = { id: entry.userId };
     // The admission decides who is learned from. Asked before the engine is read so that a paused account, a trial, a
     // conversation that read a patient record and the platform's own projects cost the engine nothing; the gateway's commit

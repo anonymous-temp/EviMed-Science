@@ -50,9 +50,8 @@ function clock() {
   };
 }
 
-const memoryDouble = ({ engine = "native", settings = {} } = {}) => ({
+const memoryDouble = ({ settings = {} } = {}) => ({
   configured: true,
-  memoryEngine: async () => engine,
   settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [], ...settings }),
   sessionState: async () => ({ trialCapsuleId: null }),
 });
@@ -63,7 +62,7 @@ const baseConfig = { memoryEngineEnabled: true, memoryEnabled: true, nativeMemor
  * A committer over doubles. `states` is what reading the engine's session answers, one entry per read (the last repeats);
  * `runs` is the conversation's runs as the ledger folds them.
  */
-function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine = "native", config = {}, runs = [], admit = null, commit = null, settings = {} } = {}) {
+function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], config = {}, runs = [], admit = null, commit = null, settings = {} } = {}) {
   resetNativeMemoryMetrics();
   const time = clock();
   const reads = [];
@@ -78,12 +77,12 @@ function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine 
       return { status: "ok", result: state };
     },
   };
-  const admission = admit ?? createMemoryAdmission({ config: baseConfig, memorySettings: memoryDouble({ engine, settings }), conversations: {
+  const admission = admit ?? createMemoryAdmission({ config: baseConfig, memorySettings: memoryDouble({ settings }), conversations: {
     running: async () => runs.filter((run) => run.status === "running"),
     runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id),
   } });
   const committer = new NativeTurnCommit({
-    config: { ...baseConfig, ...config }, memorySettings: memoryDouble({ engine, settings }), sessions, admission,
+    config: { ...baseConfig, ...config }, memorySettings: memoryDouble({ settings }), sessions, admission,
     conversations: { runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id) },
     commit: commit ?? (async (request) => { commits.push(request); return { commit: "accepted" }; }),
     setTimer: time.setTimer, clearTimer: time.clearTimer, wait: time.wait,
@@ -106,7 +105,7 @@ test("a short exchange of a native account is committed after the quiet, far bel
   assert.equal(counters().committed, 1);
 });
 
-test("a turn the platform started, and a legacy account, arm nothing and ask the engine nothing", async () => {
+test("a turn the platform started arms nothing and asks the engine nothing", async () => {
   const automated = doubles();
   for (const run of [{ automated: true }, { effectiveRouteReason: "autopilot:agenda-1" }, { routeReason: "autopilot:digest" }, { effectiveRouteReason: "loopx-continuation" }, { effectiveRouteReason: "adopted:runtime-ui:loopx-continuation" }]) {
     await automated.committer.noteRunFinished(project(), finished(run));
@@ -116,12 +115,6 @@ test("a turn the platform started, and a legacy account, arm nothing and ask the
   automated.time.fire();
   await automated.committer.idle();
   assert.deepEqual([automated.reads.length, automated.commits.length], [0, 0]);
-
-  const legacy = doubles({ engine: "legacy" });
-  await legacy.committer.noteRunFinished(project(), finished());
-  assert.equal(legacy.time.armed, 0);
-  assert.deepEqual(Object.values(counters()).reduce((sum, value) => sum + value, 0), 0, "a legacy account is not even counted");
-  assert.deepEqual([legacy.reads.length, legacy.commits.length], [0, 0]);
 
   // The platform's own projects, a run with no conversation, and a switched-off committer.
   const others = doubles();
