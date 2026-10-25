@@ -684,6 +684,40 @@ test("a weekly round that heard no answer is no week: monitoring is not done by 
   await finishRun(world, control, world.dispatched.indexOf(reports()[0]));
 });
 
+test("a one-shot import leaves the weekly round on the monitored set; with only one-shot sets the week is skipped by name (2026-10-25)", options, async () => {
+  const world = harness({ at: "2026-10-01T00:00:00Z" });
+  const { project, userId } = await newProject();
+  await store.setStep(project.id, "monitoring", { requested: true });
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  await world.orchestrator.advance(project.id);
+  const diagnosis = world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.step === "diagnosis");
+  await finishRound(diagnosis.id, { finishedAt: "2026-09-28T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  const monitoredVersion = diagnosis.ref.setVersion;
+  // A client's list is imported for a one-shot diagnosis: it is newer than the monitored set, and used to stop every recurring round.
+  const oneShot = { samplingMode: "one_shot", engines: ["deepseek"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  const imported = await store.writeQuestionSet(userId, project.id, { groups: [{ name: "Client list", questions: [{ text: "Which drug is best?", isMeasured: true }] }], contract: oneShot });
+  assert.ok(imported.version > monitoredVersion);
+  const { GeoMeasureStore } = await import("../src/geoMeasureStore.mjs");
+  assert.equal((await new GeoMeasureStore(database).measuredQuestions(project.id)).setVersion, monitoredVersion,
+    "the measurement's own question choice reads the monitored set, not the import");
+  const weeklyOf = (/** @type {string} */ week) => world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.week === week);
+  world.setClock("2026-10-04T19:10:00Z"); // Monday 2026-10-05 03:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const weekly = weeklyOf("2026-10-05");
+  assert.ok(weekly, "the weekly round is still asked after a one-shot import");
+  assert.equal(weekly.contract, undefined, "of the monitored set, never under the one-shot agreement");
+  await finishRound(weekly.id, { finishedAt: "2026-10-04T19:20:00Z" });
+  // With every set one-shot nothing is left to monitor: the week is skipped, and says why.
+  await q(`UPDATE evimed_geo.question_sets SET contract = $2::jsonb WHERE geo_project_id = $1 AND contract IS NULL`, [project.id, JSON.stringify(oneShot)]);
+  world.setClock("2026-10-11T19:10:00Z");
+  await world.orchestrator.tickSchedules();
+  assert.equal(weeklyOf("2026-10-12"), undefined);
+  const [mark] = await q(`SELECT state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'weekly:2026-10-12'`, [project.id]);
+  assert.deepEqual([mark?.state, mark?.detail?.reason], ["skipped", "one_shot_questions_only"]);
+});
+
 test("an urgent error the measurement could not tell is told by the program under its telling's key, and marked told (2026-10-25)", options, async () => {
   const world = harness();
   const { project, userId } = await newProject();

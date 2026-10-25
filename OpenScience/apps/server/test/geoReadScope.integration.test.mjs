@@ -331,6 +331,9 @@ test("legacy metric preservation never substitutes full-round aggregates for a f
   const legacy = await store.createProject({ userId: user.id, projectId: "legacy-scope-project", engines: ["deepseek", "kimi"], coverageDays: 90 });
   await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,sample_date,finished_at)
     VALUES ('legacy-scope-round',$1,$2,'baseline','done',1,'2026-10-01','2026-10-01')`, [user.id, legacy.id]);
+  // The round heard an answer before its metrics were kept (outside every filter below: no question, another engine, an earlier day).
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+    VALUES ('legacy-answered',$1,$2,'legacy-scope-round','kimi','valid','2026-09-30T00:00Z')`, [user.id, legacy.id]);
   await store.query(`INSERT INTO evimed_geo.metrics (id,user_id,geo_project_id,round_id,scope,engine,metric_id,status,value,denominator)
     VALUES ('legacy-deepseek',$1,$2,'legacy-scope-round','engine','deepseek','M-01','ok',50,100),
     ('legacy-kimi',$1,$2,'legacy-scope-round','engine','kimi','M-01','ok',50,100)`, [user.id, legacy.id]);
@@ -360,7 +363,7 @@ test("default source context selects its six rounds before enforcing history res
       SELECT $1 || n,$2,$3,'weekly','done',date '2026-01-01' + n,date '2026-01-01' + n FROM generate_series(0,$4::integer) n`,
     [`history-limit-${roundCount}-`, user.id, historic.id, roundCount - 1]);
     await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
-      SELECT 'context-' || $1 || n,$2,$3,$1 || n,'deepseek','failed',date '2026-01-01' + n FROM generate_series(0,$4::integer) n`,
+      SELECT 'context-' || $1 || n,$2,$3,$1 || n,'deepseek','valid',date '2026-01-01' + n FROM generate_series(0,$4::integer) n`,
     [`history-limit-${roundCount}-`, user.id, historic.id, roundCount - 1]);
     await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
       SELECT $1 || n,$2,$3,$4,'deepseek','failed','2026-01-01' FROM generate_series(1,20001) n`,
@@ -496,7 +499,7 @@ test("observation caps apply after engine and question-dimension filters", optio
   await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at)
     SELECT 'filtered-cap-many-' || n,$1,$2,'filtered-cap-round','cap-q2','kimi','failed','2026-10-01T00:00Z' FROM generate_series(1,20001) n`, [user.id, wide.id]);
   await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at)
-    VALUES ('filtered-cap-one',$1,$2,'filtered-cap-round','cap-q1','deepseek','failed','2026-10-02T00:00Z')`, [user.id, wide.id]);
+    VALUES ('filtered-cap-one',$1,$2,'filtered-cap-round','cap-q1','deepseek','valid','2026-10-02T00:00Z')`, [user.id, wide.id]);
   await assert.rejects(readGeoSelection(store, wide), (error) => error.status === 422);
   for (const scope of [{ engines: ["deepseek"] }, { groupIds: ["cap-g1"] }, { pools: ["P2"] }, { from: "2026-10-02", to: "2026-10-02" }]) {
     const selected = await readGeoSelection(store, wide, scope);

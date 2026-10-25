@@ -20,6 +20,8 @@ async function fixture(t) {
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'p','Basis fixture',1048576)", [user.id]);
   const project = await store.createProject({ userId: user.id, projectId: 'p', engines: ['deepseek'], coverageDays: 90 });
   await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,engines,sample_date,finished_at) VALUES('dated-round',$1,$2,'baseline','done','{deepseek}','2026-10-20',now())", [user.id, project.id]);
+  // The round heard an answer: one that heard none is never the latest reading a plan freezes (2026-10-25).
+  await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at,status) VALUES('dated-answer',$1,$2,'dated-round','deepseek','2026-10-20T01:00:00Z','valid')", [user.id, project.id]);
   const documents = new ProductDocuments(database), service = new GeoService({ store, config: { geoEnabled: true, geoAudience: 'all' } });
   const adapter = new GeoPlanContext({ documents, store, service, authorizeSession: async () => {}, runs: async () => [] });
   return { user, project, store, documents, adapter, service };

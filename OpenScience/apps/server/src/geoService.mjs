@@ -52,7 +52,7 @@ import {
 } from "@evimed/domain";
 import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoRoundReadings, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
-import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
+import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite, geoRecoveryMayCharge } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
@@ -66,6 +66,7 @@ import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
 import { readFrozenGeoAnalysisPage, hasGeoFrozenAnalysisContext } from "./geoAnalysisFrozenPages.mjs";
 import { readGeoAnalysis, presentGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
+import { GEO_ROUND_ANSWERED, geoRecoveryHeldCells } from "./geoMeasureStore.mjs";
 import { geoRivalMonitoringRows } from "./geoAnalysisMetrics.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
 import { GeoOwnedPublications } from "./geoOwnedPublications.mjs";
@@ -477,10 +478,12 @@ export class GeoService {
     /** @type {Map<string, Map<string, any>>} */
     const byProject = new Map();
     if (!geoIds.length) return byProject;
+    // The latest round is one that heard an answer (`GEO_ROUND_ANSWERED`): an empty week has no metrics, and as the latest it
+    // emptied the headline of every project the probe host could not reach.
     const result = await this.store.query(`WITH chosen AS (
-        SELECT DISTINCT ON (geo_project_id) id, geo_project_id, sample_date FROM evimed_geo.rounds
-        WHERE geo_project_id = ANY($1::text[]) AND kind = ANY($3::text[])
-        ORDER BY geo_project_id, (status IN ('done', 'partial')) DESC, CASE WHEN status IN ('done', 'partial') THEN finished_at END DESC NULLS LAST, created_at DESC, id DESC
+        SELECT DISTINCT ON (r.geo_project_id) r.id, r.geo_project_id, r.sample_date FROM evimed_geo.rounds r
+        WHERE r.geo_project_id = ANY($1::text[]) AND r.kind = ANY($3::text[]) AND (r.status NOT IN ('done', 'partial') OR ${GEO_ROUND_ANSWERED("r")})
+        ORDER BY r.geo_project_id, (r.status IN ('done', 'partial')) DESC, CASE WHEN r.status IN ('done', 'partial') THEN r.finished_at END DESC NULLS LAST, r.created_at DESC, r.id DESC
       ) SELECT DISTINCT ON (m.geo_project_id, m.metric_id) m.*, r.sample_date
       FROM evimed_geo.metrics m JOIN chosen r ON r.id = m.round_id AND r.geo_project_id = m.geo_project_id
       WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = 'project' AND m.metric_id = ANY($2::text[]) AND m.arm IS NULL AND ${PLAIN_ROW}
@@ -1143,18 +1146,21 @@ export class GeoService {
       || !Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) throw failure(400, "geo_read_filter_invalid", "Progress takes limit 1–500 and offset 0–100000.");
     const round = (await this.store.query(`SELECT id, status, set_version, engines, planned, surface, ref FROM evimed_geo.rounds WHERE id=$1 AND geo_project_id=$2 AND user_id=$3`, [roundId, project.id, project.userId])).rows[0];
     if (!round) throw failure(404, "geo_round_not_found", "Diagnosis not found.");
-    const recovered = (await this.store.query(`SELECT ref->'recoveredJobIds' AS ids FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2 AND ref->>'recoveryOf'=$3`, [project.id, project.userId, round.id])).rows.flatMap((row) => row.ids ?? []);
+    // A cell an earlier recovery still holds is not recoverable; one whose recovery provably never reached the provider is again.
+    const recoveredIds = (await this.store.query(`SELECT ref->'recoveredJobIds' AS ids FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2 AND ref->>'recoveryOf'=$3`, [project.id, project.userId, round.id])).rows.flatMap((row) => row.ids ?? []);
+    const recovered = [...await geoRecoveryHeldCells(this.store, project.id, String(round.id), [...new Set(recoveredIds.map(String))])];
     const recoverableRound = round.surface?.measurementContract?.samplingMode === "one_shot" && !round.ref?.recoveryOf;
+    // `deliveryUnknown` is every cell a recovery may pay for again (`geoRecoveryMayCharge`): the acknowledgement the page asks for.
     const stats = (await this.store.query(`SELECT count(*)::integer AS total,
       count(*) FILTER (WHERE j.status='queued')::integer AS queued, count(*) FILTER (WHERE j.status='leased')::integer AS leased,
       count(*) FILTER (WHERE j.status='done')::integer AS done, count(*) FILTER (WHERE j.status='failed')::integer AS failed,
       count(*) FILTER (WHERE j.status='skipped')::integer AS skipped,
-      count(*) FILTER (WHERE j.error_code='delivery_unknown_no_automatic_retry')::integer AS delivery_unknown,
+      count(*) FILTER (WHERE j.status IN ('failed','skipped') AND (j.error_code IN ('delivery_unknown_no_automatic_retry','inclusion_hold_expired') OR j.external_ref IS NOT NULL))::integer AS delivery_unknown,
       count(*) FILTER (WHERE $3::boolean AND j.status IN ('failed','skipped') AND NOT(j.id=ANY($4::text[]))
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')))::integer AS recoverable,
       array_agg(DISTINCT j.engine) AS observed_engines FROM evimed_geo.probe_jobs j WHERE j.round_id=$1 AND j.geo_project_id=$2`,
     [roundId, project.id, recoverableRound, recovered])).rows[0];
-    const jobs = (await this.store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.attempts, j.error_code, j.snapshot_id, s.status AS answer_status,
+    const jobs = (await this.store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.attempts, j.error_code, j.external_ref, j.snapshot_id, s.status AS answer_status,
       EXISTS (SELECT 1 FROM evimed_geo.snapshots preserved WHERE preserved.probe_job_id=j.id AND preserved.status IN ('valid','refusal')) AS has_preserved_answer,
       q.text, q.original_id, q.original_group FROM evimed_geo.probe_jobs j JOIN evimed_geo.questions q ON q.id=j.question_id AND q.geo_project_id=j.geo_project_id
       LEFT JOIN evimed_geo.snapshots s ON s.id=j.snapshot_id WHERE j.round_id=$1 AND j.geo_project_id=$2 ORDER BY j.created_at,j.id LIMIT $3 OFFSET $4`, [roundId, project.id, limit, offset])).rows;
@@ -1166,7 +1172,7 @@ export class GeoService {
       page: { limit, offset, total, shown: jobs.length, more: nextOffset != null, nextOffset },
       cells: jobs.map((job) => ({ jobId: job.id, questionId: job.question_id, text: job.text, originalId: job.original_id, originalGroup: job.original_group,
         engine: job.engine, status: job.status, answerStatus: job.answer_status ?? null, attempts: Number(job.attempts), errorCode: job.error_code ?? null,
-        snapshotId: job.snapshot_id ?? null, deliveryUnknown: job.error_code === "delivery_unknown_no_automatic_retry", recoverable: recoverableRound && !recovered.includes(job.id) && !job.has_preserved_answer && ["failed", "skipped"].includes(job.status) })) };
+        snapshotId: job.snapshot_id ?? null, deliveryUnknown: ["failed", "skipped"].includes(job.status) && geoRecoveryMayCharge(job), recoverable: recoverableRound && !recovered.includes(job.id) && !job.has_preserved_answer && ["failed", "skipped"].includes(job.status) })) };
   }
 
   /**
@@ -1295,10 +1301,11 @@ export class GeoService {
       if (!row) throw failure(404, "geo_round_not_found", "Round not found.");
       return row;
     }
-    // One resolver for "the latest measurement": a finished full round, by when it finished — the same one the sources page reads —
-    // and only when none has finished, the newest one begun.
-    return (await this.store.query(`SELECT * FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-      ORDER BY (status IN ('done', 'partial')) DESC, CASE WHEN status IN ('done', 'partial') THEN finished_at END DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
+    // One resolver for "the latest measurement": a finished full round that heard an answer, by when it finished — the same one the
+    // sources page reads — and only when none has finished, the newest one begun.
+    return (await this.store.query(`SELECT * FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = ANY($2::text[])
+        AND (r.status NOT IN ('done', 'partial') OR ${GEO_ROUND_ANSWERED("r")})
+      ORDER BY (r.status IN ('done', 'partial')) DESC, CASE WHEN r.status IN ('done', 'partial') THEN r.finished_at END DESC NULLS LAST, r.created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
   }
 
   /** @param {{ id: string }} user @param {string} id @param {string} snapshotId */
@@ -1730,6 +1737,7 @@ export class GeoService {
           JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
         WHERE m.geo_project_id = $1 AND m.scope = 'engine' AND m.metric_id = $2 AND m.pool IS NULL AND m.arm IS NULL AND ${PLAIN_ROW}
           AND m.round_id = (SELECT latest.id FROM evimed_geo.rounds latest WHERE latest.geo_project_id = $1 AND latest.kind = ANY($3::text[])
+              AND (latest.status NOT IN ('done', 'partial') OR ${GEO_ROUND_ANSWERED("latest")})
             ORDER BY (latest.status IN ('done', 'partial')) DESC, CASE WHEN latest.status IN ('done', 'partial') THEN latest.finished_at END DESC NULLS LAST, latest.created_at DESC, latest.id DESC LIMIT 1)
         ORDER BY m.engine, m.computed_at DESC`, [project.id, GEO_VIEW_METRIC_IDS.retrieval, [...GEO_HEADLINE_ROUND_KINDS]]),
     ]);

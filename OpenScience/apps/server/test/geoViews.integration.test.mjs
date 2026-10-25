@@ -77,6 +77,12 @@ const insertSnapshot = (id, geoId, roundId, questionId, engine, status, askedAt)
     geo_project_id, question_id, engine, asked_at, status, answer_text) VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, '回答')`,
 [id, ALICE, roundId, geoId, questionId, engine, askedAt, status]);
 
+/** One valid answer in a round: a finished round that heard none is never the latest measurement (2026-10-25). @param {string} roundId @param {string} geoId */
+const heard = async (roundId, geoId) => {
+  const question = (await store.questionMap(geoId, 1))[0].questions[0];
+  await insertSnapshot(`heard-${roundId}`, geoId, roundId, question.id, "deepseek", "valid", "2026-09-24T00:00:00Z");
+};
+
 test("a target is the project-wide row or nothing: a pool's own goal never stands in for it", options, async () => {
   const { project, write } = await seededProject();
   // M-01S has goals for two pools only; M-19 has a project-wide goal.
@@ -198,6 +204,7 @@ test("the diagnosis reads the round that finished last, not the one begun last",
   await insertRound(`late-${project.id}`, project.id, "weekly", { createdAt: "2026-10-02T00:00:00Z", finishedAt: "2026-10-02T06:00:00Z" });
   await insertRound(`early-${project.id}`, project.id, "weekly", { createdAt: "2026-10-01T00:00:00Z", finishedAt: "2026-10-03T06:00:00Z" });
   await insertRound(`run-${project.id}`, project.id, "weekly", { createdAt: "2026-10-04T00:00:00Z", status: "running" });
+  for (const round of [`late-${project.id}`, `early-${project.id}`]) await heard(round, project.id);
   const diagnosis = await service.diagnosis(USER, project.id);
   assert.equal(diagnosis.round?.id, `early-${project.id}`, "a round still running never stands in for a finished one");
 });
@@ -232,6 +239,7 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
   const { project } = await seededProject();
   const roundId = `rh-${project.id}`;
   await insertRound(roundId, project.id, "baseline", { finishedAt: "2026-09-24T10:00:00Z" });
+  await heard(roundId, project.id);
   const lines = async () => (await service.diagnosis(USER, project.id)).hardLines;
   const accuracy = async (/** @type {string} */ status, /** @type {number} */ numerator, /** @type {number} */ denominator, /** @type {number} */ value) => {
     await database.query(`DELETE FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'M-06'`, [roundId]);
@@ -284,8 +292,13 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
 
 test("the diagnosis says how many valid answers the round left out unjudged, and null for a round measured before that was kept (Q-11)", options, async () => {
   const { project } = await seededProject();
+  // A round with no answer is never the diagnosis' round (2026-10-25), so the count is read from the round's own answers: a valid
+  // answer nobody judged is counted, and once judged it is not.
   await insertRound(`ru-${project.id}`, project.id, "baseline", { finishedAt: "2026-09-24T10:00:00Z" });
-  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, null);
-  await database.query(`UPDATE evimed_geo.rounds SET ref = $2::jsonb WHERE id = $1`, [`ru-${project.id}`, JSON.stringify({ balance: { engines: ["doubao"], denominators: { unparsed: 7 } } })]);
-  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 7);
+  assert.equal((await service.diagnosis(USER, project.id)).round, null, "a round that heard nothing is no diagnosis");
+  await heard(`ru-${project.id}`, project.id);
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 1);
+  await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, judged_at, mentions_ours) VALUES ($1, $2, $3, now(), false)`,
+    [`heard-ru-${project.id}`, ALICE, project.id]);
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 0);
 });

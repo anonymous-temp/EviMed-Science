@@ -208,3 +208,22 @@ test('an explicitly requested engine subset follows enqueueRound scope without i
  assert.ok(event);assert.deepEqual(event.payload.basis.methods.before.declaredEngines,['deepseek']);assert.deepEqual(event.payload.basis.methods.after.engines,['deepseek']);
  const page=await readGeoGroupChangeMembers(f.documents,f.project,event,{side:'before'});assert.ok(page.items.every(row=>row.engine==='deepseek'));
 });
+test('a round that heard no answer between two measured rounds is passed over, never a pair the screen waits on for good',options,async t=>{
+ // 2026-10-25: with the probe host down a weekly round closes with nothing asked; it is never measured, so a pair ending on it was
+ // "not ready" on every pass and the screen stopped there for good.
+ const f=await fixture(t),{store,documents,user,project,signals,round}=f;
+ await round('a','00',false);
+ await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at,surface)
+   VALUES('empty','owner',$1,'weekly','partial',1,'{deepseek}',NULL,'2026-10-25T01:01:00Z','{"mode":"web"}')`,[project.id]);
+ await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,surface,citations)
+   VALUES('empty-1','owner',$1,'empty','q1','deepseek','2026-10-25T01:00:30Z','failed','{"mode":"web"}','[]')`,[project.id]);
+ await round('b','02',true);
+ const pair=await readGeoRoundComparison(store,project,{previousRoundId:'a',currentRoundId:'b'});
+ assert.equal(pair.current.rounds[0].id,'b','the empty round between them does not break the adjacency');
+ const producer=new GeoGroupChanges({store,signals});
+ await producer.project(project);await producer.project(project);
+ const events=(await documents.list(user.id,'geo-signal',{projectId:project.projectId,limit:100,filter:{recordType:'geo-signal',kind:'group_changed'}})).items;
+ assert.deepEqual(events.map(r=>[r.payload.basis.previous.id,r.payload.basis.current.id]),[['a','b']]);
+ const mark=(await store.query('SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key=$2',[project.id,GROUP_CHANGE_MARK])).rows[0].detail;
+ assert.deepEqual([mark.roundId,mark.lastError??null],['b',null]);
+});

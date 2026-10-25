@@ -54,7 +54,7 @@ import {
   GEO_RX_CLASSES, GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS,
   GEO_METRICS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
-import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { GeoMeasureStore, geoRecoveryHeldCells } from "./geoMeasureStore.mjs";
 import { enqueueRound, GEO_ROUND_MAX_ASKS } from "./geoProbeQueue.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -488,7 +488,11 @@ export async function geoStartDiagnosis(store, project, data, inclusion = null) 
   return { ...result, status: (await new GeoMeasureStore(store.database).round(result.roundId))?.status ?? "queued" };
 }
 
-/** Explicit recovery is a new, trace-linked round, with one recovery generation per failed cell.
+/**
+ * Explicit recovery is a new, trace-linked round of an original one-shot diagnosis's failed cells. A cell an earlier recovery still
+ * holds (`geoRecoveryHeldCells`) is not recovered again; one whose earlier recovery provably never reached the provider is. A cell
+ * whose request may already have been charged — its delivery unknown, an inclusion task the vendor took (`external_ref`) and never
+ * finished, its hold expired — is recovered only with the person's `acknowledgeUnknown`, because the recovery pays again.
  * @param {import("./geoStore.mjs").GeoStore} store @param {any} project @param {Record<string, any>} data */
 export async function geoRecoverDiagnosis(store, project, data) {
   if (Object.keys(data).some((key) => !["roundId", "requestKey", "jobIds", "acknowledgeUnknown"].includes(key))
@@ -498,16 +502,26 @@ export async function geoRecoverDiagnosis(store, project, data) {
   const measure = new GeoMeasureStore(store.database);
   const round = await measure.round(data.roundId);
   if (!round || round.geoProjectId !== project.id || round.userId !== project.userId) throw failure(404, "geo_round_not_found", "Diagnosis not found.");
-  if (round.surface?.measurementContract?.samplingMode !== "one_shot" || round.ref?.recoveryOf) throw failure(409, "geo_recovery_exhausted", "Only an original one-shot diagnosis permits one recovery generation.");
-  const jobs = (await store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.error_code FROM evimed_geo.probe_jobs j WHERE j.round_id=$1 AND j.geo_project_id=$2 AND j.id=ANY($3::text[]) AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')) ORDER BY j.id`, [round.id, project.id, data.jobIds])).rows;
+  if (round.surface?.measurementContract?.samplingMode !== "one_shot" || round.ref?.recoveryOf) throw failure(409, "geo_recovery_exhausted", "Only an original one-shot diagnosis is recovered; name the original diagnosis and its cells.");
+  const jobs = (await store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.error_code, j.external_ref FROM evimed_geo.probe_jobs j WHERE j.round_id=$1 AND j.geo_project_id=$2 AND j.id=ANY($3::text[]) AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')) ORDER BY j.id`, [round.id, project.id, data.jobIds])).rows;
   if (jobs.length !== data.jobIds.length || jobs.some((job) => !["failed", "skipped"].includes(job.status))) throw failure(400, "geo_recovery_invalid", "Recovery can only name failed or missing cells of this diagnosis.");
-  if (jobs.some((job) => job.error_code === "delivery_unknown_no_automatic_retry") && data.acknowledgeUnknown !== true) throw failure(409, "geo_recovery_acknowledgment_required", "A failed request may already have reached the provider; explicitly acknowledge that recovery may make another call.");
+  if ((await geoRecoveryHeldCells(store, project.id, round.id, data.jobIds)).size) throw failure(409, "geo_recovery_exhausted", "An earlier recovery of these cells is running, answered, or may have reached the provider; read diagnosis_progress first.");
+  if (jobs.some(geoRecoveryMayCharge) && data.acknowledgeUnknown !== true) throw failure(409, "geo_recovery_acknowledgment_required", "A failed request may already have reached the provider and been charged; recovery makes another, possibly billed, call only with acknowledgeUnknown.");
   const roundId = await measure.createRound({ id: randomId("gr_"), userId: project.userId, geoProjectId: project.id, kind: "single_step",
     setVersion: round.setVersion, engines: [...new Set(jobs.map((job) => String(job.engine)))], surface: round.surface, planned: jobs.length,
     ref: { requestKey: data.requestKey, recoveryOf: round.id, recoveredJobIds: jobs.map((job) => job.id), explicitRecovery: true,
       acknowledgeUnknown: data.acknowledgeUnknown === true, authorizedBy: project.actorId ?? project.userId }, now: new Date() },
   jobs.map((job) => ({ questionId: String(job.question_id), engine: String(job.engine), repeatIndex: 0 })));
   return { roundId, planned: jobs.length, status: (await measure.round(roundId))?.status ?? "queued", recoveryOf: round.id };
+}
+
+/**
+ * Whether asking a failed one-shot cell again may pay a second time: its request may have reached the provider (delivery unknown), or
+ * the inclusion vendor took a paid task for it (`external_ref`) that never finished (its hold expired).
+ * @param {{ error_code?: string | null, external_ref?: string | null }} job
+ */
+export function geoRecoveryMayCharge(job) {
+  return job.error_code === "delivery_unknown_no_automatic_retry" || job.error_code === "inclusion_hold_expired" || job.external_ref != null;
 }
 
 /** @param {ReturnType<typeof geoQuestionImportPreview>} preview */

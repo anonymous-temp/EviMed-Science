@@ -54,8 +54,13 @@ const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
 const readFilterFields = Object.freeze([...new Set([...GEO_ANALYSIS_FIELDS, ...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "targetKey", "url", "key", "limit", "offset", "member"])]);
-/** The write module's refusals of a whole call, which reach the run as they are. */
-const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid"]);
+/**
+ * The write module's refusals of a whole call, which reach the run as they are; the last three are a diagnosis start's or
+ * recovery's, each with its own next step (a new request key; a cell that has had its recovery; the person's acceptance of a
+ * possible second charge), so folding them into an invalid payload hid the one that needs the person (2026-10-25).
+ */
+const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid",
+  "geo_request_key_conflict", "geo_recovery_exhausted", "geo_recovery_acknowledgment_required"]);
 
 class GeoGatewayError extends Error {
   /** @param {number} status @param {string} code @param {string} message */
@@ -255,9 +260,10 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   return async function geoGatewayHandler(/** @type {any} */ req, /** @type {any} */ res, /** @type {any} */ onFailure) {
+    let operation = "";
     try {
       const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
-      const operation = pathname.startsWith(`${gatewayPath}/`) ? pathname.slice(gatewayPath.length + 1) : "";
+      operation = pathname.startsWith(`${gatewayPath}/`) ? pathname.slice(gatewayPath.length + 1) : "";
       if (req.method !== "POST" || !operations.includes(operation)) throw gatewayError(404, "not_found", "Not found.");
       const header = String(req.headers?.authorization ?? "").trim();
       const token = /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim();
@@ -327,18 +333,20 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       let error = caught;
       // The service and the write module speak in HttpErrors. The ones about
       // the call's own shape pass through; a filter naming a round or a set
-      // version the project does not have is the filter being wrong; nothing
-      // else of theirs is a code the run's verdict knows.
+      // version the project does not have is the filter being wrong; any other
+      // refusal of a write on its merits (an import, a diagnosis start or a
+      // round that cannot be planned as sent: 400, 409, 422) is the payload's to
+      // correct, with the module's own message — never an outage the run
+      // would go on without. Nothing else of theirs is a code the run's verdict knows.
       if (error instanceof HttpError) {
         if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
-        else if (["geo_question_import_invalid", "geo_diagnosis_invalid", "geo_contract_missing", "geo_request_key_conflict", "geo_recovery_invalid", "geo_recovery_exhausted", "geo_recovery_acknowledgment_required", "geo_round_empty", "geo_round_question_invalid"].includes(error.code)) {
-          error = gatewayError(error.status, "geo_write_payload_invalid", error.message);
-        } else if (passThroughCodes.has(error.code)) {
+        else if (passThroughCodes.has(error.code)) {
           // The run hears the refusal; which constraint of the database made it is the operator's.
           const underneath = /** @type {any} */ (error).cause?.code;
           if (typeof underneath === "string" && /^[A-Za-z0-9_]{1,64}$/.test(underneath)) report(underneath);
           error = gatewayError(error.status, error.code, error.message);
-        }
+        } else if (operation === "write" && [400, 409, 422].includes(error.status)) error = gatewayError(error.status, "geo_write_payload_invalid", error.message);
+        else if (operation === "write" && error.status === 413) error = gatewayError(413, "geo_request_too_large", error.message);
       }
       const known = error instanceof GeoGatewayError;
       const status = known ? /** @type {any} */ (error).status : 503;

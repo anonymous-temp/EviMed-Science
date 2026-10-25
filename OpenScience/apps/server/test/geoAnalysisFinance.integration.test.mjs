@@ -227,6 +227,8 @@ test('public CNY cells, exact members, exports and native freezes retain histori
  await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,text,kind,pool,is_measured) VALUES('new-q',$1,$2,'new-g',2,'New question','typical','P2',true)",[project.userId,project.id]);
  await store.query("UPDATE evimed_geo.questions SET retired_at='2026-10-03' WHERE geo_project_id=$1 AND set_version=1",[project.id]);
  await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES('v2-round',$1,$2,'baseline','done',2,'{deepseek}','2026-10-04','{\"mode\":\"web\"}')",[project.userId,project.id]);
+ // The new version's baseline heard an answer: a round that heard none is never the latest (2026-10-25).
+ await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES('v2-answer',$1,$2,'v2-round','new-q','deepseek','2026-10-04','valid','New answer','{\"mode\":\"web\"}')",[project.userId,project.id]);
  const after=await service.analysis(user,project.id,{viewId:'V25'});
  assert.equal(after.page.total,12);assert.deepEqual(after.selection.roundIds,['v2-round']);
  assert.deepEqual(after.rows.map(row=>row.values.amountCny.value),original.rows.map(row=>row.values.amountCny.value));

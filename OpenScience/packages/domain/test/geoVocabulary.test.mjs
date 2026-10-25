@@ -132,13 +132,22 @@ test("the tool codes are classified for a run, the route codes are registered, a
     "geo_gateway_timeout", "geo_gateway_rate_limited", "geo_gateway_token_missing", "geo_gateway_token_invalid", "geo_upstream_error",
     "geo_response_invalid", "geo_response_too_large", "social_posts_unconfigured"];
   const terminal = ["geo_request_invalid", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid", "geo_write_what_invalid",
-    "geo_write_payload_invalid", "geo_write_rejected", "geo_plan_file_required", "social_posts_query_invalid", "social_posts_platform_invalid", "social_posts_sort_invalid", "social_posts_limit_invalid"];
+    "geo_write_payload_invalid", "geo_write_rejected", "geo_plan_file_required", "social_posts_query_invalid", "social_posts_platform_invalid", "social_posts_sort_invalid", "social_posts_limit_invalid",
+    // The gateway passes these three diagnosis refusals to the run by name (each has its own next step), so they are a run's codes.
+    "geo_request_key_conflict", "geo_recovery_exhausted", "geo_recovery_acknowledgment_required"];
   for (const code of recoverable) assert.equal(classifyEvidenceSourceError(code), "recoverable", code);
   for (const code of terminal) assert.equal(classifyEvidenceSourceError(code), "terminal", code);
   const [toolFamily] = ERROR_CODE_FAMILIES.find(([pattern]) => pattern.test("geo_disabled")) ?? [];
   assert.ok(toolFamily, "the tool codes have a family");
   for (const code of [...recoverable, ...terminal]) assert.ok(toolFamily.test(code), `${code} falls outside the tool family`);
   assert.ok(GEO_ROUTE_ERROR_CODES.length >= 20);
+  // What the gateway folds into `geo_write_payload_invalid` only a page hears by name.
+  for (const code of ["geo_question_import_invalid", "geo_diagnosis_invalid", "geo_contract_missing", "geo_recovery_invalid", "geo_round_empty",
+    "geo_round_question_invalid", "geo_round_engine_invalid", "geo_round_too_large", "geo_round_not_found"]) assert.ok(GEO_ROUTE_ERROR_CODES.includes(code), code);
+  for (const code of ["geo_request_key_conflict", "geo_recovery_exhausted", "geo_recovery_acknowledgment_required"]) {
+    assert.equal(GEO_ROUTE_ERROR_CODES.includes(code), false, `${code} is a run's code`);
+    assert.match(knownErrorCodeMessage(code) ?? "", /补测|编号/, `${code} has its own sentence, for the page as well`);
+  }
   for (const code of GEO_ROUTE_ERROR_CODES) {
     assert.ok(ALL_ERROR_CODES.includes(code), code);
     assert.equal(toolFamily.test(code), false, `${code} is a page's code, not a run's`);

@@ -1,6 +1,7 @@
 /** Deterministic selected readings. Domain metrics own all arithmetic and membership. */
 import { createHash } from "node:crypto";
 import {
+  GEO_ENGINE_LABELS_ZH,
   GEO_METRIC_LABELS_ZH,
   GEO_METRIC_UNITS,
   documentExportDigest,
@@ -26,6 +27,8 @@ export { normalizeGeoAnalysisView } from "./geoAnalysisRegistry.mjs";
 import { buildGeoSourceAnalysis, selectedSourceDomains, readGeoSourceAnnotations, readGeoOpportunityLinks } from "./geoAnalysisSources.mjs";
 import { buildGeoEvidenceAnalysis, readGeoEvidenceContext } from "./geoAnalysisEvidence.mjs";
 import { buildGeoSupportAnalysis, readGeoSupportContext } from "./geoAnalysisSupport.mjs";
+import { geoReaderAvailability, geoReaderCellValue, geoReaderCounts, geoReaderInline, geoReaderLines, geoReaderMetric, geoReaderPeriod, geoReaderReason, geoReaderRule,
+  geoReaderScope, geoReaderState, geoReaderTimeCoverage, geoReaderUnit, GEO_READER_CONTEXT_ZH } from "./geoAnalysisReaderText.mjs";
 import { HttpError } from "./security.mjs";
 
 const hash = (value) =>
@@ -701,321 +704,230 @@ export async function readGeoAnalysis(
     return result;
   });
 }
-/** Freeze the complete table, with no formatted-value parsing or model-generated arithmetic. @param {any} view */
+/**
+ * Freeze the complete table, with no formatted-value parsing or model-generated arithmetic. The five formats carry the same reader
+ * content in labelled Chinese fields — CSV and XLSX the typed table, DOCX, PDF and HTML the Markdown; the frozen view with its
+ * selection reference, digest, data revision, method versions and every exact identity is the export record (`cover.analysis`, kept
+ * in the frozen document, never printed), and XLSX's 「依据」 sheet lists `cover.basis` in words (2026-10-25: the body printed the
+ * record's references, raw codes, English internal rules and canonical-JSON dumps).
+ * @param {any} view
+ */
 export function freezeGeoAnalysisDocument(view) {
   if(view.rowContext === "member_details") throw invalid("Read the full selected analysis before exporting its object details.");
   if (view.page.shown !== view.page.total)
     throw invalid("Freeze every selected row before exporting.");
-  const metadataColumns = [
-    "selection_ref",
-    "analysis_digest",
-    "data_revision",
-    "scope",
-    "counts",
-    "method",
-    "counting_rule",
-    "denominator_rule",
-    "contextual_basis",
-  ].map((key) => ({ key, label: key, type: "text" }));
-  const metadataValues = {
-    selection_ref: view.selection.reference,
-    analysis_digest: view.digest,
-    data_revision: view.selection.dataRevision,
-    scope: documentExportDigest(view.scope),
-    counts: documentExportDigest(view.selection.counts),
-    method: view.definition.methodVersion,
-    counting_rule: view.definition.countingRule,
-    denominator_rule: view.definition.denominatorRule,
-    contextual_basis: documentExportDigest(view.contextualBasis),
-  };
-  let columns = [
-    ...metadataColumns,
-    { key: "key", label: "Row", type: "text" },
-    { key: "label", label: "指标", type: "text" },
-    { key: "metricId", label: "Metric", type: "text" },
-    { key: "metric_unit", label: "指标尺度", type: "text" },
-    { key: "period", label: "区间", type: "text" },
-    { key: "date", label: "日期", type: "text" },
-    { key: "dimensions", label: "精确分类与条件", type: "text" },
-    ...view.columns.flatMap((column) => [
-      { key: column.key, label: column.label, type: column.type ?? "number" },
-      {
-        key: `${column.key}_state`,
-        label: `${column.label}状态`,
-        type: "text",
-      },
-      {
-        key: `${column.key}_numerator`,
-        label: `${column.label}分子`,
-        type: "number",
-      },
-      {
-        key: `${column.key}_denominator`,
-        label: `${column.label}分母`,
-        type: "number",
-      },
-      {
-        key: `${column.key}_reason`,
-        label: `${column.label}说明`,
-        type: "text",
-      },
-      {
-        key: `${column.key}_unit`,
-        label: `${column.label}成员单位`,
-        type: "text",
-      },
-    ]),
-  ];
-  let rows = view.rows.map((row) =>
-    Object.fromEntries([
-      ...Object.entries(metadataValues),
-      ["key", row.key],
-      ["label", row.label],
-      ["metricId", row.metricId],
-      ["metric_unit", GEO_METRIC_UNITS[row.metricId] ?? row.dimensions.unit ?? "count"],
-      ["period", row.dimensions.period ?? "selected"],
-      ["date", row.dimensions.date ?? null],
-      ["dimensions", documentExportDigest(row.dimensions)],
-      ...view.columns.flatMap((column) => [
-        [column.key, row.values[column.key].value],
-        [`${column.key}_state`, row.values[column.key].state],
-        [
-          `${column.key}_numerator`,
-          row.values[column.key].numerator ?? row.values[column.key].metric?.numerator ?? null,
-        ],
-        [
-          `${column.key}_denominator`,
-          row.values[column.key].denominator ?? row.values[column.key].metric?.denominator ?? null,
-        ],
-        [
-          `${column.key}_reason`,
-          row.values[column.key].reason ??
-            row.values[column.key].metric?.reason ??
-            null,
-        ],
-        [`${column.key}_unit`, row.values[column.key].members?.unit ?? null],
-      ]),
-    ]),
-  );
-  if (GEO_COVERAGE_VIEWS.includes(view.viewId) || columns.length > 40) {
-    // Keep wide status tables within the existing 40-column offline renderer contract.
-    columns = [
-      ...metadataColumns,
-      { key: "key", label: "Row", type: "text" },
-      { key: "label", label: "对象", type: "text" },
-      { key: "dimensions", label: "精确分类与条件", type: "text" },
-      { key: "cells_metadata", label: "单位、原因和计数依据", type: "text" },
-      ...view.columns.flatMap((column) => [
-        { key: column.key, label: column.label, type: column.type ?? "number" },
-        {
-          key: `${column.key}_state`,
-          label: `${column.label}状态`,
-          type: "text",
-        },
-      ]),
-    ];
-    rows = view.rows.map((row) => ({
-      ...metadataValues,
-      key: row.key,
-      label: row.label,
-      dimensions: documentExportDigest(row.dimensions),
-      cells_metadata: documentExportDigest(
-        Object.fromEntries(
-          view.columns.map((column) => {
-            const value = row.values[column.key];
-            return [
-              column.key,
-              {
-                unit: value.unit,
-                reason: value.reason ?? value.metric?.reason ?? null,
-                memberUnit: value.members?.unit ?? null,
-                numerator: value.numerator ?? value.metric?.numerator ?? null,
-                denominator: value.denominator ?? value.metric?.denominator ?? null,
-                metricId: value.metric?.metricId ?? null,
-                ...(value.knownSubtotal !== undefined ? {knownSubtotal:value.knownSubtotal,unknownCandidates:value.unknownCandidates??null} : {}),
-              },
-            ];
-          }),
-        ),
-      ),
-      ...Object.fromEntries(
-        view.columns.flatMap((column) => [
-          [column.key, row.values[column.key].value],
-          [`${column.key}_state`, row.values[column.key].state],
-        ]),
-      ),
-    }));
-  }
-  if (columns.length > 40) {
-    columns = [...metadataColumns, {key:"row_key",label:"Row",type:"text"}, {key:"label",label:"对象",type:"text"}, {key:"dimensions",label:"精确分类与条件",type:"text"}, {key:"column_key",label:"统计项",type:"text"}, {key:"column_label",label:"统计项名称",type:"text"}, {key:"value",label:"数值",type:"number"}, {key:"state",label:"状态",type:"text"}, {key:"reason",label:"原因",type:"text"}, {key:"unit",label:"单位",type:"text"}, {key:"numerator",label:"分子",type:"number"}, {key:"denominator",label:"分母",type:"number"}];
-    rows = view.rows.flatMap(row => view.columns.map(column => {const value = row.values[column.key]; return {...metadataValues,row_key:row.key,label:row.label,dimensions:documentExportDigest(row.dimensions),column_key:column.key,column_label:column.label,value:value.value,state:value.state,reason:value.reason??value.metric?.reason??null,unit:value.members?.unit??value.unit??null,numerator:value.metric?.numerator??null,denominator:value.metric?.denominator??null};}));
-  }
-  const clean = (value) =>
+  const timeZone = view.scope?.timeZone ?? "Asia/Shanghai";
+  const clean = (/** @type {unknown} */ value) =>
     String(value ?? "未测")
       .replaceAll("|", "\\|")
       .replaceAll("\n", " ");
-  const metadata = { ...view, rows: view.rows };
-  const reportColumns = [
-    { key: "label", label: "指标与区间" },
-    ...view.columns,
-  ];
-  const reportReading = (row, column) => {
-    const cell = row.values[column.key],
-      metric = cell.metric,
-      unit = cell.unit ?? GEO_METRIC_UNITS[row.metricId] ?? row.dimensions.unit ?? "count";
-    const value =
-      cell.value == null
-        ? "未测"
-        : `${cell.value}${unit === "percent" ? "%" : ""}`;
-    const word =
-      metric?.reason === "citations_without_links"
-        ? "引用不可测"
-        : metric?.status === "insufficient"
-          ? "样本不足"
-          : metric?.status === "absent"
-            ? "未测"
-            : value;
-    return `${word}${word !== value && cell.value != null ? `；保留值 ${value}` : ""} (状态 ${cell.state}; 尺度 ${unit}; 原因 ${cell.reason ?? metric?.reason ?? "—"}; 分子/分母 ${cell.numerator ?? metric?.numerator ?? "—"}/${cell.denominator ?? metric?.denominator ?? "—"}; 成员单位 ${cell.members?.unit ?? "—"})`;
+  const objectsOf = (/** @type {any} */ dimensions) => {
+    const objects = dimensions?.objects;
+    return Array.isArray(objects) ? objects : objects && typeof objects === "object" ? Object.values(objects).flat() : [];
   };
-  const reportRows = view.rows.map((row) => ({
-    label: [row.label, view.viewId === "V10" ? "" : documentExportDigest(row.dimensions)]
-      .filter(Boolean)
-      .join(" · "),
-    ...Object.fromEntries(
-      view.columns.map((column) => [column.key, reportReading(row, column)]),
-    ),
+  const withoutObjects = (/** @type {any} */ dimensions) => { const { objects: _objects, ...rest } = dimensions ?? {}; return rest; };
+  /** A row's conditions in words; the records it carries follow, one per `／`. @param {any} row */
+  const conditions = (row) => [geoReaderInline(withoutObjects(row.dimensions), timeZone),
+    ...objectsOf(row.dimensions).map((/** @type {any} */ object) => geoReaderInline(object, timeZone))].filter(Boolean).join(" ／ ") || null;
+  const shortConditions = (/** @type {any} */ row) => geoReaderInline(withoutObjects(row.dimensions), timeZone);
+  const unitOf = (/** @type {any} */ row, /** @type {any} */ cell) => cell.unit ?? GEO_METRIC_UNITS[row.metricId] ?? row.dimensions.unit ?? "count";
+  const numeratorOf = (/** @type {any} */ cell) => cell.numerator ?? cell.metric?.numerator ?? null;
+  const denominatorOf = (/** @type {any} */ cell) => cell.denominator ?? cell.metric?.denominator ?? null;
+  const reasonOf = (/** @type {any} */ cell) => geoReaderReason(cell.reason ?? cell.metric?.reason ?? null);
+  /** A cell read aloud: the reading, then what qualifies it. Under the floor it is k of n, never a rate. @param {any} row @param {any} column */
+  const cellReading = (row, column) => {
+    const cell = row.values[column.key], metric = cell.metric, unit = unitOf(row, cell);
+    const value = cell.value == null ? "未测" : `${cell.value}${unit === "percent" ? "%" : unit === "percentage_points" ? " 个百分点" : unit === "CNY" ? " 元" : ""}`;
+    const insufficient = metric?.status === "insufficient" || cell.state === "insufficient";
+    const word = metric?.reason === "citations_without_links" ? "引用不可测" : insufficient ? "样本不足" : metric?.status === "absent" ? "未测" : value;
+    const numerator = numeratorOf(cell), denominator = denominatorOf(cell);
+    const notes = [cell.state && !["known", "insufficient"].includes(cell.state) ? geoReaderState(cell.state) : null,
+      metric?.reason === "citations_without_links" ? null : reasonOf(cell),
+      numerator != null && denominator != null ? `${numerator}/${denominator}` : null].filter(Boolean);
+    return notes.length ? `${word}（${[...new Set(notes)].join("；")}）` : word;
+  };
+  const columnLabels = new Map(view.columns.map((/** @type {any} */ column) => [column.key, column.label]));
+  let columns = [
+    { key: "row_number", label: "序号", type: "number" },
+    { key: "label", label: "指标", type: "text" },
+    { key: "metric_unit", label: "指标尺度", type: "text" },
+    { key: "period", label: "区间", type: "text" },
+    { key: "date", label: "日期", type: "text" },
+    { key: "dimensions", label: "分类与条件", type: "text" },
+    ...view.columns.flatMap((/** @type {any} */ column) => [
+      { key: column.key, label: column.label, type: column.type ?? "number" },
+      { key: `${column.key}_state`, label: `${column.label}状态`, type: "text" },
+      { key: `${column.key}_numerator`, label: `${column.label}分子`, type: "number" },
+      { key: `${column.key}_denominator`, label: `${column.label}分母`, type: "number" },
+      { key: `${column.key}_reason`, label: `${column.label}说明`, type: "text" },
+      { key: `${column.key}_unit`, label: `${column.label}成员单位`, type: "text" },
+    ]),
+  ];
+  let rows = view.rows.map((/** @type {any} */ row, /** @type {number} */ index) =>
+    Object.fromEntries([
+      ["row_number", index + 1],
+      ["label", row.label],
+      ["metric_unit", geoReaderUnit(GEO_METRIC_UNITS[row.metricId] ?? row.dimensions.unit ?? "count")],
+      ["period", geoReaderPeriod(row.dimensions.period ?? "selected")],
+      ["date", row.dimensions.date ?? null],
+      ["dimensions", conditions(row)],
+      ...view.columns.flatMap((/** @type {any} */ column) => {
+        const cell = row.values[column.key];
+        return [
+          [column.key, geoReaderCellValue(column.key, cell.value)],
+          [`${column.key}_state`, geoReaderState(cell.state)],
+          [`${column.key}_numerator`, numeratorOf(cell)],
+          [`${column.key}_denominator`, denominatorOf(cell)],
+          [`${column.key}_reason`, reasonOf(cell)],
+          [`${column.key}_unit`, geoReaderUnit(cell.members?.unit ?? null)],
+        ];
+      }),
+    ]),
+  );
+  /** What qualifies each cell of a row, in words (the wide table's one note column). @param {any} row */
+  const cellsNote = (row) => view.columns.map((/** @type {any} */ column) => {
+    const cell = row.values[column.key];
+    const parts = [geoReaderUnit(cell.unit ?? null) ? `单位 ${geoReaderUnit(cell.unit)}` : null, reasonOf(cell),
+      numeratorOf(cell) != null && denominatorOf(cell) != null ? `${numeratorOf(cell)}/${denominatorOf(cell)}` : null,
+      cell.knownSubtotal !== undefined ? `已核实小计 ${cell.knownSubtotal ?? 0}${cell.unknownCandidates ? `，另有 ${cell.unknownCandidates} 条待核实` : ""}` : null].filter(Boolean);
+    return parts.length ? `${column.label}：${parts.join("，")}` : null;
+  }).filter(Boolean).join("；") || null;
+  if (GEO_COVERAGE_VIEWS.includes(view.viewId) || columns.length > 40) {
+    // Keep wide status tables within the existing 40-column offline renderer contract.
+    columns = [
+      { key: "row_number", label: "序号", type: "number" },
+      { key: "label", label: "对象", type: "text" },
+      { key: "dimensions", label: "分类与条件", type: "text" },
+      { key: "cells_note", label: "单位、原因和计数依据", type: "text" },
+      ...view.columns.flatMap((/** @type {any} */ column) => [
+        { key: column.key, label: column.label, type: column.type ?? "number" },
+        { key: `${column.key}_state`, label: `${column.label}状态`, type: "text" },
+      ]),
+    ];
+    rows = view.rows.map((/** @type {any} */ row, /** @type {number} */ index) => ({
+      row_number: index + 1, label: row.label, dimensions: conditions(row), cells_note: cellsNote(row),
+      ...Object.fromEntries(view.columns.flatMap((/** @type {any} */ column) => [
+        [column.key, geoReaderCellValue(column.key, row.values[column.key].value)],
+        [`${column.key}_state`, geoReaderState(row.values[column.key].state)],
+      ])),
+    }));
+  }
+  if (columns.length > 40) {
+    columns = [{ key: "row_number", label: "序号", type: "number" }, { key: "label", label: "对象", type: "text" }, { key: "dimensions", label: "分类与条件", type: "text" },
+      { key: "column_label", label: "统计项", type: "text" }, { key: "value", label: "数值", type: "number" }, { key: "state", label: "状态", type: "text" },
+      { key: "reason", label: "原因", type: "text" }, { key: "unit", label: "单位", type: "text" }, { key: "numerator", label: "分子", type: "number" },
+      { key: "denominator", label: "分母", type: "number" }];
+    rows = view.rows.flatMap((/** @type {any} */ row, /** @type {number} */ index) => view.columns.map((/** @type {any} */ column) => {
+      const value = row.values[column.key];
+      return { row_number: index + 1, label: row.label, dimensions: conditions(row), column_label: column.label, value: geoReaderCellValue(column.key, value.value), state: geoReaderState(value.state),
+        reason: reasonOf(value), unit: geoReaderUnit(value.members?.unit ?? value.unit ?? null), numerator: value.metric?.numerator ?? null, denominator: value.metric?.denominator ?? null };
+    }));
+  }
+  const rules = [geoReaderRule(view.definition.countingRule), geoReaderRule(view.definition.denominatorRule)].filter(Boolean);
+  const header = (/** @type {string} */ title, /** @type {string} */ note = "") => `# ${title}\n\n${rules.map((rule) => `${rule}\n\n`).join("")}范围：${clean(geoReaderScope(view.scope))}。样本：${clean(geoReaderCounts(view.selection?.counts))}。\n\n${note ? `${note}\n\n` : ""}`;
+  /** A context the analysis read, in words: what it is and which version. @param {any} basis */
+  const contextLine = (basis) => {
+    const name = GEO_READER_CONTEXT_ZH[basis?.kind] ?? null;
+    return name ? `${name}${basis.version != null ? `（版本 ${basis.version}）` : ""}` : null;
+  };
+  const contextSection = () => { const lines = [...new Set((Array.isArray(view.contextualBasis) ? view.contextualBasis : []).map(contextLine).filter(Boolean))];
+    return lines.length ? `## 读取时的上下文\n\n${lines.map((line) => `- ${line}`).join("\n")}\n` : ""; };
+  /** A kept record as a short list of its readable fields. @param {any} object */
+  const recordBlock = (object) => { const lines = geoReaderLines(object, { timeZone }); return lines.length ? `\n${lines.map((line) => `${line.match(/^\s*/u)?.[0] ?? ""}- ${line.trim()}`).join("\n")}\n` : ""; };
+  const records = (/** @type {any[]} */ objects) => { const blocks = objects.map(recordBlock).filter(Boolean); return blocks.length ? blocks.join("") : "\n无可读的关联记录。\n"; };
+  const cellTable = (/** @type {any} */ row, /** @type {string} */ heading) => `| 统计项 | ${heading} |\n| --- | --- |\n${view.columns.map((/** @type {any} */ column) => `| ${clean(column.label)} | ${clean(cellReading(row, column))} |`).join("\n")}\n`;
+  const reportColumns = [{ key: "label", label: "指标与区间" }, ...view.columns];
+  const reportRows = view.rows.map((/** @type {any} */ row) => ({
+    label: [row.label, view.viewId === "V10" ? "" : shortConditions(row)].filter(Boolean).join(" · "),
+    ...Object.fromEntries(view.columns.map((/** @type {any} */ column) => [column.key, cellReading(row, column)])),
   }));
-  let canonicalMarkdown = `# 所选数据分析\n\n${view.definition.countingRule}\n\n${view.definition.denominatorRule}\n\n范围：${clean(documentExportDigest(view.scope))}。样本：${clean(documentExportDigest(view.selection.counts))}。\n\n方法：${view.definition.methodVersion}。分析摘要：${view.digest}。目标为读取时的当前目标，对照为另选区间的实际读数。每个读数保留指标尺度、状态、不可用原因、分子/分母和成员单位。\n\n| ${reportColumns.map((column) => clean(column.label)).join(" | ")} |\n| ${reportColumns.map(() => "---").join(" | ")} |\n${reportRows.map((row) => `| ${reportColumns.map((column) => clean(row[column.key])).join(" | ")} |`).join("\n")}\n`;
+  let canonicalMarkdown = `${header("所选数据分析", "目标为读取时的当前目标，对照为另选区间的实际读数。")}| ${reportColumns.map((column) => clean(column.label)).join(" | ")} |\n| ${reportColumns.map(() => "---").join(" | ")} |\n${reportRows.map((/** @type {any} */ row) => `| ${reportColumns.map((column) => clean(row[column.key])).join(" | ")} |`).join("\n")}\n`;
 
   if (GEO_COVERAGE_VIEWS.includes(view.viewId) || view.columns.length > 40)
-    canonicalMarkdown =
-      `# 所选数据分析
-
-${view.definition.countingRule}
-
-范围：${clean(documentExportDigest(view.scope))}。样本：${clean(documentExportDigest(view.selection.counts))}。
-
-方法：${view.definition.methodVersion}。分析摘要：${view.digest}。
-
-覆盖说明：${clean(documentExportDigest(view.availability))}。采样时间与计划：${clean(documentExportDigest(view.selection.timeCoverage))}。采集与判定是两个独立轴；问题、任务、回答、陈述的单位分别保留。
-
-` +
-      view.rows
-        .map(
-          (row) => `## ${clean(row.label)}
-
-分类与条件：${clean(documentExportDigest(row.dimensions))}
-
-| 统计项 | 数值与说明 |
-| --- | --- |
-${view.columns.map((column) => `| ${clean(column.label)} | ${clean(reportReading(row, column))} |`).join("\n")}
-`,
-        )
-        .join("\n");
+    canonicalMarkdown = header("所选数据分析", `覆盖情况：${clean(geoReaderAvailability(view.availability))}。采样时间与计划：${clean(geoReaderTimeCoverage(view.selection?.timeCoverage))}。采集与判定是两个独立轴；问题、任务、回答、陈述的单位分别保留。`)
+      + view.rows.map((/** @type {any} */ row) => `## ${clean(row.label)}\n\n${shortConditions(row) ? `分类与条件：${clean(shortConditions(row))}\n\n` : ""}${cellTable(row, "数值与说明")}`).join("\n");
   if (["V15","V27"].includes(view.viewId)) {
-    const code=value=>`\n\n\`\`\`json\n${documentExportDigest(value)}\n\`\`\`\n`;
-    canonicalMarkdown=`# ${view.viewId==="V15"?"错误观察与处理历史":"业务事件与采样观察"}\n\n范围：${clean(documentExportDigest(view.scope))}。分析摘要：${view.digest}。方法：${view.definition.methodVersion}。\n\n仅呈现已保留且符合筛选范围的记录，不补算缺失历史。任务完成、判定撤回、关闭记录与错误再次出现分开计数。业务事件使用各自时间，未知时间不定位；轮次读数汇总所选样本观察区间，标在最后一次观察，任一成员时间未知则不定位。前后关系不能推断因果或交付效果。样本关联可在多个事件重复出现，不是新增采样数。\n\n## 范围与当前上下文\n${code(view.contextualBasis)}`;
-    for(const row of view.rows){
-      const {objects=[],...dimensions}=row.dimensions;
-      canonicalMarkdown+=`\n## ${clean(row.label)}\n\n行标识：${row.key}。${code(dimensions)}\n| 统计项 | 读数与单位 |\n| --- | --- |\n${view.columns.map(column=>`| ${clean(column.label)} | ${clean(reportReading(row,column))} |`).join("\n")}\n\n### 完整事件与保留材料\n`;
-      for(const object of objects)canonicalMarkdown+=code(object);
-    }
+    canonicalMarkdown=header(view.viewId==="V15"?"错误观察与处理历史":"业务事件与采样观察","仅呈现已保留且符合筛选范围的记录，不补算缺失历史。任务完成、判定撤回、关闭记录与错误再次出现分开计数。业务事件使用各自时间，未知时间不定位；轮次读数汇总所选样本观察区间，标在最后一次观察，任一成员时间未知则不定位。前后关系不能推断因果或交付效果。样本关联可在多个事件重复出现，不是新增采样数。")+contextSection();
+    for(const row of view.rows)canonicalMarkdown+=`\n## ${clean(row.label)}\n\n${shortConditions(row)?`分类与条件：${clean(shortConditions(row))}\n\n`:""}${cellTable(row,"读数与单位")}\n### 完整事件与保留材料\n${records(objectsOf(row.dimensions))}`;
   }
   if (["V25","V26"].includes(view.viewId)) {
-    const code=value=>`\n\n\`\`\`json\n${documentExportDigest(value)}\n\`\`\`\n`;
-    canonicalMarkdown=`# ${view.viewId==="V25"?"项目预算与收支":"方案冻结实测、当前实测与规划目标"}\n\n范围：${clean(documentExportDigest(view.scope))}。分析摘要：${view.digest}。方法：${view.definition.methodVersion}。\n\n${view.viewId==="V25"?"金额单位为人民币 CNY；预留、释放预留、结算、退款与预算设置分别保留，累计净支出为结算减退款。历史余额使用完整账目前缀与当时最后一次预算设置；当前配置预算单列。账户充值不计入项目支出；项目整体预算与未归属问题群金额分别保留。":"方案冻结实测、目标表登记基线、当前所选实测、规划目标和费用估计分别显示。方案与目标均使用已保存的精确版本；历史成员暂不可读时仍保留冻结值与原有成员引用，不用当前数据补齐。目标与费用是假设或规划，不能当作实际支出或实现效果。"}\n\n## 上下文与版本\n${code(view.contextualBasis)}`;
-    for(const row of view.rows){
-      const {objects=[],...dimensions}=row.dimensions;
-      canonicalMarkdown+=`\n## ${clean(row.label)}\n\n行标识：${row.key}。${code(dimensions)}\n| 统计项 | 读数与单位 |\n| --- | --- |\n${view.columns.map(column=>`| ${clean(column.label)} | ${clean(reportReading(row,column))} |`).join("\n")}\n\n### 完整关联记录\n`;
-      for(const object of objects)canonicalMarkdown+=code(object);
-    }
+    canonicalMarkdown=header(view.viewId==="V25"?"项目预算与收支":"方案冻结实测、当前实测与规划目标",view.viewId==="V25"?"金额单位为人民币元；预留、释放预留、结算、退款与预算设置分别保留，累计净支出为结算减退款。历史余额使用完整账目前缀与当时最后一次预算设置；当前配置预算单列。账户充值不计入项目支出；项目整体预算与未归属问题群金额分别保留。":"方案冻结实测、目标表登记基线、当前所选实测、规划目标和费用估计分别显示。方案与目标均使用已保存的版本；历史成员暂不可读时仍保留冻结值，不用当前数据补齐。目标与费用是假设或规划，不能当作实际支出或实现效果。")+contextSection();
+    for(const row of view.rows)canonicalMarkdown+=`\n## ${clean(row.label)}\n\n${shortConditions(row)?`分类与条件：${clean(shortConditions(row))}\n\n`:""}${cellTable(row,"读数与单位")}\n### 完整关联记录\n${records(objectsOf(row.dimensions))}`;
   }
   if (view.viewId === "V13") {
-    const code=value=>`\n\n\`\`\`json\n${documentExportDigest(value)}\n\`\`\`\n`;
     const scopeWord=({active:"有效判定记录（含已关闭）",withdrawn:"已撤回判定记录",all:"全部记录"})[view.view.errorView]??"有效判定记录";
-    canonicalMarkdown=`# 错误类型、严重程度与平台\n\n范围：${clean(documentExportDigest(view.scope))}。判定范围：${scopeWord}。\n\n分析摘要：${view.digest}。方法：${view.definition.methodVersion}。\n\n按错误记录去重，以已保存的首见、最近或关闭回答与所选采样关联。这里呈现当前判定与处置状态，不能倒推采样时的状态；重复出现、历史事件与任务次数不重复计数。有效判定记录包含已关闭记录，已撤回判定另列；这些数量不是回答错误率，也不代表处置已经改变模型回答。\n\n`;
-    for(const row of view.rows){
-      const {objects=[],...dimensions}=row.dimensions;
-      canonicalMarkdown+=`\n## ${clean(row.label)}\n\n行标识：${row.key}。${code(dimensions)}\n| 统计项 | 错误记录数 |\n| --- | --- |\n${view.columns.map(column=>`| ${clean(column.label)} | ${row.values[column.key].value??"未知"} |`).join("\n")}\n\n### 完整记录与判定依据\n`;
-      for(const object of objects)canonicalMarkdown+=code(object);
-    }
+    canonicalMarkdown=header("错误类型、严重程度与平台",`判定范围：${scopeWord}。按错误记录去重，以已保存的首见、最近或关闭回答与所选采样关联。这里呈现当前判定与处置状态，不能倒推采样时的状态；重复出现、历史事件与任务次数不重复计数。有效判定记录包含已关闭记录，已撤回判定另列；这些数量不是回答错误率，也不代表处置已经改变模型回答。`);
+    for(const row of view.rows)canonicalMarkdown+=`\n## ${clean(row.label)}\n\n${shortConditions(row)?`分类与条件：${clean(shortConditions(row))}\n\n`:""}| 统计项 | 错误记录数 |\n| --- | --- |\n${view.columns.map((/** @type {any} */ column)=>`| ${clean(column.label)} | ${row.values[column.key].value??"未知"} |`).join("\n")}\n\n### 完整记录与判定依据\n${records(objectsOf(row.dimensions))}`;
   }
   if (["V23","V24"].includes(view.viewId)) {
-    const code=value=>`\n\n\`\`\`json\n${documentExportDigest(value)}\n\`\`\`\n`;
-    canonicalMarkdown=`# ${view.viewId==="V23"?"内容与发布覆盖":"投放与发布状态"}\n\n范围：${clean(documentExportDigest(view.scope))}。分析摘要：${view.digest}。方法：${view.definition.methodVersion}。\n\n内容、文件格式、版本、登记发布和订单分别计数；同一内容可覆盖多个人群或渠道，不能相加当作交付效果。预期渠道保留在内容版本中，实际平台与地址保留在发布记录中。自行登记不等于外部核验；当前状态与历史事件分别保留。只选采样轮次时，关联业务记录不代表该轮当时状态；投放发布计数要求已有发布状态及保留地址，其他订单见执行状态分析。日期按记录中明确的业务时间筛选，未知时间不补齐为采样时间。\n\n`;
-    for(const row of view.rows){
-      const {objects=[],...dimensions}=row.dimensions;
-      canonicalMarkdown+=`\n## ${clean(row.label)}\n\n行标识：${row.key}。${code(dimensions)}\n| 统计项 | 记录数 |\n| --- | --- |\n${view.columns.map(column=>`| ${clean(column.label)} | ${row.values[column.key].value??"未知"} |`).join("\n")}\n\n### 完整关联记录\n`;
-      for(const object of objects)canonicalMarkdown+=code(object);
-    }
+    canonicalMarkdown=header(view.viewId==="V23"?"内容与发布覆盖":"投放与发布状态","内容、文件格式、版本、登记发布和订单分别计数；同一内容可覆盖多个人群或渠道，不能相加当作交付效果。预期渠道保留在内容版本中，实际平台与地址保留在发布记录中。自行登记不等于外部核验；当前状态与历史事件分别保留。只选采样轮次时，关联业务记录不代表该轮当时状态；投放发布计数要求已有发布状态及保留地址，其他订单见执行状态分析。日期按记录中明确的业务时间筛选，未知时间不补齐为采样时间。");
+    for(const row of view.rows)canonicalMarkdown+=`\n## ${clean(row.label)}\n\n${shortConditions(row)?`分类与条件：${clean(shortConditions(row))}\n\n`:""}| 统计项 | 记录数 |\n| --- | --- |\n${view.columns.map((/** @type {any} */ column)=>`| ${clean(column.label)} | ${row.values[column.key].value??"未知"} |`).join("\n")}\n\n### 完整关联记录\n${records(objectsOf(row.dimensions))}`;
   }
   if (view.viewId === "V16") {
-    const code=value=>`\n\n\`\`\`json\n${documentExportDigest(value)}\n\`\`\`\n`;
     const finding=view.view.evidenceKind==="findings";
-    canonicalMarkdown=`# ${finding?"发现表达覆盖":"主张、适用条件与来源依据"}\n\n范围：${clean(documentExportDigest(view.scope))}。样本：${clean(documentExportDigest(view.selection.counts))}。\n\n方法：${view.definition.methodVersion}。分析摘要：${view.digest}。\n\n${finding?"统计单位为回答中的发现表达记录，保留当时的发现版本与原文；表达情况不代表医学来源支持度。部分判定中的未表达或不适用保持不确定。":"统计单位为所选回答中的陈述判定记录，按精确主张版本、适用条件和证据卡来源分行。原文核实只说明引文与所存来源匹配；正确或冲突是所存回答判定，不替代对医学结论本身的评估。依据缺失保持未知，已核实小计与待核实数量分别保留。"}\n\n来源注记属于当前记录；采样时间、判定时间、来源通知日期与平台记录时间分别保留。当前对历史回答的判定不能视为采样时的原始判定。\n\n## 上下文与版本\n${code(view.contextualBasis)}`;
+    canonicalMarkdown=header(finding?"发现表达覆盖":"结论、适用条件与来源依据",`${finding?"统计单位为回答中的发现表达记录，保留当时的发现版本与原文；表达情况不代表医学来源支持度。部分判定中的未表达或不适用保持不确定。":"统计单位为所选回答中的陈述判定记录，按结论版本、适用条件和证据卡来源分行。原文核实只说明引文与所存来源匹配；正确或冲突是所存回答判定，不替代对医学结论本身的评估。依据缺失保持未知，已核实小计与待核实数量分别保留。"}来源注记属于当前记录；采样时间、判定时间、来源通知日期与平台记录时间分别保留。当前对历史回答的判定不能视为采样时的原始判定。`)+contextSection();
     for(const [index,row] of view.rows.entries()){
-      const {objects=[],...dimensions}=row.dimensions;
-      canonicalMarkdown+=`\n## ${index+1}. ${clean(row.label)}\n\n行标识：${row.key}。精确身份、条件与来源：${code(dimensions)}\n\n| 统计项 | 读数 |\n| --- | --- |\n${view.columns.map(column=>{const cell=row.values[column.key];return `| ${clean(column.label)} | ${cell.value??"未知"}${cell.unknownCandidates?`；已核实小计 ${cell.knownSubtotal??0}，另有 ${cell.unknownCandidates} 条待核实`:""} |`;}).join("\n")}\n\n### 完整判定与原文依据\n`;
-      for(const item of objects){
-        if(item.originalAssessment)canonicalMarkdown+=`\n本回答首次保存的判定与当前判定分别保留；首次保存时间不推定为采样时间。\n`;
-        canonicalMarkdown+=code(item);
+      canonicalMarkdown+=`\n## ${index+1}. ${clean(row.label)}\n\n${shortConditions(row)?`条件与来源：${clean(shortConditions(row))}\n\n`:""}| 统计项 | 读数 |\n| --- | --- |\n${view.columns.map((/** @type {any} */ column)=>{const cell=row.values[column.key];return `| ${clean(column.label)} | ${cell.value??"未知"}${cell.unknownCandidates?`；已核实小计 ${cell.knownSubtotal??0}，另有 ${cell.unknownCandidates} 条待核实`:""} |`;}).join("\n")}\n\n### 完整判定与原文依据\n`;
+      const items=objectsOf(row.dimensions);
+      for(const item of items){
+        if(item?.originalAssessment)canonicalMarkdown+=`\n本回答首次保存的判定与当前判定分别保留；首次保存时间不推定为采样时间。\n`;
+        canonicalMarkdown+=recordBlock(item);
       }
+      if(!items.some((/** @type {any} */ item)=>recordBlock(item)))canonicalMarkdown+="\n无可读的关联记录。\n";
     }
   }
   if (view.viewId === "V10") {
-    const journeyBasis = view.contextualBasis.find(basis => basis.kind === "journey_links");
-    const code = value => `\n\n\`\`\`json\n${documentExportDigest(value)}\n\`\`\`\n`;
-    canonicalMarkdown = `# 旅程与需求覆盖\n\n范围：${clean(documentExportDigest(view.scope))}。样本：${clean(documentExportDigest(view.selection.counts))}。\n\n方法：${view.definition.methodVersion}。分析摘要：${view.digest}。\n\n旅程上下文版本：${journeyBasis?.version ?? "未知"}。旅程标注和来源变更为读取时的上下文，采样日期与来源通知日期分别保留。各类数量有独立单位，不能相加为漏斗。依据不足时，“原文已核实主张”保留已核实小计，“待核实主张”另列；未知不计为零。\n\n## 上下文版本与依据\n${code(view.contextualBasis)}\n`;
+    const journeyBasis = view.contextualBasis.find((/** @type {any} */ basis) => basis.kind === "journey_links");
+    canonicalMarkdown = header("旅程与需求覆盖", `旅程上下文版本：${journeyBasis?.version ?? "未知"}。旅程标注和来源变更为读取时的上下文，采样日期与来源通知日期分别保留。各类数量有独立单位，不能相加为漏斗。依据不足时，“原文已核实结论”保留已核实小计，“待核实结论”另列；未知不计为零。`);
     for (const [index, row] of view.rows.entries()) {
       const { objects = {}, ...dimensions } = row.dimensions;
-      canonicalMarkdown += `## ${index + 1}. ${clean(row.label)}\n\n问题群标识：${clean(dimensions.groupId ?? "未映射")}；问题版本：${clean(dimensions.setVersion ?? "未知")}。行标识：${row.key}。\n\n精确分类与上下文：${code(dimensions)}\n\n| 统计项 | 读数与口径 |\n| --- | --- |\n${view.columns.map(column => `| ${clean(column.label)} | ${clean(reportReading(row, column))} |`).join("\n")}\n\n### 完整关联对象与来源注记\n\n以下记录与当前行的统计范围一致；主张原文核实与当前来源变更分开保留。通知日期、平台记录时间、检查时间不互相替代。\n`;
+      canonicalMarkdown += `## ${index + 1}. ${clean(row.label)}\n\n问题版本：${clean(dimensions.setVersion ?? "未知")}。${shortConditions(row) ? `分类与上下文：${clean(shortConditions(row))}。` : ""}\n\n${cellTable(row, "读数与口径")}\n### 完整关联对象与来源注记\n\n以下记录与当前行的统计范围一致；结论原文核实与当前来源变更分开保留。通知日期、平台记录时间、检查时间不互相替代。\n`;
       for (const [unit, items] of Object.entries(objects)) {
-        const label = view.columns.find(column => column.key === unit)?.label ?? unit;
-        canonicalMarkdown += `\n#### ${clean(label)}\n`;
-        // One compact object per wrapped code paragraph preserves the complete
-        // typed context without an over-wide table or a silent preview limit.
-        for (const item of items) canonicalMarkdown += code(item);
-        if (!items.length) canonicalMarkdown += "\n无已记录对象。\n";
+        canonicalMarkdown += `\n#### ${clean(columnLabels.get(unit) ?? "关联记录")}\n${Array.isArray(items) && items.length ? records(items) : "\n无已记录对象。\n"}`;
       }
     }
   }
   if (["V17", "V18", "V19", "V22"].includes(view.viewId)) {
       // Pandoc's existing pipe-table column widths keep source addresses readable.
-      // The typed table and cover above retain every exact dimension and cell state.
-      const table = (headers, widths, items) => `| ${headers.join(" | ")} |\n| ${widths.map(width => "-".repeat(width)).join(" | ")} |\n${items.map(cells => `| ${cells.map(clean).join(" | ")} |`).join("\n")}\n`;
-      const count = (row, key) => { const cell = row.values[key]; return cell.state === "known" && cell.value !== null ? String(cell.value) : cell.value == null ? "未知" : `${cell.value}（${cell.reason ?? cell.state}）`; };
-      const date = value => value ? new Intl.DateTimeFormat("en-CA", { timeZone: view.scope.timeZone ?? "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)) : "未知";
-      const dateRange = row => { const first = date(row.dimensions.firstObserved), last = date(row.dimensions.lastObserved); return first === last ? first : `${first} 至 ${last}`; };
-      const overview = `# 来源分析\n\n所选范围：${view.scope.from ?? "不限开始日期"} 至 ${view.scope.to ?? "不限结束日期"}；${view.scope.timeZone ?? "Asia/Shanghai"}。共 ${view.rows.length} 个来源${view.viewId === "V17" ? "类型" : "条目"}。\n\n有可用引用的回答中，采样时间已知 ${view.definition.knownTimeAnswers} 个、未知 ${view.definition.unknownTimeAnswers} 个。部分判定回答的可用引用仍保留，不代表回答已完成医学准确性判定。\n\n类型覆盖按不同回答去重，可重叠；回答与页面配对按回答及页面地址去重。共同出现错误或品牌提及不代表来源导致错误。日期仅表示已知的实际观察日期，未知时间不推定为零。\n\n分析版本：${view.digest}。方法：${clean(view.definition.methodVersion)}。完整范围、原始地址别名、逐轮历史、状态与精确来源标识保留在配套数据表及导出记录。\n\n`;
+      const table = (/** @type {string[]} */ headers, /** @type {number[]} */ widths, /** @type {unknown[][]} */ items) => `| ${headers.join(" | ")} |\n| ${widths.map(width => "-".repeat(width)).join(" | ")} |\n${items.map(cells => `| ${cells.map(clean).join(" | ")} |`).join("\n")}\n`;
+      const count = (/** @type {any} */ row, /** @type {string} */ key) => { const cell = row.values[key]; return cell.state === "known" && cell.value !== null ? String(cell.value) : cell.value == null ? "未知" : `${cell.value}（${geoReaderState(cell.state)}${reasonOf(cell) ? `；${reasonOf(cell)}` : ""}${cell.state === "insufficient" && numeratorOf(cell) != null ? `；${numeratorOf(cell)}/${denominatorOf(cell)}` : ""}）`; };
+      const date = (/** @type {any} */ value) => value ? new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)) : "未知";
+      const dateRange = (/** @type {any} */ row) => { const first = date(row.dimensions.firstObserved), last = date(row.dimensions.lastObserved); return first === last ? first : `${first} 至 ${last}`; };
+      const engine = (/** @type {any} */ code) => GEO_ENGINE_LABELS_ZH[code] ?? code ?? "未知";
+      const overview = `# 来源分析\n\n所选范围：${view.scope.from ?? "不限开始日期"} 至 ${view.scope.to ?? "不限结束日期"}；${timeZone}。共 ${view.rows.length} 个来源${view.viewId === "V17" ? "类型" : "条目"}。\n\n有可用引用的回答中，采样时间已知 ${view.definition.knownTimeAnswers} 个、未知 ${view.definition.unknownTimeAnswers} 个。部分判定回答的可用引用仍保留，不代表回答已完成医学准确性判定。\n\n类型覆盖按不同回答去重，可重叠；回答与页面配对按回答及页面地址去重。共同出现错误或品牌提及不代表来源导致错误。日期仅表示已知的实际观察日期，未知时间不推定为零。完整范围、原始地址别名、逐轮历史与状态保留在配套数据表中。\n\n`;
       if (view.viewId === "V22") {
           const words={present:"已观察引用",absent:"可观测未引用",first_observed_in_scope:"所选范围内首次",new_appearance:"新出现",no_longer_observed:"同一可比范围内未再观察到"};
-          canonicalMarkdown = overview + "所选范围内首次表示当前选择中的首次观察，不代表项目开始。可观测未引用依赖采集端记录的引用列表完整性，不代表全网或模型信息已穷尽。拒答或失败中保留的链接不能建立出现；有效重复中的引用仍可观察。未引用须所有相关重复均有效且引用列表完整，并有完整计划及任务与所选回答的一一对应；缺少计划、任务或回答均保持未知。只有相同问题、版本、平台和采样方式才比较变化；未知区间留空，不拟合引用寿命。\n\n" + table(["序号与页面", "轮次与问题", "平台与版本", "观察状态", "可比变化"],[42,24,20,18,22],view.rows.map((row,index)=>[`${index+1}. ${row.dimensions.sourceKey}`,`${row.dimensions.roundLabel} · ${row.dimensions.questionId??'问题未知'}`,`${row.dimensions.engine} · v${row.dimensions.setVersion??'未知'} · ${row.dimensions.mode??'未知'}`,words[row.values.observation.value]??'未知',words[row.values.transition.value]??'未知']));
+          const modes={web:"联网",raw:"不联网",inclusion:"收录检查"};
+          canonicalMarkdown = overview + "所选范围内首次表示当前选择中的首次观察，不代表项目开始。可观测未引用依赖采集端记录的引用列表完整性，不代表全网或模型信息已穷尽。拒答或失败中保留的链接不能建立出现；有效重复中的引用仍可观察。未引用须所有相关重复均有效且引用列表完整，并有完整计划及任务与所选回答的一一对应；缺少计划、任务或回答均保持未知。只有相同问题、版本、平台和采样方式才比较变化；未知区间留空，不拟合引用寿命。\n\n" + table(["序号与页面", "轮次", "平台与版本", "观察状态", "可比变化"],[42,24,20,18,22],view.rows.map((/** @type {any} */ row,/** @type {number} */ index)=>[`${index+1}. ${row.dimensions.sourceKey}`,row.dimensions.roundLabel??"轮次未知",`${engine(row.dimensions.engine)} · 问题版本 ${row.dimensions.setVersion??'未知'} · ${/** @type {Record<string,string>} */ (modes)[row.dimensions.mode]??'方式未知'}`,/** @type {Record<string,string>} */ (words)[row.values.observation.value]??'未知',/** @type {Record<string,string>} */ (words)[row.values.transition.value]??'未知']));
       }
       else if (view.viewId === "V19") {
-          canonicalMarkdown = overview + "## 来源与平台或版本化问题群\n\n同名问题群按精确版本与群标识分别统计。每行的引用回答、回答与页面配对和页面均在该交叉范围内去重；未知或未映射群单列。\n\n" + table(["序号与来源","平台或问题群","回答","配对","页面"],[42,30,8,8,8],view.rows.map((row,index)=>[`${index+1}. ${row.dimensions.sourceKey??row.dimensions.domain}`,view.view.sourceFacet==='engine'?row.dimensions.engine:`${row.dimensions.groupName} · v${row.dimensions.setVersion??'未知'} · ${row.dimensions.groupId??'未知'}`,...['answers','pairs','pages'].map(key=>count(row,key))])) + "\n## 共同出现与采样时间\n\n" + table(["序号","轮次","同错回答","同提回答","时间已知","时间未知"],[10,10,18,18,18,18],view.rows.map((row,index)=>[index+1,...['rounds','wrong','mentions','knownTime','unknownTime'].map(key=>count(row,key))]));
+          canonicalMarkdown = overview + "## 来源与平台或版本化问题群\n\n同名问题群按版本分别统计。每行的引用回答、回答与页面配对和页面均在该交叉范围内去重；未知或未映射群单列。\n\n" + table(["序号与来源","平台或问题群","回答","配对","页面"],[42,30,8,8,8],view.rows.map((/** @type {any} */ row,/** @type {number} */ index)=>[`${index+1}. ${row.dimensions.sourceKey??row.dimensions.domain}`,view.view.sourceFacet==='engine'?engine(row.dimensions.engine):`${row.dimensions.groupName ?? "未映射问题群"} · 问题版本 ${row.dimensions.setVersion??'未知'}`,...['answers','pairs','pages'].map(key=>count(row,key))])) + "\n## 共同出现与采样时间\n\n" + table(["序号","轮次","同错回答","同提回答","时间已知","时间未知"],[10,10,18,18,18,18],view.rows.map((/** @type {any} */ row,/** @type {number} */ index)=>[index+1,...['rounds','wrong','mentions','knownTime','unknownTime'].map(key=>count(row,key))]));
       }
       else if (view.viewId === "V17") {
-          canonicalMarkdown = overview + "## 来源类型覆盖\n\n" + table(["来源类型", "回答", "覆盖率（%）", "配对", "页面"], [40, 10, 12, 10, 10], view.rows.map(row => [row.label, ...["answers", "coverage", "pairs", "pages"].map(key => count(row, key))]));
+          canonicalMarkdown = overview + "## 来源类型覆盖\n\n覆盖率的分母是所选范围内全部带可用引用的回答；不足 30 个回答时写作样本不足，只给回答数。\n\n" + table(["来源类型", "回答", "覆盖率（%）", "配对", "页面"], [40, 10, 12, 10, 10], view.rows.map((/** @type {any} */ row) => [row.label, ...["answers", "coverage", "pairs", "pages"].map(key => count(row, key))]));
       }
       else {
-          canonicalMarkdown = overview + "## 引用与页面\n\n观察日期为首次至最近一次已知采样日期。\n\n" + table(["来源", "回答", "配对", "页面", "观察日期"], [48, 7, 7, 7, 24], view.rows.map((row, index) => [`${index + 1}. ${row.dimensions.sourceKey ?? row.dimensions.domain ?? row.label}`, ...["answers", "pairs", "pages"].map(key => count(row, key)), dateRange(row)])) +
-              "\n## 共同出现与采样时间\n\n序号与上表来源一致。同错回答指共同出现我方错误的回答，同提回答指共同出现品牌提及的回答，均为共同出现计数。时间覆盖以回答为单位，轮次仅计实际出现的轮次。\n\n" + table(["序号", "轮次", "同错回答", "同提回答", "时间已知", "时间未知"], [10, 10, 18, 18, 18, 18], view.rows.map((row, index) => [index + 1, ...["rounds", "wrong", "mentions", "knownTime", "unknownTime"].map(key => count(row, key))]));
+          canonicalMarkdown = overview + "## 引用与页面\n\n观察日期为首次至最近一次已知采样日期。\n\n" + table(["来源", "回答", "配对", "页面", "观察日期"], [48, 7, 7, 7, 24], view.rows.map((/** @type {any} */ row, /** @type {number} */ index) => [`${index + 1}. ${row.dimensions.sourceKey ?? row.dimensions.domain ?? row.label}`, ...["answers", "pairs", "pages"].map(key => count(row, key)), dateRange(row)])) +
+              "\n## 共同出现与采样时间\n\n序号与上表来源一致。同错回答指共同出现我方错误的回答，同提回答指共同出现品牌提及的回答，均为共同出现计数。时间覆盖以回答为单位，轮次仅计实际出现的轮次。\n\n" + table(["序号", "轮次", "同错回答", "同提回答", "时间已知", "时间未知"], [10, 10, 18, 18, 18, 18], view.rows.map((/** @type {any} */ row, /** @type {number} */ index) => [index + 1, ...["rounds", "wrong", "mentions", "knownTime", "unknownTime"].map(key => count(row, key))]));
       }
   }
   if (["V20", "V21"].includes(view.viewId)) {
-      const table = (headers, widths, items) => `| ${headers.join(" | ")} |\n| ${widths.map(width => "-".repeat(width)).join(" | ")} |\n${items.map(cells => `| ${cells.map(clean).join(" | ")} |`).join("\n")}\n`;
-      const count = (row, key) => { const cell = row.values[key]; return cell.value == null ? "未知" : cell.state === "known" ? String(cell.value) : `${cell.value}（${({insufficient:"样本不足",unknown:"未知",not_applicable:"不适用"})[cell.state] ?? "需核对"}）`; };
-      const overview = `# 信源关系与问题群机会分析\n\n所选范围：${view.scope.from ?? "不限开始日期"} 至 ${view.scope.to ?? "不限结束日期"}；${view.scope.timeZone ?? "Asia/Shanghai"}。分析版本：${view.digest}。方法：${clean(view.definition.methodVersion)}。\n\n当前人工注释按精确页面优先于域名解析，不推定为采样时的关系；采样时间与注释日期分别保留。完整地址、注释修订及关联对象固定在导出数据和记录中。\n\n`;
+      const table = (/** @type {string[]} */ headers, /** @type {number[]} */ widths, /** @type {unknown[][]} */ items) => `| ${headers.join(" | ")} |\n| ${widths.map(width => "-".repeat(width)).join(" | ")} |\n${items.map(cells => `| ${cells.map(clean).join(" | ")} |`).join("\n")}\n`;
+      const count = (/** @type {any} */ row, /** @type {string} */ key) => { const cell = row.values[key]; return cell.value == null ? "未知" : cell.state === "known" ? String(cell.value) : `${cell.value}（${geoReaderState(cell.state)}）`; };
+      const group = (/** @type {any} */ row) => `${row.dimensions.groupName ?? "未映射问题群"} · 问题版本 ${row.dimensions.setVersion ?? "未知"}`;
+      const overview = `# 信源关系与问题群机会分析\n\n所选范围：${view.scope.from ?? "不限开始日期"} 至 ${view.scope.to ?? "不限结束日期"}；${timeZone}。\n\n当前人工注释按精确页面优先于域名解析，不推定为采样时的关系；采样时间与注释日期分别保留。完整地址、注释修订及关联对象保留在配套数据表中。\n\n`;
       if (view.viewId === "V20") {
-          canonicalMarkdown = overview + "## 已确认信源关系\n\n引用回答按关系分别去重，回答与页面配对独立统计，不依赖品牌提及。一个回答可同时引用多种关系，回答数不构成互斥比例。\n\n" + table(["关系", "引用回答", "回答页面配对", "不同页面"], [30,20,22,20], view.rows.map(row=>[row.label,...["answers","pairs","pages"].map(key=>count(row,key))])) + "\n## 共同出现与采样覆盖\n\n错误与品牌提及仅为共同出现，不代表来源引起错误。\n\n" + table(["关系","实际轮次","同错回答","同提回答","时间已知","时间未知"],[24,14,14,14,14,14],view.rows.map(row=>[row.label,...["rounds","wrong","mentions","knownTime","unknownTime"].map(key=>count(row,key))]));
+          canonicalMarkdown = overview + "## 已确认信源关系\n\n引用回答按关系分别去重，回答与页面配对独立统计，不依赖品牌提及。一个回答可同时引用多种关系，回答数不构成互斥比例。\n\n" + table(["关系", "引用回答", "回答页面配对", "不同页面"], [30,20,22,20], view.rows.map((/** @type {any} */ row)=>[row.label,...["answers","pairs","pages"].map(key=>count(row,key))])) + "\n## 共同出现与采样覆盖\n\n错误与品牌提及仅为共同出现，不代表来源引起错误。\n\n" + table(["关系","实际轮次","同错回答","同提回答","时间已知","时间未知"],[24,14,14,14,14,14],view.rows.map((/** @type {any} */ row)=>[row.label,...["rounds","wrong","mentions","knownTime","unknownTime"].map(key=>count(row,key))]));
       } else {
-          canonicalMarkdown = overview + `## 品牌提及与登记自有引用\n\nX 为现有 M-01；Y 为所选现有 ${view.view.ownedMetricId}，保持登记域名与地址匹配口径，与人工页面关系分别解释。两条指标的合资格分母可能不同；气泡面积仅表示实际回答样本，不表示需求规模、医学优先级或因果。未登记自有信源时 Y 保留未知，可从现有行动登记自主发布地址。\n\n` + table(["精确问题群与版本","M-01（%）",`${view.view.ownedMetricId}（%）`,"实际回答样本"],[45,18,18,20],view.rows.map(row=>[`${row.dimensions.groupName} · v${row.dimensions.setVersion??"未知"} · ${row.dimensions.groupId??"未映射"}`,...["mention","owned","sample"].map(key=>count(row,key))])) + "\n## 两条指标的合资格分母\n\n" + table(["问题群","X 分子","X 合资格分母","Y 分子","Y 合资格分母"],[38,16,22,16,22],view.rows.map(row=>[row.dimensions.groupId??"未映射",row.values.mention.numerator??"未知",row.values.mention.denominator??"未知",row.values.owned.numerator??"未知",row.values.owned.denominator??"未知"])) + "\n显式依据、来源页面和内容版本关联保留于数据表与冻结上下文。缺少关联不表示不存在；活动结论也不自动视为已核实证据。\n";
+          const owned = geoReaderMetric(view.view.ownedMetricId) ?? view.view.ownedMetricId, mention = geoReaderMetric("M-01") ?? "M-01";
+          canonicalMarkdown = overview + `## 品牌提及与登记自有引用\n\nX 为${mention}（M-01）；Y 为所选的${owned}（${view.view.ownedMetricId}），保持登记域名与地址匹配口径，与人工页面关系分别解释。两条指标的合资格分母可能不同；气泡面积仅表示实际回答样本，不表示需求规模、医学优先级或因果。未登记自有信源时 Y 保留未知，可从现有行动登记自主发布地址。\n\n` + table(["问题群与版本",`${mention}（%）`,`${owned}（%）`,"实际回答样本"],[45,18,18,20],view.rows.map((/** @type {any} */ row)=>[group(row),...["mention","owned","sample"].map(key=>count(row,key))])) + "\n## 两条指标的合资格分母\n\n" + table(["问题群","X 分子","X 合资格分母","Y 分子","Y 合资格分母"],[38,16,22,16,22],view.rows.map((/** @type {any} */ row)=>[group(row),row.values.mention.numerator??"未知",row.values.mention.denominator??"未知",row.values.owned.numerator??"未知",row.values.owned.denominator??"未知"])) + "\n来源页面和内容版本的关联保留于数据表。缺少关联不表示不存在；活动结论也不自动视为已核实证据。\n";
       }
   }
-  // Excel limits a text cell to 32,767 characters. Keep exact large contexts in ordered typed continuation rows.
-  if (["V20", "V21", "V10", "V16", "V13", "V15", "V23", "V24", "V27"].includes(view.viewId) && rows.some(row=>Object.values(row).some(value=>typeof value==="string"&&value.length>30000))) {
-      columns.push(...["context_parent", "context_field", "context_part"].map(key=>({key,label:key,type:"text"})));
-      const continued = [];
+  // Excel limits a text cell to 32,767 characters. A longer readable cell continues in ordered rows under its row's 序号.
+  if (rows.some((/** @type {any} */ row)=>Object.values(row).some(value=>typeof value==="string"&&value.length>30000))) {
+      columns.push({key:"context_parent",label:"续接序号",type:"text"},{key:"context_field",label:"续接字段",type:"text"},{key:"context_part",label:"分段",type:"text"});
+      const labels = new Map(columns.map(column => [column.key, column.label]));
+      /** @type {any[]} */ const continued = [];
       for (const row of rows) {
           const main = {...row}, parts = [];
           for (const column of columns) {
@@ -1023,20 +935,28 @@ ${view.columns.map((column) => `| ${clean(column.label)} | ${clean(reportReading
               if (typeof value!=="string" || value.length<=30000) continue;
               main[column.key]=null;
               const characters=Array.from(value), total=Math.ceil(characters.length/15000);
-              for(let index=0;index<total;index++) parts.push({key:`${row.key}:context:${column.key}:${index+1}`,label:"精确上下文续行",context_parent:row.key,context_field:column.key,context_part:`${index+1}/${total}`,[column.key]:characters.slice(index*15000,(index+1)*15000).join("")});
+              for(let index=0;index<total;index++) parts.push({label:"续行",context_parent:String(row.row_number),context_field:labels.get(column.key)??"内容",context_part:`${index+1}/${total}`,[column.key]:characters.slice(index*15000,(index+1)*15000).join("")});
           }
           continued.push(main,...parts);
           if(continued.length>20000) throw new HttpError(422,"geo_read_filter_invalid","Narrow the selected context before exporting more than 20,000 typed rows.");
       }
       rows=continued;
-      canonicalMarkdown+="\nCSV 和 Excel 中过长的精确上下文按 context_parent、context_field、context_part 顺序保留为续行。续行不重复测量值；完整对象与修订固定在导出记录中。\n";
+      canonicalMarkdown+="\nCSV 和 Excel 中过长的内容按续接序号、续接字段和分段顺序保留为续行；续行不重复测量值。\n";
   }
+  const basis = [
+    { label: "分析", value: /^# (.+)$/mu.exec(canonicalMarkdown)?.[1] ?? "所选数据分析" },
+    { label: "范围", value: geoReaderScope(view.scope) },
+    { label: "样本", value: geoReaderCounts(view.selection?.counts) },
+    { label: "采样时间与计划", value: geoReaderTimeCoverage(view.selection?.timeCoverage) },
+    { label: "覆盖情况", value: geoReaderAvailability(view.availability) },
+    ...rules.map((rule) => ({ label: "计数口径", value: rule })),
+  ];
   return {
     canonicalMarkdown,
     title: "所选数据分析",
     revision: view.digest,
     assets: [],
-    cover: { analysis: metadata },
+    cover: { analysis: { ...view, rows: view.rows }, basis },
     typedTable: { columns, rows },
   };
 }

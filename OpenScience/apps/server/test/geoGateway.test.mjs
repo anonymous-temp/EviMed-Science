@@ -340,13 +340,22 @@ test("the social search needs a channel, validates its words, and answers within
 });
 
 test("native import and explicit recovery refusals retain actionable messages without becoming outages", async (t) => {
-  for (const [status, code] of [[400, "geo_question_import_invalid"], [400, "geo_diagnosis_invalid"], [409, "geo_contract_missing"], [409, "geo_request_key_conflict"],
-    [400, "geo_recovery_invalid"], [409, "geo_recovery_exhausted"], [409, "geo_recovery_acknowledgment_required"]]) {
+  // Refusals the run corrects in its payload, including a round that cannot be planned as sent (they read 「gateway unavailable」).
+  for (const [status, code] of [[400, "geo_question_import_invalid"], [400, "geo_diagnosis_invalid"], [409, "geo_contract_missing"],
+    [400, "geo_recovery_invalid"], [409, "geo_round_empty"], [409, "geo_round_question_invalid"], [400, "geo_round_engine_invalid"], [400, "geo_round_too_large"]]) {
     const message = `Correct this request: ${code}`;
     const { geo } = geoDouble(on, { failStep: new HttpError(Number(status), String(code), message) });
     const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
     const answer = await post("write", { what: "step", data: { step: "evidence", status: "running" } });
     assert.deepEqual([answer.status, answer.body.code, answer.body.error], [status, "geo_write_payload_invalid", message]);
+  }
+  // Refusals with their own next step reach the run by name: a new request key, a used recovery, the person's acceptance.
+  for (const [status, code] of [[409, "geo_request_key_conflict"], [409, "geo_recovery_exhausted"], [409, "geo_recovery_acknowledgment_required"]]) {
+    const message = `Named refusal: ${code}`;
+    const { geo } = geoDouble(on, { failStep: new HttpError(Number(status), String(code), message) });
+    const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+    const answer = await post("write", { what: "step", data: { step: "evidence", status: "running" } });
+    assert.deepEqual([answer.status, answer.body.code, answer.body.error], [status, code, message]);
   }
 });
 

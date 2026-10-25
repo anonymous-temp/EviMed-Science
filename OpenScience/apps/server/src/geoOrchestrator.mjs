@@ -4,6 +4,7 @@ import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GE
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { GEO_NOTIFY_SEVERITIES, errorNoticeKey } from "./geoErrors.mjs";
 import { GEO_PROBE_HOST_FAILURE_CODES } from "./geoProbeQueue.mjs";
+import { geoMonitoringSet } from "./geoMeasureStore.mjs";
 import { budgetOpen } from "./geoMarketStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -971,9 +972,6 @@ export class GeoOrchestrator {
    * @returns {Promise<string | null>} the round id, or null when not enqueued now
    */
   async #enqueueOnce(project, key, spec) {
-    const latestSet = (await this.store.query(`SELECT contract, version FROM evimed_geo.question_sets WHERE geo_project_id=$1 ORDER BY version DESC LIMIT 1`, [project.id])).rows[0];
-    const agreement = latestSet?.contract;
-    if (agreement?.samplingMode === "one_shot") return null;
     const existing = await this.#mark(project.id, key);
     if (existing && existing.state !== "claimed") return existing.round_id ?? null;
     if (!this.enqueueRound) return null;
@@ -985,10 +983,21 @@ export class GeoOrchestrator {
       await this.#update(project.id, key, { state: "done", roundId: String(made.id) });
       return String(made.id);
     }
+    // A recurring round measures the set monitoring reads (the newest recurring or locked set), never a newer one-shot import:
+    // the newest set used to decide, and importing a one-shot set stopped every recurring round with nothing said (2026-10-25).
+    // With only one-shot sets left there is nothing to monitor, and the key says so.
+    const monitored = await geoMonitoringSet(this.store, project.id);
+    if (!spec.questionIds && monitored.version == null && monitored.oneShot.length) {
+      await this.#update(project.id, key, { state: "skipped", detail: { reason: "one_shot_questions_only" } }, ["claimed"]);
+      this.counters.roundsSkipped += 1;
+      this.report("enqueue:one_shot_questions_only");
+      return null;
+    }
+    const agreement = monitored.contract;
     try {
       const out = await this.enqueueRound({ geoProjectId: project.id, kind: spec.kind,
         ...(spec.questionIds ? { questionIds: spec.questionIds } : {}), ...(spec.engines ? { engines: spec.engines } : {}),
-        ...(agreement ? { engines: agreement.engines, repeat: agreement.repeats, contract: { ...agreement, questionVersion: Number(latestSet.version) } } : spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
+        ...(agreement ? { engines: agreement.engines, repeat: agreement.repeats, contract: { ...agreement, questionVersion: Number(monitored.version) } } : spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
       const roundId = typeof out === "string" ? out : String(out?.roundId ?? out?.id ?? out?.round?.id ?? "") || null;
       await this.#update(project.id, key, { state: "done", roundId });
       this.counters.roundsEnqueued += 1;
@@ -1062,8 +1071,9 @@ export class GeoOrchestrator {
     }
     const upgrade = step.status === "minimal" && questions === "done" && plan.requested.has("diagnosis");
     if ((FINISHED.has(step.status) && !upgrade) || step.status === "failed") return project;
-    const set = await this.#lockedSet(project.id);
-    if (!set) return project;
+    // The programme's diagnosis measures the monitoring set; a one-shot import is started explicitly and is not this step's.
+    const set = await geoMonitoringSet(this.store, project.id);
+    if (set.version == null || !set.locked) return project;
     // A round still being measured answers the request (idempotent); one that
     // ended — cancelled, refused, or finished without a diagnosis (the step
     // was asked again) — does not: the next key, a new round.

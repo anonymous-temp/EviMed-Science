@@ -37,7 +37,7 @@ test("semantic observations respect real profile, group, audience and engine bou
   for (const [index, engine, question, version] of [[0, "deepseek", groups.questionIds[0][0], 2], [1, "kimi", groups.questionIds[0][0], 2],
     [2, "deepseek", groups.questionIds[1][0], 2], [3, "deepseek", groups.questionIds[0][0], 1]]) {
     const snapshot = `gs_${randomUUID()}`;
-    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,question_id,asked_at) VALUES($1,'alice',$2,$3,$4,$5,now())",
+    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,question_id,asked_at,status) VALUES($1,'alice',$2,$3,$4,$5,now(),'valid')",
       [snapshot, project.id, round, engine, question]);
     await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract) VALUES($1,'alice',$2,now(),$3::jsonb)",
       [snapshot, project.id, JSON.stringify({ valueBasisVersion: version, valueCoverage: [{ findingId: "f1", status: index === 0 ? "represented" : "contradicted" }] })]);
@@ -70,7 +70,7 @@ test("partial and unknown answer coverage preserves observations without claimin
     const answer = `Observed statement.${"x".repeat(9000)}`;
     const checks = coverage === "unknown" ? {} : coverage === "cut" ? { answerCut: { chars: answer.length, shown: 8000 } }
       : { judgementCoverage: { status: coverage, reasons: coverage === "partial" ? ["answer_truncated"] : [], answerChars: answer.length, assessedChars: coverage === "partial" ? 8000 : answer.length } };
-    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at,answer_text) VALUES($1,'alice',$2,$3,'deepseek',now(),$4)",
+    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at,answer_text,status) VALUES($1,'alice',$2,$3,'deepseek',now(),$4,'valid')",
       [snapshot, project.id, round, answer]);
     await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract,checks) VALUES($1,'alice',$2,now(),$3::jsonb,$4::jsonb)",
       [snapshot, project.id, JSON.stringify({ valueBasisVersion: 1, valueCoverage: [{ findingId: id, status, quote: id.startsWith("observed") ? "Observed statement." : "", reason: "Recorded interpretation" }] }), JSON.stringify(checks)]);
@@ -119,8 +119,8 @@ test("a round of eight thousand observations comes back as exact counts and twen
   await store.writeValue("alice", project.id, { findings: Array.from({ length: 20 }, (_, index) => ({ id: `f${index}`, statement: `Finding ${index}` })) });
   const round = `gr_${randomUUID()}`;
   await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'baseline','done')", [round, project.id]);
-  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at)
-    SELECT 'gs_' || $4 || g, 'alice', $1, $2, CASE WHEN g % 2 = 0 THEN 'deepseek' ELSE 'kimi' END, now() - make_interval(secs => g) FROM generate_series(1, $3::integer) g`,
+  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at,status)
+    SELECT 'gs_' || $4 || g, 'alice', $1, $2, CASE WHEN g % 2 = 0 THEN 'deepseek' ELSE 'kimi' END, now() - make_interval(secs => g), 'valid' FROM generate_series(1, $3::integer) g`,
   [project.id, round, 400, round]);
   // Even-numbered findings do not apply to the question; the odd ones are judged partly represented, and the first fifth of the answers were judged
   // against an older profile (basis 1) than the rest (basis 2).
@@ -158,7 +158,7 @@ test("a round of eight thousand observations comes back as exact counts and twen
   await store.writeValue("alice", quiet.id, { findings: [{ id: "f1", statement: "Unrelated to these questions" }] });
   const quietRound = `gr_${randomUUID()}`;
   await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'weekly','done')", [quietRound, quiet.id]);
-  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at) VALUES ($1,'alice',$2,$3,'kimi',now())`, [`gs_${quietRound}`, quiet.id, quietRound]);
+  await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at,status) VALUES ($1,'alice',$2,$3,'kimi',now(),'valid')`, [`gs_${quietRound}`, quiet.id, quietRound]);
   await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract) VALUES ($1,'alice',$2,now(),$3::jsonb)`,
     [`gs_${quietRound}`, quiet.id, JSON.stringify({ valueBasisVersion: 1, valueCoverage: Array.from({ length: 30 }, () => ({ findingId: "f1", status: "not_applicable" })) })]);
   const none = await service.valueOf(quiet);

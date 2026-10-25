@@ -153,8 +153,12 @@ test('V10 keeps source-specific current notices and exact identities in members 
     assert.equal(second.verification, 'verified_preserved_quote');
     assert.deepEqual(second.sourceChanges, []);
     const exported = freezeGeoAnalysisDocument(view);
-    for (const text of ['old', 'new', '2026-10-21', '2026-10-22T11:00:00Z', '2026-10-22T12:00:00Z', 'doi:10.1000/first', '旅程上下文版本：9'])
+    // The reader sees each version, the notice's own dates (recorded and checked times in the scope's zone) and the source; the
+    // group identities and the record's codes stay in the export record.
+    for (const text of ['问题版本：1', '问题版本：2', 'Claim one', '2026-10-21', '2026-10-22 19:00', '2026-10-22 20:00', 'doi:10.1000/first', '旅程上下文版本：9', '撤稿'])
         assert.ok(exported.canonicalMarkdown.includes(text), text);
+    for (const code of ['```json', '"sourceChanges"', 'gsel_e1', 'linked_not_verified'])
+        assert.ok(!exported.canonicalMarkdown.includes(code), code);
     for (const [name, patch, withdrawn, reason] of [
         ['expired', {validUntil:'2026-01-01',expired:true}, false, 'claim_expired'],
         ['superseded', {status:'superseded'}, false, 'claim_inactive'],

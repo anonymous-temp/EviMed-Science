@@ -94,7 +94,8 @@ test('full chart/export retain rows beyond page 200 and wide typed tables become
   assert.ok(wide.typedTable.columns.length <= 40);
   assert.equal(wide.typedTable.rows.length, 45);
   assert.equal(wide.typedTable.rows[0].value, 0);
-  assert.equal(wide.typedTable.rows[44].column_key, 'column-44');
+  assert.equal(wide.typedTable.rows[44].column_label, 'Column 44');
+  assert.equal(wide.typedTable.rows[44].state, '未知');
   assert.equal(wide.typedTable.rows[44].value, null);
 });
 
@@ -128,7 +129,9 @@ test('round charts order same-day rounds by observed time rather than newest-fir
  const pages=[];for(let offset=0;offset<view.page.total;offset+=5){const page=presentGeoAnalysis(input,view.view,{...context(),allRows:false,limit:5,offset});assert.equal(page.digest,view.digest);pages.push(...page.rows);}
  assert.deepEqual(pages.map(row=>row.key),view.rows.map(row=>row.key));
  const exported=freezeGeoAnalysisDocument(view);
- assert.deepEqual(exported.typedTable.rows.filter(row=>row.period==='round').map(row=>JSON.parse(row.dimensions).roundId),points.map(row=>row.dimensions.roundId));
+ // The typed rows keep the chart's round order under the reader's words; the record keeps the exact round of each.
+ assert.deepEqual(exported.typedTable.rows.filter(row=>row.period==='轮次').map(row=>row.label),points.map(row=>row.label));
+ assert.deepEqual(exported.cover.analysis.rows.filter(row=>row.dimensions.period==='round').map(row=>row.dimensions.roundId),points.map(row=>row.dimensions.roundId));
 
 });
 

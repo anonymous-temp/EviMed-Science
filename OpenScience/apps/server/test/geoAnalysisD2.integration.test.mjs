@@ -172,7 +172,7 @@ test('V22 eligible repeat status controls stored presence and absence without lo
     assert.ok(mixedPositive.items.some(item => item.status === 'valid' && item.source.pages[0].preservedCitations.some(citation => citation.url === link.url)), 'a valid linked repeat remains a known positive even beside a refused repeat');
     assert.equal(full.rows[7].values.observation.reason, 'answer_not_returned', 'a mixed empty batch cannot establish absence despite complete declarations');
     const document = freezeGeoAnalysisDocument(full);
-    assert.deepEqual(document.typedTable.rows.slice(0, 3).map(row => [row.observation, row.observation_state, row.observation_reason, row.transition]), [[null, 'unknown', 'answer_not_returned', null], [null, 'unknown', 'answer_not_returned', null], [null, 'unknown', 'answer_not_returned', null]]);
+    assert.deepEqual(document.typedTable.rows.slice(0, 3).map(row => [row.observation, row.observation_state, row.observation_reason, row.transition]), [[null, '未知', '没有取得回答', null], [null, '未知', '没有取得回答', null], [null, '未知', '没有取得回答', null]]);
     const requests = [];
     await service.selectedExport(user, statusProject, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest, formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, { requestFrozen: async (...args) => { requests.push(args); return { id: 'd2-status-export' }; } });
     assert.deepEqual(requests[0][1].typedTable.rows, document.typedTable.rows);
@@ -221,7 +221,8 @@ test('V22 requires every scheduled repeat in the exact selected scope before abs
     const outside = await service.analysisMembers(user, planned.id, { selectionRef:view.selection.reference,...view.view,expectedDigest:view.digest,rowKey:full.rows[8].key,columnKey:'observation' });
     const excludedJob=outside.items.find(item=>item.id==='d2-repeat-r9-job1');assert.equal(excludedJob.unit,'asks');assert.equal(excludedJob.snapshotId,undefined);assert.equal(excludedJob.answer,undefined,'an outside-scope answer is not hydrated through a missing-job member');
     const document = freezeGeoAnalysisDocument(full);
-    assert.deepEqual(document.typedTable.rows.map(row => row.observation), full.rows.map(row => row.values.observation.value));
+    const words = { present: '已观察引用', absent: '可观测未引用' };
+    assert.deepEqual(document.typedTable.rows.map(row => row.observation), full.rows.map(row => words[row.values.observation.value] ?? row.values.observation.value));
     const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
     service.planContexts = adapter;
     const staged = await adapter.stage(user, planned.id, { requestKey: 'd2-repeat-history', sessionId: 'd2-repeat-session', mode: 'analysis', selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest, intent: 'explain' });

@@ -65,7 +65,7 @@
  */
 
 import { GEO_METRICS, geoConstant } from "@evimed/domain";
-import { GEO_PROBE_ALLOWED_PROVIDERS, probeUpstream } from "./geoProbeGateway.mjs";
+import { GEO_PROBE_ALLOWED_PROVIDERS, GEO_UNDELIVERED_FAILURE_CODES, probeUpstream } from "./geoProbeGateway.mjs";
 import { citationRows } from "./geoParse.mjs";
 import { classifyProbeAnswer, classifyProbeAnswerWithJudge, isRetriableRawStatus } from "./geoSanity.mjs";
 import { storeGeoScreenshot } from "./geoScreenshots.mjs";
@@ -134,6 +134,8 @@ const DEFAULT_SURFACE = Object.freeze({ mode: "web", deep: false, newChat: true,
 
 const BUSY_CODES = new Set(["geo_probe_busy", "geo_probe_rate_limited"]);
 const CONFIG_CODES = new Set(["geo_probe_unconfigured", "geo_probe_endpoint_invalid", "geo_probe_plaintext_forbidden"]);
+/** The codes of an ask that never reached the provider (`GEO_UNDELIVERED_FAILURE_CODES`): a one-shot cell failed with one of them cost nothing. */
+const UNDELIVERED_CODES = new Set(GEO_UNDELIVERED_FAILURE_CODES);
 /**
  * The probe client's codes for a host that did not answer the ask (`geoProbeGateway.probeUpstream`): a job failed with one of them was
  * never put to its engine, and its question is asked again like a skipped one (the sentinel's make-up).
@@ -701,19 +703,22 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     answer = await upstream.ask({ question: question.text, providers: [job.engine], deep: 0, newChat: 1, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     const code = String(/** @type {any} */ (error)?.code ?? "geo_probe_failed");
-    if (!oneShot && BUSY_CODES.has(code)) {
+    // A busy or misconfigured probe never put the ask to the engine: the job waits without spending an attempt, a one-shot one
+    // too (it failed outright, and a recovery then spent the cell's one chance on a refusal that cost nothing, 2026-10-25).
+    if (BUSY_CODES.has(code)) {
       await busy(deps, state, job, counts);
       return "stop";
     }
-    if (!oneShot && CONFIG_CODES.has(code)) {
+    if (CONFIG_CODES.has(code)) {
       await store.requeueJob(job.id, { now: now(), refundAttempt: true });
       counts.probe = "misconfigured";
       await alert(deps, state, { kind: "geo_probe_misconfigured", code, message: "The GEO probe endpoint is not usable; measurement is waiting.",
         idempotencyKey: `geo:probe_misconfigured:${code}` });
       return "stop";
     }
-    const deliveryUnknown = oneShot && !CONFIG_CODES.has(code) && !BUSY_CODES.has(code)
-      && !["geo_probe_question_invalid", "geo_probe_provider_invalid", "geo_probe_request_invalid"].includes(code);
+    // Unknown only where the ask may have reached the engine: a timeout, an upstream error after the send, a malformed answer.
+    // A host that could not be connected to (`geo_probe_unavailable`) or a request it refused was never put to the engine.
+    const deliveryUnknown = oneShot && !UNDELIVERED_CODES.has(code);
     // Keep dispatch uncertainty on the failed cell so an explicit recovery can explain another possible charge.
     const snapshotId = randomId("gs_");
     await store.insertSnapshot({
@@ -975,7 +980,7 @@ async function inclusionPass(deps, state, engines, counts) {
       if (job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
         await store.requeueJob(job.id, { now: at, runAfter: new Date(at.getTime() + RETRY_DELAY_MS * job.attempts), errorCode: code });
       } else {
-        await store.finishJob(job.id, { now: at, status: "failed", errorCode: job.samplingMode === "one_shot" && !["media_market_request_invalid", "media_market_unconfigured", "geo_inclusion_disabled", "geo_inclusion_engine_not_allowed", "media_market_unauthorized", "media_market_rate_limited", "media_market_refused"].includes(code) ? "delivery_unknown_no_automatic_retry" : code });
+        await store.finishJob(job.id, { now: at, status: "failed", errorCode: job.samplingMode === "one_shot" && !UNDELIVERED_CODES.has(code) ? "delivery_unknown_no_automatic_retry" : code });
       }
       counts.inclusion.failed += 1;
       break;

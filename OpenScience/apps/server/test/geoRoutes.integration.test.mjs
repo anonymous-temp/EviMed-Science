@@ -692,7 +692,8 @@ test("GET /value: the project's value profile as the page reads it, with the cov
   const round = `gr-${randomBytes(4).toString("hex")}`;
   await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status) VALUES ($1, $2, $3, 'baseline', 'done')`, [round, ALICE, id]);
   const snapshot = `gs-${randomBytes(4).toString("hex")}`;
-  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, round_id, engine, asked_at) VALUES ($1, $2, $3, $4, 'deepseek', now())`, [snapshot, ALICE, id, round]);
+  // A judged answer is a valid one: a round of status-less snapshots heard nothing, and value coverage reads none of it (2026-10-25).
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, round_id, engine, asked_at, status) VALUES ($1, $2, $3, $4, 'deepseek', now(), 'valid')`, [snapshot, ALICE, id, round]);
   await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, judged_at, judge_extract) VALUES ($1, $2, $3, now(), $4::jsonb)`,
     [snapshot, ALICE, id, JSON.stringify({ valueBasisVersion: 1, valueCoverage: [{ findingId: "eff-adults", status: "represented" }] })]);
 

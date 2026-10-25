@@ -44,6 +44,7 @@ import { preserveGeoAssessment, geoAssessmentId } from "./geoLearningSignals.mjs
 import { migrateGeo } from "./geoPersistence.mjs";
 import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 import { geoOwnedLinkKey } from "./geoStore.mjs";
+import { GEO_UNDELIVERED_FAILURE_CODES } from "./geoProbeGateway.mjs";
 import { HttpError, randomId } from "./security.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
@@ -52,6 +53,57 @@ export const GEO_PROBE_LOCK_KEY = "evimed_geo_probe";
 
 /** Rounds whose big versions wait for the night window. */
 export const GEO_NIGHT_ROUND_KINDS = Object.freeze(["baseline", "weekly", "noise"]);
+
+/**
+ * The original cells of a one-shot diagnosis an earlier recovery still holds: its job for the same question and engine is queued,
+ * leased, answered, or failed in a way that may have reached the provider. A recovery whose job provably never reached it (skipped,
+ * or failed with `GEO_UNDELIVERED_FAILURE_CODES` and no vendor task taken) holds nothing: the cell may be recovered again
+ * (2026-10-25: one generation was the limit, so a recovery asked while the probe host was down used the cell's only chance).
+ * @param {{ query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }> }} db
+ * @param {string} geoProjectId @param {string} originalRoundId @param {string[]} jobIds the original round's job ids
+ * @returns {Promise<Set<string>>}
+ */
+export async function geoRecoveryHeldCells(db, geoProjectId, originalRoundId, jobIds) {
+  if (!jobIds.length) return new Set();
+  const rows = (await db.query(`SELECT DISTINCT original.id FROM evimed_geo.probe_jobs original
+      JOIN evimed_geo.rounds prior ON prior.geo_project_id = $1 AND prior.ref ->> 'recoveryOf' = $2 AND (prior.ref -> 'recoveredJobIds') ? original.id
+      LEFT JOIN evimed_geo.probe_jobs again ON again.round_id = prior.id AND again.question_id = original.question_id AND again.engine = original.engine
+    WHERE original.round_id = $2 AND original.id = ANY($3::text[])
+      AND (again.id IS NULL OR NOT (again.status IN ('failed', 'skipped') AND again.external_ref IS NULL
+        AND (again.status = 'skipped' OR again.error_code = ANY($4::text[]))
+        AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.probe_job_id = again.id AND answered.status IN ('valid', 'refusal'))))`,
+  [geoProjectId, originalRoundId, jobIds, [...GEO_UNDELIVERED_FAILURE_CODES]])).rows;
+  return new Set(rows.map((row) => String(row.id)));
+}
+
+/**
+ * The question set recurring measurement reads (a baseline, a weekly re-measure, a sentinel, a noise round): the newest set saved
+ * under a recurring agreement, else the newest locked set saved without one, else (none locked yet) the newest version any live
+ * measured question carries. A set imported under a one-shot agreement is measured only through its explicit start
+ * (`geoStartDiagnosis`), so it never replaces the set monitoring reads: importing one silently stopped every recurring round
+ * (2026-10-25). `oneShot` names the one-shot versions; `version` is null when nothing else is left to measure; `locked` says the
+ * set is one the programme measures (saved under a recurring agreement, or locked), not the newest draft.
+ * @param {{ query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }> }} db @param {string} geoProjectId
+ * @returns {Promise<{ version: number | null, contract: Record<string, any> | null, locked: boolean, oneShot: number[] }>}
+ */
+export async function geoMonitoringSet(db, geoProjectId) {
+  const sets = (await db.query(`SELECT version, contract, locked_at FROM evimed_geo.question_sets WHERE geo_project_id = $1 ORDER BY version DESC`,
+    [geoProjectId])).rows;
+  const oneShot = sets.filter((set) => set.contract?.samplingMode === "one_shot").map((set) => Number(set.version));
+  const chosen = sets.find((set) => set.contract && set.contract.samplingMode !== "one_shot") ?? sets.find((set) => !set.contract && set.locked_at);
+  if (chosen) return { version: Number(chosen.version), contract: chosen.contract ?? null, locked: true, oneShot };
+  const latest = (await db.query(`SELECT max(set_version) AS version FROM evimed_geo.questions WHERE geo_project_id = $1 AND is_measured
+      AND retired_at IS NULL AND NOT (set_version = ANY($2::integer[]))`, [geoProjectId, oneShot])).rows[0]?.version;
+  return { version: latest == null ? null : Number(latest), contract: null, locked: false, oneShot };
+}
+
+/**
+ * The SQL test that a round heard an answer: one valid or refused snapshot. A round that closed with its engines paused or the
+ * probe host down (2026-10-25) heard none, and is never "the latest", the baseline, a week or a source count's round.
+ * @param {string} alias the rounds alias of the query it goes into (a literal of the caller's own SQL, never input)
+ */
+export const GEO_ROUND_ANSWERED = (alias) => `EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id = ${alias}.id
+  AND answered.status IN ('valid', 'refusal'))`;
 
 const ENSURE_COLUMNS = `
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_expected jsonb NOT NULL DEFAULT '[]'::jsonb;
@@ -369,21 +421,14 @@ export class GeoMeasureStore {
   }
 
   /**
-   * The measured questions of the project's current question set: the latest
-   * locked set, else (no set locked yet) the latest version any measured
-   * question carries.
+   * The measured questions of the set recurring measurement reads (`geoMonitoringSet`).
    * @param {string} geoProjectId
    */
   async measuredQuestions(geoProjectId) {
     const rows = await this.questions(geoProjectId, { measuredOnly: true });
     if (!rows.length) return { setVersion: null, questions: [] };
-    let setVersion = Math.max(...rows.map((row) => row.setVersion));
-    const latest = (await this.query(`SELECT version, contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 ORDER BY version DESC LIMIT 1`, [geoProjectId])).rows[0];
-    if (latest?.contract) return { setVersion: Number(latest.version), questions: rows.filter((row) => row.setVersion === Number(latest.version)) };
-    const locked = await this.query(`SELECT max(version) AS version FROM evimed_geo.question_sets WHERE geo_project_id = $1 AND locked_at IS NOT NULL`,
-      [geoProjectId]);
-    if (locked.rows[0]?.version != null) setVersion = Number(locked.rows[0].version);
-    return { setVersion, questions: rows.filter((row) => row.setVersion === setVersion) };
+    const { version } = await geoMonitoringSet(this, geoProjectId);
+    return version == null ? { setVersion: null, questions: [] } : { setVersion: version, questions: rows.filter((row) => row.setVersion === version) };
   }
 
   // ───────────────────────── rounds and jobs ─────────────────────────
@@ -420,9 +465,9 @@ export class GeoMeasureStore {
         }
       }
       if (round.ref?.recoveryOf) {
-        const prior = await client.query(`SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id=$1 AND ref->>'recoveryOf'=$2
-          AND (ref->'recoveredJobIds') ?| $3::text[] LIMIT 1`, [round.geoProjectId, round.ref.recoveryOf, round.ref.recoveredJobIds]);
-        if (prior.rows.length) throw new HttpError(409, "geo_recovery_exhausted", "Each failed cell permits one explicit recovery; inspect the previous recovery first.");
+        // Under the diagnosis lock above: two recoveries of one cell cannot both pass.
+        const held = await geoRecoveryHeldCells(client, round.geoProjectId, String(round.ref.recoveryOf), /** @type {string[]} */ (round.ref.recoveredJobIds));
+        if (held.size) throw new HttpError(409, "geo_recovery_exhausted", "An earlier recovery of these cells is running, answered, or may have reached the provider; inspect it first.");
       }
       await client.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, surface, status, planned, done, failed, ref, created_at)
         VALUES ($1, $2, $3, $4, $5, $6::text[], $7::jsonb, 'queued', $8, 0, 0, $9::jsonb, $10)`,

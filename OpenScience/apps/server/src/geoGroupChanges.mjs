@@ -2,6 +2,7 @@ import { readGeoSignalProgress, writeGeoSignalProgress, geoSignalProgressSuperse
 import { createHash } from 'node:crypto';
 import { GEO_MEASUREMENT_METHOD_VERSION, validateGeoMeasurementContract } from '@evimed/domain';
 import { canonicalJson } from './geoStore.mjs';
+import { GEO_ROUND_ANSWERED } from './geoMeasureStore.mjs';
 import { withGeoReadTransaction, readGeoSelection } from './geoReadScope.mjs';
 import { geoComparisonKey, geoComparableAnswer, geoComparisonCellKey, geoComparisonMembers, compareGeoMetricCohorts, geoComparisonContractsMatch } from './geoComparison.mjs';
 import { geoMarketReadTimestamp } from './geoMarketOperations.mjs';
@@ -14,12 +15,16 @@ export const GROUP_CHANGE_MARK = 'signals:group-change:v1';
 export const GROUP_CHANGE_POLICY = Object.freeze({ policyVersion: 'group-observed-pp-v1', threshold: 5, unit: 'percentage_points', operator: '>',
   deltaBasis: 'canonical_rounded_delta', criterion: 'descriptive_magnitude_screen', noiseMeasured: false, noiseThreshold: null, causal: false, consumerModelVersion: 'unknown' });
 
-/** Exact adjacent completed observations are selected by recorded completion, including the same day. */
+/**
+ * Exact adjacent completed observations are selected by recorded completion, including the same day. A round that heard no answer
+ * (`GEO_ROUND_ANSWERED`; its engines paused or the probe host down, 2026-10-25) is no observation: it is never measured, so a pair
+ * ending on it was "not ready" on every pass and the screen stopped there for good.
+ */
 async function nextRounds(store, project, mark) {
   return (await store.query(`SELECT r.*,${geoMarketReadTimestamp('r.finished_at')} AS completed_at FROM evimed_geo.rounds r
     JOIN evimed_geo.projects p ON p.id=r.geo_project_id AND p.user_id=r.user_id
     WHERE p.id=$1 AND p.user_id=$2 AND p.project_id=$3 AND p.deleted_at IS NULL AND NOT p.internal
-      AND r.kind IN ('baseline','weekly','single_step') AND r.status IN ('done','partial') AND r.finished_at IS NOT NULL
+      AND r.kind IN ('baseline','weekly','single_step') AND r.status IN ('done','partial') AND r.finished_at IS NOT NULL AND ${GEO_ROUND_ANSWERED('r')}
       AND coalesce(r.surface->>'mode','web') IN ('web','raw')
       AND ($4::timestamptz IS NULL OR (r.finished_at,r.id)>($4::timestamptz,$5))
     ORDER BY r.finished_at,r.id LIMIT $6`, [project.id, project.userId, project.projectId, mark.completedAt ?? null, mark.roundId ?? '', mark.roundId ? 1 : 2])).rows;
@@ -48,7 +53,7 @@ export async function readGeoRoundComparison(store, project, {previousRoundId, c
         AND (previous.finished_at,previous.id)<(current.finished_at,current.id)
         AND NOT EXISTS(SELECT 1 FROM evimed_geo.rounds between_round WHERE between_round.geo_project_id=previous.geo_project_id AND between_round.user_id=previous.user_id
           AND between_round.kind IN ('baseline','weekly','single_step') AND between_round.status IN ('done','partial')
-          AND coalesce(between_round.surface->>'mode','web') IN ('web','raw')
+          AND coalesce(between_round.surface->>'mode','web') IN ('web','raw') AND ${GEO_ROUND_ANSWERED('between_round')}
           AND (between_round.finished_at,between_round.id)>(previous.finished_at,previous.id)
           AND (between_round.finished_at,between_round.id)<(current.finished_at,current.id))`,
     [previousRoundId,currentRoundId,project.id,project.userId])).rows;

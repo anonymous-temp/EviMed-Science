@@ -134,8 +134,9 @@ test('V22 only valid linked repeats supply presence while non-valid URL provenan
         assert.equal(view.chart.cells[0].value, hasValidPositive ? 1 : null);
         const frozen = freezeGeoAnalysisDocument(view);
         assert.equal(frozen.cover.analysis.rows[0].values.observation.value, hasValidPositive ? 'present' : null);
-        assert.equal(frozen.typedTable.rows[0].observation, hasValidPositive ? 'present' : null);
-        assert.equal(frozen.typedTable.rows[0].observation_state, hasValidPositive ? 'known' : 'unknown');
+        assert.equal(frozen.typedTable.rows[0].observation, hasValidPositive ? '已观察引用' : null);
+        assert.equal(frozen.typedTable.rows[0].observation_state, hasValidPositive ? '已知' : '未知');
+        assert.equal(frozen.typedTable.rows[0].observation_reason, hasValidPositive ? null : '没有取得回答');
         assert.match(frozen.canonicalMarkdown, /有效重复中的引用仍可观察/);
         assert.match(frozen.canonicalMarkdown, /未引用须所有相关重复均有效且引用列表完整/);
         if (status === 'refusal') {

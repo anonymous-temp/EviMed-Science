@@ -69,7 +69,9 @@ test('V16 actual selected sources, complete observation members and frozen nativ
   const request={requestId:'native-'+current.view.evidenceKind,sessionId:'support-session',content:[{type:'text',text:'Explain the selected evidence.'}],geoPlanContext:{referenceId:staged.referenceId}};await adapter.prepare(user,{id:project.projectId,userId:user.id},request);await adapter.bind(user,{id:project.projectId,userId:user.id},request);
   assert.deepEqual((await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,limit:50})).rows,full.rows);
   preserved.push({referenceId:staged.referenceId,rows:full.rows});
-  const doc=freezeGeoAnalysisDocument(full);assert.ok(doc.canonicalMarkdown.includes('s-old-36')||current.view.evidenceKind==='claims');
+  // The document reads the finding and its kept records in words; the snapshot identities stay in the export record.
+  const doc=freezeGeoAnalysisDocument(full);assert.ok(doc.canonicalMarkdown.includes('Frozen original finding')||current.view.evidenceKind==='claims');
+  assert.ok(!doc.canonicalMarkdown.includes('s-old-36')&&!doc.canonicalMarkdown.includes('```json'));assert.ok(JSON.stringify(doc.cover.analysis).includes('s-old-36')||current.view.evidenceKind==='claims');
   if(process.env.GEO_E2_RECEIPTS_DIR){await mkdir(process.env.GEO_E2_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_E2_RECEIPTS_DIR}/document-V16-${current.view.evidenceKind}.json`,JSON.stringify({...doc,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:full.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
  }
  await changes.record('10.1000/support2',{kind:'retraction',date:'2026-10-20',noticeIdentifier:'10.1000/notice'},{assertedBy:'operator'});
@@ -81,11 +83,12 @@ test('V16 actual selected sources, complete observation members and frozen nativ
  const changedFull=await freezeSelectedGeoAnalysis(store,project,{selectionRef:changed.selection.reference,view:changed.view,expectedDigest:changed.digest});
  const updatedDocument=freezeGeoAnalysisDocument(changedFull);
  assert.ok(updatedDocument.typedTable.rows.every(row=>Object.values(row).every(value=>typeof value!=='string'||value.length<=32767)), 'Every context cell must remain renderable after source notices expand it');
- for(const row of changedFull.rows){
-  const main=updatedDocument.typedTable.rows.find(item=>item.key===row.key);
-  const parts=updatedDocument.typedTable.rows.filter(item=>item.context_parent===row.key&&item.context_field==='dimensions');
+ assert.deepEqual(updatedDocument.cover.analysis.rows,changedFull.rows,'the export record keeps the entire exact object context');
+ for(const [index,row] of changedFull.rows.entries()){
+  const main=updatedDocument.typedTable.rows.find(item=>item.row_number===index+1);
+  const parts=updatedDocument.typedTable.rows.filter(item=>item.context_parent===String(index+1)&&item.context_field==='分类与条件');
   const dimensions=main.dimensions??parts.map(item=>item.dimensions).join('');
-  assert.deepEqual(JSON.parse(dimensions),row.dimensions,'Continuation rows preserve the entire exact object context');
+  assert.equal(main.label,row.label);assert.ok(dimensions.includes('撤稿')||!JSON.stringify(row.dimensions).includes('retraction'),'the notice reaches the reader in words');
  }
  if(process.env.GEO_E2_RECEIPTS_DIR){await writeFile(`${process.env.GEO_E2_RECEIPTS_DIR}/document-V16-updated.json`,JSON.stringify({...updatedDocument,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:changed.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
  await assert.rejects(service.analysisMembers(user,project.id,{...view.view,selectionRef:view.selection.reference,rowKey:view.rows[0].key,columnKey:'observations',expectedDigest:view.digest}),error=>error.status===409);

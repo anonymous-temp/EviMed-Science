@@ -1,6 +1,10 @@
 /** Exact engine and versioned group-engine buckets; domain owns metric arithmetic. */
 import { createHash } from 'node:crypto';
-import { documentExportDigest, geoMetricMembers, GEO_METRIC_LABELS_ZH, GEO_METRIC_UNITS } from '@evimed/domain';
+import { documentExportDigest, geoMetricMembers, GEO_ENGINE_LABELS_ZH, GEO_METRIC_LABELS_ZH, GEO_METRIC_UNITS, GEO_POOL_LABELS_ZH } from '@evimed/domain';
+/** A reader's name for a pool or an engine in a row label; the code stays in the row's dimensions. @param {string | null | undefined} code */
+const poolName = code => code ? GEO_POOL_LABELS_ZH[code] ?? code : code;
+/** @param {string | null | undefined} code */
+const engineName = code => code ? GEO_ENGINE_LABELS_ZH[code] ?? code : code;
 import { computeGeoSelection } from './geoReadScope.mjs';
 import { geoComparisonMembers } from './geoComparison.mjs';
 import { brandRegistry, registryKey, foldText } from './geoParse.mjs';
@@ -79,7 +83,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
   }; };
   for (const { dims, rows: inputs } of buckets.values()) {
     const prefix = [
-      view.viewId === 'V05' ? (groups.get(dims.groupId)?.name ?? '未命名问题群') : null, dims.setVersion != null ? `问题版本 ${dims.setVersion}` : null, dims.engine
+      view.viewId === 'V05' ? (groups.get(dims.groupId)?.name ?? '未命名问题群') : null, dims.setVersion != null ? `问题版本 ${dims.setVersion}` : null, engineName(dims.engine)
     ].filter(Boolean).join(' · ');
     if (generic) {
       const row = {
@@ -113,7 +117,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
       const key = hash([
         dims, cell.metricId, cell.pool
       ]), row = {
-        key, label: `${GEO_METRIC_LABELS_ZH[cell.metricId] ?? cell.metricId} · ${prefix}${cell.pool ? ` · ${cell.pool}` : ''}`, metricId: cell.metricId, dimensions: {
+        key, label: `${GEO_METRIC_LABELS_ZH[cell.metricId] ?? cell.metricId} · ${prefix}${cell.pool ? ` · ${poolName(cell.pool)}` : ''}`, metricId: cell.metricId, dimensions: {
           ...dims, groupName: groups.get(dims.groupId)?.name ?? null, pool: cell.pool, variant: cell.variant
         }, values: {}, links: []
       };
@@ -182,7 +186,7 @@ export function buildGeoComparisonAnalysis(selected, view, context = {}) {
         if (entry.scope !== view.dimension || view.metricId && entry.metricId !== view.metricId || entry.variant || entry.rival || entry.arm)
             continue;
         const dims = { scope: entry.scope, engine: entry.engine, groupId: entry.groupId, pool: entry.pool, groupName: (context.groups ?? []).find(group=>group.id===entry.groupId)?.name??null, comparisonMode: comparison?.mode ?? null, currentSelection: comparison?.currentSelection?.reference ?? selected.selection.reference, previousSelection: comparison?.previousSelection?.reference ?? null };
-        const row = { key: hash([entry.metricId, dims]), label: [GEO_METRIC_LABELS_ZH[entry.metricId], entry.engine, dims.groupName, entry.pool].filter(Boolean).join(' · '), metricId: entry.metricId, dimensions: dims, values: {}, links: [] };
+        const row = { key: hash([entry.metricId, dims]), label: [GEO_METRIC_LABELS_ZH[entry.metricId], engineName(entry.engine), dims.groupName, poolName(entry.pool)].filter(Boolean).join(' · '), metricId: entry.metricId, dimensions: dims, values: {}, links: [] };
         const members = {};
         for (const period of ['previous', 'current']) {
             const metric = entry[period], source = cohorts?.[period] ?? (period === 'current' ? selected : null);
@@ -256,7 +260,7 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
                     continue;
                 const generic = !entity.brandName, kind = generic ? 'generic' : 'brand';
                 const dims = { entityKey, entityKind: kind, entityName: entity.brandName ?? entity.genericName, own: entity.own, pool, period: bucket.period, date: bucket.date, roundId: bucket.period === 'round' ? bucket.key : null, roundOrdinal: bucket.roundOrdinal, roundLabel: bucket.period === 'round' ? `第 ${bucket.roundOrdinal} 轮` : null, engine: null };
-                const row = { key: hash(dims), label: `${dims.entityName} · ${generic ? '通用名观测' : entity.own ? '本品' : '已登记竞品'} · ${pool}`, metricId: generic ? null : view.metricId, dimensions: dims, values: {}, links: [] };
+                const row = { key: hash(dims), label: `${dims.entityName} · ${generic ? '通用名观测' : entity.own ? '本品' : '已登记竞品'} · ${poolName(pool)}`, metricId: generic ? null : view.metricId, dimensions: dims, values: {}, links: [] };
                 const balanced = /** @type {any[]} */ (computeGeoSelection(bucket.rows, selected.metricOptions).balance.rows).filter(item => item.pool === pool), observed = balanced.filter(item => item.status === 'valid' || item.status === 'refusal');
                 const exactEntity = (item) => { const basis = basisFor(item); const saved = basis.snapshot ? (entity.own ? basis.snapshot.product : (basis.snapshot.competitors ?? []).find(candidate => geoRivalEntityKey(candidate) === entityKey)) : entity; return { basis, saved }; };
                 const eligible = observed.filter(item => { const { basis, saved } = exactEntity(item); if (!saved)
@@ -313,7 +317,7 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
                 row.dimensions.recordedEntities=[...new Map(balanced.map(item=>{const {saved}=exactEntity(item);return [item.roundId,{roundId:item.roundId,name:saved?.brandName??saved?.genericName??null,aliases:saved?.aliases??[],genericAliases:saved?.genericAliases??[]}];})).values()];
                 const recordedNames=[...new Set(row.dimensions.recordedEntities.map(item=>item.name).filter(Boolean))];
                 row.dimensions.entityLabel=recordedNames.some(name=>name!==row.dimensions.entityName)?`当前登记：${row.dimensions.entityName}（历史登记：${recordedNames.join('、')}）`:row.dimensions.entityName;
-                row.label=`${row.dimensions.entityLabel} · ${generic?'通用名观测':entity.own?'本品':'已登记竞品'} · ${pool}`;
+                row.label=`${row.dimensions.entityLabel} · ${generic?'通用名观测':entity.own?'本品':'已登记竞品'} · ${poolName(pool)}`;
                 row.dimensions.registryBasis = [...new Set(balanced.map(item => hash(basisFor(item).snapshot)))].sort();
                 row.dimensions.temporalBasis = balanced.every(item => basisFor(item).snapshot) ? 'recorded' : 'current_context_history_unknown';
                 rows.push(row);
@@ -345,7 +349,7 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
         const paired = !row.dimensions.own && row.dimensions.entityKind === 'brand';
         return (paired ? ['pairedOwn', 'current'] : ['current']).map(columnKey => ({
             key: hash([row.dimensions.entityKey, row.dimensions.pool, columnKey]),
-            label: `${columnKey === 'pairedOwn' ? `${ownName}（同一合资格回答）` : row.dimensions.entityLabel} · ${row.dimensions.pool}`,
+            label: `${columnKey === 'pairedOwn' ? `${ownName}（同一合资格回答）` : row.dimensions.entityLabel} · ${poolName(row.dimensions.pool)}`,
             own: columnKey === 'pairedOwn' || row.dimensions.own,
             comparisonKey: paired ? comparisonKey(row) : null,
             comparisonLabel: paired ? `${row.dimensions.entityLabel} · ${row.dimensions.pool}` : null,
@@ -361,6 +365,6 @@ export function geoRivalMonitoringRows(analysis) {
     return keys.map(key => {
         const rows = analysis.rows.filter(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool]) === key && row.dimensions.period === 'day'), summary = analysis.rows.find(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool]) === key);
         const point = (row, column) => { const value = row.values[column]; return { date: row.dimensions.date, value: value.state === 'known' ? value.value : null, n: value.metric?.denominator ?? null, k: value.metric?.numerator ?? null, coverage: documentExportDigest([row.dimensions.pool, row.dimensions.registryBasis]), status: value.state, analysisMembers: value.members ?? null }; };
-        return { name: summary.dimensions.entityName, label: `${summary.dimensions.entityLabel??summary.dimensions.entityName} · ${summary.dimensions.pool}`, entityKey: summary.dimensions.entityKey, pool: summary.dimensions.pool, points: rows.map(row => point(row, 'current')), ownPoints: rows.map(row => point(row, 'pairedOwn')), unknownTimeCount: analysis.selection.timeCoverage?.unknownTime ?? 0 };
+        return { name: summary.dimensions.entityName, label: `${summary.dimensions.entityLabel??summary.dimensions.entityName} · ${poolName(summary.dimensions.pool)}`, entityKey: summary.dimensions.entityKey, pool: summary.dimensions.pool, points: rows.map(row => point(row, 'current')), ownPoints: rows.map(row => point(row, 'pairedOwn')), unknownTimeCount: analysis.selection.timeCoverage?.unknownTime ?? 0 };
     });
 }

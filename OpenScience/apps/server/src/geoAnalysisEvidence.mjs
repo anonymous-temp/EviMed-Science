@@ -84,7 +84,7 @@ export function geoJourneyClaimSupport(claim, evidence) {
     return { ...support, verification: 'verified_preserved_quote', verificationState: 'verified', reason: null };
 }
 export const GEO_JOURNEY_COLUMNS = Object.freeze([
-    ['questions', '原始问题', 'questions'], ['answeredQuestions', '取得回答的问题', 'distinct_answered_questions'], ['answers', '取得回答', 'answers'], ['linkedClaims', '已关联主张', 'claims'], ['verifiedClaims', '原文已核实主张', 'claims'], ['unknownClaims', '待核实主张', 'claims'], ['findings', '已关联发现', 'findings'], ['articles', '内容', 'articles'], ['resultVersions', '内容版本', 'result_versions'], ['publications', '发布记录', 'publications'],
+    ['questions', '原始问题', 'questions'], ['answeredQuestions', '取得回答的问题', 'distinct_answered_questions'], ['answers', '取得回答', 'answers'], ['linkedClaims', '已关联结论', 'claims'], ['verifiedClaims', '原文已核实结论', 'claims'], ['unknownClaims', '待核实结论', 'claims'], ['findings', '已关联发现', 'findings'], ['articles', '内容', 'articles'], ['resultVersions', '内容版本', 'result_versions'], ['publications', '发布记录', 'publications'],
 ].map(([key, label, unit]) => ({ key, label, unit })));
 /** @param {any} selected @param {any} view @param {any} context */
 export function buildGeoEvidenceAnalysis(selected, view, context = {}) {

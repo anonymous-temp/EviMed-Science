@@ -115,7 +115,7 @@ export function buildGeoSupportAnalysis(selected,view,context={}){
         const basis={claimId:preserved?.id??statement.claimId??null,claimVersion:preserved?.version??statement.claimVersion??null,
           applicability:preserved?geoClaimApplicability(preserved):geoClaimApplicability(statement),cardId:preserved?.cardId??null,cardRevision:preserved?.cardRevision??null,
           cardClaimId:preserved?.cardClaimId??null,sourceRef:preserved?.sourceRef??null,quoteDigest:preserved?hash(preserved.quote??''):null,statementDigest:preserved?hash(preserved.statement??''):null};
-        const row=create([identity,basis],`${preserved?.statement??'主张依据未保留'} · 版本 ${basis.claimVersion??'未知'}`,{kind:'clinical_source_support',...basis,evidenceLevel:basis.applicability?.evidenceLevel??null,temporalBasis:'current_source_context'});
+        const row=create([identity,basis],`${preserved?.statement??'结论依据未保留'} · 版本 ${basis.claimVersion??'未知'}`,{kind:'clinical_source_support',...basis,evidenceLevel:basis.applicability?.evidenceLevel??null,temporalBasis:'current_source_context'});
         const assessmentState=record?.payload.state??'unrecorded';
         const assessmentReason=!['valid','refusal'].includes(answer.status)?'sample_not_returned':
           typeof assessment?.judgedAt!=='string'||!Number.isFinite(Date.parse(assessment.judgedAt))?'judgment_time_unavailable':null;

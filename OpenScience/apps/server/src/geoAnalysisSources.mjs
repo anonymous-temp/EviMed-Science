@@ -1,6 +1,6 @@
 /** Complete preserved citation universe over the selected source-answer cohort. No retrieval inference or live URL resolution. */
 import { createHash } from 'node:crypto';
-import { documentExportDigest, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_RELATIONSHIPS, GEO_SOURCE_RELATIONSHIP_LABELS_ZH, geoMetricMembers } from '@evimed/domain';
+import { documentExportDigest, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_RELATIONSHIPS, GEO_SOURCE_RELATIONSHIP_LABELS_ZH, geoMetricMembers, GEO_MIN_CELL_SAMPLES } from '@evimed/domain';
 import { sourceCitation } from './geoSourceAnswers.mjs';
 import { buildGeoSourceHistory } from './geoAnalysisSourceHistory.mjs';
 import { geoSourceGroup } from './geoAnalysisSourceCohort.mjs';
@@ -60,11 +60,14 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
     const categoryOf = pair => {if(view.viewId==='V20')return pair.relationship;const sourceKey=view.sourceLevel==='page'?pair.sourceKey:pair.domain;return view.viewId==='V17'?pair.sourceType:view.viewId==='V19'?JSON.stringify([sourceKey,view.sourceFacet,...(view.sourceFacet==='group'?[facet(pair.row).setVersion,facet(pair.row).groupId]:[pair.row.engine])]):sourceKey;};
     const observations = selectedSourceObservations(selected), catalog = new Map((context.sources ?? []).map(source => [String(source.domain).toLowerCase().replace(/^www\./u, ''), source]));
     const bySnapshot = new Map(), byDomain = new Map(), byPage = new Map(), pairs = [], rowBySnapshot = new Map(observations.map(row => [row.snapshotId, row])), sourceTypes = new Set(), categories = new Map();
+    // Every answer in scope that cites a usable page, before any view filter: what a type's coverage is a share of.
+    const citedInScope = new Set();
     for (const row of observations) {
         const seen = new Map();
         for (const citation of row.citations ?? []) {
             const reference=sourceCitation(citation);
             if (!reference) continue;
+            citedInScope.add(row.snapshotId);
             const {domain,key}=reference, source=catalog.get(domain), sourceType=source?.kind||'unknown';
             sourceTypes.add(sourceType);
             const annotation=annotations.get(String(citation.url))??{url:String(citation.url),relation:'unknown',reference:null,basis:'unclassified'};
@@ -126,7 +129,10 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
     ] : [['answers', '引用回答', 'answers'], ['pairs', '回答与页面配对', 'source_pairs'], ['pages', '不同页面', 'source_pages'], ['rounds', '实际出现轮次', 'rounds'], ['wrong', '共同出现我方错误的回答', 'answers'], ['mentions', '共同出现品牌提及的回答', 'answers'], ['knownTime', '采样时间已知回答', 'answers'], ['unknownTime', '采样时间未知回答', 'answers']]).map(([key, label, unit]) => ({
         key, label, unit, type: 'number'
     }));
-    const denominator = bySnapshot.size;
+    // V17's coverage divides by every cited answer in scope (`citedInScope`): divided by the answers the type filter had kept it read
+    // 100 % by construction. Under the domain's 30-answer floor it is k of n (`insufficient`), never a rate a chart ranks.
+    const denominator = view.viewId === 'V17' ? citedInScope.size : bySnapshot.size;
+    const coverageState = denominator ? denominator < GEO_MIN_CELL_SAMPLES ? 'insufficient' : 'known' : 'no_data';
     function append(key, label, batch, dimensions) {
         const answers=answerMembers(batch),pages=pageMembers(batch),pairItems=pairMembers(batch),answersByRound=groupBy(answers,answer=>answer.roundId),rounds=[...answersByRound.keys()].sort();
         const history=zeroHistory.map(zero=>answersByRound.has(zero.roundId)?{...zero,citedAnswers:answersByRound.get(zero.roundId).length}:zero);
@@ -143,7 +149,7 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
         for (const column of columns) {
             const items = members[column.key];
             row.values[column.key] = {
-                value: column.key === 'coverage' ? (denominator ? answers.length / denominator * 100 : null) : items.length, state: column.key === 'coverage' && !denominator ? 'no_data' : 'known', unit: column.unit, metric: null, members: null, ...(column.key === 'coverage' ? { memberUnit: 'answers', numerator: answers.length, denominator } : {})
+                value: column.key === 'coverage' ? (denominator ? answers.length / denominator * 100 : null) : items.length, state: column.key === 'coverage' ? coverageState : 'known', unit: column.unit, metric: null, members: null, ...(column.key === 'coverage' ? { memberUnit: 'answers', numerator: answers.length, denominator } : {})
             };
             memberItems.set(`${row.key}:${column.key}`, items);
         }
@@ -164,7 +170,7 @@ export function buildGeoSourceAnalysis(selected, view, context = {}) {
         const items = ['V17','V19'].includes(view.viewId) ? answerMembers(restPairs) : pairMembers(restPairs);
         memberItems.set(`${key}:${chartColumn}`, items);
         cells.push({
-            rowKey: key, columnKey: chartColumn, label: '其余来源', value: view.viewId === 'V17' ? (denominator ? items.length / denominator * 100 : null) : items.length, state: 'known', unit: chartColumn === 'coverage' ? 'percent' : view.viewId==='V19'?'answers':'source_pairs', engine: null, groupId: null, groupName:null,setVersion: null,sourceKey:null,sourceLabel:'其余来源',facetKey:'remainder'
+            rowKey: key, columnKey: chartColumn, label: '其余来源', value: view.viewId === 'V17' ? (denominator ? items.length / denominator * 100 : null) : items.length, state: view.viewId === 'V17' ? coverageState : 'known', unit: chartColumn === 'coverage' ? 'percent' : view.viewId==='V19'?'answers':'source_pairs', engine: null, groupId: null, groupName:null,setVersion: null,sourceKey:null,sourceLabel:'其余来源',facetKey:'remainder'
         });
     }
     const citedAnswers = unique(pairs.map(pair => answerItem(pair.row)));

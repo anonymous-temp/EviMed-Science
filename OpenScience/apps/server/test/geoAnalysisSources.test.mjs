@@ -90,7 +90,9 @@ test('source prose exports use compact readable tables while exact source metada
  assert.ok(!document.canonicalMarkdown.includes('(状态 known;'),'printed counts must not repeat the same state prose in every cell');
  assert.match(document.canonicalMarkdown,/## 引用与页面/);assert.match(document.canonicalMarkdown,/## 共同出现与采样时间/);
  assert.deepEqual(document.cover.analysis.rows,full.rows);
- assert.equal(document.typedTable.rows.length,252);assert.ok(document.typedTable.rows.every(row=>JSON.parse(row.dimensions).originalUrls.length));
+ // The typed rows name every original address in words; the exact source context is the export record's.
+ assert.equal(document.typedTable.rows.length,252);assert.ok(document.typedTable.rows.every((row,index)=>full.rows[index].dimensions.originalUrls.every(url=>row.dimensions.includes(url))&&row.dimensions.includes('原始地址：')));
+ assert.ok(document.typedTable.rows.every(row=>!row.dimensions.includes('{')));
  for(const row of full.rows)assert.ok(document.canonicalMarkdown.includes(row.dimensions.sourceKey));
 });
 
@@ -116,4 +118,18 @@ test('the admitted upper bound keeps every round zero, unknown timestamp and exa
   assert.ok(row.dimensions.history.every(point=>point.kind===kinds.get(point.roundId)&&point.citedAnswers===(point.roundId===round?1:0)));
   assert.equal(item.askedAt,null);assert.equal(item.judgment,null);assert.equal(item.source.pages[0].sourceKey,row.dimensions.sourceKey);
  }
+});
+
+test('V17 type coverage is over every cited answer in scope, before the view filters, and holds the 30-answer floor', () => {
+    // Filtered to one type the coverage used to divide by the answers that type's filter had already kept: 100 % by construction.
+    const filtered = presentGeoAnalysis(sourceFixture(), { viewId: 'V17', sourceType: 'medical' }, context());
+    const medical = filtered.rows.find(row => row.dimensions.sourceType === 'medical');
+    assert.deepEqual([medical.values.coverage.numerator, medical.values.coverage.denominator, medical.values.coverage.value], [1, 2, 50]);
+    assert.equal(medical.values.coverage.state, 'insufficient', 'two cited answers are k of n, not a rate');
+    assert.equal(filtered.chart.denominator, 2);
+    const wide = sourceFixture();
+    for (let n = 0; n < 40; n += 1) wide.rows.push(observation(`wide-${n}`, [citation(n < 10 ? 'https://journal.example/b' : 'https://news.example/c')]));
+    const view = presentGeoAnalysis(wide, { viewId: 'V17' }, context());
+    const journal = view.rows.find(row => row.dimensions.sourceType === 'medical');
+    assert.deepEqual([journal.values.coverage.numerator, journal.values.coverage.denominator, journal.values.coverage.state], [11, 42, 'known']);
 });
