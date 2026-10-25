@@ -92,3 +92,20 @@ for(const background of [false,true]) test(`${background?'automatic module':'pri
   await assert.rejects(f.app.geoNativeAuthority.resolve(f.owner,{kind:'geo',geoProjectId:f.geo.id,sessionId:f.root}),{code:'runtime_session_not_found'});
  }
 });
+
+for(const shared of [false,true]) test(`${shared?'shared':'one-person'} module conversation keeps an explicit zero-document selection and says its mode`,options,async t=>{
+ const f=await setup(t,false,{shared});
+ const route=`/api/geo/projects/${f.geo.id}/conversation/${f.root}/source-scope`;
+ const put=body=>f.call('owner','PUT',route,body);
+ let answer=await put({sourceIds:[],sourceScopeMode:'selected'});
+ assert.equal(answer.status,200,JSON.stringify(answer.body));
+ assert.deepEqual(answer.body.data,{sourceScope:[],sourceScopeMode:'selected',originReference:null},'choosing no document is not the whole project');
+ assert.deepEqual((await f.app.researchSessions.get(f.project,f.root)).sourceScope,[]);
+ assert.deepEqual((await f.call('owner','GET',route)).body.data,{sourceScope:[],sourceScopeMode:'selected',originReference:null});
+ answer=await put({sourceIds:[],sourceScopeMode:'project'});
+ assert.deepEqual(answer.body.data,{sourceScope:null,sourceScopeMode:'project',originReference:null});
+ answer=await put({sourceIds:[]});
+ assert.deepEqual(answer.body.data.sourceScopeMode,'project','no mode and no document is the whole project, as on the personal route');
+ assert.equal((await put({sourceIds:[],sourceScopeMode:'all'})).status,400);
+ assert.equal((await put({sourceIds:[`src_${'c'.repeat(32)}`],sourceScopeMode:'selected'})).status,404);
+});

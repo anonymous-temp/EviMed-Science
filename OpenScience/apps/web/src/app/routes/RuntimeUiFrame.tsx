@@ -889,7 +889,7 @@ export function RuntimeUiFrame({ projectId, origin, scope, sessionId = null, act
         && message.sourceIds.every((id: unknown) => typeof id === "string" && /^src_[a-f0-9]{32}$/.test(id))))) {
         incoming.current = message.seq;
         const requestId = message.requestId;
-        const operation = scope ? (message.sessionId === scope.sessionId ? geoConversationSourceScope(scope, message.sourceIds) : Promise.reject(new Error("Conversation scope mismatch"))) : message.sourceIds === undefined ? getWebSessionSourceScope(message.sessionId, projectId)
+        const operation = scope ? (message.sessionId === scope.sessionId ? geoConversationSourceScope(scope, message.sourceIds, message.sourceScopeMode) : Promise.reject(new Error("Conversation scope mismatch"))) : message.sourceIds === undefined ? getWebSessionSourceScope(message.sessionId, projectId)
           : putWebSessionSourceScope(message.sessionId, message.sourceIds, projectId, message.sourceScopeMode);
         void operation.then(
           value => postToFrame("source-scope-result", { requestId, ok: true, sessionId: message.sessionId, sourceIds: value.sourceScope ?? [], sourceScopeMode: Array.isArray(value.sourceScope) ? "selected" : "project", originReference: value.originReference ?? null }),
