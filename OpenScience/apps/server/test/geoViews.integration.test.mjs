@@ -140,12 +140,23 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
 
   // The runtime's read pages the same list as every other read does (2026-10-25: it cut the list at the limit, took no offset and said
   // nothing about the rest, and its `more` was the list of other metrics, so the run's client could never say there was a next page).
+  // The errors are paged where they are read (`errorPage`), over every error row of the selection — the live ones first, severe first,
+  // the closed ones last — so the run can page past the page's capped list of five instead of being told there are only five.
   const first = await service.runtimeRead(project, "diagnosis", { limit: 2 });
-  assert.deepEqual([first.errors.map((/** @type {any} */ error) => error.severity), first.errorsTotal, first.more, first.nextOffset], [["S4", "S3"], 5, true, 2]);
+  assert.deepEqual([first.errors.map((/** @type {any} */ error) => error.severity), first.errorsTotal, first.more, first.nextOffset], [["S4", "S3"], 12, true, 2]);
   assert.deepEqual(first.errorCounts.total, 12, "the counts stay over every row");
+  assert.equal(first.errorsTotal, first.errorCounts.total, "the page's total is the population the counts are over");
   assert.ok(Array.isArray(first.otherMetrics) && typeof first.otherMetricsTotal === "number");
-  const last = await service.runtimeRead(project, "diagnosis", { limit: 2, offset: 4 });
-  assert.deepEqual([last.errors.length, last.errors[0].id, last.more, last.nextOffset], [1, diagnosis.errors[4].id, false, undefined]);
+  const middle = await service.runtimeRead(project, "diagnosis", { limit: 2, offset: 4 });
+  assert.deepEqual([middle.errors.length, middle.errors[0].id, middle.more, middle.nextOffset], [2, diagnosis.errors[4].id, true, 6],
+    "the page goes on where the page's own list of five stops, in the same order");
+  const pages = [first, middle];
+  for (let offset = 2; offset < 12; offset += 2) if (offset !== 4) pages.push(await service.runtimeRead(project, "diagnosis", { limit: 2, offset }));
+  const paged = pages.flatMap((entry) => entry.errors.map((/** @type {any} */ error) => error.id));
+  assert.equal(new Set(paged).size, 12, "every error row is reached once by following the pages");
+  const last = await service.runtimeRead(project, "diagnosis", { limit: 2, offset: 10 });
+  assert.deepEqual([last.errors.length, last.errors.every((/** @type {any} */ error) => error.status === "closed"), last.more, last.nextOffset], [2, true, false, undefined],
+    "the closed rows come last and the last page says there is no next one");
 });
 
 test("a measured question links its latest answer per engine, in the project's order, across set versions", options, async () => {
