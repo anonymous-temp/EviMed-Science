@@ -11,11 +11,12 @@ import { Section } from "@/components/ui/Section";
 import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { webErrorMessage } from "@/lib/apiClient";
 import { layerName } from "../geoText";
-import { useGeoFrame } from "../geoFrame";
+import { geoMayConverse, useGeoFrame } from "../geoFrame";
 import { useGeoStrategy } from "../geoProjectData";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { TabError, TabSkeleton } from "./geoTabKit";
+import { yuan } from "./geoTabText";
 import { Assumptions, Battlefield, ClientToDos, EnginePromises, Targets } from "./PlanStrategy";
 
 /** Shared contextual plan composition, including the legacy plan destination. */
@@ -34,6 +35,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
   if (state.kind === "loading") return <TabSkeleton rows={4} />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const plan = state.data;
+  const mayConverse = geoMayConverse(project);
   const handoff = async (action?: GeoImplementationAction) => {
     setBusy(true); setError(null);
     try {
@@ -51,7 +53,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
   };
   return (
     <div id="implementation-plan" data-geo-tab="plan" className="flex flex-col gap-10">
-      <Section title="实施方案" toolbar={<Button disabled={busy} onClick={() => void handoff()}>{plan.version == null ? "生成方案" : "调整方案"}</Button>}>
+      <Section title="实施方案" toolbar={mayConverse ? <Button disabled={busy} onClick={() => void handoff()}>{plan.version == null ? "生成方案" : "调整方案"}</Button> : undefined}>
         {error && <Note tone="warn" action={<Button size="sm" onClick={reload}>刷新方案</Button>}>{error}</Note>}
         {plan.freshness?.status === "needs_update" && <Note tone="warn" action={<Button size="sm" onClick={reload}>刷新方案</Button>}>所选资料或目标已变化，当前方案保留原有依据，可在对话中更新。</Note>}
         {plan.freshness?.status === "unknown" && <Note action={<Button size="sm" onClick={reload}>刷新方案</Button>}>部分依据暂时无法核实；金额与工作量未估时保留为空。</Note>}
@@ -64,9 +66,9 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
           <p className="text-ui">{action.sequence != null ? `${action.sequence}. ` : ""}{action.what.title || action.need.judgment || "内容行动"}</p>
           <PlanActionFacts action={action} basis={plan.basis} />
           {action.need.judgment && <p className="max-w-measure text-ui">{action.need.judgment}</p>}
-          {action.sources.map(source => <p key={source.domain ?? source.channel} className="max-w-measure text-caption">{source.url || source.domain || source.name} · {source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "备选渠道"}{source.why ? ` · ${source.why}` : ""}</p>)}
+          {action.sources.map(source => <p key={source.domain ?? source.channel} className="max-w-measure text-caption">{source.url || source.domain || source.name} · {source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "可选渠道"}{source.why ? ` · ${source.why}` : ""}</p>)}
 
-          <Button disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>
+          {mayConverse && <Button disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>}
         </div>)}
       </Section>
       <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
@@ -96,6 +98,6 @@ function PlanActionFacts({action,basis}:{action:GeoImplementationAction;basis:Ge
     {label:"产出",value:action.work?.outputs?.join("、") || "产出待明确"},
     {label:"预计时间",value:timing ? <>{timing.durationDays ? `${timing.durationDays.low}–${timing.durationDays.high}天` : ""}{timing.earliest || timing.latest ? ` ${timing.earliest || "开始待定"} 至 ${timing.latest || "结束待定"}` : ""} · 依据：{timing.basis}</> : "时间未估"},
     {label:"预计工作量",value:effort ? <>{effort.low}–{effort.high}{effort.unit === "hours" ? "小时" : "天"} · 估计依据：{effort.basis}</> : "工作量未估"},
-    {label:"预计费用",value:estimate ? <>{estimate.low}–{estimate.high} 灵豆 · 费用依据：{references}{estimate.assumption ? ` · 假设：${estimate.assumption}` : ""}{estimate.observedAt ? ` · 报价日期：${estimate.observedAt.slice(0,10)}` : ""}</> : "金额未估"},
+    {label:"预计费用",value:estimate ? <>{estimate.low.toLocaleString("zh-CN")}–{yuan(estimate.high)} · 费用依据：{references}{estimate.assumption ? ` · 假设：${estimate.assumption}` : ""}{estimate.observedAt ? ` · 报价日期：${estimate.observedAt.slice(0,10)}` : ""}</> : "金额未估"},
   ]} />;
 }

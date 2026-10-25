@@ -347,8 +347,8 @@ export function refetchSource(id: string) {
  * 「存入知识库」 on a file a conversation produced: a copy in this project's knowledge base, read like an upload. The
  * path is the file's, relative to the project's workspace; the destination is the control plane's.
  */
-export function saveToKnowledgeBase(path: string) {
-  return invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path });
+export function saveToKnowledgeBase(path: string, options?: { projectId?: string }) {
+  return invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path }, options);
 }
 export function retrySource(id: string, expectedRevision: number) {
   return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}/retry`, "POST", { expectedRevision });

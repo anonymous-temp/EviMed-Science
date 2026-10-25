@@ -5,16 +5,20 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { answerFilled, geoProject } from "./__fixtures__/geoTabs";
 import type { GeoDiagnosisReview } from "@/lib/geoClient";
 import { DiagnosisReview } from "./DiagnosisReview";
-const client = vi.hoisted(() => ({ getGeoDiagnosisReview: vi.fn(), submitGeoDiagnosisFeedback: vi.fn() }));
-const conversation = vi.hoisted(() => ({ open: vi.fn(async (_target: unknown, _draft?: string) => true) }));
+const client = vi.hoisted(() => ({ getGeoDiagnosisReview: vi.fn(), submitGeoDiagnosisFeedback: vi.fn(), getGeoProject: vi.fn(), stageGeoPlanContext: vi.fn() }));
+const conversation = vi.hoisted(() => ({ open: vi.fn(async (_target: unknown, _draft?: string) => true), ensure: vi.fn(async (_geoId: string, _projectId: string, sessionId?: string | null) => sessionId ?? "ses_primary") }));
 vi.mock("@/lib/geoClient", async original => ({ ...await original<typeof import("@/lib/geoClient")>(), ...client }));
 vi.mock("./useOpenGeoConversation", () => ({ useOpenGeoConversation: () => conversation.open }));
+vi.mock("./geoConversationSession", () => ({ ensureGeoConversationSession: conversation.ensure }));
+const staged = { referenceId: `gpc_${"c".repeat(64)}`, sessionId: "ses_geo_1", draft: "server draft" };
 const statement = { ...answerFilled.facts!.statements[0], text: "An exact answer sentence.", claimId: "claim1", verdict: "wrong" as const, applicability: { population: "Adults", elements: { form: "tablet" }, inLabel: true, evidenceLevel: null, validUntil: null } };
 const saved = (): GeoDiagnosisReview => ({ assessmentVersion: "a".repeat(64), state: "active", current: { statements: [statement] }, original: { statements: [statement] }, history: [{ version: "a".repeat(64), state: "active", assessment: { statements: [statement] } }], feedback: [] });
 beforeEach(() => {
   client.getGeoDiagnosisReview.mockReset().mockResolvedValue(saved());
   client.submitGeoDiagnosisFeedback.mockReset().mockResolvedValue({ id: "feedback1", jobId: "job1" });
-  conversation.open.mockClear();
+  client.getGeoProject.mockReset().mockResolvedValue(geoProject());
+  client.stageGeoPlanContext.mockReset().mockResolvedValue(staged);
+  conversation.open.mockClear(); conversation.ensure.mockClear();
 });
 const renderReview = (viewer = false) => render(<MemoryRouter><DiagnosisReview geoId="geo_1" data={answerFilled} project={{ ...geoProject(), ...(viewer ? { access: { roles: ["viewer"], abilities: ["read"], owner: false } } : {}) }} actions={[]} /></MemoryRouter>);
 it("submits an exact assessment-bound feedback and retains its original judgment after reloading", async () => {
@@ -28,15 +32,37 @@ it("submits an exact assessment-bound feedback and retains its original judgment
   expect(await screen.findByText(/等待复核 · 提交时原判定：讲错/)).toBeVisible();
   expect(screen.getByText(/原判定：讲错 · 当前判定：讲错/)).toBeVisible();
 });
-it("continues the native project conversation with exact statement and assessment context for both work actions", async () => {
-  renderReview();
+it("stages the exact review context and opens the conversation with only the person's sentence in the composer, for both work actions", async () => {
+  const errors = [{ ...answerFilled.errors[0], id: "err_review_1", statement: statement.text, claimId: statement.claimId, claimVersion: statement.claimVersion, applicability: statement.applicability }];
+  render(<MemoryRouter><DiagnosisReview geoId="geo_1" data={{ ...answerFilled, errors }} project={geoProject()} actions={[]} /></MemoryRouter>);
   await userEvent.click(await screen.findByRole("button", { name: "更新项目结论或文章" }));
   await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
-  expect(conversation.open.mock.calls[0][0]).toMatchObject({ projectId: geoProject().projectId, sessionId: geoProject().sessionId });
-  expect(conversation.open.mock.calls[0][1]).toContain(statement.text);
-  expect(conversation.open.mock.calls[0][1]).toContain("a".repeat(64));
+  expect(client.stageGeoPlanContext.mock.calls[0][0]).toBe("geo_1");
+  expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({ mode: "strategy", sessionId: geoProject().sessionId, errorIds: ["err_review_1"] });
+  expect(conversation.open.mock.calls[0][0]).toMatchObject({ projectId: geoProject().projectId, geoId: "geo_1", sessionId: "ses_geo_1", geoPlanContext: { referenceId: staged.referenceId } });
+  const draft = conversation.open.mock.calls[0][1] ?? "";
+  expect(draft).toContain(statement.text);
+  // The identities ride in the staged context; the person never sends them as their own words.
+  for (const machinery of ["a".repeat(64), "当前复核上下文", "err_review_1", "claimVersion", "{"]) expect(draft).not.toContain(machinery);
   await userEvent.click(screen.getByRole("button", { name: "创建出处或问题群处置任务" }));
+  await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(2));
   expect(conversation.open.mock.calls[1][1]).toContain("只有后续实测才能确认错误是否消失");
+});
+
+it("says so where the review is when the context cannot be staged, and opens nothing", async () => {
+  client.stageGeoPlanContext.mockRejectedValueOnce(new Error("network"));
+  renderReview();
+  await userEvent.click(await screen.findByRole("button", { name: "更新项目结论或文章" }));
+  expect(await screen.findByText("对话暂时无法打开，请稍后重试。")).toBeVisible();
+  expect(conversation.open).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "更新项目结论或文章" })).toBeEnabled();
+});
+
+it("offers the two work actions only to a role that may open the conversation", async () => {
+  render(<MemoryRouter><DiagnosisReview geoId="geo_1" data={answerFilled} project={{ ...geoProject(), access: { roles: ["medical_reviewer"], abilities: ["read", "review"], owner: false } }} actions={[]} /></MemoryRouter>);
+  expect(await screen.findByText(/原判定：讲错/)).toBeVisible();
+  expect(screen.queryByRole("button", { name: "更新项目结论或文章" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "创建出处或问题群处置任务" })).toBeNull();
 });
 it("viewers retain original evidence and history without mutation controls", async () => {
   renderReview(true);
@@ -108,8 +134,8 @@ it('keeps same-text same-id variants separate and submits the selected full stat
   expect(screen.getByText(/原判定：讲错 · 当前判定：讲对/)).toBeVisible();
   expect(screen.getByText(/原判定：讲错 · 当前判定：讲错/)).toBeVisible();
   await userEvent.click(screen.getAllByRole('button', { name: '更新项目结论或文章' })[1]);
-  expect(conversation.open.mock.calls[0][1]).toContain('variant_error_1');
-  expect(conversation.open.mock.calls[0][1]).not.toContain('variant_error_0');
+  await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
+  expect(client.stageGeoPlanContext.mock.calls[0][1].errorIds).toEqual(['variant_error_1']);
   const buttons = screen.getAllByRole('button', { name: '反馈并复核判定' });
   await userEvent.click(buttons[1]);
   await userEvent.type(screen.getByRole('textbox', { name: '反馈理由与适用条件' }), 'Review the child solution only.');

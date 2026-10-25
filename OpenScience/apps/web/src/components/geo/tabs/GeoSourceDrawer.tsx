@@ -4,7 +4,7 @@ import { ArrowUpRight, Check, X } from "lucide-react";
 import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourcePage, type GeoSourceRow } from "@/lib/geoClient";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { geoReadScopeQuery } from "@/lib/geoReadScope";
-import { useGeoFrame, useGeoReadScope } from "../geoFrame";
+import { geoMayConverse, useGeoFrame, useGeoReadScope } from "../geoFrame";
 import { useGeoPath } from "../useGeoPath";
 import { routeWord, unavailableWords } from "../spine/actionModel";
 import { clusterName } from "../spine/clusterModel";
@@ -419,6 +419,7 @@ function Footer({ project, source, detail }: { project: GeoProject; source: Pick
     setBusy(true);
     void open({ projectId: project.projectId }, draft).finally(() => setBusy(false));
   };
+  if (!geoMayConverse(project)) return null;
   return (
     <footer className="sticky -bottom-6 z-sticky -mx-6 -mb-6 mt-6 border-t border-border bg-surface px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <Button data-geo-source-handoff="" loading={busy} onClick={handoff}>在对话中处理</Button>

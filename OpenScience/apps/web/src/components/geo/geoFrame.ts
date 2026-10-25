@@ -27,6 +27,8 @@ export interface GeoFrameApi {
   /** The business workbench currently viewed; unrelated background work never overrides it. */
   step?: GeoStepKey | null;
   refreshError?: string;
+  /** The project's refresh met a saved selection that changed since (409): 重试 would send it again, `refreshScope` leaves it. */
+  refreshStale?: boolean;
   /** One analytical scope; work queues and publication state remain current state. */
   scope?: GeoReadScope;
   scopePending?: boolean;
@@ -52,6 +54,15 @@ export interface GeoFrameApi {
 export type GeoPanel = "members" | "producer" | "rename" | "budget" | "settings" | "runs";
 
 export const GeoFrameContext = createContext<GeoFrameApi | null>(null);
+
+/**
+ * Whether the account may open the project's conversation, or hand it a draft: the module's descriptor takes run and edit, so a role
+ * without them (只读, 医学审核) would only be refused. Such a role is offered the conversation kept, read-only, where there is one.
+ */
+export function geoMayConverse(project: Pick<GeoProject, "access"> | null | undefined): boolean {
+  const abilities = project?.access?.abilities;
+  return !abilities || abilities.includes("run") && abilities.includes("edit");
+}
 
 /** The layout this component is in, or null outside one. */
 export function useGeoFrame(): GeoFrameApi | null {

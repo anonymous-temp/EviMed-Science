@@ -71,3 +71,20 @@ describe("GEO shared reads during ongoing work", () => {
     stop();
   });
 });
+
+it("tells a refresh refused for a changed saved selection from one that may succeed if asked again", async () => {
+  const cache = new GeoDataCache();
+  const load = vi.fn().mockResolvedValueOnce("shown")
+    .mockRejectedValueOnce(new WebApiError("changed", { status: 409, code: "geo_read_filter_invalid" }))
+    .mockRejectedValueOnce(new WebApiError("busy", { status: 503 }));
+  const stop = cache.watch("visibility:geo1", load);
+  try {
+    await settle();
+    cache.reload("visibility:geo1"); await settle();
+    expect(cache.refreshStale()).toBe(true);
+    expect(cache.snapshot("visibility:geo1")).toMatchObject({ kind: "ready", data: "shown" });
+    cache.reload("visibility:geo1"); await settle();
+    expect(cache.refreshStale()).toBe(false);
+    expect(cache.refreshError()).not.toBe("");
+  } finally { stop(); }
+});

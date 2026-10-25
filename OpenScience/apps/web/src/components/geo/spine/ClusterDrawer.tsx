@@ -24,6 +24,7 @@ import {
   platformName,
 } from "../geoText";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
+import { geoMayConverse } from "../geoFrame";
 import { metricName, sourceKindWord, yuan } from "../tabs/geoTabText";
 import { TabError } from "../tabs/geoTabKit";
 import { expectedText, gapWord, statusWord, whatToDo } from "./actionModel";
@@ -101,7 +102,7 @@ export function ClusterDrawer({
       description={group ? <ClusterHead group={group} /> : undefined}
       widthClassName="max-w-2xl"
       onClose={onClose}
-      footer={<Button data-geo-cluster-handoff="" loading={busy} onClick={handoff}>在对话中处理</Button>}
+      footer={geoMayConverse(project) ? <Button data-geo-cluster-handoff="" loading={busy} onClick={handoff}>在对话中处理</Button> : undefined}
     >
       <div data-geo-cluster-drawer={groupId} className="flex flex-col gap-6">
         {detail.state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取这个问题群</p>}

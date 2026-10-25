@@ -35,6 +35,17 @@ function draw(props: Partial<React.ComponentProps<typeof ProgrammeRunsDrawer>> =
   return { ...view, load, onClose };
 }
 
+it("reads a long record a page at a time: the first page, then 显示更多 for the next", async () => {
+  const loadMore = vi.fn().mockResolvedValue({ runs: [RUNS[2]], nextCursor: null });
+  draw({ load: vi.fn().mockResolvedValue({ runs: RUNS.slice(0, 2), nextCursor: "c_2" }), loadMore });
+  const drawer = await screen.findByRole("dialog", { name: "AI 运行" });
+  expect(await within(drawer).findAllByRole("listitem")).toHaveLength(2);
+  await userEvent.click(within(drawer).getByRole("button", { name: "显示更多" }));
+  await waitFor(() => expect(within(drawer).getAllByRole("listitem")).toHaveLength(3));
+  expect(loadMore).toHaveBeenCalledWith("c_2");
+  expect(within(drawer).queryByRole("button", { name: "显示更多" })).not.toBeInTheDocument();
+});
+
 beforeEach(() => {
   api.history.mockReset();
   api.runs.mockReset();

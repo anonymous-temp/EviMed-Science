@@ -6,7 +6,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { registerTaskPane } from "@/lib/taskPane";
 
 /** The shell places its resident native conversation over this pane. */
-export function GeoConversationPane({ projectId, sessionId, geoId, canRun = true }: { projectId: string; sessionId: string; geoId: string; canRun?: boolean }) {
+export function GeoConversationPane({ projectId, sessionId, geoId, canRun = true, owner = true }: { projectId: string; sessionId: string; geoId: string; canRun?: boolean; owner?: boolean }) {
   const pane = useRef<HTMLDivElement>(null);
   const [scope, setScope] = useState<GeoConversationScope | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +23,7 @@ export function GeoConversationPane({ projectId, sessionId, geoId, canRun = true
   useLayoutEffect(() => {
     if (!pane.current || !scope) return undefined;
     const element = pane.current;
-    const withdraw = registerTaskPane({ element, projectId, sessionId, scope });
+    const withdraw = registerTaskPane({ element, projectId, sessionId, scope, owner });
     let scroller: HTMLElement = document.documentElement;
     for (let parent = element.parentElement; parent; parent = parent.parentElement) {
       if (["auto", "scroll"].includes(getComputedStyle(parent).overflowY)) { scroller = parent; break; }
@@ -38,7 +38,7 @@ export function GeoConversationPane({ projectId, sessionId, geoId, canRun = true
     for (const part of scroller.querySelectorAll("[data-page-header], [data-page-chrome]")) observer?.observe(part);
     window.addEventListener("resize", fit);
     return () => { withdraw(); observer?.disconnect(); window.removeEventListener("resize", fit); };
-  }, [projectId, sessionId, scope]);
+  }, [projectId, sessionId, scope, owner]);
   if (!canRun) return <PreservedConversation projectId={projectId} sessionId={sessionId} scope={{kind:"geo",geoProjectId:geoId,sessionId}} />;
   if (error) return <LoadError message={error} onRetry={() => setAttempt(value => value + 1)} />;
   return <div ref={pane} aria-label="项目对话" className="min-h-96 flex-1" />;

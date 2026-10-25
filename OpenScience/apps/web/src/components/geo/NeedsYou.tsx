@@ -11,7 +11,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
 import { isSeverityLevel, SeverityBadge } from "@/components/ui/SeverityBadge";
 import { measurementPause, type MeasurementPause } from "./geoBand";
-import { useGeoFrame } from "./geoFrame";
+import { geoMayConverse, useGeoFrame } from "./geoFrame";
 import { useGeoMonitoring } from "./geoProjectData";
 import { engineName, GEO_STEP_NAMES, zh } from "./geoText";
 import { GEO_STEP_HOME } from "./geoTabs";
@@ -101,7 +101,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
             <span>{`${engineName(item.engine ?? null)}讲错了`}</span>
           </span>
         )}
-        actions={(
+        actions={geoMayConverse(project) ? (
           <Button
             variant="secondary"
             size="sm"
@@ -114,7 +114,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
             {!busy && <PenLine size={16} aria-hidden="true" />}
             写纠错稿
           </Button>
-        )}
+        ) : undefined}
       />
     );
   }

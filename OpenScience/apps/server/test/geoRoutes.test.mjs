@@ -95,6 +95,26 @@ test("the members behind an analysis cell are a four-part GET, and the query rea
   await assert.rejects(routes(request("GET", "/api/geo/projects/geo_abc/analysis/members/extra"), response()), { status: 404 });
 });
 
+test("the module conversation's 停止 names one run of that conversation, and nothing else reaches the stop", async () => {
+  const seen = /** @type {any[]} */ ([]);
+  const audits = /** @type {any[]} */ ([]);
+  const { routes } = fixture({
+    audit: async (/** @type {string} */ event, /** @type {string} */ status, /** @type {any} */ details) => { audits.push([event, status, details]); },
+    projects: { conversationRead: async (/** @type {any} */ user, /** @type {string} */ geoId, /** @type {string} */ sessionId, /** @type {string} */ action, /** @type {any} */ body) => {
+      seen.push([user.id, geoId, sessionId, action, body]);
+      return { run: { id: body.runId, status: "canceled" }, cancellation: { root: "canceled", children: [] } };
+    } },
+  });
+  const res = response();
+  assert.equal(await routes(request("POST", "/api/geo/projects/geo_1/conversation/ses_1/stop", { runId: "run_1" }), res), true);
+  assert.deepEqual(seen, [["reader", "geo_1", "ses_1", "stop", { runId: "run_1" }]]);
+  assert.equal(res.json().data.cancellation.root, "canceled");
+  assert.deepEqual(audits, [["geo.conversation.stop", "completed", { userId: "reader", code: "geo_1", detail: "run_1" }]]);
+  await assert.rejects(routes(request("POST", "/api/geo/projects/geo_1/conversation/ses_1/stop", { runId: "run_1", projectId: "other" }), response()), { status: 400 });
+  await assert.rejects(routes(request("GET", "/api/geo/projects/geo_1/conversation/ses_1/stop"), response()), { status: 404, code: "not_found" });
+  assert.equal(seen.length, 1);
+});
+
 test("every code the routes and the service answer with is registered", async () => {
   // The refusals a request can meet: an HttpError, directly or through the
   // service's `failure` helper. Readiness codes are the readiness board's.

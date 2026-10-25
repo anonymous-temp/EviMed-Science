@@ -18,6 +18,7 @@ import {
   type GeoStepKey,
 } from "@/lib/geoClient";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
+import { geoChatPath } from "@/lib/geoLocation";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -87,7 +88,7 @@ type Loaded =
   | { kind: "off" }
   | { kind: "missing" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; project: GeoProject; scopeKey: string; refreshError?: string; scopeError?: string };
+  | { kind: "ready"; project: GeoProject; scopeKey: string; refreshError?: string; refreshStale?: boolean; scopeError?: string };
 
 /**
  * Every workbench can change while it is open. Active work refreshes more often; quiet visible projects still discover scheduled work.
@@ -95,6 +96,11 @@ type Loaded =
 const WATCHED_STEPS: readonly GeoStepKey[] = GEO_STEP_KEYS;
 const WATCH_MS = 10_000;
 const IDLE_WATCH_MS = 30_000;
+/**
+ * Articles, orders and placing can change without touching the project row. A poll that finds the work where it was re-reads only the
+ * views on screen that are older than this, instead of every view on every poll.
+ */
+const QUIET_REFRESH_MS = 120_000;
 
 /** The statuses of the steps that end, as one word: when it changes, a step began or finished and what the tabs read is stale. */
 function stepsState(project: GeoProject): string {
@@ -133,7 +139,6 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const navigate = useNavigate();
   const feature = useGeoFeature();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
-  const [conversationError, setConversationError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
   const [data] = useState(() => new GeoDataCache());
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
@@ -151,6 +156,8 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const reading = useRef(false);
   const reloadQueued = useRef(false);
   const readEpoch = useRef(0);
+  // The person came back to the page: the next read refreshes every view on screen, whatever it finds.
+  const freshRead = useRef(false);
 
   useEffect(() => {
     // An address that named a step is rewritten to where that step is read now, in place, so the reader leaves with a link that
@@ -175,13 +182,18 @@ function GeoProjectView({ geoId }: { geoId: string }) {
     reading.current = true;
     reloadQueued.current = false;
     setLoaded(current => current.kind === "ready" && current.scopeError ? { ...current, scopeError: undefined } : current);
-    setConversationError(null);
     void (scope ? getGeoProject(geoId, scope) : getGeoProject(geoId)).then(
       async (project) => {
         if (!live) return;
-        // Articles and orders can change without touching the project row; every successful refresh updates active shared reads.
+        // The shared views are read again when the work moved — a step began or ended, or the project's revision changed — and not
+        // on every poll: each read of them is a set of requests of its own, every 10 s while a step runs. A view's own reads keep
+        // their freshness (`STALE_MS`) and every write that changes one asks for it.
         const state = stepsState(project);
-        if (shown.current !== null && document.visibilityState !== "hidden") data.invalidate();
+        if (shown.current !== null && document.visibilityState !== "hidden") {
+          if (shown.current !== state || freshRead.current) data.invalidate();
+          else data.refreshOlderThan(QUIET_REFRESH_MS);
+        }
+        if (document.visibilityState !== "hidden") freshRead.current = false;
         shown.current = state;
         setLoaded({ kind: "ready", project, scopeKey });
       },
@@ -193,8 +205,9 @@ function GeoProjectView({ geoId }: { geoId: string }) {
         else {
           const message = webErrorMessage(error, { fallback: "项目暂时无法读取。" });
           const denied = error instanceof WebApiError && [401, 403].includes(error.status);
+          const stale = error instanceof WebApiError && error.status === 409;
           setLoaded(current => current.kind === "ready" && !denied
-            ? current.scopeKey === scopeKey ? { ...current, refreshError: message } : { ...current, scopeError: message }
+            ? current.scopeKey === scopeKey ? { ...current, refreshError: message, refreshStale: stale } : { ...current, scopeError: message }
             : { kind: "error", message });
         }
       },
@@ -219,9 +232,10 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   useEffect(() => {
     if (loaded.kind !== "ready") return undefined;
     const refreshVisible = () => { if (document.visibilityState !== "hidden") reload(); };
+    const returned = () => { if (document.visibilityState !== "hidden") { freshRead.current = true; reload(); } };
     const timer = window.setInterval(refreshVisible, watching ? WATCH_MS : IDLE_WATCH_MS);
-    document.addEventListener("visibilitychange", refreshVisible);
-    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refreshVisible); };
+    document.addEventListener("visibilitychange", returned);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", returned); };
   }, [loaded.kind, watching, reload]);
 
   const openPanel = useCallback((next: GeoPanel) => {
@@ -240,9 +254,12 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const heldSession = addressedSession ?? new URLSearchParams(location.search).get("session");
   const api = useMemo<GeoFrameApi | null>(
     () => (loaded.kind === "ready" ? { geoId, scope, scopePending: loaded.scopeKey !== scopeKey, scopeError: loaded.scopeError,
-      project: loaded.project, tab, conversation: heldSession ?? loaded.project.sessionId ?? null, step: viewedStep, refreshError: loaded.refreshError, reload, openPanel, data, setToolbar,
+      project: loaded.project, tab, conversation: heldSession ?? loaded.project.sessionId ?? null, step: viewedStep, refreshError: loaded.refreshError,
+      refreshStale: loaded.refreshStale, reload, openPanel, data, setToolbar,
       openAnalysisScope: () => setScopeOpen(true),
       refreshScope: () => {
+        // The stale refusal is answered by leaving the selection: what it said no longer stands, so it is not shown as pending.
+        setLoaded(current => current.kind === "ready" ? { ...current, refreshError: undefined, refreshStale: undefined } : current);
         if (scope?.selectionRef && loaded.project.scope) {
           navigate({ pathname: location.pathname, search: geoSearchWithScope(location.search, { ...loaded.project.scope, selectionRef: undefined }) }, { replace: true });
         } else reload();
@@ -273,7 +290,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
 
   return (
     <GeoFrameContext.Provider value={api}>
-      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} conversationError={conversationError} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} scopeOpen={scopeOpen} onScopeOpen={setScopeOpen} />
+      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} scopeOpen={scopeOpen} onScopeOpen={setScopeOpen} />
     </GeoFrameContext.Provider>
   );
 }
@@ -283,7 +300,6 @@ function GeoBand({
   api,
   onChat,
   addressedSession,
-  conversationError,
   toolbar,
   panel,
   suggested,
@@ -294,7 +310,6 @@ function GeoBand({
   api: GeoFrameApi;
   onChat: boolean;
   addressedSession?: string;
-  conversationError: string | null;
   toolbar: ToolbarProps | null | undefined;
   panel: GeoPanel | null;
   suggested: number | null;
@@ -309,6 +324,9 @@ function GeoBand({
   const openConversation = useOpenGeoConversation();
   const monitoring = useGeoMonitoring(geoId);
   const dataRefreshError = useSyncExternalStore(api.data.subscribe, api.data.refreshError, api.data.refreshError);
+  const dataRefreshStale = useSyncExternalStore(api.data.subscribe, api.data.refreshStale, api.data.refreshStale);
+  // A saved selection (`selectionRef`) is refused with 409 once its data changed; 重试更新 would send the same reference forever.
+  const selectionStale = Boolean(api.scope?.selectionRef) && (api.refreshStale === true || dataRefreshStale);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const handledAnchors = useRef(new Set<string>());
@@ -361,12 +379,38 @@ function GeoBand({
   const params = new URLSearchParams(location.search);
   const heldSession = api.conversation;
   const target = { geoId, projectId: project.projectId, sessionId: heldSession };
+  // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
+  // same; the page only does not offer what would be refused.
+  const abilities = project.access?.abilities;
+  const can = (ability: string) => !abilities || abilities.includes(ability);
+  // Opening the conversation (and everything that hands it a draft) takes both, as the module's descriptor does. A role without them
+  // reads the conversation the project keeps, as it was.
+  const canConverse = can("run") && can("edit");
+  const readOnlyChat = heldSession ? `${geoChatPath(geoId, heldSession)}?${(() => {
+    const kept = new URLSearchParams(location.search);
+    if (!onChat) kept.set("result", snapshotId ? "questions" : tab);
+    return kept.toString();
+  })()}` : null;
+  // The bare conversation address: opened for a role that may converse, the kept one for a role that reads, and said in place when
+  // neither can be shown — a page left on its skeleton is a page that never says what happened.
+  const [conversationError, setConversationError] = useState<string | null>(null);
+  const [conversationAttempt, setConversationAttempt] = useState(0);
   useEffect(() => {
-    if (!onChat || addressedSession) return;
-    void openConversation({ geoId, projectId: project.projectId, sessionId: heldSession });
-  }, [onChat, addressedSession, heldSession, geoId, project.projectId, openConversation]);
+    if (!onChat || addressedSession) return undefined;
+    setConversationError(null);
+    if (!canConverse) {
+      if (heldSession) navigate(`${geoChatPath(geoId, heldSession)}${location.search}`, { replace: true });
+      return undefined;
+    }
+    let live = true;
+    void openConversation({ geoId, projectId: project.projectId, sessionId: heldSession })
+      .then((opened) => { if (live && !opened) setConversationError("对话暂时无法打开，请稍后重试。"); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the search is carried along, never a reason to open again
+  }, [onChat, addressedSession, heldSession, geoId, project.projectId, openConversation, canConverse, conversationAttempt, navigate]);
   const openChat = () => {
     if (busy) return;
+    if (!canConverse) { if (readOnlyChat) navigate(readOnlyChat); return; }
     setBusy("conversation");
     void openConversation(target).finally(() => setBusy(null));
   };
@@ -385,10 +429,6 @@ function GeoBand({
       .then(() => { toast.success(pause ? "已暂停，测量和投放都停下了。" : "已继续。"); reload(); })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目状态无法修改，请稍后重试。" })));
   };
-  // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
-  // same; the menu only does not offer what would be refused.
-  const abilities = project.access?.abilities;
-  const can = (ability: string) => !abilities || abilities.includes(ability);
   const menu: MenuEntry[] = [
     ...(can("edit") ? [{ label: "重命名", onSelect: () => onPanel("rename") }] : []),
     // The engines, the window, the budget, who speaks for the product and the members: one drawer, not four entries.
@@ -433,7 +473,7 @@ function GeoBand({
   const needsBudget = marketConnected(project) && !(project.budget && project.budget.totalCny > 0);
   const continues: { label: string; onClick: () => void } | null = selectedStep === "distribution" && needsBudget && can("manage_money")
     ? { label: "设预算", onClick: () => api.openPanel("budget") }
-    : !can("run") ? null
+    : !canConverse ? null
       : selectedStep === "evidence" ? { label: "让 AI 补充结论", onClick: ask(`请在现有结论库的基础上，补充${product}还没有覆盖的说明书内容和临床证据，每条结论都带原文出处。`) }
         : selectedStep === "journey" ? { label: "让 AI 重画旅程", onClick: ask(`请根据最新的结论和 AI 的回答，重新画一遍${product}的患者与医生旅程。`) }
           : selectedStep === "questions" ? { label: "加问", onClick: ask(`请再补几个值得测量的问题，覆盖${product}现有问句池里还没有问到的情形。`) }
@@ -456,7 +496,9 @@ function GeoBand({
         onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
       ...(controls?.filters ?? []),
     ],
-    actions: <>{!onChat && ["overview", "visibility", "accuracy", "sources", "questions"].includes(tab) && <Button variant="text" size="sm" onClick={() => setScopeOpen(true)}>分析范围{geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}</Button>}{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
+    // The range is shown wherever it narrows what is read — every view's analysis and 方案's strategy — so a range carried in the
+    // address never applies unsaid; 行动's monitoring view reads none.
+    actions: <>{!onChat && !(tab === "actions" && selectedStep === "monitoring") && <Button variant="text" size="sm" onClick={() => setScopeOpen(true)}>分析范围{geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}</Button>}{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
   };
 
   return (
@@ -475,7 +517,7 @@ function GeoBand({
             <FileDown size={16} aria-hidden="true" />
             周报
           </Button>}
-          {!onChat && <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
+          {!onChat && (canConverse || readOnlyChat) && <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
             <MessageSquare size={16} aria-hidden="true" />
             对话
           </Button>}
@@ -488,11 +530,15 @@ function GeoBand({
       )}
       toolbar={bandToolbar}
     >
-      {(api.refreshError || dataRefreshError) && <Note action={<Button variant="secondary" size="sm" onClick={() => { reload(); api.data.invalidate(); }}>重试更新</Button>}>
+      {selectionStale ? <Note action={<Button variant="secondary" size="sm" onClick={() => api.refreshScope?.()}>读取最新结果</Button>}>
+        所选范围里的数据已经更新，仍显示上次结果。
+      </Note> : (api.refreshError || dataRefreshError) && <Note action={<Button variant="secondary" size="sm" onClick={() => { reload(); api.data.invalidate(); }}>重试更新</Button>}>
         更新暂时失败，仍显示上次结果。{api.refreshError || dataRefreshError}
       </Note>}
       {onChat ? (
-        conversationError ? <LoadError message={conversationError} onRetry={reload} /> : addressedSession ? <GeoConversationPane canRun={can("run") && can("edit")} geoId={geoId} projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
+        conversationError ? <LoadError message={conversationError} onRetry={() => setConversationAttempt((value) => value + 1)} />
+          : !addressedSession && !canConverse && !heldSession ? <EmptyState icon={MessageSquare} title="这个项目还没有对话" action={<Button variant="secondary" onClick={() => navigate(destination("overview"))}>回到项目总览</Button>} />
+          : addressedSession ? <GeoConversationPane canRun={can("run") && can("edit")} owner={project.access?.owner ?? true} geoId={geoId} projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
       ) : snapshotId ? (
         // One answer, read inside the band: the route's own element, which may still be on its way.
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
@@ -518,7 +564,7 @@ function GeoBand({
         />
       )}
       {panel === "members" && <MembersDialog geoId={geoId} onClose={() => onPanel(null)} />}
-      {panel === "runs" && <ProgrammeRunsDrawer projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} readRecord={project.signalsSupported ? readRunRecord : undefined} version={runsVersion} onClose={() => onPanel(null)} />}
+      {panel === "runs" && <ProgrammeRunsDrawer projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} loadMore={(cursor) => getGeoProgrammeRuns(geoId, cursor)} readRecord={project.signalsSupported ? readRunRecord : undefined} version={runsVersion} onClose={() => onPanel(null)} />}
       {panel === "rename" && (
         <RenameDialog
           geoId={geoId}

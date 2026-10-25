@@ -25,7 +25,7 @@ describe("starting work, and reading what the programme did", () => {
       { sessionId: "s_3", runId: "run_3", label: "", state: "canceled", startedAt: null },
       { sessionId: "", label: "no session" }, { label: "no session either" }, null,
     ] });
-    const runs = await getGeoProgrammeRuns("geo_1");
+    const { runs } = await getGeoProgrammeRuns("geo_1");
     expect(network.productRequest).toHaveBeenCalledWith("/geo/projects/geo_1/runs");
     expect(runs.map((run) => [run.sessionId, run.label, run.state])).toEqual([["s_1", "写第 2 批稿件", "running"], ["s_2", "生成周报", "finished"], ["s_3", "后台分析", "stopped"]]);
     expect(runs[0].at).toBe("2 分钟前");
@@ -35,7 +35,18 @@ describe("starting work, and reading what the programme did", () => {
     expect(runs.map(run => run.runId)).toEqual(['run_1', 'run_2', 'run_3']);
     expect(JSON.stringify(runs.map(run => [run.label, run.at]))).not.toMatch(/run_|geo:/);
     network.productRequest.mockResolvedValue({});
-    expect(await getGeoProgrammeRuns("geo_1")).toEqual([]);
+    expect(await getGeoProgrammeRuns("geo_1")).toEqual({ runs: [], nextCursor: null });
+  });
+
+  it("reads one page of the record at a time: the next only when asked, from the cursor the last one gave", async () => {
+    network.productRequest.mockResolvedValueOnce({ runs: [{ sessionId: "s_1", runId: "run_1", label: "生成周报", state: "finished", startedAt: null }], nextCursor: "c_2" })
+      .mockResolvedValueOnce({ runs: [{ sessionId: "s_2", runId: "run_2", label: "写稿", state: "finished", startedAt: null }], nextCursor: null });
+    const first = await getGeoProgrammeRuns("geo_1");
+    expect(network.productRequest).toHaveBeenCalledTimes(1);
+    expect(first.nextCursor).toBe("c_2");
+    const next = await getGeoProgrammeRuns("geo_1", first.nextCursor);
+    expect(network.productRequest).toHaveBeenLastCalledWith("/geo/projects/geo_1/runs?cursor=c_2");
+    expect(next).toMatchObject({ runs: [{ sessionId: "s_2" }], nextCursor: null });
   });
 });
 

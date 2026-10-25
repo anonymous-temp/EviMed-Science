@@ -13,6 +13,8 @@ export const geoConversationRuns = (scope: GeoConversationScope) => productReque
 export const geoConversationHistory = (scope: GeoConversationScope) => productRequest<PreservedConversationHistory>(`${base(scope)}/history`);
 export const geoConversationStatus = (scope: GeoConversationScope) => productRequest<WebRuntimeStartStatus>(`${base(scope)}/status`);
 export const startGeoConversation = (scope: GeoConversationScope) => productRequest<WebRuntimeStartStatus>(`${base(scope)}/start`, "POST", {});
+/** 「停止」 on the run strip: one run of this conversation, under the module's authority (an editor acts in the owner's runtime). */
+export const stopGeoConversationRun = (scope: GeoConversationScope, runId: string) => productRequest<{ run: WebAgentRun }>(`${base(scope)}/stop`, "POST", { runId });
 export const geoConversationCapability = async (scope: GeoConversationScope) => (await productRequest<{capabilityId:string|null}>(`${base(scope)}/capability`)).capabilityId;
 export const geoConversationChecks = async (scope: GeoConversationScope) => (await productRequest<{checks:ReplyCheck[]}>(`${base(scope)}/reply-checks`)).checks;
 export const geoConversationSources = async (scope: GeoConversationScope) => (await productRequest<{items:Array<{id:string;title:string}>}>(`${base(scope)}/sources`)).items;

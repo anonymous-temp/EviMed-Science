@@ -1,5 +1,5 @@
-import { GEO_METRICS, previewGeoQuestionImport } from '@evimed/domain';
-import { useEffect, useRef, useState } from 'react';
+import { GEO_METRICS, knownErrorCodeMessage, previewGeoQuestionImport } from '@evimed/domain';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { getGeoQuestions, type GeoProject, type GeoQuestions } from '@/lib/geoClient';
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, webErrorMessage } from '@/lib/apiClient';
@@ -10,6 +10,7 @@ import { Input, Textarea, inputClasses } from '@/components/ui/Input';
 import { Note } from '@/components/ui/Note';
 import { Section } from '@/components/ui/Section';
 import { AskAi } from './AskAi';
+import { ShowMore, useShowMore } from './tabs/showMore';
 import { engineName, GEO_DEFAULT_ENGINES } from './geoText';
 import { answerPath } from './tabs/geoTabText';
 
@@ -19,6 +20,23 @@ const failure = (error: unknown) => webErrorMessage(error, { fallback: error ins
 const key = () => crypto.randomUUID();
 /** Invalidate requests against the latest counter, including when an effect is disposed. */
 const invalidateIdentity = (generation: { current: number }) => { generation.current++; };
+
+/** One imported row with the key it is drawn by: an edit replaces that entry alone, so the other rows keep their elements. */
+interface RowEntry { key: string; row: GeoQuestionImportRow }
+const entriesOf = (rows: readonly GeoQuestionImportRow[]): RowEntry[] => rows.map(row => ({ key: key(), row }));
+/** A set of up to 400 originals is drawn fifty rows at a time: every row is a dozen controls. */
+const ROWS_SHOWN = 50;
+
+/**
+ * Why a diagnosis job did not answer, in a sentence. The dictionary's own sentence when it has one; the probe queue's outcomes that
+ * only this table meets are said here; any other is said without its code.
+ */
+const JOB_FAILURES: Record<string, string> = {
+  delivery_unknown_no_automatic_retry: '请求可能已经送达，但没有收到回答；为避免重复计费，没有自动重试。',
+  question_missing: '这道题已不在这一版问句里。',
+  probe_busy: '提问通道正忙，这一项没有排上。',
+};
+const jobFailure = (code: string) => knownErrorCodeMessage(code) ?? JOB_FAILURES[code] ?? '这一项没有取得回答。';
 
 /** Version editing and diagnosis are deliberate writes; viewing or importing never starts sampling. */
 export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId: string; project: GeoProject; data: GeoQuestions; onSaved: (version: number) => void }) {
@@ -34,7 +52,9 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const [book, setBook] = useState<QuestionWorkbook | null>(null);
   const [sheet, setSheet] = useState(0);
   const [mapping, setMapping] = useState<QuestionMapping>({});
-  const [rows, setRows] = useState<GeoQuestionImportRow[]>([]);
+  const [entries, setEntries] = useState<RowEntry[]>([]);
+  const rows = useMemo(() => entries.map(entry => entry.row), [entries]);
+  const setRows = (next: readonly GeoQuestionImportRow[]) => setEntries(entriesOf(next));
   const [blank, setBlank] = useState(0);
   const [contract, setContract] = useState<GeoMeasurementContract>(data.contract ?? initialContract);
   const [preview, setPreview] = useState<GeoImportPreview | null>(null);
@@ -43,13 +63,13 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const [saved, setSaved] = useState<number | null>(null);
   const pendingImport = useRef<(GeoImportInput & { requestKey: string }) | null>(null);
   useEffect(() => {
-    const reset = () => { invalidateIdentity(identityGeneration); setStorageScope(null); pendingImport.current = null; setRows([]); setPreview(null); setEditing(false); setSaved(null); };
+    const reset = () => { invalidateIdentity(identityGeneration); setStorageScope(null); pendingImport.current = null; setEntries([]); setPreview(null); setEditing(false); setSaved(null); };
     const started = () => { reset(); setIdentityVersion(value => value + 1); };
     window.addEventListener(WEB_SESSION_ENDED_EVENT, reset); window.addEventListener(WEB_SESSION_STARTED_EVENT, started);
     return () => { window.removeEventListener(WEB_SESSION_ENDED_EVENT, reset); window.removeEventListener(WEB_SESSION_STARTED_EVENT, started); };
   }, []);
   useEffect(() => {
-    setStorageScope(null); pendingImport.current = null; setRows([]); setPreview(null); setEditing(false);
+    setStorageScope(null); pendingImport.current = null; setEntries([]); setPreview(null); setEditing(false);
     let live = true; const generation = ++identityGeneration.current;
     void fetchWebMe().then(me => {
       if (!live || generation !== identityGeneration.current || !me?.user?.id) return;
@@ -66,7 +86,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
             if (!checked.requestKey) throw new Error('Missing request identity');
             // Canonical validation checks the cache; send the exact original payload for idempotency.
             const original = input as GeoImportInput & { requestKey: string };
-            pendingImport.current = original; setRows(original.rows); setContract(original.contract); setPreview(checked as GeoImportPreview); setEditing(true);
+            pendingImport.current = original; setEntries(entriesOf(original.rows)); setContract(original.contract); setPreview(checked as GeoImportPreview); setEditing(true);
           } catch {
             localStorage.setItem(`${scoped}:invalid`, raw); localStorage.removeItem(scoped);
             setError('上次保存记录损坏，已隔离。请重新导入原表后核对预览。');
@@ -87,8 +107,12 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   useEffect(() => { if (!storageScope) return; const prior = sessionStorage.getItem(`${storageScope}:diagnosis`); if (!round && prior) setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', prior); return next; }, { replace: true }); }, [storageScope, round, setParams]);
   useEffect(() => { if (!editing) setContract(data.contract ?? initialContract); }, [data.contract, editing]);
   const act = async (fn: () => Promise<void>) => { if (working.current) return; working.current = true; const generation = identityGeneration.current; setBusy(true); setError(''); try { await fn(); } catch (cause) { if (generation === identityGeneration.current) setError(failure(cause)); } finally { working.current = false; setBusy(false); } };
-  const updateRow = (index: number, patch: Partial<GeoQuestionImportRow>) => { setRows(previous => previous.map((row, at) => at === index ? { ...row, ...patch } : row)); changed(); };
-  const changed = () => { editRevision.current++; setPreview(null); pendingImport.current = null; };
+  const changed = useCallback(() => { editRevision.current++; setPreview(null); pendingImport.current = null; }, []);
+  // An edit is one row's: the entry is replaced, every other keeps its identity and its memoised row is not drawn again.
+  const updateRow = useCallback((rowKey: string, patch: Partial<GeoQuestionImportRow>) => {
+    setEntries(previous => previous.map(entry => entry.key === rowKey ? { key: rowKey, row: { ...entry.row, ...patch } } : entry)); changed();
+  }, [changed]);
+  const shown = useShowMore(entries, { first: ROWS_SHOWN, step: ROWS_SHOWN, resetKey: entries[0]?.key ?? '' });
   const editExisting = () => { if (working.current || !editableNow.current || pendingImport.current) return; void act(async () => {
     if (!data.contract) throw new Error('这个历史题库不支持原表编辑，请导入完整原题创建新的采样版本。');
     if (data.version == null) throw new Error('请先选择一个问句版本再编辑。');
@@ -136,12 +160,8 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
       <ContractFields value={contract} disabled={busy || !!pendingImport.current} onChange={next => { setContract(next); changed(); }} />
       {rows.length > 0 && <>
         <Note result={[`实际 ${rows.length} 题 · 已排除全空行 `, { n: blank }, " 行。重复原题保留；客户标签与平台分类分列。"]} />
-        <div className="max-h-96 overflow-auto"><table className="w-full text-caption"><thead><tr>{['原编号 / 客户分类 / 原标签', '原题（完整文本）', '平台补充分类', '参与测量'].map(title => <th key={title} className="p-2 text-left">{title}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>
-          <td className="p-2 align-top whitespace-pre-wrap"><fieldset disabled={busy || !!pendingImport.current}><Input label={`第 ${index + 1} 题原编号`} value={row.originalId ?? ''} onChange={event => updateRow(index, { originalId: event.target.value || null })} /><Input label={`第 ${index + 1} 题客户原分类`} value={row.originalGroup ?? ''} onChange={event => updateRow(index, { originalGroup: event.target.value || null })} />{row.clientTags?.map((tag, at) => <Textarea key={at} label={`第 ${index + 1} 题原标签 ${at + 1}`} value={tag} onChange={event => updateRow(index, { clientTags: row.clientTags?.map((item, position) => position === at ? event.target.value : item) })} />)}</fieldset></td>
-          <td className="p-2"><Textarea aria-label={`第 ${index + 1} 题文本`} value={row.text} disabled={busy || !!pendingImport.current} onChange={event => { setRows(previous => previous.map((item, at) => at === index ? { ...item, text: event.target.value } : item)); changed(); }} /></td>
-          <td className="p-2"><select aria-label={`第 ${index + 1} 题测量池`} className={inputClasses()} value={row.pool ?? ''} disabled={busy || !!pendingImport.current} onChange={event => { const pool = (event.target.value || null) as GeoQuestionImportRow['pool']; setRows(previous => previous.map((item, at) => at === index ? { ...item, pool, classificationStatus: 'confirmed' } : item)); changed(); }}><option value="">未分类</option>{['P1', 'P2', 'P3', 'P4'].map(pool => <option key={pool}>{pool}</option>)}</select><details><summary>人群、阶段与来源</summary><fieldset disabled={busy || !!pendingImport.current}><Input label={`第 ${index + 1} 题旅程阶段`} value={row.journeyStage ?? ''} onChange={event => updateRow(index, { journeyStage: event.target.value || null, classificationStatus: 'confirmed' })} /><label>人群<select className={inputClasses()} value={row.audience ?? ''} onChange={event => updateRow(index, { audience: (event.target.value || null) as GeoQuestionImportRow['audience'], classificationStatus: 'confirmed' })}><option value="">未分类</option>{Object.entries({ patient: '患者', physician: '医生', caregiver: '照护者', pharmacist: '药师', institution: '机构', other: '其他' }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>问句性质<select className={inputClasses()} value={row.kind ?? 'client'} onChange={event => updateRow(index, { kind: event.target.value as GeoQuestionImportRow['kind'] })}><option value="client">客户原题</option><option value="typical">典型 / 模型建议</option><option value="real">有来源真实问法</option><option value="label_safety">说明书安全题</option></select></label><Input label={`第 ${index + 1} 题来源链接`} value={row.sourceUrl ?? ''} onChange={event => updateRow(index, { sourceUrl: event.target.value || null })} /><Input label={`第 ${index + 1} 题采集日期`} value={row.collectedAt ?? ''} onChange={event => updateRow(index, { collectedAt: event.target.value || null })} /><label>分类状态<select className={inputClasses()} value={row.classificationStatus ?? 'unclassified'} onChange={event => updateRow(index, { classificationStatus: event.target.value as GeoQuestionImportRow['classificationStatus'] })}><option value="unclassified">未分类</option><option value="suggested">建议，待采用</option><option value="confirmed">已采用</option></select></label></fieldset></details></td>
-          <td className="p-2"><input type="checkbox" aria-label={`测量第 ${index + 1} 题`} checked={row.isMeasured !== false} disabled={busy || !!pendingImport.current} onChange={event => { setRows(previous => previous.map((item, at) => at === index ? { ...item, isMeasured: event.target.checked } : item)); changed(); }} /></td>
-        </tr>)}</tbody></table></div>
+        <div className="max-h-96 overflow-auto"><table className="w-full text-caption"><thead><tr>{['原编号 / 客户分类 / 原标签', '原题（完整文本）', '平台补充分类', '参与测量'].map(title => <th key={title} className="p-2 text-left">{title}</th>)}</tr></thead><tbody>{shown.visible.map((entry, index) => <QuestionRow key={entry.key} entry={entry} index={index} disabled={busy || !!pendingImport.current} onChange={updateRow} />)}</tbody></table></div>
+        <ShowMore remaining={shown.remaining} unit="题" onMore={shown.more} />
         <Button size="sm" disabled={busy} onClick={() => { void act(async () => { const revision = editRevision.current, generation = identityGeneration.current; const result = await previewGeoQuestions(geoId, { rows, contract }); if (revision === editRevision.current && generation === identityGeneration.current && editableNow.current) setPreview(result); }); }}>核对导入预览</Button>
         {preview && <div className="flex flex-col gap-3"><p className="text-ui text-text">实际 {preview.actualRows} 题 · 测量 {preview.measuredRows} 题 · 计划 {preview.plannedCalls} 次调用 · 疑似重复 {preview.duplicateCandidates.length} 组（全部保留）</p>{preview.duplicateCandidates.map((item, index) => <p key={index} className="text-caption text-text-2">疑似重复行：{item.rowIndexes.map(row => row + 1).join('、')}</p>)}<Button disabled={busy || !storageScope || preview.plannedCalls > 5000} onClick={() => { void act(async () => { if (!editableNow.current) throw new Error('你在这个项目里只有查看权限。'); if (!storageScope) throw new Error('请等待账户确认后再保存。'); const candidate = pendingImport.current ?? { rows, contract, requestKey: key() }; localStorage.setItem(storageScope, JSON.stringify({ input: candidate, preview })); pendingImport.current = candidate; const generation = identityGeneration.current; const result = await importGeoQuestions(geoId, pendingImport.current); if (!editableNow.current || generation !== identityGeneration.current) return; localStorage.removeItem(storageScope); pendingImport.current = null; setSaved(result.version); setEditing(false); onSaved(result.version); }); }}>保存为新版本</Button></div>}
       </>}
@@ -151,6 +171,18 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
     {round && storageScope && <DiagnosisProgress storageScope={storageScope} key={round} geoId={geoId} round={round} canRun={canRun} onRound={selectRound} />}
   </Section>;
 }
+
+/** One imported original, drawn again only when it or its controls' state changes. */
+const QuestionRow = memo(function QuestionRow({ entry, index, disabled, onChange }: { entry: RowEntry; index: number; disabled: boolean; onChange: (rowKey: string, patch: Partial<GeoQuestionImportRow>) => void }) {
+  const { row } = entry;
+  const update = (patch: Partial<GeoQuestionImportRow>) => onChange(entry.key, patch);
+  return <tr>
+          <td className="p-2 align-top whitespace-pre-wrap"><fieldset disabled={disabled}><Input label={`第 ${index + 1} 题原编号`} value={row.originalId ?? ''} onChange={event => update({ originalId: event.target.value || null })} /><Input label={`第 ${index + 1} 题客户原分类`} value={row.originalGroup ?? ''} onChange={event => update({ originalGroup: event.target.value || null })} />{row.clientTags?.map((tag, at) => <Textarea key={at} label={`第 ${index + 1} 题原标签 ${at + 1}`} value={tag} onChange={event => update({ clientTags: row.clientTags?.map((item, position) => position === at ? event.target.value : item) })} />)}</fieldset></td>
+          <td className="p-2"><Textarea aria-label={`第 ${index + 1} 题文本`} value={row.text} disabled={disabled} onChange={event => update({ text: event.target.value })} /></td>
+          <td className="p-2"><select aria-label={`第 ${index + 1} 题测量池`} className={inputClasses()} value={row.pool ?? ''} disabled={disabled} onChange={event => update({ pool: (event.target.value || null) as GeoQuestionImportRow['pool'], classificationStatus: 'confirmed' })}><option value="">未分类</option>{['P1', 'P2', 'P3', 'P4'].map(pool => <option key={pool}>{pool}</option>)}</select><details><summary>人群、阶段与来源</summary><fieldset disabled={disabled}><Input label={`第 ${index + 1} 题旅程阶段`} value={row.journeyStage ?? ''} onChange={event => update({ journeyStage: event.target.value || null, classificationStatus: 'confirmed' })} /><label>人群<select className={inputClasses()} value={row.audience ?? ''} onChange={event => update({ audience: (event.target.value || null) as GeoQuestionImportRow['audience'], classificationStatus: 'confirmed' })}><option value="">未分类</option>{Object.entries({ patient: '患者', physician: '医生', caregiver: '照护者', pharmacist: '药师', institution: '机构', other: '其他' }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>问句性质<select className={inputClasses()} value={row.kind ?? 'client'} onChange={event => update({ kind: event.target.value as GeoQuestionImportRow['kind'] })}><option value="client">客户原题</option><option value="typical">典型 / 模型建议</option><option value="real">有来源真实问法</option><option value="label_safety">说明书安全题</option></select></label><Input label={`第 ${index + 1} 题来源链接`} value={row.sourceUrl ?? ''} onChange={event => update({ sourceUrl: event.target.value || null })} /><Input label={`第 ${index + 1} 题采集日期`} value={row.collectedAt ?? ''} onChange={event => update({ collectedAt: event.target.value || null })} /><label>分类状态<select className={inputClasses()} value={row.classificationStatus ?? 'unclassified'} onChange={event => update({ classificationStatus: event.target.value as GeoQuestionImportRow['classificationStatus'] })}><option value="unclassified">未分类</option><option value="suggested">建议，待采用</option><option value="confirmed">已采用</option></select></label></fieldset></details></td>
+          <td className="p-2"><input type="checkbox" aria-label={`测量第 ${index + 1} 题`} checked={row.isMeasured !== false} disabled={disabled} onChange={event => update({ isMeasured: event.target.checked })} /></td>
+        </tr>;
+});
 
 function ContractFields({ value, onChange, disabled }: { value: GeoMeasurementContract; onChange: (next: GeoMeasurementContract) => void; disabled: boolean }) {
   return <fieldset disabled={disabled} className="flex flex-col gap-3"><legend className="text-ui font-semibold">这一版本的采样与报告口径</legend>
@@ -223,7 +255,7 @@ function DiagnosisProgress({ storageScope, geoId, round, canRun, onRound }: { st
       {progress.absentEngines.length > 0 && <p className="text-caption text-text-2">未取得任务的平台：{progress.absentEngines.map(engineName).join('、')}</p>}
       <div className="overflow-auto"><table className="w-full text-ui"><thead><tr>{['恢复', '原题', '平台', '状态', '回答'].map(title => <th key={title} className="p-2 text-left">{title}</th>)}</tr></thead><tbody>{progress.cells.map(cell => <tr key={cell.jobId}>
         <td className="p-2">{canRun && cell.recoverable && <input type="checkbox" aria-label={`恢复 ${cell.originalId ?? cell.text} ${engineName(cell.engine)}`} disabled={busy || !!pending.current} checked={selected.includes(cell.jobId)} onChange={event => setSelected(previous => event.target.checked ? [...previous, cell.jobId] : previous.filter(id => id !== cell.jobId))} />}</td>
-        <td className="p-2 whitespace-pre-wrap">{cell.originalId} {cell.originalGroup} {cell.text}</td><td className="p-2">{engineName(cell.engine)}</td><td className="p-2">{cell.answerStatus === 'refusal' ? '拒答' : cell.deliveryUnknown ? '结果未知，可能已有计费' : ({ queued: '等待', leased: '正在处理', done: '已完成', failed: '失败', skipped: '跳过' }[cell.status] ?? '状态待确认')}{cell.errorCode && <details><summary>失败信息</summary>{cell.errorCode} · 已尝试 {cell.attempts} 次</details>}</td>
+        <td className="p-2 whitespace-pre-wrap">{cell.originalId} {cell.originalGroup} {cell.text}</td><td className="p-2">{engineName(cell.engine)}</td><td className="p-2">{cell.answerStatus === 'refusal' ? '拒答' : cell.deliveryUnknown ? '结果未知，可能已有计费' : ({ queued: '等待', leased: '正在处理', done: '已完成', failed: '失败', skipped: '跳过' }[cell.status] ?? '状态待确认')}{cell.errorCode && <details><summary>失败信息</summary>{jobFailure(cell.errorCode)} · 已尝试 {cell.attempts} 次</details>}</td>
         <td className="p-2">{cell.snapshotId && <Link className="text-accent hover:underline" to={`${answerPath(geoId, cell.snapshotId)}${location.search}`}>查看回答</Link>}</td>
       </tr>)}</tbody></table></div>
       <div className="my-3 flex flex-wrap gap-3"><Button size="sm" disabled={offset === 0 || busy || !!pending.current} onClick={() => { setOffset(Math.max(0, offset - 100)); setSelected([]); }}>上一页</Button><span className="text-caption">{offset + 1}–{offset + progress.page.shown} / {progress.page.total}</span><Button size="sm" disabled={!progress.page.more || busy || !!pending.current} onClick={() => { setOffset(progress.page.nextOffset ?? offset); setSelected([]); }}>下一页</Button></div>

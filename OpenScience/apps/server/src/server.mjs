@@ -2700,6 +2700,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await authorizeOwnedNativeSession(await store.userById(project.userId), project, sessionId);
           return runtimeManager.status(project);
         }
+        if (action === "stop") {
+          // Ability `run` (a body): the run must be one of this conversation's, and it is stopped the way its own cancel stops it.
+          const runId = body?.runId;
+          if (typeof runId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(runId)) throw new HttpError(400, "invalid_payload", "The run is invalid.");
+          const run = (await agentRuns.list(project)).find(item => item.id === runId && item.sessionId === sessionId);
+          if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+          if (run.status !== "running") return { run, cancellation: { root: "not-running", children: [] } };
+          const children = agentRuns.knownChildSessions(run).map(childSessionId => ({ childSessionId, stop: "with-root" }));
+          const { root, canceled } = await stopRunForUser(project, run);
+          return { run: canceled, cancellation: { root, children } };
+        }
         if (action === "status") return runtimeManager.status(project);
         if (action === "capability") { const binding = await researchSessions.get(project, sessionId); return { capabilityId: binding?.mode === "specialist" ? binding.agentId : null }; }
         if (action === "reply-checks") return { checks: await review?.service.replyChecksForSession({ userId: project.userId, projectId: project.id }, sessionId) ?? [] };

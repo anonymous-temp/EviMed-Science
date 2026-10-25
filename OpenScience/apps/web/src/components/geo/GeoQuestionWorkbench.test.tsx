@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -219,4 +219,37 @@ it('does not navigate after a pending save resolves on an unmounted workbench', 
   await act(async () => { complete({ version: 4 }); });
   expect(onSaved).not.toHaveBeenCalled();
   expect(JSON.parse(localStorage.getItem(scope)!).input).toEqual(input);
+});
+
+it('draws a long imported set fifty rows at a time and edits a row in place, keeping every row for the preview', async () => {
+  const question = (index: number) => ({ id: `q${index}`, originalId: `${index}`, originalRowIndex: index, text: `Original ${index}`, kind: 'client' as const, platform: null, sourceUrl: null, isMeasured: true });
+  const original: GeoQuestions = { ...data, groups: [{ id: 'g', name: 'G', pool: null, typicalQuestion: '', journeyStage: null, audience: null, weight: null, isControl: false, signal: null, questions: Array.from({ length: 60 }, (_, index) => question(index)) }] };
+  render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={original} onSaved={vi.fn()} /></MemoryRouter>);
+  fireEvent.click(screen.getByText('编辑为新版本'));
+  // A table of a dozen controls a row is read straight from the DOM and driven by plain events: label and role queries and simulated
+  // typing over it cost minutes in jsdom.
+  const texts = () => [...document.querySelectorAll<HTMLTextAreaElement>('textarea[aria-label$=" 题文本"]')];
+  await waitFor(() => expect(texts()).toHaveLength(50));
+  expect(texts()[49].value).toBe('Original 49');
+  fireEvent.click(screen.getByText('显示更多 · 还有 10 题'));
+  await waitFor(() => expect(texts()).toHaveLength(60));
+  const second = texts()[1];
+  fireEvent.change(texts()[0], { target: { value: 'Original 0 x' } });
+  // The other rows are the same elements: an edit is one row's.
+  expect(texts()[1]).toBe(second);
+  expect(texts()[0].value).toBe('Original 0 x');
+  client.previewGeoQuestions.mockImplementation(async (_id, input) => ({ ...input, actualRows: 60, measuredRows: 60, plannedCalls: 60, duplicateCandidates: [] }));
+  fireEvent.click(screen.getByText('核对导入预览'));
+  await waitFor(() => expect(client.previewGeoQuestions).toHaveBeenCalled());
+  const rows = client.previewGeoQuestions.mock.calls[0][1].rows;
+  expect(rows).toHaveLength(60);
+  expect(rows[0].text).toBe('Original 0 x');
+  expect(rows[59].text).toBe('Original 59');
+}, 60_000);
+
+it('says why a job failed in a sentence, never by its code', async () => {
+  client.getGeoDiagnosisProgress.mockResolvedValue(progress());
+  show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
+  expect(screen.queryByText(/delivery_unknown_no_automatic_retry/)).toBeNull();
+  expect(screen.getByText(/请求可能已经送达，但没有收到回答/)).toBeInTheDocument();
 });

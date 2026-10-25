@@ -1,17 +1,19 @@
 import { geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, geoStatementAssessmentIdentity } from "@evimed/domain";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
-import { getGeoDiagnosisReview, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction, type GeoDiagnosisReview } from "@/lib/geoClient";
+import { getGeoDiagnosisReview, getGeoProject, stageGeoPlanContext, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction, type GeoDiagnosisReview } from "@/lib/geoClient";
+import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { safeWebHref } from "@/lib/readPages";
-import { webErrorMessage } from "@/lib/apiClient";
+import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { Section } from "@/components/ui/Section";
 import { Note } from "@/components/ui/Note";
 import { useGeoLoad } from "./geoProjectData";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
+import { ensureGeoConversationSession } from "./geoConversationSession";
 import { ErrorCorrections } from "./spine/ErrorDrawer";
-import { claimRows, correctionBrief } from "./spine/errorModel";
+import { claimRows, correctionSentence } from "./spine/errorModel";
 import { answerPath } from "./tabs/geoTabText";
 import { useGeoPath } from "./useGeoPath";
 
@@ -31,6 +33,9 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const [older, setOlder] = useState<{ snapshotId: string; version: string | null; history: GeoDiagnosisReview["history"]; feedback: GeoDiagnosisReview["feedback"]; historyPage?: GeoDiagnosisReview["historyPage"]; feedbackPage?: GeoDiagnosisReview["feedbackPage"]; feedbackCursors?: string[] } | null>(null);
   const [readingOlder, setReadingOlder] = useState(false);
+  // A work action being handed to the conversation, and the request key a retry of the same selection keeps.
+  const [handing, setHanding] = useState(false);
+  const handoffKey = useRef<{ signature: string; key: string } | null>(null);
   const ready = review.state.kind === "ready" ? review.state.data : null;
   const location = useLocation();
   const requestedVersion = new URLSearchParams(location.search).get("assessmentVersion");
@@ -90,6 +95,8 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
   if (!ready) return <Note action={null}>正在读取逐句核查与复核记录。</Note>;
   const canEdit = !project.access?.abilities || project.access.abilities.includes("edit");
   const canRun = !project.access?.abilities || project.access.abilities.includes("run");
+  // Opening the conversation and staging its context take both (the module's descriptor asks for run and edit).
+  const canConverse = canRun && canEdit;
   const retained = older?.snapshotId === data.snapshot.id && older?.version === ready.assessmentVersion ? older : null;
   const history = [...new Map([...ready.history, ...(retained?.history ?? [])].map(row => [row.version, row])).values()];
   const feedbackRows = [...new Map([...ready.feedback, ...(retained?.feedback ?? [])].map(row => [row.id, row])).values()];
@@ -126,13 +133,41 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
       reloadReview();
     } finally { setBusy(false); }
   };
-  const act = (statement: GeoStatementFact, action: "conclusion" | "treatment") => {
+  /**
+   * 「更新项目结论或文章」/「创建出处或问题群处置任务」: the errors this statement is, the actions already correcting them and the
+   * analysis range are staged as the conversation's context (`stageGeoPlanContext`, as 方案 does), and the composer holds only the
+   * person's sentence — never the records' identities, which the person would otherwise send as their own words. An error outside the
+   * staged range is left to the conversation's own reads rather than refusing the hand-off.
+   */
+  const act = async (statement: GeoStatementFact, action: "conclusion" | "treatment") => {
+    if (handing) return;
     const rows = data.errors.filter(row => geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement));
     const claim = claimRows(rows)[0] ?? { engines: [data.snapshot.engine], statement: statement.text, evidenceQuote: statement.evidence, rows };
-    const linked = actions.filter(action => action.need.errorIds.some(id => rows.some(row => row.id === id)));
-    const context = { actionKeys: linked.map(action => action.key), articleIds: [...new Set(linked.flatMap(action => action.articleIds))], snapshotId: data.snapshot.id, questionId: data.question?.id ?? null, question: data.question?.text ?? null,
-      assessmentVersion: ready.assessmentVersion, claimId: statement.claimId, claimVersion: statement.claimVersion ?? null, applicability: geoClaimApplicability(statement), statementIdentity: geoStatementAssessmentIdentity(statement), statement: statement.text, selectionRef: project.selection?.reference ?? null };
-    void open({ projectId: project.projectId, sessionId: project.sessionId }, `${correctionBrief(claim, product, action)}\n当前复核上下文：${JSON.stringify(context)}`);
+    const linked = actions.filter(item => item.need.errorIds.some(id => rows.some(row => row.id === id)));
+    setHanding(true); setError(null);
+    try {
+      const current = await getGeoProject(geoId);
+      const params = new URLSearchParams(location.search);
+      const sessionId = await ensureGeoConversationSession(geoId, project.projectId,
+        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId);
+      const selectionRef = project.selection?.reference ?? null;
+      const focus = { sessionId, mode: "strategy" as const, ...(selectionRef ? { selectionRef } : {}),
+        ...(linked.length ? { actionKeys: linked.map(item => item.key) } : {}) };
+      const stage = async (input: typeof focus & { errorIds?: string[] }) => {
+        const signature = JSON.stringify(input);
+        const requestKey = handoffKey.current?.signature === signature ? handoffKey.current.key : crypto.randomUUID();
+        handoffKey.current = { signature, key: requestKey };
+        return stageGeoPlanContext(geoId, { ...input, requestKey });
+      };
+      const errorIds = rows.map(row => row.id);
+      const context = await (errorIds.length ? stage({ ...focus, errorIds }) : stage(focus)).catch((cause: unknown) => {
+        if (errorIds.length && cause instanceof WebApiError && cause.code === "geo_plan_focus_invalid") return stage(focus);
+        throw cause;
+      });
+      if (await open({ projectId: project.projectId, geoId, sessionId: context.sessionId, geoPlanContext: { referenceId: context.referenceId } }, correctionSentence(claim, product, action))) handoffKey.current = null;
+    } catch (cause) {
+      setError(webErrorMessage(cause, { fallback: "对话暂时无法打开，请稍后重试。" }));
+    } finally { setHanding(false); }
   };
   return <Section title="逐句诊断与反馈" level="section">
     <div id="geo-judgment-history" className="flex flex-col gap-6">
@@ -155,14 +190,14 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
           <p className="text-ui text-text-2">原判定：{prior ? verdictWords[prior.verdict] : "较早判定未载入"} · 当前判定：{current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}</p>
           <p className="text-ui text-text-2">适用条件：{applicable ? [applicable.population, ...Object.entries(applicable.elements ?? {}).map(([key, value]) => `${key}：${String(value)}`)].filter(Boolean).join("；") || "尚未记录" : "尚未记录"}</p>
           {claimDetail && <p className="text-ui text-text-2">依据：{safeWebHref(claimDetail.sourceRef) ? <a className="text-link" href={safeWebHref(claimDetail.sourceRef)!} target="_blank" rel="noreferrer">{claimDetail.sourceLabel || "查看引用来源"}</a> : claimDetail.sourceLabel || "原始证据"} · 正确说法：{claimDetail.statement}</p>}
-          <p className="text-ui text-text-2">依据原文：{current?.evidence ?? prior?.evidence ?? "尚无可核验引文"}</p>
+          <p className="text-ui text-text-2">依据原文：{current?.evidence ?? prior?.evidence ?? "尚无可核对的引文"}</p>
           {canEdit && canRun && ready.assessmentVersion && current && <Button variant="secondary" size="sm" onClick={() => { setEditing(statementKey); setNote(""); setRequestKey(crypto.randomUUID()); }}>反馈并复核判定</Button>}
           {editing === statementKey && <div className="flex flex-col gap-2">
             <Textarea label="反馈理由与适用条件" value={note} maxLength={4000} onChange={event => setNote(event.target.value)} />
             <div className="flex gap-2"><Button size="sm" loading={busy} disabled={!note.trim()} onClick={() => void send(statement)}>提交复核</Button><Button variant="text" size="sm" onClick={() => setEditing(null)}>取消</Button></div>
           </div>}
-          {canRun && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" onClick={() => act(statement, "conclusion")}>更新项目结论或文章</Button><Button variant="secondary" size="sm" onClick={() => act(statement, "treatment")}>创建出处或问题群处置任务</Button></div>}
-          <ErrorCorrections geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement))))} canRun={canRun} onAsk={() => act(statement, "conclusion")} />
+          {canConverse && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={handing} onClick={() => void act(statement, "conclusion")}>更新项目结论或文章</Button><Button variant="secondary" size="sm" disabled={handing} onClick={() => void act(statement, "treatment")}>创建出处或问题群处置任务</Button></div>}
+          <ErrorCorrections geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement))))} canRun={canConverse} onAsk={() => void act(statement, "conclusion")} />
           {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement)); return <p key={entry.version}>{entry.assessment.judgedAt ? `${new Date(entry.assessment.judgedAt).toLocaleString("zh-CN")} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
           {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => geoStatementAssessmentIdentity(item) === geoStatementAssessmentIdentity(row.original))?.verdict ?? "unverifiable"]}</p>}</div>)}
         </section>;
