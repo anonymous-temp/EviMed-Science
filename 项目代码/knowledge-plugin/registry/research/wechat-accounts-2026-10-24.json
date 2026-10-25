@@ -1,5 +1,5 @@
 {
- "_doc": "The WeChat account list (ct-src, 2026-10-24); supersedes wechat-accounts-2026-10-22.json, which stays as the record of that round. An account is re-resolved by Dajiala before its first read: from verified_url when it is a link that names the account (__biz or short /s/ form), else by its nickname — the first of expected_names — kept only when the answered nickname is expected and every post carries biz (when known). The 2026-10-22 seed links of 44 accounts were Sogou temporary links (src=11/src=3, timestamp, signature) that had expired before the first read; they are dropped (seed_link_expired) and those accounts resolve by name. group: industry, clinical, society-journal, hospital, regulator, research-media. priority 1 (regulators, journals, societies; read twice a day) is spent first, then 2 (clinical portals, hospitals), 3 (industry and research media), 4 (the rest).",
+ "_doc": "The WeChat account list (ct-src, 2026-10-24); supersedes wechat-accounts-2026-10-22.json, which stays as the record of that round. An account is re-resolved by Dajiala before its first read: from verified_url when it is a link that names the account (__biz or short /s/ form), else by its nickname — the first of expected_names — kept only when the answered nickname is expected and every post carries biz (when known). The 2026-10-22 seed links of 44 accounts were Sogou temporary links (src=11/src=3, timestamp, signature) that had expired before the first read; they are dropped (seed_link_expired) and those accounts resolve by name. group: industry, clinical, society-journal, hospital, regulator, research-media. priority 1 (regulators, journals, societies; read twice a day) is spent first, then 2 (clinical portals, hospitals), 3 (industry and research media), 4 (the rest). c2-fixes 2026-10-25: eleven accounts the collector could not read were checked by Dajiala again (about ¥2 in all). Six were renamed and are listed under their current nicknames with their biz (renamed_2026_10_25: 药融云 is 摩熵医药, 丁香园肾内时间 is 丁香园肾脏时间, CellPress细胞科学 is CellPress全科学); 中华内分泌代谢杂志 answers by its own name and now carries its biz; four are out of the list with their reasons (not_listed_2026_10_25). A nickname is only as good as its last check: Sogou's index keeps old names, Dajiala answers by the current one.",
  "supersedes": "wechat-accounts-2026-10-22.json",
  "excluded": [
   {
@@ -435,6 +435,90 @@
    "cost_cny": 0.16,
    "how": "tools/social_live_check.py (the collector's own read)",
    "biz_matches": true
+  },
+  {
+   "at": "2026-10-25",
+   "id": "wx-cellpress",
+   "asked": "CellPress全科学",
+   "answered": "CellPress全科学",
+   "posts": 28,
+   "newest": "2026-10-25",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "biz_matches": null,
+   "how": "c2-fixes: post_history by nickname"
+  },
+  {
+   "at": "2026-10-25",
+   "id": "wx-dxy-nephro",
+   "asked": "丁香园肾脏时间",
+   "answered": "丁香园肾脏时间",
+   "posts": 24,
+   "newest": "2026-10-25",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "biz_matches": null,
+   "how": "c2-fixes: post_history by nickname"
+  },
+  {
+   "at": "2026-10-25",
+   "id": "wx-yxj-psych",
+   "asked": "医学界精神心理频道",
+   "answered": "医学界精神心理频道",
+   "posts": 27,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "biz_matches": null,
+   "how": "c2-fixes: post_history by nickname"
+  },
+  {
+   "at": "2026-10-25",
+   "id": "wx-yaorongyun",
+   "asked": "摩熵医药",
+   "answered": "摩熵医药",
+   "posts": 26,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "biz_matches": null,
+   "how": "c2-fixes: post_history by nickname"
+  },
+  {
+   "at": "2026-10-25",
+   "id": "wx-liangyihui-hema",
+   "asked": "良医汇血液肿瘤资讯",
+   "answered": "良医汇血液肿瘤资讯",
+   "posts": 32,
+   "newest": "2026-10-24",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "biz_matches": null,
+   "how": "c2-fixes: post_history by nickname"
+  },
+  {
+   "at": "2026-10-25",
+   "id": "wx-biopharma-xb",
+   "asked": "佰傲谷BioValley",
+   "answered": "佰傲谷BioValley",
+   "posts": 23,
+   "newest": "2026-10-25",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "biz_matches": null,
+   "how": "c2-fixes: post_history by nickname"
+  },
+  {
+   "at": "2026-10-25",
+   "id": "wx-cjem",
+   "asked": "中华内分泌代谢杂志",
+   "answered": "中华内分泌代谢杂志",
+   "posts": 10,
+   "newest": "2026-10-23",
+   "post_bizes": 1,
+   "cost_cny": 0.16,
+   "biz_matches": null,
+   "how": "c2-fixes: post_history by nickname (was wechat_nickname_mismatch)"
   }
  ],
  "not_listed_2026_10_24": [
@@ -552,21 +636,25 @@
   },
   {
    "id": "wx-biopharma-xb",
-   "name": "生物制药小编",
+   "name": "佰傲谷BioValley",
    "expected_names": [
-    "生物制药小编"
+    "佰傲谷BioValley"
    ],
    "group": "industry",
    "category": "industry",
    "source_type": "media",
    "authority": 2,
-   "owner_entity": "生物制药小编（佰傲谷 BioValley 系）",
+   "owner_entity": "佰傲谷 BioValley（生物制药小编栏目的出品方）",
    "priority": 3,
    "origin": "research-2026-10-24",
-   "confidence": "high",
+   "confidence": "medium",
    "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=生物制药小编"
-   ]
+    "https://weixin.sogou.com/weixin?type=2&query=生物制药小编",
+    "c2-fixes 2026-10-25: Dajiala answers the nickname 佰傲谷BioValley (one biz, 23 posts, newest 2026-10-25); 生物制药小编 answers code 107"
+   ],
+   "biz": "MzYzNjUxMjYzMw==",
+   "renamed_from": "生物制药小编",
+   "note": "生物制药小编 answers code 107; its publisher account 佰傲谷BioValley is current and posts the same 精选汇编 — likely the same account renamed, not proven"
   },
   {
    "id": "wx-bmj-medicine",
@@ -641,9 +729,9 @@
   },
   {
    "id": "wx-cellpress",
-   "name": "CellPress细胞科学",
+   "name": "CellPress全科学",
    "expected_names": [
-    "CellPress细胞科学"
+    "CellPress全科学"
    ],
    "group": "society-journal",
    "category": "society-journal",
@@ -652,10 +740,13 @@
    "owner_entity": "Cell Press 细胞出版社",
    "priority": 1,
    "origin": "research-2026-10-24",
-   "confidence": "medium",
+   "confidence": "high",
    "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=Cell Press细胞出版社"
-   ]
+    "https://weixin.sogou.com/weixin?type=2&query=Cell Press细胞出版社",
+    "c2-fixes 2026-10-25: Dajiala answers the nickname CellPress全科学 (one biz, 28 posts, newest 2026-10-25); CellPress细胞科学 answers code 107"
+   ],
+   "biz": "MzU5MDcwNzg0MA==",
+   "renamed_from": "CellPress细胞科学"
   },
   {
    "id": "wx-cgp-journal",
@@ -873,8 +964,10 @@
    "origin": "research-2026-10-24",
    "confidence": "medium",
    "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=GRADE中国中心"
-   ]
+    "https://weixin.sogou.com/weixin?type=2&query=GRADE中国中心",
+    "c2-fixes 2026-10-25: Dajiala answers 中华内分泌代谢杂志 itself (one biz, 10 posts, newest 2026-10-23); biz written so the read can tell another account from it"
+   ],
+   "biz": "MzA4ODYzMzg0Mg=="
   },
   {
    "id": "wx-cjim",
@@ -1565,9 +1658,9 @@
   },
   {
    "id": "wx-dxy-nephro",
-   "name": "丁香园肾内时间",
+   "name": "丁香园肾脏时间",
    "expected_names": [
-    "丁香园肾内时间"
+    "丁香园肾脏时间"
    ],
    "group": "clinical",
    "category": "clinical",
@@ -1578,8 +1671,11 @@
    "origin": "research-2026-10-24",
    "confidence": "high",
    "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=丁香园肾病时间"
-   ]
+    "https://weixin.sogou.com/weixin?type=2&query=丁香园肾病时间",
+    "c2-fixes 2026-10-25: Dajiala answers the nickname 丁香园肾脏时间 (one biz, 24 posts, newest 2026-10-25); 丁香园肾内时间 answers code 107"
+   ],
+   "biz": "MzA3MjY5NzAxNA==",
+   "renamed_from": "丁香园肾内时间"
   },
   {
    "id": "wx-dxy-neuro",
@@ -1762,22 +1858,6 @@
     "https://mp.weixin.qq.com/s/g4hTk2A6ik1ZXcXvd9QrWA"
    ],
    "biz": "MjM5NjM0NjQyOA=="
-  },
-  {
-   "id": "wx-healthai",
-   "name": "医健AI掘金志",
-   "expected_names": [
-    "医健AI掘金志"
-   ],
-   "biz": "MzIxMTY1ODE1MA==",
-   "group": "industry",
-   "category": "medical-ai-media",
-   "source_type": "media",
-   "authority": 2,
-   "owner_entity": "医健AI掘金志",
-   "priority": 3,
-   "origin": "wechat-accounts-2026-10-22",
-   "seed_link_expired": true
   },
   {
    "id": "wx-healthy-beijing",
@@ -2003,9 +2083,9 @@
   },
   {
    "id": "wx-liangyihui-hema",
-   "name": "血液肿瘤资讯",
+   "name": "良医汇血液肿瘤资讯",
    "expected_names": [
-    "血液肿瘤资讯"
+    "良医汇血液肿瘤资讯"
    ],
    "group": "clinical",
    "category": "clinical",
@@ -2014,11 +2094,14 @@
    "owner_entity": "良医汇（上海良医汇）",
    "priority": 2,
    "origin": "research-2026-10-24",
-   "confidence": "medium",
+   "confidence": "high",
    "evidence": [
     "https://weixin.sogou.com/weixin?type=2&query=良医汇肿瘤资讯",
-    "https://weixin.sogou.com/weixin?type=2&query=中华肿瘤杂志"
-   ]
+    "https://weixin.sogou.com/weixin?type=2&query=中华肿瘤杂志",
+    "c2-fixes 2026-10-25: Dajiala answers the nickname 良医汇血液肿瘤资讯 (one biz, 32 posts, newest 2026-10-24); 血液肿瘤资讯 answers code 107"
+   ],
+   "biz": "MzU4NjkzMDg4Mw==",
+   "renamed_from": "血液肿瘤资讯"
   },
   {
    "id": "wx-mdweekly",
@@ -2379,25 +2462,6 @@
     "http://www.natcm.gov.cn/"
    ],
    "biz": "MzA3ODQwNzYzMg=="
-  },
-  {
-   "id": "wx-nature-portfolio",
-   "name": "Nature Portfolio",
-   "expected_names": [
-    "Nature Portfolio",
-    "Nature自然科研"
-   ],
-   "group": "society-journal",
-   "category": "society-journal",
-   "source_type": "journal",
-   "authority": 4,
-   "owner_entity": "Springer Nature（自然科研）",
-   "priority": 1,
-   "origin": "research-2026-10-24",
-   "confidence": "high",
-   "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=Nature Portfolio 自然科研"
-   ]
   },
   {
    "id": "wx-nejm",
@@ -3159,9 +3223,8 @@
   },
   {
    "id": "wx-yaorongyun",
-   "name": "药融云",
+   "name": "摩熵医药",
    "expected_names": [
-    "药融云",
     "摩熵医药"
    ],
    "group": "industry",
@@ -3171,10 +3234,13 @@
    "owner_entity": "药融云 / 摩熵数科",
    "priority": 3,
    "origin": "research-2026-10-24",
-   "confidence": "medium",
+   "confidence": "high",
    "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=摩熵医药"
-   ]
+    "https://weixin.sogou.com/weixin?type=2&query=摩熵医药",
+    "c2-fixes 2026-10-25: Dajiala answers the nickname 摩熵医药 (one biz, 26 posts, newest 2026-10-24); 药融云 answers code 107"
+   ],
+   "biz": "MzkxMTM1MDMyMA==",
+   "renamed_from": "药融云"
   },
   {
    "id": "wx-yaoshidai",
@@ -3208,25 +3274,6 @@
    "confidence": "high",
    "evidence": [
     "https://weixin.sogou.com/weixin?type=2&query=药智网 药智"
-   ]
-  },
-  {
-   "id": "wx-yigu",
-   "name": "医谷",
-   "expected_names": [
-    "医谷"
-   ],
-   "group": "industry",
-   "category": "industry",
-   "source_type": "media",
-   "authority": 2,
-   "owner_entity": "医谷（医疗健康产业媒体）",
-   "priority": 3,
-   "origin": "research-2026-10-24",
-   "confidence": "medium",
-   "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=丁香园眼科时间",
-    "https://weixin.sogou.com/weixin?type=2&query=火石创造"
    ]
   },
   {
@@ -3439,24 +3486,6 @@
    ]
   },
   {
-   "id": "wx-yxj-lab",
-   "name": "医学界检验频道",
-   "expected_names": [
-    "医学界检验频道"
-   ],
-   "group": "clinical",
-   "category": "clinical",
-   "source_type": "media",
-   "authority": 3,
-   "owner_entity": "医学界",
-   "priority": 2,
-   "origin": "research-2026-10-24",
-   "confidence": "medium",
-   "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=医学界肾病频道"
-   ]
-  },
-  {
    "id": "wx-yxj-nephro",
    "name": "医学界肾病频道",
    "expected_names": [
@@ -3544,9 +3573,9 @@
   },
   {
    "id": "wx-yxj-psych",
-   "name": "医学界精神病学频道",
+   "name": "医学界精神心理频道",
    "expected_names": [
-    "医学界精神病学频道"
+    "医学界精神心理频道"
    ],
    "group": "clinical",
    "category": "clinical",
@@ -3557,8 +3586,11 @@
    "origin": "research-2026-10-24",
    "confidence": "high",
    "evidence": [
-    "https://weixin.sogou.com/weixin?type=2&query=医学界精神病学频道"
-   ]
+    "https://weixin.sogou.com/weixin?type=2&query=医学界精神病学频道",
+    "c2-fixes 2026-10-25: Dajiala answers the nickname 医学界精神心理频道 (one biz, 27 posts, newest 2026-10-24); 医学界精神病学频道 answers code 107"
+   ],
+   "biz": "MzIyNjk1MjAwNQ==",
+   "renamed_from": "医学界精神病学频道"
   },
   {
    "id": "wx-yxj-resp",
@@ -3733,6 +3765,66 @@
    "evidence": [
     "https://weixin.sogou.com/weixin?type=2&query=复旦大学附属中山医院"
    ]
+  }
+ ],
+ "not_listed_2026_10_25": [
+  {
+   "id": "wx-nature-portfolio",
+   "name": "Nature Portfolio",
+   "reason": "no Dajiala answer: Nature Portfolio, Nature自然科研, 自然科研, Nature Research, NaturePortfolio, Nature Portfolio自然科研, Nature Portfolio 自然科研 and Springer Nature自然科研 all answer code 107 (account does not exist); no article link of the account was found to resolve it by link"
+  },
+  {
+   "id": "wx-yxj-lab",
+   "name": "医学界检验频道",
+   "reason": "no Dajiala answer: 医学界检验频道, 医学界检验医学频道, 医学界检验, 医学界检验科频道, 医学界检验与病理频道, 医学界检验医学 and 医学界检验诊断频道 all answer code 107 (renamed or closed; other 医学界 channels were renamed, e.g. 精神病学 → 精神心理)"
+  },
+  {
+   "id": "wx-healthai",
+   "name": "医健AI掘金志",
+   "reason": "the saved id answers 「账号已迁移」 (code 110) and no account answers to 医健AI掘金志 or AI掘金志 (107); its newest article known to the research is of 2023-06"
+  },
+  {
+   "id": "wx-yigu",
+   "name": "医谷",
+   "reason": "医谷 answers (nickname 医谷, id phacct_11871bf57e75) but its list of posts is empty (code 110, 「翻页内没有文章了」): nothing to read"
+  }
+ ],
+ "renamed_2026_10_25": [
+  {
+   "id": "wx-cellpress",
+   "from": "CellPress细胞科学",
+   "to": "CellPress全科学",
+   "biz": "MzU5MDcwNzg0MA=="
+  },
+  {
+   "id": "wx-dxy-nephro",
+   "from": "丁香园肾内时间",
+   "to": "丁香园肾脏时间",
+   "biz": "MzA3MjY5NzAxNA=="
+  },
+  {
+   "id": "wx-yxj-psych",
+   "from": "医学界精神病学频道",
+   "to": "医学界精神心理频道",
+   "biz": "MzIyNjk1MjAwNQ=="
+  },
+  {
+   "id": "wx-yaorongyun",
+   "from": "药融云",
+   "to": "摩熵医药",
+   "biz": "MzkxMTM1MDMyMA=="
+  },
+  {
+   "id": "wx-liangyihui-hema",
+   "from": "血液肿瘤资讯",
+   "to": "良医汇血液肿瘤资讯",
+   "biz": "MzU4NjkzMDg4Mw=="
+  },
+  {
+   "id": "wx-biopharma-xb",
+   "from": "生物制药小编",
+   "to": "佰傲谷BioValley",
+   "biz": "MzYzNjUxMjYzMw=="
   }
  ]
 }

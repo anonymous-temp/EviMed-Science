@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from knowledge_plugin.discovery import Candidate, run_discovery, upsert_candidates
+from knowledge_plugin.discovery import Candidate, candidate_id, run_discovery, upsert_candidates
 from knowledge_plugin.registry import parse_registry, sync_registry
 from knowledge_plugin.social import wechat_discovery as wd
 from knowledge_plugin.social.collector import SocialCollector
@@ -62,6 +62,44 @@ def test_a_lead_link_becomes_a_biz_candidate_and_keys_say_how_to_validate():
     assert wd.target_of({"key": "wechat:来源", "evidence": {}}) == ("name", "来源", None)
     assert wd.target_of({"key": "wechat:网络", "evidence": {}}) is None
     assert wd.target_of({"key": "x:somedoctor", "evidence": {}}) is None
+
+
+def test_a_document_a_database_a_department_cde_and_general_news_are_never_asked_for():
+    """c2-fixes F2: the dry run of 60 candidates on production (2026-10-25) put these in its top twenty."""
+    not_accounts = ["丁型肝炎防治专家共识", "中国急性胰腺炎诊治指南", "病例截图", "米内网药品数据库", "公司白皮书", "门诊部", "编辑部",
+                    "CDE", "cde", "中国药审", "药审中心", "国家药监局药品审评中心",
+                    "新华社", "人民日报", "人民日报评论", "央视新闻", "解放军报", "中国新闻网", "上观新闻", "澎湃新闻", "环球时报",
+                    "光明日报", "经济日报"]
+    for name in not_accounts:
+        assert wd.clean_name(name) is None, name
+        assert wd.candidate_from_name("social", name) is None, name
+        assert wd.target_of({"key": f"wechat:{name}", "evidence": {}}) is None, "a stored one is refused unpaid"
+    assert wd.origin_names("\n".join(f"来源：{name}" for name in not_accounts)) == []
+    # Their health channels, and an account that merely ends like a place, are accounts.
+    for name in ["人民日报健康客户端", "央视新闻客户端", "米内网", "新华社健康", "门诊部落格", "指南针药事"]:
+        assert wd.clean_name(name) == name, name
+    assert wd.origin_names("来源：米内网（药品数据库）") == ["米内网"], "the database in brackets is not the account's name"
+
+
+def test_a_lead_read_keys_the_account_by_its_biz_by_its_nickname_or_not_at_all():
+    link = "https://mp.weixin.qq.com/s?__biz=MzNew==&mid=22&idx=1&sn=abc&chksm=def"
+    hint = {"platform": "wechat", "account": "新号", "biz": "MzNew==", "ghid": "gh_new", "alias": None, "verified_url": link,
+            "expected_names": ["新号"]}
+    evidence = {"lead_url": link, "trigger": "zh-report"}
+    by_link = wd.candidate_from_lead_read("lead", link, "新号", "MzNew==", hint=hint, evidence=evidence)
+    assert by_link.key == "wechat:biz:MzNew==" and by_link.line == "lead" and by_link.name == "新号"
+    assert by_link.hint["url"] == link and by_link.hint["verified_url"] == link and by_link.hint["ghid"] == "gh_new"
+    assert "alias" not in by_link.hint, "an empty fact is not carried"
+    stored = {"key": by_link.key, "line": "lead", "evidence": {"hint": by_link.hint}}
+    assert wd.target_of(stored) == ("link", link, "MzNew=="), "validated by the link, never by the biz read as a nickname"
+    # A short link names no biz: the account is asked for by its nickname.
+    short = "https://mp.weixin.qq.com/s/9jkBYr7mpX9NTKEX-VskfA"
+    by_name = wd.candidate_from_lead_read("lead", short, "新号", "MzNew==", hint={**hint, "verified_url": short}, evidence=evidence)
+    assert by_name.key == "wechat:新号" and by_name.hint["via"] == "lead" and by_name.hint["biz"] == "MzNew=="
+    assert wd.target_of({"key": by_name.key, "evidence": {"hint": by_name.hint}}) == ("name", "新号", None)
+    # No link that names it and no nickname that can be one: no candidate.
+    assert wd.candidate_from_lead_read("lead", short, "", "MzNew==", hint=hint, evidence=evidence) is None
+    assert wd.candidate_from_lead_read("lead", short, "新华社", "MzNew==", hint=hint, evidence=evidence) is None
 
 
 def test_a_trial_row_is_an_ordinary_wechat_row_read_once_a_day():
@@ -151,15 +189,20 @@ async def test_credited_accounts_become_candidates_and_a_valid_one_goes_on_trial
         "旧号": history("旧号", post(ACCOUNTS["旧号"], 7, days=45)),
         "冒名号": history("冒名号研究院", post(ACCOUNTS["冒名号"], 6)),
     }
-    bodies = {"1": ["正文。", "来源：新号"], "2": ["本文转载自公众号「旧号」", "正文。"],
-              "3": ["来源：新号", "来源：丁香园", "来源：冒名号", "来源：医学界"]}
+    # Each name is credited by both listed accounts (a name one account mentions is not proposed: ``MIN_CREDITING_ACCOUNTS``);
+    # 孤号 is credited once; the CDE, a general news account and a guideline are credited twice and are never an account.
+    bodies = {"1": ["正文。", "来源：新号", "来源：孤号", "来源：新华社", "来源：中国药审", "来源：丁型肝炎防治专家共识"],
+              "2": ["本文转载自公众号「旧号」", "来源：冒名号", "正文。"],
+              "3": ["来源：新号", "来源：丁香园", "来源：冒名号", "来源：医学界", "来源：旧号", "来源：新华社", "来源：中国药审",
+                    "来源：丁型肝炎防治专家共识"]}
     fetcher, asked = dajiala(bodies, histories)
     await read_listed_accounts(discovery_settings, pool, fetcher)
 
     report = await run_discovery(discovery_settings, pool, fetcher, lambda: NOW, data={"exclude_hosts": [], "directories": []},
                                  gather_lines=["social"])
     found = await candidates(pool)
-    assert set(found) == {"wechat:新号", "wechat:旧号", "wechat:冒名号"}, "a listed account or a self-credit is no candidate"
+    assert set(found) == {"wechat:新号", "wechat:旧号", "wechat:冒名号"}, (
+        "a listed account, a self-credit, a single credit, CDE, general news and a guideline are no candidate")
     assert found["wechat:新号"]["evidence"]["credited_by_count"] == 2
     assert found["wechat:新号"]["state"] == "trial" and found["wechat:旧号"]["state_reason"] == "no_fresh_items"
     assert found["wechat:冒名号"]["state_reason"] == "wechat_nickname_mismatch"
@@ -221,6 +264,72 @@ async def test_twenty_validations_a_day_across_lines_and_a_lead_link_is_validate
     assert {"url": link, "verifycode": ""} in asked and {"nickname": "某号", "verifycode": ""} in asked
     found = await candidates(pool)
     assert found[f"wechat:biz:{new}"]["state"] == "trial" and found["wechat:某号"]["state_reason"] == "wechat_not_found"
+
+
+@pytest.mark.db
+async def test_lead_candidates_keyed_by_biz_by_an_earlier_build_move_once_and_are_validated_by_their_link(discovery_settings, pool):
+    """c2-fixes F1: ``wechat:<biz>`` (read as a nickname: code 107, ``wechat_not_found``) becomes ``wechat:biz:<biz>``."""
+    new, other, third, lone = ACCOUNTS["新号"], "MzOther==", "MzThird==", "MzLone=="
+    link = f"https://mp.weixin.qq.com/s?__biz={new}&mid=9&idx=1&sn=s9&chksm=c9"
+    third_link = f"https://mp.weixin.qq.com/s?__biz={third}&mid=5&idx=1&sn=s5"
+    short = "https://mp.weixin.qq.com/s/9jkBYr7mpX9NTKEX-VskfA"
+
+    def old(biz, name, verified, **extra):
+        return Candidate("lead", "social", f"wechat:{biz}", name=name, evidence={"lead_url": verified, "trigger": "zh-report", **extra},
+                         hint={"platform": "wechat", "account": name, "biz": biz, "ghid": "gh_x", "verified_url": verified,
+                               "expected_names": [name]})
+
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await upsert_candidates(conn, [
+                old(new, "新号", link),                       # the bug's shape: failed wechat_not_found
+                old(other, "齐鲁号", short),                   # a short link: asked for by its nickname
+                old(third, "第三号", third_link),              # its new key is already held
+                old(lone, "新华社", short),                    # no link that names it, no nickname that can be one
+                Candidate("lead", "social", "wechat:biz:" + third, name="第三号", hint={"platform": "wechat", "url": third_link}),
+                Candidate("social", "social", "wechat:某号", name="某号", hint={"platform": "wechat", "account": "某号"}),
+            ], NOW, DAY)
+            await conn.execute("""UPDATE evimed_knowledge.source_candidates SET state = 'failed', state_reason = 'wechat_not_found',
+                                         attempts = 1, validation = '{"provider": "gone"}'::jsonb
+                                   WHERE key = ANY(%s)""", ([f"wechat:{new}", f"wechat:{other}", f"wechat:{lone}"],))
+            await conn.execute("""UPDATE evimed_knowledge.source_candidates SET sightings = 4 WHERE key = %s""", (f"wechat:{third}",))
+            report = await wd.rekey_lead_candidates(conn, NOW, DAY)
+    assert report == {"moved": 2, "reopened": 2, "merged": 1, "unmovable": 1}
+    found = await candidates(pool)
+    assert set(found) == {f"wechat:biz:{new}", "wechat:齐鲁号", f"wechat:biz:{third}", f"wechat:{lone}", "wechat:某号"}
+    moved = found[f"wechat:biz:{new}"]
+    assert (moved["state"], moved["state_reason"], moved["attempts"], moved["validation"]) == ("candidate", None, 0, None)
+    assert moved["id"] == candidate_id(moved["key"]) and moved["evidence"]["rekeyed_from"] == f"wechat:{new}"
+    assert moved["evidence"]["hint"]["url"] == link and moved["evidence"]["hint"]["verified_url"] == link
+    assert wd.target_of(moved) == ("link", link, new)
+    by_nickname = found["wechat:齐鲁号"]
+    assert by_nickname["state"] == "candidate" and by_nickname["evidence"]["hint"]["via"] == "lead"
+    assert wd.target_of(by_nickname) == ("name", "齐鲁号", None)
+    assert found[f"wechat:biz:{third}"]["sightings"] == 1 + 4, "the old row's sightings join the one that already held the key"
+    assert found[f"wechat:{lone}"]["state"] == "failed", "unmovable: left as it was"
+    assert found["wechat:某号"]["evidence"] == {"kind": "social", "hint": {"platform": "wechat", "account": "某号"}}
+    # A second run changes nothing (the unmovable one is counted again, as it still is).
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            assert await wd.rekey_lead_candidates(conn, NOW + timedelta(hours=1), DAY) == {"moved": 0, "reopened": 0, "merged": 0, "unmovable": 1}
+    assert await candidates(pool) == found
+    async with pool.connection() as conn:
+        daily = await (await conn.execute("SELECT candidates FROM evimed_knowledge.discovery_daily WHERE line = 'lead' AND day = %s", (DAY,))).fetchone()
+    assert daily["candidates"] == 5 + 2, "five lead rows were first seen; the two reopened ones are counted as candidates again"
+
+    # The next discovery run does the move itself and validates the account by its link: one call, a trial.
+    fetcher, asked = dajiala({}, {link: history("新号", post(new, 9, days=1))})
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM evimed_knowledge.source_candidates")
+            await upsert_candidates(conn, [old(new, "新号", link)], NOW, DAY)
+            await conn.execute("""UPDATE evimed_knowledge.source_candidates SET state = 'failed', state_reason = 'wechat_not_found'""")
+    report = await run_discovery(discovery_settings, pool, fetcher, lambda: NOW, caps={"social": 20, "lead": 20},
+                                 data={"exclude_hosts": [], "directories": []}, gather_lines=[])
+    assert report["rekeyed"] == {"moved": 1, "reopened": 1, "merged": 0, "unmovable": 0}
+    assert asked == [{"url": link, "verifycode": ""}], "asked by the article link — never by the biz as a nickname"
+    found = await candidates(pool)
+    assert found[f"wechat:biz:{new}"]["state"] == "trial" and found[f"wechat:biz:{new}"]["row"]["config"]["biz"] == new
 
 
 @pytest.mark.db

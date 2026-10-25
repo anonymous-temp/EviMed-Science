@@ -16,8 +16,8 @@ import pytest
 import yaml
 
 from knowledge_plugin.discovery import DEFAULT_CAPS, LINES
-from knowledge_plugin.leads import (LeadReader, LeadsInvalid, identity_keys, lead_kind, lead_source_row, parse_leads,
-                                    _wechat_time)
+from knowledge_plugin.leads import (LeadReader, LeadsInvalid, identity_keys, lead_kind, lead_name_mended, lead_page_names,
+                                    lead_source_row, outlet_of, parse_leads, strip_site_suffix, usable_site_name, _wechat_time)
 from knowledge_plugin.model import ACCESSES, CONTRACT_VERSION, FetchError, FetchResult, IMPLEMENTED_ACCESSES, UNPOLLED_ACCESSES
 from knowledge_plugin.registry import parse_registry, sync_registry
 
@@ -144,6 +144,63 @@ def test_what_an_address_names():
     assert _wechat_time("soon") is None
 
 
+def test_a_lead_page_is_named_by_its_page_its_host_or_its_title_never_by_a_copyright_line_or_a_host():
+    """c2-fixes F8 (gap review G4): the source names and titles production showed on 2026-10-25, as the pages gave them."""
+    # (host family, og:site_name, title candidates) → (title, site name)
+    cases = [
+        ("finance.sina.com.cn", "finance.sina.com.cn", ["美国FDA批准新型减重药物 _ 新浪财经"], "美国FDA批准新型减重药物", "新浪财经"),
+        ("toutiao.com", "toutiao.com", ["国家医保局回应创新药谈判进展 - 今日头条"], "国家医保局回应创新药谈判进展", "今日头条"),
+        ("app.xinhuanet.com", "app.xinhuanet.com", ["我国首个国产GLP-1减重药获批"], "我国首个国产GLP-1减重药获批", "新华网"),
+        ("163.com", "网易版权所有", ["多家药企发布三季度业绩_网易"], "多家药企发布三季度业绩", "网易"),
+        ("new.qq.com", "Copyright 1998 - 2026 Tencent. All Rights Reserved", ["流感疫苗接种进入高峰期_腾讯新闻"], "流感疫苗接种进入高峰期", "腾讯新闻"),
+        ("caijing.com.cn", "CAIJING.COM.CN", ["创新药出海迎来密集交易期"], "创新药出海迎来密集交易期", "财经网"),
+        ("finance.eastmoney.com", "东方财富网", ["国家药监局批准首个国产双抗上市 _ 东方财富网"], "国家药监局批准首个国产双抗上市", "东方财富网"),
+        ("overseas.example.cn", "海外华文媒体门户", ["中国医疗团队在欧洲推广分级诊疗经验-人民日报欧洲网_海外华文媒体门户"],
+         "中国医疗团队在欧洲推广分级诊疗经验", "海外华文媒体门户"),
+        # A site no table knows and no page names: its host, as before — the last resort, not a rule.
+        ("google.com", "google.com", ["FDA approves a new obesity drug"], "FDA approves a new obesity drug", "google.com"),
+        # A name the page gave and is one stays, and so does a title whose last segment names no site (GLP-1's 1).
+        ("yxj.org.cn", "医学界", ["司美格鲁肽与GLP-1: 新证据"], "司美格鲁肽与GLP-1: 新证据", "医学界"),
+        ("med.example.cn", "新浪医药", ["司美格鲁肽-心血管获益-长期随访"], "司美格鲁肽-心血管获益-长期随访", "新浪医药"),
+        # Longer than twenty characters is no name; the title's last segment is the next to try.
+        ("example.org", "国家药品监督管理局药品审评中心官方网站发布平台信息", ["新规发布 | 医学速递"], "新规发布", "医学速递"),
+    ]
+    for family, site_meta, candidates, title, site in cases:
+        assert lead_page_names(candidates, site_meta, family=family) == (title, site), (family, site_meta)
+    # A page whose og:title is its masthead and whose h1 is its headline, with the headline in the site-name field.
+    headline = "近期医疗器械资讯速览（9.26—10.16）"
+    assert lead_page_names(["中国食品药品网", headline, "中国食品药品网"], headline, family="www.cnpharm.com") == (headline, "中国食品药品网")
+    # A title that is an address gives way to the search result's; with nothing else the page has no title.
+    url_title = "https://finance.sina.com.cn/roll/2026-10-23/doc-inhabcde1234567.shtml."
+    assert lead_page_names([None, None, url_title, "新药获批的消息"], "新浪财经", family="finance.sina.com.cn") == ("新药获批的消息", "新浪财经")
+    assert lead_page_names([url_title], "新浪财经", family="finance.sina.com.cn")[0] is None
+    assert lead_page_names(["新华网"], None, family="www.xinhuanet.com")[0] is None, "only the masthead: nothing to publish"
+
+
+def test_the_parts_of_a_lead_pages_name_and_title_each_do_their_one_thing():
+    assert usable_site_name("网易版权所有", titles=[], family="163.com") is None
+    assert usable_site_name("Copyright 1998 - 2026 Tencent. All Rights Reserved", titles=[], family="qq.com") is None
+    assert usable_site_name("CAIJING.COM.CN", titles=[], family="caijing.com.cn") is None
+    assert usable_site_name("二十个字以上的名字二十个字以上的名字二十个字以上的名字", titles=[], family="x.org") is None
+    assert usable_site_name("医学界", titles=["医学界"], family="yxj.org.cn") is None, "the same text as the title"
+    assert usable_site_name("  新华网 ", titles=["别的标题"], family="xinhuanet.com") == "新华网"
+    assert outlet_of("finance.sina.com.cn") == "新浪财经" and outlet_of("www.sina.com.cn") == "新浪网", "the longest family wins"
+    assert outlet_of("eastmoney.com") == "东方财富网" and outlet_of("data.eastmoney.com") == "东方财富网" and outlet_of("noteastmoney.com") is None
+    names = {"东方财富网", "腾讯新闻"}
+    assert strip_site_suffix("新药获批 _ 东方财富网", names) == "新药获批"
+    assert strip_site_suffix("新药获批-腾讯新闻-东方财富网", names) == "新药获批", "more than one, up to three"
+    assert strip_site_suffix("GLP-1", names) == "GLP-1" and strip_site_suffix("东方财富网", names) == "东方财富网"
+    assert strip_site_suffix("东方财富网 | 东方财富网", names) == "东方财富网", "the masthead twice leaves the masthead; the reader then finds no title in it"
+    assert strip_site_suffix("_ 东方财富网", names) == "_ 东方财富网", "a title that would be left with nothing is kept"
+    # A stored site name is mended only when it is a wrong one and the page gives a right one.
+    held = {"name": "网易版权所有", "config": {"lead_key": "site:163.com"}}
+    assert lead_name_mended(held, {"name": "网易", "config": {"lead_key": "site:163.com"}}) is True
+    assert lead_name_mended(held, {"name": "163.com", "config": {"lead_key": "site:163.com"}}) is False, "a host is no better"
+    assert lead_name_mended({"name": "新浪医药", "config": {}}, {"name": "新浪", "config": {"lead_key": "site:med.example.cn"}}) is False
+    assert lead_name_mended(None, {"name": "网易", "config": {"lead_key": "site:163.com"}}) is False
+    assert lead_name_mended({"name": "医学界", "config": {}}, {"name": "医学界", "config": {"lead_key": "wechat:MzA5"}}) is False
+
+
 def test_a_lead_source_is_a_registry_row_that_loads_and_is_never_polled():
     row = lead_source_row("site:news.example.cn", name="示例医药网", homepage="https://news.example.cn/", url="https://news.example.cn/",
                           source_type="media", owner="news.example.cn")
@@ -169,6 +226,23 @@ def test_a_lead_source_is_served_by_the_sources_listing():
     row["poll_interval_s"] = row["poll_floor_s"]
     served = serialize_source(row)
     assert served["access"] == "lead" and served["name"] == "示例医药网"
+
+def test_the_daily_cap_of_leads_is_600_everywhere_it_is_written():
+    """c2-fixes F4: 300 were spent by 10:12 on 2026-10-25 and the specialty and genre-gap leads after them were ``capped``."""
+    from pathlib import Path
+
+    from knowledge_plugin import leads
+    from knowledge_plugin.settings import Settings
+
+    env = {"KNOWLEDGE_PLUGIN_DATABASE_URL": "postgresql://unused"}
+    assert Settings.from_env(env).leads_daily == leads.DEFAULT_DAILY == 600
+    assert Settings.from_env({**env, "KNOWLEDGE_PLUGIN_LEADS_DAILY": "120"}).leads_daily == 120
+    root = Path(__file__).resolve().parents[1]
+    assert "| `KNOWLEDGE_PLUGIN_LEADS_DAILY` | `600` |" in (root / "README.md").read_text(encoding="utf-8")
+    compose = root.parents[1] / "OpenScience" / "deploy" / "web" / "docker-compose.knowledge.yml"
+    if compose.is_file():
+        assert "KNOWLEDGE_PLUGIN_LEADS_DAILY: ${KNOWLEDGE_PLUGIN_LEADS_DAILY:-600}" in compose.read_text(encoding="utf-8")
+
 
 # ------------------------------------------------------------------------------------ the API
 
@@ -208,6 +282,47 @@ async def test_a_post_is_answered_address_by_address_idempotent_and_capped(regis
         http.headers["Authorization"] = TOKEN
         refused = await http.post("/v1/leads", json={"leads": [{"url": "https://a.example.cn/9", "trigger": "hot-tag"}]})
         assert refused.status_code == 501 and refused.json()["code"] == "capability_unavailable"
+
+
+async def seed_lead(pool, url: str, state: str, reason: str | None, *, days_ago: float = 1) -> None:
+    from knowledge_plugin.leads import shanghai_day, url_sha256
+
+    done = NOW - timedelta(days=days_ago)
+    async with pool.connection() as conn:
+        await conn.execute(
+            """INSERT INTO evimed_knowledge.leads (url_sha256, url, trigger, received_at, day, state, state_reason, attempts,
+                      next_attempt_at, done_at) VALUES (%s, %s, 'zh-report', %s, %s, %s, %s, 1, %s, %s)""",
+            (url_sha256(url), url, done, shanghai_day(done), state, reason, done, done))
+
+
+async def test_a_host_the_plugin_could_not_read_is_refused_up_front_and_spends_nothing_of_the_cap(registry_file, pool):
+    """c2-fixes F3: robots-denied, a challenge or a 401/403/451 within seven days and no page served since."""
+    from knowledge_plugin.api import create_app
+    from knowledge_plugin.leads import blocked_hosts
+
+    await synced(pool, registry_file)
+    await seed_lead(pool, "https://www.robots.example.org/a", "failed", "robots-denied:robots_disallow", days_ago=2)
+    await seed_lead(pool, "https://shield.example.org/a", "failed", "challenge:cf_challenge")
+    await seed_lead(pool, "https://forbidden.example.org/a", "failed", "blocked:http_403", days_ago=6.5)
+    await seed_lead(pool, "https://mixed.example.org/a", "failed", "robots-denied:robots_disallow")      # one path denied ...
+    await seed_lead(pool, "https://mixed.example.org/b", "stale", "older_than_window")                   # ... another page served
+    await seed_lead(pool, "https://old.example.org/a", "failed", "robots-denied:robots_disallow", days_ago=8)
+    await seed_lead(pool, "https://down.example.org/a", "failed", "http_404")
+    await seed_lead(pool, "https://slow.example.org/a", "failed", "timeout:timeout")
+    await seed_lead(pool, "https://config.example.org/a", "failed", "blocked:host_not_allowed")
+    await seed_lead(pool, "https://waiting.example.org/a", "queued", None)
+    async with pool.connection() as conn:
+        assert await blocked_hosts(conn, NOW) == {"robots.example.org", "shield.example.org", "forbidden.example.org"}
+    app = create_app(registry_file, pool=pool, clock=lambda: NOW)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://plugin") as http:
+        http.headers["Authorization"] = TOKEN
+        urls = ["https://robots.example.org/news/1", "https://shield.example.org/news/1", "https://forbidden.example.org/x",
+                "https://mixed.example.org/news/1", "https://old.example.org/news/1", "https://down.example.org/news/1",
+                "https://fine.example.org/news/1"]
+        body = (await http.post("/v1/leads", json={"leads": [{"url": url, "trigger": "specialty"} for url in urls]})).json()
+    assert [r["status"] for r in body["results"]] == ["refused", "refused", "refused", "accepted", "accepted", "accepted", "accepted"]
+    assert [r.get("reason") for r in body["results"][:3]] == ["host_blocked"] * 3
+    assert [body[k] for k in ("accepted", "duplicate", "refused", "capped")] == [4, 0, 3, 0], "four a day in this fixture: no cap spent"
 
 
 async def test_a_page_the_stream_already_holds_is_a_duplicate(registry_file, pool):
@@ -290,6 +405,43 @@ async def test_a_page_of_an_unknown_site_becomes_an_entry_under_its_own_lead_sou
     assert await reader.tick() == {"read": 0}, "a read lead is not read again"
 
 
+def lead_html(*, tag_title, og_title=None, h1=None, site=None, date="2026-10-23T08:00:00+08:00") -> bytes:
+    metas = (f'<meta property="og:site_name" content="{site}">' if site else "") + (f'<meta property="og:title" content="{og_title}">' if og_title else "")
+    return (f'<html><head><title>{tag_title}</title>{metas}<meta property="article:published_time" content="{date}"></head><body><article>'
+            f'{f"<h1>{h1}</h1>" if h1 else ""}<p>{"正文第一段。" * 80}</p></article></body></html>').encode()
+
+
+async def test_a_lead_page_is_published_under_its_outlet_with_its_own_title_and_a_wrongly_named_source_is_mended(registry_file, pool):
+    """c2-fixes F8: 「网易版权所有」 and 「…_腾讯新闻」 as they came in from production; a site named wrongly by an earlier read is renamed."""
+    await synced(pool, registry_file)
+    urls = {"https://www.163.com/dy/article/J8A1.html": lead_html(tag_title="多家药企发布三季度业绩_网易", site="网易版权所有"),
+            "https://new.qq.com/rain/a/20261023A0B.html": lead_html(tag_title="流感疫苗接种进入高峰期_腾讯新闻", h1="流感疫苗接种进入高峰期",
+                                                                     site="Copyright 1998 - 2026 Tencent. All Rights Reserved"),
+            "https://finance.eastmoney.com/a/2026102334.html": lead_html(tag_title="国家药监局批准首个国产双抗上市 _ 东方财富网",
+                                                                          og_title="国家药监局批准首个国产双抗上市 _ 东方财富网", site="东方财富网")}
+    # An earlier read had named the 163 site by its copyright line.
+    old = lead_source_row("site:163.com", name="网易版权所有", homepage="https://www.163.com/", url="https://www.163.com/", source_type="media",
+                          owner="163.com", language="zh")
+    async with pool.connection() as conn:
+        from psycopg.types.json import Jsonb
+
+        await conn.execute("INSERT INTO evimed_knowledge.lead_sources (id, key, row, created_at) VALUES (%s, %s, %s, %s)",
+                           (old["id"], "site:163.com", Jsonb(old), NOW - timedelta(days=1)))
+    await synced(pool, registry_file)
+    await queue(pool, registry_file, *urls)
+    reader = LeadReader(registry_file, pool, Web(urls), clock=lambda: NOW, data={"exclude_hosts": []})
+    report = await reader.tick()
+    assert report["read"] == 3 and reader.counters["lead_source_renamed"] == 1
+    stored = {e["title"]: e for e in await entries(pool)}
+    assert set(stored) == {"多家药企发布三季度业绩", "流感疫苗接种进入高峰期", "国家药监局批准首个国产双抗上市"}
+    async with pool.connection() as conn:
+        names = {r["id"]: r["name"] for r in await (await conn.execute("SELECT id, name FROM evimed_knowledge.sources WHERE access = 'lead'")).fetchall()}
+        candidates = {r["key"]: r["name"] for r in await (await conn.execute("SELECT key, name FROM evimed_knowledge.source_candidates")).fetchall()}
+    assert sorted(names.values()) == ["东方财富网", "网易", "腾讯新闻"]
+    assert stored["多家药企发布三季度业绩"]["source_id"] == old["id"], "the same lead source, renamed"
+    assert candidates == {"https://www.163.com/": "网易", "https://new.qq.com/": "腾讯新闻", "https://finance.eastmoney.com/": "东方财富网"}
+
+
 async def test_an_identifier_is_read_from_its_index_and_a_trial_from_the_registry_api(registry_file, pool):
     await synced(pool, registry_file)
     await queue(pool, registry_file, "https://doi.org/10.5555/known.1", "https://doi.org/10.5555/other.2",
@@ -342,8 +494,9 @@ async def test_a_wechat_article_is_bought_within_the_shared_cap_never_read_as_a_
         source = await (await conn.execute("SELECT name, owner_entity, access FROM evimed_knowledge.sources WHERE id = %s", (entry["source_id"],))).fetchone()
         candidate = await (await conn.execute("SELECT line, key, evidence FROM evimed_knowledge.source_candidates")).fetchone()
     assert dict(source) == {"name": "医学界", "owner_entity": "医学界", "access": "lead"}
-    assert (candidate["line"], candidate["key"]) == ("lead", "wechat:MzA5")
-    assert candidate["evidence"]["hint"]["verified_url"] == link
+    assert (candidate["line"], candidate["key"]) == ("lead", "wechat:biz:MzA5"), "keyed by biz, validated by the link (c2-fixes F1)"
+    assert candidate["evidence"]["hint"]["verified_url"] == link and candidate["evidence"]["hint"]["url"] == link
+    assert candidate["evidence"]["hint"]["account"] == "医学界" and candidate["evidence"]["hint"]["biz"] == "MzA5"
     # The day's Dajiala cap spent: the lead waits for tomorrow, no attempt spent past the third.
     link2 = "https://mp.weixin.qq.com/s?__biz=MzA5&mid=2248&idx=1&sn=def"
     await queue(pool, registry_file, link2)

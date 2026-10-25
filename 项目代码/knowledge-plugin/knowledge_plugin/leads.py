@@ -7,7 +7,8 @@ its own rules, exactly as it reads any source:
 
 - **Received** (``submit``): each address once (idempotent on its canonical form: a second post of it, or of a page the
   stream already holds, is ``duplicate``), within a day's cap (``KNOWLEDGE_PLUGIN_LEADS_DAILY``, Shanghai day; past it,
-  ``capped``), never from an owner-excluded or discovery-excluded host (``refused``). Nothing is fetched while the
+  ``capped``), never from an owner-excluded or discovery-excluded host (``refused``) — nor from a host the plugin's own
+  record shows it cannot read (``refused``, reason ``host_blocked``: ``blocked_hosts``). Nothing is fetched while the
   platform waits: an accepted address is queued.
 - **Read** (``LeadReader.tick``, a loop of the crawler): a few a minute, through the protected fetch — robots, the
   per-host pacing and budgets, the address policy, the relay when Beijing is refused — with the readers the plugin
@@ -17,9 +18,12 @@ its own rules, exactly as it reads any source:
   or an article must carry a date within ``FRESH_DAYS`` (a search finds old pages too); an identifier needs none.
 - **Emitted** as ordinary entries on the ``seq`` stream: under the registered source of that site (or WeChat account, or
   journal) when there is one, else under a lead source of its own — one per site, account or journal (``lead_sources``),
-  named by the page itself, its operator the site, composed into the registry with every other channel
-  (``dynamic_registry``) and never polled (access ``lead``). A lead source is the plugin's, not a reader's word: what a
-  reader sees is the site's own name.
+  named by the page itself when what it calls itself is a name — not a copyright line, a host, a long sentence or its own
+  headline —, else by the outlet its host belongs to (``OUTLETS``), else by the last segment of the title, else by the host
+  (``lead_page_names``); its operator the site, composed into the registry with every other channel (``dynamic_registry``) and
+  never polled (access ``lead``). A page's title is its og:title or its only h1 without the site it ends with. A site named
+  wrongly by an earlier read is renamed when a later page of it gives a right name (``lead_name_mended``). A lead source is
+  the plugin's, not a reader's word: what a reader sees is the site's own name.
 - **Discovered**: the site, account or journal of every page read becomes a discovery candidate of line ``lead``
   (``discovery.LINES``), validated, tried and admitted like every other line's.
 
@@ -46,13 +50,16 @@ from .normalize import Rejected, canonical_url, normalize_doi, prepare
 log = logging.getLogger("knowledge_plugin.leads")
 
 LEAD_ACCESS = "lead"
-DEFAULT_DAILY = 300                     # addresses accepted a Shanghai day (KNOWLEDGE_PLUGIN_LEADS_DAILY)
+DEFAULT_DAILY = 600                     # addresses accepted a Shanghai day (KNOWLEDGE_PLUGIN_LEADS_DAILY; settings.py holds the same number)
 PER_POST = 50                           # addresses one post carries at most (the contract's bound)
 PER_TICK = 8                            # addresses one tick reads
 FRESH_DAYS = 30                         # a page or an article older than this (or undated) is not emitted
 MAX_ATTEMPTS = 3
 RETRY_AFTER = timedelta(hours=1)
 RETENTION = timedelta(days=30)
+BLOCKED_WINDOW = timedelta(days=7)      # a host that denied a read this recently is not queued again (``blocked_hosts``)
+# How a read ends when the host says no: ``leads.state_reason`` is ``<fetch outcome>:<detail>`` (``LeadReader.tick``).
+BLOCKED_REASON = re.compile(r"^(robots-denied:|challenge:|blocked:http_(401|403|451)$)")
 LEAD_FLOOR_S = 86400                    # a lead source's cadence is a registry formality: it is never polled
 LEAD_CEILING_S = 604800
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -60,6 +67,29 @@ TRIGGER = re.compile(r"^[a-z][a-z0-9-]{1,39}$")
 NCT = re.compile(r"^NCT\d{8}$")
 CJK = re.compile(r"[一-鿿]")
 STATUSES = ("accepted", "duplicate", "refused", "capped")
+
+# ---- What a lead page calls itself (c2-fixes 2026-10-25, gap review G4). Of 60 lead items published on 2026-10-25, 34 showed a
+# bare host, a copyright line or a page title as their source (「finance.sina.com.cn」, 「网易版权所有」, 「Copyright 1998 - 2026
+# Tencent. All Rights Reserved」, 「CAIJING.COM.CN」), and 13 titles carried the site (「…_ 东方财富网」, 「…_腾讯新闻」) or were an address.
+# Closed lists and formats only: which marks make a line a copyright notice, what a bare host looks like, a small host → outlet table.
+SITE_NAME_MAX = 20
+COPYRIGHT_MARKS = ("版权", "copyright", "©", "all rights reserved", "icp备", "京公网安备")
+BARE_HOST = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,}$", re.I)
+URL_TITLE = re.compile(r"^(?:https?://|www\.)\S+$", re.I)
+TRAILING_SEGMENT = re.compile(r"^(.*\S)\s*[_|｜丨\-–—]\s*([^_|｜丨\-–—]+?)\s*$")
+SUFFIX_PASSES = 3
+# Host (a family and everything below it) → the outlet's name, the longest match first. Small on purpose: the sites the platform's
+# leads reach most; any other site is named by its page, else by the title's last segment, else by its host.
+OUTLETS = (
+    ("finance.sina.com.cn", "新浪财经"), ("finance.sina.cn", "新浪财经"), ("sina.com.cn", "新浪网"), ("sina.cn", "新浪网"),
+    ("eastmoney.com", "东方财富网"), ("xinhuanet.com", "新华网"), ("news.cn", "新华网"), ("gmw.cn", "光明网"), ("cnr.cn", "央广网"),
+    ("stcn.com", "证券时报"), ("163.com", "网易"), ("new.qq.com", "腾讯新闻"), ("news.qq.com", "腾讯新闻"), ("finance.qq.com", "腾讯新闻"),
+    ("toutiao.com", "今日头条"), ("caijing.com.cn", "财经网"), ("cnpharm.com", "中国食品药品网"), ("people.com.cn", "人民网"),
+    ("thepaper.cn", "澎湃新闻"), ("sohu.com", "搜狐"), ("ifeng.com", "凤凰网"), ("jiemian.com", "界面新闻"), ("yicai.com", "第一财经"),
+    ("21jingji.com", "21世纪经济报道"), ("nbd.com.cn", "每日经济新闻"), ("cctv.com", "央视网"), ("chinanews.com.cn", "中国新闻网"),
+)
+# Names a title ends with besides the page's own site name: the outlets above and a few that sit beside them.
+TITLE_SUFFIX_NAMES = frozenset({name for _, name in OUTLETS} | {"人民日报欧洲网", "海外华文媒体门户", "新浪网", "网易新闻", "腾讯网", "搜狐网"})
 
 
 class LeadsInvalid(ValueError):
@@ -176,14 +206,40 @@ async def excluded_hosts(conn) -> set[str]:
     return {site_family(host_of(value)) for row in rows for value in (row["homepage"], (row["config"] or {}).get("url")) if host_of(value)}
 
 
-async def submit(conn, leads: list[Lead], now: datetime, *, daily_cap: int, excluded: set[str]) -> dict:
-    """Receive a post (module docstring): each address accepted (queued), a duplicate, refused or capped."""
+async def blocked_hosts(conn, now: datetime) -> set[str]:
+    """The host families a lead read was refused by within ``BLOCKED_WINDOW`` — robots.txt denied it, a challenge page
+    answered, or the host said 401, 403 or 451 — and that no lead read got a page from in the same window (a host that
+    served one page denied this one only: its robots rules or its paywall, not the host). The plugin's own record of what it
+    fetched, in the same two states the reader writes (``leads.state``), so an address of such a host is never queued for a
+    fetch the plugin already knows will fail (c2-fixes 2026-10-25: about 95 of the 300 accepted leads of 2026-10-25 failed so)."""
+    rows = await (await conn.execute(
+        """SELECT url, state, state_reason FROM evimed_knowledge.leads
+            WHERE done_at > %s AND state IN ('fetched', 'stale', 'failed')""", (now - BLOCKED_WINDOW,))).fetchall()
+    denied: set[str] = set()
+    served: set[str] = set()
+    for row in rows:
+        family = host_family(row["url"])
+        if not family:
+            continue
+        if row["state"] in ("fetched", "stale"):
+            served.add(family)
+        elif BLOCKED_REASON.match(row["state_reason"] or ""):
+            denied.add(family)
+    return denied - served
+
+
+async def submit(conn, leads: list[Lead], now: datetime, *, daily_cap: int, excluded: set[str],
+                 blocked: set[str] | None = None) -> dict:
+    """Receive a post (module docstring): each address accepted (queued), a duplicate, refused or capped. ``blocked``
+    is ``blocked_hosts`` (read here when not given)."""
     from .discovery import canonical_url as public_url, host_matches, host_of
 
     day = shanghai_day(now)
     results: list[dict] = []
     counts = {status: 0 for status in STATUSES}
     async with conn.transaction():
+        if blocked is None:
+            blocked = await blocked_hosts(conn, now)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtext('evimed-knowledge-leads'))")
         received = int((await (await conn.execute(
             "SELECT count(*) AS n FROM evimed_knowledge.leads WHERE day = %s", (day,))).fetchone())["n"])
@@ -194,6 +250,8 @@ async def submit(conn, leads: list[Lead], now: datetime, *, daily_cap: int, excl
                 status, reason = "refused", "not_a_public_address"
             elif host_matches(host_of(clean), excluded):
                 status, reason = "refused", "excluded"
+            elif host_family(clean) in blocked:
+                status, reason = "refused", "host_blocked"
             else:
                 key = url_sha256(canonical_url(clean))
                 seen = await (await conn.execute(
@@ -249,6 +307,103 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 def _fresh(published: datetime | None, now: datetime) -> bool:
     return published is not None and now - timedelta(days=FRESH_DAYS) <= published <= now + timedelta(days=2)
+
+
+def _flat(text: str | None) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip()
+
+
+def usable_site_name(name: str | None, *, titles: list[str], family: str) -> str | None:
+    """A site name a page gave, or ``None`` when it is not one: empty, longer than ``SITE_NAME_MAX``, a copyright line, a bare
+    host or the host's own text, or the same text as one of the page's titles (a page that leads with its headline or its
+    masthead in the field)."""
+    text = _flat(name)
+    lowered = text.lower()
+    if not 2 <= len(text) <= SITE_NAME_MAX or any(mark in lowered for mark in COPYRIGHT_MARKS) or BARE_HOST.match(text):
+        return None
+    if family and len(family) >= 4 and family in lowered:
+        return None
+    if any(lowered == _flat(title).lower() for title in titles):
+        return None
+    return text
+
+
+def outlet_of(family: str) -> str | None:
+    """The outlet a host belongs to (``OUTLETS``): the longest family that is the host or above it."""
+    matches = [(key, name) for key, name in OUTLETS if family == key or family.endswith("." + key)]
+    return max(matches, key=lambda pair: len(pair[0]))[1] if matches else None
+
+
+def _related(segment: str, names: set[str]) -> bool:
+    """A title's last segment names the site: the same text as one of the names, one that holds it, or part of it."""
+    lowered = segment.lower()
+    return len(segment) >= 2 and any(name and (lowered == name.lower() or name.lower() in lowered
+                                               or (len(segment) >= 3 and lowered in name.lower())) for name in names)
+
+
+def strip_site_suffix(title: str, names: set[str]) -> str:
+    """The title without the site it ends with (``…_ 东方财富网``, ``…_腾讯新闻``, ``…-人民日报欧洲网_海外华文媒体门户``): the trailing
+    segments after a ``_``, ``|``, ``-``, ``–`` or ``—`` that equal, hold or are part of the site's name or a known outlet's,
+    at most ``SUFFIX_PASSES`` of them. A segment of anything else — ``GLP-1``'s ``1`` — stays, and so does a title that would
+    be left with nothing."""
+    current = _flat(title).rstrip(".。")
+    for _ in range(SUFFIX_PASSES):
+        match = TRAILING_SEGMENT.match(current)
+        if not match or not _related(_flat(match.group(2)), names):
+            break
+        current = match.group(1).strip()
+    return current or _flat(title)
+
+
+def lead_page_names(candidates: list[str | None], site_meta: str | None, *, family: str) -> tuple[str | None, str]:
+    """A lead page's title and its site's name, from what the page gave (``candidates``: its og:title, its h1, its title as
+    the metadata reader found it, the search result's title — in that order; ``site_meta``: og:site_name).
+
+    The site name is the page's own when it is one (``usable_site_name``), else the outlet its host belongs to (``OUTLETS``),
+    else the last segment of the title, else the host; the title is the first candidate that is more than an address, the site
+    or an outlet's name — a page whose og:title is its masthead and whose h1 is its headline has the headline —, with the
+    site's suffix taken off. ``None`` title when no candidate is usable."""
+    titles = [t for t in dict.fromkeys(_flat(c) for c in candidates) if t]
+    site = usable_site_name(site_meta, titles=titles, family=family) or outlet_of(family)
+    if site is None and titles:
+        match = TRAILING_SEGMENT.match(titles[0])
+        site = usable_site_name(match.group(2), titles=titles, family=family) if match else None
+    names = {site or "", *TITLE_SUFFIX_NAMES}
+    chosen = None
+    for title in titles:
+        cleaned = strip_site_suffix(title, names)
+        if URL_TITLE.match(cleaned) or cleaned in names:
+            continue
+        chosen = cleaned
+        break
+    return chosen, site or family
+
+
+def lead_name_mended(held: dict | None, fresh: dict) -> bool:
+    """Whether a lead source's stored name is one a site must not have (a copyright line, a bare host, longer than
+    ``SITE_NAME_MAX``: ``usable_site_name``) and this read gives it a name that differs and is one — only for a site
+    (``site:<host>``), whose name a page gave; an account's or a journal's name is its own."""
+    if not held or not str((fresh.get("config") or {}).get("lead_key") or "").startswith("site:"):
+        return False
+    family = str(fresh["config"]["lead_key"])[len("site:"):]
+    old, new = str(held.get("name") or ""), str(fresh.get("name") or "")
+    return old != new and usable_site_name(old, titles=[], family=family) is None and usable_site_name(new, titles=[], family="") is not None
+
+
+def _page_title_candidates(html: str) -> tuple[str | None, str | None]:
+    """The page's og:title and its h1 (when it has exactly one), as it wrote them."""
+    from trafilatura.utils import load_html
+
+    try:
+        tree = load_html(html)
+    except Exception:
+        return None, None
+    if tree is None:
+        return None, None
+    og = tree.xpath('(//meta[@property="og:title" or @name="og:title"]/@content)[1]')
+    headings = [_flat(h.text_content()) for h in tree.xpath("//h1")]
+    headings = [h for h in headings if h]
+    return (_flat(og[0]) if og else None), (headings[0] if len(headings) == 1 else None)
 
 
 @dataclass
@@ -318,8 +473,16 @@ class LeadReader:
         async with self._pool.connection() as conn:
             if new_rows:
                 async with conn.transaction():
+                    held = {r["id"]: r["row"] for r in await (await conn.execute(
+                        "SELECT id, row FROM evimed_knowledge.lead_sources WHERE id = ANY(%s)", (list(new_rows),))).fetchall()}
                     for lead_row in new_rows.values():
                         parse_registry({"sources": [lead_row]})       # a row that does not load is a bug, said here
+                        if lead_name_mended(held.get(lead_row["id"]), lead_row):
+                            # A site named wrongly by an earlier read (a copyright line, a host) takes the name this page gave.
+                            await conn.execute("UPDATE evimed_knowledge.lead_sources SET row = %s WHERE id = %s",
+                                               (Jsonb(lead_row), lead_row["id"]))
+                            self._count("lead_source_renamed")
+                            continue
                         await conn.execute(
                             """INSERT INTO evimed_knowledge.lead_sources (id, key, row, created_at) VALUES (%s, %s, %s, %s)
                                ON CONFLICT (id) DO NOTHING""",
@@ -436,7 +599,10 @@ class LeadReader:
             return Read("failed", f"http_{result.status}")
         html = decode_body(result)
         meta = extract_metadata(html, default_url=url)
-        title = (getattr(meta, "title", None) or row["title"] or "").strip()
+        og_title, h1 = _page_title_candidates(html)
+        family = host_family(url)
+        title, site_name = lead_page_names([og_title, h1, getattr(meta, "title", None), row["title"]],
+                                           getattr(meta, "sitename", None) or None, family=family)
         if not title:
             return Read("failed", "no_title")
         published, precision = None, "day"
@@ -452,7 +618,6 @@ class LeadReader:
         text = main_text(html, result.final_url)
         description = (getattr(meta, "description", None) or "").strip()
         summary = (description or text[:500] or row["snippet"] or "").strip() or None
-        site_name = (getattr(meta, "sitename", None) or "").strip()
         language = _language(title, text)
         entry = NormalizedEntry(external_key=canonical_url(url), url=url, title=title, summary=summary, published_at=published,
                                 date_precision=precision, language=language, registry_ids=registry_ids(title, summary, text),
@@ -461,21 +626,21 @@ class LeadReader:
         if registered:
             return Read("fetched", entry=entry, source=registered["id"])
         site = canonical_site(url) or url
-        family = host_family(url)
-        lead_row = lead_source_row(f"site:{family}", name=site_name or family, homepage=site, url=site, source_type="media",
+        named = site_name != family            # the host itself is no name to propose
+        lead_row = lead_source_row(f"site:{family}", name=site_name, homepage=site, url=site, source_type="media",
                                    owner=family, egress=egress, language=language)
-        candidate = Candidate("lead", "site", site, name=site_name or None,
-                              hint={"homepage": site, **({"name": site_name} if site_name else {}), "language": language},
+        candidate = Candidate("lead", "site", site, name=site_name if named else None,
+                              hint={"homepage": site, **({"name": site_name} if named else {}), "language": language},
                               evidence={"lead_url": url, "trigger": row["trigger"]})
         return Read("fetched", entry=entry, lead_row=lead_row, candidate=candidate)
 
     # ---------------------------------------------------------------- a WeChat article
 
     async def read_wechat(self, row: dict, sources: list[dict], now: datetime) -> Read:
-        from .discovery import Candidate
         from .social import wechat as wechat_mod
         from .social.providers import ProviderError
         from .social.spend import SpendCapReached, day_window
+        from .social.wechat_discovery import candidate_from_lead_read
 
         collector = self._collector
         if collector is None or not collector.dajiala.configured:
@@ -512,10 +677,11 @@ class LeadReader:
             return Read("failed", "wechat_no_title")
         if registered:
             return Read("fetched", entry=entry, source=registered["id"])
-        candidate = Candidate("lead", "social", f"wechat:{biz or nickname}", name=nickname or None,
-                              hint={"platform": "wechat", "account": nickname, "biz": biz, "ghid": detail.get("user_name"),
-                                    "alias": detail.get("alias"), "verified_url": link, "expected_names": [nickname] if nickname else []},
-                              evidence={"lead_url": row["url"], "trigger": row["trigger"]})
+        candidate = candidate_from_lead_read(
+            "lead", link, nickname, biz,
+            hint={"platform": "wechat", "account": nickname, "biz": biz, "ghid": detail.get("user_name"), "alias": detail.get("alias"),
+                  "verified_url": link, "expected_names": [nickname] if nickname else []},
+            evidence={"lead_url": row["url"], "trigger": row["trigger"]})
         return Read("fetched", entry=entry, lead_row=target, candidate=candidate)
 
     # ---------------------------------------------------------------- identifiers

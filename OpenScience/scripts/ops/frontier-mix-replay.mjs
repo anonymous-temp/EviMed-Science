@@ -7,6 +7,11 @@
  *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl                 # a table, days with 100+ items
  *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl --json          # one JSON object
  *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl --threshold 82 --min-items 1
+ *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl --no-genre-floors  # the absolute 60 for every floor place
+ *
+ * A floor place under the line asks its genre's 80th percentile of the export's own scores (production reads the last 30 days:
+ * `FRONTIER_MIX_GENRE_FLOOR`), held between 45 and 60; a week's export is a thinner basis than a month's. At most one item of an
+ * event is selected a day, as in production.
  *
  * The export is one row per published item of the window, read on the serving host (read-only):
  *
@@ -22,7 +27,7 @@
  */
 import { readFileSync } from "node:fs";
 
-import { FRONTIER_MIX_GROUP_ORDER, frontierMixReplay } from "@evimed/domain";
+import { FRONTIER_MIX_GROUP_ORDER, frontierMixGenreFloors, frontierMixReplay } from "@evimed/domain";
 
 import { FRONTIER_SELECT_THRESHOLD_DEFAULT } from "../../apps/server/src/frontierPipeline.mjs";
 
@@ -40,10 +45,11 @@ if (!file) {
 const threshold = Number(argument("threshold") ?? FRONTIER_SELECT_THRESHOLD_DEFAULT);
 const minItems = Number(argument("min-items") ?? 100);
 const rows = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
-const days = frontierMixReplay(rows, { threshold }).filter((day) => day.candidates >= minItems);
+const genreFloors = process.argv.includes("--no-genre-floors") ? {} : frontierMixGenreFloors(rows);
+const days = frontierMixReplay(rows, { threshold, genreFloors }).filter((day) => day.candidates >= minItems);
 
 if (process.argv.includes("--json")) {
-  process.stdout.write(`${JSON.stringify({ threshold, days }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ threshold, genreFloors, days }, null, 2)}\n`);
 } else {
   const groups = [...FRONTIER_MIX_GROUP_ORDER, "roundup"];
   const cells = (/** @type {{ total: number, groups: Record<string, number>, zh: number, zhShare: number }} */ side) =>

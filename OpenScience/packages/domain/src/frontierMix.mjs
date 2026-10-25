@@ -14,7 +14,12 @@
  *   place, each from the medium band up (`FRONTIER_MIX_FLOOR_SCORE`, the lane floor's 60 since launch) and only with a
  *   Chinese summary: a group short of its floor (`genre-floor`), a Chinese item within `FRONTIER_MIX_ZH_MARGIN` of the
  *   line while the day is under its Chinese share (`zh-target`), and the preprint lane's two places, folded into the
- *   research group (`preprint-lane`) — a preprint under the line comes in by those places only.
+ *   research group (`preprint-lane`) — a preprint under the line comes in by those places only. A `genre-floor` place
+ *   asks of its item the genre's own bar instead of the absolute 60 (`FRONTIER_MIX_GENRE_FLOOR`, c2-fixes 2026-10-25):
+ *   the editor's score is a clinical one, and the genres that are not clinical evidence — industry above all — score
+ *   lower whatever their worth (on 2026-10-25 industry's median was 41 against a paper's 50; of 105 industry items
+ *   today none reached 65 and one was selected, against a floor of 8%), so a floor place under the line needs the top
+ *   fifth of its own genre's last 30 days of published scores, never less than 45 and never more than the 60 it was.
  * - **A soft quota.** A group short of candidates is not padded with another group's items or with anything under the
  *   band: its places stay empty. News has no range of its own: it fills what the others leave of the day's size.
  * - **The day's size** (`FRONTIER_MIX_DAY`) is the number of non-safety items above the line the source caps allow,
@@ -24,11 +29,18 @@
  *   pin counts against nothing either.
  * - **The per-source cap** (3 a day, 5 for an authority-5 journal) binds every rule here, as it bound the line.
  * - **Merge rules** (`frontierMixMergeVerdict`): a roundup is never selected; a news report of a paper in the paper's
- *   event is never selected over it — only beside the paper once the paper is selected, and only when the event's
- *   grouping call judged that it adds something (`addsValue`); an X post announcing a paper is never selected — the post
- *   is discussion, counted by the event's heat. When either of them would have cleared the line, the paper takes the
- *   place (`event-primary`) if it is in the medium band. A Chinese 解读 of the paper may stand beside it (Chinese value),
- *   whatever the event's one-selected-report rule said.
+ *   event is never selected over it; an X post announcing a paper is never selected — the post is discussion, counted by
+ *   the event's heat. When either of them would have cleared the line, the paper takes the place (`event-primary`) if it
+ *   is in the medium band. A Chinese 解读 of a selected paper may stand beside it (Chinese value), whatever the event's
+ *   one-selected-report rule said.
+ * - **One pick per event** (c2-fixes 2026-10-25, gap review G8). The event grouping call answered "adds value" for 97% of
+ *   the reports it judged, so `addsValue` let almost every second report through and 16 of 280 selected events held two to
+ *   five items (about 11% of 精选: two genre-floor conference reports of one event in one round; a Paris court ruling in
+ *   Czech and in German beside an earlier lane-floor pick; a fifth item four days after the fourth). Now an event that
+ *   already has a selected item takes no pick, and an event with none takes at most one in a round — its paper if it has
+ *   one among the candidates, else the best-ranked report. The one exception is the Chinese 解读 of a selected paper
+ *   (the `beside-paper` verdict): it stands beside the paper, the paper being selected already or the event's pick of the
+ *   round.
  * - **Selection is sticky** (the pipeline's rule): what is already selected counts against its group, its source and
  *   the day, and is never taken back here.
  *
@@ -75,6 +87,17 @@ export const FRONTIER_MIX_ZH_MARGIN = 8
 
 /** The lowest score a place under the line is given from: the lower edge of the "medium" band, the lane floor's 60. */
 export const FRONTIER_MIX_FLOOR_SCORE = 60
+
+/**
+ * What a `genre-floor` place under the line asks of its item's genre (c2-fixes 2026-10-25, owner: industry is too little in
+ * 精选): a score within the top `1 - percentile` of the genre's published scores of the last `days` days (`percentile` 0.8,
+ * the SQL `percentile_cont`), at least `min` (45) and at most `FRONTIER_MIX_FLOOR_SCORE` — a genre the editor scores high
+ * (guidelines' 80th percentile is 84, above the line itself) keeps the 60 it had: its top fifth is never a lower bar
+ * than that, and asking it would empty the floor. A genre with fewer than `minSample` scored items in the window has no
+ * floor of its own (a percentile of a handful is noise) and keeps the 60. Preprints, the Chinese margin and the event's
+ * paper keep `FRONTIER_MIX_FLOOR_SCORE`.
+ */
+export const FRONTIER_MIX_GENRE_FLOOR = Object.freeze({ percentile: 0.8, min: 45, days: 30, minSample: 30 })
 
 /**
  * The day's size: the non-safety items above the line the source caps allow (or what its research needs at its ceiling),
@@ -196,12 +219,72 @@ export function frontierMixMergeVerdict(candidate, members = []) {
  *     zhShare: { before: number, after: number },
  *     groups: Record<FrontierMixGroup, { floor: number, ceiling: number | null, before: number, after: number }>,
  *     rules: Record<string, number>,
+ *     genreFloors: Record<string, number>,
+ *     eventHeld: number,
  *   },
  * }} FrontierMixResult
  */
 
 /** @param {number} value */
 const share = (value) => Math.round(value * 1000) / 1000
+
+/**
+ * The score a `genre-floor` place under the line asks of a genre whose 80th percentile is `percentile`: that, held between
+ * `FRONTIER_MIX_GENRE_FLOOR.min` and `floorScore` (the absolute 60); `floorScore` when the genre has no percentile.
+ * @param {unknown} percentile @param {number} [floorScore]
+ */
+export function frontierMixGenreFloorScore(percentile, floorScore = FRONTIER_MIX_FLOOR_SCORE) {
+  const value = Number(percentile)
+  if (percentile == null || !Number.isFinite(value)) return floorScore
+  return Math.min(floorScore, Math.max(FRONTIER_MIX_GENRE_FLOOR.min, value))
+}
+
+/**
+ * Each genre's 80th percentile of published scores (`FRONTIER_MIX_GENRE_FLOOR`), from rows shaped like the pipeline's
+ * 30-day query: the columns `frontierMixGenre` reads (`genre`, `platform`, `channel`, `source_type`, `evidence_type`,
+ * `flags`, `safety_alert`, `lane`), `score_total` and `n`, how many items the row stands for (default 1). Linear
+ * interpolation between the two nearest ranks, as SQL's `percentile_cont`. A genre with fewer than `minSample` scored
+ * items has no entry; a roundup (never selected) none either; a row without a score is left out.
+ * @param {readonly Record<string, any>[]} rows
+ * @param {{ percentile?: number, minSample?: number }} [options]
+ * @returns {Record<string, number>}
+ */
+export function frontierMixGenreFloors(rows, { percentile = FRONTIER_MIX_GENRE_FLOOR.percentile, minSample = FRONTIER_MIX_GENRE_FLOOR.minSample } = {}) {
+  /** @type {Map<string, Map<number, number>>} */
+  const byGenre = new Map()
+  for (const row of rows) {
+    const score = row.score_total ?? row.score
+    if (score == null || !Number.isFinite(Number(score))) continue
+    const n = row.n == null ? 1 : Number(row.n)
+    if (!(n > 0)) continue
+    const genre = frontierMixGenre(row)
+    const scores = byGenre.get(genre) ?? new Map()
+    scores.set(Number(score), (scores.get(Number(score)) ?? 0) + n)
+    byGenre.set(genre, scores)
+  }
+  /** @type {Record<string, number>} */
+  const floors = {}
+  for (const [genre, scores] of byGenre) {
+    if (frontierMixGroup(genre) == null) continue
+    const sorted = [...scores.entries()].sort((a, b) => a[0] - b[0])
+    const total = sorted.reduce((sum, [, n]) => sum + n, 0)
+    if (total < minSample) continue
+    // The value at 0-based rank `r` of the expanded sorted list.
+    const at = (/** @type {number} */ rank) => {
+      let seen = 0
+      for (const [value, n] of sorted) {
+        seen += n
+        if (rank < seen) return value
+      }
+      return sorted[sorted.length - 1][0]
+    }
+    const position = percentile * (total - 1)
+    const low = Math.floor(position)
+    const high = Math.min(low + 1, total - 1)
+    floors[genre] = Math.round((at(low) + (at(high) - at(low)) * (position - low)) * 100) / 100
+  }
+  return floors
+}
 
 /**
  * Pick a day's 精选 from its scored candidates (the module's rules). Returns the new picks, the candidates the merge rules
@@ -215,21 +298,26 @@ const share = (value) => Math.round(value * 1000) / 1000
  *   preprintPlaces?: number,
  *   preprintMinScore?: number,
  *   floorScore?: number,
+ *   genreFloors?: Readonly<Record<string, number>>,
  *   zhMargin?: number,
  *   zhTarget?: number,
  *   day?: { min: number, max: number, reference?: number },
  * }} input
- *   `events`: the other published reports of each candidate's event, by event id.
+ *   `events`: the other published reports of each candidate's event, by event id. `genreFloors`: each genre's 80th
+ *   percentile of the last 30 days (`frontierMixGenreFloors`), which sets what a `genre-floor` place under the line asks of
+ *   an item of that genre (`FRONTIER_MIX_GENRE_FLOOR`); a genre not in it asks `floorScore`.
  * @returns {FrontierMixResult}
  */
 export function frontierMixSelect({ candidates, threshold, events = {}, congressActive = false,
   preprintPlaces = FRONTIER_MIX_PREPRINT_PLACES, preprintMinScore = FRONTIER_MIX_PREPRINT_MIN_SCORE,
-  floorScore = FRONTIER_MIX_FLOOR_SCORE, zhMargin = FRONTIER_MIX_ZH_MARGIN, zhTarget = FRONTIER_MIX_ZH_TARGET,
+  floorScore = FRONTIER_MIX_FLOOR_SCORE, genreFloors = {}, zhMargin = FRONTIER_MIX_ZH_MARGIN, zhTarget = FRONTIER_MIX_ZH_TARGET,
   day = FRONTIER_MIX_DAY }) {
   const counted = (/** @type {string | null | undefined} */ rule) => /** @type {readonly string[]} */ (FRONTIER_MIX_COUNTED_RULES).includes(String(rule ?? ''))
   const scoreOf = (/** @type {FrontierMixCandidate} */ c) => (c.score == null || !Number.isFinite(Number(c.score)) ? null : Number(c.score))
   const aboveLine = (/** @type {FrontierMixCandidate} */ c) => c.eligible && scoreOf(c) != null && /** @type {number} */ (scoreOf(c)) >= threshold
   const inBand = (/** @type {FrontierMixCandidate} */ c, /** @type {number} */ from) => c.eligible && c.summarized && scoreOf(c) != null && /** @type {number} */ (scoreOf(c)) >= from
+  // What a `genre-floor` place under the line asks of the item's genre (`FRONTIER_MIX_GENRE_FLOOR`).
+  const genreFloorOf = (/** @type {FrontierMixCandidate} */ c) => frontierMixGenreFloorScore(genreFloors[c.genre], floorScore)
   const capOf = (/** @type {FrontierMixCandidate} */ c) => (Number.isInteger(c.sourceCap) && /** @type {number} */ (c.sourceCap) > 0 ? /** @type {number} */ (c.sourceCap) : FRONTIER_MIX_SOURCE_CAP)
 
   // The merge rules, once per candidate.
@@ -244,7 +332,43 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
     return verdict && /** @type {readonly string[]} */ (FRONTIER_MIX_EXCLUSIONS).includes(verdict) ? verdict : null
   }
   // The one-selected-report rule stands, except for a Chinese 解读 beside its paper.
-  const blocked = (/** @type {FrontierMixCandidate} */ c) => Boolean(excludedBy(c)) || (c.besideSelected === true && merge.get(c.id)?.verdict !== 'beside-paper')
+  const blockedByMerge = (/** @type {FrontierMixCandidate} */ c) => Boolean(excludedBy(c)) || (c.besideSelected === true && merge.get(c.id)?.verdict !== 'beside-paper')
+
+  // One pick per event (module docstring): the reports of an event that must wait for another, decided once per round.
+  const selectedIds = new Set([
+    ...candidates.filter((c) => c.selected).map((c) => c.id),
+    ...Object.values(events).flatMap((members) => members.filter((member) => member.selected === true).map((member) => member.id)),
+  ])
+  /** A Chinese 解读 of a paper that is selected already: it stands beside it, outside the event's one pick. */
+  const besideSelectedPaper = (/** @type {FrontierMixCandidate} */ c) => {
+    const entry = merge.get(c.id)
+    return entry?.verdict === 'beside-paper' && entry.paperId != null && selectedIds.has(entry.paperId)
+  }
+  /** The ranking an event's one pick goes by: its paper, then the higher score, then a Chinese report, then the id. */
+  const eventRank = (/** @type {FrontierMixCandidate} */ a, /** @type {FrontierMixCandidate} */ b) => {
+    const paper = (/** @type {FrontierMixCandidate} */ c) => (c.genre === 'paper' || c.genre === 'preprint' ? 0 : 1)
+    return paper(a) - paper(b) || (scoreOf(b) ?? -1) - (scoreOf(a) ?? -1) || Number(b.zh) - Number(a.zh) || String(a.id).localeCompare(String(b.id))
+  }
+  /** @type {Set<string>} */
+  const eventHeld = new Set()
+  /** @type {Map<string, FrontierMixCandidate[]>} */
+  const byEvent = new Map()
+  for (const c of candidates) {
+    if (c.eventId == null || c.selected || c.safety || !frontierMixGroup(c.genre) || blockedByMerge(c)) continue
+    byEvent.set(c.eventId, [...(byEvent.get(c.eventId) ?? []), c])
+  }
+  for (const [eventId, list] of byEvent) {
+    const contenders = list.filter((c) => !besideSelectedPaper(c))
+    const heldAlready = [...(events[eventId] ?? []).map((member) => member.id), ...candidates.filter((c) => c.eventId === eventId).map((c) => c.id)]
+      .some((id) => selectedIds.has(id))
+    const winner = heldAlready ? null : [...contenders].sort(eventRank)[0] ?? null
+    for (const c of contenders) {
+      if (c === winner) continue
+      if (winner && merge.get(c.id)?.verdict === 'beside-paper' && merge.get(c.id)?.paperId === winner.id) continue
+      eventHeld.add(c.id)
+    }
+  }
+  const blocked = (/** @type {FrontierMixCandidate} */ c) => blockedByMerge(c) || eventHeld.has(c.id)
 
   // What is already selected counts (selection is sticky).
   /** @type {Record<string, number>} */
@@ -326,7 +450,7 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
       if (!taken.has(c.id) && sourceRoom(c)) take(c, 'threshold', group)
     }
     // A preprint under the line comes in only by the preprint lane's places (owner, 2026-10-10: up to two a day).
-    for (const c of ranked(mine.filter((x) => !aboveLine(x) && x.genre !== 'preprint' && inBand(x, floorScore)), spec.chineseFirst)) {
+    for (const c of ranked(mine.filter((x) => !aboveLine(x) && x.genre !== 'preprint' && inBand(x, genreFloorOf(x))), spec.chineseFirst)) {
       if (groupCount[group] >= floors[group] || total >= size) break
       if (!taken.has(c.id) && sourceRoom(c)) take(c, 'genre-floor', group)
     }
@@ -420,6 +544,10 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
         before: before.groups[group], after: groupCount[group],
       }]))),
       rules,
+      // What a floor place under the line asked of each genre that has a percentile (the rest asked `floorScore`).
+      genreFloors: Object.fromEntries(Object.keys(genreFloors).map((genre) => [genre, frontierMixGenreFloorScore(genreFloors[genre], floorScore)])),
+      // Reports left out because their event has a selected item or another report of it was chosen for the round.
+      eventHeld: eventHeld.size,
     },
   }
 }
@@ -452,10 +580,12 @@ function replayDay(row, timeZone) {
  * each day were selected at once: what production selected (before) and what the mix selects (after), by group, with
  * the Chinese share. Safety alerts are in on both sides. Rows without a day are left out.
  * @param {readonly Record<string, any>[]} rows
- * @param {{ threshold: number, timeZone?: string, congressDays?: readonly string[] }} options
+ * @param {{ threshold: number, timeZone?: string, congressDays?: readonly string[], genreFloors?: Readonly<Record<string, number>> }} options
+ *   `genreFloors`: each genre's 80th percentile (`frontierMixGenreFloors`), passed to every day's selection; without it a
+ *   floor place asks the absolute `FRONTIER_MIX_FLOOR_SCORE`, as before c2-fixes.
  * @returns {FrontierMixReplayDay[]}
  */
-export function frontierMixReplay(rows, { threshold, timeZone = 'Asia/Shanghai', congressDays = [] }) {
+export function frontierMixReplay(rows, { threshold, timeZone = 'Asia/Shanghai', congressDays = [], genreFloors = {} }) {
   const genreOf = (/** @type {Record<string, any>} */ row) => frontierMixGenre(row)
   const zhOf = (/** @type {Record<string, any>} */ row) => String(row.lang ?? '').startsWith('zh')
   /** @type {Record<string, FrontierMixEventMember[]>} */
@@ -504,7 +634,7 @@ export function frontierMixReplay(rows, { threshold, timeZone = 'Asia/Shanghai',
         eventId: row.event_id == null ? null : String(row.event_id),
       }
     })
-    const result = frontierMixSelect({ candidates, threshold, events, congressActive: congressDays.includes(dayKey) })
+    const result = frontierMixSelect({ candidates, threshold, events, congressActive: congressDays.includes(dayKey), genreFloors })
     const picked = new Set(result.picks.map((pick) => pick.id))
     /** @type {Record<string, number>} */
     const excluded = {}

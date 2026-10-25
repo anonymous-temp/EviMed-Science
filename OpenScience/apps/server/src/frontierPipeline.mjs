@@ -75,7 +75,9 @@ import {
   FRONTIER_MENTION_SOURCE_TYPES,
   frontierEvidenceFromPublicationTypes,
   frontierActiveCongresses,
+  FRONTIER_MIX_GENRE_FLOOR,
   frontierMixGenre,
+  frontierMixGenreFloors,
   frontierMixSelect,
   frontierMixSourceCap,
   FRONTIER_CODE_GENRES,
@@ -830,8 +832,9 @@ export class FrontierPipeline {
       // The tag tree (`#retag`, `#score`): items tagged again, answers left without a usable row, calls that failed, candidates made.
       retagged: 0, retagSkipped: 0, retagFailures: 0, tagCandidatesCreated: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
-      // The day's mix (`#mix`): items it selected, by rule.
-      mix: /** @type {Record<string, number>} */ ({}),
+      // The day's mix (`#mix`): items it selected, by rule; and rounds whose 30-day genre percentiles could not be read (the
+      // floor places then ask the absolute floor, as before).
+      mix: /** @type {Record<string, number>} */ ({}), mixGenreFloorFailures: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
       providerRefusedWaits: 0,
@@ -2184,10 +2187,13 @@ export class FrontierPipeline {
    * selects, and the picks are written with their rule — `threshold`, `genre-floor`, `zh-target`, `preprint-lane` or
    * `event-primary`. It replaced the lane floor and the preprint lane (whose places are now inside the research group).
    * Sticky like every selection: what a day already selected counts against its groups and sources and is never taken back.
+   * A floor place under the line asks its genre's own bar (`@evimed/domain` `FRONTIER_MIX_GENRE_FLOOR`, c2-fixes 2026-10-25),
+   * the 80th percentile of the genre's published scores of the last 30 days, read once per round (`#genreFloors`).
    * @param {any} context @returns {Promise<Record<string, number>>} the picks by rule
    */
   async #mix(context) {
     const { now } = context;
+    const genreFloors = await this.#genreFloors(now);
     const days = new Map(context.mixDays instanceof Map ? context.mixDays : []);
     const today = frontierDayWindow(now, this.timeZone);
     if (!days.has(today.day)) days.set(today.day, now);
@@ -2244,7 +2250,7 @@ export class FrontierPipeline {
         });
         // A congress in its window (the domain's calendar) lets the research group rise for conference reports.
         const result = frontierMixSelect({ candidates, threshold: this.threshold, events, congressActive: frontierActiveCongresses(day).length > 0,
-          preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore });
+          preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore, genreFloors });
         for (const pick of result.picks) {
           const updated = await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = $2, selected_at = $3,
               updated_at = clock_timestamp() WHERE id = $1 AND state = 'published' AND NOT selected`, [pick.id, pick.rule, now]);
@@ -2261,6 +2267,31 @@ export class FrontierPipeline {
       this.counters.selected += count;
     }
     return picked;
+  }
+
+  /**
+   * Each genre's 80th percentile of the published scores of the last `FRONTIER_MIX_GENRE_FLOOR.days` days, for the round's
+   * mix (`frontierMixGenreFloors`): one query that groups the items by the columns a genre is read from and by score, so a
+   * month of items is a few thousand rows, and the percentile is computed in the domain, where it is tested. A genre with too
+   * few scores has none. The editor's score is a clinical one and industry scores lower whatever its worth (the median of
+   * 2026-10-25: industry 41, paper 50); a floor place under the line asks the genre's own bar, not the absolute 60. A query
+   * that fails is counted and the mix goes on with the absolute floor — it never stops the round.
+   * @param {Date} now @returns {Promise<Record<string, number>>}
+   */
+  async #genreFloors(now) {
+    try {
+      const since = new Date(now.getTime() - FRONTIER_MIX_GENRE_FLOOR.days * 24 * HOUR);
+      const { rows } = await this.database.query(`SELECT i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags,
+          i.safety_alert, i.lane, i.score_total, count(*)::int AS n
+        FROM evimed_frontier.items i
+        JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+        WHERE i.state = 'published' AND i.score_total IS NOT NULL AND i.timeline_at >= $1
+        GROUP BY i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.score_total`, [since]);
+      return frontierMixGenreFloors(rows);
+    } catch {
+      this.counters.mixGenreFloorFailures += 1;
+      return {};
+    }
   }
 
   /**
