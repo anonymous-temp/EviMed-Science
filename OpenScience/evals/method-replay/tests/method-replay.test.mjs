@@ -27,7 +27,7 @@ test("each case is rendered by the module's own text functions, and a contradict
     assert.ok(shown.methodText.includes(item.method.name.replace(/-/g, " ")), item.id);
     assert.ok(item.run.requests.every((/** @type {string} */ request) => shown.runText.includes(request)), item.id);
   }
-  const verdict = module.replayVerdictFrom(JSON.stringify({ contradicts: true, methodQuote: "周报一律写成恰好十节", runQuote: "分三节：入组、脱落、不良事件" }), shownFor(cases[0], module));
+  const verdict = module.replayVerdictFrom(JSON.stringify({ inScope: true, scopeQuote: "分三节：入组、脱落、不良事件", contradicts: true, methodQuote: "周报一律写成恰好十节", runQuote: "分三节：入组、脱落、不良事件" }), shownFor(cases[0], module));
   assert.equal(verdict.verdict, "contradiction", "the first case's own words ground a verdict");
 });
 
@@ -36,12 +36,12 @@ test("the runner scores what the module counts: a contradiction is one only when
     const id = owner.runId.replace("eval-", "");
     const item = cases.find((/** @type {any} */ candidate) => candidate.id === id);
     if (id === "mr-005") return null;
-    if (id === "mr-013") return JSON.stringify({ contradicts: true, methodQuote: "周报一律写成恰好十节", runQuote: "帮我查一下近三年" });
-    if (id === "mr-014") return JSON.stringify({ contradicts: true, methodQuote: "a rule the method never states", runQuote: "a request nobody made" });
+    if (id === "mr-013") return JSON.stringify({ inScope: true, scopeQuote: "帮我查一下近三年", contradicts: true, methodQuote: "周报一律写成恰好十节", runQuote: "帮我查一下近三年" });
+    if (id === "mr-014") return JSON.stringify({ inScope: true, scopeQuote: "a request nobody made", contradicts: true, methodQuote: "a rule the method never states", runQuote: "a request nobody made" });
     if (item.label === "contradiction") {
       const request = item.run.requests[0];
       const line = item.method.body.split("\n").find((/** @type {string} */ text) => /^1\. /.test(text)).replace(/^1\. /, "");
-      return JSON.stringify({ contradicts: true, methodQuote: line, runQuote: request });
+      return JSON.stringify({ inScope: true, scopeQuote: request, contradicts: true, methodQuote: line, runQuote: request });
     }
     return JSON.stringify({ contradicts: false, methodQuote: null, runQuote: null });
   } };

@@ -76,7 +76,7 @@ function harness({ runs = ["run_a", "run_b", "run_c"], answer = () => JSON.strin
 }
 
 /** An answer that contradicts, grounded in what the judge was shown: the method's own quoted line and the run's own quoted request. */
-const contradiction = (/** @type {string} */ methodQuote, /** @type {string} */ runQuote) => JSON.stringify({ contradicts: true, methodQuote, runQuote });
+const contradiction = (/** @type {string} */ methodQuote, /** @type {string} */ runQuote) => JSON.stringify({ inScope: true, scopeQuote: runQuote, contradicts: true, methodQuote, runQuote });
 
 test("a verdict is grounded in code: both quotations are substrings of what the judge was shown, white space folded, of a length a quotation has", () => {
   const shown = { methodText: "name: report\n\n## Workflow\n1. Always\n   write ten sections.", runText: "asked: a weekly report in three sections\nleft: report/weekly.md (md)" };
@@ -86,7 +86,11 @@ test("a verdict is grounded in code: both quotations are substrings of what the 
   assert.deepEqual(replayVerdictFrom(contradiction("Always write twenty sections", "a weekly report in three sections"), shown), { verdict: "unverified", reason: "quote_not_found" });
   assert.deepEqual(replayVerdictFrom(contradiction("Always write ten sections", "something the run never said"), shown), { verdict: "unverified", reason: "quote_not_found" });
   assert.deepEqual(replayVerdictFrom(contradiction("ten", "three sections"), shown), { verdict: "unverified", reason: "quote_length" }, "a word is not a quotation");
-  assert.deepEqual(replayVerdictFrom(JSON.stringify({ contradicts: true, methodQuote: null, runQuote: null }), shown), { verdict: "unverified", reason: "quote_length" });
+  assert.deepEqual(replayVerdictFrom(JSON.stringify({ inScope: true, scopeQuote: "a weekly report", contradicts: true, methodQuote: null, runQuote: null }), shown), { verdict: "unverified", reason: "quote_length" });
+  // A contradiction holds only for the method's own kind of work, said with the run's words.
+  assert.deepEqual(replayVerdictFrom(JSON.stringify({ inScope: false, scopeQuote: null, contradicts: true, methodQuote: "Always write ten sections", runQuote: "a weekly report in three sections" }), shown), { verdict: "agreed", reason: "out_of_scope" });
+  assert.deepEqual(replayVerdictFrom(JSON.stringify({ contradicts: true, methodQuote: "Always write ten sections", runQuote: "a weekly report in three sections" }), shown), { verdict: "unverified", reason: "scope_unstated" });
+  assert.deepEqual(replayVerdictFrom(JSON.stringify({ inScope: true, scopeQuote: "a monthly newsletter", contradicts: true, methodQuote: "Always write ten sections", runQuote: "a weekly report in three sections" }), shown), { verdict: "unverified", reason: "quote_not_found" });
   for (const bad of [null, "", "not json", JSON.stringify({ contradicts: "true" }), JSON.stringify({ verdict: "contradiction" }), JSON.stringify([1])]) {
     assert.equal(replayVerdictFrom(bad, shown).verdict, "failed", String(bad));
   }
