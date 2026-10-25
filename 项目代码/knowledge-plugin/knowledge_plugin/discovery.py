@@ -14,8 +14,9 @@ The candidate lines (``discovery_lines.py``), each with its own daily cap on val
 - ``directory``  organisations listed in ``registry/discovery.json`` (regulators, agencies, hospitals, societies, media);
 - ``hot-origin`` the origins of entries several publishers carried in the last two days (a DOI's journal, a site);
 - ``social``     accounts quoted or reposted in social entries, and the WeChat accounts our WeChat bodies credit as their
-                 origin (``social/wechat_discovery.py``: one Dajiala call validates one, at most 20 a day); X accounts
-                 wait while this build validates none;
+                 origin (``social/wechat_discovery.py``: one Dajiala call validates one, at most 20 a day); an X account
+                 is validated through SocialData (``social/x_discovery.py``: a user lookup and a page of recent posts, at
+                 most 20 a day);
 - ``request``    rows asked for in the platform's public source-request manifest, any lane, validated like the rest;
 - ``parent-feed`` the advertised feeds of trusted publishers (``medical_discovery.py``, counted here);
 - ``readmit``    retired sources due for a re-check;
@@ -76,6 +77,10 @@ SHANGHAI = ZoneInfo("Asia/Shanghai")
 FRESH_DAYS = 30
 FAILED_RETRY_AFTER = timedelta(days=30)
 DEFERRED_RETRY_AFTER = timedelta(days=7)
+# A candidate deferred only because the day's validations of its platform were spent, or its provider was capped or
+# paused, is due again the next day, not in a week (c2-gplug 2026-10-25: 43 X candidates and 20 validations a day).
+DEFERRED_RETRY_TOMORROW = ("x_validation_budget", "wechat_validation_budget", "dajiala_", "socialdata_")
+DEFERRED_RETRY_SOON = timedelta(hours=20)
 RUN_DEADLINE_S = 900.0
 VALIDATION_CONCURRENCY = 6
 TRIAL_FLOOR_S = 21600
@@ -393,7 +398,7 @@ class Validator:
     would read it, and builds the registry row. Writes nothing."""
 
     def __init__(self, fetcher, settings, now: datetime, *, known_urls: set[str], known_issns: set[str],
-                 excluded_hosts: set[str], adapters: dict | None = None, wechat=None) -> None:
+                 excluded_hosts: set[str], adapters: dict | None = None, wechat=None, x=None) -> None:
         if adapters is None:
             from .adapters import REGISTRY as adapters
         self.fetcher = fetcher
@@ -405,6 +410,7 @@ class Validator:
         self.adapters = adapters
         self.relay = bool(getattr(fetcher, "egress_configured", lambda _e: False)("relay"))
         self.wechat = wechat            # social.wechat_discovery.WechatValidator when this deployment reads WeChat
+        self.x = x                      # social.x_discovery.XValidator when this deployment reads X (a SocialData key)
 
     async def fetch(self, url: str, *, egress: str, api: bool = False, allowed: list[str] | None = None):
         spec = RequestSpec(url=url, conditional=False, api=api)
@@ -646,10 +652,15 @@ class Validator:
     async def validate_social(self, candidate: dict, hint: dict) -> Verdict:
         platform = candidate["key"].split(":", 1)[0]
         if platform == "wechat":
-            # ct-src 2026-10-24: one Dajiala call names the account (social.wechat_discovery); X stays deferred.
+            # ct-src 2026-10-24: one Dajiala call names the account (social.wechat_discovery).
             if self.wechat is None:
                 return Verdict("deferred", "adapter_unavailable:wechat")
             return await self.wechat.validate(candidate)
+        if platform == "x":
+            # c2-gplug 2026-10-25: a SocialData user lookup and one page of recent posts (social.x_discovery).
+            if self.x is None:
+                return Verdict("deferred", "adapter_unavailable:x")
+            return await self.x.validate(candidate)
         access = (hint.get("row") or {}).get("access")
         if not access or access not in self.adapters:
             # The adapters for social accounts are another package's; the candidate waits for them, it has not failed.
@@ -761,7 +772,8 @@ async def record_verdict(conn, candidate: dict, verdict: Verdict, now: datetime,
         await conn.execute(
             """UPDATE evimed_knowledge.source_candidates SET attempts = attempts + 1, state_reason = %s, next_check_at = %s
                 WHERE id = %s""",
-            (verdict.reason, now + DEFERRED_RETRY_AFTER, candidate["id"]),
+            (verdict.reason, now + (DEFERRED_RETRY_SOON if (verdict.reason or "").startswith(DEFERRED_RETRY_TOMORROW)
+                                    else DEFERRED_RETRY_AFTER), candidate["id"]),
         )
         return "deferred"
     if verdict.status == "failed":
@@ -827,9 +839,10 @@ async def validate_readmission(validator: Validator, conn, candidate: dict) -> V
                                                          "titles": probe.titles})
 
 
-# A deferral that did no work — no adapter for the platform yet (X), the day's WeChat validations spent, Dajiala paused —
-# does not use up a line's validations for the day: the candidate waits, the line's room goes to the next one.
-WAITING_REASONS = ("adapter_unavailable", "wechat_validation_budget", "dajiala_")
+# A deferral that did no work — no adapter for the platform (no key), the day's WeChat or X validations spent, Dajiala or
+# SocialData paused or capped — does not use up a line's validations for the day: the candidate waits, the line's room
+# goes to the next one.
+WAITING_REASONS = ("adapter_unavailable", "wechat_validation_budget", "dajiala_", "x_validation_budget", "socialdata_")
 
 
 def waiting(verdict: Verdict) -> bool:
@@ -846,6 +859,21 @@ async def wechat_validator(settings, pool, fetcher, clock, conn):
 
     ledger = ProviderLedger(pool, clock)
     return WechatValidator(DajialaClient(fetcher, ledger, settings, clock), ledger, clock, await known_accounts(conn))
+
+
+async def x_validator(settings, pool, fetcher, clock, conn):
+    """The X candidates' validator when this deployment reads X (a SocialData key), else ``None``."""
+    if not settings.secret("socialdata_key"):
+        return None
+    from .social.providers import SocialDataClient
+    from .social.spend import ProviderLedger
+    from .social.x_discovery import XValidator, known_x_accounts
+
+    ledger = ProviderLedger(pool, clock)
+    # Candidates that waited for this validator to exist (no key until now) are due at once, not after their week.
+    await conn.execute("""UPDATE evimed_knowledge.source_candidates SET next_check_at = NULL
+                           WHERE state = 'candidate' AND state_reason = 'adapter_unavailable:x'""")
+    return XValidator(SocialDataClient(fetcher, ledger, settings, clock), ledger, clock, await known_x_accounts(conn))
 
 
 async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] | None = None,
@@ -901,7 +929,8 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
             known_urls, known_issns, excluded = await known_urls_and_hosts(conn, base)
             excluded |= {h for h in data.get("exclude_hosts", [])}
             validator = Validator(fetcher, settings, clock(), known_urls=known_urls, known_issns=known_issns,
-                                  excluded_hosts=excluded, wechat=await wechat_validator(settings, pool, fetcher, clock, conn))
+                                  excluded_hosts=excluded, wechat=await wechat_validator(settings, pool, fetcher, clock, conn),
+                                  x=await x_validator(settings, pool, fetcher, clock, conn))
             attempts = status.setdefault("attempts", {})
             crossref_tight = await crossref_spent(fetcher)
             report["crossrefTight"] = crossref_tight

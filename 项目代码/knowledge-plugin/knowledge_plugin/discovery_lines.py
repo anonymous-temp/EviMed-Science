@@ -253,7 +253,8 @@ async def hot_origin(conn, fetcher, now: datetime, *, cap: int, known_issns: set
 async def social(conn, now: datetime, *, cap: int) -> list[Candidate]:
     """(e) Accounts quoted or reposted in social entries — an X post's quoted author, the account a WeChat repost names —
     and the WeChat accounts our WeChat bodies credit as their origin (``social.wechat_discovery``, ct-src 2026-10-24).
-    An X candidate waits while this build validates none; a WeChat one is validated by one Dajiala call."""
+    An X candidate is validated by a SocialData user lookup and one page of its posts (``social.x_discovery``); a WeChat
+    one by one Dajiala call."""
     if cap <= 0:
         return []
     from .social.wechat_discovery import origin_candidates
