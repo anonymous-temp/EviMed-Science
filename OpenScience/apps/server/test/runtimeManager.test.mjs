@@ -4530,6 +4530,101 @@ test("a cold stop observes rejected startup cleanup", async () => {
   assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
 });
 
+// A start can fail after `create` registered its runtime: the plugin
+// admission commits afterwards, and a deferred foreign key fails that COMMIT
+// with 23503 (runtimeRejectedAdmission.integration.test.mjs has the real
+// database). These doubles reject the same way after the operation returns.
+const rejectedCommit = () => Object.assign(new Error("insert or update violates a deferred foreign key"), { code: "23503" });
+const rejectingAdmission = () => ({
+  withAdmission: async (_project, operation) => { await operation(); throw rejectedCommit(); },
+  clearPromptAdmissions: async () => {},
+});
+async function runtimeLedger(project) {
+  const text = await readFile(path.join(project.metaDir, "runtime.jsonl"), "utf8").catch(() => "");
+  return text.split("\n").filter(Boolean).map(line => JSON.parse(line));
+}
+
+test("a start whose admission fails after registering its runtime closes it before any joined caller hears", async t => {
+  const { manager, owned } = await stopFixture(t);
+  manager.runtimes.clear();
+  manager.pluginService = rejectingAdmission();
+  let closed = 0, boots = 0;
+  const notices = [];
+  manager.onRuntimeStop = async (_project, status) => { notices.push(status); };
+  manager.startKernel = async () => { boots += 1; return { ...fakeRuntime(owned.id, owned.workspaceDir), project: owned, close: async () => { closed += 1; } }; };
+  const outcomes = await Promise.allSettled([manager.start(owned), manager.start(owned)]);
+  for (const outcome of outcomes) {
+    assert.equal(outcome.status, "rejected");
+    assert.equal(outcome.reason.code, "23503", "every caller hears the start's own cause");
+  }
+  assert.equal(boots, 1); assert.equal(closed, 1, "closed before the start settled, with nobody asking for a stop");
+  assert.deepEqual(notices, ["failed"]);
+  assert.equal(manager.runtimes.size, 0); assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
+  assert.equal(manager.failedRuntimeStops.size, 0); assert.equal(manager.runtimeStops.size, 0);
+  const rows = (await runtimeLedger(owned)).filter(row => row.event === "failed" || row.event.startsWith("cleanup_"));
+  assert.deepEqual(rows.map(row => [row.event, row.error, row.stage]), [["failed", "23503", "admission"]]);
+});
+
+test("a stop waiting for a replacement start that fails after registering waits for that runtime's close", async t => {
+  let failAfterCreation = true;
+  const { manager, owned, runtime: warm } = await stopFixture(t, {});
+  const mutation = manager.runtimeCreationMutation;
+  // The non-cold path: no attempt is enrolled, so the stop joins `starts`.
+  manager.runtimeCreationMutation = async operation => {
+    const value = await mutation(operation);
+    if (failAfterCreation) throw rejectedCommit();
+    return value;
+  };
+  let warmClosed = 0, enterBoot, releaseBoot, enterClose, releaseClose, settled = false;
+  warm.close = async () => { warmClosed += 1; };
+  const bootEntered = new Promise(resolve => { enterBoot = resolve; }), bootGate = new Promise(resolve => { releaseBoot = resolve; });
+  const closeEntered = new Promise(resolve => { enterClose = resolve; }), closeGate = new Promise(resolve => { releaseClose = resolve; });
+  const replacement = { ...fakeRuntime(owned.id, owned.workspaceDir), project: owned, modelGatewayTokenJti: "replacement-generation",
+    close: async () => { enterClose(); await closeGate; } };
+  manager.startKernel = async () => { enterBoot(); await bootGate; return replacement; };
+  const replacing = assert.rejects(manager.startAdmitted(owned, { replaceRuntime: async () => { await manager.stop(owned); } }), { code: "23503" });
+  await bootEntered;
+  assert.equal(warmClosed, 1);
+  const stopping = manager.stop(owned).then(value => { settled = true; return value; });
+  try {
+    releaseBoot();
+    assert.equal(await Promise.race([closeEntered.then(() => "closing"), stopping.then(() => "stop-settled")]), "closing");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false, "a close in flight is not a completed stop");
+  } finally { releaseBoot(); releaseClose(); }
+  await replacing;
+  assert.equal(await stopping, false);
+  assert.equal(manager.runtimes.size, 0); assert.equal(manager.starts.size, 0);
+  failAfterCreation = false;
+});
+
+test("a rejected start whose close fails keeps one retry entry, and the stop waiting for it is not complete", async t => {
+  const { manager, owned } = await stopFixture(t);
+  manager.runtimes.clear();
+  manager.pluginService = rejectingAdmission();
+  let closeFails = true, closes = 0, releasePolicy;
+  const gate = new Promise(resolve => { releasePolicy = resolve; });
+  const policy = manager.contextPolicyFor.bind(manager);
+  manager.contextPolicyFor = async p => { await gate; return policy(p); };
+  const failed = { ...fakeRuntime(owned.id, owned.workspaceDir), project: owned, modelGatewayTokenJti: "failed-generation",
+    close: async () => { closes += 1; if (closeFails) throw Object.assign(new Error("controller unavailable"), { code: "runtime_controller_unavailable" }); } };
+  manager.startKernel = async () => failed;
+  const starting = assert.rejects(manager.start(owned), { code: "23503" }, "the start fails with its own cause, not the close's");
+  const stopping = assert.rejects(manager.stop(owned, { by: "user" }), { code: "runtime_cleanup_required" });
+  releasePolicy();
+  await starting; await stopping;
+  assert.equal(closes, 1);
+  const entry = manager.failedRuntimeStops.get(manager.key(owned));
+  assert.equal(entry?.runtime, failed, "the unconfirmed close is the failed attempt's");
+  assert.equal(entry.cause, "runtime_controller_unavailable"); assert.equal(entry.attempts, 1);
+  assert.deepEqual((await runtimeLedger(owned)).filter(row => row.event === "failed" || row.event.startsWith("cleanup_")).map(row => row.event),
+    ["failed", "cleanup_failed"], "the start's failure and the close's, each once");
+  closeFails = false;
+  assert.equal(await manager.resolveFailedStop(owned), "recovered");
+  assert.equal(closes, 2); assert.equal(manager.failedRuntimeStops.size, 0);
+  assert.ok((await runtimeLedger(owned)).some(row => row.event === "cleanup_recovered"));
+});
+
 test("a cold stop retains terminal status, failure code and actor attribution", async t => {
   const { manager, owned } = await stopFixture(t);
   manager.runtimes.clear();

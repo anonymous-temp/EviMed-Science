@@ -4749,6 +4749,8 @@ export class RuntimeManager {
     if (!attempt && speculative && !opening) this.speculativeStarts.add(key);
 
     let creationSkipped = false;
+    /** The runtime this start registered, if it got that far: what `closeRejectedStart` closes when the start fails afterwards. */
+    let created = null;
     // Register before either admission can wait. Concurrent cold readers join
     // without retaining another pool connection behind the same container boot.
     const create = () => this.runtimeCreationMutation(async () => {
@@ -4773,6 +4775,7 @@ export class RuntimeManager {
       if (this.config.runtimeMode === "kernel") {
         const runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile);
         if (attempt) { attempt.runtime = runtime; attempt.generation = typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null; }
+        created = runtime;
         this.runtimes.set(key, runtime);
         this.yieldedRuntimes.delete(key);
         this.pendingModelGatewayScopes.delete(key);
@@ -4813,6 +4816,7 @@ export class RuntimeManager {
         modelGatewayScope,
       };
       if (attempt) { attempt.runtime = runtime; attempt.generation = null; }
+      created = runtime;
       this.runtimes.set(key, runtime);
       this.yieldedRuntimes.delete(key);
       this.pendingModelGatewayScopes.delete(key);
@@ -4836,10 +4840,19 @@ export class RuntimeManager {
       return runtime;
     });
     const startupScope = { key, promise: /** @type {Promise<any>|null} */ (null), attempt, open: true };
+    // A start that fails after `create` registered its runtime — the
+    // admission's COMMIT is the usual place — closes that runtime before it
+    // settles, so whoever waits for this promise (every joined caller, and a
+    // stop) sees the failure only once the close is done. The close failing
+    // is on the record as `cleanup_failed` with its retry entry; the start
+    // still fails with its own cause.
     const started = Promise.resolve().then(() => this.runtimeStartScope.run(startupScope, async () => {
       try { return await (withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, create) : create()); }
       finally { startupScope.open = false; }
-    }));
+    })).catch(async (error) => {
+      if (created) await this.closeRejectedStart(project, created, error).catch(() => {});
+      throw error;
+    });
     startupScope.promise = started;
     this.starts.set(key, started);
     try {
@@ -7185,6 +7198,64 @@ export class RuntimeManager {
     }
   }
 
+  /**
+   * Close the runtime a start registered when that start fails afterwards.
+   *
+   * The plugin admission's transaction commits after `create` has registered
+   * the runtime, and a deferred foreign key is checked only there: a real
+   * PostgreSQL COMMIT rejected the start with 23503 while the container it had
+   * created kept running (GEO v3 local checkpoint, 2026-10-25). Every waiter
+   * was told the start failed, so nobody would ever own or stop that runtime —
+   * not the joined callers, not a stop waiting for the start, which returned
+   * the moment the start rejected.
+   *
+   * Matched by the object this start created, never by the project: a runtime
+   * another stop already closed is that stop's, and a replacement holding the
+   * slot keeps it, its timers, its state record and its runs — the stop
+   * notice is the project's, so it is sent only while the failed runtime is
+   * still the registered one. Its model gateway credentials go by identity
+   * too, whatever generation it reports now. Serialized with every other stop.
+   * @param {any} project @param {any} runtime @param {unknown} error why the start failed
+   */
+  async closeRejectedStart(project, runtime, error) {
+    const key = this.key(project);
+    await this.withRuntimeStop(project, async () => {
+      if (runtime.closedByManager) return;
+      const generation = typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null;
+      runtime.closedByManager = true;
+      for (const [jti, active] of this.activeModelGatewayTokens) if (active.runtime === runtime) this.activeModelGatewayTokens.delete(jti);
+      await runtime.workloadWritePending?.catch(() => {});
+      const cause = cleanupCause(error);
+      // The start's failure, recorded once and before the close, so a close
+      // that fails too (`cleanup_failed`) does not hide what it followed.
+      await appendRuntimeEvent(project, "failed", { kind: runtime.kind, sandboxMode: runtime.sandboxMode ?? "mock", pid: runtime.pid ?? null,
+        containerName: runtime.containerName ?? null, error: cause, stage: "admission" }, this.config);
+      if (this.runtimes.get(key) !== runtime) {
+        try { await runtime.close(); }
+        catch (failure) {
+          await appendRuntimeEvent(project, "cleanup_failed", {
+            kind: runtime.kind, error: "runtime_cleanup_required", cause: cleanupCause(failure), attempt: 1,
+          }, this.config);
+          throw failure;
+        }
+        return;
+      }
+      this.runtimes.delete(key);
+      this.clearIdleTimer(key);
+      this.clearQuotaMonitor(key);
+      this.clearEviMedWorkloadRefresh(key);
+      this.runtimeActivity.delete(key);
+      await this.closeCapturedRuntime(project, runtime, "failed", generation);
+      // Written only once the close is confirmed: an attached state is what
+      // the next control plane's orphan sweep looks for.
+      await recordRuntimeState(project, "failed", {
+        running: false, kind: runtime.kind, startedAt: runtime.startedAt, pid: runtime.pid ?? null,
+        exitedAt: runtime.exitedAt ?? new Date().toISOString(), sandboxMode: runtime.sandboxMode ?? "mock",
+        networkMode: runtime.networkMode ?? null, containerName: runtime.containerName ?? null, error: cause,
+      });
+    });
+  }
+
   /** How long after its `attempts`-th failed close the next retry is due: the configured first step, doubling, up to the ceiling. */
   cleanupRetryDelayMs(attempts) {
     const first = positiveLimit(this.config.runtimeCleanupRetryMs) ?? DEFAULT_CLEANUP_RETRY_MS;
@@ -7383,7 +7454,14 @@ export class RuntimeManager {
     // Release the initial stop fence before joining: startup itself may need
     // that fence or the caller's admission connection in order to finish.
     let runtime;
-    try { runtime = await pendingStart; } catch { return stopped; }
+    try { runtime = await pendingStart; }
+    catch {
+      // A start that failed after registering its runtime closed it before it
+      // settled (`closeRejectedStart`). There was no unconfirmed close when this
+      // stop began, so one now is that close's, and this stop is not complete.
+      if (this.failedRuntimeStops.has(key)) throw this.cleanupRequired();
+      return stopped;
+    }
     const startedGeneration = attempt?.runtime === runtime ? attempt.generation
       : typeof runtime?.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null;
     const ownsStartedRuntime = () => this.runtimes.get(key) === runtime
