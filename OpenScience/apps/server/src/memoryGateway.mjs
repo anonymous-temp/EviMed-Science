@@ -3,7 +3,7 @@ import {
   recordGatewayCommit, recordGatewayMasked, recordGatewayMessage, recordGatewayRefusal, recordGatewayRequest,
   recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure,
 } from "./nativeMemoryMetrics.mjs";
-import { DERIVED_INDEX_SEGMENT, nativeMemoryFile } from "./openVikingSessions.mjs";
+import { DERIVED_INDEX_SEGMENT, OBSERVATIONS_SEGMENT, nativeMemoryFile } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -27,7 +27,8 @@ import { HttpError } from "./security.mjs";
  *  4. **Recall that can find our types.** `purpose` and `quotas` are removed from a search (the plugin hard-codes
  *     `purpose: "coding"`, which retrieves by upstream's buckets and can never return a custom type or the profile),
  *     `query_expansion` is forced off (it is one more model call and about three seconds), and the shared areas, the
- *     derived index subtree (`memories/evimed`: PostgreSQL's copies and the capsule facts) and the files the person marked
+ *     derived index subtree (`memories/evimed`: PostgreSQL's copies and the capsule facts), the observations (`memories/observations`:
+ *     a note kept to see whether a choice comes back, never a fact, never read back) and the files the person marked
  *     sensitive are excluded.
  *  5. **Five tools.** The engine's MCP server advertises twenty, one of which lists every user of the account. `tools/list`
  *     answers `search`, `read`, `list`, `remember` and `forget` with this platform's own short descriptions — `remember`
@@ -785,7 +786,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.
         hiddenSet: () => {
-          hiddenList ??= (async () => [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(overlay?.configured ? await overlay.sensitiveUris(user.id) : [])])();
+          hiddenList ??= (async () => [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`, ...(overlay?.configured ? await overlay.sensitiveUris(user.id) : [])])();
           return hiddenList;
         },
         hidden: async (/** @type {string} */ uri) => (await ctx.hiddenSet()).some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`)),

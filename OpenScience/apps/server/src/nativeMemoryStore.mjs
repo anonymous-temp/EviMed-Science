@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
-import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf } from "./openVikingSessions.mjs";
+import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -46,6 +46,7 @@ export const PAGE_KIND_OF_TYPE = Object.freeze({
   corrections: "correction",
   decisions: "decision",
   follow_ups: "follow_up",
+  recent_work: "project_fact",
   project_facts: "project_fact",
   project_context: "project_fact",
   entities: "project_fact",
@@ -68,6 +69,29 @@ export function nativeFileId(uri) {
 /** A compare-and-swap token the page already knows how to send back: a positive integer from the text's hash. @param {string} hash */
 export function versionOfHash(hash) {
   return Number.parseInt(String(hash).slice(0, 12), 16) + 1;
+}
+
+/** The most tasks the project card says were worked on last (`recent_work`). */
+export const RECENT_WORK_LINES = 3;
+
+/**
+ * The card's 「最近在做」 row from a project's `recent_work` records: the newest file's lines first, three at most in all, each
+ * a few words (the template writes no content of the work, and this cuts what is longer), joined into one sentence. Null when there are none.
+ * @param {readonly any[]} records the project's `recent_work` records @returns {{ slot: string, recordId: string, text: string, updatedAt: string | null } | null}
+ */
+export function recentWorkRow(records) {
+  const newestFirst = [...records].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+  /** @type {string[]} */
+  const lines = [];
+  for (const record of newestFirst) {
+    for (const line of statements(record.value)) {
+      const text = line.replace(AS_OF, "").replace(/\s+/g, " ").trim().slice(0, 120);
+      if (text && !lines.includes(text)) lines.push(text);
+      if (lines.length >= RECENT_WORK_LINES) break;
+    }
+    if (lines.length >= RECENT_WORK_LINES) break;
+  }
+  return lines.length ? { slot: "recent_work", recordId: newestFirst[0].id, text: lines.join("；"), updatedAt: newestFirst[0].updatedAt ?? null } : null;
 }
 
 /** A label line, or a statement: label lines are the platform's and are not shown as facts. @param {string} line */
@@ -517,7 +541,8 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} projectId
    */
   async projectCard(userId, projectId) {
-    const records = (await this.records(userId)).filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
+    const everything = await this.records(userId);
+    const records = everything.filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
     // The labels the template has the engine write: Chinese in a Chinese conversation, these English ones in an English one
     // (`project_context.yaml`). Any other language writes translations of them, which this closed list does not read: that card
     // shows as the file it is, in full, on the memory page, and has no slots here.
@@ -548,7 +573,10 @@ export class NativeMemoryStore {
       }
     }
     const order = ["field", "goal", "subject", "data_source", "stage", "constraints", "population", "intervention", "comparator", "outcome", "design"];
-    return order.filter((slot) => card.has(slot)).map((slot) => card.get(slot));
+    const rows = order.filter((slot) => card.has(slot)).map((slot) => card.get(slot));
+    // What the project was last worked on (`recent_work`), after the card's own slots: its own files, never the card's.
+    const recent = recentWorkRow(everything.filter((record) => record.nativeType === "recent_work" && record.scopeId === projectId));
+    return recent ? [...rows, recent] : rows;
   }
 
   /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, no conflicts, no usage. @param {string} userId */
@@ -1058,23 +1086,67 @@ export class NativeMemoryStore {
    * @param {string} userId @param {{ text: string, projectId?: string | null }} input
    */
   async remember(userId, { text, projectId = null }) {
-    this.#assertConfigured();
-    this.#touch(userId);
     const words = String(text ?? "").trim();
     if (!words || words.length > 2_000) throw new HttpError(400, "memory_payload_invalid", "What to remember must be 1 to 2000 characters.");
     if (identifierShapesIn(words).length) throw new HttpError(400, "memory_content_refused", "A memory cannot carry a credential or a personal identifier.");
-    const session = `evimed-page-${randomUUID().replace(/-/g, "")}`;
+    const commit = await this.#submitWords(userId, { content: `请记住：${maskIdentifiers(words)}`, projectId, origin: "page", prefix: "evimed-page-", pendingText: words });
+    return { pending: { id: commit.archiveUri, text: words, at: commit.createdAt, state: "pending" } };
+  }
+
+  /**
+   * What the person kept from the other assistant's memory, one message to the engine in the form the templates read as an import
+   * (`MEMORY_DECIDE_TEXT`): the statements they ticked as their own, and, apart, the ones they ticked from the keep-only-on-request tier,
+   * which that is an explicit request to remember. The engine writes them under the same never-kept rules as anything else; this
+   * is a session of its own (`evimed-import-…`) so that what it wrote reads 「从其他 AI 导入」 in the drawer.
+   * @param {string} userId @param {{ ordinary: readonly string[], onRequest?: readonly string[] }} lines each one first-person statement
+   * @returns {Promise<{ archiveUri: string }>}
+   */
+  async rememberImport(userId, { ordinary, onRequest = [] }) {
+    const clean = (/** @type {readonly string[]} */ list) => list.map((line) => maskIdentifiers(String(line ?? "").replace(/\s+/g, " ").trim())).filter(Boolean);
+    const plain = clean(ordinary);
+    const asked = clean(onRequest);
+    if (!plain.length && !asked.length) throw new HttpError(400, "memory_payload_invalid", "There is nothing to import.");
+    const content = [
+      "这是我在另一个 AI 助手里的记忆导出，请把它们导入到这里：",
+      ...plain.map((line) => `- ${line}`),
+      ...(asked.length ? ["我明确要求记住下面这几条：", ...asked.map((line) => `- ${line}`)] : []),
+    ].join("\n");
+    const commit = await this.#submitWords(userId, { content, projectId: null, origin: "import", prefix: "evimed-import-" });
+    return { archiveUri: commit.archiveUri };
+  }
+
+  /**
+   * A choice two different conversations made, as the person's explicit request to keep it (`nativeMemoryObservations.mjs`): the same
+   * path as 「记住这一条」, in a session of its own (`evimed-promote-…`) so that the preference it writes reads 「你在两次对话里都这样做」.
+   * @param {string} userId @param {string} choice the observation's own words, a line or a few
+   * @returns {Promise<{ archiveUri: string }>}
+   */
+  async keepRepeatedChoice(userId, choice) {
+    const words = maskIdentifiers(String(choice ?? "").replace(/\s+/g, " ").trim()).slice(0, 600);
+    if (!words) throw new HttpError(400, "memory_payload_invalid", "There is nothing to keep.");
+    const commit = await this.#submitWords(userId, { content: `请记住（这是我在两次不同的对话里都做出的选择，以后默认这样做）：${words}`, projectId: null, origin: "promotion", prefix: "evimed-promote-" });
+    return { archiveUri: commit.archiveUri };
+  }
+
+  /**
+   * One message to the engine in a session of its own, and its commit entered in the ledger: the one way a memory is written from
+   * outside a conversation (the page, an import, a promotion), so the engine's own templates apply to all of them.
+   * @param {string} userId @param {{ content: string, projectId: string | null, origin: "page" | "import" | "promotion", prefix: string, pendingText?: string | null }} write
+   */
+  async #submitWords(userId, { content, projectId, origin, prefix, pendingText = null }) {
+    this.#assertConfigured();
+    this.#touch(userId);
+    const session = `${prefix}${randomUUID().replace(/-/g, "")}`;
     await this.#engine(async () => {
       await this.sessions.register(userId).catch(() => false);
       await this.sessions.createSession(userId, session, { timeoutMs: this.sessions.timeoutMs });
-      await this.sessions.addMessage(userId, session, { role: "user", parts: [{ type: "text", text: `请记住：${maskIdentifiers(words)}` }] });
+      await this.sessions.addMessage(userId, session, { role: "user", parts: [{ type: "text", text: content }] });
     });
     const answer = await this.#engine(() => this.sessions.commit(userId, session));
     const result = answer?.result ?? {};
     if (result.status !== "accepted" || typeof result.archive_uri !== "string") throw new HttpError(503, "memory_engine_unavailable", "The memory service did not accept it.");
-    const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId, origin: "page",
-      taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText: words });
-    return { pending: { id: commit.archiveUri, text: words, at: commit.createdAt, state: "pending" } };
+    return this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId, origin,
+      taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText });
   }
 
   /**
@@ -1099,15 +1171,35 @@ export class NativeMemoryStore {
     this.#assertConfigured();
     this.#touch(userId);
     const root = this.sessions.memoryRoot(userId);
+    // What the engine is still extracting is written down first, because the deletions below take its sessions and the overlay's ledger
+    // with them and the extraction does not stop: whatever it writes after the reset is found by these tombstones and taken out
+    // (`NativeMemoryWorker`'s sweep), however late it lands.
+    await this.#tombstoneInFlight(userId);
     let files = 0;
     await this.#engine(async () => {
       for (const [type, segment] of Object.entries(MEMORY_SEGMENT_OF_TYPE)) {
         if (await this.sessions.remove(userId, `${root}/${segment}`, { recursive: type !== "profile" })) files += 1;
       }
+      // The observations are the account's own too, though no page lists them: a reset leaves none behind.
+      if (await this.sessions.remove(userId, `${root}/${OBSERVATIONS_SEGMENT}`, { recursive: true })) files += 1;
     });
     const sessions = await this.#deleteSessions(userId);
     const purged = await this.overlay.purgeUser(userId);
     return { files, sessions, revisions: purged.revisions };
+  }
+
+  /**
+   * The commits a reset cannot wait for: the ledger's pending ones (with their tasks) and any archive of the engine's session tree that
+   * nothing has finished yet (an idle commit the scan had not entered). A failure to list them is the reset's failure: it is run again.
+   * @param {string} userId
+   */
+  async #tombstoneInFlight(userId) {
+    const resetAt = this.now();
+    const pending = (await this.overlay.openCommits({ userId, limit: 500, now: resetAt })).filter((commit) => commit.state === "pending");
+    const known = new Set(pending.map((commit) => commit.archiveUri));
+    const listed = await this.#engine(() => this.sessions.tree(userId, `${this.sessions.userRoot(userId)}/sessions`, { levelLimit: 4, showHidden: true }));
+    const unseen = unfinishedArchives(listed).filter((archive) => !known.has(archive.archiveUri)).map((archive) => ({ archiveUri: archive.archiveUri, engineSession: archive.session, taskId: null }));
+    await this.overlay.tombstoneCommits(userId, [...pending.map((commit) => ({ archiveUri: commit.archiveUri, engineSession: commit.engineSession, taskId: commit.taskId })), ...unseen], resetAt);
   }
 
   /** Every engine session of the account, deleted. @param {string} userId @param {(name: string) => boolean} [which] */

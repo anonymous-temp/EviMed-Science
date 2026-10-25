@@ -16,6 +16,14 @@
  *    loses every tag), whether recall leaves it out, the hash of the body last seen (the page's compare-and-swap; the
  *    engine has none), the body as last ingested, and the source labels currently written into it.
  *  - `native_sources` — the sources a file names (a DOI, a knowledge-base document id), found in its text.
+ *  - `native_line_origins` — for each line of a memory file, the first revision that brought it (2026-10-25): its engine session and archive. A
+ *    file keeps 32 revisions, so a line brought by an older one named no conversation; this index is small (one row per line) and is
+ *    pruned when the line leaves its file. `native_files.last_recalled_at` and `recall_count` say when a memory search or read through
+ *    the gateway last returned the file, and how often — recorded for a later decision, acted on by nothing.
+ *  - `native_reset_tombstones` — what a reset found still being extracted: the archives (and their tasks) of commits the engine had
+ *    accepted. An extraction accepted before a reset can still write files after it; the worker takes them out whenever they land.
+ *  - `native_imports` — the statements the page's import split out of a pasted text, offered to the person until they save or the hour is
+ *    out (`nativeMemoryImport.mjs`).
  *  - `native_rejections` — the lines a person removed, as a fingerprint (a line the engine writes back verbatim is removed
  *    again) and, since 2026-10-23, as the line's normalised words: a reworded repeat is recognised by containing them or by a
  *    model judging it to say the same (`nativeMemoryRejections.mjs`). The words are the account's own, read by nothing else, and
@@ -34,7 +42,12 @@ import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
 const migrations = new WeakMap();
 
-export const NATIVE_COMMIT_ORIGINS = Object.freeze(["gateway", "tool", "scan", "page", "replay"]);
+/**
+ * Where a commit came from: the gateway (the plugin's own, or the control plane's after a turn), a tool call, the archive scan, the
+ * page's 「记住这一条」, a replay of a failed extraction, the page's import of what another assistant remembered (`import`, 2026-10-25) and
+ * the control plane's promotion of a repeated choice (`promotion`, `nativeMemoryObservations.mjs`).
+ */
+export const NATIVE_COMMIT_ORIGINS = Object.freeze(["gateway", "tool", "scan", "page", "replay", "import", "promotion"]);
 /**
  * `pending`: accepted by the engine, its diff not read yet. `completed`: its diff is in the revisions. `failed`: the
  * extraction failed and a replay is owed. `replayed`: its messages were committed again as another archive.
@@ -47,6 +60,10 @@ export const NATIVE_REVISION_CHANGES = Object.freeze(["added", "updated", "delet
 export const NATIVE_REVISION_ACTORS = Object.freeze(["engine", "user", "conversation", "platform"]);
 /** The states a memory file's link to a source can be in (what a check of the source gives it). */
 export const NATIVE_SOURCE_STATES = Object.freeze(["current", "changed", "retracted", "expired", "removed", "unknown"]);
+/** `open`: an extraction may still land. `swept`: it finished and what it wrote was taken out. `unknown`: its record is gone (the engine keeps a task a day) and nothing could be said. */
+export const NATIVE_TOMBSTONE_STATES = Object.freeze(["open", "swept", "unknown"]);
+/** `offered`: the statements wait for the person. `saved`: they were handed to the engine. */
+export const NATIVE_IMPORT_STATES = Object.freeze(["offered", "saved"]);
 export const NATIVE_TEXT_LIMIT = 100_000;
 
 const quoted = (/** @type {readonly string[]} */ values) => values.map((value) => `'${value}'`).join(", ");
@@ -191,6 +208,49 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_rejections (
   PRIMARY KEY (user_id, memory_type, fingerprint)
 );
 ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS text text CHECK (text IS NULL OR char_length(text) <= 400);
+-- When a memory search or read through the gateway last returned a file, and how many times (2026-10-25). No behaviour reads it.
+ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS last_recalled_at timestamptz(3);
+ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS recall_count integer NOT NULL DEFAULT 0 CHECK (recall_count >= 0);
+-- Where each line of a memory file came from, kept beyond the 32 revisions a file holds. One row per line, gone with the line.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_line_origins (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  uri text NOT NULL CHECK (char_length(uri) BETWEEN 1 AND 600),
+  fingerprint text NOT NULL CHECK (fingerprint ~ '^[a-f0-9]{64}$'),
+  revision_id bigint,
+  engine_session text CHECK (engine_session IS NULL OR char_length(engine_session) <= 200),
+  archive_uri text CHECK (archive_uri IS NULL OR char_length(archive_uri) <= 600),
+  project_id text,
+  added_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, uri, fingerprint)
+);
+-- The line origins of an account's older revisions are read in once, by the worker (nativeMemoryWorker.mjs), and this says when.
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS origins_indexed_at timestamptz(3);
+-- The commits a reset found still being extracted: whatever the engine writes from them after the reset is taken out again.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_reset_tombstones (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  archive_uri text NOT NULL CHECK (char_length(archive_uri) BETWEEN 1 AND 600),
+  engine_session text NOT NULL CHECK (engine_session ~ '^[A-Za-z0-9_.@-]{1,200}$'),
+  task_id text CHECK (task_id IS NULL OR task_id ~ '^[A-Za-z0-9-]{8,64}$'),
+  reset_at timestamptz(3) NOT NULL,
+  state text NOT NULL DEFAULT 'open' CHECK (state IN (${quoted(NATIVE_TOMBSTONE_STATES)})),
+  removed integer NOT NULL DEFAULT 0 CHECK (removed >= 0),
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, archive_uri)
+);
+CREATE INDEX IF NOT EXISTS native_reset_tombstones_open_idx ON evimed_memory.native_reset_tombstones (user_id) WHERE state = 'open';
+-- What the page's import offered the person, held until they save it or it expires.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_imports (
+  id text PRIMARY KEY CHECK (id ~ '^imp_[a-f0-9]{24}$'),
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  statements jsonb NOT NULL CHECK (jsonb_typeof(statements) = 'array'),
+  left_out integer NOT NULL DEFAULT 0 CHECK (left_out >= 0),
+  state text NOT NULL DEFAULT 'offered' CHECK (state IN (${quoted(NATIVE_IMPORT_STATES)})),
+  saved integer NOT NULL DEFAULT 0 CHECK (saved >= 0),
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz(3) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS native_imports_user_idx ON evimed_memory.native_imports (user_id, created_at DESC);
 `;
 
 /** @param {any} database */

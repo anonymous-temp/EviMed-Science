@@ -1,4 +1,4 @@
-// What a memory never holds is one text (`@evimed/domain`'s MEMORY_NEVER_KEPT_TEXT), read by the engine through its eight type
+// What a memory never holds is one text (`@evimed/domain`'s MEMORY_NEVER_KEPT_TEXT), read by the engine through its ten type
 // templates. (A second extractor, the legacy one, read it through its own instruction until 2026-10-25; a rule edited in one place only is
 // how the two came to disagree about the assistant's own words on 2026-10-14. The templates are the one place now.)
 import assert from "node:assert/strict";
@@ -15,12 +15,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 
 const indent = (text) => text.trimEnd().split("\n").map((line, index) => (index === 0 ? line : `  ${line}`)).join("\n");
 
-test("the engine's eight templates carry the never-kept text and the decide text, line for line, as the deployed files and as rendered", async () => {
+test("the engine's ten templates carry the never-kept text and the decide text, line for line, as the deployed files and as rendered", async () => {
   const never = indent(MEMORY_NEVER_KEPT_TEXT);
   const decide = indent(MEMORY_DECIDE_TEXT);
   const directory = path.join(root, "deploy/web/openviking/memory-templates");
   const files = (await readdir(directory)).filter((name) => name.endsWith(".yaml"));
-  assert.equal(files.length, 8);
+  assert.equal(files.length, 10);
   const rendered = renderMemoryTemplates();
   for (const name of files) {
     const deployed = await readFile(path.join(directory, name), "utf8");
@@ -55,9 +55,15 @@ test("the shared text splits what is never kept from how a line is chosen, in th
   assert.match(MEMORY_DECIDE_TEXT, /Write it in the first conversation it appears in, even as one line; do not wait to see it twice\./);
   assert.match(MEMORY_DECIDE_TEXT, /A bare "不错" or "谢谢" confirms no approach\./);
   assert.match(MEMORY_DECIDE_TEXT, /Lean towards keeping what the person asked to be remembered\. Lean towards leaving a line out when it is sensitive or about someone else\./);
-  // The signal words are examples of how a rule is said and no list to match; a repeated demonstration is no fourth tier.
+  // The signal words are examples of how a rule is said and no list to match. A choice shown in a request is not a fourth tier either:
+  // the one place it is written is OBSERVATIONS, a note the control plane counts across conversations (owner decision 6 of 2026-10-25),
+  // and the engine never promotes it itself ("do not wait to see it twice" is about what the person said, not about a note).
   assert.match(MEMORY_DECIDE_TEXT, /"以后", "一律", "默认", "always" are ways people say a rule, not a list to match/);
-  assert.doesNotMatch(MEMORY_DECIDE_TEXT, /twice in separate|two separate conversations|repeated/i);
+  assert.match(MEMORY_DECIDE_TEXT, /The one place a choice of form, tool or method made inside a request is noted is OBSERVATIONS: a note kept to see whether a second conversation repeats it, never a fact about them\./);
+  assert.doesNotMatch(MEMORY_DECIDE_TEXT, /twice in separate|two separate conversations/i);
+  // An import the person asked for is their statement, line by line, under the same never-kept rules.
+  assert.match(MEMORY_DECIDE_TEXT, /- Imported: they bring over what another assistant remembered about them and ask to have it imported[^\n]*the never-kept rules still apply line by line/);
+  assert.match(MEMORY_NEVER_KEPT_TEXT, /request to import what another assistant remembered about them is not such material/);
   assert.doesNotMatch(MEMORY_NEVER_KEPT_TEXT, /When that is doubtful, leave it out/);
 });
 

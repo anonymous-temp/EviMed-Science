@@ -15,7 +15,7 @@ const ok = (result, extra = {}) => ({ status: "ok", result, error: null, telemet
 const fail = (code, message) => ({ status: "error", result: null, error: { code, message }, telemetry: null, profile: null });
 
 const BUILT_IN_TYPES = ["cases", "entities", "events", "experiences", "identity", "preferences", "profile", "soul", "trajectories"];
-export const STUB_MEMORY_TYPES = ["corrections", "decisions", "entities", "follow_ups", "preferences", "profile", "project_context", "project_facts"];
+export const STUB_MEMORY_TYPES = ["corrections", "decisions", "entities", "follow_ups", "observations", "preferences", "profile", "project_context", "project_facts", "recent_work"];
 
 export class OpenVikingStub {
   /**

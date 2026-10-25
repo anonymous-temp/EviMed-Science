@@ -41,6 +41,7 @@ import { FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH } from './frontierVo
 /** @typedef {'field'|'goal'|'subject'|'data_source'|'stage'|'constraints'} ProjectCardGeneralSlot */
 /** @typedef {'population'|'intervention'|'comparator'|'outcome'|'design'} ProjectCardClinicalSlot */
 /** @typedef {ProjectCardGeneralSlot|ProjectCardClinicalSlot} ProjectCardSlot */
+/** @typedef {ProjectCardSlot|'recent_work'} ProjectCardRow */
 
 /** The slots every project can have, in the order the card reads. */
 export const PROJECT_CARD_GENERAL_SLOTS = /** @type {readonly ProjectCardGeneralSlot[]} */ (Object.freeze([
@@ -57,8 +58,11 @@ export const PROJECT_CARD_SLOTS = /** @type {readonly ProjectCardSlot[]} */ (Obj
   ...PROJECT_CARD_GENERAL_SLOTS, ...PROJECT_CARD_CLINICAL_SLOTS,
 ]))
 
-/** What each slot is called on the card (the words of the OpenViking project-context template, so the two engines show one card). */
-export const PROJECT_CARD_SLOT_LABELS_ZH = /** @type {Readonly<Record<ProjectCardSlot, string>>} */ (Object.freeze({
+/**
+ * What each row of the card is called (the words of the OpenViking project-context template). `recent_work` is not a slot of the card's
+ * own file: it is the project's last three tasks (`recent_work` memory type), read beside the card and put last (2026-10-25).
+ */
+export const PROJECT_CARD_SLOT_LABELS_ZH = /** @type {Readonly<Record<ProjectCardRow, string>>} */ (Object.freeze({
   field: '领域',
   goal: '目标',
   subject: '范围或对象',
@@ -70,6 +74,7 @@ export const PROJECT_CARD_SLOT_LABELS_ZH = /** @type {Readonly<Record<ProjectCar
   comparator: '对照',
   outcome: '结局',
   design: '设计',
+  recent_work: '最近在做',
 }))
 
 /** The memory key a slot is written under. */

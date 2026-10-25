@@ -46,7 +46,17 @@ export const MEMORY_SEGMENT_OF_TYPE = Object.freeze({
   decisions: "decisions",
   follow_ups: "follow_ups",
   project_facts: "project_facts",
+  recent_work: "recent_work",
 });
+
+/**
+ * Where the `observations` template writes (2026-10-25): a choice the person made in a request and never called a rule, noted until a
+ * second conversation shows it too. It is deliberately NOT in `MEMORY_SEGMENT_OF_TYPE`, so `nativeMemoryFile` answers null for it and
+ * every reader of native memory — the page's list, search, the map, the resident block, recall through the gateway, the export, 「与你相关」 —
+ * leaves it out by construction, as it leaves out `memories/evimed`: an observation is never a fact, never read back and never
+ * a premise. The only code that reads it is `nativeMemoryObservations.mjs`, through `observationFile`.
+ */
+export const OBSERVATIONS_SEGMENT = "observations";
 
 /** Where the corrections template writes since 2026-10-23, beneath the preferences' own directory. */
 export const CORRECTIONS_UNDER_PREFERENCES = "preferences/corrections";
@@ -56,7 +66,7 @@ export const MEMORY_TYPE_OF_SEGMENT = Object.freeze(Object.fromEntries(
   Object.entries(MEMORY_SEGMENT_OF_TYPE).map(([type, segment]) => [segment, type])));
 
 /** The types whose files belong to one piece of work, and carry the `project=<id>` tag of the conversation that wrote them. */
-export const PROJECT_MEMORY_TYPES = Object.freeze(["project_context", "decisions", "follow_ups", "project_facts"]);
+export const PROJECT_MEMORY_TYPES = Object.freeze(["project_context", "decisions", "follow_ups", "project_facts", "recent_work"]);
 
 /** The subtree of `memories/` that is not native memory: the derived recall index of PostgreSQL's records and the
  *  capsule facts (`userMemoryRoot`). Native recall and the memory page never read it. */
@@ -83,6 +93,42 @@ export function nativeMemoryFile(uri, root) {
   // The profile is one file at the root; every other type is a directory of files.
   if (type === "profile" ? relPath !== "profile.md" : !relPath.includes("/")) return null;
   return { type, relPath };
+}
+
+/**
+ * Whether one `viking://` URI is an observation file of the account whose root is given (`OBSERVATIONS_SEGMENT`): a file directly
+ * under `memories/observations/`.
+ * @param {string} uri @param {string} root `nativeMemoryRoot(userId)`
+ * @returns {{ type: "observations", relPath: string } | null}
+ */
+export function observationFile(uri, root) {
+  const text = String(uri ?? "");
+  const prefix = `${root}/${OBSERVATIONS_SEGMENT}/`;
+  if (!text.startsWith(prefix)) return null;
+  const relPath = text.slice(root.length + 1);
+  const name = relPath.slice(OBSERVATIONS_SEGMENT.length + 1);
+  if (!name.endsWith(".md") || name.includes("/") || name.startsWith(".")) return null;
+  return { type: "observations", relPath };
+}
+
+/**
+ * The archives in a listing of an account's `sessions/` tree that nothing has finished yet: no `memory_diff.json` and no `.failed.json`
+ * beside them (the extraction of the commit that made them may still be running). Read by a reset, which must not lose sight of them
+ * when it deletes their sessions.
+ * @param {readonly { uri: string }[]} nodes the listing, hidden files included
+ * @returns {{ archiveUri: string, session: string }[]}
+ */
+export function unfinishedArchives(nodes) {
+  /** @type {Map<string, { session: string, finished: boolean }>} */
+  const archives = new Map();
+  for (const node of nodes) {
+    const parsed = parseArchiveUri(node.uri);
+    if (!parsed) continue;
+    const entry = archives.get(parsed.archiveUri) ?? { session: parsed.session, finished: false };
+    if (parsed.rest === "memory_diff.json" || parsed.rest === ".failed.json" || parsed.rest === ".done") entry.finished = true;
+    archives.set(parsed.archiveUri, entry);
+  }
+  return [...archives].filter(([, entry]) => !entry.finished).map(([archiveUri, entry]) => ({ archiveUri, session: entry.session }));
 }
 
 /** The archive a URI names, or null: `…/sessions/<session>/history/archive_NNN[/…]`. @param {string} uri */
