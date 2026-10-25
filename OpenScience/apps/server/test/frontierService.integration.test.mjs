@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
+import { FRONTIER_HIDE_REASONS } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
@@ -228,6 +229,48 @@ test("a reader's stars, hides and reads: hidden items leave lists unless the lis
   await assert.rejects(service.setItemState(reader, "nosuchitem0000", "star"), { code: "frontier_item_not_found" });
   const prefs = await database.query("SELECT state_version FROM evimed_frontier.user_prefs WHERE user_id=$1", [reader.id]);
   assert.equal(Number(prefs.rows[0].state_version), 5, "every write moved the reader's state version");
+});
+
+test("a hide keeps the reason it was given: a later one replaces it, one without leaves it, an unhide clears it, an unknown word is refused (c2-hide)", options, async () => {
+  const item = await insertItem(database, { selected: true, title: "Reasoned" });
+  const service = serviceFor();
+  const stored = async (user = reader) => {
+    const row = (await database.query(`SELECT hidden_at, hidden_reason FROM evimed_frontier.user_state us JOIN evimed_frontier.items i ON i.id = us.item_id
+      WHERE us.user_id = $1 AND i.public_id = $2`, [user.id, item.publicId])).rows[0];
+    return row ? [row.hidden_at !== null, row.hidden_reason] : null;
+  };
+  // Hidden at once with no reason (the card's first request), then the reason the reader chose a moment later.
+  assert.deepEqual(await service.setItemState(reader, item.publicId, "hide"), { state: { starred: false, hidden: true, read: false } });
+  assert.deepEqual(await stored(), [true, null]);
+  const firstAt = (await database.query("SELECT hidden_at FROM evimed_frontier.user_state WHERE user_id = $1", [reader.id])).rows[0].hidden_at;
+  assert.deepEqual(await service.setItemState(reader, item.publicId, "hide", { reason: "promotional" }), { state: { starred: false, hidden: true, read: false } });
+  assert.deepEqual(await stored(), [true, "promotional"], "a reason on an item that is already hidden is set");
+  assert.deepEqual((await database.query("SELECT hidden_at FROM evimed_frontier.user_state WHERE user_id = $1", [reader.id])).rows[0].hidden_at, firstAt,
+    "the first time counts: the reason does not move when it was hidden");
+  await service.setItemState(reader, item.publicId, "hide");
+  assert.deepEqual(await stored(), [true, "promotional"], "a hide with no reason leaves the reason it has");
+  await service.setItemState(reader, item.publicId, "hide", { reason: "low-quality" });
+  assert.deepEqual(await stored(), [true, "low-quality"], "a later reason replaces the earlier");
+  await service.setItemState(reader, item.publicId, "star");
+  await service.setItemState(reader, item.publicId, "read");
+  assert.deepEqual(await stored(), [true, "low-quality"], "a star or a read says nothing of the hide");
+  await service.setItemState(reader, item.publicId, "unhide");
+  assert.deepEqual(await stored(), [false, null], "an unhide clears the reason with the hide");
+  await service.setItemState(reader, item.publicId, "hide");
+  assert.deepEqual(await stored(), [true, null], "hidden again, it starts with none");
+  // One reader's word is theirs alone.
+  await service.setItemState(other, item.publicId, "hide", { reason: "source" });
+  assert.deepEqual([await stored(), await stored(other)], [[true, null], [true, "source"]]);
+  // Every closed word is accepted; anything else is refused by name before the table's own check could.
+  for (const reason of FRONTIER_HIDE_REASONS) {
+    await service.setItemState(reader, item.publicId, "hide", { reason });
+    assert.deepEqual(await stored(), [true, reason]);
+  }
+  for (const reason of ["boring", "", "SOURCE"]) {
+    await assert.rejects(service.setItemState(reader, item.publicId, "hide", { reason }), { status: 400, code: "frontier_payload_invalid" }, reason);
+  }
+  await assert.rejects(service.setItemState(reader, item.publicId, "star", { reason: "source" }), { status: 400, code: "frontier_payload_invalid" });
+  assert.deepEqual(await stored(), [true, FRONTIER_HIDE_REASONS.at(-1)], "a refused call changed nothing");
 });
 
 test("search runs the keyword leg, widens 精选 to 全部, marks selected items, and pages by rank", options, async () => {

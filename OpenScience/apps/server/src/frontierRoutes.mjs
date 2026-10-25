@@ -1,4 +1,4 @@
-import { FRONTIER_INTERACTION_BATCH } from "@evimed/domain";
+import { FRONTIER_HIDE_REASONS, FRONTIER_INTERACTION_BATCH } from "@evimed/domain";
 import { recordFrontierExposure } from "./frontierEvolution.mjs";
 import { FRONTIER_EVENTS_PATH } from "./frontierInteractions.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
@@ -43,6 +43,8 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 const NOT_ENABLED = () => new HttpError(404, "frontier_not_enabled", "The frontier feed is not enabled.");
 const ITEM_ACTIONS = Object.freeze(["star", "unstar", "hide", "unhide", "read"]);
 const OPERATOR_ITEM_ACTIONS = Object.freeze(["withdraw", "pin", "unpin"]);
+/** The one field a hide may carry. */
+const HIDE_FIELDS = Object.freeze(["reason"]);
 
 /**
  * The bounded metric label of a frontier path: ids are folded so a dashboard
@@ -168,8 +170,12 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       return true;
     }
     if (parts.length === 3 && parts[0] === "items" && method === "POST" && ITEM_ACTIONS.includes(parts[2])) {
-      await bodyOf(req, maxJsonBytes, []);
-      return reply(await service.setItemState(user, parts[1], parts[2]));
+      // A hide may say why (`reason`, one of `FRONTIER_HIDE_REASONS`; absent or null is no reason); no other action takes a body.
+      const body = await bodyOf(req, maxJsonBytes, parts[2] === "hide" ? HIDE_FIELDS : []);
+      if (body.reason !== undefined && body.reason !== null && !FRONTIER_HIDE_REASONS.includes(body.reason)) {
+        throw new HttpError(400, "frontier_payload_invalid", "The hide reason is not one the feed knows.");
+      }
+      return reply(await service.setItemState(user, parts[1], parts[2], parts[2] === "hide" ? { reason: body.reason ?? null } : undefined));
     }
     if (parts.length === 3 && parts[0] === "items" && method === "POST" && parts[2] === "save-to-library") {
       const body = await bodyOf(req, maxJsonBytes, ["projectId"]);

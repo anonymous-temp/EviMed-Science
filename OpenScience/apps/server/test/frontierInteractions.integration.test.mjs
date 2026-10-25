@@ -216,3 +216,42 @@ test("the operators' reading figures: behind the token, a window of days, click-
     assert.doesNotMatch(line, /user|account|track|session/, line);
   }
 });
+
+test("a hide carries its reason over HTTP, and the operator reads the sources readers called low in quality or promotional — never a reader (c2-hide)", options, async () => {
+  const { base, database } = context;
+  await insertSource(database, "flagsrc", { name: "Flagged Source", source_type: "media" });
+  const flagged = [];
+  for (let index = 0; index < 3; index += 1) {
+    flagged.push(await insertComposedItem(database, { sourceId: "flagsrc", selected: true, title: `Flagged ${index}`, scoreTotal: 60, visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) }));
+  }
+  const hide = (role, item, body) => fetch(`${base}/api/frontier/items/${item.publicId}/hide`, { method: "POST", headers: headers(role), body: JSON.stringify(body) });
+  // The card hides at once with no body, then says why a moment later; the reason lands on the hide that stands.
+  assert.equal((await hide("reader", flagged[0], {})).status, 200);
+  const stored = async (role, item) => (await database.query("SELECT hidden_reason FROM evimed_frontier.user_state WHERE user_id = $1 AND item_id = $2",
+    [accounts[role], item.id])).rows[0]?.hidden_reason;
+  assert.equal(await stored("reader", flagged[0]), null);
+  const answer = await hide("reader", flagged[0], { reason: "low-quality" });
+  assert.equal(answer.status, 200);
+  assert.deepEqual((await answer.json()).data, { state: { starred: false, hidden: true, read: false } }, "the answer is the state, as it was");
+  assert.equal(await stored("reader", flagged[0]), "low-quality");
+  const refused = await hide("reader", flagged[1], { reason: "boring" });
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).code, "frontier_payload_invalid");
+  assert.equal(await stored("reader", flagged[1]), undefined, "a refused hide hid nothing");
+  assert.equal((await hide("reader", flagged[1], { reason: "promotional" })).status, 200);
+  assert.equal((await hide("other", flagged[0], { reason: "promotional" })).status, 200);
+  assert.equal((await hide("other", flagged[2], { reason: "source" })).status, 200);
+  assert.equal((await hide("busy", flagged[2], { reason: "already-seen" })).status, 200);
+  const ops = (await (await fetch(`${base}/api/ops/frontier-reading?days=3`, { headers: { authorization: `Bearer ${TOKEN}` } })).json()).data;
+  assert.deepEqual(ops.partsMissing, []);
+  assert.deepEqual(ops.flaggedSources, { days: 30, sources: [{ source: "flagsrc", name: "Flagged Source", lowQuality: 1, promotional: 2, readers: 2 }] },
+    "per source, over thirty days: the two reasons that are about the source, and how many readers said so; the other reasons are not counted");
+  // Undone, the reason goes with the hide and out of the count.
+  assert.equal((await fetch(`${base}/api/frontier/items/${flagged[0].publicId}/unhide`, { method: "POST", headers: headers("reader"), body: "{}" })).status, 200);
+  assert.equal(await stored("reader", flagged[0]), null);
+  const after = (await (await fetch(`${base}/api/ops/frontier-reading?days=3`, { headers: { authorization: `Bearer ${TOKEN}` } })).json()).data;
+  assert.deepEqual(after.flaggedSources.sources.map((row) => [row.lowQuality, row.promotional, row.readers]), [[0, 2, 2]]);
+  // A reader's own pages say nothing of reasons: not in an item, a list, nor the state the action returned.
+  const list = await (await fetch(`${base}/api/frontier/items?view=all&limit=50`, { headers: headers("other") })).text();
+  assert.doesNotMatch(list, /hidden_?[rR]eason|low-quality|promotional|flagged/);
+});
