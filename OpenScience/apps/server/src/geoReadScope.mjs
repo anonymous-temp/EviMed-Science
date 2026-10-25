@@ -5,7 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, geoMetricMembers, geoJudgementCoverage,
   GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES, geoCoverageKey } from "@evimed/domain";
 import { computeRoundCells } from "./geoMetricsJob.mjs";
-import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { GeoMeasureStore, GEO_ROUND_ANSWERED } from "./geoMeasureStore.mjs";
 import { HttpError } from "./security.mjs";
 
 export const GEO_SCOPE_FIELDS = Object.freeze(["round", "from", "to", "compareFrom", "compareTo", "comparisonMode", "engines", "questionVersion",
@@ -389,6 +389,10 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     AND skipped.geo_project_id = $1 AND skipped.user_id = $2 AND skipped.status = 'skipped' AND skipped.error_code IN ('engine_paused', 'engine_unavailable'))`;
   if (dated) where.push(`EXISTS (SELECT 1 FROM evimed_geo.snapshots s ${joins} WHERE ${observed.join(" AND ")} AND NOT ${paused})`);
   const ranged = Boolean(history || frozenRoundIds || scope.round || dated);
+  // With no explicit round, range or frozen selection, "the latest" is a finished round that heard an answer: one that closed with
+  // its engines paused or the probe host down (2026-10-25) cited nothing, and as the latest it drew every source, group and rate at
+  // zero. An unfinished round is still the fallback before any has finished, as before.
+  if (!frozenRoundIds && !scope.round && !dated) where.push(`(r.status NOT IN ('done', 'partial') OR ${GEO_ROUND_ANSWERED("r")})`);
   // Context previews choose their actual rounds before observation admission. Explicit and frozen scopes are never truncated.
   const contextLimit = history && !frozenRoundIds && !scope.round && !dated ? historyLimit : null;
   if (contextLimit != null && (!Number.isSafeInteger(contextLimit) || contextLimit < 1 || contextLimit > GEO_SELECTION_MAX_ROUNDS)) throw invalid("Invalid history context limit.");

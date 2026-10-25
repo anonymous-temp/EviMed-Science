@@ -87,6 +87,7 @@ export async function readGeoValueCoverage(store, geoId, { engine = null, groupI
       throw new HttpError(422, 'geo_read_filter_invalid', 'Narrow the selected answers to at most 20,000.');
   }
   const basis = `CASE WHEN jsonb_typeof(f.judge_extract -> 'valueBasisVersion') = 'number' THEN (f.judge_extract ->> 'valueBasisVersion')::numeric END`;
+  // Unselected, the latest round is one that heard an answer: an empty week (the probe host down, 2026-10-25) holds no finding to count.
   const from = `FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id AND s.geo_project_id=f.geo_project_id AND s.user_id=f.user_id
     JOIN evimed_geo.rounds r ON r.id=s.round_id AND r.geo_project_id=s.geo_project_id AND r.user_id=s.user_id
     CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.judge_extract -> 'valueCoverage') = 'array'
@@ -96,8 +97,10 @@ export async function readGeoValueCoverage(store, geoId, { engine = null, groupI
       AND ($3::text IS NULL OR s.question_id IN (SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1 AND user_id=s.user_id AND group_id = $3))
       AND ($4::text IS NULL OR s.question_id IN (SELECT q.id FROM evimed_geo.questions q JOIN evimed_geo.question_groups g ON g.id=q.group_id AND g.geo_project_id=q.geo_project_id AND g.user_id=q.user_id WHERE q.geo_project_id=$1 AND q.user_id=s.user_id AND g.audience=$4))
       AND ($5::text IS NULL OR f.user_id=$5)
-      AND ${selectedMode ? 's.id=ANY($6::text[])' : `s.round_id=(SELECT id FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=s.user_id
-        AND kind IN ('baseline','weekly','single_step') AND status IN ('done','partial') ORDER BY created_at DESC,id DESC LIMIT 1)`}`;
+      AND ${selectedMode ? 's.id=ANY($6::text[])' : `s.round_id=(SELECT latest.id FROM evimed_geo.rounds latest WHERE latest.geo_project_id=$1 AND latest.user_id=s.user_id
+        AND latest.kind IN ('baseline','weekly','single_step') AND latest.status IN ('done','partial')
+        AND EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id=latest.id AND answered.status IN ('valid','refusal'))
+        ORDER BY latest.created_at DESC,latest.id DESC LIMIT 1)`}`;
   // One read-time interpretation feeds both counts and sampled observations.
   // Historical rows with no coverage remain unknown; the older explicit cut
   // is sufficient evidence of partial coverage. Supported observed text stays.

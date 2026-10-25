@@ -53,6 +53,14 @@ export const GEO_PROBE_LOCK_KEY = "evimed_geo_probe";
 /** Rounds whose big versions wait for the night window. */
 export const GEO_NIGHT_ROUND_KINDS = Object.freeze(["baseline", "weekly", "noise"]);
 
+/**
+ * The SQL test that a round heard an answer: one valid or refused snapshot. A round that closed with its engines paused or the
+ * probe host down (2026-10-25) heard none, and is never "the latest", the baseline, a week or a source count's round.
+ * @param {string} alias the rounds alias of the query it goes into (a literal of the caller's own SQL, never input)
+ */
+export const GEO_ROUND_ANSWERED = (alias) => `EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id = ${alias}.id
+  AND answered.status IN ('valid', 'refusal'))`;
+
 const ENSURE_COLUMNS = `
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_expected jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_hits jsonb NOT NULL DEFAULT '[]'::jsonb;

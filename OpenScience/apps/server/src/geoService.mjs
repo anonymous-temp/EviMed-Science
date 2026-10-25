@@ -66,6 +66,7 @@ import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
 import { readFrozenGeoAnalysisPage, hasGeoFrozenAnalysisContext } from "./geoAnalysisFrozenPages.mjs";
 import { readGeoAnalysis, presentGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
+import { GEO_ROUND_ANSWERED } from "./geoMeasureStore.mjs";
 import { geoRivalMonitoringRows } from "./geoAnalysisMetrics.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
 import { GeoOwnedPublications } from "./geoOwnedPublications.mjs";
@@ -477,10 +478,12 @@ export class GeoService {
     /** @type {Map<string, Map<string, any>>} */
     const byProject = new Map();
     if (!geoIds.length) return byProject;
+    // The latest round is one that heard an answer (`GEO_ROUND_ANSWERED`): an empty week has no metrics, and as the latest it
+    // emptied the headline of every project the probe host could not reach.
     const result = await this.store.query(`WITH chosen AS (
-        SELECT DISTINCT ON (geo_project_id) id, geo_project_id, sample_date FROM evimed_geo.rounds
-        WHERE geo_project_id = ANY($1::text[]) AND kind = ANY($3::text[])
-        ORDER BY geo_project_id, (status IN ('done', 'partial')) DESC, CASE WHEN status IN ('done', 'partial') THEN finished_at END DESC NULLS LAST, created_at DESC, id DESC
+        SELECT DISTINCT ON (r.geo_project_id) r.id, r.geo_project_id, r.sample_date FROM evimed_geo.rounds r
+        WHERE r.geo_project_id = ANY($1::text[]) AND r.kind = ANY($3::text[]) AND (r.status NOT IN ('done', 'partial') OR ${GEO_ROUND_ANSWERED("r")})
+        ORDER BY r.geo_project_id, (r.status IN ('done', 'partial')) DESC, CASE WHEN r.status IN ('done', 'partial') THEN r.finished_at END DESC NULLS LAST, r.created_at DESC, r.id DESC
       ) SELECT DISTINCT ON (m.geo_project_id, m.metric_id) m.*, r.sample_date
       FROM evimed_geo.metrics m JOIN chosen r ON r.id = m.round_id AND r.geo_project_id = m.geo_project_id
       WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = 'project' AND m.metric_id = ANY($2::text[]) AND m.arm IS NULL AND ${PLAIN_ROW}
@@ -1295,10 +1298,11 @@ export class GeoService {
       if (!row) throw failure(404, "geo_round_not_found", "Round not found.");
       return row;
     }
-    // One resolver for "the latest measurement": a finished full round, by when it finished — the same one the sources page reads —
-    // and only when none has finished, the newest one begun.
-    return (await this.store.query(`SELECT * FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-      ORDER BY (status IN ('done', 'partial')) DESC, CASE WHEN status IN ('done', 'partial') THEN finished_at END DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
+    // One resolver for "the latest measurement": a finished full round that heard an answer, by when it finished — the same one the
+    // sources page reads — and only when none has finished, the newest one begun.
+    return (await this.store.query(`SELECT * FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = ANY($2::text[])
+        AND (r.status NOT IN ('done', 'partial') OR ${GEO_ROUND_ANSWERED("r")})
+      ORDER BY (r.status IN ('done', 'partial')) DESC, CASE WHEN r.status IN ('done', 'partial') THEN r.finished_at END DESC NULLS LAST, r.created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
   }
 
   /** @param {{ id: string }} user @param {string} id @param {string} snapshotId */
@@ -1730,6 +1734,7 @@ export class GeoService {
           JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
         WHERE m.geo_project_id = $1 AND m.scope = 'engine' AND m.metric_id = $2 AND m.pool IS NULL AND m.arm IS NULL AND ${PLAIN_ROW}
           AND m.round_id = (SELECT latest.id FROM evimed_geo.rounds latest WHERE latest.geo_project_id = $1 AND latest.kind = ANY($3::text[])
+              AND (latest.status NOT IN ('done', 'partial') OR ${GEO_ROUND_ANSWERED("latest")})
             ORDER BY (latest.status IN ('done', 'partial')) DESC, CASE WHEN latest.status IN ('done', 'partial') THEN latest.finished_at END DESC NULLS LAST, latest.created_at DESC, latest.id DESC LIMIT 1)
         ORDER BY m.engine, m.computed_at DESC`, [project.id, GEO_VIEW_METRIC_IDS.retrieval, [...GEO_HEADLINE_ROUND_KINDS]]),
     ]);
