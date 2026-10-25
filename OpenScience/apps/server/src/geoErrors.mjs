@@ -170,8 +170,36 @@ export async function traceError(store, snapshot, sentence, owned, now) {
 const engineLabel = (engine) => /** @type {Record<string, { display_name: string }>} */ (GEO_METRICS.engines)[engine]?.display_name ?? engine;
 
 /**
- * Tell the owner of the project, once, about an urgent error.
- * @param {{ store: import("./geoMeasureStore.mjs").GeoMeasureStore, notify?: (event: Record<string, any>) => unknown, now?: () => Date }} deps
+ * Which telling of an error a notice is: `first`, or `seen:<snapshot>` for the sighting that brought it back (an error reopened after
+ * closing, or seen again before its first notice went out — the parse tick tells it under that sighting's snapshot). A notice that is
+ * tried again names the same telling, so the inbox's own key keeps it one item: tried again as `first`, the notice of a reopened error
+ * read back the item of its first telling and the reopening was never told.
+ * @param {{ firstSnapshotId?: string | null, lastSnapshotId?: string | null }} error
+ */
+export function errorNoticeOccurrence(error) {
+  const { firstSnapshotId: first, lastSnapshotId: last } = error;
+  return first && last && last !== first ? `seen:${last}` : "first";
+}
+
+/** The inbox key of an error's notice. @param {{ id: string, firstSnapshotId?: string | null, lastSnapshotId?: string | null }} error */
+export function errorNoticeKey(error) {
+  return `geo:wrong_ours:${error.id}:${errorNoticeOccurrence(error)}`;
+}
+
+/** How long a notice the inbox refused waits before it is tried again: a minute, doubling, at most an hour. @param {number} refusals */
+export function notifyRetryDelayMs(refusals) {
+  return Math.min(3_600_000, 60_000 * 2 ** Math.max(0, refusals - 1));
+}
+
+/**
+ * Tell the owner of the project, once, about an urgent error. The error is
+ * marked told (`notified_at`) only when the notice was delivered or there was
+ * nothing to deliver; a notice the inbox refused (the hook answers `false`)
+ * leaves it untold, to be tried again by `tickErrors` after a wait and by the
+ * orchestrator's own pass over untold errors. 2026-10-25: a refusal used to
+ * mark the error told, and an S3/S4 notice the inbox did not take was lost.
+ * @param {{ store: import("./geoMeasureStore.mjs").GeoMeasureStore, notify?: (event: Record<string, any>) => unknown, now?: () => Date,
+ *   state?: { notifyRetry?: Map<string, { refusals: number, at: number }> } }} deps
  * @param {ReturnType<typeof import("./geoMeasureStore.mjs").errorRow>} error
  * @param {{ projectId?: string, brandName?: string | null, claimStatement?: string | null, questionText?: string | null }} context
  * @param {string} [occurrence]  `first`, or `seen:<snapshot>` for an error seen again after it was closed
@@ -179,8 +207,10 @@ const engineLabel = (engine) => /** @type {Record<string, { display_name: string
 async function notifyError(deps, error, context, occurrence = "first") {
   if (typeof deps.notify !== "function") return false;
   const now = (deps.now ?? (() => new Date()))();
+  const retry = deps.state?.notifyRetry ?? null;
+  let delivered;
   try {
-    await deps.notify({
+    delivered = await deps.notify({
       kind: "wrong_ours",
       severity: "safety",
       userId: error.userId,
@@ -201,8 +231,17 @@ async function notifyError(deps, error, context, occurrence = "first") {
       idempotencyKey: `geo:wrong_ours:${error.id}:${occurrence}`,
     });
   } catch {
+    delivered = false;
+  }
+  if (delivered === false) {
+    if (retry) {
+      const refusals = (retry.get(error.id)?.refusals ?? 0) + 1;
+      if (retry.size > 5_000) retry.clear();
+      retry.set(error.id, { refusals, at: now.getTime() + notifyRetryDelayMs(refusals) });
+    }
     return false;
   }
+  retry?.delete(error.id);
   await deps.store.updateError(error.id, { notified_at: now });
   return true;
 }
@@ -341,7 +380,7 @@ async function engineBack(deps, engine, since) {
  * again once it is back, errors a later answer shows gone, and traces whose
  * source the sources table now knows.
  * @param {{ store: import("./geoMeasureStore.mjs").GeoMeasureStore, config?: Record<string, any>, now?: () => Date,
- *   notify?: (event: Record<string, any>) => unknown, inclusion?: any, state?: { breaker?: any } }} deps
+ *   notify?: (event: Record<string, any>) => unknown, inclusion?: any, state?: { breaker?: any, notifyRetry?: Map<string, { refusals: number, at: number }> } }} deps
  */
 export async function tickErrors(deps) {
   const { store } = deps;
@@ -378,13 +417,20 @@ export async function tickErrors(deps) {
     counts.notified += recorded.notified;
   }
 
+  // Untold urgent errors, at most 20 tries a tick, each refused one after its wait (`notifyRetryDelayMs`): an inbox that is down is
+  // not asked every five seconds, and the errors waiting behind a refused one are reached.
   if (typeof deps.notify === "function") {
-    for (const error of await store.errorsToNotify([...GEO_NOTIFY_SEVERITIES], 20)) {
+    const retry = deps.state?.notifyRetry ?? null;
+    let tried = 0;
+    for (const error of await store.errorsToNotify([...GEO_NOTIFY_SEVERITIES], 100)) {
+      if (tried >= 20) break;
+      if ((retry?.get(error.id)?.at ?? 0) > now.getTime()) continue;
       const ctx = await context(error.geoProjectId);
       if (!ctx) continue;
+      tried += 1;
       const claim = ctx.claims.find((/** @type {any} */ entry) => entry.id === error.claimId) ?? null;
       if (await notifyError(deps, error, { projectId: ctx.project.projectId, brandName: ctx.project.product?.brandName ?? null,
-        claimStatement: claim?.statement ?? null })) counts.notified += 1;
+        claimStatement: claim?.statement ?? null }, errorNoticeOccurrence(error))) counts.notified += 1;
     }
   }
 
@@ -408,11 +454,15 @@ export async function tickErrors(deps) {
     // Wait until every answer the round got has been read.
     if (answers.some((answer) => (answer.status === "valid" || answer.status === "refusal") && !answer.parsed)) continue;
     const valid = answers.filter((answer) => (answer.status === "valid" && answer.judged) || answer.status === "refusal");
-    // A round that never asked the engine (paused, or no channel) confirmed
-    // nothing: the confirmation is skipped, not read as 「未确认」, and it is
-    // asked again once the engine is back (G1). The round itself stays as it
-    // was — a new round is queued, and no count of this one is rewritten.
-    if (!valid.length && (await store.roundSkippedEngines(roundId)).includes(error.engine)) {
+    // A round that got no answer from the engine — never asked it (paused,
+    // or no channel), or asked and heard nothing back (the probe host down,
+    // every ask failed or suspect) — confirmed nothing: the confirmation is
+    // skipped, not read as 「未确认」, and it is asked again once the engine is
+    // back (G1; the second half 2026-10-25, when every ask of a round failed
+    // at an unreachable host and the error read 「未确认」 for good). The round
+    // itself stays as it was — a new round is queued, and no count of this
+    // one is rewritten.
+    if (!answers.some((answer) => answer.status === "valid" || answer.status === "refusal")) {
       const skippedRounds = [...new Set([...(Array.isArray(error.confirm?.skippedRounds) ? error.confirm.skippedRounds : []), roundId])];
       await store.updateError(error.id, {
         confirm: { ...error.confirm, status: "skipped", stability: "unconfirmed", tries: Number(error.confirm?.tries ?? 1), skippedRounds,

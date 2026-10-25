@@ -135,6 +135,24 @@ test("the fixes: a dry run reports and changes nothing; --apply writes them in o
   assert.equal((await state()).strategies, 1, "no second strategy version");
 });
 
+test("the re-measure leaves a round that heard no answer unmeasured and removes the empty cells written for it before 2026-10-25", options, async () => {
+  await q(`TRUNCATE ${["metrics", "errors", "facts", "snapshots", "probe_jobs", "rounds", "questions", "question_groups", "question_sets", "claims", "journeys",
+    "sources", "articles", "orders", "strategy", "targets", "schedule_marks", "projects"].map((table) => `evimed_geo.${table}`).join(", ")} CASCADE`);
+  await seed();
+  await q(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, status, planned, done, failed, finished_at)
+    VALUES ('gr_empty', $2, $1, 'sentinel', 1, ARRAY['kimi','qianwen'], 'partial', 2, 0, 2, '2026-10-21T00:10:00Z')`, [ID, USER]);
+  await q(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, metric_id, status, snapshot_count)
+    VALUES ('m_empty_1', $2, $1, 'gr_empty', 'project', 'M-19', 'not_measurable', 0), ('m_empty_2', $2, $1, 'gr_empty', 'engine', 'M-01', 'absent', 0)`, [ID, USER]);
+  const cells = async () => (await q(`SELECT round_id, count(*)::int AS n FROM evimed_geo.metrics WHERE geo_project_id = $1 GROUP BY round_id ORDER BY round_id`, [ID]))
+    .map((row) => [row.round_id, row.n > 0]);
+  const dry = await fix(false);
+  assert.deepEqual([dry.remeasured, dry.emptyRounds], [1, { rounds: 1, cells: 2 }], "the baseline is measured; the empty sentinel is not, and its cells go");
+  assert.deepEqual(await cells(), [["gr_empty", true]], "a dry run changes nothing");
+  await fix(true);
+  assert.deepEqual(await cells(), [["gr_base", true]]);
+  assert.deepEqual((await fix(true)).emptyRounds, { rounds: 0, cells: 0 }, "nothing left the second time");
+});
+
 test("the script's arguments: a project is required; the ruling's two domains are disowned unless kept", () => {
   assert.throws(() => parseGeoDataFixArguments([]), /--geo-project/);
   const parsed = parseGeoDataFixArguments(["--geo-project", "geo_1", "--our-single-source", "true", "--our-generic-alias", "玛仕度肽",

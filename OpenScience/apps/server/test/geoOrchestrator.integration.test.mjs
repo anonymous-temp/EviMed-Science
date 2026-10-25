@@ -605,6 +605,101 @@ test("a baseline that measured no answer fails the diagnosis: no 「诊断完成
   assert.equal(world.notices.filter((notice) => notice.title === "玛仕度肽：诊断完成").length, 1);
 });
 
+test("a weekly round that heard no answer is no week: monitoring is not done by it and no weekly report is written for it (2026-10-25)", options, async () => {
+  const world = harness({ at: "2026-10-01T00:00:00Z" });
+  const { project, control } = await newProject();
+  // Monitoring alone: what it needs upstream is the diagnosis, so the only run the program may send is the weekly report.
+  await store.setStep(project.id, "monitoring", { requested: true });
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  await world.orchestrator.advance(project.id);
+  // The set is the diagnosis' minimal one: its round is a single step.
+  const diagnosis = world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.step === "diagnosis");
+  assert.ok(diagnosis);
+  await finishRound(diagnosis.id, { finishedAt: "2026-09-28T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "minimal");
+  const weeklyOf = (/** @type {string} */ week) => world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.week === week);
+  const reports = () => world.dispatched.filter((run) => run.geoProjectId === project.id && run.reason === "geo:export-weekly");
+
+  // The probe host is down: the week's round closes with every job skipped. Cells were still written for such a round before
+  // 2026-10-25, and the program read them as a measured week.
+  world.setClock("2026-10-04T19:10:00Z"); // Monday 2026-10-05 03:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  await finishRound(weeklyOf("2026-10-05").id, { answers: 0, finishedAt: "2026-10-04T19:20:00Z" });
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).monitoring, "running", "a week with no answer is not 「第 1 周」");
+  assert.deepEqual(reports(), [], "no weekly report of a week nothing was measured in");
+
+  // The next week is heard: it is the first week, and it gets its report.
+  world.setClock("2026-10-11T19:10:00Z");
+  await world.orchestrator.tickSchedules();
+  await finishRound(weeklyOf("2026-10-12").id, { finishedAt: "2026-10-11T19:20:00Z" });
+  await world.orchestrator.advance(project.id);
+  const steps = (await reload(project.id)).steps;
+  assert.deepEqual([steps.monitoring.status, steps.monitoring.note], ["done", "第 1 周"]);
+  assert.deepEqual(reports().map((run) => run.dispatchId), ["geo-export-weekly-2026-10-12-a1"]);
+  await finishRun(world, control, world.dispatched.indexOf(reports()[0]));
+});
+
+test("an urgent error the measurement could not tell is told by the program under its telling's key, and marked told (2026-10-25)", options, async () => {
+  const world = harness();
+  const { project, userId } = await newProject();
+  // Reopened: first seen in s1, back in s2; the inbox refused the measurement's notice of the reopening.
+  await q(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, statement, severity, status, first_snapshot_id, last_snapshot_id)
+    VALUES ($1, $2, $3, 'dosing', 'deepseek', '把玛仕度肽说成每天注射一次', 'S3', 'open', 's1', 's2')`, [`err-u-${project.id}`, userId, project.id]);
+  await world.orchestrator.advance(project.id);
+  const told = world.notices.filter((notice) => notice.title === "DeepSeek 把玛仕度肽说成每天注射一次");
+  assert.deepEqual(told.map((notice) => notice.idempotencyKey), [`geo:wrong_ours:err-u-${project.id}:seen:s2`], "the reopening, not the first telling");
+  const [row] = await q(`SELECT notified_at FROM evimed_geo.errors WHERE id = $1`, [`err-u-${project.id}`]);
+  assert.notEqual(row.notified_at, null, "the measurement stops trying it");
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.notices.filter((notice) => notice.title === "DeepSeek 把玛仕度肽说成每天注射一次").length, 1);
+});
+
+test("a noise round that heard no answer is asked again once an engine answers, three times at most (2026-10-25)", options, async () => {
+  const { world, project } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "done");
+  const noises = () => world.enqueued.filter((round) => round.geoProjectId === project.id && round.kind === "noise");
+  assert.deepEqual(noises().map((round) => round.ref.scheduleKey), ["round:noise"]);
+  // "An engine has answered since" is read across projects, and other tests leave answers on the wall clock: these rounds end later.
+  for (const [index, key] of [[0, "round:noise:r2"], [1, "round:noise:r3"]]) {
+    await finishRound(noises()[index].id, { answers: 0, finishedAt: `2030-01-0${index + 1}T00:00:00Z` });
+    await world.orchestrator.advance(project.id);
+    assert.equal(noises().length, index + 1, "the engines are still silent: nothing is asked again");
+    await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status) VALUES ($1, $2, $3, 'deepseek',
+      (SELECT finished_at + interval '1 minute' FROM evimed_geo.rounds WHERE id = $4), 'valid')`, [`back-n${index}-${project.id}`, project.userId, project.id, noises()[index].id]);
+    await world.orchestrator.advance(project.id);
+    assert.deepEqual(noises().map((round) => round.ref.scheduleKey).at(-1), key);
+  }
+  await finishRound(noises()[2].id, { answers: 0, finishedAt: "2030-01-03T00:00:00Z" });
+  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status) VALUES ($1, $2, $3, 'deepseek',
+    (SELECT finished_at + interval '1 minute' FROM evimed_geo.rounds WHERE id = $4), 'valid')`, [`back-n2-${project.id}`, project.userId, project.id, noises()[2].id]);
+  await world.orchestrator.advance(project.id);
+  assert.equal(noises().length, 3, "three tries, no fourth");
+  await q(`DELETE FROM evimed_geo.snapshots WHERE geo_project_id = $1 AND starts_with(id, 'back-n')`, [project.id]);
+});
+
+test("the weekly rest is counted from the first baseline that heard an answer, not an empty one before it (2026-10-25)", options, async () => {
+  const { world, project, user } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { answers: 0, finishedAt: "2026-09-20T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "failed");
+  await world.orchestrator.runStep(user, project, "diagnosis");
+  const second = world.enqueued.filter((round) => round.geoProjectId === project.id && round.kind === "baseline")[1];
+  await finishRound(second.id, { finishedAt: "2026-10-04T00:00:00Z" }); // Sunday, the day before the weekly round is due
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "done");
+  world.setClock("2026-10-04T19:10:00Z"); // Monday 2026-10-05 03:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const [mark] = await q(`SELECT state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'weekly:2026-10-05'`, [project.id]);
+  assert.deepEqual([mark?.state, mark?.detail?.reason], ["skipped", "baseline_recent"], "a day after the baseline that measured is noise, not a week");
+  assert.equal(world.enqueued.some((round) => round.geoProjectId === project.id && round.kind === "weekly"), false);
+});
+
 test("a diagnosis is done only when its metrics exist; past the grace operators are alerted and the program waits", options, async () => {
   const { world, project } = await lockedProgram();
   const round = world.enqueued[0].id;
@@ -768,6 +863,31 @@ test("a sentinel that skipped a paused engine is asked again on that engine the 
   assert.deepEqual({ ...first }, { status: "partial", done: 0, failed: 1 }, "the skipped round keeps its counts");
   await world.orchestrator.tickSchedules();
   assert.equal(makeUps().length, 1, "made once");
+});
+
+test("a sentinel whose asks the probe host never took is made up like a skipped one, once the engine answers again (2026-10-25)", options, async () => {
+  const { world, project } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  world.setClock("2026-10-01T00:10:00Z"); // 08:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const sentinel = world.enqueued.find((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id);
+  assert.ok(sentinel);
+  const [engine] = sentinel.engines;
+  const [question] = (await store.questionMap(project.id, 1))[0].questions;
+  // Every ask of the engine failed at the host (connection refused), its attempts spent; the round closed partial.
+  await q(`UPDATE evimed_geo.rounds SET status = 'partial', done = 0, failed = 1,
+      finished_at = (SELECT greatest('2026-10-01T00:30:00Z'::timestamptz, coalesce(max(asked_at), 'epoch'::timestamptz)) FROM evimed_geo.snapshots WHERE engine = $2)
+    WHERE id = $1`, [sentinel.id, engine]);
+  await q(`INSERT INTO evimed_geo.probe_jobs (id, user_id, round_id, geo_project_id, question_id, engine, status, attempts, error_code)
+    VALUES ($1, $2, $3, $4, $5, $6, 'failed', 3, 'geo_probe_unavailable')`, [`job-h-${sentinel.id}`, project.userId, sentinel.id, project.id, question.id, engine]);
+  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface) VALUES ($1, $2, $3, $4,
+    (SELECT finished_at + interval '5 minutes' FROM evimed_geo.rounds WHERE id = $5), 'valid', '{"mode":"web"}'::jsonb)`,
+  [`back-h-${project.id}`, project.userId, project.id, engine, sentinel.id]);
+  world.setClock("2026-10-01T01:10:00Z");
+  await world.orchestrator.tickSchedules();
+  const makeUps = world.enqueued.filter((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id && entry.ref?.retryOf === sentinel.id);
+  assert.deepEqual(makeUps.map((entry) => [entry.engines, entry.questionIds]), [[[engine], [question.id]]]);
 });
 
 /** A published article of a project: its order, its publication, the URL an engine may cite. @param {{ project: any, userId: string }} made */

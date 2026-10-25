@@ -39,7 +39,12 @@
  *   as zero. The counters are per engine: one shared counter never reaches the
  *   threshold while any other engine answers (the owner's night run: doubao
  *   failed 14 times in a row between four healthy engines). A probe host that
- *   cannot be reached at all pauses every engine the same way.
+ *   cannot be reached at all pauses every engine the same way, through the
+ *   same breaker: its rounds then skip and close, and its engines resume at
+ *   a re-check like any other. 2026-10-25: the host only stopped asking for
+ *   ten minutes and paused no engine, so until a restart seeded the breaker
+ *   every job spent its three asks and failed, and the confirmations and
+ *   sentinel make-ups that wait for a skipped engine never came.
  * - **Big rounds run at night.** Baseline, weekly and noise rounds of more
  *   than 60 asks are asked only inside `OPEN_SCIENCE_GEO_NIGHT_WINDOW`
  *   (`22-07` in `OPEN_SCIENCE_GEO_TIMEZONE`, Asia/Shanghai); other rounds —
@@ -129,6 +134,12 @@ const DEFAULT_SURFACE = Object.freeze({ mode: "web", deep: false, newChat: true,
 
 const BUSY_CODES = new Set(["geo_probe_busy", "geo_probe_rate_limited"]);
 const CONFIG_CODES = new Set(["geo_probe_unconfigured", "geo_probe_endpoint_invalid", "geo_probe_plaintext_forbidden"]);
+/**
+ * The probe client's codes for a host that did not answer the ask (`geoProbeGateway.probeUpstream`): a job failed with one of them was
+ * never put to its engine, and its question is asked again like a skipped one (the sentinel's make-up).
+ */
+export const GEO_PROBE_HOST_FAILURE_CODES = Object.freeze(["geo_probe_unavailable", "geo_probe_timeout", "geo_probe_upstream_error",
+  "geo_probe_not_found", "geo_probe_response_invalid", "geo_probe_response_too_large"]);
 
 // ───────────────────────── time in the module's zone ─────────────────────────
 
@@ -261,6 +272,25 @@ export class GeoProbeBreaker {
     return false;
   }
 
+  /**
+   * The probe host itself did not answer: every engine is paused at once, and re-checked in `recheckMs` like one its answers paused.
+   * A pause alone does not let a round skip an engine's jobs; the failed re-check does (`skippable`). Returns the engines this paused.
+   * @param {readonly string[]} engines @param {number} now
+   */
+  pauseAll(engines, now) {
+    /** @type {string[]} */
+    const paused = [];
+    for (const engine of engines) {
+      const entry = this.#entry(engine);
+      if (entry.pausedAt !== null) continue;
+      entry.pausedAt = now;
+      entry.lastCheckAt = now;
+      entry.failedCheckAt = null;
+      paused.push(engine);
+    }
+    return paused;
+  }
+
   /** @returns {string[]} */
   paused() {
     return [...this.engines].filter(([, entry]) => entry.pausedAt !== null).map(([engine]) => engine).sort();
@@ -321,6 +351,7 @@ export class GeoProbeBreaker {
  * @property {Record<string, number>} inclusionTotals   what the inclusion channel did, since this process started (submitted, polled, done, failed, expired)
  * @property {any} upstream
  * @property {Set<string>} alerted
+ * @property {Map<string, { refusals: number, at: number }>} notifyRetry   error id → the inbox's refusals of its notice in a row, and when it is tried next
  * @property {string} owner
  */
 
@@ -353,6 +384,7 @@ export function geoMeasureState(key) {
     inclusionTotals: {},
     upstream: null,
     alerted: new Set(),
+    notifyRetry: new Map(),
     owner: `geo-probe-${process.pid}-${randomId().slice(0, 8)}`,
   };
   if (key) states.set(key, state);
@@ -664,11 +696,12 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     });
     counts.asked += 1;
     counts.failed += 1;
-    await retryOrFail(deps, job, "failed", snapshotId, counts);
+    await retryOrFail(deps, job, "failed", snapshotId, counts, code);
     state.hostFailures += 1;
     if (state.hostFailures >= GEO_PROBE_BREAK_AFTER) {
       state.hostPausedUntil = now().getTime() + GEO_PROBE_RECHECK_MS;
       state.hostFailures = 0;
+      counts.tripped.push(...state.breaker.pauseAll(GEO_PROBE_ENGINES, now().getTime()));
       await alert(deps, state, { kind: "geo_probe_host_down", code, message: "The GEO probe host did not answer several times in a row; measurement pauses for ten minutes.",
         idempotencyKey: `geo:probe_host_down:${zonedDay(now(), zoneOf(config))}:${now().getUTCHours()}` });
       return "stop";
@@ -791,17 +824,20 @@ async function busy(deps, state, job, counts) {
 
 /**
  * A suspect or failed ask: asked again later while attempts remain, else the
- * job fails (its snapshot stays, out of every denominator).
+ * job fails (its snapshot stays, out of every denominator). `errorCode` is
+ * the job's reason when it is not the answer's status: the probe client's
+ * code for a host that did not answer (`GEO_PROBE_HOST_FAILURE_CODES`).
  * @param {GeoMeasureDeps} deps @param {{ id: string, attempts: number }} job @param {string} status @param {string} snapshotId @param {GeoProbeCounts} counts
+ * @param {string} [errorCode]
  */
-async function retryOrFail(deps, job, status, snapshotId, counts) {
+async function retryOrFail(deps, job, status, snapshotId, counts, errorCode = status) {
   const now = (deps.now ?? (() => new Date()))();
   if (job.attempts < GEO_JOB_MAX_ATTEMPTS) {
-    await deps.store.requeueJob(job.id, { now, runAfter: new Date(now.getTime() + RETRY_DELAY_MS * job.attempts), errorCode: status });
+    await deps.store.requeueJob(job.id, { now, runAfter: new Date(now.getTime() + RETRY_DELAY_MS * job.attempts), errorCode });
     counts.retried += 1;
     return;
   }
-  await deps.store.finishJob(job.id, { now, status: "failed", snapshotId, errorCode: status });
+  await deps.store.finishJob(job.id, { now, status: "failed", snapshotId, errorCode });
 }
 
 // ───────────────────────── the inclusion channel ─────────────────────────

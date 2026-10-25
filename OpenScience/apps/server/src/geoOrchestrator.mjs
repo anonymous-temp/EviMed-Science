@@ -1,6 +1,8 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
+import { GEO_NOTIFY_SEVERITIES, errorNoticeKey } from "./geoErrors.mjs";
+import { GEO_PROBE_HOST_FAILURE_CODES } from "./geoProbeQueue.mjs";
 import { budgetOpen } from "./geoMarketStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -102,6 +104,8 @@ export const GEO_SCHEDULE = Object.freeze({
   baselineRestDays: 3,
   noiseQuestions: 10,
   noiseRepeat: 5,
+  /** Noise rounds a project is given, the first included: one that heard no answer is asked again, never without bound. */
+  noiseTries: 3,
   metricsGraceMinutes: 30,
   /** The rounds that measure the whole question set; only their rows choose sentinel engines. */
   fullRoundKinds: Object.freeze(["baseline", "weekly", "single_step"]),
@@ -116,6 +120,16 @@ export const GEO_RUN_RULES = Object.freeze({ batchMax: 5, firstBatchesMax: 6, at
 const TURN = Object.freeze({ program: "orchestrator_served_at", schedule: "schedule_served_at" });
 
 const DAY_MS = 86_400_000;
+
+/**
+ * Whether the round aliased `alias` holds an answer — a valid or refused one, the answers every number is made of. A round whose
+ * jobs were all skipped (its engines paused) or all failed measured nothing, and nothing that counts measured weeks, picks the week a
+ * report is about or dates a baseline may read it as one. Production, 2026-10-25: the probe host was unreachable for days, every round
+ * closed with no answer, and the next weekly round would have been reported on and counted as 「第 N 周」.
+ * @param {string} alias a rounds alias of the query it goes into (a closed set of this file's own)
+ */
+const holdsAnswer = (alias) => `EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id = ${alias}.id
+  AND answered.status IN ('valid', 'refusal'))`;
 
 /** @param {unknown} error */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_orchestrator_failed");
@@ -1064,14 +1078,31 @@ export class GeoOrchestrator {
     return this.#step(project, "diagnosis", { status: "running", roundId });
   }
 
-  /** The noise round, once per full-program project after its baseline. @param {any} project @param {ReturnType<typeof wantedSteps>} plan @param {{ enqueued: string[] }} result */
+  /**
+   * The noise round, once per full-program project after its baseline — once that measured: a noise round that heard no answer
+   * (its engines paused, the probe host down) measured no band, and the project would have read the default threshold for good
+   * (2026-10-25). It is asked again under the next key once one of the project's engines has answered since it finished, at most
+   * `GEO_SCHEDULE.noiseTries` times in all.
+   * @param {any} project @param {ReturnType<typeof wantedSteps>} plan @param {{ enqueued: string[] }} result
+   */
   async #noise(project, plan, result) {
     if (!plan.full || project.steps.questions.status !== "done" || project.steps.diagnosis.status !== "done" || !this.enqueueRound) return;
-    if (await this.#mark(project.id, "round:noise")) return;
+    const prior = (await this.#marksWith(project.id, "round:noise")).filter((mark) => mark.key === "round:noise" || String(mark.key).startsWith("round:noise:r"));
+    let key = "round:noise";
+    if (prior.length) {
+      if (prior.length >= GEO_SCHEDULE.noiseTries) return;
+      const last = prior.at(-1);
+      if (last.state !== "done" || !last.round_id) return;
+      const empty = (await this.store.query(`SELECT 1 FROM evimed_geo.rounds r WHERE r.id = $1 AND r.status IN ('done', 'partial') AND NOT ${holdsAnswer("r")}
+          AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.engine = ANY($2::text[]) AND s.asked_at > r.finished_at AND s.status IN ('valid', 'refusal')
+            AND coalesce(s.surface ->> 'mode', 'web') <> 'inclusion')`, [String(last.round_id), project.engines])).rows.length > 0;
+      if (!empty) return;
+      key = `round:noise:r${prior.length + 1}`;
+    }
     // The questions and the repeats are the measurement's own (the owner's
     // PROBE_NOISE_* constants): the highest-weight measured questions, five times each.
-    const roundId = await this.#enqueueOnce(project, "round:noise", { kind: "noise", engines: project.engines, ref: { reason: "noise" } });
-    if (roundId) result.enqueued.push("round:noise");
+    const roundId = await this.#enqueueOnce(project, key, { kind: "noise", engines: project.engines, ref: { reason: "noise" } });
+    if (roundId) result.enqueued.push(key);
   }
 
   /** Step 7 is the market's: running while orders are out, done once one is published. @param {any} project @param {ReturnType<typeof wantedSteps>} plan */
@@ -1088,8 +1119,9 @@ export class GeoOrchestrator {
   /** Step 8 is the schedule's: armed once the diagnosis is in, done with its first weekly round. @param {any} project @param {ReturnType<typeof wantedSteps>} plan */
   async #monitoring(project, plan) {
     if (!plan.want.has("monitoring") || !FINISHED.has(project.steps.diagnosis.status)) return project;
-    const weeks = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'weekly'
-      AND status IN ('done', 'partial')`, [project.id])).rows[0]?.n ?? 0);
+    // A week counts when its round heard an answer.
+    const weeks = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = 'weekly'
+      AND r.status IN ('done', 'partial') AND ${holdsAnswer("r")}`, [project.id])).rows[0]?.n ?? 0);
     return this.#step(project, "monitoring", weeks > 0 ? { status: "done", note: `第 ${weeks} 周` } : { status: "running" });
   }
 
@@ -1215,7 +1247,8 @@ export class GeoOrchestrator {
 
   /**
    * The latest weekly round whose numbers are in, when it has no export yet:
-   * the weekly report run.
+   * the weekly report run. A week whose round heard no answer has no numbers
+   * to report and is passed over (`holdsAnswer`); the week before it stands.
    * @param {any} project @param {ReturnType<typeof wantedSteps>} plan @returns {Promise<RunSpec | null>}
    */
   async #weeklyExport(project, plan) {
@@ -1235,7 +1268,7 @@ export class GeoOrchestrator {
     if (!plan.want.has("monitoring")) return null;
     const row = (await this.store.query(`SELECT m.key, m.round_id FROM evimed_geo.schedule_marks m JOIN evimed_geo.rounds r ON r.id = m.round_id
       WHERE m.geo_project_id = $1 AND starts_with(m.key, 'weekly:') AND m.state = 'done' AND r.status IN ('done', 'partial')
-        AND EXISTS (SELECT 1 FROM evimed_geo.metrics x WHERE x.round_id = r.id)
+        AND EXISTS (SELECT 1 FROM evimed_geo.metrics x WHERE x.round_id = r.id) AND ${holdsAnswer("r")}
       ORDER BY m.key DESC LIMIT 1`, [project.id])).rows[0];
     return row ? { monday: String(row.key).slice("weekly:".length), roundId: String(row.round_id) } : null;
   }
@@ -1566,7 +1599,18 @@ export class GeoOrchestrator {
         AND e.notified_at IS NULL AND e.created_at >= now() - make_interval(days => $2)
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.schedule_marks m WHERE m.geo_project_id = e.geo_project_id AND m.key = 'notice:error:' || e.id)
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT $3`, [project.id, GEO_RUN_RULES.noticeScanDays, GEO_RUN_RULES.noticesPerTick])).rows;
-    for (const error of errors) await this.#notice(project, `notice:error:${error.id}`, () => this.notifier?.wrongOurs(project, error));
+    // An urgent error is here only when the measurement's own notice did not go out (the inbox refused it): it is told under the key
+    // of the telling it is (`errorNoticeKey`, a reopened error's sighting), and marked told once the inbox took it, so the measurement's
+    // retry stops (2026-10-25: a refused S3/S4 notice was marked told and nothing tried it again).
+    for (const error of errors) {
+      const urgent = GEO_NOTIFY_SEVERITIES.includes(String(error.severity));
+      const key = urgent ? errorNoticeKey({ id: String(error.id), firstSnapshotId: error.first_snapshot_id ?? null, lastSnapshotId: error.last_snapshot_id ?? null }) : null;
+      const told = await this.#notice(project, `notice:error:${error.id}`, () => this.notifier?.wrongOurs(project, error, { key }));
+      if (told && urgent) {
+        await this.store.query(`UPDATE evimed_geo.errors SET notified_at = now() WHERE id = $1 AND geo_project_id = $2 AND notified_at IS NULL`,
+          [String(error.id), project.id]);
+      }
+    }
     const held = (await this.store.query(`SELECT a.id, a.title FROM evimed_geo.articles a WHERE a.geo_project_id = $1 AND a.safety = 'open'
         AND a.status <> 'withdrawn'
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.schedule_marks m WHERE m.geo_project_id = a.geo_project_id AND m.key = 'notice:article-safety:' || a.id)
@@ -1721,9 +1765,9 @@ export class GeoOrchestrator {
 
   /**
    * Today's sentinel asked again on an engine it skipped (paused, or no
-   * channel), once that engine has answered again since (G1, 2026-09-26: the
-   * 09-26 sentinel picked 千问 and DeepSeek, DeepSeek was paused, and its ten
-   * questions were simply gone). A make-up is a round of its own, keyed by
+   * channel) or whose asks the probe host never took, once that engine has
+   * answered again since (G1, 2026-09-26: the 09-26 sentinel picked 千问 and
+   * DeepSeek, DeepSeek was paused, and its ten questions were simply gone). A make-up is a round of its own, keyed by
    * the day and the engine and made once; the first round keeps its counts.
    * Only today's: a day that has passed is the next day's sentinel's to cover.
    * @param {any} project @param {string} sentinelKey @param {string} day
@@ -1733,9 +1777,11 @@ export class GeoOrchestrator {
     if (!mark?.round_id) return 0;
     const round = (await this.store.query(`SELECT id, status, finished_at FROM evimed_geo.rounds WHERE id = $1`, [mark.round_id])).rows[0];
     if (!round || !["done", "partial"].includes(String(round.status)) || !round.finished_at) return 0;
+    // Skipped on a paused or unreachable engine, or failed because the probe host did not answer (2026-10-25): never put to the engine.
     const skipped = (await this.store.query(`SELECT engine, array_agg(DISTINCT question_id) AS questions FROM evimed_geo.probe_jobs
-      WHERE round_id = $1 AND status = 'skipped' AND error_code IN ('engine_paused', 'engine_unavailable') GROUP BY engine ORDER BY engine`,
-    [round.id])).rows;
+      WHERE round_id = $1 AND ((status = 'skipped' AND error_code IN ('engine_paused', 'engine_unavailable'))
+        OR (status = 'failed' AND error_code = ANY($2::text[]))) GROUP BY engine ORDER BY engine`,
+    [round.id, [...GEO_PROBE_HOST_FAILURE_CODES]])).rows;
     let made = 0;
     for (const row of skipped) {
       const engine = String(row.engine);
@@ -1761,8 +1807,10 @@ export class GeoOrchestrator {
     if (!this.enqueueRound) return counts;
     const now = this.now();
     const plan = wantedSteps(project.steps);
-    const baseline = (await this.store.query(`SELECT id, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1
-      AND kind IN ('baseline', 'single_step') AND status IN ('done', 'partial') ORDER BY finished_at LIMIT 1`, [project.id])).rows[0];
+    // The baseline the weekly rest is counted from is the first that heard an answer: one that measured nothing (a diagnosis asked
+    // again after it) dated the rest from a round that was no baseline, and a weekly round could follow the real one within days.
+    const baseline = (await this.store.query(`SELECT r.id, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
+      AND r.kind IN ('baseline', 'single_step') AND r.status IN ('done', 'partial') AND ${holdsAnswer("r")} ORDER BY r.finished_at LIMIT 1`, [project.id])).rows[0];
     if (plan.want.has("monitoring") && baseline && FINISHED.has(project.steps.diagnosis.status)) {
       const slot = weeklySlot(now, this.timeZone);
       const weeklyKey = `weekly:${slot.monday}`;

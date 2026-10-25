@@ -639,7 +639,8 @@ export class GeoSpine {
   }
 
   /**
-   * One short count per programme step, for the rail.
+   * One short count per programme step, for the rail. A round that heard no answer is not counted among the measurements
+   * (2026-10-25: rounds whose engines were all paused were counted as monitoring done).
    * @param {string} geoId
    * @returns {Promise<Record<string, { text: string, count: number, unit: string } | null>>}
    */
@@ -656,7 +657,8 @@ export class GeoSpine {
         (SELECT count(*) FROM evimed_geo.articles WHERE geo_project_id = $1 AND status <> 'withdrawn')::integer AS articles,
         ((SELECT count(*) FROM evimed_geo.orders WHERE geo_project_id = $1 AND state IN ('published', 'verified', 'settled'))
           + (SELECT count(*) FROM evimed_geo.owned_links WHERE geo_project_id = $1 AND status = 'active'))::integer AS published,
-        (SELECT count(*) FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step') AND status IN ('done', 'partial'))::integer AS rounds`,
+        (SELECT count(*) FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind IN ('baseline', 'weekly', 'single_step') AND r.status IN ('done', 'partial')
+           AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal')))::integer AS rounds`,
     [geoId])).rows[0] ?? {};
     const counts = { claims: num(row.claims), stages: num(row.stages), groups: num(row.groups), answers: num(row.answers), sources: num(row.sources),
       articles: num(row.articles), published: num(row.published), rounds: num(row.rounds) };

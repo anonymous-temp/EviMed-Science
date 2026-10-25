@@ -256,7 +256,9 @@ export async function measureRound(deps, roundId) {
   out.balanceDropped = balance.dropped.length;
   const arms = options.arms;
 
-  if (NET_ROUND_KINDS.has(round.kind)) {
+  // A round no engine answered in is compared with nothing: it writes no net effect, and the last one computed stands. Its rows used
+  // to say 「no follow-up」 (no sample date) or 「engines differ」 (no engine), and the page reads the newest of them (2026-10-25).
+  if (NET_ROUND_KINDS.has(round.kind) && balance.engines.length) {
     const net = await netEffectRows(store, { project, round, controlGroups: arms.control.length, engines: balance.engines, arms });
     await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: net, replace: { metricId: GEO_NET_METRIC_ID } });
     out.net = net.length;
