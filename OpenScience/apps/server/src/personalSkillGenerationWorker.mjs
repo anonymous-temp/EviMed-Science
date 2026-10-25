@@ -114,32 +114,26 @@ export class PersonalSkillGenerationWorker {
           } catch (error) {
             await guard()
             // Restore the exact prior immutable bytes, or the ordinary built-in
-            // baseline. A failure of optional personal methods never stops it.
+            // baseline. A failure of optional personal methods never stops it,
+            // and neither does an optional preference (a platform skill or an
+            // integration switched off) that could not be proven: the project
+            // keeps serving and the state says the choice is not in effect
+            // (owner rulings 2026-10-10).
             const baseline = { reference: null, pins: [], selectionRevision: 0, findings: [] }
-            const baselineAllowed = !(candidate.platformSkills?.disabled ?? []).length && !(candidate.platformSkills?.disabledPlugins ?? []).length
             let restored = previous
-            try {
-              if (restored || baselineAllowed) await this.runtime.replacePersonalSkillRuntime(project, restored ?? baseline)
-              else await this.runtime.stop?.(project)
-            }
+            try { await this.runtime.replacePersonalSkillRuntime(project, restored ?? baseline) }
             catch (restoreError) {
               await guard()
-              if (!baselineAllowed) {
-                await this.runtime.stop?.(project)
-                restored = null
-              } else {
-                if (!restored) throw restoreError
+              if (!restored) throw restoreError
               // A formerly valid generation may depend on a retired image.
               // One bounded ordinary-baseline recovery keeps optional methods
               // from making the entire project permanently unavailable.
-                await this.runtime.replacePersonalSkillRuntime(project, baseline)
-                restored = null
-              }
+              await this.runtime.replacePersonalSkillRuntime(project, baseline)
+              restored = null
             }
             await guard()
             let restoredProof = null
             try {
-              if (!restored && !baselineAllowed) throw new HttpError(503, 'product_state_unavailable', 'The saved project policy has no verified recovery composition.')
               restoredProof = await this.runtime.probePersonalSkillGeneration(project, restored ?? baseline)
               if (restoredProof.pendingSession) throw new HttpError(502, 'personal_skill_apply_failed', 'The restored skill composition could not be verified.')
               if (restoredProof.composite) await this.runtime.markPersonalCompositeEffective(project, restoredProof.composite.candidate, restoredProof.composite.proof, client)

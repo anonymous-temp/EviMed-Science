@@ -4994,10 +4994,11 @@ export class RuntimeManager {
     // after that freeze and invalidate the worker's post-replacement guard.
     if (!contextGeneration && !this.personalSkillOverrides.has(key) && !this.extensionGenerationOverrides.has(key) && this.personalSkillGenerations) {
       try { personalSkillGeneration = await this.personalSkillGenerations.prepareForRuntime(project); }
-      catch (error) {
-        if (error?.preserveSkillPolicy === true) throw error;
+      catch {
         // Preparation failed before current identity compatibility could be
-        // established. Ordinary research starts without optional personal bytes.
+        // established. Ordinary research starts without optional personal bytes
+        // (and without the project's optional choices, which the generation
+        // state records as not in effect).
         personalSkillGeneration = null;
       }
     }
