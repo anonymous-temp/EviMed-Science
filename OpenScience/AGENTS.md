@@ -134,7 +134,7 @@ per-project workspace + JSONL provenance.
   tool. A capsule is context, never permission (below).
 - **The learning loop learns only from the researcher's own work.** A script or eval that starts a run marks it
   `automated` (`apps/server/test/automatedDrivers.test.mjs` holds the list); evidence is the person's own words, checked
-  as a substring of what they wrote; nothing is withheld from a run on purpose to measure a method; a method takes
+  as a substring of what they wrote, or their opening a delivered file, and silence is unknown, never approval; nothing is withheld from a run on purpose to measure a method; a method takes
   effect at once and every automatic stop or change is restorable in one click and carries its reason.
 - Keep the artifact schema and workflow templates stable and versioned.
 
