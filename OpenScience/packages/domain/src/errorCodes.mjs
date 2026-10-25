@@ -261,6 +261,9 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // An item the conversation was opened from that the feed no longer holds (withdrawn, or an id nobody published): the run goes on
   // with the link it was given.
   "frontier_search_item_not_found",
+  // The service's own name for it, which the gateway reads and answers as the line above: classified the same, so it is never fatal
+  // should it reach a run unchanged.
+  "frontier_item_not_found",
   // 「循证 GEO」's runtime tools (geo_platform.py → geoGateway.mjs) not
   // answering: the module off or not open to this account, a conversation
   // outside a GEO project, the social channel not configured, an outage. The
