@@ -27,7 +27,10 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // Version 15 adds a read-only observation of this deployment's OpenViking
 // resource-compile configuration and installed implementation.
 // Version 16 adds only the API's Ed25519 public attendance verifier to a runtime start. No signing secret crosses this boundary.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 16;
+// Version 17 changes launch semantics with no new field: the controller derives the disabled platform skills and client bundles
+// (`EVIMED_DISABLED_PLATFORM_SKILLS` / `EVIMED_DISABLED_CLIENT_BUNDLES`) from the verified personal generation's manifest, so a
+// web image refuses an older controller that would launch without them instead of mis-launching the project's choices.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 17;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
