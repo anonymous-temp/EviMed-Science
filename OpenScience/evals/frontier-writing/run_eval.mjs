@@ -101,8 +101,31 @@ async function main() {
       "max-cny": { type: "string", default: "3" },
       "skip-edit": { type: "boolean", default: false },
       out: { type: "string" },
+      rescore: { type: "string" },
     },
   });
+  // Measure a result file again with this file's metrics (no model call): the texts are in it, the sources in cases.json.
+  if (values.rescore) {
+    const run = JSON.parse(await readFile(values.rescore, "utf8"));
+    const { cases } = JSON.parse(await readFile(join(here, "cases.json"), "utf8"));
+    const byId = new Map(cases.map((/** @type {any} */ entry) => [entry.id, entry]));
+    for (const row of run.results) {
+      const entry = byId.get(row.id);
+      if (!entry || !row.after) continue;
+      const item = entry.item;
+      const chinese = isChineseTitle(item.titleRaw);
+      const input = { sourceName: item.sourceName, titleRaw: item.titleRaw, titleZh: row.after.title ?? item.titleZh ?? null, text: entry.text, kind: entry.textSource, post: item.platform === "x" };
+      const source = readerNumberSource(buildLeadInput(input));
+      const limit = frontierLeadLimit(entry.text);
+      row.metrics = { before: metricsOf({ ...entry.before, title: item.titleZh ?? (chinese ? item.titleRaw : null) }, { source, limit, genre: entry.expectGenre, titleRaw: item.titleRaw, chinese }),
+        after: metricsOf(row.after, { source, limit, genre: row.after.genre, titleRaw: item.titleRaw, chinese }) };
+    }
+    run.summary = summarize(run.results);
+    const out = values.out ?? values.rescore;
+    await writeFile(out, `${JSON.stringify(run, null, 1)}\n`);
+    process.stdout.write(`${JSON.stringify({ out, summary: run.summary.all }, null, 1)}\n`);
+    return;
+  }
   const apiKey = (await readFile(values["key-file"], "utf8")).trim();
   if (!apiKey) throw new Error("The DeepSeek key file is empty.");
   const maxCny = Number(values["max-cny"]) || 3;

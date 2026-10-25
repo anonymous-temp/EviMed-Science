@@ -57,7 +57,7 @@ export const FRONTIER_BRIEF_FIELDS = Object.freeze({
     points: Object.freeze([
       textField("question", "研究问题", "研究要回答的临床或科学问题，一句话"),
       textField("design", "设计与对象", "研究设计、人群、样本量、干预与对照、随访时间"),
-      itemsField("results", "主要结果", "主要终点的两组结果及效应量和置信区间；原文给出事件数或两组各自的发生率时写出来；最多再加一条最重要的次要终点，每条一句"),
+      itemsField("results", "主要结果", "主要终点的两组结果及效应量和置信区间；原文给出事件数或两组各自的发生率时，单独写成一条；最多再加一条最重要的次要终点，每条一句"),
       textField("safety", "安全性", "不良事件或安全性结果；原文给出两组的发生率时写出两组的数字"),
       textField("limits", "局限", "原文写明的、最限制外推的一两条局限"),
     ]),
@@ -67,7 +67,7 @@ export const FRONTIER_BRIEF_FIELDS = Object.freeze({
     points: Object.freeze([
       textField("question", "研究问题", "研究要回答的问题，一句话"),
       textField("design", "设计与样本", "研究设计、数据来源、人群、样本量"),
-      itemsField("results", "主要发现", "主要结果及效应量和置信区间，写成关联或估计；原文给出例数或绝对发生率时写出来，每条一句"),
+      itemsField("results", "主要发现", "主要结果及效应量和置信区间，写成关联或估计；原文给出例数或绝对发生率时，单独写成一条，每条一句"),
       namesField("funding", "资助与利益冲突", "原文写明的资助方、作者的企业任职或利益冲突"),
       textField("limits", "局限", "原文写明的局限"),
     ]),
@@ -128,7 +128,7 @@ export const FRONTIER_BRIEF_FIELDS = Object.freeze({
     points: Object.freeze([
       namesField("meeting", "会议与摘要号", "会议名称、摘要编号、研究名称或注册号、汇报人"),
       textField("design", "设计", "是否随机、盲法、分期、人群、样本量、主要终点"),
-      itemsField("results", "主要结果", "主要终点结果及效应量和置信区间；原文给出两组事件数或各自的发生率时写出来，每条一句"),
+      itemsField("results", "主要结果", "主要终点结果及效应量和置信区间；原文给出两组事件数或各自的发生率时，单独写成一条，每条一句"),
       textField("safety", "安全性", "严重或 3 级以上不良事件的两组对比"),
       textField("limits", "局限", "原文写明的局限：期中分析、非随机、单一地区、总生存不成熟等"),
       namesField("publication", "发表情况", "是否同步发表及期刊"),

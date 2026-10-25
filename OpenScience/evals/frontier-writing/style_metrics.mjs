@@ -14,8 +14,8 @@
  *   policy rules (NHC 2025 negative list item 8) add the hype words and a site's name after the title.
  * - **Absolute numbers and harms** (`givenUsed`): when the source gives event counts or an absolute risk, or reports harms, does
  *   what the reader sees (导读 and 要点) carry one (HealthNewsReview criteria 2–3; Schwartz et al., BMJ 2012).
- * - **Exemplar leakage** (`leakage`): an eight-character run of a style card's exemplar in an output that the item's own source does
- *   not contain.
+ * - **Exemplar leakage** (`leakage`): an eight-character run of a style card's exemplar (four Chinese characters at least, the
+ *   phrase a preprint's 导读 is asked for masked) in an output that the item's own source does not contain.
  * - **Scores** (`scoreDistribution`): the edit's three sub-scores per genre, and how many sit at the top of every scale (the
  *   2026-10-25 review: 258 of 510 精选 items had impact 30, novelty 20 and relevance 20).
  */
@@ -35,7 +35,8 @@ const chars = (text) => [...String(text ?? "")].length;
 export function proseStyle(text) {
   const value = String(text ?? "");
   const sentences = sentencesOf(value);
-  const numbersIn = (/** @type {string} */ s) => s.match(NUMBER)?.length ?? 0;
+  // 「95% CI」 is a label, not a number of the result (the prompt's rule counts an effect and its interval as one result).
+  const numbersIn = (/** @type {string} */ s) => s.replace(/95\s*%\s*(?:CI|置信区间)/g, "").match(NUMBER)?.length ?? 0;
   return {
     chars: chars(value),
     sentences: sentences.length,
@@ -110,17 +111,22 @@ export function givenUsed(source, seen) {
  */
 export function leakage(output, source, exemplars) {
   const found = new Set();
-  const text = String(output ?? "");
+  const mask = (/** @type {string} */ text) => MANDATED_PHRASES.reduce((t, phrase) => t.split(phrase).join("\u0000"), text);
+  const text = mask(String(output ?? ""));
   for (const exemplar of exemplars) {
-    const points = [...String(exemplar)];
+    const points = [...mask(String(exemplar))];
     for (let i = 0; i + 8 <= points.length; i += 1) {
       const run = points.slice(i, i + 8).join("");
-      if (/^[\s\p{P}\d]+$/u.test(run)) continue;
+      // Expression, not a name or a figure: four Chinese characters at least, and none of a phrase every such text is asked for.
+      if (run.includes("\u0000") || (run.match(/[\u3400-\u9fff]/gu)?.length ?? 0) < 4) continue;
       if (text.includes(run) && !source.includes(run)) found.add(run);
     }
   }
   return [...found];
 }
+
+/** Phrases the prompts ask every text of a kind to carry (a preprint's 导读 says what it is), not taken from an exemplar. */
+const MANDATED_PHRASES = Object.freeze(["这项尚未经同行评议的预印本", "尚未经同行评议的预印本"]);
 
 /** The three sub-scores per genre, and how many sit at the scale's top. @param {Array<{ genre: string, scores: any }>} rows */
 export function scoreDistribution(rows) {
