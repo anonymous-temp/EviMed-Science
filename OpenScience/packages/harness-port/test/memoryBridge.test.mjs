@@ -252,7 +252,7 @@ test('the bridge row listens and provides its service only when this session is 
   const env = { ...process.env }
   try {
     await registerMemoryBridge(context(), { enabled: false, gatewayUrl: '', tokenFile: '', port: await freePort() })
-    assert.deepEqual(provided, [], 'a legacy account\'s runtime gets no bridge')
+    assert.deepEqual(provided, [], 'a runtime of a deployment without the memory engine gets no bridge')
     assert.equal(process.env.OPENVIKING_API_KEY, env.OPENVIKING_API_KEY, 'and no plugin environment')
 
     const port = await freePort()

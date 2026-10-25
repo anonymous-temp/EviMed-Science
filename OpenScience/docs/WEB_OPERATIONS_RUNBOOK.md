@@ -764,20 +764,18 @@ not sufficient containment for those events.
   non-secret status directory read-only. Web verifies its age, restore/cleanup
   proof and actual PostgreSQL system identifier, database OID and name. The
   tracked empty default directory preserves non-PostgreSQL local deployment;
-  it is not a production restore receipt. This database dump carries research
-  memory, whose notes and structured records are rows in the `evimed_memory`
-  schema. It does not cover separate attachment volumes, the OpenViking engine
-  volume or OpenList configuration. The engine volume has a capture of its own
-  since v0.5.0 (next item): it holds native memory and compiled knowledge that
-  exist nowhere else. The copies of PostgreSQL's records it also holds are
-  rebuilt after a restore of either side with
-  `pnpm rebuild:memory-index --all`. A memory's validity (`valid_from`,
-  `invalid_since`), what replaced it (`superseded_by`), the statements it
-  disagrees with (`record_conflicts`) and the sources it rests on
-  (`record_sources`, by `src_` id or DOI) are columns and tables of that same
-  schema, so the dump carries them and a restore needs nothing more; the index
-  holds each memory's text and nothing else, and recall decides validity and
-  conflict from PostgreSQL when it reads.
+  it is not a production restore receipt. This database dump carries what
+  PostgreSQL holds about memory: the person's switches, the overlay of facts
+  about the engine's memory files (its commit ledger, file revisions, source
+  links, the forgotten list) and the memory capsules, all in the `evimed_memory`
+  and `evimed_product` schemas. It does not cover separate attachment volumes,
+  the OpenViking engine volume or OpenList configuration. The engine volume has
+  a capture of its own since v0.5.0 (next item): it holds native memory and
+  compiled knowledge that exist nowhere else. The capsule facts it also holds as
+  a recall index are rebuilt after a restore of either side with
+  `pnpm rebuild:memory-index --all`; a source's state on a memory file
+  (`retracted`, `changed`, `expired`, `removed`) is a row of the overlay, so the
+  dump carries it and a restore needs nothing more.
 - The dump also leaves out the rows of `evimed_frontier.item_vectors`, the
   frontier feed's embeddings (derived from the items the dump does carry, and
   otherwise the largest table in every retained archive). The table's
@@ -932,7 +930,7 @@ not sufficient containment for those events.
   docker volume rm web_evimed-openviking-data && docker volume create web_evimed-openviking-data
   sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs restore "$A" web_evimed-openviking-data
   $COMPOSE up -d --no-build --pull never evimed-openviking
-  pnpm rebuild:memory-index --all   # the copies of PostgreSQL's records, which may be older than PostgreSQL
+  pnpm rebuild:memory-index --all   # the capsule facts' recall index, which may be older than PostgreSQL
   ```
 
   `restore` refuses a volume that holds anything, and checks every file

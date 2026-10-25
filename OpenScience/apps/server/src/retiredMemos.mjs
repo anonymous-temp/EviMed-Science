@@ -10,8 +10,8 @@ import { recordRetiredTableRows } from "./memoryMetrics.mjs";
  * key that makes "delete my account" true for every other memory table never reached them: an account's records and notes
  * lived on there, in every nightly backup, after the account was gone.
  *
- * The retired service identified an EviMed account by two digests of its id (`scripts/ops/migrate-research-memory.mjs` is where
- * they were last read): the `namespace` of a `memory_record` row, and the trailing `#evimed-user-<tag>` line of a `memo`. This
+ * The retired service identified an EviMed account by two digests of its id (the one-off import, deleted on 2026-10-25, is where
+ * they were last read; git history has it): the `namespace` of a `memory_record` row, and the trailing `#evimed-user-<tag>` line of a `memo`. This
  * removes the rows those two digests name, inside the account's own deletion, and tolerates a store that is no longer there —
  * on a deployment that ran the retirement the tables are dropped and there is nothing to remove.
  *

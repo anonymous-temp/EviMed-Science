@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { linkStatesLeftFor } from "@evimed/domain";
 
 /**
  * The memory engine's side of a source change, in memory: the files of an account that name sources, and the two calls
@@ -8,8 +9,8 @@ import { randomBytes } from "node:crypto";
  * link) and `NativeMemoryStore.dependentsOfSource`, and the engine's own write is covered with them
  * (`nativeMemory.integration.test.mjs`). The tests that use this double are about what reaches a memory when a source changes, not
  * about how the engine writes a label, so it keeps one rule of the real worker and no more: a check moves a link only where it
- * adds knowledge (a correction never lowers a retraction, and a check that could not answer is only what a link nobody had
- * found a change on becomes).
+ * adds knowledge (`linkStatesLeftFor`: a correction never lowers a retraction, a check that could not answer or one that found
+ * nothing is only what a link nobody had found a change on becomes).
  */
 export function nativeSourceLinks() {
   /** @type {{ userId: string, recordId: string, scope: string, scopeId: string, kind: string, summary: string, sensitive: boolean, links: { type: string, id: string, state: string }[] }[]} */
@@ -29,8 +30,7 @@ export function nativeSourceLinks() {
       let touched = 0;
       for (const file of files.filter((entry) => entry.userId === userId)) {
         for (const link of file.links.filter((entry) => entry.type === source.type && entry.id === source.id)) {
-          if (link.state === state) continue;
-          if ((state === "changed" && link.state === "retracted") || (state === "unknown" && link.state !== "current")) continue;
+          if (link.state === state || !linkStatesLeftFor(state).includes(link.state)) continue;
           link.state = state;
           touched += 1;
         }

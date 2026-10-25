@@ -157,14 +157,27 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_product.plugin_application_state": "the runtime's view of a plugin document that is itself exported, and stale the moment it leaves this deployment",
   "evimed_product.source_uses": "a pointer from a document to the conversations that consulted it (a search hit or a read of its parsed text), derived from run transcripts the archive does not carry and rebuilt by use; the documents and the conversations themselves are what the archive holds",
   "evimed_product.memory_index_state": "publication bookkeeping for the ranking index over capsules that are themselves exported; derived from them and from nothing else",
-  "evimed_memory.records": "carried by the archive as memory/memory.json, written from the store's own exportUserMemory so that the evidence and revision history travel in the shape the product reads them in",
-  "evimed_memory.settings": "carried by the archive as memory/memory.json, beside the records: the researcher's own pause switches, read through the same store",
+  "evimed_memory.settings": "carried by the archive as memory/memory.json, beside the memories: the researcher's own pause switches, read through the same store (`MemorySettingsStore.exportUserMemory`)",
   "evimed_memory.sessions": "the capsule a conversation is trying, for conversations that live in this deployment's runtime; it means nothing outside it, and the capsule itself is exported",
-  "evimed_memory.record_conflicts": "carried by the archive as memory/memory.json under `links`, beside the records they relate: which statements disagree, and whether it was settled",
-  "evimed_memory.record_sources": "carried by the archive as memory/memory.json under `links`, beside the records: the sources each memory rests on, by recorded identifier, with what a later check found",
-  "evimed_memory.record_usage": "how often each memory was recalled: derived from the records that are themselves exported, rebuilt by use, and meaningless in another deployment",
-  "evimed_memory.record_reviews": "which version of the memory rules each memory was last read again under: derived, holds no text, and meaningless in another deployment, whose rules are its own",
-  "evimed_memory.topic_sets": "how the exported memories were last grouped into topics for the memory map, with the names the researcher gave those groups: derived from the records, regrouped on demand, and keyed by group ids that mean nothing in another deployment",
+  "evimed_memory.topic_sets": "how the exported memories were last grouped into topics for the memory map, with the names the researcher gave those groups: derived from the memories, regrouped on demand, and keyed by group ids that mean nothing in another deployment",
+});
+
+/** The account-scoped tables no migration creates any more, and what the archive does about them.
+ *
+ * The structured-record tables of the legacy memory engine were deleted with it (2026-10-25). `legacyMemoryRetirement.mjs` drops them
+ * at start when they hold nothing and no account says it is on that engine, and keeps them when they do, so a database that started
+ * life under an earlier release can still hold rows the person has never seen as a file. No DDL creates them, so
+ * `accountExport.test.mjs` cannot find them in the migration scan; this is the counterpart of `UNEXPORTED_ACCOUNT_TABLES` for tables
+ * that only an old database has, and the test holds it both ways: an entry here that a migration creates again must be declared (or
+ * exported) like any other table, and every entry says what the archive carries of it.
+ *
+ * Build to delete: when `legacyMemoryRetirement.mjs` is, with `MemorySettingsStore.exportUserMemory`'s `legacyRecords`. */
+export const RETIRED_ACCOUNT_TABLES = Object.freeze({
+  "evimed_memory.records": "carried by the archive as memory/memory.json under `legacyRecords` (the person's own rows, text and status), by `MemorySettingsStore.exportUserMemory`, for a database that kept them",
+  "evimed_memory.record_conflicts": "not carried: which two of the legacy records disagreed and whether it was settled; relation bookkeeping between records that are themselves in the archive",
+  "evimed_memory.record_sources": "not carried: the recorded identifiers of the sources each legacy record rested on and what a later check found; the documents themselves are in the archive",
+  "evimed_memory.record_usage": "not carried: how often each legacy record was recalled; derived by use and meaningless in another deployment",
+  "evimed_memory.record_reviews": "not carried: which version of the retired memory rules each legacy record was last read again under; derived, holds no text, and meaningless in another deployment",
 });
 
 function tooLarge() { return new HttpError(413, "archive_too_large", "Account export exceeds its complete customer-state row or byte limit."); }

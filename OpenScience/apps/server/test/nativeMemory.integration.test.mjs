@@ -321,9 +321,34 @@ test("a source that changed is a label line on the memory that names it, removed
   assert.equal(record.relations.sources[0].state, "retracted");
   assert.match(record.value, /已撤稿/, "the label travels with the text; the record's relations carry the state");
   assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "retracted"), 0, "the same state twice writes nothing");
-  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "current"), 1);
-  assert.equal(await sessions.read(userId, uri), `The trial reported a benefit (doi ${doi}).`);
+  // A later clean check of the same source does not undo the retraction (`linkStatesLeftFor`): the label stays, the state stays.
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "current"), 0);
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "unknown"), 0);
+  assert.match(await sessions.read(userId, uri), /已撤稿/, "the label survives a clean answer and an outage");
+  assert.equal((await overlay.sources(userId, [uri]))[0].state, "retracted");
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "changed"), 0, "a correction never lowers a retraction");
   assert.ok(root.length > 0);
+});
+
+test("a clean answer sets right a link no check had answered, and a document that is back in the library lifts its removal label", options, async (t) => {
+  const { userId, worker, sessions, seed, overlay } = await fixture(t, {});
+  const doi = "10.1056/nejmoa0000002";
+  const sourceId = `src_${"a".repeat(64)}`;
+  const uri = seed("project_facts/trial.md", `The trial reported a benefit (doi ${doi}, ${sourceId}).`, { type: "project_facts" });
+  await overlay.upsertFile({ userId, uri, memoryType: "project_facts", body: `The trial reported a benefit (doi ${doi}, ${sourceId}).` });
+  await overlay.setSources(userId, uri, [{ type: "doi", id: doi }, { type: "knowledge_source", id: sourceId }]);
+  const stateOf = async (/** @type {string} */ id) => (await overlay.sources(userId, [uri])).find((link) => link.id === id)?.state;
+  // A check that could not answer is `unknown`, and the clean answer after it sets that right: no label was ever written for it.
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "unknown"), 0);
+  assert.equal(await stateOf(doi), "unknown");
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "current"), 0);
+  assert.equal(await stateOf(doi), "current");
+  // The library's own fact: a deleted document is labelled, and the same bytes added again take the label off.
+  assert.equal(await worker.labelSource(userId, { type: "knowledge_source", id: sourceId }, "removed"), 1);
+  assert.match(await sessions.read(userId, uri), /已从资料库删除/);
+  assert.equal(await worker.labelSource(userId, { type: "knowledge_source", id: sourceId }, "current"), 1);
+  assert.doesNotMatch(await sessions.read(userId, uri), /已从资料库删除/);
+  assert.equal(await stateOf(sourceId), "current");
 });
 
 test("reset, a deleted project and an erased account take what the engine holds with them", options, async (t) => {

@@ -13,7 +13,6 @@
 // `*.integration.test.mjs`: a Postgres-gated block down here would skip in the
 // unit run and never be opened by the product-state run at all.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test from "node:test";
 import { DISTILLATION_TRIGGERS } from "../src/methodDistillationRuns.mjs";
 import {
@@ -176,20 +175,6 @@ function fixture() {
   const documents = new DocumentsDouble();
   const feedback = new FeedbackEvents({ database, jobs, now: () => new Date("2026-09-07T08:00:00.000Z") });
   return { database, jobs, documents, feedback };
-}
-
-/** A structured memory record as the memory API hands it back. */
-function memoryRecord(overrides = {}) {
-  return {
-    id: "record_1", scope: "user", scopeId: "", kind: "preference", key: "response.evidence_depth",
-    value: "优先给原始证据", summary: "原始证据优先", origin: "inferred", status: "pending",
-    confidence: 0.7, importance: 0.9, sensitive: false, version: 3, ...overrides,
-  };
-}
-
-/** The digest the ledger names a memory value by, computed here independently. */
-function digestOf(value) {
-  return createHash("sha256").update(value).digest("hex").slice(0, 32);
 }
 
 const SUBJECT = { type: "deliverable", id: deliverableSubjectId("run_1", "reports/evidence.md") };

@@ -16,11 +16,6 @@ const memoryStore = {
   async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
 };
 
-const until = async (/** @type {() => boolean} */ condition, ms = 8_000) => {
-  for (const started = Date.now(); !condition() && Date.now() - started < ms;) await new Promise((resolve) => setTimeout(resolve, 50));
-  return condition();
-};
-
 async function auditRows(/** @type {string} */ dataDir) {
   const text = await readFile(path.join(dataDir, ".openscience", "security.jsonl"), "utf8").catch(() => "");
   return text.split("\n").filter(Boolean).map((line) => JSON.parse(line));

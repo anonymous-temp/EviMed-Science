@@ -8,7 +8,7 @@ import { MemoryIndexWorker } from "../src/memoryIndexWorker.mjs";
 import { MemoryIndexing } from "../src/memoryIndexing.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { projectMemoryUri, researchMemoryRoots, sessionMemoryUri, userMemoryRoot } from "../src/openVikingClient.mjs";
+import { projectMemoryUri, userMemoryRoot } from "../src/openVikingClient.mjs";
 
 /**
  * What a deletion owes the recall index, against a real PostgreSQL.
