@@ -29,7 +29,7 @@
  *
  * `--simulated-wallet` bills research from the simulated wallet (as the owner's deployment does), so the settings page is 额度 rather than 用量.
  *
- * The release gate runs both walks: production's owner-view walk (as it always has) and this one, locally, on the integrated tree.
+ * The release gate runs both walks: production's walk on a throwaway account and this one, locally, on the integrated tree.
  *
  * Seeding is idempotent: the account is made once (a second start finds it and seeds nothing), and `--reseed` drops nothing — to start
  * from nothing, drop the database. Each part is a function of its own below so that a part can be read, run or changed alone.
