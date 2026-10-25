@@ -786,6 +786,12 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.congress_recaps (
   generated_at timestamptz(3),
   PRIMARY KEY (congress_id, day)
 );
+-- c3-primary 2026-10-25: a top journal's research paper with no text of its own is read through the published reports of it. The text
+-- is the reports' words under their source names (item_texts.reader_reports, the last of the reader texts), the reports it was made
+-- from are listed in reader_reports_refs, and items.primary_checked_at is when the paper was last looked at for reports.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_reports text CHECK (char_length(reader_reports) <= 12000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_reports_refs jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS primary_checked_at timestamptz(3);
 
 ${FRONTIER_INTERACTIONS_SQL}
 `;

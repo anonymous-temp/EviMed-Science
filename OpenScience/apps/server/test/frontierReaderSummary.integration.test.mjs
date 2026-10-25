@@ -232,18 +232,20 @@ test("G2: a record whose entry says too little is looked at once and left as it 
 });
 
 test("G11: an item with nothing to read leaves the claim queue once its entry has waited FRONTIER_TEXT_GIVE_UP_MS, and stops being claimed", options, async () => {
+  // A journal below the top tier: fourteen days (a top journal's papers are waited for twenty-one, c3-primary).
+  await insertSource(database, "minor-journal", { name: "Minor Journal", authority: 3, access: "crossref-issn" });
   /** @param {string} title @param {number} waitedMs */
   async function waiting(title, waitedMs) {
     const received = new Date(NOW.getTime() - waitedMs);
     const inserted = await database.query(`INSERT INTO evimed_frontier.items (public_id, primary_source_id, canonical_url, identity_key, title_raw, lang, lane, source_type,
         first_seen_at, timeline_at, state, verification, evidence_type)
-      VALUES ($1,'nejm',$2,$3,$4,'en','evidence','journal',$5,$5,'scored','passed','rct') RETURNING id`,
+      VALUES ($1,'minor-journal',$2,$3,$4,'en','evidence','journal',$5,$5,'scored','passed','rct') RETURNING id`,
     [`t${randomUUID().replace(/-/g, "").slice(0, 15)}`, `https://example.org/${title}`, `url:${sha256(title)}`, title, received]);
     const id = String(inserted.rows[0].id);
     await database.query("INSERT INTO evimed_frontier.item_texts (item_id, model_input, model_input_sha256) VALUES ($1, $2, $3)", [id, title, sha256(title)]);
     seq += 1;
     await database.query(`INSERT INTO evimed_frontier.entries (plugin_entry_id, plugin_seq, source_id, identity_key, url, canonical_url, title_raw, first_seen_at, received_at, content_sha256, state, item_id)
-      VALUES ($1,$2,'nejm',$3,$4,$4,$5,$6,$6,$7,'held',$8)`,
+      VALUES ($1,$2,'minor-journal',$3,$4,$4,$5,$6,$6,$7,'held',$8)`,
     [`nejm:${seq}`, 820_000 + seq, `url:${sha256(title)}`, `https://example.org/${title}`, title, received, sha256(`${seq}`), id]);
     return id;
   }

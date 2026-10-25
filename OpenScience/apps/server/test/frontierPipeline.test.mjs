@@ -6,6 +6,7 @@ import {
   FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT,
   FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT,
   FRONTIER_SELECT_THRESHOLD_DEFAULT,
+  FRONTIER_PRIMARY_GIVE_UP_MS,
   FRONTIER_TEXT_GIVE_UP_MS,
   FRONTIER_TEXT_AFTER_ATTEMPT_MS,
   FRONTIER_TEXT_HOLD_MS,
@@ -194,7 +195,12 @@ test("the text step: take it when it is there, wait for it while it may come, an
   assert.deepEqual(decide("unavailable", fresh, smallJournal), { action: "drop", holdMs: 0 });
   assert.deepEqual(decide("pending", old, smallJournal), { action: "drop", holdMs: 0 }, "after fourteen days it is not waited for");
   assert.deepEqual(decide("pending", fresh, journal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a top journal's paper waits for its text too");
-  assert.deepEqual(decide("pending", old, journal), { action: "drop", holdMs: 0 });
+  // c3-primary: a top journal's paper (authority 4-5) is waited for twenty-one days, the plugin's horizon for it; the others fourteen.
+  assert.equal(FRONTIER_PRIMARY_GIVE_UP_MS, 21 * 24 * HOUR);
+  assert.deepEqual(decide("pending", old, journal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "fourteen days is not the end of a top journal's paper");
+  const older = { ...fresh, first_seen_at: new Date(now.getTime() - FRONTIER_PRIMARY_GIVE_UP_MS).toISOString() };
+  assert.deepEqual(decide("pending", older, journal), { action: "drop", holdMs: 0 });
+  assert.deepEqual(decide("pending", older, smallJournal), { action: "drop", holdMs: 0 });
   // A safety feed's notice goes out on its title; a whole feed summary is enough to go on; a published item keeps asking.
   assert.deepEqual(decide("pending", fresh, safety), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
   assert.deepEqual(decide("unavailable", fresh, safety), { action: "promote", holdMs: 0 });

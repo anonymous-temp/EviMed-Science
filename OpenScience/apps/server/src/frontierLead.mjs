@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { FRONTIER_GENRES, FRONTIER_GENRE_LABELS_ZH, isFrontierGenre } from "@evimed/domain";
 import { readerNumberSource, trimToWholeSentences, verifyWriting } from "./frontierEditor.mjs";
 import { FRONTIER_SENTENCE_RULE, FRONTIER_STYLE_CARDS } from "./frontierStyle.mjs";
+import { FRONTIER_REPORTS_LEAD_LINE } from "./frontierPrimaryReports.mjs";
 
 export const FRONTIER_LEAD_LIMITS = Object.freeze({ chars: 380, min: 80, briefed: 160, input: 12_000 });
 const LEAD_MAX_TOKENS = 1_200;
@@ -101,13 +102,13 @@ export function frontierLeadLimit(text) {
   return Math.max(FRONTIER_LEAD_LIMITS.min, Math.min(FRONTIER_LEAD_LIMITS.chars, Math.round(equivalent)));
 }
 
-const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要" });
+const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要", reports: "媒体报道摘编" });
 
 /**
  * What one call shows the model: the source, the date, the title (and its Chinese when there is one), and the reader text, its
  * head when longer than `FRONTIER_LEAD_LIMITS.input`.
  * @param {{ sourceName: string, date?: string | null, titleRaw: string, titleZh?: string | null, text: string,
- *           kind: "body" | "abstract" | "excerpt" | "summary", post?: boolean }} input
+ *           kind: "body" | "abstract" | "excerpt" | "summary" | "reports", post?: boolean }} input
  */
 export function buildLeadInput({ sourceName, date = null, titleRaw, titleZh = null, text, kind, post = false }) {
   const body = String(text ?? "").trim();
@@ -154,7 +155,9 @@ export function verifyLead(answer, input, { briefed = false } = {}) {
  */
 export async function frontierWriteLead(editor, input) {
   const modelInput = buildLeadInput(input);
-  const result = await editor.writeJson(frontierLeadInstructions(input.genre ?? null, { briefed: input.briefed === true }), modelInput, LEAD_MAX_TOKENS,
+  // A paper read through the reports of it (c3-primary): one line more, for this basis only, so the 导读 says whose reports it rests on.
+  const instructions = frontierLeadInstructions(input.genre ?? null, { briefed: input.briefed === true });
+  const result = await editor.writeJson(input.kind === "reports" ? `${instructions}\n${FRONTIER_REPORTS_LEAD_LINE}` : instructions, modelInput, LEAD_MAX_TOKENS,
     { verify: (/** @type {any} */ answer) => verifyLead(answer, modelInput, { briefed: input.briefed === true }), timeoutMs: LEAD_TIMEOUT_MS });
   return { lead: result.output?.lead_zh ?? null, verification: result.verification, error: result.error ?? null, modelInput };
 }

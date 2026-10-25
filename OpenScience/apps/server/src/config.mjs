@@ -459,6 +459,9 @@ function frontierSettings(overrides) {
     // the plugin); a day's searches are capped here (FRONTIER_LEADS_DAILY_QUERIES_DEFAULT), each booked under purpose
     // `frontier` and held to the module's daily budget; 0 makes none.
     frontierLeadsEnabled: overrides.frontierLeadsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_LEADS_ENABLED", true),
+    // c3-primary 2026-10-25: a top journal's research paper with no text is read through the published reports of it
+    // (frontierPrimaryReports.mjs), and its dropped entries are asked of the plugin again for twenty-one days.
+    frontierPrimaryReportsEnabled: overrides.frontierPrimaryReportsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_PRIMARY_REPORTS_ENABLED", true),
     frontierLeadsDailyQueries: integer("frontierLeadsDailyQueries", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES", 120, 0, 1000),
     // c2-leads 2026-10-25 (frontierTopics.mjs): the outside-event trigger — the public hot lists the knowledge plugin reads, a
     // grouping call and a topic call on deepseek-flash under purpose `frontier` and the module's budget, topics with their
