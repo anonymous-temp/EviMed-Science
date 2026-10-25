@@ -175,12 +175,12 @@ const NOTED_LIMIT = 5_000;
 /**
  * What a reader's memory was when a profile read it: how many memory files the overlay knows, the latest change of one, and the newest
  * revision the overlay holds. Every extraction, page edit, forget and restore of a file adds a revision (and a hard delete moves the
- * count), so any change of what the reader's memory says moves it; comparing it needs no clock and no read of the engine. `$1` is the
- * account (a column or a parameter).
+ * count), so any change of what the reader's memory says moves it; comparing it needs no clock and no read of the engine. The notes of the
+ * `observations` type are not what the memory says (no reader of it sees one) and do not move it. `$1` is the account (a column or a parameter).
  */
 const memoryMarkOf = (/** @type {string} */ user) => `(SELECT count(*)::text || ':' || coalesce(extract(epoch FROM max(f.updated_at))::text, '')
-    FROM evimed_memory.native_files f WHERE f.user_id = ${user})
-  || ':' || (SELECT coalesce(max(v.id), 0)::text FROM evimed_memory.native_revisions v WHERE v.user_id = ${user})`;
+    FROM evimed_memory.native_files f WHERE f.user_id = ${user} AND f.memory_type <> 'observations')
+  || ':' || (SELECT coalesce(max(v.id), 0)::text FROM evimed_memory.native_revisions v WHERE v.user_id = ${user} AND v.memory_type <> 'observations')`;
 
 /**
  * The mark of one reader's memory now (`memoryMarkOf`): what a profile stores beside itself when it reads the memory, and what the round

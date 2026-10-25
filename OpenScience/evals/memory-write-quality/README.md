@@ -144,7 +144,7 @@ runner counts both places as the `correction` kind.
 
 ## The next-round families (2026-10-25, native arm only)
 
-Eleven synthetic cases beside the 38 (49 in `cases-general/`), written for the instruments of the memory-capsule next round
+Eleven synthetic cases beside the 38 (49 in `cases-general/` with the one below), written for the instruments of the memory-capsule next round
 (`evals/capsule-longitudinal` scenarios S9 and S11 read the same questions through the whole product):
 
 | Family | Cases | What is asked |
@@ -158,3 +158,25 @@ Eleven synthetic cases beside the 38 (49 in `cases-general/`), written for the i
 case still runs; while it fails the runner reports it as `pending-template`, never as a failure (the exit code stays 0), and when
 it passes the summary lists it under "pending but passing, drop the marker". The shape E3 is written in is the memory templates'
 to decide: C22 asks only that a preference be written and that it carry the choice.
+
+### What the memory package's templates changed (2026-10-25), and how the runner replays it
+
+- **The `observations` type** (E3: a choice made in a request, never called a rule, kept as a note) and **`recent_work`** (a project's last three
+  tasks) are two more types of the ten. A note is not a memory: the runner scores no note (not as a kind, not in the text, not as an operation —
+  `withoutObservations`) and prints how many there are beside each result (`observations: { files, lines, promoted }`), so noise in the notes
+  is read there and never failed. `recent_work` bullets count as `recent_work` and as `project_fact`.
+- **C22, E3B and E3C replay the control plane's counting.** The runner keeps the revisions of the notes as the overlay would
+  (`nativeMemoryObservations.mjs`, run for real over the real engine); when two different conversations wrote one note it hands the note's words to
+  the engine as `repeatedChoiceMessage` says, in a session of its own, awaits that extraction too, and then reads the files. So C22 passes
+  only when the engine writes the second conversation's line into the first one's note (the template shape: one file per choice, one line per
+  conversation, the same topic reused) **and** writes the explicit request as a preference. `apps/server/test/memoryWriteQualityRepeatedChoice.test.mjs` runs
+  the runner against a stub engine that behaves as the template asks, so the harness is tested without a model.
+- **I01 and I02** (the import) are answered by the shared deciding text ("Imported: …": each listed line is the person's own statement, under the
+  same never-kept rules); the page's import sends the same sentence the cases do (`这是我在另一个 AI 助手里的记忆导出，请把它们导入到这里：`).
+- **P01** (M8, S7 of the longitudinal harness): a rule given for "this project" in the same message as a small request must land under 约束 of the
+  project's card (`requireKeys: ["project.constraints"]`, with 英文 in it) and not as a user-level preference.
+
+Cases to replay in the lab after the template change (three samples each): `--only c22,e3b,e3c,i01,i02,i03,p01` for what changed; then the whole
+corpus once (`--repeat 3`) for the never side: the new types and the longer shared text must not have moved any refusal (`c15`–`c21`, `c23`, `c24`,
+`g06`–`g10`, `m01`–`m03`, `s01`–`s03` first). Remove `pendingTemplate` from every case that passes all three samples.
+

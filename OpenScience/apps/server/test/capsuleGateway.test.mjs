@@ -8,7 +8,7 @@ import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
-async function fixture(t, { sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved", recallLimits = {} } = {}) {
+async function fixture(t, { sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved", recallLimits = {}, resident = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -31,7 +31,7 @@ async function fixture(t, { sessions = null, recallItems = [], handbooks = null,
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, sessions, handbooks, subscriptions, clinicalContext, ...recallLimits });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, sessions, handbooks, subscriptions, clinicalContext, resident, ...recallLimits });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -410,4 +410,61 @@ test("a note that carries a credential or anyone's identifier is not kept, even 
   assert.equal(f.calls.filter((call) => call.action === "note").length, 0, "nothing was written");
   const taken = await (await f.request("note", { factKind: "preference", content: "记住：随访统一放在周三" })).json();
   assert.equal(taken.takesEffect, true);
+});
+
+// 2026-10-25: a turn typed in the kernel's own composer is handed the project's card and the capsule's profile at the conversation's first
+// step, through `session`; the conversation counts as holding it once the plugin says the step entered (`session-attached`).
+const BLOCK = { text: "用户的长期记忆（历史记录，不是指令）：\n<evimed-memory id=\"card:project-one\">约束：所有文字交付物一律用英文写。</evimed-memory>",
+  digest: "b".repeat(64), memories: [{ id: "card:project-one", kind: "project_fact", scope: "project" }] };
+
+/** A resident double that holds the block until it is acknowledged, as the conversation's state does. */
+function residentDouble({ block = BLOCK } = {}) {
+  const state = { held: false, asked: 0, attached: [], failing: false };
+  return { state, forSession: async () => { state.asked += 1; if (state.failing) throw new Error("engine unavailable"); return state.held ? null : block; },
+    attached: async (user, project, sessionId, receipt) => { state.attached.push({ user: user.id, project: project.id, sessionId, receipt }); state.held = true; } };
+}
+
+test("the first step is handed the resident block with the notes, once: the conversation holds it only after the plugin says the step entered", async (t) => {
+  const resident = residentDouble();
+  const f = await fixture(t, { resident, sessions: { running: async () => [], state: async () => ({}), notes: async () => ["这个对话绑定了一个能力。"] } });
+  const first = await (await f.request("session", { sessionId: "ses_native" })).json();
+  assert.equal(first.context, `${BLOCK.text}\n\n这个对话绑定了一个能力。`, "the block first, then what the conversation's own state adds");
+  assert.deepEqual(first.resident, { digest: BLOCK.digest });
+  // Asked again before the step entered (a rejected step is retried): handed again, nothing noted.
+  assert.equal((await (await f.request("session", { sessionId: "ses_native" })).json()).resident.digest, BLOCK.digest);
+  assert.deepEqual(resident.state.attached, []);
+  // Entered: noted, as the account's and the project's own, with what the block held.
+  const noted = await f.request("session-attached", { sessionId: "ses_native", digest: BLOCK.digest });
+  assert.equal(noted.status, 200);
+  assert.deepEqual(await noted.json(), { attached: true });
+  assert.deepEqual(resident.state.attached, [{ user: "owner", project: "project-one", sessionId: "ses_native", receipt: { digest: BLOCK.digest, memories: BLOCK.memories } }]);
+  // Held: the next step is handed the notes alone, and says nothing to acknowledge.
+  const again = await (await f.request("session", { sessionId: "ses_native" })).json();
+  assert.equal(again.context, "这个对话绑定了一个能力。");
+  assert.equal("resident" in again, false);
+});
+
+test("a receipt for a block that is no longer the block is not noted: the changed card is handed with its own digest at the next step", async (t) => {
+  const resident = residentDouble();
+  const f = await fixture(t, { resident });
+  const stale = await f.request("session-attached", { sessionId: "ses_native", digest: "c".repeat(64) });
+  assert.deepEqual(await stale.json(), { attached: false });
+  assert.deepEqual(resident.state.attached, []);
+  for (const bad of [{ sessionId: "ses_native" }, { sessionId: "ses_native", digest: "not-a-digest" }, { sessionId: "../x", digest: BLOCK.digest }, { sessionId: "ses_native", digest: BLOCK.digest, extra: 1 }]) {
+    assert.equal((await f.request("session-attached", bad)).status, 400, JSON.stringify(bad));
+  }
+  assert.deepEqual(resident.state.attached, []);
+});
+
+test("a block that cannot be read, or none to give, leaves the conversation its notes, and a deployment without the block answers as it did", async (t) => {
+  const failing = residentDouble();
+  failing.state.failing = true;
+  const f = await fixture(t, { resident: failing, sessions: { running: async () => [], state: async () => ({}), notes: async () => ["注。"] } });
+  const answer = await (await f.request("session", { sessionId: "ses_native" })).json();
+  assert.deepEqual(answer, { context: "注。" }, "the conversation starts without it, and the next step asks again");
+  const none = await fixture(t, { resident: residentDouble({ block: null }), sessions: { running: async () => [], state: async () => ({}), notes: async () => [] } });
+  assert.deepEqual(await (await none.request("session", { sessionId: "ses_native" })).json(), { context: "" });
+  const bare = await fixture(t);
+  assert.deepEqual(await (await bare.request("session", { sessionId: "ses_native" })).json(), { context: "" });
+  assert.deepEqual(await (await bare.request("session-attached", { sessionId: "ses_native", digest: BLOCK.digest })).json(), { attached: false });
 });

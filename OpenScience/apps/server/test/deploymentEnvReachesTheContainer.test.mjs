@@ -155,6 +155,8 @@ const operatorLevers = {
   // The judge of a reworded repeat of a removed line (2026-10-23): a model call a commit at most, bounded per account per day.
   OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS: ["open-science-web"],
+  // The page's import of what another assistant remembered (2026-10-25): the offers an account may ask for in an hour.
+  OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR: ["open-science-web"],
   // The turn committer (2026-10-14): when the control plane commits a conversation to the engine, and how many commits and waiting
   // conversations it holds. Each commit that finds something pending is one extraction call on the platform's budget.
   OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED: ["open-science-web"],

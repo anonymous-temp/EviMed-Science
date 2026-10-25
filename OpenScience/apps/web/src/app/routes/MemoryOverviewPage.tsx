@@ -142,7 +142,7 @@ function Overview() {
             />
           ) }],
           [
-            { key: "you", node: <AboutYouCardView state={stateOf("memories")} card={you} errorMessage={failure} onRetry={map.reload} onOpen={open} onRemember={() => setHeader({ kind: "remember" })} /> },
+            { key: "you", node: <AboutYouCardView state={stateOf("memories")} card={you} errorMessage={failure} onRetry={map.reload} onOpen={open} onRemember={() => setHeader({ kind: "remember" })} onImportFromAssistant={() => setHeader({ kind: "import" })} /> },
             { key: "projects", node: <ProjectsCardView state={stateOf("projects")} card={projects} errorMessage={failure} onRetry={map.reload} onChat={toChat} /> },
           ],
           [

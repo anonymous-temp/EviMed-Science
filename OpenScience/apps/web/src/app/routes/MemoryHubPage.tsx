@@ -21,6 +21,7 @@ import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/mem
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
 import { factItems, factRowSummary, factsOfProject, OTHER_PROJECT, practiceItems, projectScopeGroups, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
+import { ImportDialog } from "@/components/memory/ImportDialog";
 import { RememberDialog } from "@/components/memory/RememberDialog";
 import { useMemoryReads, type MemoryRead } from "@/components/memory/useMemoryReads";
 import { usePendingMemory } from "@/components/memory/usePendingMemory";
@@ -126,7 +127,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const [pickedProject, setPickedProject] = useState<string | null>(null);
   const projectChoice = params.get("project") ?? pickedProject;
   const { value: openKey, open: setOpenKey, close } = useAddressOpen("open");
-  const [drawer, setDrawer] = useState<"share" | "forgotten" | "remember" | null>(null);
+  const [drawer, setDrawer] = useState<"share" | "forgotten" | "remember" | "import" | null>(null);
   const [found, setFound] = useState<WebStructuredMemory[] | null>(null);
   // What the conversations behind a search's hits were about, for the drawer's source link.
   const [searchConversations, setSearchConversations] = useState<Record<string, string>>({});
@@ -376,6 +377,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
           onShare={() => setDrawer("share")}
           onForgotten={() => setDrawer("forgotten")}
           onRemember={() => setDrawer("remember")}
+          onImport={() => setDrawer("import")}
         />
       )}
       toolbar={{ label: "搜索记忆", search: { label: "搜索记忆", value: query, maxLength: 80, onChange: search.setDraft, onClear: search.clear, inputProps: search.composition } }}
@@ -410,6 +412,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
           onAsked={reload}
         />
       )}
+      {drawer === "import" && <ImportDialog onClose={() => setDrawer(null)} onSaved={reload} />}
       {drawer === "share" && <ShareDrawer onClose={() => setDrawer(null)} onImported={reload} />}
       {drawer === "forgotten" && (
         <ForgottenDrawer

@@ -1,0 +1,54 @@
+memory_type: recent_work
+description: |
+  __LANGUAGE__
+  Recent work: what the user worked on last inside ONE of their named projects, at the level of
+  a task, so that the next conversation in that project can pick up where this one stopped
+  ("上次做到哪了"). One file per project, at most three lines, newest first.
+  Write it when a conversation is held inside one of the user's named projects and a user-role
+  message asks for a piece of work in it: a deliverable, an analysis, an edit, a search, a
+  piece of code. Each line says what kind of task and which part of the project it was about,
+  in the user's own terms and a few words, and the date ("给第 2 章补参考文献", "整理 Q3 渠道数据"). Never
+  the content of the work: no numbers, results or conclusions from it, no text of a document, no
+  file path, no name of another person. Skip a plain question, small talk, anything asked
+  outside a named project, and a request the assistant only discussed.
+  The lines REPLACE each other, they do not pile up: put this conversation's line first and
+  drop the oldest line when there would be a fourth. When one conversation did several tasks,
+  write the last one. What the user states about the project itself belongs on the project's
+  card (PROJECT_CONTEXT), not here.
+
+  __NEVER_KEEP__
+
+  __DECIDE__
+directory: "viking://user/{{ user_space }}/memories/recent_work"
+filename_template: "{{ project|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ project }}
+
+  {{ content }}
+
+overview_template: |-
+  # Recent Work Overview
+  {% for item in items %}
+  - [{{ item.file_content.project|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: project
+    type: string
+    description: |
+      The name of the project in {{ language }}: the exact name of the project's card
+      (PROJECT_CONTEXT) when there is one, otherwise the name the user uses for it. No dates,
+      no slashes. It identifies the file: reuse the exact name of an existing file for the
+      same project.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets, at most three, newest first: the kind of task, the part of the project
+      it was about, and the date. No content of the work.
+      Example:
+      - 给第 2 章补参考文献（2026-10-24）
+      - 整理 Q3 渠道数据（2026-10-22）
+    merge_op: patch

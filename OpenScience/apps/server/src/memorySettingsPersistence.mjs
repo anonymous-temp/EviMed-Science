@@ -85,6 +85,9 @@ ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS resident_digest text
   CHECK (resident_digest IS NULL OR resident_digest ~ '^[a-f0-9]{64}$');
 ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS resident_delivered_at timestamptz(3);
 ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS compacted_at timestamptz(3);
+-- What the block that was handed over held, as the run record names it (id, kind, scope; never the text): a turn typed in the kernel's own
+-- composer is adopted as a run after the block went in, and the run's recalled memories are read from here when it ends (2026-10-25).
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS resident_memos jsonb CHECK (resident_memos IS NULL OR jsonb_typeof(resident_memos) = 'array');
 -- A conversation that tries a capsule someone shared (「试用一次」): the pack
 -- it is handed as context. It writes nothing into the researcher's own
 -- memory (memoryPausedFor) while the trial lasts.

@@ -120,6 +120,18 @@ describe("总览 on the owner's first day: native memory, no memory file, docume
     expect(await screen.findByRole("dialog", { name: "记住这一条" })).toBeInTheDocument();
   });
 
+  it("offers 从其他 AI 导入 beside it in the empty 关于你 card, and in the header's 「⋯」", async () => {
+    const user = userEvent.setup();
+    open();
+    await ready();
+    await user.click(within(card("you")).getByRole("button", { name: "从其他 AI 导入" }));
+    expect(await screen.findByRole("dialog", { name: "从其他 AI 导入" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog", { name: "从其他 AI 导入" })).getByRole("button", { name: "关闭" }));
+    await user.click(screen.getByRole("button", { name: "记忆设置" }));
+    await user.click(await screen.findByRole("menuitem", { name: "从其他 AI 导入" }));
+    expect(await screen.findByRole("dialog", { name: "从其他 AI 导入" })).toBeInTheDocument();
+  });
+
   it("opens 分享与导入 on 导入 from the recipe of 收到的, and on 导出 from the card of what could be handed over", async () => {
     const user = userEvent.setup();
     open();

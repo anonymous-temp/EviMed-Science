@@ -1208,7 +1208,7 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
   `poll_interval_ms: 5000` would make it 5 s; it has not been probed). A compile that names another user's root is refused by the
   engine (403); one that names the account-shared `viking://resources/…` or `viking://agent/…` roots is not, so
   `OpenVikingResources.submitCompile` refuses every root outside the acting user's own resources.
-- **The memory templates.** `deploy/web/openviking/memory-templates/` — eight types, the platform's keep / never-keep policy
+- **The memory templates.** `deploy/web/openviking/memory-templates/` — ten types, the platform's keep / never-keep policy
   written in the engine's template language — is bind-mounted read-only at `/app/memory-templates`. A missing mount is silent
   upstream (the server falls back to its built-in types), which is why the control plane checks it.
 - **The model path.** The engine's `vlm` is this deployment's own model gateway (`http://open-science-web:8787/internal/model/v1`),
@@ -1235,13 +1235,14 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
 | `OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY`, `_MAX_SCHEDULED` | `2`, `1000` | Commits in flight at once, and conversations waiting for their quiet; a conversation over the bound is not scheduled and is counted `dropped` (the engine's idle commit still takes it). Counted in `open_science_native_memory_turn_commits_total{outcome}`. |
 | `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED`, `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS` | `true`, `7` | The native 重读旧记忆: the engine's own `compile --skill memory` over an account's memories root, at most once per interval and only after the account's files changed, recorded as overlay revisions of actor `engine` (undoable). On since the lab probe of 2026-10-24; each run is model calls of the engine's, booked as `memory-extraction` on the engine's daily budget (`docs/WEB_OPERATIONS_RUNBOOK.md`, "Memory, the capsule and the learning loop"). |
 | `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED`, `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS` | `true`, `40` | Whether one Flash call per commit judges if a line the engine wrote again says what the person had removed, in other words, and how many such judgements an account may have per UTC day. Off, only a line that contains a removed one is refused; the removed line's normalised words stay on its rejection row either way. |
+| `OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR` | `5` | 「从其他 AI 导入」 on the memory page (`nativeMemoryImport.mjs`): the person pastes what another assistant remembered (8,000 characters), one Flash call (`memory-extraction`, thinking off, charged to the account) splits it into first-person statements and names each one's sensitivity tier by `MEMORY_NEVER_KEPT_TEXT`, code drops what carries a credential or cannot be traced to a line of the text, the person reviews the list, and the engine writes what they keep under its own templates. The offers an account may ask for in an hour bound the call (0 refuses every import); counted in `open_science_native_memory_imports_total{outcome}`. |
 | `OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS` | `1500` | How long the opening block waits for the project's card (100–30000); past it the conversation starts without the card and the read counts `timeout`. |
 | `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` | `true` (the API-only overlay: `false`) | Sharing a capsule between accounts: deliveries, share links and sealed files, and the 待收下的分享 shelf. The method pack and the plain file export are not behind it. A private override that pins it `false` wins. |
 | `OPEN_SCIENCE_OPENVIKING_BACKUP_STATE_FILE` | `/run/openviking-backup-status/state.json` (set by the backup overlay) | The host's receipt of the engine volume's last capture ("The OpenViking volume", below). Unset, nothing is reported. |
 | `OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS` | `90000` | How old the last verified capture may be before `checks.backup.openviking` says `openviking_backup_stale` (a notice). |
 
 `/api/ready` reports the engine under `checks.memoryIndex.engine`: `facts.version` (the answering server is the pin),
-`facts.modelKey`, `facts.memoryTemplates` (the template directory is loaded and a user's settings read back the eight types),
+`facts.modelKey`, `facts.memoryTemplates` (the template directory is loaded and a user's settings read back the ten types),
 `facts.skills` (`llm-wiki` and `knowledge-graph` are installed with the pinned bytes; a missing one is installed at start) and
 `facts.compileIdentity` (`GET /api/v1/compile/capabilities` says Compile is configured, and one real submission whose source is an
 empty directory ends, about 30 s later, with "Compile sources contain no files": the bot ran the task as the caller, and no model was

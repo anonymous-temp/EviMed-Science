@@ -89,6 +89,14 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(await screen.findByRole("button", { name: "记住这一条" })).toBeInTheDocument();
   });
 
+  it("offers 从其他 AI 导入 in the 「⋯」, which opens the import and reads the list again once something is saved", async () => {
+    open();
+    await screen.findByRole("list", { name: "背景" });
+    await userEvent.click(screen.getByRole("button", { name: "记忆设置" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "从其他 AI 导入" }));
+    expect(await screen.findByRole("dialog", { name: "从其他 AI 导入" })).toBeInTheDocument();
+  });
+
   it("hands the words over, closes, and shows them as 正在记住 until the memory has written them", async () => {
     const asked = { id: "p1", text: "以后报告先给结论，再给依据。", at: new Date().toISOString(), state: "pending" as const };
     memory.rememberMemory.mockResolvedValue({ pending: asked });

@@ -613,6 +613,9 @@ export interface WebStructuredMemory {
     /** The project the conversation was held in, when the control plane knows it (a memory of the native engine names the
      *  conversation it came out of this way; it keeps no quotation, so `quote` is empty there). */
     projectId?: string | null;
+    /** What a memory the platform itself wrote was written from, in the person's words (「从其他 AI 导入」, 「你在两次对话里都这样做」): the
+     *  control plane names it for an import and for a choice two conversations made, where there is no conversation to link to. */
+    label?: string;
   }>;
   revisions: Array<{
     version: number;

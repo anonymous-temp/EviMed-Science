@@ -34,7 +34,7 @@ function engine({ count = 20, delay = 5 } = {}) {
     files: async () => new Map(),
     revisionsOfMany: async () => new Map(),
     sources: async () => [],
-    reject: async () => {}, unreject: async () => {}, addRevision: async () => {}, upsertFile: async () => {}, setSources: async () => {},
+    reject: async () => {}, unreject: async () => {}, addRevision: async () => {}, upsertFile: async () => {}, setSources: async () => {}, syncOrigins: async () => {}, originsOf: async () => new Map(),
   };
   return { files, calls, store: new NativeMemoryStore({ sessions: /** @type {any} */ (sessions), overlay: /** @type {any} */ (overlay) }) };
 }

@@ -52,11 +52,27 @@ export const NATIVE_CONSOLIDATION_OUTCOMES = Object.freeze(["not_due", "unchange
 /** What a finished consolidation did to the account's files. */
 export const NATIVE_CONSOLIDATION_CHANGES = Object.freeze(["added", "updated", "deleted"]);
 /** What the deterministic after-the-fact checks did, by why: `rejected_line` a verbatim repeat of a line the person removed, `rejected_reworded` a line that contains one, `rejected_judged` one a model judged to say the same. */
-export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged"]);
+export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged", "recent_work_default_project"]);
 /** What became of a call to the model that judges whether a line repeats one the person removed: asked, failed (unreachable, or not the one shape), over the account's day, or no model here. */
 export const NATIVE_REJECTION_JUDGE_OUTCOMES = Object.freeze(["asked", "failed", "over_budget", "unavailable"]);
 /** What became of the lines that were near a removed one: held by containment (code), judged the same or not (the model), or kept because the judge could not say. */
 export const NATIVE_REJECTION_LINE_VERDICTS = Object.freeze(["contained", "judged_same", "judged_kept", "judge_failed"]);
+/** What became of a note of the `observations` type that two conversations may have written: promoted to a preference, held back because its words were empty, or a pass that failed. */
+export const NATIVE_OBSERVATION_OUTCOMES = Object.freeze(["promoted", "empty", "failed"]);
+/** What became of an extraction a reset found still running: its files taken out after it finished (`swept`), a task the engine no longer holds (`unknown`), or still running at this pass (`waiting`). */
+export const NATIVE_RESET_SWEEP_OUTCOMES = Object.freeze(["swept", "unknown", "waiting"]);
+/** Why a commit's extraction failed, as far as the engine's own error says: the output ran out of room (`budget_exhausted`, v0.5.2), the model budget was spent (`quota`), or anything else. */
+export const NATIVE_EXTRACTION_FAILURES = Object.freeze(["budget_exhausted", "quota", "other"]);
+/** What became of the deletion of a session's privacy configuration (v0.5.2's privacy tree) that follows a session's deletion: deleted, absent (404: none, or an engine that has no such route), or failed. */
+export const NATIVE_PRIVACY_DELETE_OUTCOMES = Object.freeze(["deleted", "absent", "failed"]);
+/** What the check of an account's memory policy against the deployment's list of types found: already the list, rewritten to it, or the engine could not say. */
+export const NATIVE_POLICY_SYNC_OUTCOMES = Object.freeze(["current", "rewritten", "failed"]);
+/** Lines removed because the person forgot another that says the same, and the judge's part in it. */
+export const NATIVE_FORGET_DUPLICATE_OUTCOMES = Object.freeze(["removed", "judge_failed", "kept"]);
+/** What became of a recall-statistics write (`last_recalled_at`): noted, or failed (never a reason for a recall to fail). */
+export const NATIVE_RECALL_NOTE_OUTCOMES = Object.freeze(["noted", "failed"]);
+/** What the page's import did: offered a list, saved it, was refused for the rate, or had no usable answer from the model. */
+export const NATIVE_IMPORT_OUTCOMES = Object.freeze(["offered", "saved", "rate_limited", "model_failed"]);
 /** What the worker wrote besides revisions. */
 export const NATIVE_WORKER_WRITES = Object.freeze(["project_tag", "source_label_added", "source_label_removed", "registration"]);
 
@@ -85,6 +101,15 @@ const consolidatedFiles = table(NATIVE_CONSOLIDATION_CHANGES);
 const checkActions = table(NATIVE_CHECK_ACTIONS);
 const workerWrites = table(NATIVE_WORKER_WRITES);
 const workerPasses = table(["completed", "failed"]);
+const observationOutcomes = table(NATIVE_OBSERVATION_OUTCOMES);
+const resetSweeps = table(NATIVE_RESET_SWEEP_OUTCOMES);
+const resetSweptFiles = table(["files"]);
+const extractionFailures = table(NATIVE_EXTRACTION_FAILURES);
+const privacyDeletes = table(NATIVE_PRIVACY_DELETE_OUTCOMES);
+const policySyncs = table(NATIVE_POLICY_SYNC_OUTCOMES);
+const forgetDuplicates = table(NATIVE_FORGET_DUPLICATE_OUTCOMES);
+const recallNotes = table(NATIVE_RECALL_NOTE_OUTCOMES);
+const imports = table(NATIVE_IMPORT_OUTCOMES);
 
 /** One gateway request. @param {string} route @param {string} outcome */
 export function recordGatewayRequest(route, outcome) {
@@ -142,9 +167,29 @@ export function recordNativeWrite(what) { bump(workerWrites, what); }
 /** One pass of the worker. @param {boolean} ok */
 export function recordNativePass(ok) { bump(workerPasses, ok ? "completed" : "failed"); }
 
+/** A note of the observations type, by what became of it. @param {string} outcome */
+export function recordObservationPromotion(outcome) { bump(observationOutcomes, outcome); }
+/** An extraction a reset found running, by what the sweep did. @param {string} outcome @param {number} [files] files taken out */
+export function recordResetSweep(outcome, files = 0) { bump(resetSweeps, outcome); if (files) bump(resetSweptFiles, "files", files); }
+/** A failed extraction's error, classified. @param {unknown} error the task's error text */
+export function recordNativeExtractionFailure(error) {
+  const text = String(error ?? "");
+  bump(extractionFailures, /budget_exhausted/i.test(text) ? "budget_exhausted" : /insufficient_quota/i.test(text) ? "quota" : "other");
+}
+/** A session's privacy configuration deletion. @param {string} outcome */
+export function recordPrivacyDelete(outcome) { bump(privacyDeletes, outcome); }
+/** An account's type allowlist checked against the deployment's. @param {string} outcome */
+export function recordPolicySync(outcome) { bump(policySyncs, outcome); }
+/** Lines removed with a forgotten one, by what the judge made of them. @param {string} outcome @param {number} [count] */
+export function recordForgetDuplicates(outcome, count = 1) { bump(forgetDuplicates, outcome, count); }
+/** The recall statistics write. @param {string} outcome */
+export function recordRecallNote(outcome) { bump(recallNotes, outcome); }
+/** One step of the page's import. @param {string} outcome */
+export function recordImport(outcome) { bump(imports, outcome); }
+
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -158,6 +203,8 @@ export function nativeMemoryCounters() {
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
     workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
     rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
+    observationOutcomes: plain(observationOutcomes), resetSweeps: plain(resetSweeps), resetSweptFiles: plain(resetSweptFiles), extractionFailures: plain(extractionFailures),
+    privacyDeletes: plain(privacyDeletes), policySyncs: plain(policySyncs), forgetDuplicates: plain(forgetDuplicates), recallNotes: plain(recallNotes), imports: plain(imports),
   };
 }
 
@@ -210,5 +257,23 @@ export function nativeMemoryMetricFamilies() {
       help: "What the native memory worker wrote besides revisions: project tags, source labels added to and removed from memory files, account registrations." },
     { name: "open_science_native_memory_passes_total", type: "counter", series: series(workerPasses, "outcome"),
       help: "Passes of the native memory worker, by whether the pass finished." },
+    { name: "open_science_native_memory_observations_total", type: "counter", series: series(observationOutcomes, "outcome"),
+      help: "Notes of the observations type that two different conversations wrote (a choice made in a request and never called a rule): promoted to a preference, held back because the note held no words, or a pass that failed. A note one conversation wrote is not counted here." },
+    { name: "open_science_native_memory_reset_sweeps_total", type: "counter", series: series(resetSweeps, "outcome"),
+      help: "Extractions a memory reset found still running, by what the sweep did when it looked: files the finished extraction wrote after the reset were taken out (swept), the engine no longer held the task (unknown), or it was still running (waiting)." },
+    { name: "open_science_native_memory_reset_swept_files_total", type: "counter", series: series(resetSweptFiles, "what"),
+      help: "Memory files taken out again because an extraction accepted before a reset wrote them after it." },
+    { name: "open_science_native_memory_extraction_failures_total", type: "counter", series: series(extractionFailures, "reason"),
+      help: "Failed extraction tasks by the engine's own error: budget_exhausted (the model's output ran out of room, v0.5.2 fails fast instead of retrying), quota (the model budget is spent) or other." },
+    { name: "open_science_native_memory_privacy_config_deletes_total", type: "counter", series: series(privacyDeletes, "outcome"),
+      help: "Deletions of a session's privacy configuration (OpenViking v0.5.2 keeps the credentials it replaced in a session beside the session) that follow a session's deletion: deleted, absent (none, or an engine without the route: v0.5.1.1) or failed." },
+    { name: "open_science_native_memory_policy_syncs_total", type: "counter", series: series(policySyncs, "outcome"),
+      help: "Checks of an account's memory-type allowlist in the engine against the deployment's list: already the list, rewritten to it (an account whose settings were stored before a type was added), or the engine could not say." },
+    { name: "open_science_native_memory_forget_duplicates_total", type: "counter", series: series(forgetDuplicates, "outcome"),
+      help: "Lines that state the same thing as one the person forgot, found in other memory files: removed with it, kept because the judge said they differ, or kept because the judge could not answer." },
+    { name: "open_science_native_memory_recall_notes_total", type: "counter", series: series(recallNotes, "outcome"),
+      help: "Writes of a memory file's last-recalled time and recall count after a search or read through the gateway returned it: noted, or failed (never a reason for the recall to fail)." },
+    { name: "open_science_native_memory_imports_total", type: "counter", series: series(imports, "outcome"),
+      help: "The page's import of what another assistant remembered: a list offered to the person, a list saved, refused for the account's rate, or the model gave no usable answer." },
   ];
 }

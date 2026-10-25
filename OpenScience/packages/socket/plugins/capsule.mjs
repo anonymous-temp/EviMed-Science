@@ -158,12 +158,18 @@ export async function apply(ctx, config) {
       // Memory is an enhancement: the conversation goes on without it, and
       // says so where an operator looks.
       if (!response.ok) ctx.get('evimedDiagnostics')?.degrade?.(`conversation context not read: ${response.message}`)
-      return { allow: true, discardOnReject: true, onEntered: () => {
+      // The block the control plane handed this conversation (the project's card, the capsule's profile) counts as held only once the
+      // step that carries it has entered: a step the kernel rejects is asked again and handed it again (`capsuleGateway.mjs`, `session-attached`).
+      const digest = response.ok && text && typeof response.data?.resident?.digest === 'string' && /^[a-f0-9]{64}$/.test(response.data.resident.digest) ? response.data.resident.digest : ''
+      return { allow: true, discardOnReject: true, onEntered: async () => {
         asked.add(key)
         if (asked.size > 1_000) {
           const oldest = asked.values().next().value
           if (oldest !== undefined) asked.delete(oldest)
         }
+        if (!digest) return
+        const noted = await callControlPlane(ctx, config, 'session-attached', { sessionId: step.sessionId, digest })
+        if (!noted.ok) ctx.get('evimedDiagnostics')?.degrade?.(`conversation context receipt not recorded: ${noted.message}`)
       } }
     }, (payload) => ({
       first: Number(payload?.turn ?? 0) <= 1 && Number(payload?.step ?? 0) <= 1,

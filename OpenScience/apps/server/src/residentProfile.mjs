@@ -129,6 +129,57 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   return { text, profile, memos, omitted };
 }
 
+/**
+ * What a turn typed in the kernel's own composer was handed up front, for the run it becomes. That turn reaches the model with no dispatch,
+ * so the block went in at the capsule plugin's first step (`capsuleGateway.mjs` `session`), before the control plane had a run to name it
+ * on; the conversation's state kept what it held (`noteResidentDelivered`), and when the run ends this is what its record says it recalled.
+ * A dispatched run named its own, a run that already names some is left as it is, and a block handed over before the run began (an earlier
+ * turn's, still in the conversation) is not this run's.
+ * @param {{ dispatchId?: string | null, recalledMemories?: readonly unknown[] | null, startedAt?: string | null, finishedAt?: string | null } | null | undefined} run
+ * @param {{ deliveredAt?: string | null, memos?: readonly { id: string, kind?: string, scope?: string }[] } | null | undefined} state `residentState`
+ * @returns {{ id: string, kind?: string, scope?: string }[]}
+ */
+export function nativeResidentMemos(run, state) {
+  if (!run || run.dispatchId) return [];
+  if (Array.isArray(run.recalledMemories) && run.recalledMemories.length) return [];
+  if (!state?.deliveredAt || !state.memos?.length) return [];
+  const delivered = Date.parse(state.deliveredAt);
+  const started = Date.parse(String(run.startedAt ?? ""));
+  const finished = run.finishedAt ? Date.parse(run.finishedAt) : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(delivered) || !Number.isFinite(started)) return [];
+  return delivered >= started - 5_000 && delivered <= finished + 5_000 ? [...state.memos] : [];
+}
+
+/**
+ * The resident block as the capsule gateway's first step asks for it (`capsuleGateway.mjs` `session`), for a turn typed in the kernel's own
+ * composer. Built from the one decision a dispatch takes (`ResidentProfiles.forDispatch`), with the two facts only the ledger has:
+ *
+ *  - a conversation with a run the control plane dispatched is told nothing — that prompt carries the block in its own context, and said
+ *    twice it is only longer;
+ *  - a turn nobody is in (a run the platform started: automated, scheduled, a module's) is handed no project card, as at a dispatch; a turn
+ *    typed into the composer is a person's, which is why `attended` is the absence of such a run.
+ *
+ * Whether the conversation already holds the block, whether memory is paused for it and the card's own limits (the default project, an
+ * internal project, 1,500 characters) are `forDispatch`'s.
+ * @param {{ residentProfiles: ResidentProfiles, activeRuns: (project: any) => Promise<any[]>, startedByPlatform: (run: any) => boolean }} services
+ */
+export function nativeSessionResident({ residentProfiles, activeRuns, startedByPlatform }) {
+  return {
+    /** @param {any} user @param {any} project @param {string} sessionId */
+    async forSession(user, project, sessionId) {
+      const running = (await activeRuns(project)).filter((run) => run.sessionId === sessionId);
+      if (running.some((run) => run.dispatchId)) return null;
+      const block = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId, attended: !running.some(startedByPlatform) });
+      if (!block.due || !block.text || !block.digest) return null;
+      return { text: block.text, digest: block.digest, memories: block.memories.map((/** @type {any} */ memo) => ({ id: memo.id, kind: memo.kind, scope: memo.scope })) };
+    },
+    /** @param {any} user @param {any} project @param {string} sessionId @param {{ digest: string, memories: { id: string, kind?: string, scope?: string }[] }} receipt */
+    attached(user, project, sessionId, receipt) {
+      return residentProfiles.acknowledge(user.id, { projectId: project.id, sessionId, ...receipt });
+    },
+  };
+}
+
 export class ResidentProfiles {
   /**
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
@@ -185,12 +236,13 @@ export class ResidentProfiles {
    * @param {string} userId @param {{ projectId: string, sessionId: string | null, attended?: boolean }} scope
    *   `attended`: a person is in this turn now (the web chat, an IM channel). A scheduled task, an episode, a module's step and
    *   a platform job are turns nobody is in, and are handed no project card.
-   * @returns {Promise<{ text: string, memories: any[], due: boolean, reason: string, omitted: number, delivered: () => Promise<void> }>}
+   * @returns {Promise<{ text: string, memories: any[], due: boolean, reason: string, omitted: number, digest: string | null, delivered: () => Promise<void> }>}
+   *   `digest` names the block, for a caller that hands it over in two steps (`acknowledge`): the capsule gateway's first-step context
    */
   async forDispatch(userId, { projectId, sessionId, attended = false }) {
     const none = (/** @type {string} */ reason) => {
       recordResidentProfile(reason);
-      return { text: "", memories: [], due: false, reason, omitted: 0, delivered: async () => {} };
+      return { text: "", memories: [], due: false, reason, omitted: 0, digest: null, delivered: async () => {} };
     };
     // The deployment's switch, then the researcher's own: nothing of the memory is handed over, and the profile a
     // conversation was given earlier is not taken back.
@@ -226,12 +278,22 @@ export class ResidentProfiles {
     recordResidentProfile(reason);
     const memories = block.memos;
     return {
-      text: block.text, memories, due, reason, omitted: block.omitted,
+      text: block.text, memories, due, reason, omitted: block.omitted, digest,
       // After the prompt that carried it was accepted, so a dispatch that failed leaves the next one to hand it over.
       delivered: async () => {
         if (!due) return;
-        if (state && sessionId) await this.store.noteResidentDelivered(userId, projectId, sessionId, digest).catch(() => {});
+        if (state && sessionId) await this.store.noteResidentDelivered(userId, projectId, sessionId, digest, memories).catch(() => {});
       },
     };
+  }
+
+  /**
+   * The block was handed to a conversation by the kernel's own first step (the capsule gateway's `session`), and the step has entered: the
+   * conversation now holds it, so the next one is not handed it again. The second half of a hand-over made in two calls; a dispatch's
+   * `delivered` is the same note made in one.
+   * @param {string} userId @param {{ projectId: string, sessionId: string, digest: string, memories?: readonly { id: string, kind?: string, scope?: string }[] }} receipt
+   */
+  async acknowledge(userId, { projectId, sessionId, digest, memories = [] }) {
+    await this.store.noteResidentDelivered(userId, projectId, sessionId, digest, memories);
   }
 }

@@ -19,7 +19,8 @@ import { Switch } from "@/components/ui/Switch";
  * The memory page's header controls: one switch and one 「⋯」 (2026-10-07 plan
  * §3.2). The owner put the switch, the reset and sharing on the header's one
  * line (2026-09-22); the menu holds the four things that are not a list:
- * 分享与导入 · 已忘记的内容 · 本项目不使用记忆 · 重置记忆.
+ * 分享与导入 · 已忘记的内容 · 本项目不使用记忆 · 重置记忆, and, where the memory takes words typed on
+ * the page, 从其他 AI 导入 beside the first (2026-10-25).
  *
  * 「记忆」 is one decision over two stored halves (learning and recall, owner
  * ruling 2026-09-20); it reads on only when both are on, because a switch that
@@ -30,7 +31,7 @@ import { Switch } from "@/components/ui/Switch";
  * the researcher's own capsule), and none of what it does not (对话, 报告, 知识库
  * and the capsules others shared).
  */
-export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember, projectId: shown }: {
+export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember, onImport, projectId: shown }: {
   /** The project 「本项目不使用记忆」 acts on: the one the page shows. `undefined` is the shell's own project; `null` is a page showing none that can be paused (the 「其他」 of the 项目 tab), where the item is off. */
   projectId?: string | null;
   onReset: () => void;
@@ -40,6 +41,8 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
   onForgotten: () => void;
   /** 「记住这一条」: present only for an account whose memory can take words typed on the page. */
   onRemember?: () => void;
+  /** 「从其他 AI 导入」: bring in what another assistant remembered about the person; present only where memory can take words typed on the page. */
+  onImport?: () => void;
 }) {
   const [settings, setSettings] = useState<WebMemorySettings | null>(null);
   const [failed, setFailed] = useState(false);
@@ -104,6 +107,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
         label="记忆设置"
         items={[
           { label: "分享与导入", onSelect: onShare },
+          ...(onImport ? [{ label: "从其他 AI 导入", onSelect: onImport }] : []),
           { label: "已忘记的内容", onSelect: onForgotten },
           "separator",
           {

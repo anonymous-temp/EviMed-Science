@@ -21,7 +21,7 @@ import { createHash, createHmac } from "node:crypto";
  * @module openVikingLayout
  */
 
-/** `memory.custom_templates_dir`: the eight memory types' templates, mounted read-only. */
+/** `memory.custom_templates_dir`: the ten memory types' templates, mounted read-only. */
 export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
 
 /**
@@ -34,6 +34,10 @@ export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
  */
 export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   "profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts",
+  // 2026-10-25 (owner decision 6): `observations` is a choice the person made in a request and never called a rule, kept until a second
+  // conversation shows it (`nativeMemoryObservations.mjs`) — never a fact, never read back; `recent_work` is what a project was last
+  // worked on, at task level, three lines at most (the project card's 「最近在做」).
+  "observations", "recent_work",
 ]);
 
 /** Where the account-shared skills are installed; a compile names one as `<root>/<name>`. */

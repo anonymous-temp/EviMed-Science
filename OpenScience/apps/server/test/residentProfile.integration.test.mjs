@@ -47,7 +47,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 test("a conversation's state says what it was last handed and when the kernel compacted it", options, async () => {
   const digest = "a".repeat(64);
-  assert.deepEqual(await store.residentState(owner, "prj_state", "ses_state"), { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false });
+  assert.deepEqual(await store.residentState(owner, "prj_state", "ses_state"), { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false, memos: [] });
   await store.noteCompaction(owner, "prj_state", "ses_state");
   const compactedFirst = await store.residentState(owner, "prj_state", "ses_state");
   assert.equal(compactedFirst.digest, null, "a conversation never handed the profile has nothing to lose to a compaction");
@@ -73,7 +73,7 @@ test("a conversation's state says what it was last handed and when the kernel co
 
   // The state is the conversation's: it goes with the project.
   await store.deleteProjectState(owner, "prj_state");
-  assert.deepEqual(await store.residentState(owner, "prj_state", "ses_state"), { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false });
+  assert.deepEqual(await store.residentState(owner, "prj_state", "ses_state"), { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false, memos: [] });
 });
 
 test("a real store drives the whole decision: first, unchanged, changed, compacted", options, async () => {

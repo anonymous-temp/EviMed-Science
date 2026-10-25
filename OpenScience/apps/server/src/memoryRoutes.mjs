@@ -52,6 +52,7 @@ import {
  *   config: any,
  *   memorySettings: any,
  *   nativeMemory?: import("./nativeMemoryStore.mjs").NativeMemoryStore | null,
+ *   nativeMemoryImport?: import("./nativeMemoryImport.mjs").NativeMemoryImport | null,
  *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number, jobs: number, feedback: number }>) | null,
  *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
  *   projectWork?: ((user: any, project: any, options: { timeZone: string }) => Promise<{ capabilities: any[], works: any[] }>) | null,
@@ -63,7 +64,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, memorySettings, nativeMemory = null, resetProduct = null, releasePausedRuntimes = null, projectWork = null,
+  config, memorySettings, nativeMemory = null, nativeMemoryImport = null, resetProduct = null, releasePausedRuntimes = null, projectWork = null,
   store, context, audit, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
@@ -166,6 +167,38 @@ export function createMemoryRoutes({
       const remembered = await memory.remember(ctx.user.id, { text, projectId });
       await audit(ctx, "memory.remember", "completed", { project: projectId ?? "" });
       sendJson(res, 200, { data: remembered });
+      return true;
+    }
+
+    // 「从其他 AI 导入」 (`nativeMemoryImport.mjs`): the pasted text is read into statements the person reviews, and what they keep is written
+    // by the engine under its own templates. `POST /api/memory/import {text}` answers `{ id, statements, leftOut }`; `POST
+    // /api/memory/import/:id/confirm {ids?}` saves the ticked ones (every statement the offer ticked when `ids` is absent).
+    if (pathname === "/api/memory/import" && req.method === "POST") {
+      const ctx = await context(req, res);
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "memory import");
+      const unknown = Object.keys(body).filter((field) => field !== "text");
+      if (unknown.length > 0) throw new HttpError(400, "memory_payload_invalid", `Unknown field(s): ${unknown.sort().join(", ")}.`);
+      engine();
+      if (!nativeMemoryImport) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+      const offered = await nativeMemoryImport.offer(ctx.user.id, { text: assertString(body.text, "text", { max: 8_000 }) });
+      await audit(ctx, "memory.import.offer", "completed", { statements: offered.statements.length, leftOut: offered.leftOut });
+      sendJson(res, 200, { data: offered });
+      return true;
+    }
+    const importConfirm = /^\/api\/memory\/import\/([^/]+)\/confirm$/.exec(pathname);
+    if (importConfirm && req.method === "POST") {
+      const ctx = await context(req, res);
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "memory import");
+      const unknown = Object.keys(body).filter((field) => field !== "ids");
+      if (unknown.length > 0) throw new HttpError(400, "memory_payload_invalid", `Unknown field(s): ${unknown.sort().join(", ")}.`);
+      if (body.ids !== undefined && !(Array.isArray(body.ids) && body.ids.length <= 50 && body.ids.every((id) => typeof id === "string" && id.length <= 20))) {
+        throw new HttpError(400, "memory_payload_invalid", "ids is a list of the statements to save.");
+      }
+      engine();
+      if (!nativeMemoryImport) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+      const saved = await nativeMemoryImport.save(ctx.user.id, decodeRouteComponent(importConfirm[1], "import id"), { ids: body.ids ?? null });
+      await audit(ctx, "memory.import.save", "completed", { saved: saved.saved });
+      sendJson(res, 200, { data: saved });
       return true;
     }
 

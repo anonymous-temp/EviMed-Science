@@ -2782,6 +2782,10 @@ export function loadConfig(overrides = {}) {
     // of — unreachable, not the one answer shape, or the account's day spent — is kept. The day's calls per account are the bound
     // (`open_science_native_memory_rejection_judge_total`); off, only a verbatim repeat and a line that contains a removed one are met.
     nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
+    // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person
+    // reviews the list, the engine writes what they keep. The offers an account may ask for in an hour are the bound on that call
+    // (`open_science_native_memory_imports_total{outcome="rate_limited"}`); 0 refuses every import.
+    memoryImportOffersPerHour: boundedInteger(overrides.memoryImportOffersPerHour ?? process.env.OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR, 5, 0, 1_000, "OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR"),
     nativeMemoryRejectionJudgeDailyCalls: boundedInteger(overrides.nativeMemoryRejectionJudgeDailyCalls ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS, 40, 0, 10_000, "OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS"),
     // The turn committer (`nativeTurnCommit.mjs`): the plugin commits a conversation only at a token threshold no ordinary
     // conversation reaches and when its session is disposed (hours away while the runtime lives), so the control plane

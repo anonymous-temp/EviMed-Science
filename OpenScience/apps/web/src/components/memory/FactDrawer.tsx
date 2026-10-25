@@ -287,6 +287,12 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {record && (record.evidence.length > 0 || source || materials.length > 0) && (
             <DrawerSection label="出处">
+              {/* What the platform wrote from the person's own act has no conversation to open: it says what it was (an import, a choice made twice). */}
+              {record.evidence.filter((evidence) => evidence.label).slice(0, 1).map((evidence) => (
+                <p key={evidence.fingerprint || evidence.sourceRef} className="text-ui text-text-2">
+                  {evidence.label}{formatDay(evidence.observedAt) ? `（${formatDay(evidence.observedAt)}）` : ""}
+                </p>
+              ))}
               {/* A memory of the native engine names its conversation and keeps no quotation: only what was quoted is quoted. */}
               {record.evidence.filter((evidence) => evidence.quote).slice(-3).reverse().map((evidence) => (
                 <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
