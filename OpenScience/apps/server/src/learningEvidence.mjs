@@ -32,7 +32,8 @@
  *    a counter moves). An answer that fails any check is no event at all and a counter (principle 5: a failed verdict is dropped, not
  *    softened). Works for both memory engines.
  *  - **A use**: the owner opened or downloaded one of a finished run's delivered files through the control plane (`noteFileUse`, from
- *    the files routes and the kernel frame's file reads). Recorded once per run, with no words. Silence is unknown and approval is
+ *    the files routes — the outputs list, the inbox link and the files page all go through them —, the kernel frame's file panel reading
+ *    a workspace file, and a result taken as a package). Recorded once per run, with no words. Silence is unknown and approval is
  *    not assumed, so this is the one reaction short of words that says the work was kept.
  *  - **Silence**: a succeeded run that left a file and was reacted to by nobody by the time its next turn came or thirty minutes
  *    passed. A job, due thirty minutes after the run ended (`learning-evidence`), settles it: no event of any kind means `silent`,
@@ -95,6 +96,7 @@ const REQUEST_CHARS = 1_000;
 /** How many files opened are remembered as already looked at, and for how long: bounds on a cache, not opinions. */
 const USE_SEEN_LIMIT = 500;
 const USE_SEEN_MS = 5 * 60_000;
+const USE_UNDELIVERED_MS = 30_000;
 
 const INSTRUCTIONS = [
   "You read the message a person sent right after an assistant finished a piece of work for them, and say what it says about that finished work.",
@@ -387,14 +389,15 @@ export class LearningEvidence {
    * `judge`, the newest `MAX_STEERS_JUDGED` are read first, by the follow-up judge in `steer` mode, and carry its verdict, rule and the methods it
    * names; a steer that could not be read (no judge, too many in flight, an answer that fails a check) is recorded unjudged, which reads as a
    * correction. Idempotent: the settling of the run calls this without a judge to record any steer the background reading did not reach.
-   * @param {any} project @param {any} run @param {{ judge: boolean }} options
+   * @param {any} project @param {any} run @param {{ judge: boolean, count?: boolean }} options `count`: whether a steer that is not kept is counted
+   *   (the settling goes over the same steers again and counts nothing twice)
    */
-  async #recordSteers(project, run, { judge }) {
+  async #recordSteers(project, run, { judge, count = true }) {
     const steers = (Array.isArray(run.steers) ? run.steers : []).filter((/** @type {any} */ steer) => steer?.text);
     const newest = new Set([...steers].sort((left, right) => String(right.at ?? "").localeCompare(String(left.at ?? ""))).slice(0, MAX_STEERS_JUDGED));
     const opened = judge && newest.size ? await this.#opened(project, run) : [];
     for (const steer of steers) {
-      if (unsafeToKeep(steer.text)) { this.#failed("sensitive"); continue; }
+      if (unsafeToKeep(steer.text)) { if (count) this.#failed("sensitive"); continue; }
       const read = judge && newest.has(steer) ? await this.#readSteer(project, run, steer, opened) : null;
       await this.feedback.recordLearningEvidence(project.userId, {
         runId: run.id, projectId: project.id, key: String(steer.requestId ?? ""), occurredAt: steer.at,
@@ -516,16 +519,22 @@ export class LearningEvidence {
       const now = this.now().getTime();
       const seenKey = `${project.id}\u0000${file}`;
       if ((this.seenUses.get(seenKey) ?? 0) > now) return { recorded: false, reason: "seen" };
-      this.seenUses.delete(seenKey);
-      this.seenUses.set(seenKey, now + USE_SEEN_MS);
-      while (this.seenUses.size > USE_SEEN_LIMIT) this.seenUses.delete(/** @type {string} */ (this.seenUses.keys().next().value));
+      /** What is remembered of this file, and for how long: the ledger is read once per file per while, not once per read. @param {number} ms */
+      const remember = (ms) => {
+        this.seenUses.delete(seenKey);
+        this.seenUses.set(seenKey, now + ms);
+        while (this.seenUses.size > USE_SEEN_LIMIT) this.seenUses.delete(/** @type {string} */ (this.seenUses.keys().next().value));
+      };
+      // Held for the length of the ledger read too, so a burst of reads of one file is one look; shortened below for a file no run has delivered yet.
+      remember(USE_SEEN_MS);
       const runs = await this.agentRuns.list(project).catch(() => []);
       const delivered = runs
         .filter((/** @type {any} */ run) => run?.status === "succeeded" && Number.isFinite(Date.parse(String(run.finishedAt ?? ""))) && Date.parse(run.finishedAt) <= now
           && [...this.#filesOf(run), ...(Array.isArray(run.presentedFiles) ? run.presentedFiles.map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? "")) : [])]
             .some((candidate) => relativeFile(candidate) === file))
         .sort((/** @type {any} */ left, /** @type {any} */ right) => Date.parse(right.finishedAt) - Date.parse(left.finishedAt))[0];
-      if (!delivered) return { recorded: false, reason: "not_delivered" };
+      // A file no finished run has delivered (an upload, a scratch file, or a run's own file while it is still going) is looked at again soon: its run may finish.
+      if (!delivered) { remember(USE_UNDELIVERED_MS); return { recorded: false, reason: "not_delivered" }; }
       const refused = await this.#triggers.refusalFor(project, delivered, { runs });
       if (refused) return { recorded: false, reason: refused };
       const events = await this.feedback.learningEvidenceOf(project.userId, delivered.id);
@@ -574,7 +583,7 @@ export class LearningEvidence {
    */
   async #settleRun(project, run, { guestInfluence = false } = {}) {
     // A steer the background reading did not reach (a restart, a judge that was busy) is recorded now, unjudged.
-    await this.#recordSteers(project, run, { judge: false });
+    await this.#recordSteers(project, run, { judge: false, count: false });
     const events = await this.feedback.learningEvidenceOf(project.userId, run.id);
     const outcome = learningRunOutcome(events.map((/** @type {any} */ event) => event.detail));
     if (outcome === "corrected") return { settled: "corrected", routine: false, outcome };

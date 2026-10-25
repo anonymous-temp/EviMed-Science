@@ -188,13 +188,15 @@ export function leftFiles(run) {
 }
 
 /**
- * Whether a finished run delivered something there is to keep: a file the researcher can open (`leftFiles`), or an answer — the run's
- * history holds more than the question it began with (`observedMessages`, the ledger's own count of the messages it saw). What an
- * `adopt` is about: the way a piece of work was done needs a piece of work.
+ * Whether a finished run delivered something there is to keep: a file the researcher can open (`leftFiles`), or an answer — the ledger records
+ * more than the question the run began with: the transcript it stored at the end holds more than one message (`transcript.messages`), or the
+ * monitor counted more than one while it ran (`observedMessages`, which a run that finished between two polls never got). What an `adopt` is
+ * about: the way a piece of work was done needs a piece of work.
  * @param {any} run
  */
 export function deliveredSomething(run) {
-  return run?.status === "succeeded" && (leftFiles(run) || Number(run?.observedMessages) > 1);
+  return run?.status === "succeeded"
+    && (leftFiles(run) || Number(run?.transcript?.messages) > 1 || Number(run?.observedMessages) > 1);
 }
 
 /**

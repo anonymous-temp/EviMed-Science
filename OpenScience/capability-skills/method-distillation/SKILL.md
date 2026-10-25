@@ -209,7 +209,10 @@ work they named:
   document.
 - Quote their adoption words in `evidence`, however short: 「以后周报都按这个来」 is a quotation of a person who asked.
 - A method on file that already says what this run did is `no_change`, naming it; one that says part of it, or a different way of
-  doing the same kind of work, is an `amend` — they have now said which way they want.
+  doing the same kind of work, is an `amend` — they have now said which way they want. Otherwise it is a `create`: they asked, in
+  those words, for it to be kept, so "an ordinary run" is not a reason for `no_change`, and the atomising of section 3 starts with
+  its second mark already given (they said it as a standing practice). Only an adopted way you cannot state without inventing what
+  the person did not give is thin enough to answer `no_change`, and `reason` says what was missing.
 
 **`delivered` — a delivery finished and nobody reacted to it.** The platform no longer queues this
 by itself (what it taught is read in the routine below); a job queued earlier may still carry it. A

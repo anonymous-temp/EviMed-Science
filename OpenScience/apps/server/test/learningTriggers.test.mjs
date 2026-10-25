@@ -473,8 +473,9 @@ const adoptEvent = (verdict = "adopt") => ({ id: "feedback:learning-evidence:ado
 test("what a run delivered is a file, or an answer: the ledger's history holds more than the question", () => {
   assert.equal(deliveredSomething(run({ artifacts: [], outputFiles: ["report/weekly.md"] })), true);
   assert.equal(deliveredSomething(run({ artifacts: [], unverifiedArtifacts: ["d/x.md"] })), true);
-  assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 3 })), true, "an answer in the conversation");
-  assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 1 })), false, "only the question");
+  assert.equal(deliveredSomething(run({ artifacts: [], transcript: { completeness: "complete", messages: 4 } })), true, "an answer in the conversation: the stored transcript holds more than the question");
+  assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 3 })), true, "or the monitor counted more while the run went");
+  assert.equal(deliveredSomething(run({ artifacts: [], transcript: { completeness: "complete", messages: 1 }, observedMessages: 1 })), false, "only the question");
   assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 0 })), false);
   assert.equal(deliveredSomething(run({ status: "failed" })), false, "a run that did not finish has nothing to keep");
   assert.equal(deliveredSomething(null), false);
@@ -505,7 +506,7 @@ test("an adoption is a lesson about the run whose way was kept, queued at once w
   assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), trigger: "deliverable-edited" } }), null);
   assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), id: "" } }), null);
   // A run that delivered nothing has nothing to keep.
-  const nothing = run({ id: "run_orig", artifacts: [], outputFiles: [], observedMessages: 1 });
+  const nothing = run({ id: "run_orig", artifacts: [], outputFiles: [], transcript: { completeness: "complete", messages: 1 }, observedMessages: 1 });
   assert.equal(adoptedLessonFor({ run: nothing, runs: [nothing], event: adoptEvent() }), null);
 });
 

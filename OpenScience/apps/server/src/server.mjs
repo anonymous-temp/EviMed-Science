@@ -2869,7 +2869,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The selected research package: the result, its recorded dependencies, and the replays and corrections read beside them.
   const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, replays: resultReplays, corrections: resultCorrections,
     maxBytes: config.resultExportMaxBytes, maxFiles: config.resultExportMaxFiles }) : null;
-  const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
+  const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions,
+    // The owner took a result as a package: the file the result is of was used (`LearningEvidence.noteFileUse`), beside the answer.
+    onExported: async (user, projectId, versionId) => {
+      if (!learningEvidence || !resultProvenance) return;
+      const version = await resultProvenance.get(user.id, projectId, versionId);
+      if (typeof version?.path === "string" && version.path) await learningEvidence.noteFileUse(await store.requireProject(user, projectId), { path: version.path });
+    } });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
     runtimeWorkspaceRoot: project => runtimeManager.runtimeWorkspaceRoot(project),

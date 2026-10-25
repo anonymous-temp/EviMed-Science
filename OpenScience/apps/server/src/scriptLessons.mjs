@@ -18,9 +18,10 @@
  * recorded: no hash is ever guessed in Node.
  *
  * The same hash in three runs of two conversations of one account within ninety days queues one `script` lesson (`SCRIPT_RUNS`, `SCRIPT_CONVERSATIONS`;
- * provisional, as every threshold of the loop is until it has a distribution), once for that hash. Only a run the researcher left alone
- * (`LearningEvidence.settle`, after every refusal of the loop: the researcher's own attended work, not paused, not clinical, not a trial, not automated)
- * counts, and a snippet that carries a credential or an identifier is dropped before it is stored. The occurrences are kept in `evimed_learning.script_uses`,
+ * provisional, as every threshold of the loop is until it has a distribution), once for that hash. Only a run the researcher kept — accepted, adopted
+ * or its file used, and never corrected: silence is unknown, not approval (2026-10-25) — counts
+ * (`LearningEvidence.settle`, after every refusal of the loop: the researcher's own attended work, not paused, not clinical, not a trial, not automated),
+ * and a snippet that carries a credential or an identifier is dropped before it is stored. The occurrences are kept in `evimed_learning.script_uses`,
  * with the source of each (bounded), so that the distillation is shown the variants and not only the one that completed the count; they are kept for the
  * window and no longer (each write drops the account's older rows), a project's deletion and a memory reset take them, an account's deletion too, and they
  * are in the account's export.
@@ -387,7 +388,7 @@ export class ScriptLessons {
   }
 
   /**
-   * A run the researcher left alone, read for the scripts it ran. The caller has passed it through every refusal of the loop. Never a throw: a
+   * A run the researcher kept (accepted, adopted or used, never corrected), read for the scripts it ran. The caller has passed it through every refusal of the loop. Never a throw: a
    * run whose scripts could not be read is one the loop did not learn a script from.
    * @param {any} project @param {any} run
    * @returns {Promise<{ recorded: number, queued: string[] }>}

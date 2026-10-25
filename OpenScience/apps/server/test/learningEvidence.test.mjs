@@ -571,12 +571,12 @@ test("an adoption on the next turn is evidence that keeps the run and queues its
 });
 
 test("an adoption of a run that delivered nothing is refused and counted; one that cannot be confirmed is no evidence at all", async () => {
-  const nothing = setup({ answer: adoptAnswer(), runs: [finished({ outputFiles: [], observedMessages: 1 })] });
+  const nothing = setup({ answer: adoptAnswer(), runs: [finished({ outputFiles: [], transcript: { completeness: "complete", messages: 1 }, observedMessages: 1 })] });
   assert.deepEqual(await nothing.evidence.onNewTurn(project, { sessionId: "ses_1", text: ADOPT_MESSAGE, requestId: "r" }), { recorded: false, reason: "adopt_without_delivery" });
   assert.deepEqual(nothing.failures, ["adopt_without_delivery"]);
   assert.equal(nothing.ledger.rows.length + nothing.lessons.length, 0);
   // An answer in the conversation is something to keep: the ledger counts more than the question.
-  const answered = setup({ answer: adoptAnswer(), runs: [finished({ outputFiles: [], observedMessages: 4 })] });
+  const answered = setup({ answer: adoptAnswer(), runs: [finished({ outputFiles: [], transcript: { completeness: "complete", messages: 4 } })] });
   assert.equal((await answered.evidence.onNewTurn(project, { sessionId: "ses_1", text: ADOPT_MESSAGE, requestId: "r" })).verdict, "adopt");
   assert.equal(answered.ledger.rows[0].detail.shape, undefined, "no file, no shape");
   const answers = [adoptAnswer(), JSON.stringify({ verdict: "none" })];

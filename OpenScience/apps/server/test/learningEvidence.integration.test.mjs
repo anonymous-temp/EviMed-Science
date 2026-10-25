@@ -12,6 +12,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FeedbackEvents } from "../src/feedbackEvents.mjs";
 import { learningRunOutcome } from "@evimed/domain";
 import { LearningEvidence, settleKeyFor } from "../src/learningEvidence.mjs";
+import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { LearningWorker } from "../src/learningWorker.mjs";
 import { FEEDBACK_EVENT_TRIGGERS, FEEDBACK_SUBJECT_TYPES, PRODUCT_JOB_KINDS, migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
@@ -194,4 +195,34 @@ test("a delivery is settled by the product queue: not before its window closes, 
   assert.equal(lessons.length, 1);
   assert.deepEqual(lessons[0].payload.peers.map((peer) => [peer.runId, peer.projectId]), [["s_run_a", PROJECT], ["s_run_b", PROJECT]]);
   assert.equal(lessons[0].idempotencyKey, `distill:${third.id}:routine`);
+});
+
+test("an adoption on the next turn, through the real triggers and the real queue, is one follow-up row, one adopted lesson naming it, and a clean run", options, async () => {
+  const run = { id: `adopt_run_${randomUUID().slice(0, 8)}`, sessionId: `ses_${randomUUID().slice(0, 8)}`, status: "succeeded", effectiveAgentId: "open-domain-answer", question: "写本周周报",
+    outputFiles: ["report/weekly.docx"], transcript: { completeness: "complete" },
+    finishedAt: new Date(Date.now() - 2 * 60_000).toISOString(), startedAt: new Date(Date.now() - 6 * 60_000).toISOString() };
+  const answer = JSON.stringify({ verdict: "adopt", rule: "周报都按刚才的做法写", quote: "以后周报都按这个来", concerns: [] });
+  /** @type {any} */ let triggers = null;
+  const evidence = new LearningEvidence({
+    feedback, jobs, agentRuns: { list: async () => [run] }, triggers: () => triggers, judge: /** @type {any} */ ({ available: true, read: async () => answer }),
+    resolveProject: async () => ({ id: PROJECT, userId: owner }), readShapes: async () => ({ "report/weekly.docx": shape[0] }), now: () => new Date(),
+  });
+  triggers = new LearningTriggers({ jobs, agentRuns: { list: async () => [run], runWorkflowProjection: async () => null }, evidence });
+  const project = { id: PROJECT, userId: owner };
+  const result = await evidence.onNewTurn(project, { sessionId: run.sessionId, text: "这个格式很好，以后周报都按这个来。", requestId: "req_adopt" });
+  assert.deepEqual([result.recorded, result.verdict, result.queued], [true, "adopt", ["adopted"]]);
+  const rows = await feedback.learningEvidenceOf(owner, run.id);
+  assert.deepEqual(rows.map((row) => [row.detail.evidence, row.detail.verdict, row.detail.quote]), [["follow-up", "adopt", "以后周报都按这个来"]]);
+  assert.deepEqual(rows[0].detail.shape, shape.slice(0, 1));
+  const queued = await database.query("SELECT payload, status FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill' AND payload->>'runId'=$2", [owner, run.id]);
+  assert.equal(queued.rowCount, 1, "one lesson");
+  assert.deepEqual([queued.rows[0].payload.trigger, queued.rows[0].payload.feedbackEventIds, queued.rows[0].payload.feedback[0].detail.verdict], ["adopted", [rows[0].id], "adopt"]);
+  // The same turn read again is the same row and the same lesson.
+  await evidence.onNewTurn(project, { sessionId: run.sessionId, text: "这个格式很好，以后周报都按这个来。", requestId: "req_adopt" });
+  assert.equal((await feedback.learningEvidenceOf(owner, run.id)).length, 1);
+  assert.equal((await database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill' AND payload->>'runId'=$2", [owner, run.id])).rowCount, 1);
+  // Kept, and never corrected: in the family a routine is counted over.
+  const family = await feedback.cleanSettledRuns(owner, { scope: "conversation", from: new Date(Date.now() - 3_600_000), to: new Date(Date.now() + 3_600_000) });
+  assert.ok(family.some((member) => member.runId === run.id));
+  await database.query("DELETE FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill' AND payload->>'runId'=$2", [owner, run.id]);
 });
