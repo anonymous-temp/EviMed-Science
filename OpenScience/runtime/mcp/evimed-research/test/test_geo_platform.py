@@ -212,6 +212,33 @@ class GeoWriteTests(_GatewayCase):
         self.assertEqual(_Gateway.seen, [])
 
 
+class GeoStopReasonTests(_GatewayCase):
+    """What the run is told to do next, by the gateway's code (2026-10-25): a payload the store refused or one too large is the run's
+    to correct and send again, and a refused credential is the deployment's -- as vcr_platform.py already says for its own codes."""
+
+    def test_a_payload_the_store_refused_or_one_too_large_is_the_runs_to_correct_not_to_give_up(self):
+        _Gateway.answers["write"] = (422, {"error": "The platform's store refused this write; check the closed words, then write it again.",
+                                           "code": "geo_write_rejected"})
+        rejected = self.server.call_tool("geo_write", {"what": "claims", "items": [{"claimKey": "a"}]})
+        self.assertEqual((rejected["error"]["code"], rejected["error"]["stopReason"], rejected["error"]["retryable"]),
+                         ("geo_write_rejected", "invalid_input", False))
+        self.assertNotIn("Go on without", " ".join(rejected["next_actions"]))
+        _Gateway.answers["write"] = (413, {"error": "The GEO request was too large.", "code": "geo_request_too_large"})
+        large = self.server.call_tool("geo_write", {"what": "claims", "items": [{"claimKey": "a"}]})
+        self.assertEqual(large["error"]["stopReason"], "invalid_input")
+        self.assertIn("smaller", " ".join(large["next_actions"]))
+
+    def test_a_refused_credential_is_the_deployments_never_a_field_the_run_got_wrong(self):
+        for code in ("geo_gateway_token_invalid", "geo_gateway_token_missing"):
+            _Gateway.answers["read"] = (401, {"error": "GEO gateway authentication failed.", "code": code})
+            result = self.server.call_tool("geo_read", {"what": "claims"})
+            self.assertEqual((result["error"]["code"], result["error"]["stopReason"]), (code, "unsupported"))
+            self.assertNotIn("Correct the named field", " ".join(result["next_actions"]))
+        self.assertEqual(geo_platform.GeoPlatformError("geo_read_filter_invalid", "x").stop_reason(), "invalid_input")
+        self.assertEqual(geo_platform.GeoPlatformError("geo_gateway_unreachable", "x", retryable=True).stop_reason(), "retry")
+        self.assertEqual(geo_platform.GeoPlatformError("geo_disabled", "x").stop_reason(), "unsupported")
+
+
 class SocialPostsTests(_GatewayCase):
     def test_collected_posts_come_back_as_they_were_minimised(self):
         post = {"platform": "xhs", "url": "https://www.xiaohongshu.com/discovery/item/abc", "postId": "abc", "excerpt": "二甲双胍饭前还是饭后吃？",
