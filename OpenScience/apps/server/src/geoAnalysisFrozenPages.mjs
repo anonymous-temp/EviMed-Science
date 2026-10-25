@@ -39,12 +39,60 @@ export function freezeGeoAnalysisPages(
   analysis,
   { parentId, project, actorId },
 ) {
+  if (!analysis?.page || analysis.rowContext === "member_details" || !Array.isArray(analysis.rows) || analysis.page.shown !== analysis.page.total || analysis.rows.length !== analysis.page.total) throw invalid();
+  const objectPages = [], contexts = [];
+  const projectedRows = analysis.rows.map((row, rowIndex) => {
+    if (bytes(row) + 4096 <= GEO_FROZEN_ANALYSIS_LIMITS.pageBytes || !Array.isArray(row.dimensions?.objects)) return row;
+    const source = row.dimensions.objects, descriptors = [], objectsDigest = hash(source);
+    let objects = [], size = 0, start = 0;
+    const header = () => ({ recordType: "geo-analysis-object-page", schemaVersion: 1, parentId, ownerId: project.userId,
+      geoId: project.id, actorId, analysisDigest: analysis.digest, rowKey: row.key, columnKey: "objects", objectsDigest,
+      index: descriptors.length, start, objects: [], digest: "0".repeat(64) });
+    const flush = () => {
+      if (!objects.length) return;
+      const { digest: _digest, ...content } = { ...header(), objects };
+      const payload = { ...content, digest: hash(content) };
+      if (bytes(payload) > GEO_FROZEN_ANALYSIS_LIMITS.pageBytes || objectPages.length >= GEO_FROZEN_ANALYSIS_LIMITS.pages) throw tooLarge();
+      const id = objectPageId(parentId, row.key, payload.index, analysis.digest, payload.digest);
+      objectPages.push({ kind: "geo-plan-context", id, projectId: project.projectId, payload });
+      descriptors.push({ id, index: payload.index, start, count: objects.length, digest: payload.digest, bytes: bytes(payload) });
+      start += objects.length; objects = []; size = 0;
+    };
+    for (const object of source) {
+      const itemBytes = bytes(object);
+      if (bytes(header()) + itemBytes > GEO_FROZEN_ANALYSIS_LIMITS.pageBytes) throw tooLarge();
+      if (objects.length && bytes(header()) + size + itemBytes + objects.length > GEO_FROZEN_ANALYSIS_LIMITS.pageBytes) flush();
+      objects.push(object); size += itemBytes;
+    }
+    flush();
+    if (!descriptors.length || source.length > 20000) throw tooLarge();
+    contexts.push({ rowKey: row.key, rowIndex, columnKey: "objects", total: source.length, digest: objectsDigest, pages: descriptors });
+    const { objects: _objects, ...dimensions } = row.dimensions;
+    return { ...row, dimensions: { ...dimensions, objectsContext: { schemaVersion: 1, total: source.length,
+      digest: objectsDigest, pageRefs: descriptors.map(page => page.id) } } };
+  });
+  if (!contexts.length) return freezeRows(analysis, { parentId, project, actorId });
+  const pack = freezeRows({ ...analysis, rows: projectedRows }, { parentId, project, actorId }, true);
+  pack.analysis.frozenPages = { ...pack.analysis.frozenPages, schemaVersion: 2, rowsDigest: hash(analysis.rows),
+    projectedRowsDigest: hash(projectedRows), objects: contexts };
+  pack.analysis.nativeProjection = { ...pack.analysis.nativeProjection,
+    objectsSource: "frozen_object_pages",
+    objectInstruction: "A row with dimensions.objectsContext keeps its exact aggregate values. Read every object page with the same planContextRef, rowKey, columnKey 'objects', offset and limit; advance by nextOffset. These are the frozen observations, never current replacements." };
+  pack.pages.push(...objectPages);
+  if (pack.pages.length > GEO_FROZEN_ANALYSIS_LIMITS.pages || bytes(pack.analysis) > GEO_FROZEN_ANALYSIS_LIMITS.summaryBytes
+    || pack.pages.reduce((sum, page) => sum + bytes(page.payload), 0) > GEO_FROZEN_ANALYSIS_LIMITS.totalBytes) throw tooLarge();
+  return pack;
+}
+const objectPageId = (parentId, rowKey, index, analysisDigest, digest) => `gpcobject_${hash([parentId, rowKey, index, analysisDigest, digest])}`;
+
+/** Keep the original inline/schema-1 representation when object paging is unnecessary. */
+function freezeRows(analysis, { parentId, project, actorId }, forcePages = false) {
   if (
     analysis.page.shown !== analysis.page.total ||
     analysis.rows.length !== analysis.page.total
   )
     throw invalid();
-  if (bytes(analysis) <= GEO_FROZEN_ANALYSIS_LIMITS.summaryBytes)
+  if (!forcePages && bytes(analysis) <= GEO_FROZEN_ANALYSIS_LIMITS.summaryBytes)
     return { analysis, pages: [] };
   const pages = [],
     descriptors = [];
@@ -179,6 +227,7 @@ export async function readFrozenGeoAnalysisPage(
     parent.payload.basisDigest !== hash(parent.payload.basis)
   )
     throw invalid();
+  if (input.rowKey != null || input.columnKey != null) return readObjectPage(documents, project, parent, input);
   const manifest = frozen.frozenPages;
   if (!manifest)
     return {
@@ -198,7 +247,7 @@ export async function readFrozenGeoAnalysisPage(
     !hasGeoFrozenAnalysisContext(parent.payload) ||
     parent.payload.state !== "bound" ||
     parent.payload.basisDigest !== hash(parent.payload.basis) ||
-    manifest.schemaVersion !== 1 ||
+    ![1, 2].includes(manifest.schemaVersion) ||
     manifest.parentId !== parent.id ||
     manifest.analysisDigest !== frozen.digest ||
     !Number.isSafeInteger(manifest.totalRows) ||
@@ -228,9 +277,31 @@ export async function readFrozenGeoAnalysisPage(
     expectedStart += descriptor.count;
     totalBytes += descriptor.bytes;
   }
+  let totalPages = manifest.pages.length;
+  if (manifest.schemaVersion === 2) {
+    if (!/^[a-f0-9]{64}$/.test(manifest.rowsDigest ?? "") || !/^[a-f0-9]{64}$/.test(manifest.projectedRowsDigest ?? "")
+      || !Array.isArray(manifest.objects) || !manifest.objects.length || manifest.objects.length > GEO_FROZEN_ANALYSIS_LIMITS.pages) throw invalid();
+    const keys = new Set(), indexes = new Set(), ids = new Set(manifest.pages.map(page => page.id));
+    for (const context of manifest.objects) {
+      if (typeof context.rowKey !== "string" || !context.rowKey || context.rowKey.length > 160 || keys.has(context.rowKey)
+        || !Number.isSafeInteger(context.rowIndex) || context.rowIndex < 0 || context.rowIndex >= manifest.totalRows || indexes.has(context.rowIndex)
+        || context.columnKey !== "objects" || !Number.isSafeInteger(context.total) || context.total < 1 || context.total > 20000
+        || !/^[a-f0-9]{64}$/.test(context.digest ?? "") || !Array.isArray(context.pages) || !context.pages.length) throw invalid();
+      keys.add(context.rowKey); indexes.add(context.rowIndex);
+      let start = 0;
+      for (const [index, page] of context.pages.entries()) {
+        if (page.index !== index || page.start !== start || !Number.isSafeInteger(page.count) || page.count < 1
+          || !Number.isSafeInteger(page.bytes) || page.bytes < 1 || page.bytes > GEO_FROZEN_ANALYSIS_LIMITS.pageBytes
+          || !/^[a-f0-9]{64}$/.test(page.digest ?? "") || ids.has(page.id)
+          || page.id !== objectPageId(parent.id, context.rowKey, index, frozen.digest, page.digest)) throw invalid();
+        start += page.count; totalBytes += page.bytes; totalPages += 1; ids.add(page.id);
+      }
+      if (start !== context.total) throw invalid();
+    }
+  } else if (manifest.objects != null || manifest.projectedRowsDigest != null) throw invalid();
   if (
     expectedStart !== manifest.totalRows ||
-    totalBytes > GEO_FROZEN_ANALYSIS_LIMITS.totalBytes
+    totalBytes > GEO_FROZEN_ANALYSIS_LIMITS.totalBytes || totalPages > GEO_FROZEN_ANALYSIS_LIMITS.pages
   )
     throw invalid();
   const needed = manifest.pages.filter(
@@ -287,6 +358,49 @@ export async function readFrozenGeoAnalysisPage(
     },
     readingsKind: "submitted_input",
   };
+}
+
+/** Return at most one verified storage page, even when limit would cross it. */
+async function readObjectPage(documents, project, parent, input) {
+  if (typeof input.rowKey !== "string" || !input.rowKey || input.rowKey.length > 160 || input.columnKey !== "objects") throw invalid();
+  const frozen = parent.payload.basis.analysis, { limit, offset } = geoReadPage(input);
+  const context = frozen.frozenPages?.schemaVersion === 2 ? frozen.frozenPages.objects?.find(item => item.rowKey === input.rowKey) : null;
+  // The normal reader checks the entire manifest before any object page is read.
+  let row = null;
+  if (context) {
+    const page = await readFrozenGeoAnalysisPage(documents, project, parent, { offset: context.rowIndex, limit: 1 });
+    row = page.rows[0];
+  } else {
+    const total = frozen.frozenPages?.totalRows ?? frozen.rows.length;
+    for (let at = 0; at < total && !row; at += 50) {
+      const page = await readFrozenGeoAnalysisPage(documents, project, parent, { offset: at, limit: 50 });
+      row = page.rows.find(item => item.key === input.rowKey) ?? null;
+    }
+  }
+  if (!row || row.key !== input.rowKey) throw invalid();
+  const response = (items, total, objectsDigest) => ({ rowKey: row.key, columnKey: "objects", unit: "context_objects", items, total,
+    nextOffset: offset + items.length < total ? offset + items.length : null, digest: frozen.digest, objectsDigest, readingsKind: "submitted_input" });
+  if (!context) {
+    if (!Array.isArray(row.dimensions?.objects) || row.dimensions.objectsContext != null) throw invalid();
+    return response(row.dimensions.objects.slice(offset, offset + limit), row.dimensions.objects.length, hash(row.dimensions.objects));
+  }
+  const expected = { schemaVersion: 1, total: context.total, digest: context.digest, pageRefs: context.pages.map(page => page.id) };
+  if (row.dimensions.objects != null || canonicalJson(row.dimensions.objectsContext) !== canonicalJson(expected)) throw invalid();
+  if (offset >= context.total) return response([], context.total, context.digest);
+  const descriptor = context.pages.find(page => page.start <= offset && offset < page.start + page.count);
+  if (!descriptor) throw invalid();
+  const record = await documents.get(project.userId, "geo-plan-context", descriptor.id), payload = record?.payload;
+  if (!record || record.id !== descriptor.id || record.kind !== "geo-plan-context" || record.projectId !== project.projectId
+    || payload?.recordType !== "geo-analysis-object-page" || payload.schemaVersion !== 1 || payload.ownerId !== project.userId
+    || payload.geoId !== project.id || payload.actorId !== parent.payload.actorId || payload.parentId !== parent.id
+    || payload.analysisDigest !== frozen.digest || payload.rowKey !== row.key || payload.columnKey !== "objects"
+    || payload.objectsDigest !== context.digest || payload.index !== descriptor.index || payload.start !== descriptor.start
+    || !Array.isArray(payload.objects) || payload.objects.length !== descriptor.count || payload.digest !== descriptor.digest
+    || bytes(payload) !== descriptor.bytes) throw invalid();
+  const { digest: _digest, ...content } = payload;
+  if (hash(content) !== descriptor.digest) throw invalid();
+  const start = offset - descriptor.start;
+  return response(payload.objects.slice(start, start + limit), context.total, context.digest);
 }
 /** Atomic parent+page admission uses the same bounded ProductDocuments batch.
  * @param {any} documents @param {any} project @param {string} id @param {any} payload @param {any[]} pages */

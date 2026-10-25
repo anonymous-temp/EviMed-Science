@@ -53,6 +53,19 @@ const unavailable = () => new HttpError(503, "source_change_unavailable", "Sourc
 /** @param {string} identifier */
 const documentId = (identifier) => `sc_${createHash("sha256").update(identifier).digest("hex").slice(0, 40)}`;
 
+/** Cached public source facts within a caller's existing read transaction. No migration, lookup or write.
+ * @param {any} client @param {string|null} ownerUserId @param {unknown[]} identifiers */
+export async function readStoredSourceChanges(client, ownerUserId, identifiers) {
+  const canonical = [...new Set(identifiers.map(canonicalSourceIdentifier).filter(value => value !== null))];
+  if (canonical.length > MAX_IDENTIFIERS) throw invalid();
+  const held = new Map();
+  if (ownerUserId && canonical.length && (await client.query("SELECT to_regclass('evimed_product.documents') AS documents")).rows[0]?.documents) {
+    const result = await client.query(`SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind=$2 AND id=ANY($3::text[]) AND deleted_at IS NULL`, [ownerUserId, KIND, canonical.map(documentId)]);
+    for (const row of result.rows) if (typeof row.payload?.identifier === "string") held.set(row.payload.identifier, row.payload);
+  }
+  return new Map(canonical.map(identifier => [identifier, sourceChangeFact(identifier, held.get(identifier))]));
+}
+
 /**
  * Every identifier a card source or any `{ url, doi, pmid, identifier }`-shaped reference names, in the forms the code
  * already compares (`doi.org` links, PubMed links, ClinicalTrials.gov study links; a field holding one directly).

@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   KNOWLEDGE_TREES, applyKnowledgePageEdits, checkPageQuotations, diffKnowledgePageEdit,
   emptyKnowledgeUserEdits, isKnowledgeMirrorPath, isTypedKnowledgePage, knowledgeGraphToGraph, knowledgeMirrorPathOf,
   knowledgeSourceIdOfUri, readKnowledgePage, wikiPagesToGraph,
 } from "@evimed/domain";
+import { knowledgeDigest, knowledgeGenerationRoots, knowledgeOutputPath, readKnowledgeManifest, readKnowledgeOutputSource, readKnowledgeSourceInputs, readSelectedKnowledgeGeneration, validKnowledgeExecution, validKnowledgeQualificationRef, writeKnowledgeManifest } from "./knowledgeGeneration.mjs";
 import { compileIdempotencyKey } from "./openVikingResources.mjs";
 import { isCompiledPage } from "./openVikingSourceSync.mjs";
 import { HttpError } from "./security.mjs";
@@ -142,12 +143,14 @@ export class KnowledgePageService {
    *   config: any, documents: any, jobs: any, sources: any, store: any, resources: any, engine?: any, sourceSync?: any,
    *   entries: { writePage: (request: { user: any, project: any, tree: string, rel: string, buffer: Buffer, title: string }) => Promise<any>,
    *     retirePage: (request: { user: any, source: any }) => Promise<any>, readPage: (project: any, tree: string, rel: string) => Promise<string | null> },
+   *   knowledgeContext?: any,
    *   libraryText?: ((userId: string, sourceId: string) => Promise<string | null>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    *   `resources`: `OpenVikingResources`; `engine`: `OpenVikingEngine` (its `ready("knowledge")`); `sourceSync`: `OpenVikingSourceSync`;
    *   `libraryText`: the account library's own copy of a document, which a compile reads beside the project's documents
    */
-  constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, libraryText = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, knowledgeContext = null, libraryText = null, now = () => new Date(), report = () => {} }) {
+    this.knowledgeContext = knowledgeContext;
     this.config = config; this.documents = documents; this.jobs = jobs; this.sources = sources; this.store = store;
     this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.now = now; this.report = report;
     this.counters = { rounds: 0, failed: 0, compiles: 0, indexOnlyRetries: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, writeBackConflicts: 0, deferred: 0,
@@ -156,6 +159,13 @@ export class KnowledgePageService {
 
   /** Compiling is on: the switch, and an engine to compile with. Pages that exist are readable either way. */
   get enabled() { return this.config.ovKnowledgeEnabled === true && Boolean(this.resources?.configured); }
+
+  async #knowledgeContext(userId, projectId) {
+    if (!this.knowledgeContext) return null;
+    const context = await this.knowledgeContext.forProject({ userId, id: projectId });
+    if (!["owned", "geo-project"].includes(context?.kind)) throw new HttpError(503, "knowledge_scope_unavailable", "The project knowledge policy is unavailable.");
+    return context;
+  }
 
   // -------------------------------------------------------------------------------------------------------------------
   // The ledger
@@ -189,6 +199,13 @@ export class KnowledgePageService {
 
   /** The mirrored files of a project that are not retired. @param {string} userId @param {string} projectId @param {Record<string, any>} [filter] */
   async #pageRecords(userId, projectId, filter = {}) {
+    const context = await this.#knowledgeContext(userId, projectId);
+    if (context?.kind === "geo-project") {
+      const rows = (context.selected?.pages ?? []).filter(row => Object.entries(filter).every(([key, value]) =>
+        Array.isArray(value) ? value.every(item => row.payload[key]?.includes(item)) : row.payload[key] === value));
+      await context.current();
+      return rows;
+    }
     /** @type {any[]} */
     const found = [];
     let cursor = null;
@@ -238,7 +255,9 @@ export class KnowledgePageService {
       if (!source || source.projectId !== projectId || KnowledgePageService.isPage(source)) return;
       // A document is announced when its text is in and again when its understanding ends: the second says nothing the
       // round that read the text has not already taken in.
-      const textSha = String(source.payload?.analysis?.textSha256 ?? "");
+      const context = await this.#knowledgeContext(userId, projectId);
+      const textSha = context?.kind === "geo-project" ? knowledgeDigest(context.inputs.find(input => input.receipt.sourceId === sourceId)?.receipt ?? null)
+        : String(source.payload?.analysis?.textSha256 ?? "");
       const changed = await this.#updateState(userId, projectId, (value) => {
         if (value.pending[sourceId]) return null;
         if (textSha && value.taken?.[sourceId] === textSha) return null;
@@ -348,6 +367,14 @@ export class KnowledgePageService {
   async catchUp(userId, projectId) {
     if (!this.enabled) return "skipped";
     const { value } = await this.#state(userId, projectId);
+    const context = await this.#knowledgeContext(userId, projectId);
+    if (context?.kind === "geo-project") {
+      if (value.run) return "waiting";
+      if (context.selected || context.inputs.length < this.config.knowledgePagesMinSources) return "skipped";
+      if (value.lastError && value.lastError.sourceSetDigest === context.sourceSetDigest) return "skipped";
+      await this.#updateState(userId, projectId, state => { state.pending.catchUp = "changed"; return state; });
+      await this.schedule(userId, projectId); return "scheduled";
+    }
     if (value.compiledAt || value.lastRound || value.lastError || value.pages?.wiki || value.pages?.kg) return "skipped";
     if (value.run) return "waiting";
     const readable = await this.#readableSources(userId, projectId);
@@ -449,6 +476,8 @@ export class KnowledgePageService {
 
   /** The project's readable documents that are not compiled pages. @param {string} userId @param {string} projectId */
   async #readableSources(userId, projectId) {
+    const context = await this.#knowledgeContext(userId, projectId);
+    if (context?.kind === "geo-project") return context.inputs.map(input => input.source);
     /** @type {any[]} */
     const found = [];
     let cursor = null;
@@ -469,13 +498,14 @@ export class KnowledgePageService {
    * @returns {Promise<Map<string, { text: string, title: string }>>}
    */
   async #texts(userId, projectId, ids, cache = new Map()) {
+    const context = await this.#knowledgeContext(userId, projectId);
     for (const id of new Set(ids)) {
       if (cache.has(id) || !SOURCE_ID.test(id)) continue;
       try {
         const source = await this.sources.get(userId, id).catch(() => null);
-        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isPage(source)) {
+        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isPage(source) || context?.kind === "geo-project" && !await context.acceptSource(source)) {
           // Not a document of this project: the account's library may hold it, and its copy there is what the compile read.
-          const copy = this.libraryText ? await this.libraryText(userId, id).catch(() => null) : null;
+          const copy = context?.kind !== "geo-project" && this.libraryText ? await this.libraryText(userId, id).catch(() => null) : null;
           if (copy) cache.set(id, { title: /^#[ \t]+(.+)$/m.exec(copy)?.[1]?.trim() ?? id, text: copy });
           continue;
         }
@@ -495,11 +525,13 @@ export class KnowledgePageService {
   async #titles(userId, projectId, ids) {
     /** @type {Map<string, string>} */
     const titles = new Map();
+    const context = await this.#knowledgeContext(userId, projectId);
     for (const id of new Set(ids)) {
       if (!SOURCE_ID.test(id)) continue;
       try {
         const source = await this.sources.get(userId, id);
-        if (source && source.projectId === projectId && !source.deletedAt) titles.set(id, projectSourceManifestRecord(source).display.title);
+        if (source && source.projectId === projectId && !source.deletedAt
+          && (context?.kind !== "geo-project" || await context.acceptSource(source))) titles.set(id, projectSourceManifestRecord(source).display.title);
       } catch { /* a document that is gone has no title to show */ }
     }
     return titles;
@@ -742,7 +774,7 @@ export class KnowledgePageService {
    * and answers what the worker should do: `{ result }` finished; `{ defer: { code, delayMs } }` come back, with no
    * attempt spent.
    * @param {{ id: string, userId: string, projectId: string, payload: any }} job
-   * @returns {Promise<{ result: any } | { defer: { code: string, delayMs: number } }>}
+   * @returns {Promise<{ result: any, sharedSettlement?: any } | { defer: { code: string, delayMs: number } }>}
    */
   async runJob(job) {
     const userId = job.userId;
@@ -758,6 +790,8 @@ export class KnowledgePageService {
       if (/** @type {any} */ (error)?.status === 404 || /** @type {any} */ (error)?.code === "project_not_found") return { result: { skipped: "project_gone" } };
       throw error;
     }
+    const context = await this.#knowledgeContext(userId, projectId);
+    if (context?.kind === "geo-project") return this.#runShared(job, user, project, state, context);
     const defer = (/** @type {string} */ code, /** @type {number} */ delayMs) => { this.counters.deferred += 1; return { defer: { code, delayMs } }; };
     // The engine cannot compile now: the round waits, and nothing else in the product does.
     const ready = this.engine?.ready?.("knowledge");
@@ -877,6 +911,466 @@ export class KnowledgePageService {
     return { result: { round: state.round, ...summary } };
   }
 
+  /** A logical address names one selected output even when several paths
+   * share the same content-addressed source. Optional receipt fields freeze a
+   * reader's base; they never authorize a different generation or page. */
+  #addressedPage(context, project, source, address = null) {
+    if (address && (address.projectId !== project.id || !KNOWLEDGE_TREES.includes(address.tree) || !knowledgeOutputPath(address.path))) {
+      throw new HttpError(409, "knowledge_page_changed", "The knowledge page address changed.");
+    }
+    const selected = context?.selected;
+    const page = address ? selected?.pages.find(row => row.payload.tree === address.tree && row.payload.path === address.path)
+      : selected?.pages.find(row => row.payload.pageSourceId === source.id);
+    if (address && (!page || page.payload.pageSourceId !== source.id || Object.hasOwn(address, "generationId") && address.generationId !== selected.receipt.generationId
+      || address.pageId != null && address.pageId !== page.id || address.pageRevision != null && address.pageRevision !== page.revision)) {
+      throw new HttpError(409, "knowledge_page_changed", "The addressed knowledge page changed; reload this page before editing.");
+    }
+    return page;
+  }
+
+  /** @returns {Promise<{source:any,duplicate:boolean,changed:boolean,writeBack:"none"|"queued"|"written",userBlocks:number}>} */
+  async #saveSharedEdit({ user, project, source, markdown, baseSha256, address = null }, context) {
+    const selected = context.selected;
+    const page = this.#addressedPage(context, project, source, address);
+    if (!page || !/\.md$/i.test(page.payload.path)) throw new HttpError(409, "knowledge_page_not_editable", "This knowledge page is unavailable for editing.");
+    const current = await this.entries.readPage(project, page.payload.tree, page.payload.mirrorRel);
+    if (current == null || sha256(current) !== page.payload.sha256 || baseSha256 && sha256(current) !== baseSha256) throw new HttpError(409, "knowledge_page_changed", "The page changed while it was being edited.");
+    const text = `${String(markdown ?? "").replace(/\r\n?/g, "\n").trimEnd()}\n`;
+    if (!text.trim()) throw new HttpError(400, "knowledge_page_empty", "A page cannot be saved empty.");
+    if (text === current) return { source, duplicate: true, changed: false, writeBack: "none", userBlocks: 0 };
+    const allowedIds = new Set(context.inputs.map(input => input.receipt.sourceId));
+    for (const match of text.matchAll(/\b(src_[a-f0-9]{32})\b/g)) if (!allowedIds.has(match[1])) throw new HttpError(409, "knowledge_output_scope_unverified", "The edited page names an unavailable source.");
+    for (const match of text.matchAll(/viking:\/\/[^\s"'`()<>[\]]*/g)) {
+      const uri = match[0];
+      if (!context.resources.inScope(user.id, project.id, uri) && !context.inputs.some(input => uri === `${selected.receipt.roots.sources}/${input.receipt.sourceId}.md`)) {
+        throw new HttpError(409, "knowledge_output_scope_unverified", "The edited page names an unavailable resource.");
+      }
+    }
+    const diff = diffKnowledgePageEdit(current, text, page.payload.userEdits ?? emptyKnowledgeUserEdits(), { digest: words => sha256(words).slice(0, 16) });
+    const id = `kedit_${sha256(randomUUID()).slice(0, 32)}`;
+    const edit = { recordType: "knowledge-generation-edit", generationId: selected.receipt.generationId, policy: context.stamp,
+      sourceSetDigest: context.sourceSetDigest, pageId: page.id, pageRevision: page.revision, baseSha256: sha256(current),
+      baseEngineSha256: page.payload.engineSha256, actor: { userId: user.id, ownerCreatedAt: context.stamp.ownerCreatedAt },
+      text, textSha256: sha256(text), diffDigest: knowledgeDigest(diff), userEdits: diff.edits, createdAt: this.now().toISOString() };
+    await context.current();
+    await this.documents.database.transaction(client => this.documents.database.withTransactionClient(client, async () => {
+      await context.lockCurrent(client);
+      const state = await this.#state(user.id, project.id);
+      if (state.value.sharedEdit || state.value.selectedGeneration?.digest !== knowledgeDigest(selected.receipt)) throw new HttpError(409, "knowledge_page_changed", "Another knowledge edit is being saved.");
+      await this.documents.put(user.id, "knowledge", id, edit, { projectId: project.id, expectedRevision: 0, transactionClient: client });
+      await this.documents.put(user.id, "knowledge", stateId(project.id), { ...state.value, sharedEdit: { id, digest: knowledgeDigest(edit) },
+        editEpoch: Number(state.value.editEpoch ?? 0) + 1, pending: { ...state.value.pending, edit: "changed" } },
+      { projectId: project.id, expectedRevision: state.row.revision, transactionClient: client });
+    }));
+    await this.schedule(user.id, project.id, { immediate: true });
+    return { source, duplicate: false, changed: true, writeBack: "queued", userBlocks: diff.edits.blocks.length };
+  }
+
+  async #applySharedEdit(job, user, project, state, context) {
+    const superseded = async code => {
+      await this.#transitionShared(job, { round: state.round, generationId: state.run?.generationId }, value => {
+        if (value.sharedEdit?.id !== state.sharedEdit.id || value.sharedEdit?.digest !== state.sharedEdit.digest) {
+          throw new HttpError(409, "knowledge_page_changed", "Another knowledge edit replaced this queue entry.");
+        }
+        // Keep the immutable edit and state revision for recovery, but never
+        // rebase its checked write onto changed source/page bytes automatically.
+        value.lastSharedEdit = { ...value.sharedEdit, status: "superseded", code, at: this.now().toISOString() };
+        value.sharedEdit = null;
+        value.pending = { ...value.pending, refresh: "changed" };
+        return value;
+      });
+      return { defer: { code: "knowledge_round_advancing", delayMs: 0 } };
+    };
+    const editRow = await this.documents.get(user.id, "knowledge", state.sharedEdit.id), edit = editRow?.payload;
+    const generationRow = await this.documents.get(user.id, "knowledge", edit?.generationId), generation = generationRow?.payload;
+    const pageRow = await this.documents.get(user.id, "knowledge", edit?.pageId), page = pageRow?.payload;
+    if (!edit || !generation || !page || knowledgeDigest(edit) !== state.sharedEdit.digest
+      || edit.policy.digest !== context.stamp.digest || edit.sourceSetDigest !== context.sourceSetDigest
+      || pageRow.revision !== edit.pageRevision || page.sha256 !== edit.baseSha256) return superseded("knowledge_page_changed");
+    const outputs = await readKnowledgeManifest(this.documents, user.id, project.id, generation.outputs);
+    if (!outputs || generation.sourceSetDigest !== context.sourceSetDigest) return superseded("knowledge_page_changed");
+    const engineBytes = await this.resources.download(user.id, page.uri);
+    if (!engineBytes) return superseded("knowledge_page_engine_changed");
+    // Restart after a successful checked write is idempotent only for these
+    // exact desired bytes; any other changed base is a conflict, never retry.
+    if (sha256(engineBytes) !== edit.textSha256) {
+      try { await this.resources.writePage(user.id, page.uri, edit.text, { expectedSha256: edit.baseEngineSha256 }); }
+      catch (error) {
+        if (codeOf(error) === "knowledge_page_engine_changed") return superseded("knowledge_page_engine_changed");
+        throw error;
+      }
+    }
+    const written = await this.entries.writePage({ user, project, tree: page.tree, rel: page.mirrorRel, buffer: Buffer.from(edit.text), title: page.title });
+    const captured = await readKnowledgeOutputSource({ sources: this.sources, ownerId: user.id, projectId: project.id, sourceId: written.source.id });
+    if (!captured) return { defer: { code: "knowledge_mirror_capture_pending", delayMs: 2000 } };
+    try {
+      await this.#transitionShared(job, { round: state.round, generationId: state.run?.generationId }, async (value, client) => {
+      await context.lockCurrent(client);
+      const currentPage = await this.documents.get(user.id, "knowledge", pageRow.id);
+      if (currentPage.revision !== pageRow.revision || value.sharedEdit?.digest !== state.sharedEdit.digest) throw new HttpError(409, "knowledge_page_changed", "The edit changed before publication.");
+      const payload = { ...page, sha256: edit.textSha256, engineSha256: edit.textSha256, pageSourceId: captured.source.id,
+        userEdits: edit.userEdits, editReceipt: { id: editRow.id, revision: editRow.revision, digest: knowledgeDigest(edit) }, basis: "user", editedAt: edit.createdAt };
+      const changed = await this.documents.put(user.id, "knowledge", pageRow.id, payload, { projectId: project.id, expectedRevision: pageRow.revision, transactionClient: client });
+      const updated = [];
+      for (const output of outputs) {
+        const candidate = output.recordId === pageRow.id ? { ...output, engineBytesSha256: edit.textSha256, displayedBytesSha256: edit.textSha256,
+          bytes: Buffer.byteLength(edit.text), recordRevision: changed.revision, recordDigest: knowledgeDigest(payload), source: captured.receipt } : output;
+        // Content-addressed aliases can share a source row. Editing one path
+        // revises that row's remaining path metadata; rebind only after proving
+        // every unchanged path, file hash and current capture again under the
+        // existing project/source locks, never merely revision >= old revision.
+        const fresh = await readKnowledgeOutputSource({ sources: this.sources, ownerId: user.id, projectId: project.id, sourceId: candidate.source.sourceId });
+        const mirror = await this.entries.readPage(project, candidate.tree, candidate.mirrorRel);
+        if (!fresh || fresh.receipt.fileSha256 !== candidate.displayedBytesSha256 || mirror === null
+          || sha256(mirror) !== candidate.displayedBytesSha256
+          || !fresh.source.payload.paths?.includes(`knowledge-base/${candidate.tree}/${candidate.mirrorRel}`)) {
+          throw new HttpError(409, "knowledge_mirror_changed", "An edited generation mirror could not be verified.");
+        }
+        updated.push({ ...candidate, source: fresh.receipt });
+      }
+      const manifest = await writeKnowledgeManifest(this.documents, user.id, project.id, generation.generationId, `edit-${editRow.id}`, updated);
+      const nextGeneration = { ...generation, outputs: manifest, outputDigest: knowledgeDigest(updated) };
+      const updatedGeneration = await this.documents.put(user.id, "knowledge", generationRow.id, nextGeneration,
+        { projectId: project.id, expectedRevision: generationRow.revision, transactionClient: client });
+      value.selectedGeneration = { id: generationRow.id, revision: updatedGeneration.revision, digest: knowledgeDigest(nextGeneration) };
+      value.sharedEdit = null;
+      return value;
+      });
+    } catch (error) {
+      // The page/generation writes above have rolled back. A definite vanished
+      // output is an obsolete edit base, whereas an IO/ledger outage remains
+      // retryable and must not discard the active edit intent.
+      if (["knowledge_mirror_changed", "source_not_found", "knowledge_page_changed"].includes(codeOf(error))) {
+        return superseded(codeOf(error));
+      }
+      throw error;
+    }
+    return { defer: { code: "knowledge_round_advancing", delayMs: 0 } };
+  }
+
+  /** A shared transition never replays a stale closure into a newer round. */
+  async #transitionShared(job, expected, operation) {
+    const database = this.documents.database;
+    if (!database || !job.leaseToken) throw new HttpError(409, "product_job_lease_lost", "A shared compile requires its current worker lease.");
+    const result = await this.jobs.withLease(job.userId, job.id, job.leaseToken, client => database.withTransactionClient(client, async () => {
+      const state = await this.#state(job.userId, job.projectId);
+      if (state.value.round !== expected.round || (expected.generationId !== undefined && state.value.run?.generationId !== expected.generationId)
+        || expected.step && state.value.run?.step !== expected.step || expected.taskId && state.value.run?.taskId !== expected.taskId) {
+        throw new HttpError(409, "knowledge_generation_superseded", "The compile round changed before this worker could save it.");
+      }
+      const next = await operation(structuredClone(state.value), client);
+      const live = await client.query(`SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND id=$2 AND lease_token=$3
+        AND status='running' AND lease_expires_at>clock_timestamp()`, [job.userId, job.id, job.leaseToken]);
+      if (!live.rows.length) throw new HttpError(409, "product_job_lease_lost", "The compile lease expired before saving.");
+      await this.documents.put(job.userId, "knowledge", stateId(job.projectId), next, { projectId: job.projectId, expectedRevision: state.row?.revision ?? 0, transactionClient: client });
+      return next;
+    }));
+    if (!result) throw new HttpError(409, "product_job_lease_lost", "The compile lease was lost.");
+    return result;
+  }
+
+  async #runShared(job, user, project, state, context) {
+    const defer = (code, delayMs = POLL_MS) => ({ defer: { code, delayMs } });
+    const expected = { round: state.round, generationId: state.run?.generationId };
+    if (state.sharedEdit) return this.#applySharedEdit(job, user, project, state, context);
+    if (state.run && !state.run.generationId) {
+      for (const tree of ["wiki", "kg"]) if (state.run[tree]?.taskId) await this.resources.cancelTask(user.id, state.run[tree].taskId).catch(() => null);
+      await this.#transitionShared(job, expected, value => ({ ...value, run: null }));
+      return defer("knowledge_clean_generation_required", 0);
+    }
+    if (!state.run) {
+      const quiet = state.lastChangeAt ? Date.parse(state.lastChangeAt) + this.config.knowledgePagesDebounceMs - this.now().getTime() : 0;
+      if (quiet > 1000) return defer("knowledge_waiting_for_quiet", Math.min(quiet, 3_600_000));
+      if (context.inputs.length < this.config.knowledgePagesMinSources) {
+        await this.#transitionShared(job, expected, value => ({ ...value, round: value.round + 1, pending: {} }));
+        return { result: { skipped: "below_threshold", readable: context.inputs.length } };
+      }
+      const over = await this.#overBudget(user.id);
+      if (over) return defer("usage_budget_exceeded", 3_600_000);
+      const generationId = `kg_${sha256(randomUUID()).slice(0, 32)}`;
+      const roots = knowledgeGenerationRoots(this.resources, user.id, project.id, generationId);
+      if (this.config.knowledgeGraphEnabled === false) roots.kg = null;
+      const requests = {};
+      for (const tree of ["wiki", "kg"]) {
+        if (tree === "kg" && this.config.knowledgeGraphEnabled === false) continue;
+        const request = { from: [roots.sources], to: roots[tree], skill: tree === "wiki" ? "llm-wiki" : "knowledge-graph",
+          instruction: knowledgeCompileInstruction({ tree: /** @type {"wiki"|"kg"} */ (tree), language: state.language,
+            userBlocks: tree === "wiki" ? (context.selected?.pages ?? []).filter(page => (page.payload.editReceipt || page.payload.carriedEditReceipt) && page.payload.tree === "wiki")
+              .flatMap(page => (page.payload.userEdits?.blocks ?? []).map(block => ({ path: page.payload.path, text: block.text }))) : [],
+            removed: tree === "wiki" ? (context.selected?.pages ?? []).filter(page => (page.payload.editReceipt || page.payload.carriedEditReceipt) && page.payload.tree === "wiki")
+              .flatMap(page => (page.payload.userEdits?.removed ?? []).map(block => ({ path: page.payload.path, text: block.text }))) : [] }), generationId, tree, editReceipts: [] };
+        request.editReceipts = tree === "wiki" ? (context.selected?.pages ?? []).filter(page => (page.payload.editReceipt || page.payload.carriedEditReceipt) && page.payload.tree === "wiki")
+          .map(page => ({ ...(page.payload.editReceipt ?? page.payload.carriedEditReceipt), path: page.payload.path, tree: page.payload.tree })) : [];
+        const execution = await context.compileExecutionFor?.(context.stamp, request);
+        if (!validKnowledgeExecution(execution, request)) return defer("knowledge_compile_execution_unqualified", 120_000);
+        requests[tree] = { ...request, execution };
+      }
+      await context.current();
+      await this.#transitionShared(job, expected, async (value, client) => {
+        await context.lockCurrent(client);
+        const inputs = await writeKnowledgeManifest(this.documents, user.id, project.id, generationId, "inputs", context.inputs.map(input => input.receipt));
+        const edits = await writeKnowledgeManifest(this.documents, user.id, project.id, generationId, "edits",
+          (context.selected?.pages ?? []).filter(page => (page.payload.editReceipt || page.payload.carriedEditReceipt) && page.payload.tree === "wiki")
+            .map(page => ({ path: page.payload.path, tree: page.payload.tree, userEdits: page.payload.userEdits, editReceipt: page.payload.editReceipt ?? page.payload.carriedEditReceipt })));
+        const generation = { edits, recordType: "knowledge-generation", generationId, status: "preparing", policy: context.stamp,
+          sourceSetDigest: context.sourceSetDigest, editEpoch: Number(state.editEpoch ?? 0), roots, inputs, requests, tasks: {}, startedAt: this.now().toISOString(),
+ };
+        await this.documents.put(user.id, "knowledge", generationId, generation, { projectId: project.id, expectedRevision: 0, transactionClient: client });
+        value.run = { generationId, step: "freeze", startedAt: generation.startedAt, changeAt: value.lastChangeAt, taskId: null };
+        return value;
+      });
+      return defer("knowledge_round_advancing", 0);
+    }
+    const run = state.run;
+    const row = await this.documents.get(user.id, "knowledge", run.generationId);
+    const generation = row?.payload;
+    const editInputs = generation?.edits ? await readKnowledgeManifest(this.documents, user.id, project.id, generation.edits) : [];
+    if (!editInputs) throw new HttpError(409, "knowledge_generation_superseded", "The frozen edit manifest changed.");
+    const aliases = context.inputs.map(input => ({ uri: `${generation?.roots.sources}/${input.receipt.sourceId}.md`, sourceId: input.receipt.sourceId }));
+    if (!generation || generation.policy.digest !== context.stamp.digest || generation.sourceSetDigest !== context.sourceSetDigest || generation.editEpoch !== Number(state.editEpoch ?? 0)) {
+      if (run.taskId) await this.resources.cancelTask(user.id, run.taskId).catch(() => null);
+      await this.#transitionShared(job, expected, value => ({ ...value, round: value.round + 1, run: null, pending: { ...value.pending, refresh: "changed" } }));
+      await this.schedule(user.id, project.id, { immediate: true });
+      return { result: { skipped: "generation_superseded" } };
+    }
+    const change = async (step, patch, taskId = null) => this.#transitionShared(job, { ...expected, step: run.step, taskId: run.taskId }, async (value, client) => {
+      await context.lockCurrent(client);
+      const current = await this.documents.get(user.id, "knowledge", run.generationId);
+      if (current.revision !== row.revision) throw new HttpError(409, "knowledge_generation_superseded", "The generation changed.");
+      await this.documents.put(user.id, "knowledge", run.generationId, { ...generation, ...patch }, { projectId: project.id, expectedRevision: row.revision, transactionClient: client });
+      value.run = { ...value.run, step, taskId };
+      return value;
+    });
+    if (run.step === "freeze") {
+      if (this.sourceSync) await this.sourceSync.reconcileInputs(user.id, project.id, context.inputs);
+      // An already reserved directory is replayed only when its complete bytes
+      // equal the frozen manifest. No target from another attempt is reused.
+      const existing = await this.resources.listAll(user.id, generation.roots.sources);
+      const names = new Set(context.inputs.map(input => `${generation.roots.sources}/${input.receipt.sourceId}.md`));
+      if (existing.some(entry => entry.isDir || !names.has(entry.uri))) throw new HttpError(409, "knowledge_generation_input_changed", "The frozen input directory contains an unexpected file.");
+      for (const input of context.inputs) {
+        const uri = `${generation.roots.sources}/${input.receipt.sourceId}.md`;
+        const before = await this.resources.download(user.id, uri);
+        if (before && sha256(before) !== input.receipt.renditionSha256) throw new HttpError(409, "knowledge_generation_input_changed", "A frozen source changed.");
+        if (!before) await this.resources.pushSource(user.id, uri, input.text, { sourceId: input.receipt.sourceId, sha: input.receipt.textSha256 });
+        const after = await this.resources.download(user.id, uri);
+        if (!after || sha256(after) !== input.receipt.renditionSha256) throw new HttpError(409, "knowledge_generation_input_changed", "A frozen source could not be verified.");
+      }
+      for (const tree of ["wiki", "kg"]) if (generation.roots[tree] && (await this.resources.listAll(user.id, generation.roots[tree])).length) {
+        throw new HttpError(409, "knowledge_target_not_fresh", "The shared compile target must be empty before its first submission.");
+      }
+      await context.current();
+      await change("wiki-submit", { status: "compiling", emptyTargets: { wiki: true, kg: Boolean(generation.roots.kg) } });
+      return defer("knowledge_round_advancing", 0);
+    }
+    if (run.step.endsWith("-submit")) {
+      const tree = run.step.split("-")[0], request = generation.requests[tree];
+      const execution = await context.compileExecutionFor(context.stamp, request);
+      if (!validKnowledgeExecution(execution, request) || knowledgeDigest(execution) !== knowledgeDigest(request.execution)) throw new HttpError(409, "knowledge_compile_execution_unqualified", "The compile execution qualification changed.");
+      const requestDigest = knowledgeDigest(request);
+      const key = compileIdempotencyKey({ projectId: project.id, tree, round: state.round, attempt: generation.attempt ?? 0, requestDigest });
+      await this.#verifySharedInputs(user.id, context, generation);
+      await context.current();
+      // Key and exact body were frozen in the generation before this POST.
+      const task = await this.resources.submitCompile(user.id, { from: request.from, to: request.to, skill: request.skill, instruction: request.instruction, idempotencyKey: key });
+      await context.current();
+      await change(tree, { tasks: { ...generation.tasks, [tree]: { request, requestDigest, key, taskId: task.taskId, submittedAt: this.now().toISOString() } } }, task.taskId);
+      return defer("knowledge_compile_running");
+    }
+    if (run.step === "wiki" || run.step === "kg") {
+      const tree = run.step, held = generation.tasks[tree];
+      const task = await this.resources.task(user.id, held.taskId);
+      if (task && !task.terminal) {
+        if (this.now().getTime() - Date.parse(held.submittedAt) > (Number(this.config.knowledgePagesTaskTimeoutMs) || 1_800_000)) {
+          await this.resources.cancelTask(user.id, held.taskId).catch(() => null);
+          throw new HttpError(409, "knowledge_task_expired", "The shared compile exceeded its deadline.");
+        }
+        return defer("knowledge_compile_running");
+      }
+      if (!task || task.status !== "completed") throw new HttpError(409, "knowledge_compile_failed", "The shared compile did not complete.");
+      await this.#recordUsage(user.id, { taskId: task.taskId, tree, usage: task.usage });
+      const tasks = { ...generation.tasks, [tree]: { ...held, task, taskDigest: knowledgeDigest(task) } };
+      // Exactly one index-only retry; its target and request are fresh.
+      if (tree === "wiki" && !generation.attempt) {
+        const files = await this.#sharedOutputFiles(user.id, generation.roots.wiki);
+        const typed = files.filter(file => isTypedKnowledgePage(file.path, file.bytes.toString("utf8"))).length;
+        if (asksAgainForIndexOnly({ tree, status: task.status, typed, retried: false })) {
+          const roots = knowledgeGenerationRoots(this.resources, user.id, project.id, generation.generationId, 1);
+          if (generation.roots.kg === null) roots.kg = null;
+          const request = { ...generation.requests.wiki, to: roots.wiki };
+          if ((await this.resources.listAll(user.id, roots.wiki)).length) throw new HttpError(409, "knowledge_target_not_fresh", "The retry target is not empty.");
+          await change("wiki-submit", { roots, attempt: 1, earlierWiki: tasks.wiki, tasks: {}, requests: { ...generation.requests, wiki: request } });
+          return defer("knowledge_round_advancing", 0);
+        }
+      }
+      if (!generation.requests.kg) tasks.kg = { disabled: true };
+      await change(tree === "wiki" && generation.requests.kg ? "kg-submit" : "mirror", { tasks });
+      return defer("knowledge_round_advancing", 0);
+    }
+    if (run.step === "mirror") {
+      await this.#verifySharedInputs(user.id, context, generation);
+      const outputs = [];
+      for (const tree of ["wiki", "kg"]) {
+        if (generation.tasks[tree]?.disabled) continue;
+        for (const file of await this.#sharedOutputFiles(user.id, generation.roots[tree])) {
+          // Absolute engine references must name this generation's exact
+          // frozen input or target, never another owner's library/history.
+          const frozenEdit = tree === "wiki" ? editInputs.find(page => page.tree === tree && page.path === file.path) : null;
+          const trustedBase = frozenEdit ? { payload: frozenEdit } : null;
+          if (trustedBase) {
+            const applied = applyKnowledgePageEdits(file.bytes.toString("utf8"), trustedBase.payload.userEdits);
+            if (applied.changed) {
+              await this.resources.writePage(user.id, file.uri, applied.markdown, { expectedSha256: sha256(file.bytes) });
+              file.bytes = Buffer.from(applied.markdown);
+            }
+          }
+          const text = file.bytes.toString("utf8");
+          const permittedIds = new Set(context.inputs.map(input => input.receipt.sourceId));
+          for (const mention of text.matchAll(/\b(src_[a-f0-9]{32})\b/g)) if (!permittedIds.has(mention[1])) {
+            throw new HttpError(409, "knowledge_output_scope_unverified", "A compiled file names an unavailable source.");
+          }
+          for (const match of text.matchAll(/viking:\/\/[^\s"'`()<>[\]]*/g)) {
+            const uri = match[0];
+            if (!aliases.some(alias => alias.uri === uri)
+              && ![generation.roots.wiki, generation.roots.kg].some(root => uri.startsWith(`${root}/`))) {
+              throw new HttpError(409, "knowledge_output_scope_unverified", "A compiled file names an unproven resource.");
+            }
+          }
+          const mirrorRel = `generations/${generation.generationId}/${file.path}`;
+          const existingMirror = await this.entries.readPage(project, tree, mirrorRel);
+          if (existingMirror != null && sha256(existingMirror) !== sha256(file.bytes)) throw new HttpError(409, "knowledge_mirror_changed", "An immutable generation mirror changed.");
+          const written = await this.entries.writePage({ user, project, tree, rel: mirrorRel, buffer: file.bytes, title: readKnowledgePage(text, { path: file.path }).title ?? file.path });
+          const captured = await readKnowledgeOutputSource({ sources: this.sources, ownerId: user.id, projectId: project.id, sourceId: written.source.id });
+          if (!captured) return defer("knowledge_mirror_capture_pending", 2000);
+          const id = `kgp_${sha256(`${project.id}\0${generation.generationId}\0${tree}\0${file.path}`)}`;
+          const payload = { recordType: PAGE_RECORD, generationId: generation.generationId, tree, path: file.path, mirrorRel,
+            uri: file.uri, pageSourceId: captured.source.id, sha256: sha256(file.bytes), engineSha256: sha256(file.bytes),
+            title: readKnowledgePage(text, { path: file.path }).title ?? file.path, typed: isTypedKnowledgePage(file.path, text),
+            dependsOn: aliases.filter(alias => text.includes(alias.uri)).map(alias => alias.sourceId),
+            updatedAt: generation.startedAt, retired: false, basis: "compiler",
+            ...(trustedBase ? { userEdits: trustedBase.payload.userEdits, carriedEditReceipt: trustedBase.payload.editReceipt } : {}) };
+          const prior = await this.documents.get(user.id, "knowledge", id);
+          if (prior && knowledgeDigest(prior.payload) !== knowledgeDigest(payload)) throw new HttpError(409, "knowledge_generation_superseded", "The generation page was changed.");
+          let page = prior;
+          if (!page) await this.#transitionShared(job, { ...expected, step: "mirror", taskId: run.taskId }, async (value, client) => {
+            await context.lockCurrent(client);
+            page = await this.documents.put(user.id, "knowledge", id, payload, { projectId: project.id, expectedRevision: 0, transactionClient: client });
+            return value;
+          });
+          outputs.push({ tree, path: file.path, mirrorRel, uri: file.uri, bytes: file.bytes.length, engineBytesSha256: sha256(file.bytes), displayedBytesSha256: sha256(file.bytes),
+            recordId: id, recordRevision: page.revision, recordDigest: knowledgeDigest(payload), source: captured.receipt });
+        }
+      }
+      await context.current();
+      // Rehydrate reused content-addressed sources only after every mirror
+      // path has been registered, otherwise later path additions stale them.
+      for (const output of outputs) {
+        const captured = await readKnowledgeOutputSource({ sources: this.sources, ownerId: user.id, projectId: project.id, sourceId: output.source.sourceId });
+        if (!captured) return defer("knowledge_mirror_capture_pending", 2000);
+        output.source = captured.receipt;
+      }
+      const manifest = await writeKnowledgeManifest(this.documents, user.id, project.id, generation.generationId, "outputs", outputs);
+      await change("finish", { outputs: manifest, outputDigest: knowledgeDigest(outputs), status: "completed" });
+      return defer("knowledge_round_advancing", 0);
+    }
+    return { result: { round: state.round, generationId: generation.generationId, warnings: Object.values(generation.tasks).flatMap(task => task.task?.result?.warnings ?? []).slice(0, 20) },
+      sharedSettlement: { generationId: generation.generationId, round: state.round, generationRevision: row.revision, digest: knowledgeDigest(generation) } };
+  }
+
+  async #verifySharedInputs(userId, context, generation) {
+    const wanted = new Map(context.inputs.map(input => [`${generation.roots.sources}/${input.receipt.sourceId}.md`, input]));
+    const files = await this.resources.listAll(userId, generation.roots.sources);
+    if (files.length !== wanted.size || files.some(file => file.isDir || !wanted.has(file.uri))) throw new HttpError(409, "knowledge_generation_input_changed", "The frozen source inventory changed.");
+    for (const [uri, input] of wanted) {
+      const bytes = await this.resources.download(userId, uri);
+      if (!bytes || sha256(bytes) !== input.receipt.renditionSha256) throw new HttpError(409, "knowledge_generation_input_changed", "A frozen source's bytes changed.");
+    }
+  }
+
+  /** Complete traversal uses paged ls, never the engine's truncated tree. */
+  async #sharedOutputFiles(userId, root) {
+    const files = [], pending = [root], seen = new Set();
+    while (pending.length) {
+      const directory = pending.shift();
+      if (seen.has(directory) || seen.size > 10000) throw new HttpError(422, "knowledge_output_scan_incomplete", "The output inventory is incomplete.");
+      seen.add(directory);
+      for (const entry of await this.resources.listAll(userId, directory)) {
+        const path = String(entry.uri).slice(root.length + 1);
+        if (path.split("/").some(part => part.startsWith("."))) continue;
+        if (!entry.uri.startsWith(`${root}/`) || !knowledgeOutputPath(path) || !entry.uri.startsWith(`${directory}/`)
+          || entry.uri.slice(directory.length + 1).includes("/")) throw new HttpError(409, "knowledge_output_scope_unverified", "The output listing contains an unproven path.");
+        if (entry.isDir) pending.push(entry.uri);
+        else {
+          const bytes = await this.resources.download(userId, entry.uri);
+          if (!bytes || files.length >= 5000) throw new HttpError(422, "knowledge_output_scan_incomplete", "The output inventory is incomplete.");
+          files.push({ path, uri: entry.uri, bytes });
+        }
+      }
+    }
+    return files.sort((left, right) => left.path.localeCompare(right.path));
+  }
+
+  /** Qualify each completed task live before taking a job/state lock. Reads
+   * later use these authority references without contacting the engine. */
+  async prepareSharedSettlement(job, settlement) {
+    const context = await this.#knowledgeContext(job.userId, job.projectId);
+    const generation = await this.documents.get(job.userId, "knowledge", settlement.generationId);
+    if (context?.kind !== "geo-project" || generation?.revision !== settlement.generationRevision || knowledgeDigest(generation.payload) !== settlement.digest
+      || generation.payload.policy.digest !== context.stamp.digest) throw new HttpError(409, "knowledge_generation_superseded", "The shared generation changed before qualification.");
+    const qualificationRefs = {};
+    for (const tree of ["wiki", "kg"]) {
+      const held = generation.payload.tasks?.[tree];
+      if (tree === "kg" && held?.disabled === true) continue;
+      if (!held?.request) throw new HttpError(409, "knowledge_generation_unverified", "The compile task receipt is unavailable.");
+      const execution = await context.compileExecutionFor(context.stamp, held.request, { mode: "live" });
+      if (!validKnowledgeExecution(execution, held.request) || knowledgeDigest(execution) !== knowledgeDigest(held.request.execution)) {
+        throw new HttpError(409, "knowledge_compile_execution_unqualified", "The compile execution changed before publication.");
+      }
+      const reference = await context.compileExecutionFor(context.stamp, held.request, { mode: "authority-reference" });
+      if (!validKnowledgeQualificationRef(reference, held.request)) throw new HttpError(409, "knowledge_compile_execution_unqualified", "The execution authority did not preserve the observed binding.");
+      qualificationRefs[tree] = reference;
+    }
+    return { ...settlement, context, qualificationRefs };
+  }
+
+  async finishSharedJob(job, settlement, client) {
+    return this.documents.database.withTransactionClient(client, async () => {
+      const context = settlement.context;
+      if (context?.kind !== "geo-project") throw new HttpError(409, "knowledge_scope_denied", "The shared project policy changed.");
+      await context.lockCurrent(client);
+      const currentInputs = await readKnowledgeSourceInputs({ documents: this.documents, sources: this.sources, ownerId: job.userId, projectId: job.projectId });
+      if (knowledgeDigest(currentInputs.map(input => input.receipt)) !== knowledgeDigest(context.inputs.map(input => input.receipt))) throw new HttpError(409, "knowledge_generation_superseded", "The source set changed before selection.");
+      const state = await this.#state(job.userId, job.projectId);
+      const generation = await this.documents.get(job.userId, "knowledge", settlement.generationId);
+      if (state.value.round !== settlement.round || state.value.run?.generationId !== settlement.generationId || state.value.run?.step !== "finish"
+        || generation?.revision !== settlement.generationRevision || knowledgeDigest(generation.payload) !== settlement.digest
+        || generation.payload.editEpoch !== Number(state.value.editEpoch ?? 0) || state.value.sharedEdit
+        || generation.payload.sourceSetDigest !== context.sourceSetDigest || generation.payload.policy.digest !== context.stamp.digest) {
+        throw new HttpError(409, "knowledge_generation_superseded", "The shared compile changed before selection.");
+      }
+      for (const tree of ["wiki", "kg"]) {
+        const held = generation.payload.tasks?.[tree];
+        if (tree === "kg" && held?.disabled === true) continue;
+        const authorityRef = settlement.qualificationRefs?.[tree];
+        if (!held?.request || !validKnowledgeQualificationRef(authorityRef, held.request)) throw new HttpError(409, "knowledge_compile_execution_unqualified", "The prepared authority reference is unavailable.");
+        const execution = await context.compileExecutionFor(context.stamp, held.request, { mode: "completed-read", authorityRef, transactionClient: client });
+        if (!validKnowledgeExecution(execution, held.request) || knowledgeDigest(execution) !== knowledgeDigest(held.request.execution)) throw new HttpError(409, "knowledge_compile_execution_unqualified", "The execution authority changed before publication.");
+      }
+      // Authority records are locked before the generation/state publication.
+      const payload = { ...generation.payload, qualificationRefs: settlement.qualificationRefs };
+      const qualified = await this.documents.put(job.userId, "knowledge", generation.id, payload,
+        { projectId: job.projectId, expectedRevision: generation.revision, transactionClient: client });
+      const next = { ...state.value, selectedGeneration: { id: generation.id, revision: qualified.revision, digest: knowledgeDigest(payload) },
+        round: state.value.round + 1, run: null, compiledAt: this.now().toISOString(), lastRound: { at: this.now().toISOString(), generationId: generation.id },
+        lastError: null, pending: state.value.lastChangeAt === state.value.run.changeAt ? {} : state.value.pending,
+        taken: Object.fromEntries(context.inputs.map(input => [input.receipt.sourceId, knowledgeDigest(input.receipt)])) };
+      await this.documents.put(job.userId, "knowledge", stateId(job.projectId), next, { projectId: job.projectId, expectedRevision: state.row.revision, transactionClient: client });
+      const verified = await readSelectedKnowledgeGeneration({ documents: this.documents, sources: this.sources, project: context.project,
+        policy: context.stamp, currentInputs, compileExecutionFor: context.compileExecutionFor, transactionClient: client });
+      if (verified?.receipt.generationId !== generation.id) throw new HttpError(409, "knowledge_generation_unverified", "The shared output could not be verified for selection.");
+    });
+  }
+
   /**
    * A round that cannot go on as it is — a step kept failing until the job's attempts were spent — is closed: what is
    * mirrored stays, the task (if one is still running) is asked to stop, and the next change asks for a new round.
@@ -886,15 +1380,26 @@ export class KnowledgePageService {
     const projectId = String(job.payload?.projectId ?? job.projectId ?? "");
     if (!projectId) return;
     const { value } = await this.#state(job.userId, projectId).catch(() => ({ value: null }));
+    if (value?.run?.generationId && value.round !== Number(job.payload?.round)) return;
+    const sharedGeneration = value?.run?.generationId ? await this.documents.get(job.userId, "knowledge", value.run.generationId) : null;
+    const context = sharedGeneration ? null : await this.#knowledgeContext(job.userId, projectId).catch(() => null);
+    const failedSourceSetDigest = sharedGeneration?.payload.sourceSetDigest
+      ?? (context?.kind === "geo-project" ? context.sourceSetDigest : null);
     for (const tree of ["wiki", "kg"]) {
-      const taskId = value?.run?.[tree]?.taskId;
+      const taskId = sharedGeneration?.payload.tasks?.[tree]?.taskId ?? value?.run?.[tree]?.taskId;
       if (taskId) await this.resources.cancelTask(job.userId, taskId).catch(() => null);
+    }
+    if (value?.run?.generationId) {
+      await this.#transitionShared(job, { round: Number(job.payload?.round), generationId: value.run.generationId }, state => ({ ...state,
+        round: state.round + 1, run: null, lastError: { code, at: this.now().toISOString(), sourceSetDigest: failedSourceSetDigest } }));
+      return;
     }
     await this.#updateState(job.userId, projectId, (state) => {
       if (state.round !== Number(job.payload?.round)) return null;
       state.round += 1;
       state.run = null;
-      state.lastError = { code, at: this.now().toISOString(), round: Number(job.payload?.round) };
+      state.lastError = { code, at: this.now().toISOString(), round: Number(job.payload?.round),
+        ...(failedSourceSetDigest ? { sourceSetDigest: failedSourceSetDigest } : {}) };
       return state;
     }).catch((error) => this.report(codeOf(error)));
   }
@@ -906,11 +1411,14 @@ export class KnowledgePageService {
    * A person saved a page in the reader. Their text is the document's next version in the ledger first; what they
    * changed is kept as blocks on the page's record; then the engine's copy is written to match — at once when no round
    * is running, otherwise when the round ends.
-   * @param {{ user: any, project: any, source: any, markdown: string, baseSha256?: string | null }} request
+   * @param {{ user: any, project: any, source: any, markdown: string, baseSha256?: string | null, address?: any }} request
    * @returns {Promise<{ source: any, duplicate: boolean, changed: boolean, writeBack: "written" | "queued" | "none", userBlocks: number }>}
    */
-  async saveEdit({ user, project, source, markdown, baseSha256 = null }) {
-    const where = knowledgeMirrorPathOf(source?.payload?.paths?.[0]);
+  async saveEdit({ user, project, source, markdown, baseSha256 = null, address = null }) {
+    const context = await this.#knowledgeContext(user.id, project.id);
+    if (context?.kind === "geo-project") return this.#saveSharedEdit({ user, project, source, markdown, baseSha256, address }, context);
+    const addressed = address ? await this.pageView(user.id, project, source, address) : null;
+    const where = addressed ? { tree: addressed.tree, rel: addressed.path } : knowledgeMirrorPathOf(source?.payload?.paths?.[0]);
     if (!where || !/\.md$/i.test(where.rel)) throw new HttpError(409, "knowledge_page_not_editable", "That document is not a page that can be edited.");
     const text = `${String(markdown ?? "").replace(/\r\n?/g, "\n").trimEnd()}\n`;
     if (!text.trim()) throw new HttpError(400, "knowledge_page_empty", "A page cannot be saved empty.");
@@ -999,15 +1507,26 @@ export class KnowledgePageService {
    * with each quotation's label, whether it holds a person's blocks, and what changed under it.
    * @param {string} userId @param {any} project @param {any} source the page's document
    */
-  async pageView(userId, project, source) {
-    const where = knowledgeMirrorPathOf(source?.payload?.paths?.[0]);
+  async pageView(userId, project, source, address = null) {
+    const context = await this.#knowledgeContext(userId, project.id);
+    const selectedPage = context?.kind === "geo-project" ? this.#addressedPage(context, project, source, address) : null;
+    if (context?.kind === "geo-project" && !selectedPage) throw new HttpError(404, "knowledge_page_not_found", "That knowledge page is unavailable.");
+    const where = selectedPage ? { tree: selectedPage.payload.tree, rel: selectedPage.payload.path }
+      : address ? { tree: address.tree, rel: address.path } : knowledgeMirrorPathOf(source?.payload?.paths?.[0]);
+    if (address && context?.kind !== "geo-project" && (address.projectId !== project.id || !KNOWLEDGE_TREES.includes(address.tree)
+      || !knowledgeOutputPath(address.path) || !source.payload?.paths?.includes(`knowledge-base/${address.tree}/${address.path}`))) {
+      throw new HttpError(409, "knowledge_page_changed", "The addressed knowledge page changed.");
+    }
     if (!where) throw new HttpError(404, "knowledge_page_not_found", "That document is not a knowledge page.");
-    const markdown = await this.entries.readPage(project, where.tree, where.rel);
-    if (markdown == null) throw new HttpError(404, "knowledge_page_not_found", "The page could not be read.");
+    const markdown = await this.entries.readPage(project, where.tree, selectedPage?.payload.mirrorRel ?? where.rel);
+    if (markdown == null || selectedPage && sha256(markdown) !== selectedPage.payload.sha256) throw new HttpError(404, "knowledge_page_not_found", "The page could not be read.");
     const records = await this.#pageRecords(userId, project.id, { tree: where.tree });
     const byPath = new Map(records.map((row) => [row.payload.path, row.payload]));
-    const ledger = byPath.get(where.rel) ?? null;
-    const root = this.resources.treeUri(userId, project.id, where.tree);
+    const ledgerRow = records.find(row => row.payload.path === where.rel) ?? null;
+    const ledger = ledgerRow?.payload ?? null;
+    if (address && context?.kind !== "geo-project" && (address.generationId != null || address.pageId != null && address.pageId !== ledgerRow?.id
+      || address.pageRevision != null && address.pageRevision !== ledgerRow?.revision)) throw new HttpError(409, "knowledge_page_changed", "The addressed page revision changed.");
+    const root = context?.kind === "geo-project" ? context.selected.receipt.roots[where.tree] : this.resources.treeUri(userId, project.id, where.tree);
     const page = readKnowledgePage(markdown, { path: where.rel, root, known: new Set(byPath.keys()) });
     // The labels of this text: the stored ones when they were computed for these bytes, else computed now.
     const digest = sha256(markdown);
@@ -1048,7 +1567,10 @@ export class KnowledgePageService {
     }
     const claims = sections.flatMap((section) => section.items);
     const count = (/** @type {string} */ status) => claims.filter((item) => item.status === status).length;
+    if (context?.kind === "geo-project") await context.current();
     return {
+      ...(ledgerRow ? { address: { projectId: project.id, tree: where.tree, path: where.rel,
+        generationId: selectedPage?.payload.generationId ?? null, pageId: ledgerRow.id, pageRevision: ledgerRow.revision } } : {}),
       sourceId: source.id, tree: where.tree, path: where.rel, slug: where.rel, type: page.type, title: page.title, description: page.description, tags: page.tags,
       markdown, sha256: digest, frontmatter: page.frontmatter, body: page.body, links,
       sources: cited.map((id) => ({ sourceId: id, title: titles.get(/** @type {string} */ (id)) ?? null, available: titles.has(/** @type {string} */ (id)) })),
@@ -1064,14 +1586,17 @@ export class KnowledgePageService {
 
   /** The mirrored files of one tree, read from the project. @param {string} userId @param {any} project @param {"wiki" | "kg"} tree */
   async #files(userId, project, tree) {
+    const context = await this.#knowledgeContext(userId, project.id);
     // In path order, so a graph's nodes come out the same way every time it is read.
     const records = (await this.#pageRecords(userId, project.id, { tree })).sort((left, right) => (left.payload.path < right.payload.path ? -1 : 1));
     /** @type {{ path: string, content: string, record: any }[]} */
     const files = [];
     for (const row of records) {
-      const content = await this.entries.readPage(project, tree, row.payload.path).catch(() => null);
+      const content = await this.entries.readPage(project, tree, row.payload.mirrorRel ?? row.payload.path).catch(() => null);
+      if (row.payload.generationId && (content == null || sha256(content) !== row.payload.sha256)) throw new HttpError(409, "knowledge_mirror_changed", "The knowledge mirror no longer matches its receipt.");
       if (content != null) files.push({ path: row.payload.path, content, record: row.payload });
     }
+    if (context?.kind === "geo-project") await context.current();
     return files;
   }
 
@@ -1081,12 +1606,15 @@ export class KnowledgePageService {
    * @param {string} userId @param {any} project @param {"wiki" | "kg"} kind
    */
   async graph(userId, project, kind) {
+    const operationContext = await this.#knowledgeContext(userId, project.id);
     const files = await this.#files(userId, project, kind);
     const byPath = new Map(files.map((file) => [file.path, file.record]));
     const documentOf = (/** @type {string} */ uri) => knowledgeSourceIdOfUri(uri);
     if (kind === "wiki") {
-      const graph = wikiPagesToGraph(files, { root: this.resources.treeUri(userId, project.id, "wiki") });
+      const context = await this.#knowledgeContext(userId, project.id);
+      const graph = wikiPagesToGraph(files, { root: context?.kind === "geo-project" ? context.selected?.receipt.roots.wiki : this.resources.treeUri(userId, project.id, "wiki") });
       const titles = await this.#titles(userId, project.id, graph.nodes.flatMap((node) => node.sources.map((source) => documentOf(source.uri) ?? "")));
+      if (operationContext?.kind === "geo-project") await operationContext.current();
       return {
         kind, nodes: graph.nodes.map((node) => {
           const record = byPath.get(node.path);
@@ -1101,6 +1629,7 @@ export class KnowledgePageService {
     const named = [...graph.nodes.flatMap((node) => node.sources), ...graph.links.flatMap((link) => link.evidence)].map((uri) => documentOf(uri) ?? "");
     const titles = await this.#titles(userId, project.id, named);
     const map = (/** @type {string[]} */ uris) => [...new Set(uris.map((uri) => documentOf(uri)).filter(Boolean))].map((id) => ({ sourceId: id, title: titles.get(/** @type {string} */ (id)) ?? null }));
+    if (operationContext?.kind === "geo-project") await operationContext.current();
     return {
       kind, nodes: graph.nodes.map((node) => ({ id: node.id, path: node.path, title: node.title, entityType: node.entityType, description: node.description, aliases: node.aliases,
         degree: node.degree, sourceId: byPath.get(node.path)?.pageSourceId ?? null, stale: byPath.get(node.path)?.stale?.sources ?? [], sources: map(node.sources) })),
@@ -1121,8 +1650,10 @@ export class KnowledgePageService {
     if (!user) return null;
     let project;
     try { project = await this.store.requireProject(user, request.projectId); } catch { return null; }
+    const context = await this.#knowledgeContext(user.id, project.id);
     const kg = await this.#files(user.id, project, "kg");
     const wiki = await this.#files(user.id, project, "wiki");
+    if (context?.kind === "geo-project") await context.current();
     if (!kg.length && !wiki.length) return null;
     return {
       entities: kg.filter((file) => /^entities\/[^/]+\.md$/i.test(file.path)).map((file) => ({ path: file.path, text: file.content })),
@@ -1141,7 +1672,9 @@ export class KnowledgePageService {
     for (const tree of /** @type {Array<"wiki" | "kg">} */ (KNOWLEDGE_TREES)) {
       for (const file of await this.#files(userId, project, tree)) files.push({ tree, path: file.path, content: file.content, title: file.record.title ?? file.path });
     }
-    const roots = this.resources.roots(userId, project.id);
+    const context = await this.#knowledgeContext(userId, project.id);
+    const roots = context?.kind === "geo-project" ? { ...context.resources.roots(), library: null } : this.resources.roots(userId, project.id);
+    if (context?.kind === "geo-project") await context.current();
     return { files, roots: { wiki: roots.wiki, kg: roots.kg, sources: roots.sources, library: roots.library } };
   }
 
@@ -1150,13 +1683,14 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId
    */
   async summary(userId, projectId) {
+    const context = await this.#knowledgeContext(userId, projectId);
     const { value } = await this.#state(userId, projectId);
     const pages = await this.#pageRecords(userId, projectId);
     const wiki = pages.filter((row) => row.payload.tree === "wiki");
     const kg = pages.filter((row) => row.payload.tree === "kg");
     const readable = this.enabled ? (await this.#readableSources(userId, projectId)).length : 0;
     const ready = this.engine?.ready?.("knowledge") ?? null;
-    const run = value.run;
+    const run = context?.kind === "geo-project" && !value.run?.generationId ? null : value.run;
     const running = run ? (run.step === "wiki" || run.step === "kg" ? run[run.step] : null) : null;
     const pending = Object.keys(value.pending ?? {}).length;
     const state = !this.enabled ? "disabled"
@@ -1164,6 +1698,7 @@ export class KnowledgePageService {
         : ready && !ready.ok ? "engine_unavailable"
           : pending ? (readable < this.config.knowledgePagesMinSources && !pages.length ? "below_threshold" : "queued")
             : value.lastError ? "failed" : wiki.length ? "compiled" : readable < this.config.knowledgePagesMinSources ? "below_threshold" : "idle";
+    if (context?.kind === "geo-project") await context.current();
     return {
       enabled: this.enabled, state,
       engine: ready ? { ok: ready.ok, code: ready.code } : null,
@@ -1179,7 +1714,7 @@ export class KnowledgePageService {
       // for a new round by itself) and then closed, and a status that only said `below_threshold` left the person who had just
       // pressed 「重新整理」 with nothing to say why.
       message: state === "below_threshold" ? thresholdSentence(readable, this.config.knowledgePagesMinSources) : null,
-      compiledAt: value.compiledAt, lastRound: value.lastRound, lastError: value.lastError, writeBacksQueued: (value.writeBacks ?? []).length,
+      compiledAt: wiki.length ? value.compiledAt : null, lastRound: wiki.length ? value.lastRound : null, lastError: value.lastError, writeBacksQueued: (value.writeBacks ?? []).length,
     };
   }
 

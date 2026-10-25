@@ -243,7 +243,9 @@ function SourceReader({ sourceId }: { sourceId: string }) {
           )}
           {loaded.phase === "missing" && (
             <EmptyState icon={FileQuestion} title="这份资料不存在或已删除。"
-              action={<Link to={back} className={buttonClasses({ variant: "secondary" })}>回到知识库</Link>} />
+              action={view.knowledge ? <Link to={`/app/files/open?${new URLSearchParams({ project: view.knowledge.projectId, tree: view.knowledge.tree, path: view.knowledge.path })}`}
+                className={buttonClasses({ variant: "secondary" })}>打开当前知识页</Link>
+                : <Link to={back} className={buttonClasses({ variant: "secondary" })}>回到知识库</Link>} />
           )}
           {loaded.phase === "error" && <LoadError message={loaded.message} onRetry={() => void load(false)} />}
           {source && isKnowledgePage(source) && <KnowledgePageView source={source} onPage={setKnowledgePage} />}

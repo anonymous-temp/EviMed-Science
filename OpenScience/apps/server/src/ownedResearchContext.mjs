@@ -14,10 +14,11 @@ export function remainingHandbookPromptBytes(config, runtimeManager, project) {
 }
 
 /** Shared selection for ordinary dispatch and an immutable native input envelope.
- * @param {{learning:any,registry:any,config:any,runtimeManager:any,paused:Function,audit:Function}} dependencies */
-export function createOwnedHandbookSelector({ learning, registry, config, runtimeManager, paused, audit }) {
+ * @param {{learning:any,registry:any,config:any,runtimeManager:any,paused:Function,audit:Function,contextPolicies?:any,contextItems?:any}} dependencies */
+export function createOwnedHandbookSelector({ learning, registry, config, runtimeManager, paused, audit, contextPolicies = null, contextItems = null }) {
   /** @param {any} project @param {any} session @param {any} options @param {any} run */
   return async (project, session, options, run) => {
+    const contextPolicy = contextPolicies ? await contextPolicies.forProject(project) : {kind:"owned",ownerId:project.userId,controlProjectId:project.id};
     const capabilityId = run.effectiveAgentId ?? options.routedSpecialist?.agentId ?? session.agentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID;
     let handbooks = null;
     // Whether this run is one the learning loop may touch at all: the account's own supplements and the platform's probation entry share the answer.
@@ -30,14 +31,26 @@ export function createOwnedHandbookSelector({ learning, registry, config, runtim
           eligible = true;
           const remaining = remainingHandbookPromptBytes(config, runtimeManager, project);
           handbooks = await prepareCapabilityHandbooks({ learning, registry: await registry,
-            project, capabilityId, config, maxPromptBytes: remaining });
+            project, capabilityId, config, contextPolicy, contextItems, maxPromptBytes: remaining });
         }
       } catch (error) {
         await audit("handbook.context", "failed", { userId: project.userId, projectId: project.id,
           runId: run.id, code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" });
       }
     }
-    return { ...handbookContextFor(handbooks, project, capabilityId), selection: handbooks, eligible };
+    if(contextPolicy.kind==="geo-project" && handbooks) {
+      try {
+        const current=await contextPolicies.forProject(project);
+        if(handbookContextFor(handbooks,project,capabilityId,current).context) {
+          for(const item of handbooks.items) if(!await contextItems.handbook(current,{id:item.id,revision:item.revision,payload:{recordType:"capability-handbook",contentDigest:item.contentDigest}})) { handbooks=null;break; }
+        } else handbooks=null;
+      } catch(error) {
+        handbooks=null;
+        await audit("handbook.context", "failed", {userId:project.userId,projectId:project.id,runId:run.id,
+          code:typeof error?.code==="string"?error.code:"handbook_context_unavailable"});
+      }
+    }
+    return { ...handbookContextFor(handbooks, project, capabilityId,contextPolicy), selection: handbooks, eligible,contextPolicy };
   };
 }
 
@@ -45,13 +58,13 @@ export function createOwnedHandbookSelector({ learning, registry, config, runtim
  * `platformTrial` is the platform's probation entry for a dispatch (`learningPlatformHandbooks.probationFor`), asked only of a researcher's own run the learning loop may
  * touch - not an internal project, a harness's, or one the researcher paused learning for - since an exposure is only worth making when it can be observed.
  * It is the dispatch's alone: a conversation typed in the kernel's own frame has no run to record it against, so it carries none.
- * @param {{learning:any,registry:any,config:any,runtimeManager:any,agentRuns:any,paused:Function,audit:Function,sourceService?:any,researchSessions?:any,
+ * @param {{learning:any,registry:any,config:any,runtimeManager:any,agentRuns:any,paused:Function,audit:Function,sourceService?:any,researchSessions?:any,knowledgeContext?:any,contextPolicies?:any,contextItems?:any,
  *   platformTrial?:((input:{project:any,run:any,capabilityId:string,fits:(text:any)=>boolean})=>Promise<any>)|null}} dependencies */
 export function createOwnedResearchContext(dependencies) {
   const select = createOwnedHandbookSelector(dependencies);
   const { config, agentRuns } = dependencies;
   return async (project, session, options, run) => {
-    const { selection: handbooks, eligible } = await select(project, session, options, run);
+    const { selection: handbooks, eligible, contextPolicy } = await select(project, session, options, run);
     const capabilityId = run.effectiveAgentId ?? options.routedSpecialist?.agentId ?? session.agentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID;
     let platformTrial = null;
     if (eligible && dependencies.platformTrial && isResearcherOwnedWork(run)) {
@@ -65,9 +78,11 @@ export function createOwnedResearchContext(dependencies) {
           runId: run.id, code: typeof error?.code === "string" ? error.code : "platform_trial_unavailable" });
       }
     }
-    const saved = dependencies.researchSessions ? await dependencies.researchSessions.get(project, session.sessionId) : session;
-    const sourceContext = await sourceConversationContext(dependencies.sourceService, project, saved);
-    const prepared = await prepareResearchContext(project, { ...session, agentId: session.agentId ?? capabilityId }, config, { ...options, handbooks, sourceContext, platformTrial });
+    let saved = dependencies.researchSessions ? await dependencies.researchSessions.get(project, session.sessionId) : session;
+    const knowledge = await dependencies.knowledgeContext?.forProject(project);
+    if (knowledge?.kind === "geo-project" && saved?.sourceScope) saved = { ...saved, sourceScope: await knowledge.sourceScope(session.sessionId) };
+    const sourceContext = await sourceConversationContext(dependencies.sourceService, project, saved, false, knowledge?.kind === "geo-project" ? knowledge : {});
+    const prepared = await prepareResearchContext(project, { ...session, agentId: session.agentId ?? capabilityId }, config, { ...options, handbooks, sourceContext, platformTrial, contextPolicy });
     if (prepared.handbooks.length) {
       await agentRuns.recordLearning(project, run.id, { capabilityHandbooks: prepared.handbooks });
     }

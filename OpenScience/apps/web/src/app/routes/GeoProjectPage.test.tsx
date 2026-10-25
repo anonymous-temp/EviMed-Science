@@ -24,6 +24,7 @@ const client = vi.hoisted(() => ({
   patchGeoProject: vi.fn(),
   deleteGeoProject: vi.fn(),
   open: vi.fn(),
+  nativeOpen: vi.fn(),
 }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
@@ -43,6 +44,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   deleteGeoProject: client.deleteGeoProject,
 }));
 
+vi.mock("@/lib/geoNativeClient",async original=>({...await original<typeof import("@/lib/geoNativeClient")>(),openGeoConversation:client.nativeOpen}));
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => client.open }));
 
 const scroll = vi.hoisted(() => ({ scrollBlockToTop: vi.fn() }));
@@ -143,6 +145,7 @@ const severeDiagnosis = diagnosisWith([
 
 beforeEach(() => {
   vi.clearAllMocks();
+  client.nativeOpen.mockImplementation(async (geoId,target)=>({projectId:GEO_PROJECT.projectId,sessionId:target.sessionId,scope:{kind:"geo",geoProjectId:geoId,sessionId:target.sessionId}}));
   useProjectStore.setState({ currentId: GEO_PROJECT.projectId });
   client.useGeoFeature.mockReturnValue("on");
   client.getGeoProject.mockResolvedValue(GEO_PROJECT);

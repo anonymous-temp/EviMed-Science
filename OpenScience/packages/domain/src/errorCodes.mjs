@@ -229,6 +229,8 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "kb_browse_gateway_token_missing",
   "kb_browse_gateway_token_invalid",
   "kb_browse_not_found",
+  // A denied project context is an unavailable source, never permission to widen scope.
+  "kb_browse_scope_denied",
   // The stored meaning of a dataset (dataset_semantics → dataSemanticsGateway.mjs) not answering — the module off,
   // an outage, a slow ledger. The analysis goes on from the files, as it did before the tool existed, and says it
   // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
@@ -653,6 +655,20 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "geo_write_payload_invalid",
   "geo_plan_file_required",
   "geo_write_rejected",
+  // Invalid or unavailable write inputs are normalized to geo_write_payload_invalid
+  // by the runtime gateway. Keep their direct producer identities classified too;
+  // recovery exhaustion/acknowledgment never authorizes another provider request.
+  "geo_question_import_invalid",
+  "geo_diagnosis_invalid",
+  "geo_contract_missing",
+  "geo_request_key_conflict",
+  "geo_recovery_invalid",
+  "geo_recovery_exhausted",
+  "geo_recovery_acknowledgment_required",
+  "geo_round_empty",
+  "geo_round_question_invalid",
+  // A nonexistent or foreign round is normalized to an invalid selection.
+  "geo_round_not_found",
   "social_posts_query_invalid",
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",
@@ -1670,6 +1686,9 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_plan_basis_too_large',
   'geo_plan_action_invalid',
   'geo_plan_output_unavailable',
+  'geo_plan_output_invalid',
+  'geo_plan_output_ambiguous',
+  'geo_strategy_import_failed',
   'geo_strategy_not_found',
   'geo_strategy_version_invalid',
 
@@ -2143,6 +2162,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_plan_action_invalid: '请从所选方案版本中选择要处理的行动。',
   geo_plan_file_required: '请在当前对话中完成并保存所选方案，再刷新方案页。',
   geo_plan_output_unavailable: '暂时无法读取本次方案成果，文件已保留，请稍后刷新。',
+  geo_plan_output_invalid: '方案数据暂时无法读取，请检查原任务中的文件后重试导入。',
+  geo_plan_output_ambiguous: '发现多份不同的方案文件，请选择需要导入的那一份。',
+  geo_strategy_import_failed: '方案暂未写入项目，文件仍保留；请查看导入记录并重试。',
   geo_strategy_not_found: '找不到这个方案版本，请返回方案页重新选择。',
   geo_strategy_version_invalid: '方案版本不正确，请从方案页选择已有版本。',
   geo_source_not_found: '找不到这个信源，它可能已被移除。',

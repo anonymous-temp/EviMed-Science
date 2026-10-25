@@ -10,7 +10,6 @@ import {
 } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
 import { Delta } from "@/components/ui/Delta";
-import { Drawer } from "@/components/ui/Drawer";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
@@ -27,7 +26,7 @@ import { GEO_VIEW_PARAM, geoSectionId } from "../geoTabs";
 import { ClaimRow } from "../spine/ClaimRow";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
-import { ErrorDrawer } from "../spine/ErrorDrawer";
+import { GeoErrorGroupDrawer } from "../GeoErrorGroupDrawer";
 import {
   claimRows,
   claimRowsOfEngine,
@@ -225,7 +224,6 @@ function Accuracy({
   }, refresh);
   const filtered = useMemo(() => filterErrors(pages.data?.errors ?? [], { show, engine, type, trace, query, questions: cluster ? new Set([...groupOf.entries()].filter(([, group]) => group.id === cluster).map(([id]) => id)) : null }), [pages.data, show, engine, type, trace, query, cluster, groupOf]);
   const claims = useMemo(() => claimRows(filtered), [filtered]);
-  const everyClaim = useMemo(() => claimRows([...new Map([...errors, ...filtered].map(row => [row.id, row])).values()]), [errors, filtered]);
   const narrowed = engine !== null || type !== null || trace !== null || cluster !== null || query.trim() !== "";
   // The server counts every row; the page carries a capped list. Said only while the list is the status chip alone.
   const total = pages.data?.errorPage?.total ?? null;
@@ -279,7 +277,6 @@ function Accuracy({
     setBusyClaim(claim.key);
     void open({ projectId: project.projectId, sessionId: project.sessionId }, correctionBrief(claim, product)).finally(() => setBusyClaim(null));
   };
-  const opened = drawer.error ? everyClaim.find((claim) => claim.key === drawer.error) ?? null : null;
 
   const rowOf = (claim: ClaimModel, showEngines: boolean) => (
     <ClaimRow
@@ -376,12 +373,8 @@ function Accuracy({
         </div>
       )}
 
-      {drawer.error && opened && (
-        <ErrorDrawer geoId={geoId} project={project} claim={opened} actions={everyAction} groupOf={groupOf} onClose={drawer.close} />
-      )}
-      {drawer.error && !opened && !pages.loading && (
-        <ErrorDrawerGone onClose={drawer.close} />
-      )}
+      {drawer.error && <GeoErrorGroupDrawer geoId={geoId} project={project} fingerprint={drawer.error}
+        selectionRef={diagnosis.selection?.reference} actions={everyAction} groupOf={groupOf} onClose={drawer.close} onRefreshScope={refresh}/>}
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );
@@ -403,15 +396,4 @@ export function errorTotals(diagnosis: GeoDiagnosis, rows: readonly GeoErrorRow[
     closed: rows.filter((error) => error.judgmentState !== "withdrawn" && error.status === "closed").length,
     severe: rows.filter(isSevereError).length,
   };
-}
-
-/** A link to a claim the list no longer holds (the round moved on, or it was closed and trimmed): said, and the way back. */
-function ErrorDrawerGone({ onClose }: { onClose: () => void }) {
-  return (
-    <Drawer title="这条说法已经不在清单里了" onClose={onClose}>
-      <Note action={<Button variant="secondary" size="sm" onClick={onClose}>回到清单</Button>}>
-        新的一轮测量里没有再测到它，或者它已经关闭。
-      </Note>
-    </Drawer>
-  );
 }

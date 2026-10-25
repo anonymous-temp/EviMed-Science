@@ -4,6 +4,7 @@ import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { ProductDocuments } from '../src/productStore.mjs';
 import { GeoStore } from '../src/geoStore.mjs';
 import { GeoService } from '../src/geoService.mjs';
+import { GeoSignals } from '../src/geoSignals.mjs';
 import { GeoPlanContext, freezeGeoPlanBasis, geoPlanDigest } from '../src/geoPlanContext.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
@@ -38,7 +39,8 @@ test('a PostgreSQL Date is serialized before the frozen basis is hashed or store
 
 test('fresh signal bases use their persisted JSON identity while legacy recorded digests are preserved on retry', options, async t => {
   const f = await fixture(t), date = new Date('2026-10-20T01:02:03.000Z');
-  f.service.signals = { stageInput: async () => ({ basis: { handlingKey: 'signal-json', capturedAt: date, nested: [date] }, draft: 'Review the preserved input' }) };
+  f.service.signals = new GeoSignals({ store: f.store, documents: f.documents, service: f.service, runs: async () => [] });
+  f.service.signals.stageInput = async () => ({ basis: { handlingKey: 'signal-json', capturedAt: date, nested: [date] }, draft: 'Review the preserved input' });
   const signal = await f.adapter.stage(f.user, f.project.id, { requestKey: 'signal-key', sessionId: 'native-session', mode: 'signal' });
   const signalRow = await f.adapter.resolve(f.user, f.project, signal.referenceId);
   assert.equal(signalRow.payload.basisDigest, geoPlanDigest(signalRow.payload.basis));

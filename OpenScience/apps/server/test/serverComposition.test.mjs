@@ -99,6 +99,7 @@ const RECURRING_SWEEPS = [
 const USER_ID = "composition-user";
 const PROJECT_ID = "composition-project";
 const ACCOUNT_CREATED_AT = "2026-01-01 00:00:00.123456+00";
+const PROJECT_CREATED_AT = "2026-01-02 00:00:00.234567+00";
 
 /** A row as `evimed_product.documents` stores one. */
 function documentRow(kind, id, payload) {
@@ -177,6 +178,15 @@ class FakePool extends EventEmitter {
     const sql = oneLine(text);
     this.statements.push(sql);
     this.calls.push({ sql, values: Array.isArray(values) ? values : [] });
+    if (sql.startsWith('SELECT u.id AS "ownerId",u.created_at::text AS "ownerCreatedAt", p.id AS "projectId",p.created_at::text AS "projectCreatedAt" FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id')) {
+      const owned = values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1]);
+      return { rows: owned ? [{ ownerId: USER_ID, ownerCreatedAt: ACCOUNT_CREATED_AT, projectId: values[1], projectCreatedAt: PROJECT_CREATED_AT }] : [], rowCount: owned ? 1 : 0 };
+    }
+    if (sql === "SELECT to_regclass('evimed_geo.projects') IS NOT NULL AS present") return { rows: [{ present: this.geoProjects.size > 0 }], rowCount: 1 };
+    if (sql === 'SELECT id FROM evimed_geo.projects WHERE user_id=$1 AND project_id=$2') {
+      const rows = [...this.geoProjects.values()].filter(row => row.user_id === values[0] && row.project_id === values[1]).map(row => ({ id: row.id }));
+      return { rows, rowCount: rows.length };
+    }
     if (sql === "SELECT current_setting('transaction_isolation') AS isolation") return { rows: [{ isolation: this.transactionIsolation }], rowCount: 1 };
     if (sql === "SELECT clock_timestamp()::timestamptz(3) AS created_at") return { rows: [{ created_at: new Date() }], rowCount: 1 };
     if (/^SELECT \* FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND id=\$3/.test(sql)) {
@@ -199,7 +209,7 @@ class FakePool extends EventEmitter {
     // Everything below is what the feedback loop needs and nothing else needs:
     // each branch is gated on the one kind it serves, so no statement any other
     // test depends on changes its answer.
-    if (/^INSERT INTO evimed_product\.documents\(user_id,kind,id,payload,project_id\)/.test(sql) && values[1] === "method") {
+    if (/^INSERT INTO evimed_product\.documents\(user_id,kind,id,payload,project_id\)/.test(sql) && ["method", "geo-plan-context"].includes(values[1])) {
       const key = `${values[1]}:${values[2]}`;
       if (this.documents.has(key)) return { rows: [], rowCount: 0 };
       const row = { ...documentRow(values[1], values[2], JSON.parse(values[3])), project_id: values[4] ?? null };
@@ -348,7 +358,7 @@ class FakePool extends EventEmitter {
     }
     if (/^SELECT id, name, password_hash, auth_type, created_at::text AS account_created_at FROM evimed_control\.users WHERE id = \$1/.test(sql)) {
       return values[0] === USER_ID
-        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: "2026-01-01 00:00:00+00" }], rowCount: 1 }
+        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT .* FROM evimed_geo\.projects WHERE id = \$1 AND user_id = \$2 AND deleted_at IS NULL$/.test(sql)) {
@@ -369,7 +379,7 @@ class FakePool extends EventEmitter {
       // The frontier feed's internal project, which its worker finds under
       // the operator account before its first batch.
       return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
-        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, created_at: PROJECT_CREATED_AT, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -875,7 +885,7 @@ test("a verification runs in a workspace that does not contain the report it is 
   for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
 
   const user = await fixture.app.store.userById(USER_ID);
-  assert.equal(user.accountCreatedAt, "2026-01-01 00:00:00+00", "the current-user fixture preserves the database account epoch");
+  assert.equal(user.accountCreatedAt, ACCOUNT_CREATED_AT, "the current-user fixture preserves the database account epoch");
   const project = await fixture.app.store.requireProject(user, PROJECT_ID);
   // The episode's own report, where the episode wrote it.
   await mkdir(path.join(project.workspaceDir, "reports"), { recursive: true });

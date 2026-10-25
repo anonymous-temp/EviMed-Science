@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { GEO_SIGNAL_KINDS, GEO_SIGNAL_DISPOSITIONS, GEO_SIGNAL_STATES, GEO_SIGNAL_STEPS, GEO_STEPS, geoSignalLifecycle } from '@evimed/domain';
 import { canonicalJson } from './geoStore.mjs';
 import { HttpError } from './security.mjs';
-import { packGeoSignalTargets, readGeoSignalTargets } from './geoSignalTargets.mjs';
+import { packGeoSignalTargets, readGeoSignalTargets, packGeoGroupChange, readGeoGroupChangeMembers } from './geoSignalTargets.mjs';
 import { summarizeGeoSourceReviews } from './geoSourceReviews.mjs';
+import { migrateProductStore } from './productPersistence.mjs';
 
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const fail = (code, message, status = 409) => new HttpError(status, code, message);
@@ -39,15 +40,49 @@ export class GeoSignals {
     this.sourceReviewForRun = sourceReviewForRun;
   }
 
+  /** The existing profile write/prune lock also covers publication of its deferred readers.
+   * Schemas are ready before checkout; all nested ledger operations borrow this exact client. */
+  async withValueRetention(project, operation) {
+    await this.store.ready();
+    await migrateProductStore(this.store.database);
+    return this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-value:' || $1))", [project.id]);
+      return operation();
+    }));
+  }
+
+  /** A captured event may have waited before publication. Never publish a
+   * historical lookup unless its exact owned version and finding bytes still exist. */
+  async #validateValueBasis(project, basis, targets) {
+    const findings = targets.filter(target => target.type === 'finding');
+    if (!findings.length && basis.profileVersionAtDetection == null) return;
+    if (!Number.isSafeInteger(basis.profileVersionAtDetection) || basis.profileVersionAtDetection < 1) throw fail('geo_signal_conflict', 'The preserved affected versions are unavailable.');
+    const profile = (await this.store.query(`SELECT v.data FROM evimed_geo.value_profiles v JOIN evimed_geo.projects g
+      ON g.id=v.geo_project_id AND g.user_id=v.user_id WHERE g.id=$1 AND g.user_id=$2 AND g.project_id=$3
+      AND g.deleted_at IS NULL AND v.version=$4`, [project.id, project.userId, project.projectId, basis.profileVersionAtDetection])).rows[0];
+    const byId = new Map((Array.isArray(profile?.data?.findings) ? profile.data.findings : []).map(finding => [finding.id, finding]));
+    if (!profile || findings.some(target => !byId.has(target.id) || digest(byId.get(target.id)) !== target.digest)) throw fail('geo_signal_conflict', 'The preserved affected versions are unavailable.');
+  }
+
   async record(project, event) {
     if (!GEO_SIGNAL_KINDS.includes(event.kind) || typeof event.objectKey !== 'string' || !event.objectKey || event.objectKey.length > 3000
       || typeof event.eventVersion !== 'string' || !event.eventVersion || event.eventVersion.length > 200
-      || !shape(event.basis, Object.keys(event.basis ?? {})) || event.kind !== 'source_changed' && Buffer.byteLength(JSON.stringify(event.basis)) > 200_000
+      || !shape(event.basis, Object.keys(event.basis ?? {})) || !['source_changed', 'group_changed'].includes(event.kind) && Buffer.byteLength(JSON.stringify(event.basis)) > 200_000
       || typeof event.title !== 'string' || !event.title.trim() || event.title.length > 1000) throw fail('geo_payload_invalid', 'Invalid preserved signal.', 400);
+    return event.kind === 'source_changed'
+      ? this.withValueRetention(project, () => this.#persistEvent(project, event)) : this.#persistEvent(project, event);
+  }
+
+  async #persistEvent(project, event) {
     const id = geoSignalId(project.id, event.kind, event.objectKey, event.eventVersion);
     const prior = await this.documents.get(project.userId, 'geo-signal', id);
-    if (prior) return this.requireRow(project, prior);
-    const packed = event.kind === 'source_changed' ? packGeoSignalTargets(project, id, event.basis) : { basis: event.basis, pages: [] };
+    if (prior) {
+      this.requireRow(project, prior);
+      if (event.kind === 'source_changed') await this.#validateValueBasis(project, prior.payload.basis, await readGeoSignalTargets(this.documents, project, prior));
+      return prior;
+    }
+    if (event.kind === 'source_changed') await this.#validateValueBasis(project, event.basis, event.basis.targets ?? []);
+    const packed = event.kind === 'group_changed' ? packGeoGroupChange(project, id, event.basis) : event.kind === 'source_changed' ? packGeoSignalTargets(project, id, event.basis) : { basis: event.basis, pages: [] };
     const payload = { recordType: 'geo-signal', schemaVersion: 1, geoId: project.id, kind: event.kind, step: GEO_SIGNAL_STEPS[event.kind],
       objectKey: event.objectKey, eventVersion: event.eventVersion, title: event.title, basis: packed.basis, basisDigest: digest(packed.basis),
       observedAt: iso(event.observedAt), detectedAt: this.now().toISOString(), disposition: 'active', dispositionBy: null,
@@ -202,10 +237,30 @@ export class GeoSignals {
       nextCursor: remaining.length > limit && last ? Buffer.from(JSON.stringify([scope, last.createdAt, last.id])).toString('base64url') : null };
   }
 
+  /** A viewer can page the event's preserved samples even when the live selection has changed. */
+  async members(user, geoId, id, input = {}) {
+    if(!shape(input,['side','offset','limit','metricKey','expectedBasisDigest'])||!['before','after'].includes(input.side)
+      ||!/^\d{1,5}$/.test(String(input.offset??0))||!/^\d{1,2}$/.test(String(input.limit??20))
+      ||Number(input.offset??0)>20000||Number(input.limit??20)<1||Number(input.limit??20)>50
+      ||!/^([a-f0-9]{64})$/.test(input.expectedBasisDigest??'')
+      ||input.metricKey!=null&&(typeof input.metricKey!=='string'||!input.metricKey||input.metricKey.length>160))throw fail('geo_payload_invalid','Choose a preserved sample page.',400);
+    const project=await this.service.requireProject(user,geoId),row=await this.row(project,id);
+    if(row.payload.kind!=='group_changed'||row.payload.basisDigest!==input.expectedBasisDigest)throw fail('geo_signal_conflict','Refresh this signal before reading its samples.');
+    return {...await readGeoGroupChangeMembers(this.documents,project,row,{side:input.side,metricKey:input.metricKey??null,offset:Number(input.offset??0),limit:Number(input.limit??20)}),basisDigest:row.payload.basisDigest};
+  }
+
   async detail(user, geoId, id) {
     const project = await this.service.requireProject(user, geoId);
     const [row, execution] = await Promise.all([this.row(project, id), this.executions(project)]);
-    return { ...await this.projectRow(project, row, execution), basis: row.payload.basis, basisDigest: row.payload.basisDigest,
+    let groupMembers = null;
+    if (row.payload.kind === 'group_changed') {
+      groupMembers = {};
+      for (const side of ['before', 'after']) {
+        try { groupMembers[side] = { availability: 'preserved', ...await readGeoGroupChangeMembers(this.documents, project, row, { side, limit: 5 }) }; }
+        catch { groupMembers[side] = { availability: 'unknown', items: [], total: null }; }
+      }
+    }
+    return { ...await this.projectRow(project, row, execution), groupMembers, basis: row.payload.basis, basisDigest: row.payload.basisDigest,
       targets: await readGeoSignalTargets(this.documents, project, row),
       dispositionReason: row.payload.dispositionReason };
   }
@@ -229,7 +284,9 @@ export class GeoSignals {
     if (row.payload.kind === 'order_anomaly') throw fail('geo_payload_invalid', 'Open the existing order to resolve its state.', 400);
     const intents = row.payload.kind === 'source_changed' ? ['review', 'analyse'] : row.payload.kind === 'error_observed' ? ['correct', 'analyse'] : ['analyse'];
     if (!intents.includes(input.intent)) throw fail('geo_payload_invalid', 'Choose a supported action for this signal.', 400);
+    if (row.payload.kind === 'group_changed') for (const side of ['before', 'after']) await readGeoGroupChangeMembers(this.documents, project, row, {side, limit: 1});
     const targets = await readGeoSignalTargets(this.documents, project, row);
+    if (row.payload.kind === 'source_changed') await this.#validateValueBasis(project, row.payload.basis, targets);
     const focus = input.focusRefs ?? targets.map(target => target.key);
     if (!Array.isArray(focus) || focus.length > 100 || new Set(focus).size !== focus.length || focus.some(key => typeof key !== 'string' || !targets.some(target => target.key === key))) {
       throw fail('geo_payload_invalid', 'Choose only preserved affected versions.', 400);

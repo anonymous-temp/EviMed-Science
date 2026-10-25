@@ -25,8 +25,8 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...client,
 }));
 
-const createSession=vi.hoisted(()=>vi.fn());
-vi.mock("@/lib/apiClient",async original=>({...await original<typeof import("@/lib/apiClient")>(),createWebRuntimeSession:createSession}));
+const moduleSession=vi.hoisted(()=>vi.fn());
+vi.mock("@/lib/geoNativeClient",async original=>({...await original<typeof import("@/lib/geoNativeClient")>(),openGeoConversation:moduleSession}));
 const open = vi.hoisted(() => vi.fn());
 vi.mock("../useOpenGeoConversation", () => ({ useOpenGeoConversation: () => open }));
 
@@ -44,6 +44,7 @@ function renderPlan(reload: () => void = () => undefined) {
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   open.mockReset().mockResolvedValue(true);
+  moduleSession.mockReset().mockImplementation(async(geoId,target)=>({projectId:project.projectId,sessionId:target.sessionId??"created-plan-session",scope:{kind:"geo",geoProjectId:geoId,sessionId:target.sessionId??"created-plan-session"}}));
   client.getGeoStrategy.mockResolvedValue(strategyFilled);
   client.getGeoProject.mockResolvedValue({...project,sessionId:"current-native-session"});
   client.stageGeoPlanContext.mockResolvedValue({referenceId:`gpc_${"a".repeat(64)}`,sessionId:"current-native-session",draft:"Selected plan draft"});
@@ -75,10 +76,11 @@ describe("方案: what it is", () => {
     expect(client.getGeoJourney).not.toHaveBeenCalled();
   });
 
-  it("draws no filter, no chip row and no tab list in its body: the tier is chosen in a column's header", async () => {
+  it("keeps plan tier controls separate from its embedded selected-analysis toolbar", async () => {
     const view = renderPlan();
     await screen.findByRole("heading", { name: "目标" });
-    expect(view.container.querySelectorAll("[role=tablist], [data-toolbar], [role=searchbox], input")).toHaveLength(0);
+    expect([...view.container.querySelectorAll("[role=tablist], [data-toolbar], [role=searchbox], input")].filter(node=>!node.closest("[data-geo-analysis]"))).toHaveLength(0);
+    expect(view.container.querySelector("[data-geo-analysis] [data-toolbar]")).toBeInTheDocument();
     // The only controls on the page that can be pressed are 「选这一档」 buttons: none is a chip of a filter group.
     for (const group of view.container.querySelectorAll("[role=group]")) {
       expect(group.querySelectorAll("[aria-pressed]"), group.getAttribute("aria-label") ?? "").toHaveLength(0);
@@ -350,14 +352,14 @@ it("labels frozen historical readings as plan-time values instead of current rea
 });
 
 
-it("creates the first ordinary session before staging a plan draft",async()=>{
+it("resolves the first module primary before staging a plan draft",async()=>{
   client.getGeoProject.mockResolvedValue({...project,sessionId:null});
-  createSession.mockReset().mockResolvedValue({id:"created-plan-session",kernel:"dsh"});
+
   client.stageGeoPlanContext.mockImplementation(async(_geo,input)=>({referenceId:"gpc_first_plan",sessionId:input.sessionId,draft:"Selected unsent plan"}));
   render(<MemoryRouter><GeoFrameHarness project={{...project,sessionId:null}} tab="plan"><PlanTab geoId="geo_1" project={{...project,sessionId:null}}/></GeoFrameHarness></MemoryRouter>);
   await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
   await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalledWith("geo_1",expect.objectContaining({sessionId:"created-plan-session",mode:"strategy"})));
-  expect(createSession).toHaveBeenCalledWith(project.projectId);
+  expect(moduleSession).toHaveBeenCalledWith("geo_1",{kind:"primary"});
   expect(open).toHaveBeenCalledTimes(1);
   expect(open).toHaveBeenCalledWith(expect.objectContaining({projectId:project.projectId,sessionId:"created-plan-session",geoPlanContext:{referenceId:"gpc_first_plan"}}),"Selected unsent plan");
 });
@@ -398,4 +400,21 @@ it("keeps non-head metric notes and multiline plain text visible without interpr
   expect(screen.getAllByText("Other metric")).toHaveLength(3);
   expect(screen.getAllByText(/<script>plain text<\/script>/)).toHaveLength(3);
   expect(view.container.querySelector("script")).toBeNull();
+});
+
+it("opens the exact source-plan primary before staging and keeps the draft unsent",async()=>{
+  client.getGeoProject.mockResolvedValue({...project,sessionId:null});
+  render(<MemoryRouter><GeoFrameHarness project={{...project,sessionId:null}} tab="plan"><PlanTab geoId="geo_1" project={{...project,sessionId:null}} sourceId={`src_${"a".repeat(32)}`} sourceUrl="https://example.org/exact-source" selectionRef="gsel_source"/></GeoFrameHarness></MemoryRouter>);
+  await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalledWith("geo_1",expect.objectContaining({sessionId:"created-plan-session",sourceId:`src_${"a".repeat(32)}`,url:"https://example.org/exact-source"})));
+  expect(moduleSession).toHaveBeenCalledWith("geo_1",{kind:"primary"});
+  expect(moduleSession.mock.invocationCallOrder[0]).toBeLessThan(client.stageGeoPlanContext.mock.invocationCallOrder[0]);
+  expect(client.stageGeoPlanContext.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]);
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:`gpc_${"a".repeat(64)}`}}),"Selected plan draft");
+});
+it("retains the source plan when an exact conversation is unavailable",async()=>{
+  moduleSession.mockRejectedValue(new Error("Selected conversation unavailable"));
+  renderPlan();await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await screen.findByText("方案暂时无法打开，请刷新后重试。");
+  expect(client.stageGeoPlanContext).not.toHaveBeenCalled();expect(open).not.toHaveBeenCalled();
 });

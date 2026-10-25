@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absentWord, coverageText, GEO_ERROR_STATUS_WORDS, groupName, platformName, withStartDate, zh } from "./geoText";
+import { absentWord, claimConditionsText, coverageText, GEO_ERROR_STATUS_WORDS, groupName, platformName, withStartDate, zh } from "./geoText";
 
 describe("a sentence assembled from values (spec §5.5)", () => {
   it("puts a half-width space where Chinese meets a Latin name or a digit, and only there", () => {
@@ -15,6 +15,12 @@ describe("a sentence assembled from values (spec §5.5)", () => {
 });
 
 describe("the reader's words for the platform's codes", () => {
+  it("preserves negative and zero clinical conditions rather than treating them as absent", () => {
+    expect(claimConditionsText({ population: "儿童", inLabel: false, elements: { dose: 0, form: "片剂" } }))
+      .toBe("适用人群：儿童；说明书范围：否；剂量：0；剂型：片剂");
+    expect(claimConditionsText({ population: null, dose: "", evidenceLevel: "high" })).toBe("适用条件未保留");
+    expect(claimConditionsText("餐后使用")).toBe("餐后使用");
+  });
   it("names a platform, keeps one already in Chinese, and never prints an unknown code", () => {
     expect(platformName("xhs")).toBe("小红书");
     expect(platformName("douyin")).toBe("抖音");

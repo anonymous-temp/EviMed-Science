@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
 import { notMigratedBecause } from "../src/nativeMemoryMigration.mjs";
-import { nativeMemoryRoot } from "../src/openVikingLayout.mjs";
+import { nativeMemoryRoot, openVikingUserId, userRootUri } from "../src/openVikingLayout.mjs";
 
 const userId = "native-export-owner";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -25,7 +25,7 @@ function fixture({ unavailable = false, foreign = false, many = false, migrated 
     ...extra,
   ];
   const sessions = {
-    configured: true, memoryRoot: () => root,
+    configured: true, memoryRoot: () => root, engineUser: openVikingUserId, userRoot: userRootUri,
     tree: async () => { if (unavailable) throw Object.assign(new Error("engine unavailable"), { code: "memory_engine_unavailable" }); return held.map(([name, value, project]) => ({ uri: `${root}/${name}`, isDir: false, modTime: "2026-10-21", size: value.length, tags: project ? [`project=${project}`] : [] })); },
     read: async (_user, uri) => held.find(([name]) => `${root}/${name}` === uri)?.[1],
   };

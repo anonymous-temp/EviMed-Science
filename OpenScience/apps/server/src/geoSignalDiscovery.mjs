@@ -1,3 +1,5 @@
+import { readGeoSignalProgress, writeGeoSignalProgress, geoSignalProgressSuperseded } from './geoSignalProgress.mjs';
+import { GeoGroupChanges } from './geoGroupChanges.mjs';
 import { createHash } from 'node:crypto';
 import { geoValueImpacts } from '@evimed/domain';
 import { canonicalJson } from './geoStore.mjs';
@@ -34,7 +36,7 @@ export function geoSourceImpactEvent(profile, impact, articles, claims) {
 
 /** Bounded reconciliation through the existing leased GEO worker and its existing durable marks. */
 export class GeoSignalDiscovery {
-  constructor({ store, signals, now = () => new Date(), report = (_code) => {} }) { this.store = store; this.signals = signals; this.now = now; this.report = report; }
+  constructor({ store, signals, now = () => new Date(), report = (_code) => {} }) { this.store = store; this.signals = signals; this.now = now; this.report = report; this.groups = new GeoGroupChanges({store, signals, now}); }
 
   async errorEvents(project, row) {
     const error = errorRow(row);
@@ -43,10 +45,10 @@ export class GeoSignalDiscovery {
       const snapshotId = occurrence.snapshotId ?? occurrence.after?.snapshotId;
       const snapshot = snapshotId ? (await this.store.query(`SELECT s.id,s.round_id,s.question_id,s.engine,s.asked_at,s.answer_sha256,
         f.statements,r.ref,q.group_id,q.set_version FROM evimed_geo.snapshots s
-        LEFT JOIN evimed_geo.facts f ON f.snapshot_id=s.id AND f.geo_project_id=s.geo_project_id
-        LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id AND r.geo_project_id=s.geo_project_id
-        LEFT JOIN evimed_geo.questions q ON q.id=s.question_id AND q.geo_project_id=s.geo_project_id
-        WHERE s.geo_project_id=$1 AND s.id=$2`, [project.id, snapshotId])).rows[0] : null;
+        LEFT JOIN evimed_geo.facts f ON f.snapshot_id=s.id AND f.geo_project_id=s.geo_project_id AND f.user_id=s.user_id
+        LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id AND r.geo_project_id=s.geo_project_id AND r.user_id=s.user_id
+        LEFT JOIN evimed_geo.questions q ON q.id=s.question_id AND q.geo_project_id=s.geo_project_id AND q.user_id=s.user_id
+        WHERE s.geo_project_id=$1 AND s.id=$2 AND s.user_id=$3`, [project.id, snapshotId, project.userId])).rows[0] : null;
       // A missing historic snapshot is unknown evidence, not a link to the latest answer.
       const statement = geoErrorOrigin(list(snapshot?.statements), error, list(snapshot?.ref?.evaluationBasis?.claims), { includeNonWrong: true });
       const eventVersion = occurrence.kind === 'first' ? 'first' : digest(occurrence);
@@ -64,11 +66,14 @@ export class GeoSignalDiscovery {
   }
 
   async sources(project) {
-    const [profile, articles, claims] = await Promise.all([this.store.latestValue(project.id), this.store.listArticles(project.id), this.store.listClaims(project.id)]);
-    for (const impact of geoValueImpacts(profile.data, articles)) {
-      const row = await this.signals.record(project, geoSourceImpactEvent(profile, impact, articles, claims));
-      await this.signals.deliver(project, row);
-    }
+    const rows = await this.signals.withValueRetention(project, async () => {
+      const [profile, articles, claims] = await Promise.all([this.store.latestValue(project.id), this.store.listArticles(project.id), this.store.listClaims(project.id)]);
+      const recorded = [];
+      for (const impact of geoValueImpacts(profile.data, articles)) recorded.push(await this.signals.record(project, geoSourceImpactEvent(profile, impact, articles, claims)));
+      return recorded;
+    });
+    // Notification delivery never holds a profile retention lock or database client.
+    for (const row of rows) await this.signals.deliver(project, row);
   }
 
   async citations(project, snapshots) {
@@ -118,59 +123,62 @@ export class GeoSignalDiscovery {
   }
 
   async project(project) {
-    const mark = (await this.store.query('SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key=$2', [project.id, MARK])).rows[0]?.detail ?? {};
-    const [errors, snapshots, events] = await Promise.all([
-      this.store.query('SELECT * FROM evimed_geo.errors WHERE geo_project_id=$1 AND id>$2 ORDER BY id LIMIT $3', [project.id, mark.errorId ?? '', PAGE]),
-      this.store.query(`SELECT s.*,${geoMarketReadTimestamp('s.created_at')} AS _cursor_at FROM evimed_geo.snapshots s WHERE geo_project_id=$1
-        AND ($2::timestamptz IS NULL OR (created_at,id)>($2::timestamptz,$3)) ORDER BY created_at,id LIMIT $4`, [project.id, mark.snapshotAt ?? null, mark.snapshotId ?? '', PAGE]),
-      this.store.query(`SELECT e.*,o.article_id,o.article_result_version_id,o.article_digest,${geoMarketReadTimestamp('e.at')} AS _cursor_at
-        FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id=e.order_id WHERE o.geo_project_id=$1
-        AND ($2::timestamptz IS NULL OR (e.at,e.id)>($2::timestamptz,$3)) ORDER BY e.at,e.id LIMIT $4`, [project.id, mark.orderAt ?? null, mark.orderEventId ?? '', PAGE]),
-    ]);
-    for (const error of errors.rows) await this.errorEvents(project, error);
-    // Source reconciliation has no incremental cursor. A malformed or oversized
-    // profile must not prevent independent answer and order observations.
-    let sourceError = null;
-    try { await this.sources(project); } catch (error) { sourceError = error; }
-    await this.citations(project, snapshots.rows);
-    await this.orders(project, events.rows);
-    const notifications = await this.signals.documents.list(project.userId, 'geo-signal', { projectId: project.projectId, limit: PAGE,
-      cursor: mark.noticeCursor ?? null, filter: { recordType: 'geo-signal', geoId: project.id } });
-    for (const row of notifications.items) if (!['citation_observed', 'group_changed'].includes(row.payload.kind)) await this.signals.deliver(project, row);
-    const tailSnapshot = snapshots.rows.at(-1), tailOrder = events.rows.at(-1);
-    const detail = { ...mark, lastError: null, noticeCursor: notifications.nextCursor, errorId: errors.rows.length === PAGE ? errors.rows.at(-1).id : '',
-      snapshotAt: tailSnapshot?._cursor_at ?? mark.snapshotAt ?? null, snapshotId: tailSnapshot?.id ?? mark.snapshotId ?? null,
-      orderAt: tailOrder?._cursor_at ?? mark.orderAt ?? null, orderEventId: tailOrder?.id ?? mark.orderEventId ?? null };
-    // Every cursor-bearing producer above is durable. Source reconciliation is
-    // retried in full and never shares those observation cursors.
-    await this.store.query(`INSERT INTO evimed_geo.schedule_marks(geo_project_id,key,user_id,kind,state,detail,updated_at)
-      VALUES($1,$2,$3,'notice','done',$4::jsonb,$5) ON CONFLICT(geo_project_id,key) DO UPDATE SET detail=EXCLUDED.detail,state='done',updated_at=EXCLUDED.updated_at`,
-    [project.id, MARK, project.userId, JSON.stringify(detail), this.now().toISOString()]);
-    if (sourceError) throw sourceError;
-    return { errors: errors.rows.length, snapshots: snapshots.rows.length, orders: events.rows.length };
+    let mark = await readGeoSignalProgress(this.store,project,MARK);
+    try {
+      let sourceError = null;
+      try { if ((await this.groups.project(project))?.superseded) return {superseded:true}; } catch (error) { sourceError = error; }
+      const [errors, snapshots, events] = await Promise.all([
+        this.store.query('SELECT * FROM evimed_geo.errors WHERE geo_project_id=$1 AND user_id=$4 AND id>$2 ORDER BY id LIMIT $3', [project.id, mark.errorId ?? '', PAGE, project.userId]),
+        this.store.query(`SELECT s.*,${geoMarketReadTimestamp('s.created_at')} AS _cursor_at FROM evimed_geo.snapshots s WHERE geo_project_id=$1 AND user_id=$5
+          AND ($2::timestamptz IS NULL OR (created_at,id)>($2::timestamptz,$3)) ORDER BY created_at,id LIMIT $4`, [project.id, mark.snapshotAt ?? null, mark.snapshotId ?? '', PAGE, project.userId]),
+        this.store.query(`SELECT e.*,o.article_id,o.article_result_version_id,o.article_digest,${geoMarketReadTimestamp('e.at')} AS _cursor_at
+          FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id=e.order_id WHERE o.geo_project_id=$1 AND o.user_id=$5
+          AND ($2::timestamptz IS NULL OR (e.at,e.id)>($2::timestamptz,$3)) ORDER BY e.at,e.id LIMIT $4`, [project.id, mark.orderAt ?? null, mark.orderEventId ?? '', PAGE, project.userId]),
+      ]);
+      for (const error of errors.rows) await this.errorEvents(project, error);
+      // Source reconciliation has no incremental cursor. A malformed or oversized
+      // profile must not prevent independent answer and order observations.
+      try { await this.sources(project); } catch (error) { sourceError = error; }
+      await this.citations(project, snapshots.rows);
+      await this.orders(project, events.rows);
+      const notifications = await this.signals.documents.list(project.userId, 'geo-signal', { projectId: project.projectId, limit: PAGE,
+        cursor: mark.noticeCursor ?? null, filter: { recordType: 'geo-signal', geoId: project.id } });
+      for (const row of notifications.items) if (!['citation_observed', 'group_changed'].includes(row.payload.kind)) await this.signals.deliver(project, row);
+      const tailSnapshot = snapshots.rows.at(-1), tailOrder = events.rows.at(-1);
+      const detail = { ...mark, lastError: null, noticeCursor: notifications.nextCursor, errorId: errors.rows.length === PAGE ? errors.rows.at(-1).id : '',
+        snapshotAt: tailSnapshot?._cursor_at ?? mark.snapshotAt ?? null, snapshotId: tailSnapshot?.id ?? mark.snapshotId ?? null,
+        orderAt: tailOrder?._cursor_at ?? mark.orderAt ?? null, orderEventId: tailOrder?.id ?? mark.orderEventId ?? null };
+      // Every cursor-bearing producer above is durable. Source reconciliation is
+      // retried in full and never shares those observation cursors.
+      mark = await writeGeoSignalProgress(this.store,project,MARK,detail,'done',this.now());
+      if (sourceError) throw sourceError;
+      return { errors: errors.rows.length, snapshots: snapshots.rows.length, orders: events.rows.length };
+    } catch (error) {
+      if (geoSignalProgressSuperseded(error)) return {superseded:true};
+      const code = typeof error?.code === 'string' ? error.code : 'geo_signal_discovery_failed';
+      try { await writeGeoSignalProgress(this.store,project,MARK,{...mark,lastError:code.slice(0,160)},'failed',this.now()); }
+      catch (failure) { if (geoSignalProgressSuperseded(failure)) return {superseded:true}; this.report('geo_signal_retry_schedule_failed'); }
+      throw error;
+    }
   }
 
   async tick() {
     const selected = await this.store.query(`SELECT p.user_id,p.project_id FROM evimed_geo.projects p
-      LEFT JOIN evimed_geo.schedule_marks m ON m.geo_project_id=p.id AND m.key=$1
+      LEFT JOIN evimed_geo.schedule_marks m ON m.geo_project_id=p.id AND m.user_id=p.user_id AND m.key=$1
       WHERE p.deleted_at IS NULL AND NOT p.internal ORDER BY m.updated_at NULLS FIRST,p.created_at,p.id LIMIT 5`, [MARK]);
     const counts = { projects: 0, failed: 0 };
     for (const item of selected.rows) {
       const project = await this.store.projectByControlProject(item.user_id, item.project_id);
       if (!project) continue;
-      try { await this.project(project); counts.projects++; }
+      try {
+        if ((await this.project(project))?.superseded) break;
+        counts.projects++;
+      }
       catch (error) {
         counts.failed++;
         const code = typeof error?.code === 'string' ? error.code : 'geo_signal_discovery_failed';
         this.report(code);
-        // Schedule fairness is independent of producer progress. A failed attempt
-        // changes no cursor, and is retried after other projects get their turn.
-        try {
-          await this.store.query(`INSERT INTO evimed_geo.schedule_marks(geo_project_id,key,user_id,kind,state,detail,updated_at)
-            VALUES($1,$2,$3,'notice','failed',$4::jsonb,$5) ON CONFLICT(geo_project_id,key) DO UPDATE
-            SET state='failed',detail=evimed_geo.schedule_marks.detail || EXCLUDED.detail,updated_at=EXCLUDED.updated_at`,
-          [project.id, MARK, project.userId, JSON.stringify({ lastError: code.slice(0, 160) }), this.now().toISOString()]);
-        } catch { this.report('geo_signal_retry_schedule_failed'); }
+        // The project attempt already wrote its failure through its exact read generation and lease fence.
       }
     }
     return counts;

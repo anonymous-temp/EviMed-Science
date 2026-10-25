@@ -231,3 +231,44 @@ test("the16MiB total budget is enforced even below the128-page count ceiling", (
     (error) => error.status === 422,
   );
 });
+
+function sameClaimObjects(count = 250) {
+  const objects = Array.from({length:count}, (_,index)=>({id:`answer-${index}`,snapshotId:`snapshot-${index}`,statement:{text:'Preserved statement '.repeat(90),verdict:'wrong'},position:index}));
+  const row={key:'same-claim',label:'Exact same claim',dimensions:{objects},values:{observations:{value:count,state:'known'}}};
+  return {digest:geoPlanDigest(objects),rows:[row],page:{total:1,shown:1,nextOffset:null},chart:null,comparison:null};
+}
+test('large same-row contexts keep aggregate values and page every frozen object without mutating input',async()=>{
+  const view=sameClaimObjects(),original=structuredClone(view),pack=freezeGeoAnalysisPages(view,{parentId:'gpc_parent',project,actorId:'actor'});
+  assert.deepEqual(view,original);assert.equal(pack.analysis.frozenPages.schemaVersion,2);
+  assert.ok(pack.pages.every(page=>Buffer.byteLength(JSON.stringify(page.payload))<=150000));
+  assert.ok(Buffer.byteLength(JSON.stringify(pack.analysis))<=200000);
+  const fixture=stored(pack),rowPage=await readFrozenGeoAnalysisPage(fixture.documents,project,fixture.parent,{limit:1});
+  assert.equal(rowPage.rows[0].key,view.rows[0].key);assert.deepEqual(rowPage.rows[0].values,view.rows[0].values);
+  assert.equal(rowPage.rows[0].dimensions.objects,undefined);assert.equal(rowPage.rows[0].dimensions.objectsContext.total,250);
+  const all=[];let offset=0;
+  while(offset!==null){const page=await readFrozenGeoAnalysisPage(fixture.documents,project,fixture.parent,{rowKey:'same-claim',columnKey:'objects',offset,limit:37});assert.ok(Buffer.byteLength(JSON.stringify(page))<4*1024*1024);all.push(...page.items);offset=page.nextOffset;}
+  assert.deepEqual(all,original.rows[0].dimensions.objects);assert.equal(geoPlanDigest(all),rowPage.rows[0].dimensions.objectsContext.digest);
+  const arbitrary=await readFrozenGeoAnalysisPage(fixture.documents,project,fixture.parent,{rowKey:'same-claim',columnKey:'objects',offset:121,limit:50});
+  assert.deepEqual(arbitrary.items,all.slice(121,121+arbitrary.items.length));
+});
+test('frozen object pages refuse missing, altered, cross-row and cross-project records',async()=>{
+  for(const mode of ['missing','altered','other-row','other-project']){
+    const pack=freezeGeoAnalysisPages(sameClaimObjects(),{parentId:'gpc_parent',project,actorId:'actor'}),fixture=stored(pack);
+    const descriptor=pack.analysis.frozenPages.objects[0].pages[0],record=fixture.records.get(descriptor.id);
+    if(mode==='missing')fixture.records.delete(descriptor.id);
+    if(mode==='altered')record.payload.objects[0].statement.text='Changed';
+    if(mode==='other-row')record.payload.rowKey='foreign';
+    if(mode==='other-project')record.projectId='foreign';
+    await assert.rejects(readFrozenGeoAnalysisPage(fixture.documents,project,fixture.parent,{rowKey:'same-claim',columnKey:'objects'}),{code:'geo_plan_basis_unavailable'},mode);
+  }
+});
+test('frozen object selectors preserve inline legacy rows and reject unrelated selectors or oversized single objects',async()=>{
+  const view=sameClaimObjects(2),pack=freezeGeoAnalysisPages(view,{parentId:'gpc_parent',project,actorId:'actor'}),fixture=stored(pack);
+  assert.deepEqual(pack.analysis,view);assert.equal(pack.pages.length,0);
+  const page=await readFrozenGeoAnalysisPage(fixture.documents,project,fixture.parent,{rowKey:'same-claim',columnKey:'objects',offset:1,limit:1});
+  assert.deepEqual(page.items,[view.rows[0].dimensions.objects[1]]);
+  await assert.rejects(readFrozenGeoAnalysisPage(fixture.documents,project,fixture.parent,{rowKey:'same-claim'}));
+  await assert.rejects(readFrozenGeoAnalysisPage(fixture.documents,project,fixture.parent,{rowKey:'missing',columnKey:'objects'}));
+  const giant=sameClaimObjects(1);giant.rows[0].dimensions.objects[0].statement.text='x'.repeat(200000);
+  assert.throws(()=>freezeGeoAnalysisPages(giant,{parentId:'gpc_parent',project,actorId:'actor'}),{code:'geo_plan_basis_too_large'});
+});

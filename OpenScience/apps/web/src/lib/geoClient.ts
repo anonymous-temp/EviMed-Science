@@ -346,6 +346,8 @@ export interface GeoCitedSource {
   basis?: "inline_marker" | "no_retrieval" | "not_attributable" | (string & {}) | null;
 }
 export interface GeoErrorRow {
+  originalErrorAssessment?: {statement: unknown;claim: unknown;temporalBasis: "first_preserved_error_assessment"} | null;
+  currentClaim?: {version: number | null;applicability: GeoErrorRow["applicability"];temporalBasis: "current_claim_context"};
   judgmentState?: "active" | "withdrawn";
   judgmentCorrection?: { kind: string; snapshotId: string; assessmentVersion?: string; previousAssessmentVersion?: string; changedAt: string } | null;
   judgmentHistory?: Array<{ kind: string; snapshotId: string; changedAt: string }>;
@@ -428,8 +430,8 @@ export interface GeoErrorSummary {
   byTrace: Record<string, number>;
   byEngineSeverity: Record<string, number>;
 }
-export interface GeoErrorPage { offset: number; limit: number; total: number; shown: number; more: boolean; nextOffset: number | null }
-export interface GeoErrorFilters { errorJudgmentState?: "active" | "withdrawn"; errorStatuses?: string[]; errorSeverities?: string[]; errorTypes?: string[]; errorSearch?: string; errorTrace?: string; errorLimit?: number; errorOffset?: number }
+export interface GeoErrorPage { populationRevision?: string; offset: number; limit: number; total: number; shown: number; more: boolean; nextOffset: number | null }
+export interface GeoErrorFilters { errorFingerprint?: string; errorJudgmentState?: "active" | "withdrawn"; errorStatuses?: string[]; errorSeverities?: string[]; errorTypes?: string[]; errorSearch?: string; errorTrace?: string; errorLimit?: number; errorOffset?: number }
 export interface GeoDiagnosis extends GeoScopedView {
   activeErrorSummary?: GeoErrorSummary;
   errorSummary?: GeoErrorSummary;
@@ -1218,7 +1220,7 @@ export async function listGeoProjects(): Promise<GeoProjectSummary[]> {
 }
 
 export function createGeoProject(input: { brandName?: string; coverageDays?: number; engines?: string[] } = {}) {
-  return productRequest<{ id: string; projectId: string; sessionId: string }>("/geo/projects", "POST", input);
+  return productRequest<{ id: string; projectId: string; sessionId: string | null }>("/geo/projects", "POST", input);
 }
 
 export async function getGeoProject(geoId: string, scope?: GeoReadScope): Promise<GeoProject> {

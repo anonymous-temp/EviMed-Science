@@ -123,7 +123,11 @@ test('producer cursor advances only after durable exact page sightings; repeated
   signals.record = async (...args) => { if (++n === 2) throw new Error('interrupted persistence'); return originalRecord(...args); };
   try { await assert.rejects(discovery.project(project), /interrupted persistence/); }
   finally { signals.record = originalRecord; }
-  assert.equal((await store.query("SELECT * FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key='signals:discovery:v1'", [project.id])).rows.length, 0);
+  const interrupted = (await store.query("SELECT state,detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key='signals:discovery:v1'", [project.id])).rows[0];
+  assert.equal(interrupted.state, 'failed');
+  assert.equal(interrupted.detail.snapshotId, undefined, 'an owned failure receipt does not advance the interrupted snapshot cursor');
+  assert.equal(interrupted.detail.orderEventId, undefined);
+  assert.equal(interrupted.detail.noticeCursor, undefined);
   await discovery.project(project);
   await discovery.project(project);
   const rows = (await documents.list(user.id, 'geo-signal', { projectId: project.projectId, limit: 100, filter: { recordType: 'geo-signal', kind: 'citation_observed', eventVersion: 'first_preserved_observation' } })).items;

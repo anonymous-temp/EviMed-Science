@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GeoCitedSource, GeoErrorRow, GeoProject } from "@/lib/geoClient";
+import type { GeoCitedSource, GeoDiagnosis, GeoErrorFilters, GeoErrorRow, GeoProject } from "@/lib/geoClient";
 import { diagnosisFilled, diagnosisWith, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
 import { actionFixture, actionsFilled, clustersFilled, clusterViewFixture, G_BRAND, G_EFFECT, questionSetFixture } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
@@ -123,7 +123,11 @@ const correction = actionFixture({
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   conversation.open.mockClear();
-  client.getGeoDiagnosis.mockResolvedValue(diagnosisWith(claims()));
+  client.getGeoDiagnosis.mockImplementation(async (_geoId: string, _scope: unknown, filters?: GeoErrorFilters) => {
+    const errors = filters?.errorFingerprint ? claims().filter(error => error.fingerprint === filters.errorFingerprint) : claims();
+    return { ...diagnosisWith(errors), selection: { reference: "gsel_exact" },
+      errorPage: { populationRevision: "stable", total: errors.length, shown: errors.length, offset: 0, limit: filters?.errorLimit ?? 100, more: false, nextOffset: null } } as GeoDiagnosis;
+  });
   client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
   client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [correction] });
   client.getGeoClusters.mockResolvedValue(clustersFilled);
@@ -140,6 +144,11 @@ const findClaim = (key: string) => waitFor(() => {
   const found = claimRow(key);
   if (!found) throw new Error(`no row for ${key}`);
   return found;
+});
+const findErrorRecord = () => waitFor(() => {
+  const record = document.querySelector<HTMLElement>("[data-geo-error-drawer]");
+  if (!record) throw new Error("error detail is still loading");
+  return record;
 });
 const claimKeys = () => [...document.querySelectorAll("[data-geo-claim]")].map((node) => node.getAttribute("data-geo-claim"));
 
@@ -327,8 +336,7 @@ describe("准确与安全: a claim's drawer", () => {
     const told = await findClaim("fp_a");
     await userEvent.click(within(told).getByRole("button", { name: /信尔美需要每天固定时间皮下注射一次/ }));
     await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("error=fp_a"));
-    const drawer = await screen.findByRole("dialog");
-    const record = drawer.querySelector("[data-geo-error-drawer='fp_a']") as HTMLElement;
+    const record = await findErrorRecord();
     expect(record).toHaveTextContent("说明书：本品每周注射一次。");
     // three rows, one per engine, each the way to the answer it was first said in
     const words = within(record).getAllByRole("link", { name: /信尔美需要每天固定时间皮下注射一次/ });
@@ -339,7 +347,7 @@ describe("准确与安全: a claim's drawer", () => {
   it("follows the claim to where each engine took it from, and to the group it was asked in", async () => {
     renderTab();
     await userEvent.click(within(await findClaim("fp_a")).getByRole("button", { name: /信尔美需要每天固定时间皮下注射一次/ }));
-    const record = (await screen.findByRole("dialog")).querySelector("[data-geo-error-drawer]") as HTMLElement;
+    const record = await findErrorRecord();
     const source = record.querySelector("[data-geo-error-source='baike.baidu.com']") as HTMLElement;
     expect(source.getAttribute("href")).toBe("/app/geo/geo_1/sources?source=baike.baidu.com");
     expect(record.querySelector("[data-geo-error-trace='noRetrieval']")).toHaveTextContent("这条回答没有引用任何来源");
@@ -350,7 +358,7 @@ describe("准确与安全: a claim's drawer", () => {
   it("shows the correction under way with its article, and the footer can ask for another", async () => {
     renderTab();
     await userEvent.click(within(await findClaim("fp_a")).getByRole("button", { name: /信尔美需要每天固定时间皮下注射一次/ }));
-    const record = (await screen.findByRole("dialog")).querySelector("[data-geo-error-drawer]") as HTMLElement;
+    const record = await findErrorRecord();
     const action = await waitFor(() => {
       const node = record.querySelector("[data-geo-error-action]");
       if (!node) throw new Error("no action");
@@ -365,7 +373,7 @@ describe("准确与安全: a claim's drawer", () => {
   it("says plainly when a claim has no correction, and starts one with one button", async () => {
     renderTab();
     await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: /哺乳期可以正常使用信尔美/ }));
-    const record = (await screen.findByRole("dialog")).querySelector("[data-geo-error-drawer]") as HTMLElement;
+    const record = await findErrorRecord();
     expect(within(record).getByText("这条说法还没有纠错稿。")).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
@@ -373,12 +381,12 @@ describe("准确与安全: a claim's drawer", () => {
 
   it("says so when the address names a claim the list no longer holds", async () => {
     renderTab(geoProject(), "/app/geo/geo_1/accuracy?error=gone");
-    expect(await screen.findByText("这条说法已经不在清单里了")).toBeInTheDocument();
+    expect(await screen.findByText("所选范围内没有这条说法")).toBeInTheDocument();
   });
 
   it("opens a question group's drawer from a name in it, in place of its own", async () => {
     renderTab(geoProject(), "/app/geo/geo_1/accuracy?error=fp_a");
-    const record = (await screen.findByRole("dialog")).querySelector("[data-geo-error-drawer]") as HTMLElement;
+    const record = await findErrorRecord();
     await userEvent.click(within(record).getAllByRole("link", { name: "品牌身份、规格与厂家" })[0]);
     await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent(`group=${G_BRAND}`));
     expect(screen.getByTestId("search")).not.toHaveTextContent("error=");
@@ -450,4 +458,16 @@ describe("准确与安全: nothing wrong", () => {
     expect(document.querySelector("[data-geo-error-list]")).toBeNull();
     expect(screen.queryByRole("heading", { name: "讲错清单，按严重度排序" })).toBeNull();
   });
+});
+
+it('opens an exact full group even when the ordinary list page does not contain it',async()=>{
+ client.getGeoDiagnosis.mockImplementation(async (_id:string,_scope:unknown,filters?:GeoErrorFilters)=>{
+  const errors=filters?.errorFingerprint==='fp_a'?claims().filter(item=>item.fingerprint==='fp_a'):[row('other',{fingerprint:'different'})];
+  return {...diagnosisWith(errors),selection:{reference:'gsel_exact'},errorPage:{populationRevision:'stable',offset:0,limit:filters?.errorLimit??100,total:errors.length,shown:errors.length,more:false,nextOffset:null}} as GeoDiagnosis;
+ });
+ renderTab(geoProject(),'/app/geo/geo_1/accuracy?error=fp_a&selectionRef=gsel_exact');
+ const record=await findErrorRecord();
+ expect(within(record).getAllByRole('link',{name:/信尔美需要每天固定时间皮下注射一次/})).toHaveLength(3);
+ expect(client.getGeoDiagnosis).toHaveBeenCalledWith('geo_1',{selectionRef:'gsel_exact'},{errorFingerprint:'fp_a',errorLimit:500,errorOffset:0});
+ expect(screen.queryByText('所选范围内没有这条说法')).toBeNull();
 });

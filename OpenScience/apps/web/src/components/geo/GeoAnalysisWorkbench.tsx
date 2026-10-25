@@ -35,18 +35,20 @@ import { metricUnit } from "./tabs/geoTabText";
 import { GeoAnalysisVisual } from "./GeoAnalysisVisual";
 import { useOpenPublication } from "./spine/useOpenPublication";
 import { SourceRelationship } from "./tabs/SourceRelationship";
-import { engineName } from "./geoText";
+import { engineName, claimConditionsText } from "./geoText";
 
 export function GeoAnalysisWorkbench({
   geoId,
   project,
   initialView = "V01",
   embedded = false,
+  initialDescriptor,
 }: {
   geoId: string;
   project: GeoProject;
   initialView?: GeoAnalysisId;
   embedded?: boolean;
+  initialDescriptor?: GeoAnalysisDescriptor;
 }) {
   const [expanded, setExpanded] = useState(false);
   if (embedded)
@@ -60,6 +62,7 @@ export function GeoAnalysisWorkbench({
             geoId={geoId}
             project={project}
             initialView={initialView}
+            initialDescriptor={initialDescriptor}
           />
         </Section>
       </div>
@@ -71,6 +74,7 @@ export function GeoAnalysisWorkbench({
           geoId={geoId}
           project={project}
           initialView={initialView}
+          initialDescriptor={initialDescriptor}
         />
       )}
     </Disclosure>
@@ -80,13 +84,15 @@ function AnalysisBody({
   geoId,
   project,
   initialView,
+  initialDescriptor,
 }: {
   geoId: string;
   project: GeoProject;
   initialView: GeoAnalysisId;
+  initialDescriptor?: GeoAnalysisDescriptor;
 }) {
   const scope = useGeoReadScope();
-  const [view, setView] = useState<GeoAnalysisDescriptor>({
+  const [view, setView] = useState<GeoAnalysisDescriptor>(initialDescriptor ?? {
     viewId: initialView,
     dimension: initialView === "V05" ? "group" : ["V02", "V03", "V04"].includes(initialView) ? "engine" : "project",
   });
@@ -159,7 +165,7 @@ function AnalysisPage({
     try {
       const current = await getGeoProject(geoId);
       const sessionId = await ensureGeoConversationSession(
-        project.projectId,
+        geoId, project.projectId,
         geoSessionIdFromChatPath(location.pathname) ||
           new URLSearchParams(location.search).get("session") ||
           current.sessionId ||
@@ -168,7 +174,7 @@ function AnalysisPage({
       const context = await stageGeoPlanContext(geoId, {
         requestKey: crypto.randomUUID(),
         sessionId,
-        mode: focus ? "strategy" : "analysis",
+        mode: focus && data.view.viewId === "V21" ? "strategy" : "analysis",
         selectionRef: data.selection.reference,
         view: data.view,
         expectedDigest: data.digest,
@@ -206,6 +212,15 @@ function AnalysisPage({
               { value: "V01", label: "当前水平与目标" },
               { value: "V02", label: "指标趋势" },
               { value: "V03", label: "可比变化排序" },
+              { value: "V10", label: "旅程与需求覆盖" },
+              { value: "V16", label: "主张条件与来源依据" },
+              { value: "V13", label: "讲错类型与严重程度" },
+              { value: "V23", label: "内容与发布覆盖" },
+              { value: "V24", label: "投放与发布状态" },
+              { value: "V25", label: "预算、结算与退款" },
+              { value: "V26", label: "方案冻结实测与规划目标" },
+              { value: "V15", label: "错误观察与处理历史" },
+              { value: "V27", label: "事件与采样观察" },
               { value: "V09", label: "推荐表达与条件" },
               { value: "V08", label: "已登记竞品与趋势" },
               { value: "V04", label: "平台指标比较" },
@@ -235,6 +250,14 @@ function AnalysisPage({
             ...(view.viewId==="V19"?[{kind:"select" as const,label:"来源交叉维度",value:view.sourceFacet??"engine",options:[{value:"engine",label:"平台"},{value:"group",label:"版本化问题群"}],onChange:(value:string|null)=>setView({...view,sourceFacet:value==="group"?"group":"engine"})}]:[]),
             {kind:"select" as const,label:"图表显示",value:String(view.topN??15),options:[5,15,30,50].map(value=>({value:String(value),label:`前 ${value} 项及其余`})),onChange:(value:string|null)=>setView({...view,topN:Number(value??15)})},
           ]:[]),
+          ...(view.viewId === "V25" ? [{kind:"select" as const,label:"收支维度",value:view.financeFacet??"ledger",options:[{value:"ledger",label:"逐条账目与余额"},{value:"group",label:"明确关联的问题群"}],onChange:(value:string|null)=>setView({...view,financeFacet:value==="group"?"group":"ledger"})}] : []),
+          ...(view.viewId === "V26" ? [{kind:"select" as const,label:"方案版本",value:view.strategyVersion!=null?String(view.strategyVersion):null,allLabel:"所选范围最新方案",options:data?.view.strategyVersion?[{value:String(data.view.strategyVersion),label:`方案版本 ${data.view.strategyVersion}`}]:[],onChange:(value:string|null)=>setView({...view,strategyVersion:value?Number(value):undefined,targetVersion:undefined})}] : []),
+          ...(view.viewId === "V23" ? [{kind:"select" as const,label:"内容覆盖维度",value:view.publicationFacet??"group",options:[{value:"group",label:"问题群"},{value:"audience",label:"面向人群"},{value:"channel",label:"预期渠道"}],onChange:(value:string|null)=>setView({...view,publicationFacet:value==="audience"?"audience":value==="channel"?"channel":"group"})}] : []),
+          ...(view.viewId === "V13" ? [
+            {kind:"select" as const,label:"错误维度",value:view.errorFacet??"type",options:[{value:"type",label:"错误类型"},{value:"severity",label:"严重程度"}],onChange:(value:string|null)=>setView({...view,errorFacet:value==="severity"?"severity":"type"})},
+            {kind:"select" as const,label:"判定状态",value:view.errorView??"active",options:[{value:"active",label:"当前有效判定"},{value:"withdrawn",label:"已撤回判定"},{value:"all",label:"全部判定"}],onChange:(value:string|null)=>setView({...view,errorView:value==="all"?"all":value==="withdrawn"?"withdrawn":"active"})},
+          ] : []),
+          ...(view.viewId === "V16" ? [{kind:"select" as const,label:"证据视角",value:view.evidenceKind??"claims",options:[{value:"claims",label:"主张与来源"},{value:"findings",label:"发现表达"}],onChange:(value:string|null)=>setView({...view,evidenceKind:value==="findings"?"findings":"claims"})}] : []),
           ...(view.viewId === "V21" ? [{kind:"select" as const,label:"自有引用口径",value:view.ownedMetricId??"M-08",options:[{value:"M-08",label:"M-08 · 可追溯检索"},{value:"M-08S",label:"M-08S · 全部合资格回答"}],onChange:(value:string|null)=>setView({...view,ownedMetricId:value==="M-08S"?"M-08S":"M-08"})}] : []),
           ...(["V01", "V02", "V03"].includes(view.viewId)
             ? [
@@ -260,16 +283,16 @@ function AnalysisPage({
                 },
               ]
             : []),
-          ...(["V01", "V02", "V03", "V04", "V05", "V06", "V08"].includes(view.viewId) && view.entityKind !== "generic"
+          ...(["V01", "V02", "V03", "V04", "V05", "V06", "V08", "V27"].includes(view.viewId) && view.entityKind !== "generic"
             ? [
                 {
                   kind: "select" as const,
                   label: "指标",
                   value:
-                    view.metricId ?? (view.viewId === "V08" ? "M-16" : ["V02", "V03", "V04", "V05"].includes(view.viewId) ? "M-01" : null),
+                    view.metricId ?? (view.viewId === "V08" ? "M-16" : ["V02", "V03", "V04", "V05", "V27"].includes(view.viewId) ? "M-01" : null),
                   allLabel: view.viewId === "V01" ? "全部指标" : undefined,
                   options: Object.entries(GEO_METRIC_LABELS_ZH)
-                    .filter(([id]) => id.startsWith("M-") && (view.viewId !== "V08" || ["M-16","M-17"].includes(id)) && (!["V04", "V05"].includes(view.viewId) || !["M-16", "M-17", "M-18", "M-21"].includes(id)))
+                    .filter(([id]) => id.startsWith("M-") && (view.viewId !== "V08" || ["M-16","M-17"].includes(id)) && (!["V04", "V05", "V27"].includes(view.viewId) || !["M-16", "M-17", "M-18", "M-21"].includes(id)))
                     .map(([value, label]) => ({ value, label: String(label) })),
                   onChange: (value: string | null) =>
                     setView({ ...view, metricId: value }),
@@ -339,6 +362,22 @@ function AnalysisPage({
             .map(
               (reason) =>
                 ({
+                  finance_attribution_or_time_unknown:"部分金额缺少当前问题群资料、历史范围关联或记账日期，仍保留原始金额与已知历史关联；项目整体预算不分摊到问题群。",
+                  no_selected_business_events:"这个范围暂无匹配的已保留业务事件。",
+                  error_history_is_retained_observations:"只展示已保留的首见、最近及明确的历史记录；中间未保留的观察不作推测。",
+                  handling_context_unavailable:"处理任务的当前记录暂不可用；已保留事件仍可查看。",
+                  observation_time_unknown:"部分指标成员的观察时间未知，保留读数而不定位到时间轴。",
+                  group_history_scope_unavailable:"完整问题群的历史变化不代表这个更窄的筛选范围，已从本次事件计数中排除。",
+                  no_selected_ledger_entries:"这个范围暂无账目记录。",
+                  matching_plan_unavailable:"这个所选范围尚无匹配方案，可在现有方案中制定。",
+                  frozen_plan_basis_unavailable:"该历史方案未保留冻结依据，保持未知。",
+                  frozen_targets_unavailable:"该方案未保留规划目标。",
+                  plan_reading_or_estimate_unknown:"部分历史读数、费用或工作量未保留，保持未知；当前数据不补齐旧值。",
+                  publication_mapping_incomplete: "部分记录尚未关联到具体问题群或内容版本，已单独保留；这些记录不代表已经覆盖所选问题群。",
+                  content_format_unknown: "部分版本未保留可识别的文件格式，未知格式仍保留在明细中。",
+                  business_time_unknown: "部分业务记录未保留明确时间，已单独保留，不按采样时间补齐。",
+                  no_selected_publication_records: "这个范围尚无内容或发布记录。",
+                  verification_basis_incomplete: "部分主张缺少核实依据；已核实小计与待核实数量分别保留，未知不计为零。",
                   registered_metric_not_manual_relationship: "登记自有指标按现有域名与地址规则匹配；人工页面关系单独保留，不能互换。",
                   opportunity_denominators: "两条指标的合资格分母与样本要求可能不同。气泡面积仅表示实际回答样本；缺少关联对象不等于对象不存在。",
                   owned_not_registered: "尚未登记自有信源，Y 保留未知。可从现有行动登记自主发布地址。",
@@ -351,6 +390,8 @@ function AnalysisPage({
                   rival_history_unknown: "部分历史回答缺少登记实体依据，保持未知；阳性提及和合资格分母分别列出。",
                   generic_observation_identity_only: "通用名来自当前配置，不代表所选历史轮次的登记名称。通用名提及是独立观测；缺少匹配的历史实体提取时保留未知，不代表未提及，也不归因到品牌或剂型。",
                   no_selected_readings: "这个范围尚无可用读数。",
+                  no_preserved_evidence_observations: "这个范围尚无已保存的陈述判定或发现表达记录。",
+                  finding_definition_unavailable: "部分记录未保留当时的发现定义；保留版本与表达记录，不用最新定义补齐。",
                   original_categories_missing:
                     "所选问题尚未保留原始分类，可在问题导入中补充。",
                   unknown_sampling_time:
@@ -420,8 +461,16 @@ function AnalysisPage({
                   row.dimensions.engine ?? "\u0000",
                   engineName(row.dimensions.engine ?? ""),
                 )}
+                {row.dimensions.kind === "history_reading" && <p className="text-caption text-text-2">观察区间：{row.dimensions.observedFrom??"未知"} 至 {row.dimensions.observedTo??"未知"}{row.dimensions.unknownTimes?`；另有 ${row.dimensions.unknownTimes} 条时间未保留`:""}</p>}
+                {row.dimensions.kind === "error_history" && <p className="text-caption text-text-2">当前处置：{({open:"待处理",acting:"处理中",awaiting_remeasure:"等待再次观察",closed:"已关闭"} as Record<string,string>)[row.dimensions.currentStatus??""]??"未知"}；当前判定：{row.dimensions.currentJudgmentState==="withdrawn"?"已撤回":row.dimensions.currentJudgmentState==="active"?"有效":"未知"}</p>}
+                {row.dimensions.kind === "frozen_plan_target" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/plan${geoReadScopeQuery({selectionRef:data!.selection.reference})}&strategyVersion=${row.dimensions.strategyVersion}`)}>查看此版本方案与调整费用目标</Link>}
+                {row.dimensions.kind === "journey_need" && <Button size="sm" variant="text" disabled={!!project.access&&!project.access.abilities.includes("edit")} loading={busy} onClick={()=>void explain({rowKey:row.key,columnKey:"questions"})}>按此需求补充问题与内容</Button>}
+                {row.dimensions.kind === "journey_need" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/questions${geoReadScopeQuery({selectionRef:data!.selection.reference})}&group=${encodeURIComponent(row.dimensions.groupId??"")}`)}>查看问题与采集</Link>}
+                {row.dimensions.kind === "journey_unmapped" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/evidence`)}>补充证据与需求关联</Link>}
+                {row.dimensions.kind === "clinical_source_support" && <><p className="text-caption text-text-2">适用条件：{claimConditionsText(row.dimensions.applicability)} · 证据级别：{row.dimensions.evidenceLevel??"未知"}</p><Link className="text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/evidence${geoReadScopeQuery({selectionRef:data!.selection.reference})}`)}>查看或更新证据</Link></>}
+                {row.dimensions.kind === "finding_expression" && <p className="text-caption text-text-2">发现版本 {row.dimensions.basisVersion??"未知"} · {row.dimensions.definitionState==="known"?"已保留原始定义":"原始定义未保留"}</p>}
                 {row.dimensions.groupState && <p className="text-caption text-text-2">{row.dimensions.groupName} · 问题版本 {row.dimensions.setVersion??"未知"} · {row.dimensions.groupState==="known"?"已映射":row.dimensions.groupState==="unmapped"?"未映射":"未知"}</p>}
-                {row.dimensions.groupState === "known" && row.dimensions.groupId && <Link className="text-accent" to={sourceActionPath({group:row.dimensions.groupId})}>查看问题群与行动</Link>}
+                {row.dimensions.kind !== "journey_need" && row.dimensions.groupState === "known" && row.dimensions.groupId && <Link className="text-accent" to={sourceActionPath({group:row.dimensions.groupId})}>查看问题群与行动</Link>}
                 {row.dimensions.kind === "source_relationship" && <Disclosure summary="当前关系注释与编辑"><p className="text-caption text-text-3">当前上下文；采样时间单独保留，以下先列 10 条，全部页面见数值明细。</p>{row.dimensions.annotationContext?.pages.slice(0,10).map(annotation=><p key={annotation.url}><Button size="sm" variant="text" onClick={()=>setRelationshipUrl(annotation.url)}>{annotation.url} · {row.dimensions.annotationContext?.records[annotation.recordIndex].origin??"未知"} · 修订 {row.dimensions.annotationContext?.records[annotation.recordIndex].reference?.revision??"未标记"}</Button></p>)}</Disclosure>}
                 {row.dimensions.kind === "opportunity" && <>
                   <Button size="sm" variant="text" disabled={!!project.access&&!project.access.abilities.includes("edit")} loading={busy} onClick={()=>void explain({rowKey:row.key,columnKey:"owned"})}>按此问题群拟定方案</Button>
@@ -452,7 +501,8 @@ function AnalysisPage({
             cell: (row: GeoAnalysisRow) => {
               const value = row.values[column.key];
               const word =
-                value.state === "known" && value.value !== null
+                value.state === "partial" && value.knownSubtotal != null ? `${value.knownSubtotal}（已核实小计）`
+                : value.state === "known" && value.value !== null
                   ? typeof value.value === "string" ? sourceObservationWord(value.value) : value.metric
                     ? formatGeoValue(value.value, metricUnit(row.metricId ?? undefined))
                     : value.unit
@@ -486,7 +536,7 @@ function AnalysisPage({
             },
           })),
         ]}
-        footnote={["V17","V18","V19","V20","V22"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
+        footnote={["V15","V27"].includes(view.viewId)?"事件、任务与样本关联分别计数；样本可被多个事件引用，不是新增采样。采样读数保留实际观察区间，未知不补为零。":view.viewId==="V25"?"金额为人民币；历史余额使用完整项目账目前缀与当时预算，预留和退款不重复计为支出。":view.viewId==="V26"?"冻结实测、登记基线、当前实测与规划目标分别显示；费用为规划估计，未知不计为零。":["V17","V18","V19","V20","V22"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
       />
       {data && (
         <>
@@ -559,6 +609,7 @@ function unitWord(unit: string) {
   return (
     (
       {
+        business_events:"事件",history_answer_refs:"样本关联",history_target_refs:"关联材料",CNY:"元",weeks:"周",placements:"次",ledger_entries:"账目记录",ledger_balance_readings:"余额读数",target_rows:"规划目标",frozen_metric_readings:"冻结实测",
         percentage_points: "个百分点",
         rank: "名",
         percent: "%",
@@ -566,6 +617,8 @@ function unitWord(unit: string) {
         answers: "回答",
         asks: "任务",
         questions: "问题",
+        distinct_answered_questions: "已回答问题",
+        claims: "主张", findings: "发现", articles: "内容", result_versions: "内容版本", publications: "发布记录", article_formats: "内容文件格式", orders: "订单", order_events: "订单事件", error_records: "错误记录",
         statements: "陈述",
   expressions: "表达",
         records: "记录",
@@ -582,7 +635,9 @@ function sourceObservationWord(value:string):string {
 }
 
 function analysisReason(reason: string): string {
- return ({owned_not_registered:"尚未登记自有信源",group_metric_unavailable:"该问题群没有适用的指标读数",sampling_plan_unknown:"缺少完整采集计划，未引用保持未知",sampling_plan_incomplete:"采集计划缺少重复任务，未引用保持未知",scheduled_observation_missing:"计划中的重复采集尚无回答",sampling_scope_incomplete:"重复回答未完整落入所选范围",citation_completeness_unknown:"采集端未记录完整引用列表",citations_without_links:"引用缺少可核对链接",answer_not_returned:"失败或拒答，无法观察未引用",no_sampling:"未采样，保持未知",comparison_cohort_unknown:"可比问题或采集范围未知",sampling_time_unknown:"采样时间未知",sampling_order_unknown:"采样顺序未知",comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",own_brand_not_registered:"该范围未登记本品品牌，通用名独立观测",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";
+ if (reason === "verification_basis_incomplete") return "部分依据缺失，另见待核实主张";
+ if (reason === "verification_basis_unavailable") return "核实依据缺失，保持未知";
+ return ({frozen_reading_unavailable:"历史冻结读数未保留",not_recorded:"未记录或未估",association_context_unavailable:"关联依据未知",linked_not_verified:"已关联、尚未核实",owned_not_registered:"尚未登记自有信源",group_metric_unavailable:"该问题群没有适用的指标读数",sampling_plan_unknown:"缺少完整采集计划，未引用保持未知",sampling_plan_incomplete:"采集计划缺少重复任务，未引用保持未知",scheduled_observation_missing:"计划中的重复采集尚无回答",sampling_scope_incomplete:"重复回答未完整落入所选范围",citation_completeness_unknown:"采集端未记录完整引用列表",citations_without_links:"引用缺少可核对链接",answer_not_returned:"失败或拒答，无法观察未引用",no_sampling:"未采样，保持未知",comparison_cohort_unknown:"可比问题或采集范围未知",sampling_time_unknown:"采样时间未知",sampling_order_unknown:"采样顺序未知",comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",own_brand_not_registered:"该范围未登记本品品牌，通用名独立观测",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";
 }
 
 function OpportunityLinks({gaps,openPublication}:{gaps:NonNullable<GeoAnalysisRow['dimensions']['gaps']>;openPublication(version:string,digest:string):Promise<void>}) {

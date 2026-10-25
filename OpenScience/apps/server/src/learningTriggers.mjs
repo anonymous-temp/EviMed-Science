@@ -85,6 +85,7 @@
  */
 
 import { METHOD_INDUCTION_MIN_TRAJECTORIES, artifactShapesMatch, isLearningCorrection, isResearcherOwnedWork } from "@evimed/domain";
+import { contextPolicyIdentity } from "./geoContextItems.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset, memoryPausedFor } from "./researchMemory.mjs";
@@ -377,6 +378,7 @@ export class LearningTriggers {
    *   routinePeriodDays?: number,
    *   guestInfluence?: { assess: (userId: string, run: any) => Promise<{ guest: any[], uncorroborated: string[] }>,
    *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null,
+   *   contextProvenance?: any,
    *   evidence?: { afterRun: (project: any, run: any, options: { guestInfluence: boolean }) => Promise<unknown>,
    *     mirrorResultCorrected?: (project: any, input: { event: any, runId: string }) => Promise<unknown> } | null,
    *   onRefused?: ((reason: string) => void) | null,
@@ -386,8 +388,9 @@ export class LearningTriggers {
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
     routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null,
-    evidence = null, onRefused = null, repairShare = 0, onRepairSample = null }) {
+    evidence = null, onRefused = null, repairShare = 0, onRepairSample = null, contextProvenance = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
+    this.contextProvenance = contextProvenance;
     this.jobs = jobs;
     this.agentRuns = agentRuns;
     this.memory = memory;
@@ -516,7 +519,20 @@ export class LearningTriggers {
    */
   async queue(project, run, lesson) {
     try {
-      await this.jobs.enqueue(project.userId, "distill", lesson.payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
+      const policy = await this.contextProvenance?.policyFor(project);
+      let payload = lesson.payload;
+      if (policy?.kind === 'geo-project') {
+        const sourceRunIds = [...new Set([run.id,...(payload.sourceRunIds??[]),...(payload.feedback??[]).flatMap(event=>event.detail?.sourceRunIds??[])])];
+        const observations = [];
+        for (const runId of sourceRunIds) {
+          const source = await this.contextProvenance.resolveSourceRun(project.userId,project.id,runId);
+          if (!source) throw new Error('A canonical learning source is unavailable.');
+          observations.push(await this.contextProvenance.observeRun(project,source));
+        }
+        payload = { ...payload, sourceProjectId: project.id, contextPolicy: contextPolicyIdentity(policy),
+          inputReceiptRefs: [...new Set(observations.flatMap(source=>source.inputReceiptRefs))], sourceRunIds };
+      }
+      await this.jobs.enqueue(project.userId, "distill", payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
       return true;
     } catch (error) {
       this.#refused("enqueue_failed");

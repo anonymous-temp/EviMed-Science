@@ -112,3 +112,70 @@ test("duplicate rows, nonprogressing pagination and ledger failures never produc
   f.sources.list = async () => { throw Object.assign(new Error("database unavailable"), { code: "ledger_unavailable" }); };
   await assert.rejects(readKnowledgeSourceInputs(f.request), { code: "ledger_unavailable" });
 });
+
+test("historical page bindings exclude a source before any capture body is read", async () => {
+  const f = fixture();
+  const documents = { async list(_owner, _kind, options) { return { items: options.deleted ? [] : [{ id: "old-page", payload: { recordType: "wiki-page", pageSourceId: id(2) } }], nextCursor: null }; },
+    async history(_owner, _kind, _id, { beforeRevision }) { return beforeRevision ? [] : [{ revision: 1, payload: { recordType: "wiki-page", pageSourceId: id(1) } }]; } };
+  assert.equal(await readKnowledgeSourceInput({ ...f.request, documents }), null);
+  assert.equal(f.calls.filter(call => call[0] === "capture").length, 0);
+});
+
+import { knowledgeGenerationRoots, knowledgePolicyStamp, readSelectedKnowledgeGeneration, validKnowledgeExecution, writeKnowledgeManifest } from "../src/knowledgeGeneration.mjs";
+import { createKnowledgeCompileQualificationStub } from "./helpers/knowledgeCompileQualificationStub.mjs";
+import { OpenVikingResources } from "../src/openVikingResources.mjs";
+
+test("one selected generation requires completed exact tasks, frozen manifests, current captures and execution binding", async () => {
+  const f = fixture(2), rows = new Map();
+  const documents = { get: async (_owner, _kind, key) => rows.get(key) ?? null,
+    put: async (_owner, kind, key, payload, options) => { const row = { id: key, kind, projectId: options.projectId, revision: (rows.get(key)?.revision ?? 0) + 1, payload }; rows.set(key, row); return row; } };
+  const project = { userId: "owner", id: "project" }, generationId = `kg_${"a".repeat(32)}`;
+  const policy = knowledgePolicyStamp({ kind: "geo-project", ownerId: "owner", controlProjectId: "project", ownerCreatedAt: "2026-01-01", projectCreatedAt: "2026-02-01", referenceId: "floor", revision: 1, namespace: { id: "ns" } });
+  const resources = new OpenVikingResources({ client: {} }), roots = knowledgeGenerationRoots(resources, "owner", "project", generationId); roots.kg = null;
+  const raw = await readKnowledgeSourceInput(f.request);
+  const pageSource = f.records.get(id(2)); pageSource.payload.paths = [`knowledge-base/wiki/generations/${generationId}/index.md`];
+  const captured = await readKnowledgeSourceInput({ ...f.request, sourceId: id(2), allowGenerated: true });
+  const binding = { version: 1, mode: "openviking-resource-pipeline-direct-noexec", engineVersion: "0.5.1.1", imageDigest: `sha256:${"d".repeat(64)}`, upstreamCommit: "c".repeat(40),
+    backend: "direct", allowCompileExec: false, targetContextType: "resource", skillUri: "viking://agent/skills/llm-wiki", skillSha256: "b".repeat(64), configDigest: "e".repeat(64), qualificationDigest: "f".repeat(64) };
+  const request = { from: [roots.sources], to: roots.wiki, generationId, tree: "wiki", skill: "llm-wiki", instruction: "project", execution: binding };
+  assert.equal(validKnowledgeExecution(binding, request), true);
+  assert.equal(validKnowledgeExecution({ ...binding, allowCompileExec: true }, request), false);
+  const page = await documents.put("owner", "knowledge", "page", { recordType: "wiki-page", generationId, path: "index.md", tree: "wiki", pageSourceId: id(2) }, { projectId: "project" });
+  const outputs = [{ tree: "wiki", path: "index.md", uri: `${roots.wiki}/index.md`, mirrorRel: `generations/${generationId}/index.md`,
+    source: captured.receipt, displayedBytesSha256: pageSource.payload.fingerprint.sha256, engineBytesSha256: hash("engine"), recordId: page.id, recordRevision: page.revision, recordDigest: knowledgeDigest(page.payload) }];
+  const authority = createKnowledgeCompileQualificationStub({ bindingFor: () => binding });
+  await authority.qualify(policy, request, { mode: "live" });
+  const authorityRef = await authority.qualify(policy, request, { mode: "authority-reference" });
+  const task = { taskId: "task", status: "completed", terminal: true, result: { warnings: ["Partial output retained"] } };
+  const generation = { recordType: "knowledge-generation", generationId, status: "completed", policy, roots,
+    sourceSetDigest: knowledgeSourceSetDigest(policy, [raw]), inputs: await writeKnowledgeManifest(documents, "owner", "project", generationId, "inputs", [raw.receipt]),
+    outputs: await writeKnowledgeManifest(documents, "owner", "project", generationId, "outputs", outputs), outputDigest: knowledgeDigest(outputs),
+    qualificationRefs: { wiki: authorityRef },
+    tasks: { wiki: { request, requestDigest: knowledgeDigest(request), task, taskDigest: knowledgeDigest(task), taskId: "task" }, kg: { disabled: true } } };
+  const row = await documents.put("owner", "knowledge", generationId, generation, { projectId: "project" });
+  await documents.put("owner", "knowledge", "wiki:state:project", { selectedGeneration: { id: generationId, revision: row.revision, digest: knowledgeDigest(generation) } }, { projectId: "project" });
+  const input = { documents, sources: f.sources, project, policy, currentInputs: [raw], compileExecutionFor: authority.qualify };
+  const selected = await readSelectedKnowledgeGeneration(input);
+  assert.equal(selected.receipt.generationId, generationId);
+  assert.equal(selected.permitsSource(pageSource), true);
+  delete generation.qualificationRefs;
+  rows.get("wiki:state:project").payload.selectedGeneration.digest = knowledgeDigest(generation);
+  assert.equal(await readSelectedKnowledgeGeneration(input), null, "a request binding without an authority reference never certifies itself");
+  generation.qualificationRefs = { wiki: authorityRef };
+  rows.get("wiki:state:project").payload.selectedGeneration.digest = knowledgeDigest(generation);
+  authority.setOffline(true);
+  const offlineCalls = authority.calls.length;
+  assert.ok(await readSelectedKnowledgeGeneration(input), "intact mirrored outputs survive a transport outage");
+  assert.ok(authority.calls.slice(offlineCalls).every(call => call.mode === "completed-read"));
+  assert.equal(await readSelectedKnowledgeGeneration({ ...input, compileExecutionFor: async (_policy, _request, options) => { assert.equal(options.mode, "completed-read"); return null; } }), null);
+  assert.equal(await readSelectedKnowledgeGeneration({ ...input, currentInputs: [] }), null);
+  pageSource.revision += 1;
+  assert.equal(await readSelectedKnowledgeGeneration(input), null, "identical file bytes cannot upgrade an unbound source revision");
+  pageSource.revision -= 1;
+  rows.get("page").revision += 1;
+  assert.equal(await readSelectedKnowledgeGeneration(input), null, "a concurrent page edit invalidates publication");
+  rows.get("page").revision -= 1;
+  authority.revokeEnvironment();
+  assert.equal(await readSelectedKnowledgeGeneration(input), null, "known environment revocation invalidates a historical receipt");
+  assert.throws(() => knowledgeGenerationRoots(resources, "owner", "project", "../library"), { code: "knowledge_generation_invalid" });
+});

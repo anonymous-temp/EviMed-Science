@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useState } from "react";
 import { Download } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -59,9 +60,10 @@ export function JourneyTab({ geoId, project, toolbar }: { geoId: string; project
     : toolbar ?? null);
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
-  if (!journey || empty) return <StepPending geoId={geoId} project={project} step="journey" />;
+  if (!journey || empty) return <><StepPending geoId={geoId} project={project} step="journey" /><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V10" embedded /></>;
   return (
     <div data-geo-tab="journey">
+      <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V10" embedded />
       <div>
         {current === "journey" && <Stages stages={journey.stages} />}
         {current === "care" && <CareNodes nodes={journey.careNodes} />}

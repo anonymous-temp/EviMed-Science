@@ -27,12 +27,12 @@
  *   orchestrator's marks — so a restart or a second process does not run a
  *   daily loop twice), else remembered in memory.
  * - **Leased across processes.** A loop marked `leased` (the orchestrator's
- *   two and every market tick) runs inside `lease(loop, work)` — a session
- *   advisory lock per loop on a dedicated connection — so two control planes,
- *   or a tick that outlived its interval in one of them, never run the same
- *   tick at once: the market's money path assumes it is alone. A loop whose
- *   lease another process holds is skipped this time (`last.held`), not
- *   failed. The measurement ticks take their own locks (the probe's).
+ *   two and every market tick) runs inside `lease(loop, work)`, composed as
+ *   the orchestrator's expiring row lease. A callback can outlive that lease;
+ *   the signals producer fences its short progress writes against the exact
+ *   acquisition token and expiry. The market and measurement packages retain
+ *   their own transaction/session locks. A loop whose lease another process
+ *   holds is skipped this time (`last.held`), not failed.
  * - Every loop checks `canRun` (the maintenance lease's `claimingAllowed`)
  *   before it starts, like every other worker of this control plane.
  *

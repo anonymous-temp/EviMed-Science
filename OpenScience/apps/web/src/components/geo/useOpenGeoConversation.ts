@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
-import { getGeoProject, listGeoProjects } from "@/lib/geoClient";
+import { listGeoProjects } from "@/lib/geoClient";
 import { geoChatPath, geoSessionIdFromChatPath } from "@/lib/geoLocation";
-import { useProjectStore } from "@/lib/projects";
+import { openGeoConversation } from "@/lib/geoNativeClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { resolveGeoTab } from "./geoTabs";
 import { toast } from "@/lib/toast";
@@ -19,25 +19,7 @@ export interface GeoConversationTarget {
   exactSession?: boolean;
 }
 
-/**
- * Open a GEO project's conversation, optionally with a draft in the composer.
- *
- * A GEO project is an ordinary control-plane project, and a conversation
- * belongs to the project the shell is in — the intent names it. So the shell
- * switches to the GEO project first (in place, `useProjectStore.select`) and
- * mints the intent only once it is there, in the same render as the
- * navigation, as the project list does. The draft is never sent: it waits in
- * the composer for the reader.
- *
- * The project list is re-read first when the project is not in it yet — a
- * project created a moment ago — so the sidebar shows the project it lands in.
- *
- * It never rejects. A project that cannot be proved or opened (the network, a
- * project deleted in another tab) is said in a toast, once, here, and the
- * answer is `false`: every button that calls this gives its spinner back and
- * nothing is left to swallow at the call site. `true` is a conversation that
- * was opened.
- */
+/** Open an exact module descriptor in the existing native composer. Drafts remain unsent. */
 export function useOpenGeoConversation() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,31 +32,24 @@ export function useOpenGeoConversation() {
     if (!live.current || arrival.current !== location.key) return false;
     const request = ++generation.current;
     const from = location.key;
-    let superseded = false;
-    const unsubscribe = useProjectStore.subscribe((state, previous) => {
-      if (state.currentId !== previous.currentId || state.switching !== previous.switching) superseded = true;
-    });
-    const current = () => live.current && !superseded && generation.current === request && arrival.current === from;
+    const current = () => live.current && generation.current === request && arrival.current === from;
     try {
-      const store = useProjectStore.getState();
-      if (!store.projects.some((project) => project.id === target.projectId)) await store.load();
-      if (!current()) return false;
-      const geoId = target.geoId ?? (await listGeoProjects()).find((project) => project.projectId === target.projectId)?.id;
+      if (target.exactSession && !target.sessionId) throw new Error("The selected GEO conversation is unavailable.");
+      const matches = target.geoId ? [] : (await listGeoProjects()).filter(project => project.projectId === target.projectId);
+      const geoId = target.geoId ?? (matches.length === 1 ? matches[0].id : undefined);
       if (!current()) return false;
       if (!geoId) throw new Error("GEO project unavailable");
-      const project = await getGeoProject(geoId);
-      if (!current()) return false;
-      if (project.projectId !== target.projectId) throw new Error("GEO project mismatch");
       const sameProject = location.pathname.startsWith(`/app/geo/${encodeURIComponent(geoId)}/`) || location.pathname === `/app/geo/${encodeURIComponent(geoId)}`;
       const selectedSession = sameProject ? geoSessionIdFromChatPath(location.pathname) || new URLSearchParams(location.search).get("session") : null;
-      const sessionId = ((target.geoPlanContext || target.resultRevision || target.exactSession) ? target.sessionId || selectedSession : selectedSession || target.sessionId) || project.sessionId || undefined;
-      unsubscribe();
-      let opened = false;
-      await useProjectStore.getState().select(target.projectId, () => {
-        opened = true;
-        const intent = newRuntimeUiIntent(draft, sessionId);
-        if (target.geoPlanContext) { intent.kind = "open"; intent.geoPlanContext = target.geoPlanContext; }
-        if (target.resultRevision) { intent.kind = "open"; intent.resultRevision = target.resultRevision; }
+      const exactSession = ((target.geoPlanContext || target.resultRevision || target.exactSession) ? target.sessionId || selectedSession : selectedSession || target.sessionId);
+      const descriptor = await openGeoConversation(geoId, exactSession ? { kind: "session", sessionId: exactSession } : { kind: "primary" });
+      if (!current()) return false;
+      if (descriptor.projectId !== target.projectId || descriptor.scope.geoProjectId !== geoId || descriptor.sessionId !== descriptor.scope.sessionId
+        || exactSession && exactSession !== descriptor.sessionId) throw new Error("GEO conversation mismatch");
+      const intent = newRuntimeUiIntent(draft, descriptor.sessionId, { projectId: descriptor.projectId, scope: descriptor.scope });
+      intent.kind = "open";
+      if (target.geoPlanContext) intent.geoPlanContext = target.geoPlanContext;
+      if (target.resultRevision) intent.resultRevision = target.resultRevision;
         const params = new URLSearchParams(sameProject ? location.search : "");
         if (sameProject && !location.pathname.includes("/chat")) {
           const part = location.pathname.split("/")[4];
@@ -85,12 +60,11 @@ export function useOpenGeoConversation() {
           state: { runtimeUiIntent: intent },
           flushSync: true,
         });
-      });
-      return opened;
+      return true;
     } catch (error: unknown) {
       if (!current()) return false;
       toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" }));
       return false;
-    } finally { unsubscribe(); }
+    }
   }, [navigate, location.key, location.pathname, location.search]);
 }

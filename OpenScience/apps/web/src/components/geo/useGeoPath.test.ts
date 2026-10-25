@@ -24,3 +24,9 @@ it("carries the actual addressed native session through source and plan navigati
   expect(url.searchParams.get("session")).toBe("current-session");
   expect(url.searchParams.getAll("groupIds")).toEqual(["g1"]);
 });
+
+ it('a destination saved selection replaces all inherited filters but preserves the active conversation',()=>{
+  const result=geoPathWithContext('/app/geo/g/accuracy?selectionRef=gsel_exact&error=rare',{pathname:'/app/geo/g/visibility',search:'?round=latest&from=2026-10-01&engines=kimi&groupIds=unrelated&session=ses1'});
+  const query=new URL(result,'https://local.example').searchParams;
+  expect([...query.entries()].sort()).toEqual([['error','rare'],['selectionRef','gsel_exact'],['session','ses1']]);
+ });

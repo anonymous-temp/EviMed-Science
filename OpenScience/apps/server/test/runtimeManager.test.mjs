@@ -1693,11 +1693,9 @@ test("RuntimeManager serializes concurrent starts for the same project", async (
   assert.equal(starts, 1);
 });
 
-test("RuntimeManager stops an in-flight start after stop is requested", async () => {
-  const manager = new RuntimeManager({
-    runtimeMode: "kernel",
-    runtimeSandboxMode: "docker",
-  });
+test("RuntimeManager stops an in-flight start after stop is requested", async t => {
+  const { manager, owned: project } = await stopFixture(t);
+  manager.runtimes.clear();
   let releaseStart;
   let closed = false;
   manager.startKernel = async () => {
@@ -1705,7 +1703,7 @@ test("RuntimeManager stops an in-flight start after stop is requested", async ()
       releaseStart = resolve;
     });
     return {
-      ...fakeRuntime(project.id),
+      ...fakeRuntime(project.id, project.workspaceDir),
       close: async () => {
         closed = true;
       },
@@ -1714,11 +1712,15 @@ test("RuntimeManager stops an in-flight start after stop is requested", async ()
 
   const started = manager.start(project);
   for (let i = 0; i < 20 && manager.starts.size === 0; i++) await sleep(1);
-  await manager.stop(project);
+  let stopSettled = false;
+  const stopped = manager.stop(project).then(value => { stopSettled = true; return value; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(stopSettled, false, "stop covers startup and provider cleanup");
   assert.equal(closed, false);
 
   releaseStart();
-  await started;
+  await Promise.allSettled([started]);
+  await stopped;
   for (let i = 0; i < 20 && !closed; i++) await sleep(1);
 
   assert.equal(closed, true);
@@ -4367,6 +4369,201 @@ test("maintenance refusal preserves a warm runtime when the workspace changes", 
   assert.equal(stopped, 0);
   assert.equal(manager.runtimes.get(manager.key(project)), warm);
   assert.equal((await manager.status(project)).running, true, "the still-running workspace remains available after refusal");
+});
+
+test("cold callers enroll before the first policy read and merge startup options", async () => {
+  let releasePolicy;
+  const policyGate = new Promise(resolve => { releasePolicy = resolve; });
+  let policies = 0, admissions = 0, boots = 0;
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  manager.contextPolicyFor = async p => {
+    policies += 1;
+    await policyGate;
+    return { kind: "owned", ownerId: p.userId, controlProjectId: p.id };
+  };
+  manager.pluginService = { withAdmission: async (_p, operation) => { admissions += 1; return operation(); } };
+  manager.makeRoomFor = async (_p, options) => assert.deepEqual(options, { opening: true, speculative: false, dispatch: true });
+  const runtime = { ...fakeRuntime(project.id), workspaceDir: project.workspaceDir };
+  manager.startKernel = async () => { boots += 1; return runtime; };
+  const first = manager.start(project, { speculative: true });
+  const joined = manager.start(project, { opening: true, dispatch: true });
+  assert.equal(manager.coldStartAttempts.size, 1, "cold enrollment precedes the first asynchronous policy result");
+  releasePolicy();
+  assert.deepEqual(await Promise.all([first, joined]), [runtime, runtime]);
+  assert.equal(boots, 1); assert.equal(admissions, 1);
+  assert.ok(policies >= 4, "each caller has its own authority checks");
+  assert.equal(manager.starts.size, 0);
+});
+
+test("cold waiters retain current authorization and refuse an incompatible workspace, scope or held transaction", async () => {
+  let finish, entered, revoked = false, held = false;
+  const gate = new Promise(resolve => { finish = resolve; });
+  const began = new Promise(resolve => { entered = resolve; });
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  manager.contextTransactionHeld = () => held;
+  manager.contextPolicyFor = async p => {
+    if (p.waiter && revoked) throw Object.assign(new Error("revoked"), { code: "memory_scope_denied" });
+    return { kind: "owned", ownerId: p.userId, controlProjectId: p.id };
+  };
+  const runtime = { ...fakeRuntime(project.id), workspaceDir: project.workspaceDir };
+  manager.startKernel = async () => { entered(); await gate; return runtime; };
+  const leader = manager.start(project);
+  await began;
+  const waiter = manager.start({ ...project, waiter: true });
+  // Observe the waiter immediately, even if a later assertion fails.
+  const rejected = assert.rejects(waiter, { code: "memory_scope_denied" });
+  try {
+    await assert.rejects(manager.start({ ...project, workspaceDir: project.workspaceDir + "-other" }), { code: "runtime_busy" });
+    await assert.rejects(manager.start(project, { boundedScope: { runId: "another" } }), { code: "runtime_busy" });
+    await assert.rejects(manager.startAdmitted(project, { replaceRuntime: async () => assert.fail("unrelated replacement must not run") }), { code: "runtime_busy" });
+    held = true;
+    await assert.rejects(manager.start(project), { code: "runtime_busy" });
+    held = false;
+    revoked = true;
+  } finally { held = false; finish(); }
+  assert.equal(await leader, runtime);
+  await rejected;
+  assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
+});
+
+for (const changed of ["policy", "runtime"]) test(`cold waiters refuse a ${changed} change during final authorization`, async () => {
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  let reads = 0;
+  manager.contextPolicyFor = async p => {
+    reads += 1;
+    if (manager.runtimes.has(manager.key(p))) {
+      if (changed === "runtime") manager.runtimes.set(manager.key(p), { workspaceDir: p.workspaceDir });
+      else return { kind: "owned", ownerId: "changed-owner", controlProjectId: p.id };
+    }
+    return { kind: "owned", ownerId: p.userId, controlProjectId: p.id };
+  };
+  manager.startKernel = async () => ({ ...fakeRuntime(project.id), workspaceDir: project.workspaceDir });
+  await assert.rejects(manager.start(project), { code: "runtime_context_unverified" });
+  assert.ok(reads > 2);
+  assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
+});
+
+for (const shutdown of ["stop", "closeAll"]) test(`${shutdown} observes a cold attempt still waiting for its first policy`, async t => {
+  let releasePolicy, closed = false, shutdownSettled = false;
+  const gate = new Promise(resolve => { releasePolicy = resolve; });
+  const { manager, owned: project } = await stopFixture(t);
+  manager.runtimes.clear();
+  manager.contextPolicyFor = async p => { await gate; return { kind: "owned", ownerId: p.userId, controlProjectId: p.id }; };
+  manager.startKernel = async () => ({ ...fakeRuntime(project.id, project.workspaceDir), workspaceDir: project.workspaceDir, close: async () => { closed = true; } });
+  const started = manager.start(project);
+  const outcome = Promise.allSettled([started]);
+  const shutting = (shutdown === "stop" ? manager.stop(project) : manager.closeAll()).then(() => { shutdownSettled = true; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(shutdownSettled, false, "shutdown waits for an enrolled start before closing its runtime");
+  } finally { releasePolicy(); await outcome; await shutting; }
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(closed, true);
+  assert.equal(manager.runtimes.size, 0); assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
+});
+
+test("stop waits for its cold runtime's provider close before reporting completion", async t => {
+  const { manager, owned: project } = await stopFixture(t);
+  manager.runtimes.clear();
+  let releasePolicy, releaseClose, closing, settled = false, boots = 0;
+  const policyGate = new Promise(resolve => { releasePolicy = resolve; });
+  const closeGate = new Promise(resolve => { releaseClose = resolve; });
+  const closeEntered = new Promise(resolve => { closing = resolve; });
+  manager.contextPolicyFor = async p => { await policyGate; return { kind: "owned", ownerId: p.userId, controlProjectId: p.id }; };
+  manager.startKernel = async () => { boots += 1; return { ...fakeRuntime(project.id, project.workspaceDir), close: async () => { closing(); await closeGate; } }; };
+  const starting = Promise.allSettled([manager.start(project)]);
+  const stopped = manager.stop(project).then(value => { settled = true; return value; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false); assert.equal(boots, 0);
+    releasePolicy(); await closeEntered;
+    assert.equal(settled, false, "an initiated provider close is still unfinished");
+  } finally { releasePolicy(); releaseClose(); await starting; await stopped; }
+  assert.equal(boots, 1); assert.equal(manager.runtimes.size, 0);
+  assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
+});
+
+for (const changed of ["runtime", "generation", "guard"]) test(`a pending cold stop preserves a changed ${changed}`, async () => {
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  let releasePolicy, closed = 0, allowed = true;
+  const gate = new Promise(resolve => { releasePolicy = resolve; });
+  manager.contextPolicyFor = async p => { await gate; return { kind: "owned", ownerId: p.userId, controlProjectId: p.id }; };
+  const old = { ...fakeRuntime(project.id), modelGatewayTokenJti: "cold-generation", close: async () => { closed += 1; } };
+  const newer = { ...old, modelGatewayTokenJti: "new-generation", close: async () => assert.fail("must not close a newer runtime") };
+  manager.startKernel = async () => old;
+  manager.onRuntimeStart = () => {
+    if (changed === "runtime") manager.runtimes.set(manager.key(project), newer);
+    if (changed === "generation") old.modelGatewayTokenJti = "new-generation";
+    if (changed === "guard") allowed = false;
+  };
+  const starting = Promise.allSettled([manager.start(project)]);
+  const stopped = manager.stop(project, { guard: () => allowed });
+  releasePolicy(); await starting; assert.equal(await stopped, false);
+  assert.equal(closed, 0); assert.equal(manager.runtimes.get(manager.key(project)), changed === "runtime" ? newer : old);
+  manager.runtimes.clear();
+});
+
+test("an internal cold replacement stop never waits for its own startup", { timeout: 2000 }, async () => {
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  manager.contextTransactionHeld = () => true;
+  manager.startKernel = async () => fakeRuntime(project.id);
+  const runtime = await manager.startAdmitted(project, { replaceRuntime: async () => {
+    assert.equal(await manager.stop(project), false, "no prior runtime needs closing");
+  } });
+  assert.equal(manager.runtimes.get(manager.key(project)), runtime);
+  manager.runtimes.clear();
+});
+
+test("a cold stop observes rejected startup cleanup", async () => {
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  let releasePolicy, settled = false;
+  const gate = new Promise(resolve => { releasePolicy = resolve; });
+  manager.contextPolicyFor = async p => { await gate; return { kind: "owned", ownerId: p.userId, controlProjectId: p.id }; };
+  manager.startKernel = async () => { throw new Error("synthetic startup refusal"); };
+  const starting = assert.rejects(manager.start(project), /synthetic startup refusal/);
+  const stopped = manager.stop(project, { terminalStatus: "failed", failureCode: "test-stop", by: "user" }).then(value => { settled = true; return value; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false);
+  } finally { releasePolicy(); await starting; await stopped; }
+  assert.equal(await stopped, false);
+  assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
+});
+
+test("a cold stop retains terminal status, failure code and actor attribution", async t => {
+  const { manager, owned } = await stopFixture(t);
+  manager.runtimes.clear();
+  let releasePolicy;
+  const gate = new Promise(resolve => { releasePolicy = resolve; });
+  const notices = [];
+  manager.contextPolicyFor = async p => { await gate; return { kind: "owned", ownerId: p.userId, controlProjectId: p.id }; };
+  manager.startKernel = async () => ({ ...fakeRuntime(owned.id, owned.workspaceDir), modelGatewayTokenJti: "accepted-generation" });
+  manager.onRuntimeStop = async (_project, status, _code, options) => { notices.push({ status, by: options.by }); };
+  const starting = Promise.allSettled([manager.start(owned)]);
+  const stopped = manager.stop(owned, { terminalStatus: "failed", failureCode: "synthetic-stop-code", by: "user" });
+  releasePolicy(); await starting;
+  assert.equal(await stopped, true);
+  assert.deepEqual(notices, [{ status: "failed", by: "user" }]);
+  const state = JSON.parse(await readFile(path.join(owned.metaDir, "runtime-state.json"), "utf8"));
+  assert.equal(state.event, "failed"); assert.equal(state.error, "synthetic-stop-code");
+});
+
+test("a pending cold stop cannot hold a parent transaction while joining outside startup", async t => {
+  const { manager, owned } = await stopFixture(t);
+  manager.runtimes.clear();
+  let releasePolicy, held = false, detachments = 0;
+  const gate = new Promise(resolve => { releasePolicy = resolve; });
+  manager.contextTransactionHeld = () => held;
+  manager.pluginService = { clearPromptAdmissions: async () => {}, withAdmission: async (_project, operation) => operation(), database: { withoutTransactionClient: () => { detachments += 1; assert.fail("a parent transaction must not detach"); } } };
+  manager.contextPolicyFor = async p => { await gate; return { kind: "owned", ownerId: p.userId, controlProjectId: p.id }; };
+  manager.startKernel = async () => fakeRuntime(owned.id, owned.workspaceDir);
+  const starting = manager.start(owned);
+  try {
+    held = true;
+    await assert.rejects(manager.stop(owned), { code: "runtime_busy" });
+    assert.equal(manager.runtimeStops.size, 0); assert.equal(detachments, 0);
+  } finally { held = false; manager.pluginService = null; releasePolicy(); }
+  await starting; await manager.stop(owned);
 });
 
 test("a pending cold start is registered before admission and concurrent callers share its release", async () => {

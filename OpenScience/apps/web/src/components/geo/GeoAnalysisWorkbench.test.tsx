@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
 const read=vi.hoisted(()=>vi.fn());
 const memberRead=vi.hoisted(()=>vi.fn());
@@ -8,11 +8,22 @@ const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),st
 vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read,getGeoAnalysisMembers:memberRead}));
 vi.mock('./spine/useOpenPublication',()=>({useOpenPublication:()=>navigation.publication}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.open}));
-vi.mock('@/lib/apiClient',async original=>({...await original<typeof import('@/lib/apiClient')>(),createWebRuntimeSession:navigation.create}));
+vi.mock('@/lib/geoNativeClient',async original=>({...await original<typeof import('@/lib/geoNativeClient')>(),openGeoConversation:navigation.create}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage}));
 vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:({source}:{source:unknown})=><div data-testid="export">{JSON.stringify(source)}</div>}));
 vi.mock('./geoFrame',()=>({useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>({openAnalysisScope:navigation.scope})}));
 const project={projectId:'control',sessionId:'session'};
+it('opens both history views and keeps metric selection on the business timeline in the existing workbench',async()=>{
+ read.mockReset().mockImplementation(async(_geo,_scope,view)=>({view,selection:{reference:'gsel_history'},digest:'history-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}}));
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V15"/></MemoryRouter>);
+ fireEvent.click(screen.getByText('所选数据分析'));
+ fireEvent.click(await screen.findByRole('button',{name:'分析：错误观察与处理历史'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'事件与采样观察'}));
+ await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V27'}),0,undefined));
+ fireEvent.click(screen.getByRole('button',{name:'指标：品牌提及率'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'事实准确率'}));
+ await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V27',metricId:'M-06'}),0,undefined));
+ expect(screen.getByTestId('export')).toHaveTextContent('gsel_history');
+});
+beforeEach(()=>{navigation.create.mockReset().mockImplementation(async(_geo,target)=>({projectId:'control',sessionId:target.sessionId??'created-session',scope:{kind:'geo',geoProjectId:'geo',sessionId:target.sessionId??'created-session'}}));});
 describe('selected analysis workbench',()=>{
  it('retains exact selection through export and shows null distinct from zero',async()=>{
   read.mockResolvedValue({view:{viewId:'V01',metricId:null,dimension:'project'},selection:{reference:'gsel_old'},digest:'digest',columns:[{key:'current',label:'所选实测'},{key:'target',label:'当前目标'}],rows:[{key:'row',label:'品牌',metricId:'M-01S',dimensions:{},values:{current:{value:0,state:'known',metric:null,members:null},target:{value:null,state:'no_data',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
@@ -36,17 +47,17 @@ it('labels each series visibly instead of overlapping indistinguishable platform
   expect(screen.getByRole('heading',{name:/品牌提及率.*豆包/})).toBeTruthy();
 });
 
-it('creates the intended ordinary session then stages the exact analysis and unsent draft on the first click',async()=>{
+it('resolves the exact GEO primary then stages the exact analysis and unsent draft on the first click',async()=>{
   navigation.open.mockReset().mockResolvedValue(true);
   navigation.current.mockResolvedValue({projectId:'control',sessionId:null});
-  navigation.create.mockReset().mockResolvedValue({id:'created-session',kernel:'dsh'});
+  navigation.create.mockReset().mockResolvedValue({projectId:'control',sessionId:'created-session',scope:{kind:'geo',geoProjectId:'geo',sessionId:'created-session'}});
   navigation.stage.mockReset().mockImplementation(async (_geo,input)=>({referenceId:'gpc_exact',sessionId:input.sessionId,draft:'Selected unsent analysis'}));
   read.mockResolvedValue({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_first'},digest:'exact-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
   render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={{...project,sessionId:null} as never}/></MemoryRouter>);
   fireEvent.click(screen.getByText('所选数据分析'));
   fireEvent.click(await screen.findByRole('button',{name:'在对话中解释'}));
   await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({sessionId:'created-session',mode:'analysis',selectionRef:'gsel_first',expectedDigest:'exact-digest'})));
-  expect(navigation.create).toHaveBeenCalledWith('control');
+  expect(navigation.create).toHaveBeenCalledWith('geo',{kind:'primary'});
   expect(navigation.open).toHaveBeenCalledTimes(1);
   expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({projectId:'control',sessionId:'created-session',geoPlanContext:{referenceId:'gpc_exact'}}),'Selected unsent analysis');
 });
@@ -189,4 +200,65 @@ it('V21 stages an unsent next-steps draft with exact row, metric and frozen gaps
  expect(screen.getByRole('link',{name:'https://shared.example/a?id=1'})).toHaveAttribute('href','https://shared.example/a?id=1');
  fireEvent.click(screen.getByRole('button',{name:/article-old.*001/}));expect(navigation.publication).toHaveBeenCalledWith('001','a'.repeat(64));
  fireEvent.click(screen.getByText(/claim-1.*1/));expect(screen.getByText('Preserved source quote')).toBeTruthy();
+});
+
+it('switches evidence perspectives while retaining the selected question scope',async()=>{
+ read.mockResolvedValue({view:{viewId:'V16',evidenceKind:'claims'},selection:{reference:'gsel_evidence'},digest:'evidence',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V16" embedded/></MemoryRouter>);
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V16',dimension:'project'},0,undefined));
+ fireEvent.click(screen.getByRole('button',{name:'证据视角：主张与来源'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'发现表达'}));
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V16',dimension:'project',evidenceKind:'findings'},0,undefined));
+});
+
+it.each([['V10','journey_need','查看问题与采集'],['V16','clinical_source_support','查看或更新证据']] as const)('keeps %s object action on its exact saved selection without conflicting date/round filters',async(viewId,kind,label)=>{
+ read.mockResolvedValue({view:{viewId},selection:{reference:'gsel_exact_action'},digest:'action',columns:[],rows:[{key:'one',label:'Exact object',dimensions:{kind,groupId:'group-old',groupState:'known',setVersion:1,applicability:{population:'Adults',elements:{dose:'10 mg'}}},values:{}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'available'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView={viewId} embedded/></MemoryRouter>);
+ const link=await screen.findByRole('link',{name:label});const url=new URL(link.getAttribute('href')!,'https://local.example');
+ expect(url.searchParams.get('selectionRef')).toBe('gsel_exact_action');expect(url.searchParams.get('round')).toBeNull();expect(url.searchParams.has('?selectionRef')).toBe(false);
+ if(viewId==='V10')expect(url.searchParams.get('group')).toBe('group-old');
+});
+
+it('switches error dimensions and withdrawn judgments without replacing the selected observation scope',async()=>{
+ read.mockResolvedValue({view:{viewId:'V13'},selection:{reference:'gsel_errors'},digest:'errors',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V13" embedded/></MemoryRouter>);
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V13',dimension:'project'},0,undefined));
+ fireEvent.click(screen.getByRole('button',{name:'错误维度：错误类型'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'严重程度'}));
+ fireEvent.click(screen.getByRole('button',{name:'判定状态：当前有效判定'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'已撤回判定'}));
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V13',dimension:'project',errorFacet:'severity',errorView:'withdrawn'},0,undefined));
+});
+
+it('switches content coverage grouping while retaining the exact selected observation scope',async()=>{
+ read.mockResolvedValue({view:{viewId:'V23',publicationFacet:'group'},selection:{reference:'gsel_content'},digest:'content',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V23" embedded/></MemoryRouter>);
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V23',dimension:'project'},0,undefined));
+ fireEvent.click(screen.getByRole('button',{name:'内容覆盖维度：问题群'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'预期渠道'}));
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V23',dimension:'project',publicationFacet:'channel'},0,undefined));
+});
+
+it('content and execution tables display localized object units',async()=>{
+ const units=[['article_formats','内容文件格式'],['orders','订单'],['order_events','订单事件'],['error_records','错误记录']];
+ read.mockReset().mockResolvedValue({view:{viewId:'V23'},selection:{reference:'gsel_units'},digest:'units',columns:units.map(([key])=>({key,label:key+' label'})),rows:[{key:'row',label:'Object counts',metricId:null,dimensions:{},values:Object.fromEntries(units.map(([unit])=>[unit,{value:2,state:'known',unit,members:null}]))}],page:{total:1,shown:1,nextOffset:null},availability:{status:'available'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V23" embedded/></MemoryRouter>);
+ for(const [,label] of units)expect(await screen.findByText('2 '+label)).toBeVisible();
+ for(const [unit] of units)expect(screen.queryByText('2 '+unit)).toBeNull();
+});
+
+it('switches ledger attribution without replacing the observation scope',async()=>{
+ read.mockResolvedValue({view:{viewId:'V25',financeFacet:'ledger'},selection:{reference:'gsel_finance'},digest:'finance',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V25" embedded/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'收支维度：逐条账目与余额'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'明确关联的问题群'}));
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V25',dimension:'project',financeFacet:'group'},0,undefined));
+});
+
+it('keeps an exact historical plan descriptor for export and native explanation',async()=>{
+ navigation.open.mockReset().mockResolvedValue(true);navigation.current.mockResolvedValue(project);navigation.stage.mockReset().mockResolvedValue({referenceId:'gpc_old_plan',sessionId:'session',draft:'Explain preserved plan'});
+ const view={viewId:'V26' as const,strategyVersion:3,targetVersion:2};
+ read.mockResolvedValue({view,selection:{reference:'gsel_current'},digest:'historical-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V26" initialDescriptor={view} embedded/></MemoryRouter>);
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},view,0,undefined));
+ expect(screen.getByTestId('export').textContent).toContain('"strategyVersion":3');expect(screen.getByTestId('export').textContent).toContain('"targetVersion":2');
+ fireEvent.click(screen.getByRole('button',{name:'在对话中解释'}));
+ await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({view,mode:'analysis',selectionRef:'gsel_current',expectedDigest:'historical-digest'})));
+ fireEvent.click(screen.getByRole('button',{name:'方案版本：方案版本 3'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'所选范围最新方案'}));
+ await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V26',strategyVersion:undefined,targetVersion:undefined},0,undefined));
 });

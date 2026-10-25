@@ -394,7 +394,7 @@ test("native selected-scope export encrypts full engine bodies and imports throu
   const { NativeMemoryStore } = await import("../src/nativeMemoryStore.mjs");
   const { migrateNativeMemory } = await import("../src/nativeMemoryPersistence.mjs");
   await migrateNativeMemory(database);
-  const { nativeMemoryRoot } = await import("../src/openVikingLayout.mjs");
+  const { nativeMemoryRoot, openVikingUserId, userRootUri } = await import("../src/openVikingLayout.mjs");
   const { NativeMemoryOverlay } = await import("../src/nativeMemoryOverlay.mjs");
   const { createHash } = await import("node:crypto");
   const sharer = `native_transfer_${randomUUID()}`;
@@ -405,7 +405,7 @@ test("native selected-scope export encrypts full engine bodies and imports throu
     await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'native-cohort','Cohort',1024)", [sharer]);
     const uri = `${root}/projects/cohort.md`;
     const nativeMemory = new NativeMemoryStore({
-      sessions: { configured: true, memoryRoot: () => root,
+      sessions: { configured: true, memoryRoot: () => root, engineUser: openVikingUserId, userRoot: userRootUri,
         tree: async () => [{ uri, isDir: false, modTime: "2026-10-21", size: body.length, tags: ["project=native-cohort"] }], read: async () => body },
       overlay: new NativeMemoryOverlay({ database }),
     });

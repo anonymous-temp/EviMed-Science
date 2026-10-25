@@ -4,11 +4,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { GeoSignalsWorkbench } from './GeoSignalsWorkbench';
 import type { GeoSignalDetail, GeoSignalPage } from '@/lib/geoSignalsClient';
 
-const api = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), disposition: vi.fn(), project: vi.fn(), stage: vi.fn(), open: vi.fn(), drawer: vi.fn() }));
-vi.mock('@/lib/geoSignalsClient', async original => ({ ...await original<typeof import('@/lib/geoSignalsClient')>(), listGeoSignals: api.list, getGeoSignal: api.detail, setGeoSignalDisposition: api.disposition }));
+const api = vi.hoisted(() => ({ members:vi.fn(), list: vi.fn(), detail: vi.fn(), disposition: vi.fn(), project: vi.fn(), stage: vi.fn(), open: vi.fn(), drawer: vi.fn(), moduleSession: vi.fn() }));
+vi.mock('@/lib/geoSignalsClient', async original => ({ ...await original<typeof import('@/lib/geoSignalsClient')>(), listGeoSignals: api.list, getGeoSignal: api.detail, getGeoSignalMembers:api.members, setGeoSignalDisposition: api.disposition }));
 vi.mock('@/lib/geoClient', async original => ({ ...await original<typeof import('@/lib/geoClient')>(), getGeoProject: api.project, stageGeoPlanContext: api.stage }));
+vi.mock('@/lib/geoNativeClient',async original=>({...await original<typeof import('@/lib/geoNativeClient')>(),openGeoConversation:api.moduleSession}));
 vi.mock('./useOpenGeoConversation', () => ({ useOpenGeoConversation: () => api.open }));
-vi.mock('./useGeoPath', () => ({ useGeoDestinationPath: () => () => '/app/geo/geo/actions?session=held#geo-distribution' }));
+vi.mock('./useGeoPath', () => ({ useGeoDestinationPath: () => (_geo: string, target: { tab: string }) => target.tab === 'visibility' ? '/app/geo/geo/visibility?from=2026-01-01&session=held#geo-trend' : '/app/geo/geo/actions?session=held#geo-distribution' }));
 vi.mock('@/components/runs/ProgrammeRunsDrawer', () => ({ ProgrammeRunsDrawer: (props: unknown) => { api.drawer(props); return <div>Exact run drawer</div>; } }));
 const project = { projectId: 'control', sessionId: 'stale-session', access: { abilities: ['read', 'edit'] } };
 const signal = (extra: Partial<GeoSignalDetail> = {}): GeoSignalDetail => ({ id: 'gs_exact', revision: 2, kind: 'source_changed', step: 'evidence', affectedSteps: ['evidence', 'content'],
@@ -19,7 +20,7 @@ const attempt = { contextRef: 'gpc_previous', sessionId: 'original-session', req
 const page = (items: GeoSignalDetail[]): GeoSignalPage => ({ items, total: items.length, counts: { pending: items.length, started: 0, processing: 0, completed: 0, ignored: 0, failed_recoverable: 0 }, actionable: items.length, nextCursor: null });
 const draw = (path = '/app/geo/geo?signal=gs_exact', value = project) => render(<MemoryRouter initialEntries={[path]}><GeoSignalsWorkbench geoId="geo" project={value as never} /></MemoryRouter>);
 beforeEach(() => {
-  vi.clearAllMocks(); api.detail.mockResolvedValue(signal()); api.list.mockResolvedValue(page([signal()])); api.project.mockResolvedValue({ projectId: 'control', sessionId: 'fresh-session' });
+  vi.clearAllMocks(); api.members.mockImplementation(async(_geo,_signal,input)=>({side:input.side,basisDigest:input.expectedBasisDigest,total:0,items:[],more:false,nextOffset:null})); api.moduleSession.mockImplementation(async(geoId,target)=>({projectId:'control',sessionId:target.sessionId??'primary-session',scope:{kind:'geo',geoProjectId:geoId,sessionId:target.sessionId??'primary-session'}})); api.detail.mockResolvedValue(signal()); api.list.mockResolvedValue(page([signal()])); api.project.mockResolvedValue({ projectId: 'control', sessionId: 'fresh-session' });
   api.stage.mockImplementation(async (_geo, body) => ({ referenceId: 'gpc_exact', sessionId: body.sessionId, draft: 'Review selected preserved versions.', state: 'staged' })); api.open.mockResolvedValue(true);
 });
 
@@ -113,4 +114,47 @@ it('keeps history reachable after the final actionable item was ignored', async 
   draw('/app/geo/geo');
   fireEvent.click(await screen.findByRole('button', { name: '查看全部发现' }));
   expect(await screen.findByRole('combobox', { name: '处理状态' })).toBeTruthy();
+});
+
+it('resolves the first exact module primary before staging a signal in a same-id personal collision',async()=>{
+ api.project.mockResolvedValue({projectId:'control',sessionId:null});
+ draw('/app/geo/geo?signal=gs_exact',{...project,sessionId:null} as never);
+ fireEvent.click(await screen.findByRole('button',{name:'核查所选版本'}));
+ await waitFor(()=>expect(api.stage).toHaveBeenCalledWith('geo',expect.objectContaining({sessionId:'primary-session',mode:'signal'})));
+ expect(api.moduleSession).toHaveBeenCalledWith('geo',{kind:'primary'});
+ expect(api.moduleSession.mock.invocationCallOrder[0]).toBeLessThan(api.stage.mock.invocationCallOrder[0]);
+ expect(api.stage.mock.invocationCallOrder[0]).toBeLessThan(api.open.mock.invocationCallOrder[0]);
+ expect(api.open).toHaveBeenCalledWith(expect.objectContaining({sessionId:'primary-session',exactSession:true}),'Review selected preserved versions.');
+});
+it('does not stage or replace an unavailable exact signal conversation',async()=>{
+ api.moduleSession.mockRejectedValueOnce(new Error('Exact session unavailable'));
+ draw();fireEvent.click(await screen.findByRole('button',{name:'核查所选版本'}));
+ await screen.findByText('暂时无法打开处理对话，已保留本次选择。');expect(api.stage).not.toHaveBeenCalled();expect(api.open).not.toHaveBeenCalled();
+});
+
+it('never replaces an unavailable submitted signal root with the primary',async()=>{
+ api.detail.mockResolvedValue(signal({currentAttempt:{...attempt,sessionId:null,status:'failed',state:'failed_recoverable',executionState:'failed_recoverable'} as never}));
+ draw();fireEvent.click(await screen.findByRole('button',{name:'在原对话继续处理'}));
+ await screen.findByText('暂时无法打开处理对话，已保留本次选择。');
+ expect(api.moduleSession).not.toHaveBeenCalled();expect(api.stage).not.toHaveBeenCalled();expect(api.open).not.toHaveBeenCalled();
+});
+
+
+it('shows immutable group values, denominators, exact side analysis and uncertainty before an unsent analyse draft', async () => {
+  api.members.mockImplementation(async(_geo,_signal,input)=>({side:input.side,basisDigest:input.expectedBasisDigest,total:1,items:[{snapshotId:'old-'+input.side,engine:'deepseek',preservedAnswer:{text:input.side==='before'?'Frozen old answer':'Frozen new answer'}}],more:false,nextOffset:null}));
+  api.detail.mockResolvedValue(signal({ kind: 'group_changed', businessOutcome: { state: 'observed' }, basis: {
+    group: { id: 'g', label: 'Exact group', pool: 'P2', questionVersion: 3 },
+    previous: { id: 'a', completedAt: '2026-10-25T01:00:00Z' }, current: { id: 'b', completedAt: '2026-10-25T01:01:00Z' },
+    policy: { threshold: 5, noiseMeasured: false }, cells: [{ key: 'metric', metricId: 'M-01', delta: 20, before: { value: 20, numerator: 44, denominator: 220 }, after: { value: 40, numerator: 88, denominator: 220 } }],
+    sides: { before: { selectionRef: 'gsel_before', count: 220 }, after: { selectionRef: 'gsel_after', count: 220 } },
+  }, groupMembers: { before: { availability: 'preserved', total: 220, items: [{ snapshotId: 'old', questionId: 'question', engine: 'deepseek', preservedAnswer: { text: 'Frozen old answer' } }] }, after: { availability: 'unknown', total: null, items: [] } } }));
+  draw();
+  expect(await screen.findByText('品牌提及率：20% → 40%')).toBeTruthy();
+  expect(screen.getByText(/前次 44 \/ 220；本次 88 \/ 220；差异 \+20 个百分点/)).toBeTruthy();
+  expect(screen.getByText(/噪声未实测，不能据此判断由内容调整造成/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: '查看前轮共同样本' })).toHaveAttribute('href', '/app/geo/geo/visibility?selectionRef=gsel_before&session=held#geo-trend');
+  expect(await screen.findByText('Frozen old answer')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '在对话中分析' }));
+  await waitFor(() => expect(api.stage).toHaveBeenCalledWith('geo', expect.objectContaining({ mode: 'signal', intent: 'analyse', focusRefs: [] })));
+  expect(api.open).toHaveBeenCalledWith(expect.objectContaining({ geoPlanContext: { referenceId: 'gpc_exact' } }), 'Review selected preserved versions.');
 });

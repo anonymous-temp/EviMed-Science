@@ -672,7 +672,7 @@ export class SourceService {
     const previous = family.items.filter((item) => item.payload.fingerprint?.sha256 && item.id !== sourceId)
       .sort((a, b) => (Number(b.payload.version) || 0) - (Number(a.payload.version) || 0))[0];
     return { source: exact, duplicate: false, job, replaces: previous ? { replaced: { sourceId: previous.id, sha256: previous.payload.fingerprint.sha256,
-      version: Number(previous.payload.version) || 1 }, by: { sourceId, version: Number(payload.version) || 1, at: payload.createdAt } } : null };
+      version: Number(previous.payload.version) || 1 }, by: { sourceId, version: Number(exact.payload.version) || 1, at: exact.payload.createdAt } } : null };
     });
     // Outside the registration locks: it reads results and memories, and the registration is complete without it.
     // A knowledge page is rewritten by the compile and by the researcher; nothing a result or a memory rests on is the page.
@@ -693,7 +693,12 @@ export class SourceService {
     if (!retired?.deletedAt) throw conflict;
     if (retired.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
     const restored = await this.documents.restore(userId, "source", sourceId, retired.revision);
-    return this.documents.put(userId, "source", sourceId, payload, { expectedRevision: restored.revision, projectId });
+    // A digest returning after removal is a new extraction, not generation 1
+    // again: the old idempotency key can already name a finished/cancelled job.
+    const next = { ...payload,
+      generation: Math.max(Number(payload.generation) || 1, (Number(retired.payload.generation) || 0) + 1),
+      version: Math.max(Number(payload.version) || 1, (Number(retired.payload.version) || 0) + 1) };
+    return this.documents.put(userId, "source", sourceId, next, { expectedRevision: restored.revision, projectId });
   }
 
   /**

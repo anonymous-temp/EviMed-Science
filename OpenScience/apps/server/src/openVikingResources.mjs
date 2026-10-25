@@ -90,10 +90,10 @@ export function sourceFileName(sourceId) {
  * The idempotency key of one compile submission: the same project, target, round and attempt always name the same
  * task, so a control plane that restarts between submitting and recording finds its task again instead of paying for
  * a second one.
- * @param {{ projectId: string, tree: string, round: number, attempt?: number }} submission
+ * @param {{ projectId: string, tree: string, round: number, attempt?: number, requestDigest?: string }} submission
  */
-export function compileIdempotencyKey({ projectId, tree, round, attempt = 0 }) {
-  return `evimed-${tree}-${sha256(`${projectId}\u0000${tree}\u0000${round}\u0000${attempt}`).slice(0, 40)}`;
+export function compileIdempotencyKey({ projectId, tree, round, attempt = 0, requestDigest = "" }) {
+  return `evimed-${tree}-${sha256(`${projectId}\u0000${tree}\u0000${round}\u0000${attempt}${requestDigest ? `\u0000${requestDigest}` : ""}`).slice(0, 40)}`;
 }
 
 export class OpenVikingResources {
@@ -511,14 +511,27 @@ function taskSegment(taskId) {
  * rounds (input and output tokens, cache hits not told apart); the summaries written after it are not in it.
  * @param {any} task
  */
-function compileTask(task) {
+export function compileTask(task) {
   if (!task || typeof task !== "object" || typeof task.task_id !== "string") throw new HttpError(502, "memory_index_response_invalid", "The engine answered without a task.");
   // v0.5.1 moved the token counts to `meta.pipeline.tokens` (`{ input, output, cached }`; v0.5.0 had `meta.token_usage`).
   const tokens = task.meta?.pipeline?.tokens;
   const inputTokens = Number(tokens?.input) || 0;
   const outputTokens = Number(tokens?.output) || 0;
   const result = task.result && typeof task.result === "object" ? task.result : null;
-  const lines = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(String).slice(0, 20) : []);
+  const lines = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(value => String(value).slice(0, 2000)).slice(0, 20) : []);
+  const paths = (list) => {
+    const all = Array.isArray(list) ? list : [], kept = [];
+    let bytes = 0, truncated = false;
+    for (const value of all) {
+      const raw = String(typeof value === "string" ? value : value?.uri ?? value?.path ?? "");
+      const text = raw.slice(0, 1000);
+      if (kept.length >= 2000 || bytes + Buffer.byteLength(text) > 16384) { truncated = true; break; }
+      kept.push(text); bytes += Buffer.byteLength(text);
+      if (text !== raw || typeof value !== "string") truncated = true;
+    }
+    return { paths: kept, count: all.length, truncated };
+  };
+  const updated = paths(result?.updated), created = paths(result?.created), unchanged = paths(result?.unchanged);
   return {
     taskId: task.task_id,
     status: String(task.status ?? ""),
@@ -528,6 +541,9 @@ function compileTask(task) {
     processingSeconds: Number.isFinite(Number(task.processing_seconds)) ? Number(task.processing_seconds) : null,
     usage: tokens && typeof tokens === "object" ? { inputTokens, outputTokens, cachedTokens: Number(tokens.cached) || 0, totalTokens: inputTokens + outputTokens } : null,
     result: result ? { pageCount: Number(result.page_count) || 0, linkCount: Number(result.link_count) || 0, conflicts: Array.isArray(result.conflicts) ? result.conflicts.length : 0,
+      updated: updated.paths, updatedCount: updated.count, updatedTruncated: updated.truncated,
+      created: created.paths, createdCount: created.count, createdTruncated: created.truncated,
+      unchanged: unchanged.paths, unchangedCount: unchanged.count, unchangedTruncated: unchanged.truncated,
       // What a task that says `completed` still reports: the warnings of its result and the errors of the jobs that failed.
       warnings: [...lines(result.warnings), ...lines(task.meta?.pipeline?.errors).filter((line) => !lines(result.warnings).includes(line))].slice(0, 20) } : null,
   };

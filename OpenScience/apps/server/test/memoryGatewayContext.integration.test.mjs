@@ -20,7 +20,7 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { startOpenVikingStub } from './helpers/openVikingStub.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
-async function fixture(t, { capsuleSearch = null } = {}) {
+async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'memorygatewaycontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'memory-gateway-context-'));
   const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
@@ -41,7 +41,7 @@ async function fixture(t, { capsuleSearch = null } = {}) {
     noteSession: async (...args) => { noted.push(args); }, recordCommit: async row => { commits.push(row); }, commit: async (_owner, uri) => commits.find(row => row.archiveUri === uri) ?? null };
   const journal = new GeoNativeMemoryRemember({ contexts, overlay });
   const admission = { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) };
-  const handler = createMemoryGatewayHandler({ config: { ovNativeMemoryEnabled: true, memoryEnabled: true }, sessions, admission, overlay,
+  const handler = createMemoryGatewayHandler({ config: { ovNativeMemoryEnabled: true, memoryEnabled: true, memoryGatewayTimeoutMs:gatewayTimeoutMs }, sessions, admission, overlay,
     runtimeManager: { assertActiveEviMedWorkloadToken: async token => {
       if (![a.id, b.id, ordinary.id].includes(token)) throw new Error('Unknown workload');
       return { userId: owner.id, projectId: token };
@@ -59,16 +59,17 @@ async function fixture(t, { capsuleSearch = null } = {}) {
   return { owner, accounts, documents, contexts, sessions, a, b, ordinary, stub, handler, commits, noted, forgotten, call, overlay };
 }
 
-test('account capsule recall stays available for owned memory but never crosses into shared GEO recall', options, async t => {
+test('one native entrance passes the bound project policy to capsule selection and retains ordinary recall', options, async t => {
   const called = [];
-  const f = await fixture(t, { capsuleSearch: async input => { called.push(input.project.id); return [{ content: 'Private account capsule fact' }]; } });
+  const f = await fixture(t, { capsuleSearch: async input => { called.push(input); return input.contextPolicy?.kind === 'geo-project' ? [{content:'Authorized project capsule fact'}] : [{ content: 'Private account capsule fact' }]; } });
   const search = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'work facts' } } };
   const shared = await f.call(f.a, 'POST', '/mcp', search);
   assert.equal(shared.status, 200); assert.doesNotMatch(shared.text, /Private account capsule/);
-  assert.deepEqual(called, []);
+  assert.match(shared.text,/Authorized project capsule fact/);
+  assert.equal(called[0].contextPolicy.controlProjectId,f.a.id);
   const owned = await f.call(f.ordinary, 'POST', '/mcp', search);
   assert.equal(owned.status, 200); assert.match(owned.text, /Private account capsule fact/);
-  assert.deepEqual(called, [f.ordinary.id]);
+  assert.deepEqual(called.map(input=>input.project.id), [f.a.id,f.ordinary.id]);
 });
 
 test('unnamed startup recall uses the project namespace and initializes six types while ordinary personal recall remains available', options, async t => {
@@ -284,4 +285,18 @@ test('a project memory listing can follow its own continuation beyond twenty tho
     assert.ok(value.nextOffset > offset); offset = value.nextOffset; assert.ok(pages < 5);
   }
   assert.match(lastUri, /fact-20199\.md$/); assert.equal(pages, 3);
+});
+
+
+test('optional scoped capsule timeout retains native project search results and does not broaden targets',options,async t=>{
+  let calls=0;
+  const f=await fixture(t,{gatewayTimeoutMs:250,capsuleSearch:async()=>{calls++;return new Promise(()=>{});}});
+  const context=await f.contexts.forProject(f.a);
+  f.stub.seedMemory(context.namespaceId,'project_facts/native.md','PROJECT native result');
+  const started=Date.now();
+  const result=await f.call(f.a,'POST','/api/v1/search/search',{mode:'context',query:'PROJECT'});
+  assert.equal(result.status,200);assert.match(result.text,/PROJECT native result/);assert.equal(calls,1);
+  assert.ok(Date.now()-started<2000);
+  await f.call(f.a,'POST','/api/v1/search/search',{mode:'context',query:'PROJECT',target_uri:`${context.userRoot}/memories/project_facts`});
+  assert.equal(calls,1);
 });

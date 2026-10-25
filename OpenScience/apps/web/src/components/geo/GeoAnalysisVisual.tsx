@@ -1,11 +1,14 @@
-import { useId } from "react";
+import {GeoHistoryVisual} from "./GeoHistoryVisual";
+import { useId, useState } from "react";
 import type { GeoAnalysisView, GeoAnalysisChartCell } from "@/lib/geoAnalysisClient";
 import { ChartCard } from "@/components/ui/ChartCard";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/Button";
 import { BarList } from "@/components/charts/BarList";
 import { HeatGrid } from "@/components/charts/HeatGrid";
 import { GeoLineChart, chartScale } from "./tabs/GeoCharts";
 import { engineName } from "./geoText";
+import { GeoFinanceVisual } from "./GeoFinanceVisual";
 
 const reasonWords: Readonly<Record<string, string>> = {
   measurement_method_changed: "测量方法已变化，保留两期读数且不参与排序。",
@@ -59,8 +62,65 @@ export function GeoAnalysisVisual({ data, onSelect }: {
   onSelect(cell: GeoAnalysisChartCell): void;
 }) {
   const statusId = useId();
+  const [journeyColumn, setJourneyColumn] = useState("questions");
   const chart = data.chart;
   if (!chart) return null;
+  if(chart.kind==="error_history"||chart.kind==="business_history")return <GeoHistoryVisual rows={data.rows} columns={data.columns} cells={chart.cells??[]} timeline={chart.timeline??{total:0,dated:0,undated:0,events:[]}} trend={chart.trend} errorHistory={chart.kind==="error_history"} timeZone={data.scope?.timeZone} onSelect={onSelect}/>;
+  if(chart.kind==="project_finance"||chart.kind==="frozen_plan_targets")return <GeoFinanceVisual data={data} onSelect={onSelect}/>;
+  if(chart.kind==="publication_coverage"||chart.kind==="publication_execution"){
+    const visible=new Set(data.rows.map(row=>row.key)),cells=(chart.cells??[]).filter(cell=>visible.has(cell.rowKey));
+    const rows=data.rows.map(row=>({key:row.key,header:row.label,cells:data.columns.map(column=>{const value=row.values[column.key]?.value;return {value:typeof value==="number"?value:null,text:String(value??"未知")};})}));
+    const events=chart.timeline?.events??[],dates=events.map(event=>Date.parse(event.at)),low=Math.min(...dates),high=Math.max(...dates);
+    return <>
+      <ChartCard title={chart.kind==="publication_coverage"?"内容与发布覆盖":"投放与发布状态"} state={rows.length?"content":"empty"} emptyText="这个范围尚无内容或发布记录。"
+        footnote="各列独立计数；一篇内容可有多个版本和发布记录。登记发布不等于外部核验。业务记录按日期筛选；只选采样轮次时，这些关联记录不代表该轮当时状态。">
+        <HeatGrid label="内容、版本与发布记录" columns={data.columns.map(column=>({key:column.key,header:column.label}))} rows={rows}/>
+        <ul aria-label="内容与发布精确明细">{cells.map(cell=><li key={`${cell.rowKey}:${cell.columnKey}`}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{cell.label} · {data.columns.find(column=>column.key===cell.columnKey)?.label} · {cell.value??"未知"}</Button></li>)}</ul>
+      </ChartCard>
+      {chart.timeline&&<ChartCard title="订单事件时间" state={events.length?"content":"empty"} emptyText="所选范围暂无有日期的订单事件。"
+        footnote={`时间轴显示最早的 ${events.length} / ${chart.timeline.dated} 条有日期记录；${chart.timeline.undated} 条时间未知记录保留在明细。订单按创建日期筛选，事件按其记录时间筛选，不能作为同一分母。`}>
+        <svg role="img" aria-label="订单实际事件时间轴" viewBox="0 0 600 60" className="w-full"><line x1="10" x2="590" y1="30" y2="30" className="stroke-border"/>
+         {events.map((event,index)=><circle key={event.id} cx={high>low?10+(dates[index]-low)/(high-low)*580:300} cy={30+(index%3-1)*7} r="3" className="fill-current text-accent"><title>{event.at} · {event.label}</title></circle>)}
+        </svg>
+        {events.length>0&&<p className="text-caption text-text-3">{events[0].at} — {events.at(-1)?.at}</p>}
+        <ul aria-label="订单事件明细入口">{cells.filter(cell=>cell.columnKey==="orderEvents"&&Number(cell.value)>0).map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.label} · 查看 {cell.value} 条事件</Button></li>)}</ul>
+      </ChartCard>}
+    </>;
+  }
+  if (chart.kind === "error_distribution") {
+    const visible=new Set(data.rows.map(row=>row.key)),columns=data.columns.filter(column=>column.key.startsWith("engine_"));
+    const cells=(chart.cells??[]).filter(cell=>visible.has(cell.rowKey));
+    const rows=data.rows.map(row=>({key:row.key,header:row.label,cells:columns.map(column=>{const value=row.values[column.key]?.value;return {value:typeof value==="number"?value:null,text:String(value??"未知")};})}));
+    return <ChartCard title={data.view.errorFacet==="severity"?"严重程度与平台":"错误类型与平台"} state={rows.length?"content":"empty"} emptyText="所选回答没有关联的错误记录。"
+      footnote="展示当前页关联的错误记录；重复出现和任务次数不重复计数。这里是当前判定与处置状态，不能当作当时状态或回答错误率。">
+      <HeatGrid label="错误记录分布" columns={columns.map(column=>({key:column.key,header:column.label}))} rows={rows}/>
+      <ul aria-label="错误记录精确明细">{cells.map(cell=><li key={`${cell.rowKey}:${cell.columnKey}`}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{cell.label} · {engineName(cell.engine??"")} · {cell.value??"未知"} 条记录</Button></li>)}</ul>
+    </ChartCard>;
+  }
+  if (chart.kind === "evidence") {
+    const visible = new Set(data.rows.map(row => row.key));
+    const cells = (chart.cells ?? []).filter(cell => visible.has(cell.rowKey));
+    const rows = data.rows.map(row => ({key:row.key,header:row.label,cells:data.columns.map(column=>{
+      const cell=cells.find(item=>item.rowKey===row.key&&item.columnKey===column.key);
+      return {value:cell?.state==="known"?cell.value:null,text:cell?.state==="partial"?`${cell.knownSubtotal??cell.value??"未知"} 已核实；${cell.unknownCandidates??"未知"} 待核实`:cell?.value==null?"未知":String(cell.value)};
+    })}));
+    const findings=data.view.evidenceKind==="findings";
+    return <ChartCard title={findings?"发现表达覆盖":"主张与来源覆盖"} state={rows.length?"content":"empty"} emptyText="尚无所选范围的已保存判定。"
+      footnote={findings?"展示当前页的表达记录；是否表达给定结论与医学来源是否支持该结论分别判断。":"展示当前页的精确主张、条件与来源；依据缺失保持未知，当前来源变更与采样时的回答分别保留。"}>
+      <HeatGrid label={findings?"发现表达覆盖矩阵":"主张条件与来源覆盖矩阵"} columns={data.columns.map(column=>({key:column.key,header:column.label}))} rows={rows}/>
+      <ul aria-label="证据覆盖精确明细">{cells.map(cell=><li key={`${cell.rowKey}:${cell.columnKey}`}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{cell.label} · {data.columns.find(column=>column.key===cell.columnKey)?.label} · {cell.value??"未知"}{cell.state==="partial"?`（另有 ${cell.unknownCandidates??"未知"} 条待核实）`:""}</Button></li>)}</ul>
+    </ChartCard>;
+  }
+  if (chart.kind === "journey") {
+    const columns=data.columns??[], selected=columns.find(column=>column.key===journeyColumn)??columns[0], cells=(chart.cells??[]).filter(cell=>cell.columnKey===selected?.key);
+    const word = (cell: GeoAnalysisChartCell) => cell.state === "partial"
+      ? `${cell.knownSubtotal ?? cell.value ?? "未知"}（已核实小计；${cell.unknownCandidates == null ? "待核实数量未知" : `另有 ${cell.unknownCandidates} 条待核实`}）` : cell.value == null ? "未知" : String(cell.value);
+    return <ChartCard title="旅程与需求覆盖" state={cells.length?"content":"empty"} emptyText="尚无所选问题定义。" footnote="各类数量有独立单位；同一对象可关联多个需求，不能相加为漏斗或人群比例。未采样问题仍保留。">
+      <Toolbar filters={[{kind:"select",label:"覆盖数量",value:selected?.key??"questions",options:columns.map(column=>({value:column.key,label:column.label})),onChange:value=>{if(value)setJourneyColumn(value);}}]} />
+      <HeatGrid label="旅程与需求覆盖矩阵" columns={[{key:selected?.key??"questions",header:selected?.label??"原始问题"}]} rows={cells.map(cell=>({key:cell.rowKey,header:cell.label,cells:[{value:cell.state === "known" ? cell.value : null,text:word(cell),hint:cell.state !== "known" ? "部分主张缺少核实依据；已核实小计与待核实数量分别保留。" : selected?.label}]}))} />
+      <ul aria-label="需求覆盖明细">{cells.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{cell.label} · {selected?.label} {word(cell)}</Button></li>)}</ul>
+    </ChartCard>;
+  }
   if (chart.kind === "source_facets" || chart.kind === "source_history") {
     const history=chart.kind === "source_history", cells=chart.cells??[];
     const columnKey=(cell:GeoAnalysisChartCell)=>history?cell.roundId??"unknown":cell.facetKey??"remainder";

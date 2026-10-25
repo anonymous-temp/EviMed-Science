@@ -7,7 +7,7 @@ import { GeoService } from "../src/geoService.mjs";
 import { GeoPlanContext, geoPlanDigest } from "../src/geoPlanContext.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { freezeSelectedGeoAnalysis } from "../src/geoAnalysis.mjs";
-import { freezeGeoAnalysisPages } from "../src/geoAnalysisFrozenPages.mjs";
+import { freezeGeoAnalysisPages, persistFrozenGeoAnalysisContext } from "../src/geoAnalysisFrozenPages.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "",
   options = { skip: !url && "Disposable local PostgreSQL required" };
@@ -305,3 +305,17 @@ test(
     );
   },
 );
+
+test('an object-page collision rolls back its aggregate and all other frozen children',options,async()=>{
+  const id=`gpc_${geoPlanDigest('object-collision')}`;
+  const objects=Array.from({length:250},(_,index)=>({id:`observation-${index}`,text:'Preserved text '.repeat(100)}));
+  const analysis={digest:geoPlanDigest(objects),rows:[{key:'object-row',dimensions:{objects},values:{observations:{value:250,state:'known'}}}],page:{total:1,shown:1,nextOffset:null},chart:null,comparison:null};
+  const pack=freezeGeoAnalysisPages(analysis,{parentId:id,project,actorId:user.id});
+  const collision=pack.pages.find(page=>page.payload.recordType==='geo-analysis-object-page');
+  await documents.put(user.id,'geo-plan-context',collision.id,{recordType:'unrelated-fixture'},{expectedRevision:0,projectId:project.projectId});
+  const basis={analysis:pack.analysis};
+  await assert.rejects(persistFrozenGeoAnalysisContext(documents,project,id,{recordType:'geo-plan-context',geoId:project.id,actorId:user.id,mode:'analysis',state:'bound',basis,basisDigest:geoPlanDigest(basis)},pack.pages));
+  assert.equal(await documents.get(user.id,'geo-plan-context',id),null);
+  for(const page of pack.pages)if(page.id!==collision.id)assert.equal(await documents.get(user.id,'geo-plan-context',page.id),null);
+  assert.equal((await documents.get(user.id,'geo-plan-context',collision.id)).payload.recordType,'unrelated-fixture');
+});

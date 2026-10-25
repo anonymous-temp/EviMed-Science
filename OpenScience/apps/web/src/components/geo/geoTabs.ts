@@ -33,8 +33,8 @@ export const GEO_VIEW_PARAM = "view";
 export const GEO_QUESTIONS_VIEWS = Object.freeze(["pools", "journey", "all"] as const);
 export type GeoQuestionsView = (typeof GEO_QUESTIONS_VIEWS)[number];
 
-/** 依据's two views: the claim library, and the drug-value analysis. No `view` in the address is `claims`. */
-export const GEO_EVIDENCE_VIEWS = Object.freeze(["claims", "value"] as const);
+/** Evidence views retain the library, value research and exact selected support analysis. */
+export const GEO_EVIDENCE_VIEWS = Object.freeze(["claims", "value", "coverage"] as const);
 export type GeoEvidenceView = (typeof GEO_EVIDENCE_VIEWS)[number];
 
 /** Whether a word is a view of a tab, else null: a bad `?view=` reads as the tab's first view. */
@@ -189,7 +189,7 @@ export function geoViewedStep(tab: GeoTabKey, { step = null, view = null, sectio
   if (tab === "visibility") return section?.replace(/^geo-/, "") === "trend" || requested === "monitoring" ? "monitoring" : "diagnosis";
   if (tab === "actions") {
     const block = section?.replace(/^geo-/, "");
-    if (block === "delivery" || block === "budget") return "distribution";
+    if (block === "delivery" || block === "distribution" || block === "budget") return "distribution";
     if (block === "effect") return "monitoring";
     if (block === "review") return "content";
     if (requested && GEO_TAB_STEPS.actions.includes(requested)) return requested;

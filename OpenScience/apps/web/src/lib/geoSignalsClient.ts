@@ -34,9 +34,16 @@ export interface GeoSignalTarget { key: string; type: 'finding' | 'claim' | 'art
 export interface GeoSignalDetail extends GeoSignal {
   basisDigest: string; dispositionReason: string | null;
   targets?: GeoSignalTarget[];
+  groupMembers?: Record<'before' | 'after', { availability: 'preserved' | 'unknown'; total: number | null; items: Array<{ snapshotId: string; questionId: string; engine: string; preservedAnswer?: { text: string | null }; facts?: { statements?: Array<{ text: string; verdict: string }> } | null }> }> | null;
   basis: { errorId?: string; snapshotId?: string | null; questionId?: string | null; groupId?: string | null; questionVersion?: number | null;
     engine?: string; statement?: string; assessedStatement?: { text?: string; evidence?: string; applicability?: { population?: string; inLabel?: boolean; elements?: Record<string, unknown> } } | null;
     evidenceAvailability?: string; url?: string; orderId?: string; articleId?: string | null; articleResultVersionId?: string | null;
+    group?: { id: string; label: string | null; pool: string; questionVersion: number };
+    previous?: { id: string; completedAt: string | null }; current?: { id: string; completedAt: string | null };
+    cells?: Array<{ key: string; metricId: string; delta: number; before: { value: number; numerator: number | null; denominator: number | null }; after: { value: number; numerator: number | null; denominator: number | null } }>;
+    methods?:{before:{engines:string[]};after:{engines:string[]}};
+    policy?: { threshold: number; noiseMeasured: boolean };
+    sides?: Record<'before' | 'after', { selectionRef: string; count: number }>;
     targets?: GeoSignalTarget[]; mappingState?: string; dependencyObservation?: string; notice?: Record<string, string | null> };
 }
 export interface GeoSignalPage { items: GeoSignal[]; total: number; counts: Record<GeoSignalState, number>; actionable: number; nextCursor: string | null }
@@ -45,6 +52,13 @@ export function listGeoSignals(geoId: string, input: { limit?: number; cursor?: 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(input)) if (value != null) query.set(key, String(value));
   return productRequest<GeoSignalPage>(`${root(geoId)}${query.size ? `?${query}` : ''}`);
+}
+export interface GeoSignalMemberPage {
+  side:'before'|'after';items:Array<{snapshotId:string;questionId:string;engine:string;preservedQuestion?:{text:string|null};preservedAnswer?:{text:string|null};facts?:{statements?:Array<{text:string;verdict:string}>}|null}>;
+  total:number;digest:string;fullDigest:string;basisDigest:string;more:boolean;nextOffset:number|null;
+}
+export function getGeoSignalMembers(geoId:string,signalId:string,input:{side:'before'|'after';offset:number;limit?:number;expectedBasisDigest:string}){
+  return productRequest<GeoSignalMemberPage>(`${root(geoId)}/${encodeURIComponent(signalId)}/members?${new URLSearchParams(Object.entries(input).map(([key,value])=>[key,String(value)]))}`);
 }
 export const getGeoSignal = (geoId: string, signalId: string) => productRequest<GeoSignalDetail>(`${root(geoId)}/${encodeURIComponent(signalId)}`);
 export const setGeoSignalDisposition = (geoId: string, signalId: string, input: { expectedRevision: number; requestKey: string; disposition: 'active' | 'ignored'; reason?: string }) =>

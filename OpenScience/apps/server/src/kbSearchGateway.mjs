@@ -150,7 +150,9 @@ export function createKbSearchGatewayHandler(config, runtimeManager, { index, ev
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      sendJson(res, 200, { data: evaluationIsolation ? await evaluationIsolation.filter(identity, "knowledge-base", result) : result });
+      const data = evaluationIsolation ? await evaluationIsolation.filter(identity, "knowledge-base", result) : result;
+      if (shared && typeof policy.current === "function") await policy.current();
+      sendJson(res, 200, { data });
     } catch (error) {
       const known = error instanceof KbSearchGatewayError;
       const status = known ? error.status : 503;

@@ -116,3 +116,62 @@ test('remote capability hints and model catalogue match scoped actions without o
   assert.throws(() => s.project('session/modelCatalog', { args: {} }, { ...catalog, default: { provider: 'other', model: 'private' } }));
   assert.equal(s.permits('unknown/read', { args: {} }), false);
 });
+
+test('sequenced native question projection proves continued call after waterfall cancellation and never accepts foreign or stale restoration',()=>{
+  const s=scope(),question={callId:'continued-call',state:'continued',questions:[{id:'q',question:'Which?',options:[{label:'A'}]}]};
+  const args={agentId:'root',callId:'continued-call',answer:{answers:[{id:'q',selected:['A']}]}};
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},{kind:'sequenced',asOfSeq:10,values:{userQuestions:{active:[question]}}});
+  assert.equal(s.permits('userQuestions/answer',{args}),true);
+  assert.equal(s.permits('userQuestions/answer',{args:{...args,agentId:'foreign'}}),false);
+  s.complete('userQuestions/answer',{args});assert.equal(s.permits('userQuestions/answer',{args}),false);
+  s.project('session/control',{args:{}},{type:'projection',sessionId:'root',key:'userQuestions',seq:11,value:{active:[]}});
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},{kind:'sequenced',asOfSeq:10,values:{userQuestions:{active:[question]}}});
+  assert.equal(s.permits('userQuestions/answer',{args}),false);
+  s.resetCarrier();assert.equal(s.questionCalls.size,0);
+});
+
+test('completed question stays invalid through delayed equal/newer snapshots before any later empty projection',()=>{
+  const s=scope(),question={callId:'same-seq-call',state:'continued',questions:[{id:'q',question:'Which?'}]};
+  const payload={args:{agentId:'root',callId:question.callId,answer:{answers:[{id:'q',selected:['A']}]}}};
+  const snapshot={kind:'sequenced',asOfSeq:10,values:{userQuestions:{active:[question]}}};
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},snapshot);assert.equal(s.permits('userQuestions/answer',payload),true);
+  s.complete('userQuestions/answer',payload);assert.equal(s.permits('userQuestions/answer',payload),false);
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},snapshot);
+  assert.equal(s.permits('userQuestions/answer',payload),false,'same-sequence pre-answer snapshot cannot restore a completed call');
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},{...snapshot,asOfSeq:11});
+  assert.equal(s.permits('userQuestions/answer',payload),false,'later stale content cannot reuse a completed native call identity');
+  const next={...question,callId:'different-call'};
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},{...snapshot,asOfSeq:11,values:{userQuestions:{active:[next]}}});
+  assert.equal(s.permits('userQuestions/answer',{args:{...payload.args,callId:next.callId}}),false,'same seq cannot introduce different calls');
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},{...snapshot,asOfSeq:12,values:{userQuestions:{active:[next]}}});
+  assert.equal(s.permits('userQuestions/answer',{args:{...payload.args,callId:next.callId}}),true);
+});
+test('carrier lifetime question invalidation survives readiness, event closure and removed-child snapshots',()=>{
+  const s=scope(),question={callId:'lifetime-call',state:'continued',questions:[{id:'q',question:'Which?'}]};
+  const project=(/** @type {string} */ id,/** @type {number} */ seq,/** @type {any[]} */ active)=>s.project('session/control',{args:{}},{type:'projection',sessionId:id,key:'userQuestions',seq,value:{active}});
+  const payload=(/** @type {string} */ id)=>({args:{agentId:id,callId:question.callId,answer:{answers:[{id:'q',selected:['A']}]}}});
+  s.setChildren([child]);project('child',10,[question]);assert.equal(s.permits('userQuestions/answer',payload('child')),true);
+  s.complete('userQuestions/answer',payload('child'));s.setChildren([]);project('child',11,[question]);
+  s.setChildren([child]);project('child',10,[question]);assert.equal(s.permits('userQuestions/answer',payload('child')),false);
+  s.project('$events',{args:{}},{type:'ready',clientId:'renewed-client',host:{home:'/private'}});
+  s.closeEvents();project('child',11,[question]);assert.equal(s.permits('userQuestions/answer',payload('child')),false);
+  project('foreign',100,[question]);assert.equal(s.questionSequences.has('foreign'),false);
+  s.resetCarrier();project('child',12,[{...question,callId:'fresh-call'}]);
+  assert.equal(s.permits('userQuestions/answer',{args:{...payload('child').args,callId:'fresh-call'}}),true);
+});
+test('closing an events stream keeps a pending sequenced continued call usable until trusted carrier rotation',()=>{
+  const s=scope(),question={callId:'pending-call',state:'continued',questions:[{id:'q',question:'Which?'}]};
+  const payload={args:{agentId:'root',callId:question.callId,answer:{answers:[{id:'q',selected:['A']}]}}};
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},{kind:'sequenced',asOfSeq:10,values:{userQuestions:{active:[question]}}});
+  s.closeEvents();assert.equal(s.permits('userQuestions/answer',payload),true,'sequenced call proof is independent of waterfall client identity');
+  s.resetCarrier();assert.equal(s.permits('userQuestions/answer',payload),false);
+});
+test('completed question tombstones have a bounded lifetime budget and are never evicted to admit stale calls',()=>{
+  const s=scope();
+  for(let i=0;i<4100;i++)s.settleQuestion('root',`completed-${i}`);
+  assert.equal(s.settledQuestions.size,4096);assert.equal(s.questionProofsExhausted,true);
+  const question={callId:'completed-0',state:'continued',questions:[{id:'q',question:'Which?'}]};
+  s.project('session/projections',{args:{request:{sessionId:'root'}}},{kind:'sequenced',asOfSeq:9999,values:{userQuestions:{active:[question]}}});
+  assert.equal(s.permits('userQuestions/answer',{args:{agentId:'root',callId:question.callId,answer:{answers:[]}}}),false);
+  s.resetCarrier();assert.equal(s.settledQuestions.size,0);assert.equal(s.questionProofsExhausted,false);
+});

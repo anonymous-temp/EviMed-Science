@@ -10,7 +10,8 @@ export function geoPathWithContext(path: string, from: { pathname: string; searc
   const sourceParts = from.pathname.split("/");
   const targetParts = target.pathname.split("/");
   if (sourceParts[2] !== "geo" || targetParts[2] !== "geo" || !sourceParts[3] || sourceParts[3] !== targetParts[3]) return path;
-  const kept = new URLSearchParams(geoReadScopeQuery(geoReadScopeFromSearch(from.search)));
+  // An exact saved selection replaces inherited filters rather than narrowing them.
+  const kept = new URLSearchParams(target.searchParams.has("selectionRef") ? "" : geoReadScopeQuery(geoReadScopeFromSearch(from.search)));
   const session = geoSessionIdFromChatPath(from.pathname) || new URLSearchParams(from.search).get("session");
   if (session) kept.set("session", session);
   for (const [alias, canonical] of [["engine", "engines"], ["cluster", "groupIds"], ["pool", "pools"]]) {

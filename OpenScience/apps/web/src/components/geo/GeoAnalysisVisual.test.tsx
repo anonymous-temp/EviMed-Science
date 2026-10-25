@@ -180,3 +180,54 @@ it('confirmed relationship bars have exact members independently of brand mentio
  render(<GeoAnalysisVisual data={{view:{viewId:'V20'},chart:{kind:'source_relationships',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={selected}/>);
  fireEvent.click(screen.getByRole('button',{name:/其他/}));expect(selected).toHaveBeenCalledWith(cells[0]);expect(screen.getByText(/当前人工注释/)).toBeTruthy();
 });
+it('journey coverage selects independent units, keeps zero and unknown and drills into full chart members',()=>{
+ const chosen=vi.fn(),members={selectionRef:'selected',view:{viewId:'V10'},rowKey:'old',columnKey:'questions',expectedDigest:'digest',unit:'questions',total:2,exact:true};
+ const cells=[{rowKey:'old',columnKey:'questions',label:'同名群 · 问题版本 1',groupId:'old',setVersion:1,engine:null,value:2,state:'known',members},{rowKey:'new',columnKey:'questions',label:'同名群 · 问题版本 2',groupId:'new',setVersion:2,engine:null,value:0,state:'known',members},{rowKey:'old',columnKey:'articles',label:'同名群 · 问题版本 1',groupId:'old',setVersion:1,engine:null,value:null,state:'unknown',members:null}];
+ render(<GeoAnalysisVisual data={{view:{viewId:'V10'},columns:[{key:'questions',label:'原始问题'},{key:'articles',label:'内容'}],chart:{kind:'journey',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={chosen}/>);
+ expect(screen.getByRole('table',{name:'旅程与需求覆盖矩阵'})).toBeTruthy();expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:/问题版本 1 · 原始问题 2/}));expect(chosen).toHaveBeenCalledWith(cells[0]);
+ fireEvent.click(screen.getByRole('button',{name:'覆盖数量：原始问题'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'内容'}));expect(screen.getByText('未知')).toBeTruthy();
+});
+
+it('journey verified support labels a partial subtotal while unavailable verification stays unknown',()=>{
+ const cells=[{rowKey:'partial',columnKey:'verifiedClaims',label:'部分依据',groupId:'g1',setVersion:1,engine:null,value:1,knownSubtotal:1,unknownCandidates:2,state:'partial'},
+  {rowKey:'unknown',columnKey:'verifiedClaims',label:'缺少依据',groupId:'g2',setVersion:1,engine:null,value:null,knownSubtotal:0,unknownCandidates:2,state:'unknown'},
+  {rowKey:'empty',columnKey:'verifiedClaims',label:'已知为空',groupId:'g3',setVersion:1,engine:null,value:0,knownSubtotal:0,unknownCandidates:0,state:'known'}];
+ render(<GeoAnalysisVisual data={{view:{viewId:'V10'},columns:[{key:'verifiedClaims',label:'原文已核实主张'}],chart:{kind:'journey',labels:[],series:[],cells}} as unknown as GeoAnalysisView} onSelect={()=>{}}/>);
+ expect(screen.getByText('1（已核实小计；另有 2 条待核实）')).toBeVisible();
+ expect(screen.getByText('未知')).toBeVisible();expect(screen.getByText('0')).toBeVisible();
+});
+
+it('evidence coverage keeps unknown, partial subtotal and known zero separate on the current page',()=>{
+ const cells:GeoAnalysisChartCell[]=[
+  {...cell('known','deepseek',0),rowKey:'known',columnKey:'supported',label:'Adult'},
+  {...cell('unknown','deepseek',null,'unknown'),rowKey:'unknown',columnKey:'supported',label:'Child'},
+  {...cell('offpage','deepseek',99),rowKey:'offpage',columnKey:'supported',label:'Not on this page'},
+ ];
+ cells[0].members={selectionRef:'gsel_evidence',view:{viewId:'V16',evidenceKind:'claims'},rowKey:'known',columnKey:'supported',expectedDigest:'digest',unit:'statement_assessments',total:0,exact:true};
+ const selected=vi.fn(),data={view:{viewId:'V16',evidenceKind:'claims'},rows:[{key:'known',label:'Adult'},{key:'unknown',label:'Child'}],columns:[{key:'supported',label:'依据已核实且表达一致'}],chart:{kind:'evidence',labels:[],series:[],cells}} as unknown as GeoAnalysisView;
+ render(<GeoAnalysisVisual data={data} onSelect={selected}/>);
+ expect(screen.getByRole('table',{name:'主张条件与来源覆盖矩阵'})).toBeVisible();
+ expect(screen.getByText('未知')).toBeVisible();expect(screen.getByText('0')).toBeVisible();expect(screen.queryByText('Not on this page')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:/Adult.*表达一致/}));expect(selected).toHaveBeenCalledWith(cells[0]);
+ expect(screen.getByRole('button',{name:/Child.*未知/})).toBeDisabled();
+});
+
+it('renders error records as a paged platform matrix with exact member actions',()=>{
+ const selected=vi.fn(),member={selectionRef:'gsel_errors',view:{viewId:'V13'},rowKey:'rare',columnKey:'engine_kimi',expectedDigest:'errors',unit:'error_records',total:1,exact:true};
+ const item={rowKey:'rare',columnKey:'engine_kimi',engine:'kimi',label:'条件遗漏',value:1,state:'known',members:member};
+ const view={view:{viewId:'V13',errorFacet:'type'},columns:[{key:'engine_kimi',label:'Kimi'}],rows:[{key:'rare',label:'条件遗漏',values:{engine_kimi:{value:1}}}],chart:{kind:'error_distribution',cells:[item,{...item,rowKey:'off-page'}],labels:[],series:[]}} as unknown as GeoAnalysisView;
+ render(<GeoAnalysisVisual data={view} onSelect={selected}/>);
+ expect(screen.getByRole('table',{name:'错误记录分布'})).toBeVisible();
+ expect(screen.getAllByRole('button',{name:/条件遗漏.*Kimi.*1 条记录/})).toHaveLength(1);
+ fireEvent.click(screen.getByRole('button',{name:/条件遗漏.*Kimi.*1 条记录/}));expect(selected).toHaveBeenCalledWith(item);
+ expect(screen.getByText(/不能当作当时状态或回答错误率/)).toBeVisible();
+});
+
+it('keeps publication units independent and opens the full exact current-state and event memberships',()=>{
+ const selected=vi.fn(),members={selectionRef:'gsel_publication',view:{viewId:'V24'},rowKey:'state',columnKey:'orderEvents',expectedDigest:'publication',unit:'order_events',total:3,exact:true};
+ const item={rowKey:'state',columnKey:'orderEvents',label:'状态待确认',value:3,state:'known',members};
+ const view={view:{viewId:'V24'},columns:[{key:'orders',label:'投放订单'},{key:'orderEvents',label:'已记录订单变更'}],rows:[{key:'state',label:'状态待确认',values:{orders:{value:1},orderEvents:{value:3}}}],chart:{kind:'publication_execution',cells:[item],labels:[],series:[],timeline:{total:3,dated:2,undated:1,events:[{id:'e1',rowKey:'state',columnKey:'orderEvents',at:'2026-10-01T00:00:00Z',label:'提交'},{id:'e2',rowKey:'state',columnKey:'orderEvents',at:'2026-10-03T00:00:00Z',label:'未知'}]}}} as unknown as GeoAnalysisView;
+ render(<GeoAnalysisVisual data={view} onSelect={selected}/>);
+ expect(screen.getByRole('table',{name:'内容、版本与发布记录'})).toBeVisible();expect(screen.getByRole('img',{name:'订单实际事件时间轴'})).toBeVisible();
+ expect(screen.getByText(/1 条时间未知记录保留在明细/)).toBeVisible();fireEvent.click(screen.getByRole('button',{name:'状态待确认 · 查看 3 条事件'}));expect(selected).toHaveBeenCalledWith(item);
+});

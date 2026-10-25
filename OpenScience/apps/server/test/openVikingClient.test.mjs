@@ -32,6 +32,24 @@ const config = {
   openVikingRequestTimeoutMs: 1_000,
 };
 
+test("bounded sensitive responses cancel the stream before retaining excess bytes", async () => {
+  let cancelled = false;
+  const client = new OpenVikingClient(config, { fetchImpl: async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("private configuration must remain bounded")); },
+    cancel() { cancelled = true; },
+  })) });
+  await assert.rejects(client.request({ path: "/api/v1/admin/configuration", maxResponseBytes: 8 }),
+    error => error.code === "memory_index_unavailable" && !error.message.includes("private configuration"));
+  assert.equal(cancelled, true);
+});
+
+test("bounded reads preserve JSON and byte responses within the limit", async () => {
+  const client = new OpenVikingClient(config, { fetchImpl: async () => new Response('{"result":{"ok":true}}') });
+  assert.deepEqual(await client.request({ path: "/api/v1/admin/configuration", maxResponseBytes: 64 }), { result: { ok: true } });
+  const bytes = await client.request({ path: "/api/v1/content/download", maxResponseBytes: 64, responseType: "bytes" });
+  assert.equal(bytes.bytes.toString(), '{"result":{"ok":true}}');
+});
+
 /** Records every call and answers with the queued responses. */
 function recordingFetch(responses) {
   const calls = [];

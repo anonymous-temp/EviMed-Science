@@ -1490,6 +1490,9 @@ test("a valid, matching receipt makes its files the artifacts even when the tran
     const files = { "clinical-evidence-report.md": "# graded and unchanged\n", "clinical-evidence-matrix.json": "{\"claims\":[]}\n" };
     for (const [name, body] of Object.entries(files)) await writeFile(path.join(deliverableDir, name), body, "utf8");
     await writeFile(path.join(deliverableDir, "scratch.txt"), "left beside the package, named by no receipt\n", "utf8");
+    // This preexisting sibling is outside this run; keep its mtime unambiguously before millisecond run timestamps.
+    const earlier = new Date(Date.now() - 5000);
+    await utimes(path.join(deliverableDir, "scratch.txt"), earlier, earlier);
     await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
       formatVersion: 1,
       runId: "run_live_valid",

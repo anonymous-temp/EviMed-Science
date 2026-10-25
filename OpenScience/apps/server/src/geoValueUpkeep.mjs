@@ -16,10 +16,12 @@
  *
  * Hidden knowledge:
  *
- * - **A reference is a stored version number, and the list of them is one table.** `GEO_VALUE_REFERENCES` names every place the
+ * - **A reference is a stored version number, and the inventories name its actual schema.** `GEO_VALUE_REFERENCES` names where the
  *   module records which version of the profile something stood on: a round's frozen evaluation basis, the version an answer was
  *   judged against, an article's basis, a research request and the research results the profile itself holds, and the value context
- *   a question group or a source may carry. The prune statement is built from that table, and a test reads the module's sources
+ *   a question group or a source may carry. `GEO_VALUE_PRODUCT_REFERENCES` separately names source-change signals and native signal
+ *   contexts in the product ledger; only nondeleted heads belonging to the GEO owner and control project count. The prune statement
+ *   is built from both inventories, and a test reads the module's sources
  *   for the words that write such a number, so a new reference that is not in the table fails a test instead of losing a version.
  *   No card and no export records one today: a card names its claims and an export is a file in the workspace.
  * - **A pruned version is not read as an empty one.** The latest twenty are never pruned and the profile's readers ask for the
@@ -52,8 +54,9 @@ import {
 } from "@evimed/domain";
 import { FRONTIER_MATCH_MAX_LIMIT } from "./entityVocabulary.mjs";
 import { sourceIdentifiersOf } from "./sourceChanges.mjs";
+import { migrateProductStore } from "./productPersistence.mjs";
 
-/** Where a stored object records which version of a project's value profile it stood on: its table and the JSON value that holds the number. */
+/** GEO-schema references: the table and the JSON value holding a project's profile version. */
 export const GEO_VALUE_REFERENCES = Object.freeze([
   Object.freeze({ by: "a round's frozen evaluation basis", table: "rounds", value: "ref #> '{evaluationBasis,value,version}'" }),
   Object.freeze({ by: "the version an answer was judged against", table: "facts", value: "judge_extract -> 'valueBasisVersion'" }),
@@ -61,6 +64,14 @@ export const GEO_VALUE_REFERENCES = Object.freeze([
   Object.freeze({ by: "a question group's value context", table: "question_groups", value: "value_context -> 'basisVersion'" }),
   Object.freeze({ by: "a source's value context", table: "sources", value: "value_context -> 'basisVersion'" }),
   Object.freeze({ by: "a research request", table: "schedule_marks", value: "detail -> 'basisVersion'" }),
+]);
+
+/** Product-document heads read later by signal inputs, scoped to the GEO owner's control project. */
+export const GEO_VALUE_PRODUCT_REFERENCES = Object.freeze([
+  Object.freeze({ by: "a source-change signal", kind: "geo-signal", recordType: "geo-signal", discriminator: "kind", mode: "source_changed",
+    value: "d.payload #> '{basis,profileVersionAtDetection}'" }),
+  Object.freeze({ by: "a native signal context", kind: "geo-plan-context", recordType: "geo-plan-context", discriminator: "mode", mode: "signal",
+    value: "d.payload #> '{basis,event,profileVersionAtDetection}'" }),
 ]);
 
 /** The JSON value `value` as a number, or NULL where it is anything else. @param {string} value */
@@ -73,6 +84,10 @@ const numberOf = (value) => `CASE WHEN jsonb_typeof(${value}) = 'number' THEN ($
  */
 const POINTED = [
   ...GEO_VALUE_REFERENCES.map((reference) => `SELECT ${numberOf(reference.value)} AS v FROM evimed_geo.${reference.table} WHERE geo_project_id = $1`),
+  ...GEO_VALUE_PRODUCT_REFERENCES.map((reference) => `SELECT ${numberOf(reference.value)} AS v FROM evimed_product.documents d
+    JOIN evimed_geo.projects g ON g.id=$1 AND d.user_id=g.user_id AND d.project_id=g.project_id
+    WHERE d.deleted_at IS NULL AND d.kind='${reference.kind}' AND d.payload->>'recordType'='${reference.recordType}'
+      AND d.payload->>'${reference.discriminator}'='${reference.mode}' AND d.payload->>'geoId'=$1`),
   `SELECT ${numberOf("entry -> 'basisVersion'")} AS v FROM evimed_geo.value_profiles latest
     CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(latest.data -> 'researchResults') = 'array' THEN latest.data -> 'researchResults' ELSE '[]'::jsonb END) entry
     WHERE latest.geo_project_id = $1 AND latest.version = (SELECT max(version) FROM evimed_geo.value_profiles WHERE geo_project_id = $1) AND jsonb_typeof(entry) = 'object'`,
@@ -98,11 +113,13 @@ const PRUNE = `WITH pointed AS MATERIALIZED (
 /**
  * Prune one project's profile: the versions that are neither recent, nor a calendar month's first, nor pointed to. Takes the lock a
  * write of the profile takes (`writeGeoValue`), so a version cannot be written between choosing and deleting.
- * @param {{ transaction: (work: (client: any) => Promise<any>) => Promise<any> }} store
+ * @param {{ database: any, transaction: (work: (client: any) => Promise<any>) => Promise<any> }} store
  * @param {string} geoId @param {{ keep: number, limit: number, timeZone: string }} options
  * @returns {Promise<number[]>} the versions deleted, oldest first
  */
 export async function pruneGeoValueProfiles(store, geoId, { keep, limit, timeZone }) {
+  // Initialize before borrowing the pruning connection, including on a one-connection standalone store.
+  await migrateProductStore(store.database);
   return store.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-value:' || $1))", [geoId]);
     const deleted = await client.query(PRUNE, [geoId, keep, timeZone, limit]);

@@ -17,8 +17,6 @@ import {
   type GeoStartAnswer,
   type GeoStepKey,
 } from "@/lib/geoClient";
-import { geoChatPath } from "@/lib/geoLocation";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -181,18 +179,6 @@ function GeoProjectView({ geoId }: { geoId: string }) {
     void (scope ? getGeoProject(geoId, scope) : getGeoProject(geoId)).then(
       async (project) => {
         if (!live) return;
-        try {
-          const store = useProjectStore.getState();
-          if (onChat && store.currentId !== project.projectId) {
-            if (!store.projects.some((item) => item.id === project.projectId)) await store.load();
-            if (!live) return;
-            await useProjectStore.getState().select(project.projectId);
-          }
-          if (!live) return;
-        } catch (error: unknown) {
-          if (!live) return;
-          setConversationError(webErrorMessage(error, { fallback: "对话暂时无法打开。" }));
-        }
         // Articles and orders can change without touching the project row; every successful refresh updates active shared reads.
         const state = stepsState(project);
         if (shown.current !== null && document.visibilityState !== "hidden") data.invalidate();
@@ -374,11 +360,8 @@ function GeoBand({
   const target = { geoId, projectId: project.projectId, sessionId: heldSession };
   useEffect(() => {
     if (!onChat || addressedSession) return;
-    const intent = newRuntimeUiIntent(undefined, heldSession ?? undefined);
-    navigate(`${geoChatPath(geoId, intent.sessionId)}${location.search}`, {
-      replace: true, state: { ...location.state, runtimeUiIntent: intent },
-    });
-  }, [onChat, addressedSession, heldSession, geoId, location.search, location.state, navigate]);
+    void openConversation({ geoId, projectId: project.projectId, sessionId: heldSession });
+  }, [onChat, addressedSession, heldSession, geoId, project.projectId, openConversation]);
   const openChat = () => {
     if (busy) return;
     setBusy("conversation");
@@ -505,7 +488,7 @@ function GeoBand({
         更新暂时失败，仍显示上次结果。{api.refreshError || dataRefreshError}
       </Note>}
       {onChat ? (
-        conversationError ? <LoadError message={conversationError} onRetry={reload} /> : addressedSession ? <GeoConversationPane projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
+        conversationError ? <LoadError message={conversationError} onRetry={reload} /> : addressedSession ? <GeoConversationPane canRun={can("run") && can("edit")} geoId={geoId} projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
       ) : snapshotId ? (
         // One answer, read inside the band: the route's own element, which may still be on its way.
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>

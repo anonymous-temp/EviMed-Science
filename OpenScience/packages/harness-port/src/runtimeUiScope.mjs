@@ -13,6 +13,8 @@ const DISCOVERY = new Set(['$events', 'session/list', 'session/control', 'sessio
 const WORKSPACE_READS = new Set(RUNTIME_UI_WORKSPACE_PATH_METHODS);
 const SUMMARY_FIELDS = ['agentAvailable', 'formatStatus', 'sessionId', 'updatedAt', 'running', 'blank', 'parentSessionId', 'origin', 'cwd', 'projections'];
 const JOB_FIELDS = ['id', 'kind', 'label', 'owner', 'outputLimitBytes', 'status', 'progress', 'detail', 'startedAt', 'finishedAt'];
+const MAX_QUESTION_PROOFS = 4096;
+const MAX_QUESTION_SESSIONS = 128;
 const SESSION_EMITS = new Set(['api-session/status', 'api-session/activity', 'api-session/error', 'api-session/removed']);
 
 /**
@@ -23,6 +25,10 @@ const SESSION_EMITS = new Set(['api-session/status', 'api-session/activity', 'ap
 export class NativeUiScope {
   /** @param {{rootSessionId:string,workspacePath:string,provider:string,model:string}} options */
   constructor({ rootSessionId, workspacePath, provider, model }) {
+    /** @type {Map<string,{seq:number,items:Map<string,any>}>} */ this.questionCalls = new Map();
+    /** @type {Map<string,number>} */ this.questionSequences = new Map();
+    /** @type {Set<string>} */ this.settledQuestions = new Set();
+    this.questionProofsExhausted = false;
     this.rootSessionId = rootSessionId; this.workspacePath = workspacePath;
     this.provider = provider; this.model = model;
     /** @type {Map<string,any>} */ this.children = new Map();
@@ -44,6 +50,7 @@ export class NativeUiScope {
     }
     for (const [id, interaction] of this.interactions) if (!this.readable(interaction.agentId)) this.interactions.delete(id);
     for (const id of this.jobs.keys()) if (!this.readable(id)) this.jobs.delete(id);
+    for (const id of this.questionCalls.keys()) if (!this.readable(id)) this.questionCalls.delete(id);
   }
   /** @param {any} id */
   readable(id) { return id === this.rootSessionId || this.children.has(id); }
@@ -56,12 +63,31 @@ export class NativeUiScope {
   }
   /** Keep proof registries no longer than their actual transport generation. */
   closeEvents() { this.clientId = null; this.interactions.clear(); }
-  dispose() { this.closeEvents(); this.jobs.clear(); this.children.clear(); this.workspaces.clear(); }
+  resetCarrier() { this.closeEvents(); this.questionCalls.clear(); this.questionSequences.clear(); this.settledQuestions.clear(); this.questionProofsExhausted = false; }
+  dispose() { this.resetCarrier(); this.jobs.clear(); this.children.clear(); this.workspaces.clear(); }
+  /** Retain completed native identities until the trusted carrier/generation
+   * rotates. Exhaustion refuses new questions rather than evicting proof.
+   * @param {string} sessionId @param {string} callId */
+  settleQuestion(sessionId, callId) {
+    if (typeof sessionId !== 'string' || sessionId.length > 128 || typeof callId !== 'string' || !/^[A-Za-z0-9_.:-]{1,256}$/u.test(callId)) return;
+    if (this.settledQuestions.size >= MAX_QUESTION_PROOFS) { this.questionProofsExhausted = true; return; }
+    this.settledQuestions.add(JSON.stringify([sessionId,callId]));
+  }
+  /** @param {string} sessionId @param {string} callId */
+  questionSettled(sessionId, callId) { return this.settledQuestions.has(JSON.stringify([sessionId,callId])); }
   /** The pinned gateway removes the answering peer before broadcasting cancel
    * to other peers. Only a confirmed successful response consumes this proof.
    * @param {string} method @param {any} payload */
   complete(method, payload) {
-    if (method === '$events/result' && payload?.args?.clientId === this.clientId) this.interactions.delete(payload.args.eventId);
+    if (method === '$events/result' && payload?.args?.clientId === this.clientId) {
+      const question = this.interactions.get(payload.args.eventId);
+      if (question?.callId) this.settleQuestion(question.agentId,question.callId);
+      this.interactions.delete(payload.args.eventId);
+    }
+    if (method === 'userQuestions/answer') {
+      this.settleQuestion(payload?.args?.agentId,payload?.args?.callId);
+      this.questionCalls.get(payload?.args?.agentId)?.items.delete(payload?.args?.callId);
+    }
     if (method === 'userQuestions/answer') for (const [id, item] of this.interactions) {
       if (item.agentId === payload?.args?.agentId && item.callId === payload?.args?.callId) this.interactions.delete(id);
     }
@@ -79,12 +105,35 @@ export class NativeUiScope {
     if (['fileReferences/list', 'fileUploads/upload'].includes(method)) return args.agentId === this.rootSessionId;
     if (method === 'job/list') return this.readable(request?.sessionId);
     if (['job/follow', 'job/kill'].includes(method)) return this.readable(request?.sessionId) && Boolean(this.jobs.get(request.sessionId)?.has(request.jobId));
-    if (method === '$events/result') return this.clientId !== null && args.clientId === this.clientId && this.interactions.has(args.eventId);
-    if (['userQuestions/answer', 'userQuestions/attachWait'].includes(method)) return typeof args.callId === 'string'
-      && [...this.interactions.values()].some(item => item.agentId === args.agentId && item.event === 'user-questions/request' && item.callId === args.callId);
+    if (method === '$events/result') {
+      const question = this.interactions.get(args.eventId);
+      return !this.questionProofsExhausted && this.clientId !== null && args.clientId === this.clientId && question !== undefined
+        && (!question.callId || !this.questionSettled(question.agentId,question.callId));
+    }
+    if (['userQuestions/answer', 'userQuestions/attachWait'].includes(method)) return !this.questionProofsExhausted && typeof args.callId === 'string' && !this.questionSettled(args.agentId,args.callId)
+      && ([...this.interactions.values()].some(item => item.agentId === args.agentId && item.event === 'user-questions/request' && item.callId === args.callId)
+        || this.readable(args.agentId) && this.questionCalls.get(args.agentId)?.items.get(args.callId)?.state === (method === 'userQuestions/answer' ? 'continued' : 'open'));
     return false;
   }
 
+  /** Current sequenced native projection, scoped by its originating RPC/control
+   * stream. A timed waterfall cancellation does not erase a continued call.
+   * @param {string} sessionId @param {any} value @param {number} seq */
+  questionProjection(sessionId, value, seq) {
+    if (this.questionProofsExhausted || !this.readable(sessionId) || !Number.isSafeInteger(seq) || seq < 0 || !Array.isArray(value?.active)
+      || value.active.length > 128 || (this.questionSequences.get(sessionId) ?? -1) >= seq
+      || !this.questionSequences.has(sessionId) && this.questionSequences.size >= MAX_QUESTION_SESSIONS) return;
+    const items = new Map();
+    for (const question of value.active) {
+      if (!['open', 'continued'].includes(question?.state) || !Array.isArray(question.questions)) return;
+      const rendered = renderNativeQuestionReply({callId:question.callId,questions:question.questions,
+        answers:question.questions.map((/** @type {any} */ item)=>({id:item.id,selected:[]}))});
+      if (!rendered || items.has(question.callId) || JSON.stringify(rendered).length > 65536) return;
+      if (!this.questionSettled(sessionId,question.callId)) items.set(question.callId,{callId:question.callId,state:question.state,questions:JSON.parse(rendered[0].text).questions});
+    }
+    this.questionSequences.set(sessionId,seq);
+    this.questionCalls.set(sessionId,{seq,items});
+  }
   /** UI hints mirror the server ceiling; they never grant server authority. */
   access() {
     return { type: 'baseline', owner: false, grants: [
@@ -106,10 +155,16 @@ export class NativeUiScope {
   /** @param {string} method @param {any} payload @param {any} value @returns {{forward:boolean,value?:any}} */
   project(method, payload, value) {
     if (!this.permits(method, payload)) return dropped();
+    if (method === 'session/projections' && value?.kind === 'sequenced') this.questionProjection(payload.args.request.sessionId, value.values?.userQuestions, value.asOfSeq);
     if (method === 'session/list') return kept({ items: rows(value?.items).filter(item => this.readable(item.sessionId)).map(item => pick(item, SUMMARY_FIELDS)) });
     if (method === 'session/control') {
-      if (value?.type === 'baseline' && record(value.value?.projections)) return kept({ type: 'baseline', value: { projections: Object.fromEntries(Object.entries(value.value.projections).filter(([id]) => this.readable(id))) } });
-      if (value?.type === 'projection' && this.readable(value.sessionId)) return kept(pick(value, ['type', 'sessionId', 'key', 'value', 'seq']));
+      if (value?.type === 'baseline' && record(value.value?.projections)) {
+        for (const [id, snapshot] of Object.entries(value.value.projections)) if (this.readable(id)) this.questionProjection(id, snapshot?.values?.userQuestions, snapshot?.asOfSeq);
+        return kept({ type: 'baseline', value: { projections: Object.fromEntries(Object.entries(value.value.projections).filter(([id]) => this.readable(id))) } }); }
+      if (value?.type === 'projection' && this.readable(value.sessionId)) {
+        if (value.key === 'userQuestions') this.questionProjection(value.sessionId, value.value, value.seq);
+        return kept(pick(value, ['type', 'sessionId', 'key', 'value', 'seq']));
+      }
       return dropped();
     }
     if (method === 'workspace/create') {
@@ -162,7 +217,7 @@ export class NativeUiScope {
   /** @param {any} value @returns {{forward:boolean,value?:any}} */
   event(value) {
     if (value?.type === 'ready' && typeof value.clientId === 'string' && value.clientId) {
-      this.closeEvents(); this.clientId = value.clientId;
+      this.interactions.clear(); this.clientId = value.clientId;
       return kept({ type: 'ready', clientId: value.clientId, host: { home: this.workspacePath } });
     }
     if (!this.clientId) return dropped();
@@ -181,4 +236,33 @@ export class NativeUiScope {
     // no delegated disclosure path, including events without a session field.
     return dropped();
   }
+}
+
+/** Exact continued-answer user/message wrapper from the pinned userQuestions
+ * service. Call/question association is supplied by the authenticated carrier;
+ * this renderer grants no authority. Unknown wire forms remain unproved.
+ * @param {{callId:string,questions:any[],answers:any[]}} input @returns {any[]|null} */
+export function renderNativeQuestionReply({ callId, questions, answers }) {
+  if (typeof callId !== 'string' || !/^[A-Za-z0-9_.:-]{1,256}$/u.test(callId) || !Array.isArray(questions) || !questions.length
+    || questions.length > 100 || !Array.isArray(answers) || answers.length !== questions.length) return null;
+  const normalizedQuestions = [];
+  for (const question of questions) {
+    if (!record(question) || typeof question.id !== 'string' || typeof question.question !== 'string'
+      || question.options !== undefined && (!Array.isArray(question.options) || question.options.some((/** @type {any} */ option) => !record(option) || typeof option.label !== 'string'
+        || option.description !== undefined && typeof option.description !== 'string'))
+      || question.header !== undefined && typeof question.header !== 'string' || question.multiSelect !== undefined && typeof question.multiSelect !== 'boolean') return null;
+    normalizedQuestions.push({ id: question.id, question: question.question,
+      ...(question.header === undefined ? {} : { header: question.header }),
+      ...(question.options === undefined ? {} : { options: question.options.map((/** @type {any} */ option) => ({ label: option.label,
+        ...(option.description === undefined ? {} : { description: option.description }) })) }),
+      ...(question.multiSelect === undefined ? {} : { multiSelect: question.multiSelect }) });
+  }
+  if (new Set(answers.map(answer => answer?.id)).size !== questions.length || answers.some(answer => !record(answer)
+    || Object.keys(answer).some(key => !['id', 'selected', 'custom'].includes(key)) || typeof answer.id !== 'string'
+    || !Array.isArray(answer.selected) || answer.selected.some((/** @type {any} */ item) => typeof item !== 'string')
+    || answer.custom !== undefined && typeof answer.custom !== 'string' || !questions.some(question => question.id === answer.id))) return null;
+  const normalizedAnswers = answers.map(answer => ({ id: answer.id, selected: answer.selected,
+    ...(answer.custom === undefined ? {} : { custom: answer.custom }) }));
+  return [{ type: 'text', text: JSON.stringify({ kind: 'answer_to_pending_question', tool: 'ask_user_question', callId,
+    questions: normalizedQuestions, answers: normalizedAnswers }) }];
 }

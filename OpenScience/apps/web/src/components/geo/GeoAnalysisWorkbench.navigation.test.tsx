@@ -3,8 +3,9 @@ import {MemoryRouter,useLocation} from 'react-router';
 import {it,expect,vi} from 'vitest';
 import {GeoAnalysisWorkbench} from '@/components/geo/GeoAnalysisWorkbench';
 import {useProjectStore} from '@/lib/projects';
-const mocks=vi.hoisted(()=>({stage:vi.fn(),current:vi.fn(),listWebProjects:vi.fn(),fetchWebMe:vi.fn()}));
+const mocks=vi.hoisted(()=>({stage:vi.fn(),current:vi.fn(),listWebProjects:vi.fn(),fetchWebMe:vi.fn(),moduleSession:vi.fn()}));
 vi.mock('@/lib/apiClient',async original=>({...await original<typeof import('@/lib/apiClient')>(),hasWebApi:true,listWebProjects:mocks.listWebProjects,fetchWebMe:mocks.fetchWebMe}));
+vi.mock('@/lib/geoNativeClient',async original=>({...await original<typeof import('@/lib/geoNativeClient')>(),openGeoConversation:mocks.moduleSession}));
 vi.mock('@/lib/runtimeWarm',()=>({warmWebRuntime:vi.fn()}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:mocks.current,stageGeoPlanContext:mocks.stage}));
 vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:async()=>({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_old'},digest:'digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null}})}));
@@ -17,6 +18,7 @@ it('keeps the current route when selected-analysis staging finishes after unmoun
  mocks.listWebProjects.mockResolvedValue(projects);
  mocks.fetchWebMe.mockImplementation(async ({projectId}: {projectId:string})=>({user:{id:'u',name:'u'},project:{id:projectId,name:'x'},projects}));
  mocks.current.mockResolvedValue({id:'geo',projectId:'control',sessionId:'session'});
+ mocks.moduleSession.mockResolvedValue({projectId:'control',sessionId:'session',scope:{kind:'geo',geoProjectId:'geo',sessionId:'session'}});
  let resolveStage!: (value:unknown)=>void;
  mocks.stage.mockReturnValue(new Promise(resolve=>{resolveStage=resolve;}));
  const renderTree=(show:boolean)=><MemoryRouter initialEntries={['/app/geo/geo/overview']}>{show&&<GeoAnalysisWorkbench geoId="geo" project={{projectId:'control',sessionId:'session'} as never}/>}<Probe/></MemoryRouter>;

@@ -44,3 +44,15 @@ test("a correction is a steer, a corrected result, or a follow-up that corrected
   assert.equal(isLearningCorrection({ evidence: "silent", verdict: "none" }), false);
   assert.equal(isLearningCorrection(null), false);
 });
+
+test('shared reference trace survives the cleaner as informational references; malformed or partial traces are omitted whole',()=>{
+  const trace={sourceProjectId:'project-1',sourceRunIds:['run-1'],inputReceiptRefs:['gni_'+'a'.repeat(64)]};
+  const clean=cleanLearningEvidence({evidence:'steer',quote:'Preserve the denominator.',at,...trace});
+  assert.ok(clean);
+  assert.equal(clean.sourceProjectId,trace.sourceProjectId);assert.deepEqual(clean.sourceRunIds,trace.sourceRunIds);assert.deepEqual(clean.inputReceiptRefs,trace.inputReceiptRefs);
+  for(const bad of [{...trace,inputReceiptRefs:['raw text']},{...trace,sourceRunIds:[]},{...trace,sourceProjectId:''},{inputReceiptRefs:trace.inputReceiptRefs}]) {
+    const rejected=cleanLearningEvidence({evidence:'steer',at,...bad});
+    assert.ok(rejected);
+    assert.equal(rejected.inputReceiptRefs,undefined);assert.equal(rejected.sourceRunIds,undefined);assert.equal(rejected.sourceProjectId,undefined);
+  }
+});

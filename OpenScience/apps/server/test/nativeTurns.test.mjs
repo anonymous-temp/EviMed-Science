@@ -1038,3 +1038,24 @@ test("native adoption keeps specialist stickiness unless the trusted route callb
     f.restart();assert.equal((await f.runs()).length,2,"restarted ledger reads the same pins");
   }
 });
+
+test('canonical consumed-input callback survives folding and uses only the proved original human prefix',async t=>{
+  const events=[{type:'turn/start',seq:1,time:1000,data:{turn:1}},
+    {type:'user/message',seq:2,time:1001,data:{source:{kind:'user',rpcId:'initial'},content:[{type:'text',text:'Explain the study.'}]}},
+    {type:'user/message',seq:3,time:1002,data:{source:{kind:'user',rpcId:'editor-steer'},content:[{type:'text',text:'Use plain language.'},{type:'text',text:'<evimed_geo_plan_context>Platform context never human</evimed_geo_plan_context>'}]}},
+    {type:'turn/end',seq:4,time:1003,data:{reason:{kind:'completed'}}}];
+  const f=await setup(t,events);let called=0;
+  f.store.nativeInputs={reconcileTurn:async(project,transcript,turn,run)=>{
+    called++;assert.equal(project.userId,'u1');assert.equal(transcript.sessionId,fixture.sessionId);assert.equal(turn.startSeq,1);assert.equal(run.nativeTurn.userSeq,2);
+    return {version:1,namespaceId:'native-namespace',policyRef:'policy',count:2,throughSeq:3,digest:'d'.repeat(64),complete:true,
+      inputs:turn.inputs.map((message,index)=>({referenceId:`gni_${String(index).padStart(64,'0')}`,sourceRequestId:message.sourceRequestId,inputSeq:message.seq,
+        originalParts:1,originalTextDigest:createHash('sha256').update(JSON.stringify(message.parts[0].text)).digest('hex'),
+        actor:{kind:'human',id:index?'editor':'owner',createdAt:'2026-01-01'}}))};
+  }};
+  await f.adopt();const run=(await f.runs())[0];
+  assert.equal(called,1);assert.equal(run.inputAttribution.complete,true);assert.equal(run.inputAttribution.inputs[1].actor.id,'editor');
+  assert.equal(run.steers[0].text,'Use plain language.');assert.equal(run.steers[0].inputReceipt.actor.id,'editor');
+  assert.equal(run.steers[0].inputReceipt.inputSeq,3);assert.equal(run.corrections,1);
+  await f.adopt();assert.equal((await f.runs())[0].corrections,1);
+  f.restart();assert.equal((await f.runs())[0].steers[0].inputReceipt.actor.id,'editor');
+});

@@ -230,6 +230,30 @@ export class OpenVikingSourceSync {
     return report;
   }
 
+  /** Strict shared convergence uses the complete canonical receipt inventory
+   * supplied by the policy facade and verifies actual bytes after writing.
+   * It never invokes library reconciliation or trusts text-only tags.
+   * @param {string} userId @param {string} projectId @param {any[]} inputs */
+  async reconcileInputs(userId, projectId, inputs) {
+    const expected = new Map(inputs.map(input => [input.receipt.sourceId, input]));
+    const root = this.resources.roots(userId, projectId).sources;
+    for (const present of await this.resources.listSources(userId, root)) {
+      if (!expected.has(present.sourceId)) await this.resources.removeSource(userId, present.uri);
+    }
+    for (const input of inputs) {
+      const uri = this.resources.sourceUri(userId, projectId, input.receipt.sourceId);
+      const bytes = await this.resources.download(userId, uri);
+      if (!bytes || renditionHash(bytes) !== input.receipt.renditionSha256) {
+        await this.resources.pushSource(userId, uri, input.text, { sourceId: input.receipt.sourceId, sha: input.receipt.textSha256 });
+      }
+      const verified = await this.resources.download(userId, uri);
+      if (!verified || renditionHash(verified) !== input.receipt.renditionSha256) {
+        throw new HttpError(409, "knowledge_source_sync_unverified", "The source rendition readback differs from the canonical receipt.");
+      }
+    }
+    return { expected: expected.size, verified: expected.size };
+  }
+
   /**
    * Make the engine agree with the account's library: one file per document whose read-only copy exists, the copy's own text.
    * @param {string} userId @param {{ apply?: boolean }} [options]

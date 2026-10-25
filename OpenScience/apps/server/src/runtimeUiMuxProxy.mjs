@@ -45,6 +45,8 @@ function send(peer, data) {
  * heartbeat?: { intervalMs: number, timeoutMs: number },
  * admit?: (endpoint:string,operation:()=>Promise<void>,payload?:any) => Promise<void>,
  * observe?: (endpoint: string, payload?: any) => Promise<void>,
+ * beforeSend?: (endpoint:string,payload:any)=>Promise<void>,
+ * observeOutcome?: (endpoint:string,payload:any,outcome:any)=>void,
  * prepare?: (endpoint: string, payload?: any) => Promise<void>,
  * projectItem?: ((endpoint:string,payload:any,value:any,context?:{streamId:string,signal:AbortSignal})=>Promise<{forward:boolean,value?:any}>)|null,
  * onStreamClosed?: ((endpoint:string,streamId?:string)=>void)|null,
@@ -57,6 +59,8 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   admit = async (_endpoint, operation) => operation(),
   observe = async () => {},
   prepare = async () => {},
+  beforeSend = async () => {},
+  observeOutcome = null,
   projectItem = null,
   onStreamClosed = null,
   onProjectionDiscarded = null,
@@ -111,7 +115,10 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     for (const operation of authorizing) finishStream(operation);
     streams.clear();
     closedStreams.clear();
-    for (const pending of acknowledgements.values()) pending.reject(new Error("Prompt acceptance is unknown."));
+    for (const pending of acknowledgements.values()) {
+      if (observeOutcome) pending.resolve(pending.accepted ?? { state: 'unknown', authority: 'native-mux', reasonCode: 'transport_closed' });
+      else pending.reject(new Error('Prompt acceptance is unknown.'));
+    }
     acknowledgements.clear();
     clearInterval(validationTimer);
     clearInterval(heartbeatTimer);
@@ -236,7 +243,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       streams.set(frame.streamId, operation);
     }
     // Preserve endpoint payloads and cancellation semantics byte-for-byte.
-    if (frame.type === "open" && frame.endpoint === "session/prompt") {
+    if (frame.type === "open" && (frame.endpoint === 'session/prompt' || observeOutcome && ['userQuestions/answer', '$events/result'].includes(frame.endpoint))) {
       try {
         await admit(frame.endpoint, async () => {
           // Target authorization is part of this operation, and a failure
@@ -245,12 +252,19 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
           // An observer that fails is the observer's to report; the prompt
           // is forwarded all the same.
           await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
-          const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject }); });
+          const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject, accepted: null }); });
+          void accepted.catch(() => {});
           const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), 30000);
           try {
             const prepared = Buffer.from(JSON.stringify(frame));
             if (prepared.length > maxPayload) throw new HttpError(413, "runtime_ui_payload_limit", "The prepared native prompt is too large.");
-            await send(upstream, prepared); await accepted;
+            // Admission must read split item/end frames even while another projection is busy.
+            upstream.resume();
+            await beforeSend(frame.endpoint, frame.payload);
+            try { await send(upstream, prepared); }
+            catch (error) { observeOutcome?.(frame.endpoint, frame.payload, acknowledgements.get(frame.streamId)?.accepted ?? { state: 'unknown', authority: 'native-mux' }); throw error; }
+            const outcome = await accepted;
+            observeOutcome?.(frame.endpoint, frame.payload, outcome);
           }
           finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId); }
         }, frame.payload);
@@ -267,7 +281,10 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
         if (frame.type === "open" && frame.endpoint === "session/cancel") await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
         await send(upstream, raw);
       };
-      if (frame.type === 'open') await admit(frame.endpoint, forward, frame.payload);
+      if (frame.type === 'open') await admit(frame.endpoint, async () => {
+        if (frame.endpoint === 'session/cancel') await beforeSend(frame.endpoint, frame.payload);
+        await forward();
+      }, frame.payload);
       else await forward();
     }
     if (frame.type === "cancel") {
@@ -303,6 +320,10 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       if (projectItem && !operation) { shutdown(1008, "runtime_ui_stream_unbound"); return; }
       if (projectItem && operation.cancelled && frame.type !== 'end') return;
       if (projectItem && operation.terminalError && frame.type !== 'end') { shutdown(1008, 'runtime_ui_frame_invalid'); return; }
+      if (frame.type === 'item' && (operation?.endpoint === 'session/prompt' ? frame.value?.accepted === true : operation?.endpoint === 'userQuestions/answer' ? frame.value === true : operation?.endpoint === '$events/result')) {
+        const pending = acknowledgements.get(frame.streamId);
+        if (pending) pending.accepted = { state: 'accepted', authority: 'native-mux' };
+      }
       if (frame.type === "end" || frame.type === "error") {
         if (projectItem && !operation.finished) retiring.add(operation);
         if (projectItem) rememberClosed(frame.streamId, operation.cancelled);
@@ -310,9 +331,10 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
           operation.terminalError = true;
         }
         streams.delete(frame.streamId);
-        // A valid terminal response proves acceptance or an explicit refusal;
-        // either releases admission. Transport loss retains pending authority.
-        acknowledgements.get(frame.streamId)?.resolve();
+        // Raw terminal frames release the operation independently of response
+        // projection. Only retained positive item data proves acceptance.
+        const pending = acknowledgements.get(frame.streamId);
+        pending?.resolve(pending.accepted ?? { state: 'unknown', authority: 'native-mux', reasonCode: 'terminal_without_acceptance' });
       }
     } catch { shutdown(1008, "runtime_ui_frame_invalid"); return; }
     const data = Buffer.isBuffer(raw) ? raw : Buffer.from(/** @type {ArrayBuffer} */ (raw));
@@ -325,7 +347,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     responseQueuedBytes += data.length;
     let charge = data.length;
     responseQueuedFrames++;
-    upstream.pause();
+    if (!acknowledgements.size) upstream.pause();
     responseQueue = responseQueue.then(async () => {
       if (closed || operation?.cancelled && frame.type === 'item') return;
       if (projectItem && frame.type === 'item') {

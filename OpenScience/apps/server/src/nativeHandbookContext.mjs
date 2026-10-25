@@ -1,3 +1,4 @@
+import { sameContextPolicy } from "./geoContextItems.mjs";
 /** Request-scoped supplements for native inputs. Envelopes live outside the runtime workspace. */
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
@@ -19,9 +20,10 @@ const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRunt
 
 export class NativeHandbookContext {
   /** @param {{route:(project:any,sessionId:string,text:string,input?:{requestIds:string[],request:any})=>Promise<any>,select:(project:any,session:any,route:any)=>Promise<any>,
-   * budget:(project:any)=>number,allowed?:(project:any,sessionId:string)=>Promise<boolean>,attached?:(project:any,sessionId:string,requestIds:string[])=>Promise<any>,now?:()=>number,ttlMs?:number,timeoutMs?:number}} options */
-  constructor({ route, select, budget, allowed = async () => true, attached = async () => {}, now = () => Date.now(), ttlMs = 24 * 60 * 60_000, timeoutMs = 5000 }) {
+   * budget:(project:any)=>number,contextPolicies?:any,contextItems?:any,allowed?:(project:any,sessionId:string)=>Promise<boolean>,attached?:(project:any,sessionId:string,requestIds:string[])=>Promise<any>,now?:()=>number,ttlMs?:number,timeoutMs?:number}} options */
+  constructor({ route, select, budget, contextPolicies = null, contextItems = null, allowed = async () => true, attached = async () => {}, now = () => Date.now(), ttlMs = 24 * 60 * 60_000, timeoutMs = 5000 }) {
     this.route = route; this.select = select; this.budget = budget; this.allowed = allowed; this.attached = attached;
+    this.contextPolicies=contextPolicies;this.contextItems=contextItems;
     this.now = now; this.ttlMs = ttlMs; this.timeoutMs = timeoutMs;
     this.preparing = new Map();
   }
@@ -99,8 +101,9 @@ export class NativeHandbookContext {
     const existing = await this.envelope(project, request.sessionId, request.requestId);
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new HttpError(409, "handbook_request_conflict", "This request identity already names another input.");
-      return existing;
+      return await this.authorized(project,existing) ? existing : {...existing,context:"",items:[],supplementFailure:"handbook_context_unavailable"};
     }
+    const contextPolicy=this.contextPolicies ? await this.contextPolicies.forProject(project) : {kind:"owned",ownerId:project.userId,controlProjectId:project.id};
     const text = nativeInputText(request.content);
     // Routing is core request identity. Its existing classifier budget is independent of optional recall.
     const route = await this.route(project, request.sessionId, text, { requestIds: [request.requestId], request });
@@ -119,7 +122,8 @@ export class NativeHandbookContext {
       context = ""; items = [];
       supplementFailure = ["handbook_context_timeout", "handbook_context_limit"].includes(error?.code) ? error.code : "handbook_context_unavailable";
     } finally { clearTimeout(timer); }
-    const envelope = { ownerId: project.userId, projectId: project.id, sessionId: request.sessionId, requestId: request.requestId,
+    if(contextPolicy.kind==="geo-project" && !await this.authorized(project,{contextPolicy,items,context})) { context="";items=[]; }
+    const envelope = { contextPolicy, ownerId: project.userId, projectId: project.id, sessionId: request.sessionId, requestId: request.requestId,
       fingerprint, textDigest: textDigest(text), routeTextDigest: routeDigest(text),
       route: Object.fromEntries(routeFields.filter(key => route?.[key] !== undefined).map(key => [key, route[key]])),
       context, items, preparedAt: this.now(), expiresAt: this.now() + this.ttlMs, ...(supplementFailure ? { supplementFailure } : {}) };
@@ -134,7 +138,7 @@ export class NativeHandbookContext {
       const current = await this.envelope(project, request.sessionId, request.requestId);
       if (current) {
         if (current.fingerprint !== fingerprint) throw new HttpError(409, "handbook_request_conflict", "This request identity already names another input.");
-        return current;
+        return await this.authorized(project,current) ? current : {...current,context:"",items:[],supplementFailure:"handbook_context_unavailable"};
       }
       await this.prune(project);
       await writeFileAtomicNoFollow(project.rootDir, this.file(project, request.sessionId, request.requestId), bytes, { mode: 0o600 });
@@ -158,7 +162,7 @@ export class NativeHandbookContext {
       const envelope = await this.envelope(project, sessionId, input?.requestId);
       if (!envelope || envelope.textDigest !== input.textDigest || routes.some(item => item.requestId === input.requestId)) continue;
       routes.push({ requestId: input.requestId, textDigest: envelope.textDigest, digest: envelope.digest, route: envelope.route });
-      if (!supplementsAllowed || !envelope.context) continue;
+      if (!supplementsAllowed || !envelope.context || !await this.authorized(project,envelope)) continue;
       const size = Buffer.byteLength(envelope.context) + 1;
       if (bytes + size > allowance) continue;
       await withProjectStorageMutation(project, async () => {
@@ -186,6 +190,7 @@ export class NativeHandbookContext {
         if (!envelope || envelope.digest !== input.digest || receipt?.digest !== envelope.digest) {
           throw new HttpError(409, "handbook_receipt_mismatch", "This receipt does not name offered context.");
         }
+        if (!await this.authorized(project,envelope)) return;
         if (!receipt.attachedAt) await writeFileAtomicNoFollow(project.rootDir, receiptFile,
           JSON.stringify({ ...receipt, attachedAt: this.now() }), { mode: 0o600 });
         attached.push(input.requestId);
@@ -193,6 +198,19 @@ export class NativeHandbookContext {
     }
     if (attached.length) await this.attached(project, sessionId, attached);
     return { attached };
+  }
+
+  /** Optional private context can disappear while its immutable route remains. */
+  async authorized(project,envelope) {
+    try {
+    const current=this.contextPolicies ? await this.contextPolicies.forProject(project) : {kind:"owned",ownerId:project.userId,controlProjectId:project.id};
+    if(envelope.contextPolicy && !sameContextPolicy(current,envelope.contextPolicy)) return false;
+    if(current.kind!=="geo-project") return true;
+    if(!envelope.contextPolicy || !this.contextItems || current.ownerId!==project.userId || current.controlProjectId!==project.id
+      || envelope.context && !envelope.items.length) return false;
+    for(const item of envelope.items) if(!await this.contextItems.handbook(current,{id:item.id,revision:item.revision,payload:{recordType:"capability-handbook",contentDigest:item.contentDigest}})) return false;
+    return true;
+    } catch { return false; }
   }
 
   /** The immutable route can be reused when the committed input becomes a run. */
@@ -210,7 +228,7 @@ export class NativeHandbookContext {
       const envelope = await this.envelope(project, run.sessionId, requestId);
       if (!envelope || envelope.route.effectiveAgentId !== run.effectiveAgentId) continue;
       const receipt = await this.readFile(project, this.file(project, run.sessionId, requestId, true));
-      if (!receipt?.attachedAt || receipt.digest !== envelope.digest) continue;
+      if (!receipt?.attachedAt || receipt.digest !== envelope.digest || !await this.authorized(project,envelope)) continue;
       for (const item of envelope.items) if (item.ownerId === project.userId && item.capabilityId === run.effectiveAgentId
         && !items.some(other => other.id === item.id && other.contentDigest === item.contentDigest)) items.push({ ...item, requestId });
     }

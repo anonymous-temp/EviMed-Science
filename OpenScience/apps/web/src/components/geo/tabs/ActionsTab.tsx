@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -243,7 +244,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
   const listed = new Set(all.flatMap((action) => action.articleIds));
   const others = articleList.filter((article) => !listed.has(article.id) && article.status !== "withdrawn" && article.safety !== "open");
   const nothing = all.length === 0 && articleList.length === 0 && view.control.length === 0;
-  if (nothing && mode !== "monitoring" && mode !== "distribution") return <StepPending geoId={geoId} project={project} step="content" />;
+  if (nothing && mode !== "monitoring" && mode !== "distribution") return <><StepPending geoId={geoId} project={project} step="content" /><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V23" embedded /></>;
 
   const openAction = drawer.action ? all.find((action) => action.key === drawer.action) ?? null : null;
   const input = netEffectInput(monitoring.state.kind === "ready" ? monitoring.state.data : null, distributionData);
@@ -263,6 +264,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
       />}
       {(mode === "all" || mode === "distribution") && <BudgetLine distribution={marketConnected(project) || distributionData?.budget ? distributionData : null} canManage={can("manage_money")} onEdit={() => frame?.openPanel("budget")} />}
       {mode === "distribution" && <DistributionWorkbench key={geoId} geoId={geoId} project={project} />}
+      {mode!=="monitoring"&&<GeoAnalysisWorkbench key={`${geoId}:${mode}`} geoId={geoId} project={project} initialView={mode==="distribution"?"V25":"V23"} embedded/>}
       {(mode === "all" || mode === "content") && project.cards?.blockedBy && can("edit") && (
         <Note action={<Button variant="secondary" size="sm" onClick={() => frame?.openPanel(CARDS_WAIT[project.cards?.blockedBy as "producer" | "reviewer"].panel)}>{CARDS_WAIT[project.cards.blockedBy].verb}</Button>}>
           {CARDS_WAIT[project.cards.blockedBy].sentence}

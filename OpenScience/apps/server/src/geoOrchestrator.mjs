@@ -1,3 +1,4 @@
+import { withGeoSignalLease } from "./geoSignalProgress.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
@@ -591,19 +592,20 @@ export class GeoOrchestrator {
    * @param {string} loop @param {() => Promise<unknown>} work
    */
   async leaseLoop(loop, work) {
-    const key = `lease:${loop}`;
+    const key = `lease:${loop}`, token = randomId();
     const got = await this.store.query(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, detail)
-      VALUES ('_platform', $1, '_platform', 'request', 'running', jsonb_build_object('owner', $2::text))
-      ON CONFLICT (geo_project_id, key) DO UPDATE SET state = 'running', detail = jsonb_build_object('owner', $2::text), done_at = NULL, updated_at = now()
+      VALUES ('_platform', $1, '_platform', 'request', 'running', jsonb_build_object('owner', $2::text, 'token', $4::text))
+      ON CONFLICT (geo_project_id, key) DO UPDATE SET state = 'running', detail = jsonb_build_object('owner', $2::text, 'token', $4::text), done_at = NULL, updated_at = now()
         WHERE schedule_marks.state <> 'running' OR schedule_marks.updated_at < now() - make_interval(secs => $3)
           OR schedule_marks.detail ->> 'owner' = $2
-      RETURNING key`, [key, this.owner, this.leaseSeconds]);
+      RETURNING key`, [key, this.owner, this.leaseSeconds, token]);
     if (!got.rows.length) return { acquired: false };
     try {
-      return { acquired: true, value: await work() };
+      return { acquired: true, value: await (loop === "signals"
+        ? withGeoSignalLease(this.store.database, { key, owner: this.owner, token, seconds: this.leaseSeconds }, work) : work()) };
     } finally {
       await this.store.query(`UPDATE evimed_geo.schedule_marks SET state = 'done', done_at = now(), updated_at = now()
-        WHERE geo_project_id = '_platform' AND key = $1 AND detail ->> 'owner' = $2`, [key, this.owner]).catch(() => {});
+        WHERE geo_project_id = '_platform' AND key = $1 AND detail ->> 'owner' = $2 AND detail ->> 'token' = $3`, [key, this.owner, token]).catch(() => {});
     }
   }
 

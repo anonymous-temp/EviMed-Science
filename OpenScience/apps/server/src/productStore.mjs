@@ -103,13 +103,41 @@ export class ProductDocuments {
     });
   }
 
-  /** @param {string} userId @param {string} kind @param {string} id @param {{ includeDeleted?: boolean }} options */
-  async get(userId, kind, id, { includeDeleted = false } = {}) {
-    const values = [productId(userId, "user"), productKind(kind), productId(id), includeDeleted];
+  /** @param {string} userId @param {string} kind @param {string} id @param {{ includeDeleted?: boolean, expectedRevision?: number }} options */
+  async get(userId, kind, id, { includeDeleted = false, expectedRevision = undefined } = {}) {
+    if (expectedRevision !== undefined) productInteger(expectedRevision, 1, 2_147_483_647);
+    const values = [productId(userId, "user"), productKind(kind), productId(id), includeDeleted, expectedRevision ?? null];
     await migrateProductStore(this.database);
     const result = await this.database.query(`SELECT * FROM evimed_product.documents
-      WHERE user_id=$1 AND kind=$2 AND id=$3 AND ($4::boolean OR deleted_at IS NULL)`, values);
+      WHERE user_id=$1 AND kind=$2 AND id=$3 AND ($4::boolean OR deleted_at IS NULL)
+        AND ($5::integer IS NULL OR revision=$5)`, values);
     return record(result.rows[0]);
+  }
+
+  /** Compare a bounded authorized metadata closure in one database snapshot, without returning any body.
+   * @param {string} userId @param {Array<{kind:string,id:string,revision:number,projectId?:string|null,payload:Record<string,any>}>} snapshots
+   * @param {{fields:Record<string,true|number>}} options */
+  async matchesSnapshots(userId, snapshots, { fields }) {
+    const projection=payloadProjection(fields,3);
+    if(!Array.isArray(snapshots)||snapshots.length>512)throw new HttpError(400,"product_filter_invalid","Invalid snapshot set.");
+    if(!snapshots.length)return true;
+    const seen=new Set(), expected=snapshots.map(snapshot=>{
+      productKind(snapshot.kind);productId(snapshot.id);productInteger(snapshot.revision,1,2_147_483_647);
+      if(snapshot.projectId!=null)productId(snapshot.projectId,"project");
+      const key=JSON.stringify([snapshot.kind,snapshot.id]);
+      if(seen.has(key))throw new HttpError(400,"product_filter_invalid","Duplicate snapshot identity.");seen.add(key);
+      return {kind:snapshot.kind,id:snapshot.id,revision:snapshot.revision,projectId:snapshot.projectId??null,expected:snapshot.payload};
+    });
+    const serialized=JSON.stringify(expected);
+    if(Buffer.byteLength(serialized)>16*1024*1024)throw new HttpError(413,"product_filter_invalid","The snapshot set is too large.");
+    await migrateProductStore(this.database);
+    const result=await this.database.query(`SELECT count(*)::integer AS matched
+      FROM jsonb_to_recordset($2::jsonb) AS wanted(kind text,id text,revision integer,"projectId" text,expected jsonb)
+      JOIN evimed_product.documents ON documents.user_id=$1 AND documents.kind=wanted.kind AND documents.id=wanted.id
+      WHERE documents.deleted_at IS NULL AND documents.revision=wanted.revision
+        AND documents.project_id IS NOT DISTINCT FROM wanted."projectId" AND ${projection.sql}=wanted.expected`,
+    [productId(userId,"user"),serialized,...projection.values]);
+    return Number(result.rows[0]?.matched)===snapshots.length;
   }
 
   /**
@@ -154,8 +182,17 @@ export class ProductDocuments {
   /** Bounded lexical fallback; semantic retrieval can enrich it without weakening ownership.
    * @param {string} userId @param {string} kind @param {string} query
    * `projectId` has the list's semantics: omitted means all, null means account records only.
-   * @param {{ limit?: number, filter?: Record<string,any>, since?: string|null, any?: { field: string, values: string[] }, projectId?: string|null }} options */
-  async search(userId, kind, query, { limit = 20, filter = {}, since = null, any = { field: "", values: [] }, projectId = undefined } = {}) {
+   * @param {{ limit?: number, filter?: Record<string,any>, since?: string|null, any?: { field: string, values: string[] }, projectId?: string|null, ids?: string[], expectedRevisions?: Array<{id:string,revision:number}> }} options */
+  async search(userId, kind, query, { limit = 20, filter = {}, since = null, any = { field: "", values: [] }, projectId = undefined, ids = undefined, expectedRevisions = undefined } = {}) {
+    if (ids !== undefined && (!Array.isArray(ids) || ids.length > 100 || ids.some(id => typeof id !== "string" || !id))) throw new HttpError(400, "product_filter_invalid", "Invalid record ids.");
+    if (ids) for (const id of ids) productId(id);
+    if (expectedRevisions !== undefined) {
+      if (!Array.isArray(expectedRevisions) || expectedRevisions.length > 100) throw new HttpError(400, "product_filter_invalid", "Invalid record revisions.");
+      for (const item of expectedRevisions) {
+        if (!item || typeof item !== 'object' || Array.isArray(item) || Object.keys(item).some(key => !['id','revision'].includes(key))) throw new HttpError(400, "product_filter_invalid", "Invalid record revision.");
+        productId(item.id); productInteger(item.revision, 1, 2_147_483_647);
+      }
+    }
     if (projectId != null) productId(projectId, "project");
     if (since != null && (typeof since !== "string" || since.length > 40 || !Number.isFinite(Date.parse(since)))) throw new HttpError(400, "product_filter_invalid", "Invalid record date.");
     if (typeof any?.field !== "string" || any.field.length > 80 || !Array.isArray(any.values) || any.values.length > 100
@@ -171,8 +208,11 @@ export class ProductDocuments {
       AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
       AND (cardinality($8::text[])=0 OR payload->>$7::text=ANY($8::text[]))
       AND ($9::boolean=false OR project_id IS NOT DISTINCT FROM $10::text)
+      AND ($11::boolean=false OR id=ANY($12::text[]))
+      AND ($13::boolean=false OR EXISTS (SELECT 1 FROM jsonb_to_recordset($14::jsonb) AS authorized(id text,revision integer)
+        WHERE authorized.id=documents.id AND authorized.revision=documents.revision))
       ORDER BY updated_at DESC,id DESC LIMIT $5`,
-    [productId(userId, "user"), productKind(kind), filterJson, query, limit, since, any.field, any.values, projectId !== undefined, projectId ?? null]);
+    [productId(userId, "user"), productKind(kind), filterJson, query, limit, since, any.field, any.values, projectId !== undefined, projectId ?? null, ids !== undefined, ids ?? [], expectedRevisions !== undefined, JSON.stringify(expectedRevisions ?? [])]);
     return result.rows.map(record);
   }
 
@@ -232,15 +272,16 @@ export class ProductDocuments {
   }
 
   /** @param {string} userId @param {string} kind @param {string} id
-   * @param {{ beforeRevision?: number|null, limit?: number }} options */
-  async history(userId, kind, id, { beforeRevision = null, limit = 50 } = {}) {
+   * @param {{ beforeRevision?: number|null, limit?: number, fields?: Record<string,true|number>|null }} options */
+  async history(userId, kind, id, { beforeRevision = null, limit = 50, fields = null } = {}) {
+    const projection = payloadProjection(fields, 6);
     productInteger(limit, 1, 100);
     if (beforeRevision != null) productInteger(beforeRevision, 1, 2_147_483_647);
     await migrateProductStore(this.database);
-    const result = await this.database.query(`SELECT * FROM evimed_product.revisions
+    const result = await this.database.query(`SELECT revision,deleted_at,recorded_at,${projection.sql} AS payload FROM evimed_product.revisions
       WHERE user_id=$1 AND kind=$2 AND id=$3 AND ($4::integer IS NULL OR revision<$4)
       ORDER BY revision DESC LIMIT $5`,
-    [productId(userId, "user"), productKind(kind), productId(id), beforeRevision, limit]);
+    [productId(userId, "user"), productKind(kind), productId(id), beforeRevision, limit, ...projection.values]);
     return result.rows.map((row) => ({ revision: row.revision, payload: row.payload, deletedAt: productTime(row.deleted_at), recordedAt: productTime(row.recorded_at) }));
   }
 }

@@ -7,6 +7,100 @@ const editable = file => /\.(?:md|markdown|docx)$/i.test(file ?? "");
 
 /** Business links over shared immutable results. No byte storage or file engine lives here. */
 export class GeoArticleResults {
+  #prepared = new WeakMap();
+
+  /** Phase A selects preserved bytes only. Historical business-head migration
+   * is retained as metadata and occurs during the admitted bind, never here. */
+  async prepare(user, project, request, selection = undefined) {
+    const geo = await this.store.projectByControlProject(project.userId, project.id);
+    if (!geo || !request?.sessionId) return null;
+    await this.service.requireProject(user, geo.id, "edit");
+    const current = await this.revisions.requestScope(user.id, project, request);
+    if (current.userId !== project.userId) throw new HttpError(403, "result_project_forbidden", "The result project is unavailable.");
+    if (request.evimedResultRevision !== undefined) {
+      let row = await this.documents.get(project.userId, "result-revision", request.evimedResultRevision?.referenceId);
+      if (!row || row.projectId !== project.id || row.payload.requestedBy !== user.id || row.payload.sessionId !== request.sessionId) throw new HttpError(409, "result_revision_stale", "Reopen the article.");
+      if (!row.payload.target && row.payload.state !== "bound") {
+        const article = (await this.store.listArticles(geo.id)).find(item => item.currentResultVersionId === row.payload.versionId);
+        if (article) row = await this.documents.put(project.userId, "result-revision", row.id, { ...row.payload,
+          target: { kind: "geo-article", geoProjectId: geo.id, articleId: article.id }, expectedHeadVersionId: article.currentResultVersionId },
+        { projectId: project.id, expectedRevision: row.revision });
+      }
+      this.#prepared.set(request, { referenceId: row.id, geoId: geo.id });
+      await this.validatePrepared(user, project, request);
+      return { referenceId: row.id };
+    }
+    // Same-ID retries retain the original staged/bound selection even after a
+    // successor advances the head. Journal replay decides whether it may send.
+    let reference = await this.revisions.prepareConversation(user.id, project, request);
+    if (!reference && selection !== null) {
+      let selected = selection;
+      if (selected === undefined) {
+        const candidates = [];
+        for (const article of await this.store.listArticles(geo.id)) {
+          if (!editable(article.path)) continue;
+          if (article.currentResultVersionId) {
+            const version = await this.results.get(project.userId, project.id, article.currentResultVersionId);
+            if (version.producer?.sessionId === request.sessionId) candidates.push({ version, article });
+          } else if (article.runId) {
+            const page = await this.results.list(project.userId, { projectId: project.id, path: article.path, runId: article.runId, limit: 100 });
+            if (page.nextCursor) continue;
+            const version = page.items.find(item => item.digest === article.contentSha256 && item.producer?.sessionId === request.sessionId
+              && item.producer?.runId === article.runId && item.producer?.kind !== "workspace");
+            if (version) candidates.push({ version, article, migration: { path: article.path, runId: article.runId, digest: article.contentSha256 } });
+          }
+        }
+        if (!candidates.length) {
+          const found = await this.results.query(project.userId, project.id, { producer: { sessionId: request.sessionId } }, { limit: 100 });
+          const versions = found.items.filter(item => editable(item.path) && item.producer?.kind !== "workspace");
+          const parents = new Set(versions.map(item => item.supersedesVersionId).filter(Boolean));
+          const parentBytes = new Set(versions.filter(item => parents.has(item.versionId)).map(item => `${item.path}\0${item.digest}`));
+          const leaves = [...new Map(versions.filter(item => !parents.has(item.versionId) && !parentBytes.has(`${item.path}\0${item.digest}`))
+            .map(item => [`${item.path}\0${item.digest}`, item])).values()];
+          if (leaves.length === 1 && !found.nextCursor) selected = { versionId: leaves[0].versionId, digest: leaves[0].digest, target: null, expectedHeadVersionId: null };
+        } else if (candidates.length === 1) {
+          const { version, article, migration = null } = candidates[0];
+          selected = { versionId: version.versionId, digest: version.digest, target: { kind: "geo-article", geoProjectId: geo.id, articleId: article.id },
+            expectedHeadVersionId: version.versionId, migration };
+        }
+      }
+      if (selected) reference = await this.revisions.prepareConversation(user.id, project, request, selected);
+    }
+    this.#prepared.set(request, { referenceId: reference?.referenceId ?? null, geoId: geo.id });
+    return reference;
+  }
+
+  async validatePrepared(user, project, request) {
+    const prepared = this.#prepared.get(request);
+    if (!prepared) throw new HttpError(409, "result_revision_stale", "Prepare the article selection first.");
+    await this.service.requireProject(user, prepared.geoId, "edit");
+    await this.revisions.requestScope(user.id, project, request);
+    if (!prepared.referenceId) return null;
+    const row = await this.documents.get(project.userId, "result-revision", prepared.referenceId);
+    if (!row || row.projectId !== project.id || row.payload.requestedBy !== user.id || row.payload.sessionId !== request.sessionId) throw new HttpError(409, "result_revision_stale", "Reopen the article.");
+    if (row.payload.target?.kind === "geo-article" && !(row.payload.state === "bound" && row.payload.promptRequestId === request.requestId)) {
+      const article = await this.store.getArticle(prepared.geoId, row.payload.target.articleId);
+      const migration = row.payload.migration;
+      if (!(migration && !article?.currentResultVersionId && article?.path === migration.path && article?.runId === migration.runId
+        && article?.contentSha256 === migration.digest)) await this.assertHead(project, { id: prepared.geoId }, row.payload);
+    }
+    return row;
+  }
+
+  async bindPrepared(user, project, request) {
+    const row = await this.validatePrepared(user, project, request);
+    if (!row) return null;
+    if (row.payload.migration && row.payload.state !== "bound") {
+      const article = await this.store.getArticle(row.payload.target.geoProjectId, row.payload.target.articleId);
+      if (!article.currentResultVersionId) {
+        const version = await this.results.get(project.userId, project.id, row.payload.versionId);
+        await this.store.linkArticleVersion(row.payload.target.geoProjectId, article.id, { version });
+      }
+      await this.assertHead(project, { id: row.payload.target.geoProjectId }, row.payload);
+    }
+    return this.revisions.bind(user.id, project, request);
+  }
+
   /** @param {{store:any,service:any,results:any,revisions:any,documents:any,cards:any,parser:any,report?:(code:string)=>void}} deps */
   constructor({ store, service, results, revisions, documents, cards, parser, report = () => {} }) {
     this.store = store; this.service = service; this.results = results; this.revisions = revisions;
@@ -26,6 +120,7 @@ export class GeoArticleResults {
 
   /** Resolve by this conversation only. Ambiguous files stay with the model's native clarification. */
   async bind(user, project, request) {
+    if (this.#prepared.has(request)) return this.bindPrepared(user, project, request);
     const geo = await this.store.projectByControlProject(project.userId, project.id);
     if (!geo || !request?.sessionId) return null;
     await this.service.requireProject(user, geo.id, "edit");

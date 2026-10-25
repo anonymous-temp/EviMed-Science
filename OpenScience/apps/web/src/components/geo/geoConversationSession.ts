@@ -1,9 +1,10 @@
-import { createWebRuntimeSession } from '@/lib/apiClient';
+import { openGeoConversation } from '@/lib/geoNativeClient';
 
-/** Resolve the actual ordinary native session before staging project-bound input. */
-export async function ensureGeoConversationSession(projectId: string, sessionId?: string | null): Promise<string> {
-  if (sessionId) return sessionId;
-  const created = await createWebRuntimeSession(projectId);
-  if (!created.id || !/^[A-Za-z0-9_-]{1,160}$/.test(created.id)) throw new Error('The native conversation could not be created.');
-  return created.id;
+/** Resolve the exact owner-controlled module conversation before staging input. */
+export async function ensureGeoConversationSession(geoId: string, projectId: string, sessionId?: string | null): Promise<string> {
+  const descriptor = await openGeoConversation(geoId, sessionId ? { kind: 'session', sessionId } : { kind: 'primary' });
+  if (descriptor.projectId !== projectId || descriptor.scope.kind !== 'geo' || descriptor.scope.geoProjectId !== geoId
+    || descriptor.scope.sessionId !== descriptor.sessionId || !/^[A-Za-z0-9_-]{1,128}$/.test(descriptor.sessionId)
+    || sessionId && descriptor.sessionId !== sessionId) throw new Error('The selected GEO conversation changed.');
+  return descriptor.sessionId;
 }

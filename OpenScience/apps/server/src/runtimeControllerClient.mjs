@@ -24,7 +24,9 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // Version 14 adds one more optional field to a runtime start: `geoSkills`, true for the runtime of a 「循证 GEO」 project, which
 // mounts the GEO method pack as a skill root (absent for every other project). A boolean, and all it chooses is whether one
 // read-only directory the image already carries is among the session's skill roots.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 14;
+// Version 15 adds a read-only observation of this deployment's OpenViking
+// resource-compile configuration and installed implementation.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 15;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -93,6 +95,10 @@ export class RuntimeControllerClient {
     this.timeoutMs = Number(config.runtimeControllerTimeoutMs) || 10_000;
     this.maxJsonBytes = Number(config.maxJsonBytes) || 12 * 1024 * 1024;
     this.vcrIntakeTimeoutMs = (Number(config.vcrIntakeTimeoutMs) || 60_000) * 2 + 15_000;
+  }
+
+  observeOpenVikingCompile() {
+    return this.request("GET", "/v1/openviking/compile-observation", null, { timeoutMs: 30_000, maxResponseBytes: 4096 });
   }
 
   async request(method, requestPath, payload = null, options = {}) {
@@ -298,7 +304,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false) {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false, contextGeneration = null) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -310,6 +316,7 @@ export class RuntimeControllerClient {
       ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
       ...(extensionGeneration ? { extensionGeneration } : {}),
       ...(platformSkillGeneration ? { platformSkillGeneration } : {}),
+      ...(contextGeneration ? { contextGeneration } : {}),
       // Protocol 13: the account's memory engine, as the memory gateway's base for one on the native engine. Sent only
       // then; absent, the runtime is launched for the legacy path.
       ...(memoryGatewayUrl ? { memoryGatewayUrl } : {}),

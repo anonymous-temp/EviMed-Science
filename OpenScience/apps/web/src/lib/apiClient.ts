@@ -1417,9 +1417,9 @@ export interface WebRuntimeUiFrame {
 }
 
 /** Create one immutable native frame through the authenticated control plane. */
-export async function createWebRuntimeUiFrame(projectId: string): Promise<WebRuntimeUiFrame> {
+export async function createWebRuntimeUiFrame(projectId: string, scope?: {kind:"geo";geoProjectId:string;sessionId:string}): Promise<WebRuntimeUiFrame> {
   const res = await fetchWithWebAuth(apiUrl("/runtime-ui/frames"), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, ...(scope ? {scope} : {}) }),
   });
   return parseApiResponse<WebRuntimeUiFrame>(res);
 }

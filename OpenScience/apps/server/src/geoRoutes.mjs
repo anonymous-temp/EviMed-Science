@@ -180,8 +180,10 @@ function money(value, field, zero = false) {
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
  *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
  *     rename?: (ownerId: string, projectId: string, name: string) => Promise<unknown>,
- *     bindSession: (user: any, projectId: string) => Promise<{ sessionId: string, bound: boolean }>,
- *     conversationSessionId?: (user: any, projectId: string) => Promise<string | null>,
+ *     bindSession: (user: any, projectId: string, geoProject?: any) => Promise<{ sessionId: string | null, bound: boolean }>,
+ *     conversationSessionId?: (user: any, geoId: string) => Promise<string | null>,
+ *     openConversation?: (user: any, geoId: string, target: any) => Promise<any>,
+ *     conversationRead?: (user: any, geoId: string, sessionId: string, action: string, body?: any) => Promise<any>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
@@ -310,10 +312,29 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const id = parts[1];
+    if (parts.length === 4 && parts[2] === "conversation" && parts[3] === "open" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["target"]);
+      if (!dependencies.projects?.openConversation) throw UNAVAILABLE();
+      return reply(await dependencies.projects.openConversation(user, id, body.target));
+    }
+    if (parts.length === 5 && parts[2] === "conversation" && dependencies.projects?.conversationRead) {
+      const action = parts[4];
+      if (method === "GET" && ["runs", "history", "capability", "status", "reply-checks", "source-scope", "sources"].includes(action)) {
+        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action));
+      }
+      if (method === "POST" && action === "start") {
+        await bodyOf(req, maxJsonBytes, []);
+        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action));
+      }
+      if (method === "PUT" && action === "source-scope") {
+        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action, await bodyOf(req, maxJsonBytes, ["sourceIds"])));
+      }
+      throw new HttpError(404, "not_found", "GEO conversation route not found.");
+    }
     if (parts.length === 2) {
       if (method === "GET") {
         const view = await service.projectView(user, id, geoScopeFromQuery(url.searchParams, []));
-        const sessionId = await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        const sessionId = await dependencies.projects?.conversationSessionId?.(user, id).catch(() => null) ?? null;
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {
@@ -382,6 +403,14 @@ export function createGeoRoutes(dependencies) {
           query[key] = url.searchParams.get(key);
         }
         return reply(await hooks.signals.list(user, id, query));
+      }
+      if (method === "GET" && parts.length === 5 && parts[4] === "members") {
+        const query={};
+        for(const key of url.searchParams.keys()){
+          if(!["side","offset","limit","metricKey","expectedBasisDigest"].includes(key)||url.searchParams.getAll(key).length!==1)throw new HttpError(400,"geo_payload_invalid","Invalid preserved sample query.");
+          query[key]=url.searchParams.get(key);
+        }
+        return reply(await hooks.signals.members(user,id,parts[3],query));
       }
       if (method === "GET" && parts.length === 4) return reply(await hooks.signals.detail(user, id, parts[3]));
       if (method === "POST" && parts.length === 5 && parts[4] === "disposition") {

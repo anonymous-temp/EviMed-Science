@@ -9,7 +9,7 @@ const fail = (code = 'geo_owned_link_invalid', message = 'Invalid publication up
 const hash = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const idOf = (project, linkId) => `geo-owned-publication-${hash([project.id, linkId])}`;
 const select = `SELECT l.*,${geoMarketReadTimestamp('l.created_at')} AS _cursor_at,a.title AS article_title,a.current_result_version_id,a.content_sha256 AS current_digest
-  FROM evimed_geo.owned_links l LEFT JOIN evimed_geo.articles a ON a.id=l.article_id AND a.geo_project_id=l.geo_project_id`;
+  FROM evimed_geo.owned_links l LEFT JOIN evimed_geo.articles a ON a.id=l.article_id AND a.geo_project_id=l.geo_project_id AND a.user_id=l.user_id`;
 const view = row => {
   const link = geoOwnedLinkFromRow(row);
   const known = Boolean(link.articleResultVersionId && link.articleDigest && row.current_result_version_id && row.current_digest);

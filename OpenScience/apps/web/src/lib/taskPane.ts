@@ -1,3 +1,4 @@
+import type { GeoConversationScope } from "./geoNativeClient";
 import { useSyncExternalStore } from "react";
 import { geoIdFromChatPath } from "@/lib/geoLocation";
 import { isStudyChatPath } from "@/lib/studyLocation";
@@ -20,6 +21,7 @@ export interface TaskPaneRequest {
   projectId: string;
   /** The conversation the pane shows: the execution's, or the study's own. */
   sessionId: string;
+  scope?: GeoConversationScope;
 }
 
 /**

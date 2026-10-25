@@ -84,6 +84,18 @@ export function geoErrorOrigin(statements, error, frozenClaims = [], { includeNo
   return new Set(matches.map(geoClaimAssessmentIdentity)).size === 1 ? matches[0] ?? null : null;
 }
 
+/** One clinical identity projection for analysis, diagnosis, and correction drafts. Current context is never an original substitute. */
+export function geoErrorClinicalContext(row) {
+  const original = geoErrorOrigin(row.origin_statements ?? [], { claimId: row.claim_id, fingerprint: row.fingerprint }, row.origin_claims ?? [], { includeNonWrong: true });
+  const claim = original ? geoClaimForStatement(row.origin_claims ?? [], original) : null;
+  return {
+    claimVersion: original?.claimVersion ?? null,
+    applicability: original?.applicability ?? null,
+    originalErrorAssessment: original ? { statement: original, claim: claim ?? null, temporalBasis: "first_preserved_error_assessment" } : null,
+    currentClaim: { version: row.claim_version ?? null, applicability: row.applicability ?? null, temporalBasis: "current_claim_context" },
+  };
+}
+
 /** A business resolution is supported only by this complete, explicit and quote-anchored reading.
  * @param {any} original @param {any} answer @param {any} basis */
 export function geoErrorResolutionSatisfied(original, answer, basis) {

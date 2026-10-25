@@ -163,9 +163,12 @@ test("a programme step is no conversation: the run list marks it, the header's �
   const geo = await newProject("安静的步骤");
   const agent = (await context.app.agentRegistry)?.get?.("geo-insight");
   assert.ok(agent, "this build's registry has the GEO capabilities");
-  // The person's own conversation: the one the project was made with (bound to geo-insight).
-  assert.equal(geo.bound, true);
-  const own = geo.sessionId;
+  // Project creation commissions no session. This read fixture explicitly
+  // retains a server-owned primary; actual native creation is tested by composition.
+  assert.equal(geo.bound, false);
+  assert.equal(geo.sessionId, null);
+  const own = "person-primary";
+  await context.app.geoNativeAuthority.registerPrimary(await context.app.geo.service.requireProject(await context.app.store.userById(OWNER),geo.id),own);
   // Three steps the platform ran, each in a session of its own and each newer than the person's conversation.
   await ledgerRun(geo, { sessionId: "step-session-1", agentVersion: agent.version, dispatchId: "geo-insight-a1", automated: true, reason: "geo:evidence", question: "整理产品证据" });
   await new Promise((resolve) => setTimeout(resolve, 15));
@@ -178,9 +181,9 @@ test("a programme step is no conversation: the run list marks it, the header's �
   assert.equal(page.status, 200, JSON.stringify(page.body));
   assert.equal(page.body.data.sessionId, own, "the header's 「对话」 opens the person's conversation, never the latest run");
 
-  // A conversation the person has since begun is theirs, and is the newest of theirs.
+  // A newer ordinary owner conversation is not a GEO association.
   await ledgerRun(geo, { sessionId: "chat-session-1", agentVersion: agent.version, automated: false, reason: "session-binding", question: "这个药的核心卖点是什么" });
-  assert.equal((await call("GET", `/api/geo/projects/${geo.id}`)).body.data.sessionId, "chat-session-1");
+  assert.equal((await call("GET", `/api/geo/projects/${geo.id}`)).body.data.sessionId, own);
 
   // The record: what the programme did, by what it was, newest first, with no way into a conversation and nothing of the instruction.
   const listed = await call("GET", `/api/geo/projects/${geo.id}/runs`);

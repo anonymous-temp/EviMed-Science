@@ -1,0 +1,33 @@
+import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
+import {MemoryRouter,Routes,Route} from 'react-router';
+import {afterEach,expect,it,vi} from 'vitest';
+import {GeoAnalysisMembersDrawer} from '@/components/geo/GeoAnalysisMembersDrawer';
+import {DistributionWorkbench} from '@/components/geo/tabs/DistributionWorkbench';
+const mocks=vi.hoisted(()=>({read:vi.fn(),orders:vi.fn(),order:vi.fn(),owned:vi.fn()}));
+vi.mock('@/lib/geoAnalysisClient',async original=>({...await original<typeof import("@/lib/geoAnalysisClient")>(),getGeoAnalysisMembers:mocks.read}));
+vi.mock('@/lib/geoDistributionClient',async original=>({...await original<typeof import("@/lib/geoDistributionClient")>(),getGeoExecutionOrders:mocks.orders,getGeoOrderDetail:mocks.order,getGeoOwnedPublication:mocks.owned}));
+afterEach(()=>cleanup());
+const member=(selectionRef='gsel_spec')=>({selectionRef,view:{viewId:'V24'},rowKey:'published',columnKey:'ownedPublications',expectedDigest:'a'.repeat(64),unit:'publications',total:1,exact:true} as const);
+it('selected publication clears an inherited order and opens the exact existing publication workflow',async()=>{
+ mocks.read.mockResolvedValue({total:1,nextOffset:null,unit:'publications',items:[{id:'owned_publication:exact-link',objectId:'exact-link',articleId:'article',unit:'publications',title:'Exact publication',resultVersionId:'old',digest:'a'.repeat(64),pinState:'exact'}]});
+ mocks.orders.mockResolvedValue({items:[],total:0,nextCursor:null});
+ mocks.order.mockResolvedValue({order:{id:'stale-order',articleTitle:'Wrong old order',state:'unknown',versionState:'unknown',priceCny:null},events:{items:[],total:0,nextCursor:null}});
+ mocks.owned.mockResolvedValue({link:{id:'exact-link',title:'Exact publication detail',status:'active'},revision:0,history:{items:[],nextBeforeRevision:null}});
+ render(<MemoryRouter initialEntries={['/app/geo/g/actions?step=distribution&order=stale-order&action=stale-action&session=session-one']}><Routes><Route path="/app/geo/g/actions" element={<><GeoAnalysisMembersDrawer geoId="g" members={member()} onClose={()=>{}}/><DistributionWorkbench geoId="g" project={{projectId:'control'} as never}/></>}/></Routes></MemoryRouter>);
+ const target=await screen.findByRole('link',{name:'查看发布记录与更新登记'});
+ const url=new URL(target.getAttribute('href')!,'https://local.example');
+ expect(url.searchParams.get('publication')).toBe('exact-link');expect(url.searchParams.get('selectionRef')).toBe('gsel_spec');
+ fireEvent.click(target);
+ await waitFor(()=>expect(mocks.owned).toHaveBeenCalledWith('g','exact-link',undefined));
+});
+it('a late former member response cannot replace the changed exact selection',async()=>{
+ let oldResolve:any;const old=new Promise(resolve=>{oldResolve=resolve});
+ mocks.read.mockImplementation((_geo,members)=>members.selectionRef==='gsel_old'?old:Promise.resolve({total:1,nextOffset:null,unit:'publications',items:[{id:'new',unit:'publications',title:'Current selected member'}]}));
+ const shown=render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member('gsel_old')} onClose={()=>{}}/></MemoryRouter>);
+ await waitFor(()=>expect(mocks.read).toHaveBeenCalledWith('g',expect.objectContaining({selectionRef:'gsel_old'}),0));
+ shown.rerender(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member('gsel_new')} onClose={()=>{}}/></MemoryRouter>);
+ expect(await screen.findByText('Current selected member')).toBeVisible();
+ oldResolve({total:1,nextOffset:null,unit:'publications',items:[{id:'old',unit:'publications',title:'Stale former member'}]});
+ await new Promise(resolve=>setTimeout(resolve,0));
+ expect(screen.queryByText('Stale former member')).not.toBeInTheDocument();expect(screen.getByText('Current selected member')).toBeVisible();
+});

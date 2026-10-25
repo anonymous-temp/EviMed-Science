@@ -10,7 +10,7 @@ import { HttpError } from "./security.mjs";
 
 export const GEO_SCOPE_FIELDS = Object.freeze(["round", "from", "to", "compareFrom", "compareTo", "comparisonMode", "engines", "questionVersion",
   "groupIds", "pools", "clientTags", "timeZone", "timezone", "engine", "version", "pool", "groupId", "selectionRef"]);
-export const GEO_ERROR_FILTER_FIELDS = Object.freeze(["errorStatuses", "errorSeverities", "errorTypes", "errorSearch", "errorLimit", "errorOffset", "questionId", "errorTrace", "errorJudgmentState"]);
+export const GEO_ERROR_FILTER_FIELDS = Object.freeze(["errorStatuses", "errorSeverities", "errorTypes", "errorSearch", "errorLimit", "errorOffset", "questionId", "errorTrace", "errorJudgmentState", "errorFingerprint"]);
 export const GEO_SOURCE_PAGE_FIELDS = Object.freeze(["answerLimit", "answerOffset"]);
 export const GEO_SELECTION_MAX_ROWS = 20_000;
 export const GEO_SELECTION_MAX_ROUNDS = 120;
@@ -100,7 +100,7 @@ export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
     const all = query.getAll(key);
     if (!lists.has(key) && all.length !== 1) throw invalid(`${key} may only be given once.`);
     raw[key] = lists.has(key) ? key === "clientTags" ? all : all.flatMap((value) => value.split(",")) : all[0];
-    if (["questionVersion", "version", "strategyVersion", "errorLimit", "errorOffset", "limit", "offset", "topN", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
+    if (["questionVersion", "version", "strategyVersion", "targetVersion", "errorLimit", "errorOffset", "limit", "offset", "topN", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
       if (!/^\d+$/u.test(raw[key])) throw invalid(`${key} must be a whole number.`);
       raw[key] = Number(raw[key]);
     }
@@ -117,11 +117,12 @@ export function geoErrorFilters(input = {}) {
     return n;
   };
   const search = input.errorSearch ?? "";
+  if(input.errorFingerprint!=null&&(typeof input.errorFingerprint!=="string"||!input.errorFingerprint.trim()||input.errorFingerprint.length>240||hasControls(input.errorFingerprint)))throw invalid("errorFingerprint must be an exact bounded group key.");
   if (input.questionId != null && (typeof input.questionId !== "string" || !idShape.test(input.questionId))) throw invalid("questionId must be an identifier.");
   if (typeof search !== "string" || search.length > 240 || hasControls(search)) throw invalid("errorSearch must be short text.");
   if (input.errorTrace != null && !["traced", "unattributable", "noRetrieval"].includes(input.errorTrace)) throw invalid("errorTrace is unsupported.");
   if (input.errorJudgmentState != null && !["active", "withdrawn"].includes(input.errorJudgmentState)) throw invalid("errorJudgmentState is unsupported.");
-  return { judgmentState: input.errorJudgmentState ?? null, trace: input.errorTrace ?? null, statuses: values(input.errorStatuses, "errorStatuses", GEO_ERROR_STATUSES), severities: values(input.errorSeverities, "errorSeverities", GEO_SEVERITIES),
+  return { fingerprint:input.errorFingerprint??null, judgmentState: input.errorJudgmentState ?? null, trace: input.errorTrace ?? null, statuses: values(input.errorStatuses, "errorStatuses", GEO_ERROR_STATUSES), severities: values(input.errorSeverities, "errorSeverities", GEO_SEVERITIES),
     types: values(input.errorTypes, "errorTypes", [...GEO_ERROR_TYPES, "unknown"]), questionId: input.questionId ?? null, search: search.trim(), limit: integer("errorLimit", 100, 500), offset: integer("errorOffset") };
 }
 
@@ -233,13 +234,15 @@ export const geoScopeIsFiltered = (scope) => Boolean(scope?.round || scope?.from
 /** Exact scoped error aggregation precedes the independently filtered, bounded list.
  * @param {import('./geoStore.mjs').GeoStore} store @param {any} project
  * @param {Awaited<ReturnType<typeof readGeoSelection>>} selected @param {any} [input]
+ * @param {{allRows?: boolean}} [options] Internal bounded analytical admission; public list pagination is unchanged.
  */
-export async function readGeoSelectionErrors(store, project, selected, input = {}) {
-  const filter = geoErrorFilters(input);
+export async function readGeoSelectionErrors(store, project, selected, input = {}, {allRows=false} = {}) {
+  const filter = {...geoErrorFilters(input),...(allRows?{limit:20000,offset:0}:{})};
   const params = [project.id, project.userId, selected.rows.map((row) => row.snapshotId)];
   const where = ["e.geo_project_id = $1", "e.user_id = $2", "(e.first_snapshot_id = ANY($3::text[]) OR e.last_snapshot_id = ANY($3::text[]) OR e.closed_snapshot_id = ANY($3::text[]))"];
   const add = (/** @type {string} */ sql, /** @type {any} */ value) => { params.push(value); where.push(sql.replace("?", `$${params.length}`)); };
   if (filter.judgmentState) add("e.judgment_state = ?", filter.judgmentState);
+  if(filter.fingerprint)add("coalesce(nullif(btrim(e.fingerprint),''),nullif(btrim(e.claim_id),''),btrim(e.id)) = ?",filter.fingerprint);
   if (filter.questionId) add("e.question_id = ?", filter.questionId);
   if (filter.statuses.length) add("e.status = ANY(?::text[])", filter.statuses);
   if (filter.severities.length) add("e.severity = ANY(?::text[])", filter.severities);
@@ -253,9 +256,9 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
   if (filter.trace) add(`${traceSql} = ?`, filter.trace);
   const aggregate = (await store.query(`SELECT ${traceSql} AS trace, e.status, e.judgment_state, e.severity, e.error_type, e.engine, coalesce(q.group_id,sq.group_id) AS group_id, count(*)::integer AS n,
       count(*) FILTER (WHERE e.status <> 'closed' AND e.cited_source IS NOT NULL)::integer AS sourced_open
-    FROM evimed_geo.errors e LEFT JOIN evimed_geo.questions q ON q.id=e.question_id
-    LEFT JOIN evimed_geo.snapshots es ON es.id=coalesce(e.last_snapshot_id,e.first_snapshot_id,e.closed_snapshot_id)
-    LEFT JOIN evimed_geo.questions sq ON sq.id=es.question_id
+    FROM evimed_geo.errors e LEFT JOIN evimed_geo.questions q ON q.id=e.question_id AND q.user_id=e.user_id AND q.geo_project_id=e.geo_project_id
+    LEFT JOIN evimed_geo.snapshots es ON es.id=coalesce(e.last_snapshot_id,e.first_snapshot_id,e.closed_snapshot_id) AND es.user_id=e.user_id AND es.geo_project_id=e.geo_project_id
+    LEFT JOIN evimed_geo.questions sq ON sq.id=es.question_id AND sq.user_id=e.user_id AND sq.geo_project_id=e.geo_project_id
     WHERE ${where.join(" AND ")} GROUP BY e.status, e.judgment_state, e.severity, e.error_type, e.engine, trace, coalesce(q.group_id,sq.group_id)`, params)).rows;
   /** @type {Record<string, number>} */ const counts = { total: 0, open: 0, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 0, withdrawn: 0 };
   /** @type {Record<string, Record<string, number>>} */ const breakdown = { byType: {}, bySeverity: {}, byEngine: {}, byStatus: {}, byTrace: {}, byEngineSeverity: {} };
@@ -280,18 +283,30 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
       if (!withdrawn) activeBreakdown[key][name] = (activeBreakdown[key][name] ?? 0) + n;
     }
   }
-  const live = (await store.query(`SELECT e.id, e.status, e.severity, e.cited_source FROM evimed_geo.errors e
+  if(allRows&&counts.total>20000)throw invalid("Narrow the selection to at most 20,000 error records.",422);
+  const live = allRows?null:(await store.query(`SELECT e.id, e.status, e.severity, e.cited_source FROM evimed_geo.errors e
     WHERE ${where.join(" AND ")} AND e.judgment_state='active' AND e.status <> 'closed'`, params)).rows;
+  // A drawer may span requests; a stable population digest prevents mixing revisions across pages.
+  const populationRevision=filter.fingerprint?(await store.query(`SELECT md5(coalesce(string_agg(
+    md5(jsonb_build_array(to_jsonb(e),to_jsonb(c),f.statements,r.ref->'evaluationBasis'->'claims')::text),'' ORDER BY e.id),'')) AS revision
+    FROM evimed_geo.errors e
+    LEFT JOIN evimed_geo.claims c ON c.id=e.claim_id AND c.geo_project_id=e.geo_project_id AND c.user_id=e.user_id
+    LEFT JOIN evimed_geo.facts f ON f.snapshot_id=e.first_snapshot_id AND f.geo_project_id=e.geo_project_id AND f.user_id=e.user_id
+    LEFT JOIN evimed_geo.snapshots original ON original.id=e.first_snapshot_id AND original.geo_project_id=e.geo_project_id AND original.user_id=e.user_id
+    LEFT JOIN evimed_geo.rounds r ON r.id=original.round_id AND r.geo_project_id=e.geo_project_id AND r.user_id=e.user_id
+    WHERE ${where.join(" AND ")}`,params)).rows[0].revision:null;
   params.push(filter.limit, filter.offset);
-  const rows = (await store.query(`SELECT e.*, f.statements AS origin_statements,r.ref->'evaluationBasis'->'claims' AS origin_claims, c.version AS claim_version,
+  const rows = (await store.query(`SELECT e.*, md5(to_jsonb(e)::text) AS error_revision, f.statements AS origin_statements,r.ref->'evaluationBasis'->'claims' AS origin_claims, c.version AS claim_version,
     CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object('population',c.population,'elements',c.elements,'inLabel',c.in_label,'validUntil',c.valid_until,'evidenceLevel',c.evidence_level) END AS applicability
-    FROM evimed_geo.errors e LEFT JOIN evimed_geo.claims c ON c.id=e.claim_id AND c.geo_project_id=e.geo_project_id
-    LEFT JOIN evimed_geo.facts f ON f.snapshot_id=e.first_snapshot_id LEFT JOIN evimed_geo.snapshots original ON original.id=e.first_snapshot_id
-    LEFT JOIN evimed_geo.rounds r ON r.id=original.round_id WHERE ${where.join(" AND ")}
+    FROM evimed_geo.errors e LEFT JOIN evimed_geo.claims c ON c.id=e.claim_id AND c.geo_project_id=e.geo_project_id AND c.user_id=e.user_id
+    LEFT JOIN evimed_geo.facts f ON f.snapshot_id=e.first_snapshot_id AND f.geo_project_id=e.geo_project_id AND f.user_id=e.user_id
+    LEFT JOIN evimed_geo.snapshots original ON original.id=e.first_snapshot_id AND original.geo_project_id=e.geo_project_id AND original.user_id=e.user_id
+    LEFT JOIN evimed_geo.rounds r ON r.id=original.round_id AND r.geo_project_id=e.geo_project_id AND r.user_id=e.user_id WHERE ${where.join(" AND ")}
     ORDER BY (e.status = 'closed'), e.severity DESC NULLS LAST, e.updated_at DESC, e.id
     LIMIT $${params.length - 1} OFFSET $${params.length}`, params)).rows;
-  return { rows, live, claimRows: rows, counts, activeSummary: { unit: "error_rows", total: activeTotal, ...activeBreakdown, byGroup, sourcedOpen }, summary: { unit: "error_rows", total: counts.total, byGroup, ...breakdown, sourcedOpen },
-    page: { offset: filter.offset, limit: filter.limit, total: counts.total, shown: rows.length, more: filter.offset + rows.length < counts.total,
+  if(allRows&&rows.length!==counts.total)throw invalid("The selected error population changed. Read the selection again.",409);
+  return { rows, live:live??rows.filter(row=>row.judgment_state==='active'&&row.status!=='closed').map(({id,status,severity,cited_source})=>({id,status,severity,cited_source})), claimRows: rows, counts, activeSummary: { unit: "error_rows", total: activeTotal, ...activeBreakdown, byGroup, sourcedOpen }, summary: { unit: "error_rows", total: counts.total, byGroup, ...breakdown, sourcedOpen },
+    page: { ...(populationRevision?{populationRevision}:{}), offset: filter.offset, limit: filter.limit, total: counts.total, shown: rows.length, more: filter.offset + rows.length < counts.total,
       nextOffset: filter.offset + rows.length < counts.total ? filter.offset + rows.length : null }, filter };
 }
 

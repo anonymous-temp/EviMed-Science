@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { ensureGeoConversationSession } from "../geoConversationSession";
 import { GEO_ARTICLE_CHANNEL_LABELS_ZH } from "@evimed/domain";
 import { useState } from "react";
@@ -37,7 +38,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
     setBusy(true); setError(null);
     try {
       const current = await getGeoProject(geoId);
-      const sessionId = await ensureGeoConversationSession(project.projectId,
+      const sessionId = await ensureGeoConversationSession(geoId, project.projectId,
         geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId);
       const signature = JSON.stringify([sessionId,plan.selection?.reference,plan.version,sourceId,sourceUrl,action?.key]);
       const key = retryKey?.signature === signature ? retryKey.key : crypto.randomUUID(); setRetryKey({signature,key});
@@ -68,6 +69,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
           <Button disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>
         </div>)}
       </Section>
+      <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
       <Targets geoId={geoId} plan={plan} onChosen={() => { reload(); frame?.data.invalidate(); }} />
       <Battlefield geoId={geoId} plan={plan} />
       <EnginePromises plan={plan} />

@@ -843,6 +843,14 @@ describe("a document's page", () => {
   });
 
   describe("a document that is not there", () => {
+    it("a retired source with a valid knowledge address can reopen the current same-path page", async () => {
+      const params = new URLSearchParams({scope:"paper-1",kind:"wiki",kpProject:"paper-1",kpTree:"wiki",kpPath:"concept/alias.md",
+        kpGeneration:`kg_${"a".repeat(32)}`,kpId:"alias-page",kpRevision:"3"});
+      renderReader(readerAt("src_gone",`?${params}`));
+      expect(await screen.findByRole("link",{name:"打开当前知识页"})).toHaveAttribute("href",
+        `/app/files/open?${new URLSearchParams({project:"paper-1",tree:"wiki",path:"concept/alias.md"})}`);
+      expect(screen.queryByTestId("preview")).not.toBeInTheDocument();
+    });
     it("is one sentence and the way back, the same for a document that was deleted and one that was never this account's", async () => {
       renderReader(readerAt("src_gone", "?scope=paper-1"));
       expect(await screen.findByText("这份资料不存在或已删除。")).toBeInTheDocument();

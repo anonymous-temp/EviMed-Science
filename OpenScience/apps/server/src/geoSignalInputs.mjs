@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson, claimFromRow } from './geoStore.mjs';
 import { geoReadPage } from './geoReadScope.mjs';
+import { readGeoGroupChangeMembers } from './geoSignalTargets.mjs';
 import { HttpError } from './security.mjs';
 const hash = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const unavailable = () => new HttpError(404, 'geo_plan_context_not_found', 'The selected signal input is unavailable.');
@@ -14,7 +15,17 @@ export class GeoSignalInputs {
     if (row?.projectId !== project.projectId || context?.geoId !== project.id || context.mode !== 'signal' || context.state !== 'bound'
       || context.basisDigest !== hash(context.basis)) throw unavailable();
     await this.service.requireProject({ id: context.actorId }, project.id);
-    const { limit, offset } = geoReadPage(input), targets = context.basis.event.targets ?? [];
+    const { limit, offset } = geoReadPage(input);
+    if (context.basis.signal.kind === 'group_changed') {
+      const signal = await this.service.signals.row(project, context.basis.signal.id);
+      if (signal.payload.kind !== 'group_changed' || signal.payload.basisDigest !== context.basis.signal.basisDigest
+        || hash((({ targets: _targets, targetSelection: _selection, ...event }) => event)(context.basis.event)) !== hash(signal.payload.basis)) throw unavailable();
+      if (input.targetKey == null) return { signal: context.basis.signal, event: context.basis.event,
+        items: ['before','after'].map(side => ({ key: side, total: signal.payload.basis.sides[side].count })), total: 2, more: false, nextOffset: null };
+      if (!['before','after'].includes(input.targetKey)) throw unavailable();
+      return { availability: 'preserved', ...await readGeoGroupChangeMembers(this.contexts.documents, project, signal, { side: input.targetKey, offset, limit }) };
+    }
+    const targets = context.basis.event.targets ?? [];
     if (input.targetKey == null) return { signal: context.basis.signal, basisDigest: context.basisDigest, event: { ...context.basis.event, targets: undefined },
       items: targets.slice(offset, offset + limit), total: targets.length, more: offset + limit < targets.length, nextOffset: offset + limit < targets.length ? offset + limit : null };
     const target = targets.find(candidate => candidate.key === input.targetKey && context.basis.focusRefs.includes(candidate.key));

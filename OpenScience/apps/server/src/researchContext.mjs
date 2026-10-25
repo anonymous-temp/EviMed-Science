@@ -285,7 +285,7 @@ export async function prepareResearchContext(
   // `attended`: a person is in this conversation now and can answer a question (the web chat, an IM channel). It is said
   // by the caller that knows — the dispatch a person sent — and everything else is a turn nobody is watching: a scheduled
   // task, a proactive episode, a module's background step, a platform job.
-  { query: _query = "", memories = [], resident = null, specialists: _specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, sourceContext = null, platformTrial = null, attended = false } = {},
+  { query: _query = "", memories = [], resident = null, specialists: _specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, contextPolicy = null, sourceContext = null, platformTrial = null, attended = false } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   // A pointer, not a retrieval. Until 2026-09-20 every dispatch indexed the
@@ -363,7 +363,7 @@ export async function prepareResearchContext(
   // is that work; an open conversation is not, and reads them in the evidence method when it loads it.
   const evidenceTurn = Boolean(routedSpecialist) || session.mode !== "open-domain";
 
-  const attachedHandbooks = handbookContextFor(handbooks, project, routedSpecialist?.agentId ?? session.agentId ?? "");
+  const attachedHandbooks = handbookContextFor(handbooks, project, routedSpecialist?.agentId ?? session.agentId ?? "", contextPolicy);
   // The platform's entry on probation, for the sampled runs the caller decided it for (`learningPlatformHandbooks.probationFor`): the model's context only.
   const trialContext = platformTrialContext(platformTrial);
   return {

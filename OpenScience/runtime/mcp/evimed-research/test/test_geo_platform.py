@@ -122,6 +122,9 @@ class GeoReadTests(_GatewayCase):
             {"viewId": "V18", "sourceLevel": "page", "sourceSearch": "portal?doc=001", "sourceRelationship": "mentions", "topN": 50},
             {"viewId": "V19", "sourceLevel": "page", "sourceFacet": "group", "topN": 10},
             {"viewId": "V22", "sourceLevel": "page"},
+            {"viewId": "V10"},
+            {"viewId": "V16", "evidenceKind": "claims"},
+            {"viewId": "V16", "evidenceKind": "findings"},
         ]:
             result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
             self.assertEqual(result["status"], "success")
@@ -133,6 +136,145 @@ class GeoReadTests(_GatewayCase):
             result = self.server.call_tool("geo_read", {"what": "analysis", "filter": {"viewId": "V18", field: value}})
             self.assertEqual(result["status"], "error")
         self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_evidence_view_cannot_replace_frozen_context_or_target_another_resource(self):
+        sent = len(_Gateway.seen)
+        for what, selector in [
+            ("analysis", {"viewId": "V10", "evidenceKind": "claims"}),
+            ("analysis", {"viewId": "V16", "evidenceKind": "other"}),
+            ("analysis", {"viewId": "V16", "evidenceKind": "claims", "planContextRef": "gpc_" + "a" * 64}),
+            ("claims", {"viewId": "V16", "evidenceKind": "findings"}),
+        ]:
+            result = self.server.call_tool("geo_read", {"what": what, "filter": selector})
+            self.assertEqual(result["status"], "error")
+        self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_error_distribution_and_exact_group_filters_preserve_scope(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
+        for what, selector in [
+            ("analysis", {"viewId": "V13", "errorFacet": "severity", "errorView": "withdrawn", "selectionRef": "gsel_original"}),
+            ("diagnosis", {"errorFingerprint": "chosen", "errorLimit": 500, "errorOffset": 500, "selectionRef": "gsel_original"}),
+        ]:
+            result = self.server.call_tool("geo_read", {"what": what, "filter": selector})
+            self.assertEqual(result["status"], "success", result)
+            self.assertEqual(_Gateway.seen[-1]["body"]["filter"], selector)
+        sent = len(_Gateway.seen)
+        for what, selector in [
+            ("analysis", {"viewId": "V16", "errorFacet": "type"}),
+            ("analysis", {"viewId": "V13", "errorFacet": "other"}),
+            ("analysis", {"viewId": "V13", "errorView": "other"}),
+            ("analysis", {"viewId": "V13", "errorView": "all", "planContextRef": "gpc_" + "a" * 64}),
+            ("claims", {"errorFingerprint": "chosen"}),
+            ("diagnosis", {"errorFingerprint": " "}),
+            ("diagnosis", {"errorFingerprint": "bad\\nkey".replace("\\n", "\n")}),
+            ("diagnosis", {"errorFingerprint": "x" * 241}),
+            ("diagnosis", {"errorFingerprint": "chosen", "planContextRef": "gpc_" + "a" * 64}),
+        ]:
+            result = self.server.call_tool("geo_read", {"what": what, "filter": selector})
+            self.assertEqual(result["status"], "error", result)
+        self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_analysis_rejects_all_unsupported_diagnosis_list_filters(self):
+        sent = len(_Gateway.seen)
+        for selector in [{"errorSeverities": ["S4"]}, {"errorStatuses": ["open"]}, {"errorTypes": ["number"]},
+                         {"errorSearch": "x"}, {"errorLimit": 5}, {"errorOffset": 1}, {"questionId": "q"},
+                         {"errorTrace": "traced"}, {"errorJudgmentState": "active"}, {"errorFingerprint": "f"}]:
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": {"viewId": "V13", **selector}})
+            self.assertEqual(result["status"], "error", result)
+        self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_publication_analysis_closed_descriptors_preserve_intended_facets(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
+        for selector in [{"viewId": "V23", "publicationFacet": facet} for facet in ("group", "audience", "channel")] + [{"viewId": "V24"}]:
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "success", result)
+            self.assertEqual(_Gateway.seen[-1]["body"]["filter"], selector)
+        sent = len(_Gateway.seen)
+        for selector in [{"viewId": "V24", "publicationFacet": "group"}, {"viewId": "V23", "publicationFacet": "platform"},
+                         {"viewId": "V23", "publicationFacet": "group", "planContextRef": "gpc_" + "a" * 64}] + [
+                {"viewId": "V23", key: value} for key, value in (("audience", "patient"), ("sourceId", "source"), ("url", "https://example.org"),
+                    ("key", "key"), ("strategyVersion", 1), ("member", {}), ("answerLimit", 20), ("answerOffset", 1))]:
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "error", result)
+        self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_finance_analysis_preserves_only_its_exact_version_selectors(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
+        for selector in ({"viewId": "V25", "financeFacet": "ledger"},
+                         {"viewId": "V25", "financeFacet": "group"},
+                         {"viewId": "V26", "strategyVersion": 2, "targetVersion": 1},
+                         {"viewId": "V26"}):
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "success", result)
+            self.assertEqual(_Gateway.seen[-1]["body"]["filter"], selector)
+        sent = len(_Gateway.seen)
+        for selector in ({"viewId": "V23", "strategyVersion": 1}, {"viewId": "V25", "targetVersion": 1},
+                         {"viewId": "V26", "strategyVersion": True}, {"viewId": "V26", "targetVersion": 0},
+                         {"viewId": "V26", "financeFacet": "group"}, {"viewId": "V25", "financeFacet": "project"},
+                         {"planContextRef": "gpc_" + "a" * 64, "strategyVersion": 1},
+                         {"planContextRef": "gpc_" + "a" * 64, "financeFacet": "ledger"}):
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "error", result)
+        self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_history_analysis_retains_exact_selection_and_refuses_live_frozen_overrides(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
+        for selector in ({"viewId": "V15", "selectionRef": "gsel_history"},
+                         {"viewId": "V27", "metricId": "M-06", "dimension": "project", "clientTags": ["selected"]},
+                         {"planContextRef": "gpc_" + "a" * 64, "rowKey": "historical-event", "columnKey": "objects", "offset": 37, "limit": 37}):
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "success", result)
+            self.assertEqual(_Gateway.seen[-1]["body"]["filter"], selector)
+        sent = len(_Gateway.seen)
+        for selector in ({"viewId": "V15", "metricId": "M-01"}, {"viewId": "V27", "metricId": "M-16"},
+                         {"viewId": "V27", "dimension": "group"}, {"viewId": "V27", "sourceSearch": "foreign"},
+                         {"viewId": "V15", "planContextRef": "gpc_" + "a" * 64},
+                         {"viewId": "V27", "targetVersion": 1}):
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+            self.assertEqual(result["status"], "error", result)
+        self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_target_version_never_crosses_http_for_other_resources(self):
+        _Gateway.answers["read"] = (200, {"data": {"rows": [], "page": {"total": 0}}})
+        sent = len(_Gateway.seen)
+        for what in ("claims", "strategy"):
+            for selector in ({"targetVersion": 1}, {"targetVersion": 1, "strategyVersion": 17},
+                             {"targetVersion": 1, "planContextRef": "gpc_" + "a" * 64}):
+                with self.subTest(what=what, selector=selector):
+                    result = self.server.call_tool("geo_read", {"what": what, "filter": selector})
+                    self.assertEqual(result["status"], "error", result)
+                    self.assertEqual(len(_Gateway.seen), sent)
+        for what, selector in (("strategy", {"strategyVersion": 17}),
+                               ("analysis", {"viewId": "V26", "strategyVersion": 17, "targetVersion": 2}),
+                               ("analysis", {"planContextRef": "gpc_" + "a" * 64, "rowKey": "old", "columnKey": "objects", "offset": 51, "limit": 37})):
+            result = self.server.call_tool("geo_read", {"what": what, "filter": selector})
+            self.assertEqual(result["status"], "success", result)
+            self.assertEqual(_Gateway.seen[-1]["body"], {"what": what, "filter": selector})
+        self.assertEqual(len(_Gateway.seen), sent + 3)
+
+    def test_analysis_resources_reject_signal_targets_and_frozen_live_overrides_before_http(self):
+        sent = len(_Gateway.seen)
+        for view in ("V23", "V24"):
+            for selector in ({"viewId": view, "targetKey": "live-target"},
+                             {"viewId": view, "planContextRef": "gpc_" + "a" * 64}):
+                with self.subTest(selector=selector):
+                    result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+                    self.assertEqual(result["status"], "error", result)
+        for override in ({"selectionRef": "gsel_live"}, {"metricId": "M-01"}, {"rowKey": "one"},
+                         {"rowKey": "one", "columnKey": "orders"}, {"columnKey": "objects"}):
+            result = self.server.call_tool("geo_read", {"what": "analysis", "filter": {"planContextRef": "gpc_" + "a" * 64, **override}})
+            self.assertEqual(result["status"], "error", result)
+        self.assertEqual(len(_Gateway.seen), sent)
+
+    def test_frozen_object_continuation_preserves_exact_selectors_and_offset(self):
+        selector = {"planContextRef": "gpc_" + "a" * 64, "rowKey": "same-claim", "columnKey": "objects", "offset": 51, "limit": 37}
+        items = [{"id": "old-observation", "originalAssessment": {"assessmentVersion": "original", "assessment": {"statements": [{"verdict": "wrong"}]}}}]
+        _Gateway.answers["read"] = (200, {"data": {"items": items, "total": 250, "nextOffset": 52, "readingsKind": "submitted_input"}})
+        result = self.server.call_tool("geo_read", {"what": "analysis", "filter": selector})
+        self.assertEqual(result["status"], "success", result)
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "analysis", "filter": selector})
+        self.assertEqual(result["data"]["items"], items)
+        self.assertEqual(result["data"]["nextOffset"], 52)
 
     def test_confirmed_relationship_and_opportunity_analysis_forward_exact_native_selectors(self):
         selectors = [

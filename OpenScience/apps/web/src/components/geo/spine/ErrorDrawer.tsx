@@ -88,6 +88,7 @@ export function ErrorDrawer({
     >
       <div data-geo-error-drawer={claim.key} className="flex flex-col gap-6">
         <Section title="这句话" level="sub">
+          {claim.rows.some(row => !row.originalErrorAssessment || row.claimVersion == null || row.applicability == null) && <p className="text-ui text-text-2">部分原始判定依据未保留，需先核实当时的主张版本及适用条件。</p>}
           {withdrawn && <p className="text-ui text-text-2">原判定已经复核撤回，记录和复核依据仍保留；这不代表后续实测显示改善。</p>}
           <p className="flex items-start gap-1.5 text-ui text-text">
             <X size={16} aria-hidden="true" className="mt-1 shrink-0 text-danger" />

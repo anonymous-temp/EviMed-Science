@@ -60,6 +60,17 @@ POOLS = ("P1", "P2", "P3", "P4")
 SOCIAL_PLATFORMS = ("xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels")
 SOCIAL_SORTS = ("hot", "latest")
 OWNED_SOURCE_METRIC_IDS = ("M-08", "M-08S")
+# Keep analysis resource admission closed before crossing the HTTP boundary.
+ANALYSIS_SCOPE_FIELDS = frozenset((
+    "round", "from", "to", "compareFrom", "compareTo", "comparisonMode", "engines", "questionVersion",
+    "groupIds", "pools", "clientTags", "timeZone", "timezone", "engine", "version", "pool", "groupId", "selectionRef",
+))
+ANALYSIS_VIEW_FIELDS = frozenset((
+    "viewId", "metricId", "dimension", "categoryMode", "timeGrain", "entityKind", "entityKey", "sourceType",
+    "sourceSearch", "sourceRelationship", "sourceLevel", "sourceFacet", "topN", "ownedMetricId", "evidenceKind",
+    "errorFacet", "errorView", "publicationFacet", "financeFacet", "strategyVersion", "targetVersion", "rowKey", "columnKey", "expectedDigest", "limit", "offset",
+))
+FROZEN_ANALYSIS_FIELDS = frozenset(("planContextRef", "limit", "offset", "rowKey", "columnKey"))
 READ_MAX_LIMIT = 50
 # An action's key (`kind:group:ref`), as the domain's `parseGeoActionKey` bounds it.
 ACTION_KEY_MAX = 240
@@ -116,7 +127,14 @@ def tool_definitions():
                             "groupIds": {"type": "array", "items": ID, "maxItems": 100},
                             "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
                             "selectionRef": ID,
-                            "viewId": {"type": "string", "enum": ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09", "V11", "V12", "V14", "V17", "V18", "V19", "V20", "V21", "V22"]},
+                            "viewId": {"type": "string", "enum": ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09", "V10", "V11", "V12", "V13", "V14", "V15", "V16", "V17", "V18", "V19", "V20", "V21", "V22", "V23", "V24", "V25", "V26", "V27"]},
+                            "financeFacet": {"type": "string", "enum": ["ledger", "group"], "description": "V25 only: ledger entries or explicit pinned group attribution, in CNY."},
+                            "targetVersion": {"type": "integer", "minimum": 1, "description": "V26 only: assert the target version preserved by the exact strategy basis."},
+                            "publicationFacet": {"type": "string", "enum": ["group", "audience", "channel"], "description": "V23 only: exact need groups, intended audience or intended channel; actual publication platform remains separate."},
+                            "errorFacet": {"type": "string", "enum": ["type", "severity"], "description": "V13 only: group distinct preserved error records by type or severity."},
+                            "errorView": {"type": "string", "enum": ["active", "withdrawn", "all"], "description": "V13 only: current judgment state, separate from business handling."},
+                            "errorFingerprint": {"type": "string", "minLength": 1, "maxLength": 240, "description": "Diagnosis only: exact canonical error group, independent of list pagination."},
+                            "evidenceKind": {"type": "string", "enum": ["claims", "findings"], "description": "V16 only: exact claim/source support or separately counted finding-expression observations."},
                             "metricId": {"type": "string", "pattern": "^M-[0-9]{2}[A-Z]?$"},
                             "ownedMetricId": {"type": "string", "enum": list(OWNED_SOURCE_METRIC_IDS), "description": "V21 only: existing registered-owned metric; manual source annotations remain separate."},
                             "dimension": {"type": "string", "enum": ["project", "engine", "group"]},
@@ -309,6 +327,47 @@ def read(arguments: dict) -> dict:
     if what not in READ_WHATS:
         raise GeoPlatformError("geo_read_what_invalid", "what must be one of: %s." % ", ".join(READ_WHATS))
     selector = arguments.get("filter")
+    if isinstance(selector, dict):
+        if "targetVersion" in selector and what != "analysis":
+            raise GeoPlatformError("geo_read_filter_invalid", "targetVersion requires a direct V26 analysis.")
+        if "publicationFacet" in selector and (what != "analysis" or selector.get("viewId") != "V23"
+                or selector["publicationFacet"] not in ("group", "audience", "channel") or "planContextRef" in selector):
+            raise GeoPlatformError("geo_read_filter_invalid", "publicationFacet requires a direct V23 analysis.")
+        if "financeFacet" in selector and (what != "analysis" or selector.get("viewId") != "V25" or selector["financeFacet"] not in ("ledger", "group")):
+            raise GeoPlatformError("geo_read_filter_invalid", "financeFacet requires a direct V25 analysis.")
+        if what == "analysis":
+            if selector.get("viewId") in ("V15", "V27"):
+                history_fields = ANALYSIS_SCOPE_FIELDS | frozenset((
+                    "viewId", "metricId", "dimension", "rowKey", "columnKey", "expectedDigest", "limit", "offset",
+                ))
+                if (not selector.keys() <= history_fields or selector.get("dimension", "project") != "project"
+                        or selector.get("viewId") == "V15" and "metricId" in selector
+                        or selector.get("viewId") == "V27" and selector.get("metricId") in ("M-16", "M-17", "M-18", "M-21")):
+                    raise GeoPlatformError("geo_read_filter_invalid", "Use the history view's exact observation scope and supported project metric.")
+            for key in ("strategyVersion", "targetVersion"):
+                value = selector.get(key)
+                if key in selector and (selector.get("viewId") != "V26" or type(value) is not int or value < 1):
+                    raise GeoPlatformError("geo_read_filter_invalid", "Plan version selectors require a direct V26 analysis.")
+            allowed = FROZEN_ANALYSIS_FIELDS if "planContextRef" in selector else ANALYSIS_SCOPE_FIELDS | ANALYSIS_VIEW_FIELDS
+            if not selector.keys() <= allowed:
+                raise GeoPlatformError("geo_read_filter_invalid", "Use only the selected analysis resource's supported fields.")
+            if "planContextRef" in selector and ("rowKey" in selector or "columnKey" in selector):
+                row_key = selector.get("rowKey")
+                if not isinstance(row_key, str) or not row_key or len(row_key) > 160 or selector.get("columnKey") != "objects":
+                    raise GeoPlatformError("geo_read_filter_invalid", "Choose an exact frozen object page.")
+        for field, choices in (("errorFacet", ("type", "severity")), ("errorView", ("active", "withdrawn", "all"))):
+            if field in selector and (what != "analysis" or selector.get("viewId") != "V13"
+                                      or selector[field] not in choices or "planContextRef" in selector):
+                raise GeoPlatformError("geo_read_filter_invalid", field + " requires a direct V13 analysis.")
+        if "errorFingerprint" in selector and (what != "diagnosis" or "planContextRef" in selector
+                or not isinstance(selector["errorFingerprint"], str)
+                or not selector["errorFingerprint"].strip() or len(selector["errorFingerprint"]) > 240
+                or any(ord(char) < 32 or ord(char) == 127 for char in selector["errorFingerprint"])):
+            raise GeoPlatformError("geo_read_filter_invalid", "errorFingerprint requires an exact diagnosis group.")
+    if isinstance(selector, dict) and "evidenceKind" in selector:
+        if (what != "analysis" or selector.get("viewId") != "V16"
+                or selector["evidenceKind"] not in ("claims", "findings") or "planContextRef" in selector):
+            raise GeoPlatformError("geo_read_filter_invalid", "evidenceKind requires a direct V16 analysis; frozen input cannot be replaced.")
     if isinstance(selector, dict) and "ownedMetricId" in selector:
         if (what != "analysis" or selector.get("viewId") != "V21"
                 or selector["ownedMetricId"] not in OWNED_SOURCE_METRIC_IDS or "planContextRef" in selector):

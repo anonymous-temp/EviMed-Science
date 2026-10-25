@@ -12,6 +12,24 @@ export const GEO_ANALYSIS_REGISTRY = Object.freeze(Object.fromEntries([
   ], [
     'V08', 'rivals'
   ], [
+    'V10', 'evidence'
+  ], [
+    'V16', 'evidence'
+  ], [
+    'V23', 'execution'
+  ], [
+    'V24', 'execution'
+  ], [
+    'V25', 'execution'
+  ], [
+    'V15', 'execution'
+  ], [
+    'V27', 'execution'
+  ], [
+    'V26', 'execution'
+  ], [
+    'V13', 'execution'
+  ], [
     'V09', 'recommendations'
   ], [
     'V17', 'sources'
@@ -39,7 +57,7 @@ export const GEO_ANALYSIS_REGISTRY = Object.freeze(Object.fromEntries([
   }
 ])));
 export const GEO_ANALYSIS_DESCRIPTOR_FIELDS = Object.freeze([
-  'viewId', 'metricId', 'dimension', 'categoryMode', 'timeGrain', 'entityKind', 'entityKey', 'sourceType', 'sourceSearch', 'sourceRelationship', 'sourceLevel', 'sourceFacet', 'topN', 'ownedMetricId'
+  'viewId', 'metricId', 'dimension', 'categoryMode', 'timeGrain', 'entityKind', 'entityKey', 'sourceType', 'sourceSearch', 'sourceRelationship', 'sourceLevel', 'sourceFacet', 'topN', 'ownedMetricId', 'evidenceKind', 'errorFacet', 'errorView', 'publicationFacet', 'financeFacet', 'strategyVersion', 'targetVersion'
 ]);
 const invalid = () => new HttpError(400, 'geo_read_filter_invalid', 'Choose a registered analysis view and its supported options.');
 /** @param {any} [input] */
@@ -49,7 +67,7 @@ export function normalizeGeoAnalysisView(input = {}) {
   const viewId = input.viewId ?? 'V01', metricView = [
     'V02', 'V03', 'V04', 'V05'
   ].includes(viewId), family = GEO_ANALYSIS_REGISTRY[viewId]?.family;
-  const metricId = input.metricId ?? (viewId === 'V08' ? 'M-16' : metricView ? 'M-01' : null), dimension = input.dimension ?? (viewId === 'V05' ? 'group' : metricView ? 'engine' : 'project');
+  const metricId = input.metricId ?? (viewId === 'V08' ? 'M-16' : viewId==='V27'||metricView ? 'M-01' : null), dimension = input.dimension ?? (viewId === 'V05' ? 'group' : metricView ? 'engine' : 'project');
   if (!family || (metricId !== null && !GEO_METRIC_IDS.includes(metricId)) || ![
     'project', 'engine', 'group'
   ].includes(dimension))
@@ -77,6 +95,14 @@ export function normalizeGeoAnalysisView(input = {}) {
   if (input.entityKey != null && (viewId !== 'V08' && input.entityKind !== 'generic' || typeof input.entityKey !== 'string' || !input.entityKey.trim() || input.entityKey.length > 300))
     throw invalid();
   if (viewId === 'V08' && (input.entityKind === 'generic' || !['M-16','M-17'].includes(metricId))) throw invalid();
+  if (family === 'evidence' && (metricId !== null || dimension !== 'project')) throw invalid();
+  if (family === 'execution' && (dimension !== 'project'||viewId!=='V27'&&metricId!==null||viewId==='V27'&&['M-16','M-17','M-18','M-21'].includes(metricId))) throw invalid();
+  if(input.publicationFacet!=null&&(viewId!=='V23'||!['group','audience','channel'].includes(input.publicationFacet)))throw invalid();
+  if(input.financeFacet!=null&&(viewId!=='V25'||!['ledger','group'].includes(input.financeFacet)))throw invalid();
+  for(const key of ['strategyVersion','targetVersion']) if(input[key]!=null&&(viewId!=='V26'||!Number.isSafeInteger(input[key])||input[key]<1))throw invalid();
+  if (input.errorFacet != null && (viewId !== 'V13' || !['type','severity'].includes(input.errorFacet))) throw invalid();
+  if (input.errorView != null && (viewId !== 'V13' || !['active','withdrawn','all'].includes(input.errorView))) throw invalid();
+  if (input.evidenceKind != null && (viewId !== 'V16' || !['claims','findings'].includes(input.evidenceKind))) throw invalid();
   if (viewId === 'V09' && dimension !== 'project') throw invalid();
   if (viewId === 'V04' && dimension !== 'engine' || viewId === 'V05' && dimension !== 'group')
     throw invalid();
@@ -93,6 +119,11 @@ export function normalizeGeoAnalysisView(input = {}) {
     if(input.topN!=null&&(!Number.isSafeInteger(input.topN)||input.topN<1||input.topN>50)) throw invalid();
   }
   return {
+    ...(viewId==='V25'?{financeFacet:input.financeFacet??'ledger'}:{}),
+    ...(viewId==='V26'?{...(input.strategyVersion!=null?{strategyVersion:input.strategyVersion}:{}),...(input.targetVersion!=null?{targetVersion:input.targetVersion}:{})}:{}),
+    ...(viewId==='V23'?{publicationFacet:input.publicationFacet??'group'}:{}),
+    ...(viewId==='V13'?{errorFacet:input.errorFacet??'type',errorView:input.errorView??'active'}:{}),
+    ...(viewId==='V16'?{evidenceKind:input.evidenceKind??'claims'}:{}),
     ...(family==='sources'&&viewId!=='V21'?{...(input.sourceType?{sourceType:input.sourceType.trim()}:{}),...(input.sourceSearch?{sourceSearch:input.sourceSearch.trim()}:{}),sourceRelationship:input.sourceRelationship??'all',...(['V18','V19','V22'].includes(viewId)?{sourceLevel:input.sourceLevel??(viewId==='V22'?'page':'domain')}:{}),...(viewId==='V19'?{sourceFacet:input.sourceFacet??'engine'}:{}),topN:input.topN??15}:{}),
     ...(viewId==='V21'?{ownedMetricId:input.ownedMetricId??'M-08'}:{}),
     viewId, metricId: input.entityKind === 'generic' ? null : metricId, dimension,

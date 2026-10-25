@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -284,7 +284,17 @@ test("a link in the package, a name that differs only by case and a file outside
   assert.equal(outcome.status, 1);
   assert.ok(codes(outcome).includes("file_not_regular"), "a link is named, not followed");
   assert.ok(codes(outcome).includes("file_undeclared"));
-  assert.ok(codes(outcome).includes("file_duplicate"), "two names that one case-insensitive extraction would merge");
+  const names = await readdir(pkg.root);
+  const directoryKeepsBoth = names.includes("README.txt") && names.includes("README.TXT");
+  t.diagnostic(`Directory preserves both case spellings: ${directoryKeepsBoth}`);
+  if (directoryKeepsBoth) assert.ok(codes(outcome).includes("file_duplicate"), "the directory keeps both case spellings");
+  // ZIP names preserve both entries even when the host filesystem merges them.
+  const duplicateZip = path.join(pkg.root, "..", `${path.basename(pkg.root)}-duplicate.zip`);
+  t.after(() => rm(duplicateZip, { force: true }));
+  await writeFile(duplicateZip, zipSync({ ...pkg.files, "README.TXT": Buffer.from("same name, different case") }));
+  const zipped = await verify(duplicateZip);
+  assert.equal(zipped.status, 1);
+  assert.ok(codes(zipped).includes("file_duplicate"), "two archive names that case-insensitive extraction would merge");
 });
 
 test("nothing in a package is executed: a package that ships a json.py and a hashlib.py is not run by the verifier", async t => {
@@ -292,16 +302,23 @@ test("nothing in a package is executed: a package that ships a json.py and a has
   const original = await f.calculate(0.7134);
   const pkg = await extract(t, (await f.exportOf().export(OWNER, "p", original.versionId)).bytes);
   const canary = path.join(pkg.root, "..", `${path.basename(pkg.root)}-ran`);
+  t.after(() => rm(canary, { force: true }));
   for (const module of ["json", "hashlib", "zipfile", "re", "sitecustomize", "usercustomize"]) {
     await writeFile(path.join(pkg.root, `${module}.py`), `open(${JSON.stringify(canary)}, "w").write("ran")\n`);
   }
   await writeFile(path.join(pkg.root, "evil.pth"), `import os; open(${JSON.stringify(canary)}, "w").write("ran")\n`);
-  // From inside the package, with and without -I, by the script's own path: no run, only the undeclared files named.
-  for (const args of [["-I", path.join(pkg.root, "verify.py")], [path.join(pkg.root, "verify.py")]]) {
-    await run("python3", args, { cwd: pkg.root }).then(() => assert.fail("undeclared files are not a pass"), error => {
-      assert.equal(error.code, 1);
-      assert.ok(JSON.parse(error.stdout).undeclared.includes("json.py"));
-    });
+  // Both the recipient's directory spelling and its canonical path must exclude package imports.
+  const canonical = await realpath(pkg.root);
+  const alias = path.join(path.dirname(canonical), `${path.basename(canonical)}-alias`);
+  await symlink(canonical, alias, "dir");
+  t.after(() => rm(alias, { force: true }));
+  const locations = [...new Set([pkg.root, canonical, alias])];
+  for (const location of locations) for (const isolated of [true, false]) {
+    const args = [...(isolated ? ["-I"] : []), path.join(location, "verify.py")];
+    const outcome = spawnSync("python3", args, { cwd: location, encoding: "utf8" });
+    assert.equal(outcome.status, 1, outcome.stderr);
+    assert.ok(outcome.stdout.trim(), `verifier must return JSON: ${outcome.stderr}`);
+    assert.ok(JSON.parse(outcome.stdout).undeclared.includes("json.py"));
     await assert.rejects(readFile(canary), { code: "ENOENT" }, "the shadowing module was never imported");
   }
   // The verifier's own source reads, never runs: a closed set of standard-library imports, no way to execute or fetch.
@@ -313,6 +330,27 @@ test("nothing in a package is executed: a package that ships a json.py and a has
   }
   assert.equal(/(?<![.\w])compile\(/.test(source), false, "no compile() of package text (re.compile of its own patterns is the only compile)");
   assert.equal(/open\([^)]*["'][wax+]/.test(source), false, "no file is opened for writing");
+});
+
+
+test("isolated verifier startup ignores PYTHONPATH hooks before the script can filter imports", async t => {
+  const f = await fixture(t);
+  const original = await f.calculate(0.7134);
+  const pkg = await extract(t, (await f.exportOf().export(OWNER, "p", original.versionId)).bytes);
+  const canary = path.join(pkg.root, "startup-ran");
+  await writeFile(path.join(pkg.root, "sitecustomize.py"), `open(${JSON.stringify(canary)}, "w").write("startup hook")\n`);
+  const invoke = isolated => spawnSync("python3", [...(isolated ? ["-I"] : []), path.join(pkg.root, "verify.py")], {
+    cwd: pkg.root, env: { ...process.env, PYTHONPATH: pkg.root }, encoding: "utf8",
+  });
+  const unisolated = invoke(false);
+  assert.equal(unisolated.status, 1, unisolated.stderr);
+  assert.equal(JSON.parse(unisolated.stdout).ok, false);
+  assert.equal(await readFile(canary, "utf8"), "startup hook", "Python executes startup hooks before in-script protection");
+  await rm(canary);
+  const isolated = invoke(true);
+  assert.equal(isolated.status, 1, isolated.stderr);
+  assert.ok(JSON.parse(isolated.stdout).undeclared.includes("sitecustomize.py"));
+  await assert.rejects(readFile(canary), { code: "ENOENT" }, "the platform and recipient runner must retain -I");
 });
 
 test("every kind of omission carries its reason, and a dependency is never silently missing", async t => {

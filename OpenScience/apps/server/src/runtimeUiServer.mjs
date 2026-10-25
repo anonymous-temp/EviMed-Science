@@ -270,7 +270,7 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any)=>Promise<{project:any,principal:any}>)|null,
  *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
@@ -278,7 +278,7 @@ function assertNativeModelSelection(config, payload) {
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
   const delegatedPolicies = new Map();
   function pruneDelegatedPolicies() {
@@ -362,6 +362,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   async function prepareNativePlan(user, project, payload) {
     const request = payload?.args?.request;
     if (request?.geoPlanContext !== undefined && prepareGeoPlan) await prepareGeoPlan(user, project, request);
+    if (request && prepareSelections) await prepareSelections(user, project, request);
   }
   async function bindNativeResult(user, project, payload) {
     const request = payload?.args?.request;
@@ -823,10 +824,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       await authorizeMethod(config, project, "session/prompt", false, usageLedger, runtimeManager, balanceGate,
         { args: { request: { sessionId: loopxBody.payload.sessionId } } });
     }
+    let nativeInputRequest = null;
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
       revalidate,
+      ...(scoped?.nativeInputs && nativeInputRequest ? {
+        beforeForward: () => scoped.beforeInputForward(nativeInputRequest),
+        observeResponse: response => scoped.observeHttpInput(nativeInputRequest, promptBody?.rpcId ?? scopedCall?.rpcId, response),
+      } : {}),
       // Build assets and revisioned bundles the document names are served
       // from the path every project shares; a file whose URL names its
       // content is kept by the browser, across sessions and projects.
@@ -842,6 +848,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       await authorizePromptSession(project, promptBody?.payload);
       const preparing = await resolveFrame(snapshot, null);
       await prepareNativePlan(preparing.user, preparing.project, promptBody?.payload);
+      nativeInputRequest = promptBody?.payload?.args?.request;
+      if (preparing.scoped) await preparing.scoped.prepareInput(nativeInputRequest);
       // Counted inside the admission, so a prompt the plugin fence refuses is
       // not a message that arrived.
       const admitted = async () => {
@@ -851,15 +859,21 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         await bindNativeResult(current.user, current.project, promptBody?.payload);
         await recordNativeActor(current.user, current.project, promptBody?.payload);
         await prepareNativeContext(project, promptBody?.payload);
-        await recordSteer(project, promptBody?.payload);
+        if (!current.scoped?.nativeInputs) await recordSteer(project, promptBody?.payload);
         req.__openScienceProxyBody = Buffer.from(JSON.stringify(promptBody));
         req.headers["content-length"] = String(req.__openScienceProxyBody.length);
         return forward();
       };
-      const authorized = () => scoped ? scoped.withAuthority(admitted) : admitted();
-      return runtimeManager.pluginService
-        ? runtimeManager.pluginService.withAdmission(project, authorized, { prompt: true })
-        : authorized();
+      const authorized = () => scoped ? scoped.runInput(nativeInputRequest, admitted) : admitted();
+      try {
+        return await (runtimeManager.pluginService
+          ? runtimeManager.pluginService.withAdmission(project, authorized, { prompt: true,
+            ...(scoped?.nativeInputs ? { promptDisposition: () => scoped.inputDisposition(nativeInputRequest) } : {}) })
+          : authorized());
+      } catch (error) {
+        if (scoped?.nativeInputs) await scoped.afterInputAdmission(nativeInputRequest, error);
+        throw error;
+      }
     };
     if (method === "session/prompt") {
       if (authorizeMutation) await authorizeMutation(forwardPrompt);
@@ -876,6 +890,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       const admitted = () => runtimeManager.pluginService
         ? runtimeManager.pluginService.withAdmission(project, start, { prompt: true }) : start();
       if (authorizeMutation) await authorizeMutation(admitted); else await admitted();
+    } else if (scoped?.nativeInputs && req.method === 'POST' && scoped.inputOperation(method)) {
+      nativeInputRequest = await scoped.prepareOperation(method, scopedCall.payload);
+      try { await scoped.runOperation(method, scopedCall.payload, forward); }
+      catch (error) { await scoped.afterInputAdmission(nativeInputRequest, error); throw error; }
     } else if (scoped && req.method === 'POST') await scoped.withAuthority(forward);
     else await forward();
   }
@@ -935,6 +953,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             assertNativeModelSelection(config, payload);
             await authorizePromptSession(project, payload);
           }
+          if (currentActor.scoped?.nativeInputs && currentActor.scoped.inputOperation(endpoint)) {
+            await currentActor.scoped.prepareOperation(endpoint, payload);
+          }
           if (endpoint === "fileUploads/upload" && recordUploadAttempt) await recordUploadAttempt(currentActor.project);
           if (endpoint === "session/prompt") {
             await revalidate();
@@ -945,6 +966,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             if (authorizeMutation) await authorizeMutation(check);
             else await check();
             await prepareNativePlan(currentActor.user, currentActor.project, payload);
+            if (currentActor.scoped) await currentActor.scoped.prepareInput(payload?.args?.request);
           }
         };
         // The mux calls `observe` inside the prompt's admission, right before
@@ -959,7 +981,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         };
         const observe = async (endpoint, payload = null) => {
           if (endpoint === "session/prompt") {
-            await recordSteer(project, payload);
+            if (!currentActor.scoped?.nativeInputs) await recordSteer(project, payload);
           } else if (endpoint === "session/cancel") {
             await recordStop(project, payload);
           }
@@ -967,6 +989,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe, prepare,
           ...(initial.scoped ? {
             withAuthority: operation => initial.scoped.withAuthority(operation),
+            ...(initial.scoped.nativeInputs ? {
+              admitInput: (payload, operation) => initial.scoped.runInput(payload?.args?.request, operation),
+              beforeSend: (endpoint, payload) => initial.scoped.beforeInputForward(endpoint === 'session/prompt' ? payload?.args?.request : initial.scoped.operationRequest(payload)),
+              observeOutcome: (endpoint, payload, outcome) => initial.scoped.observeInput(endpoint === 'session/prompt' ? payload?.args?.request : initial.scoped.operationRequest(payload), outcome),
+              admitOperation: (endpoint, payload, operation) => initial.scoped.runOperation(endpoint, payload, operation),
+              promptDisposition: payload => initial.scoped.inputDisposition(payload?.args?.request),
+              afterInputAdmission: (payload, error) => initial.scoped.afterInputAdmission(payload?.args?.request, error),
+            } : {}),
             projectItem: (endpoint, payload, value, context) => scopedCarrier.projectItem(endpoint, payload, value, context),
             onStreamClosed: (endpoint, streamId) => scopedCarrier.onStreamClosed(endpoint, streamId),
             onProjectionDiscarded: (endpoint, streamId) => scopedCarrier.onStreamClosed(endpoint, streamId),

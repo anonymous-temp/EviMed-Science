@@ -1,3 +1,4 @@
+import { CONTEXT_ITEM_FIELDS, contextPolicyIdentity } from "./geoContextItems.mjs";
 /**
  * The learned methods a project's runs may read.
  *
@@ -289,7 +290,7 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  * pulled in by similarity can be read against a real library; and `kept`, above.
  *
  * @param {any} learning `LearningService`
- * @param {{userId: string, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
+ * @param {{userId: string, contextPolicy?: any, contextItems?: any, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
  *   scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null, keep?: Iterable<string> | null,
  *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null}} scope
  * @returns {Promise<MountedLearnedMethod[] & { mode?: "embedding" | "lexical" | "recent", topScore?: number | null, kept?: MountedLearnedMethod[] }>}
@@ -298,6 +299,7 @@ export async function selectLearnedMethods(learning, scope) {
   /** @type {any} */
   const empty = [];
   if (!learning) return empty;
+  if(scope.contextPolicy?.kind === "geo-project" && (scope.contextPolicy.ownerId!==scope.userId || scope.contextPolicy.controlProjectId!==scope.projectId)) return empty;
   const maxCount = Number.isSafeInteger(scope.maxCount) ? Number(scope.maxCount) : MAX_MOUNTED_LEARNED_METHODS;
   const maxBytes = Number.isSafeInteger(scope.maxBytes) ? Number(scope.maxBytes) : Number.POSITIVE_INFINITY;
   // A spent byte budget still reads the library, so that what it leaves out
@@ -315,7 +317,34 @@ export async function selectLearnedMethods(learning, scope) {
   // project at all.
   /** @type {Map<string, any>} */
   const library = new Map();
-  for (const document of await learning.approvedMethods(scope.userId) ?? []) {
+  const shared=scope.contextPolicy?.kind === "geo-project";
+  if(shared) {
+    if(!scope.contextItems || !learning.listMethods || !learning.getMethod) return empty;
+    let cursor=null; const seen=new Set();
+    do {
+      const page=await learning.listMethods(scope.userId,{projectId:scope.contextPolicy.controlProjectId,status:"approved",limit:100,cursor,fields:CONTEXT_ITEM_FIELDS});
+      for(const metadata of page.items) {
+        if(metadata.payload?.provenance?.sourceProjectId!==scope.contextPolicy.controlProjectId || !await scope.contextItems.method(scope.contextPolicy,metadata)) continue;
+        const full=await learning.getMethod(scope.userId,metadata.id,{expectedRevision:metadata.revision}).catch(error=>{
+          if(error?.code==='method_not_found')return null;throw error;
+        });
+        if(full?.revision===metadata.revision && full.payload.status==="approved" && await scope.contextItems.method(scope.contextPolicy,full)) library.set(full.id,full);
+      }
+      cursor=page.nextCursor;
+      if(cursor && seen.has(cursor)) return empty;
+      seen.add(cursor);
+    } while(cursor);
+    // Missing or foreign dependencies exclude their dependents before ranking,
+    // exploration, rendering and keep handling. Require the exact name@digest.
+    let changed=true;
+    while(changed) {
+      changed=false;
+      for(const [id,document] of library) if((document.payload.dependencies??[]).some(dependency=>
+        ![...library.values()].some(other=>other.payload.frontmatter?.name===dependency.name && other.payload.contentDigest===dependency.digest))) {
+        library.delete(id); changed=true;
+      }
+    }
+  } else for (const document of await learning.approvedMethods(scope.userId) ?? []) {
     if (!library.has(document.id)) library.set(document.id, document);
   }
 
@@ -335,6 +364,7 @@ export async function selectLearnedMethods(learning, scope) {
     const bytes = Buffer.byteLength(rendered, "utf8") + methodFileBytes(payload);
     entries.set(String(document.id), {
       id: String(document.id),
+      ...(shared ? {revision:document.revision,contentDigest:payload.contentDigest,contextPolicy:contextPolicyIdentity(scope.contextPolicy)} : {}),
       name,
       digest: mountedMethodDigest(payload, sha256),
       directoryName,
@@ -445,12 +475,13 @@ export async function selectLearnedMethods(learning, scope) {
       scope.onLeftOut?.(entry.id);
       continue;
     }
+    if(shared && !await scope.contextItems.method(scope.contextPolicy,entry.source)) continue;
     spent += entry.promptBytes;
     const { payload: _payload, approvedAt: _approvedAt, carried: _carried, dependencies: _dependencies, source: _source, ...mounted } = entry;
     selected.push({ ...mounted, reason });
   }
   const selectedNames = new Set(selected.map((method) => method.directoryName));
-  const wanted = new Set(scope.keep ?? []);
+  const wanted = new Set(shared ? [] : scope.keep ?? []);
   /** @type {MountedLearnedMethod[]} */
   const kept = [];
   for (const entry of entries.values()) {

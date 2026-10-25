@@ -466,12 +466,13 @@ export class OpenVikingClient {
    *
    * @param {{ method?: string, path: string, query?: Record<string, unknown> | null, body?: unknown,
    *   userId?: string | null, openVikingUser?: string | null, peerId?: string | null, timeoutMs?: number | null,
-   *   idempotencyKey?: string | null, responseType?: "json" | "text" | "bytes", authenticated?: boolean }} request
+   *   idempotencyKey?: string | null, responseType?: "json" | "text" | "bytes", authenticated?: boolean,
+   *   maxResponseBytes?: number | null }} request
    * @returns {Promise<any>}
    */
   async request({
     method = "GET", path, query = null, body = undefined, userId = null, openVikingUser = null, peerId = null,
-    timeoutMs = null, idempotencyKey = null, responseType = "json", authenticated = true,
+    timeoutMs = null, idempotencyKey = null, responseType = "json", authenticated = true, maxResponseBytes = null,
   }) {
     // `/health` is asked before anything is known to be configured: `status()` reports what is missing by name.
     if (authenticated) this.#assertConfigured();
@@ -533,7 +534,29 @@ export class OpenVikingClient {
       /** @type {string} */ let text = "";
       /** @type {Buffer | null} */ let bytes = null;
       try {
-        if (responseType === "bytes" && response.ok) bytes = Buffer.from(await response.arrayBuffer());
+        if (maxResponseBytes != null) {
+          if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) throw new Error("invalid response bound");
+          const reader = response.body?.getReader();
+          let responseBytes;
+          if (reader) {
+            const chunks = []; let total = 0;
+            try {
+              for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                total += value.byteLength;
+                if (total > maxResponseBytes) { await reader.cancel(); throw new Error("response bound exceeded"); }
+                chunks.push(Buffer.from(value));
+              }
+              responseBytes = Buffer.concat(chunks, total);
+            } finally { reader.releaseLock(); }
+          } else {
+            responseBytes = Buffer.from(await response.text());
+            if (responseBytes.length > maxResponseBytes) throw new Error("response bound exceeded");
+          }
+          if (responseType === "bytes" && response.ok) bytes = responseBytes;
+          else text = responseBytes.toString("utf8");
+        } else if (responseType === "bytes" && response.ok) bytes = Buffer.from(await response.arrayBuffer());
         else text = await response.text();
       } catch {
         throw new HttpError(503, controller.signal.aborted ? "memory_index_timeout" : "memory_index_unavailable", "The memory index is unavailable.");

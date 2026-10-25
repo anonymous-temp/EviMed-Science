@@ -146,7 +146,7 @@ export function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, m
         thinking: false,
       },
       heartbeat: { enabled: false },
-      sandbox: { backends: { direct: { allow_compile_exec: false } } },
+      sandbox: { backend: "direct", backends: { direct: { allow_exec: false, allow_compile_exec: false } } },
     },
     retrieval: { enable_intent: false },
     // The embedder is a public HTTPS endpoint, and the model gateway above is

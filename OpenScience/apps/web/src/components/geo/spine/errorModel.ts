@@ -214,8 +214,10 @@ export function traceLine(claim: Pick<ClaimRow, "rows">): string | null {
 export function correctionBrief(claim: Pick<ClaimRow, "engines" | "statement" | "evidenceQuote"> & Partial<Pick<ClaimRow, "rows">>, product: string, action: "article" | "conclusion" | "treatment" = "article"): string {
   const engines = claim.engines.map(engineName).join("、");
   const task = action === "conclusion" ? "根据证据更新项目结论及相关已有文章，保留原版和新版关联。" : action === "treatment" ? "创建对应出处或问题群的处置任务，记录任务及输出关联；只有后续实测才能确认错误是否消失。" : "写一篇纠错稿，把正确说法及适用条件讲清楚；已有相关文章时沿用文章修订流程。";
-  const context = claim.rows?.map(row => ({ errorId: row.id, snapshotId: row.firstSnapshotId ?? row.snapshotId, latestSnapshotId: row.snapshotId, questionId: row.questionId ?? null, claimId: row.claimId ?? null, claimVersion: row.claimVersion ?? null, applicability: row.applicability ?? null })) ?? [];
-  return zh`${engines}在回答里说“${claim.statement}”，需要核查${product}的相关依据${claim.evidenceQuote ? `（原文：${claim.evidenceQuote}）` : ""}。${task}提交任务与输出时绑定这些原始对象：${JSON.stringify(context)}`;
+  const context = claim.rows?.map(row => ({ errorId: row.id, snapshotId: row.firstSnapshotId ?? row.snapshotId, latestSnapshotId: row.snapshotId, questionId: row.questionId ?? null, claimId: row.claimId ?? null, claimVersion: row.originalErrorAssessment ? row.claimVersion ?? null : null, applicability: row.originalErrorAssessment ? row.applicability ?? null : null, originalContextState: row.originalErrorAssessment ? "preserved" : "unknown" })) ?? [];
+  const limitation = context.some(row => row.originalContextState === "unknown" || row.claimVersion == null || row.applicability == null)
+    ? "部分原始判定依据未保留，请先核实当时的主张版本及适用条件；不得用当前主张冒充原始依据。" : "";
+  return zh`${engines}在回答里说“${claim.statement}”，需要核查${product}的相关依据${claim.evidenceQuote ? `（原文：${claim.evidenceQuote}）` : ""}。${task}${limitation}提交任务与输出时绑定这些原始对象：${JSON.stringify(context)}`;
 }
 
 /**

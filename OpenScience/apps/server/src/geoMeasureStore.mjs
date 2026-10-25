@@ -1197,10 +1197,14 @@ export class GeoMeasureStore {
         LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id AND f.geo_project_id = s.geo_project_id AND f.user_id = s.user_id
       WHERE s.round_id = $1 AND ($2::text IS NULL OR s.geo_project_id = $2) AND ($3::text IS NULL OR s.user_id = $3)
         AND ($4::text[] IS NULL OR s.id = ANY($4::text[])) ORDER BY s.asked_at, s.id`, [roundId, geoProjectId, userId, snapshotIds]);
-    const assessments = result.rows.length ? (await this.query(`SELECT payload FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL
-      AND id=ANY($1::text[]) AND ($2::text IS NULL OR user_id=$2) AND ($3::text IS NULL OR payload->>'geoProjectId'=$3)`,
+    const assessments = result.rows.length ? (await this.query(`SELECT d.id,d.payload FROM evimed_product.documents d
+      JOIN evimed_geo.projects p ON p.id=d.payload->>'geoProjectId' AND p.user_id=d.user_id AND p.project_id=d.project_id
+      JOIN evimed_geo.snapshots s ON s.id=d.payload->>'snapshotId' AND s.user_id=p.user_id AND s.geo_project_id=p.id
+      WHERE d.kind='knowledge' AND d.deleted_at IS NULL AND d.payload->>'recordType'='geo-assessment'
+      AND d.payload->>'projectId'=p.project_id AND p.deleted_at IS NULL
+      AND d.id=ANY($1::text[]) AND ($2::text IS NULL OR d.user_id=$2) AND ($3::text IS NULL OR p.id=$3)`,
       [result.rows.map(row => geoAssessmentId(String(row.id))), userId, geoProjectId])).rows : [];
-    const assessmentBySnapshot = new Map(assessments.map(row => [row.payload.snapshotId, row.payload]));
+    const assessmentBySnapshot = new Map(assessments.filter(row => row.id === geoAssessmentId(row.payload.snapshotId)).map(row => [row.payload.snapshotId, row.payload]));
     return result.rows.map((row) => {
       const inclusion = row.surface?.mode === "inclusion";
       const usable = row.has_facts && (row.judged_at != null || inclusion);
@@ -1239,7 +1243,7 @@ export class GeoMeasureStore {
    */
   async noteRoundBalance(roundId, balance) {
     await this.query(`UPDATE evimed_geo.rounds SET ref = coalesce(ref, '{}'::jsonb) || jsonb_build_object('balance', $2::jsonb) WHERE id = $1`,
-      [roundId, JSON.stringify(balance)]);
+      [roundId, JSON.stringify({ ...balance, methodVersion: GEO_MEASUREMENT_METHOD_VERSION })]);
   }
 
   /** Engines whose jobs a round skipped because the engine was paused or unreachable (not a single missing question). @param {string} roundId */

@@ -173,3 +173,50 @@ compile's result, `last_idle_commit_accepted_at` on a session, a user deleted a 
 A find score is `(cosine + 1) / 2` since v0.4.22 and unchanged at v0.5.1.1 (the same four records score the same four numbers as
 on v0.5.0; the production volume rehearsed under v0.5.0 on 2026-10-12 gave every score `(old + 1) / 2`), so
 `OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE` stays 0.75.
+
+## Shared project resource compilation
+
+Shared knowledge generations use the same official Compile pipeline with fresh
+resource inputs and output trees. `compile-scope-proof.json` binds the reviewed
+upstream lifecycle/reader source hashes to the image pin. The ordinary production
+configuration explicitly selects `direct` with both execution flags false.
+The existing runtime controller provides a parameter-free, read-only observer
+for its own Compose stack: immutable image identity, fixed installed source
+hashes, the actual managed server/Bot processes, and the read-only configuration
+file before both processes started. It never returns configuration contents or
+environment values. The control plane additionally checks the official ROOT
+configuration API's current/startup equality and the installed Skills API's
+locked integrity manifest. Neither operation submits a task or calls a model.
+
+This is **startup-configuration evidence under the pinned lifecycle**, not a
+direct read of Bot's live Python object or an attestation against an operator
+who adversarially replaces and restores configuration. The two generated hidden
+skill summaries are recorded in the package revision, not treated as pinned
+instructions. Only the pinned `SKILL.md` and those two standard summary paths
+are admitted. An unavailable or changed observation leaves original documents
+readable and defers shared compilation. The binding excludes transient process
+identities, so a normal restart with unchanged qualified bytes retains existing
+generation identity. The local replay tests are separate from a live engine
+acceptance; the new observation protocol has not been deployed by this change.
+
+Completed local mirrors use a separate historical read mode. One internal
+`knowledge-compile-qualification` product document belongs to the existing
+platform engine project; it records the qualified environment and each of the
+two Skills, with independent epochs. A known environment rejection invalidates
+both slots across all projects; a known Skill rejection invalidates that slot.
+Transport/liveness loss does not erase an earlier positive authority. An
+optimistic revision is read before observation, so a stale success cannot
+overwrite a newer rejection. Live qualification and reference capture happen
+before the leased settlement transaction; that transaction locks and checks the
+authority reference before saving the generation and selected pointer. A
+request's `execution` field alone cannot supply historical authority.
+
+The web process runs as root with all capabilities dropped, while `ov.conf`
+belongs to UID 10001 at mode 0600. It cannot read that secret file. The ordinary
+Compose init therefore atomically writes only `ov.conf.sha256`, owned by root
+at mode 0600, beside the configuration it copied. Historical reads compare this
+installation digest with the retained authority and current shipped pin/proof;
+they make no current-engine claim and call no engine API. Live admission also
+compares that digest with the actual configuration observed inside the engine.
+No extra secret copy, permission expansion, manually supplied qualification or
+online deployment is part of this change.

@@ -105,6 +105,15 @@ test('selected analysis descriptors pass intact and cannot leak into another rea
   assert.equal((await post('read', { what: 'analysis', filter: { planContextRef: `gpc_${'a'.repeat(64)}`, timeGrain: 'round' } })).status, 400);
 });
 
+test('frozen object continuation forwards its exact row and refuses selection replacement',async t=>{
+  const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+  const filter={planContextRef:`gpc_${'a'.repeat(64)}`,rowKey:'same-claim',columnKey:'objects',offset:51,limit:37};
+  assert.equal((await post('read',{what:'analysis',filter})).status,200);
+  assert.deepEqual(calls.at(-1),['read','geo_1','analysis',filter]);
+  for(const bad of [{...filter,columnKey:'observations'},{...filter,rowKey:null},{...filter,round:'latest'},
+    {...filter,viewId:'V16'},{...filter,expectedDigest:'a'.repeat(64)}])assert.equal((await post('read',{what:'analysis',filter:bad})).status,400);
+});
+
 test("exact member continuation can reach every observation in a bounded selection", async (t) => {
   const { geo, calls } = geoDouble(on);
   const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
@@ -356,4 +365,26 @@ test('a project token cannot turn an active other-session plan hint into scoped 
   assert.equal(calls.some(call=>String(call[0]).includes('Strategy')),false);
   active = false;
   assert.notEqual((await post('write',{what:'actions',items:[]})).status,409,'legacy unbound path remains available');
+});
+
+test('error distribution and addressed diagnosis selectors stay on their own read contract',async t=>{
+ const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+ for(const [what,filter] of [['analysis',{viewId:'V13',errorFacet:'severity',errorView:'withdrawn'}],['diagnosis',{selectionRef:'gsel_exact',errorFingerprint:'rare',errorLimit:500,errorOffset:500}]]){
+  assert.equal((await post('read',{what,filter})).status,200);for(const [key,value] of Object.entries(filter))assert.deepEqual(calls.at(-1)[3][key],value);
+ }
+ for(const [what,filter] of [['analysis',{viewId:'V16',errorFacet:'severity'}],['analysis',{viewId:'V13',errorView:'bad'}],['analysis',{viewId:'V13',errorFingerprint:'rare'}],['claims',{errorFingerprint:'rare'}],['analysis',{planContextRef:'gpc_'+'a'.repeat(64),viewId:'V13',errorView:'all'}]])assert.equal((await post('read',{what,filter})).status,400);
+});
+
+test('analytical reads reject every unsupported diagnosis-list filter instead of ignoring it',async t=>{
+ const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+ for(const filter of [{errorSeverities:['S4']},{errorStatuses:['open']},{errorTypes:['number']},{errorSearch:'x'},{errorLimit:5},{errorOffset:1},{questionId:'q'},{errorTrace:'traced'},{errorJudgmentState:'active'},{errorFingerprint:'f'}])assert.equal((await post('read',{what:'analysis',filter:{viewId:'V13',...filter}})).status,400);
+ assert.equal(calls.length,0);
+});
+
+test('publication descriptors are scoped and unrelated legacy filters cannot silently narrow analytics',async t=>{
+ const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+ for(const filter of [{viewId:'V23',publicationFacet:'group'},{viewId:'V23',publicationFacet:'audience'},{viewId:'V23',publicationFacet:'channel'},{viewId:'V24'}]){
+  assert.equal((await post('read',{what:'analysis',filter})).status,200);for(const [key,value] of Object.entries(filter))assert.equal(calls.at(-1)[3][key],value);
+ }
+ for(const filter of [{viewId:'V24',publicationFacet:'group'},{viewId:'V23',publicationFacet:'platform'},...['audience','sourceId','url','key','strategyVersion','member','answerLimit','answerOffset'].map(key=>({viewId:'V23',[key]:key==='strategyVersion'||key.endsWith('Limit')?1:'unapplied'})),{planContextRef:'gpc_'+'a'.repeat(64),publicationFacet:'group'}])assert.equal((await post('read',{what:'analysis',filter})).status,400);
 });

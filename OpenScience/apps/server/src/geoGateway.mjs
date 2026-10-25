@@ -118,10 +118,11 @@ function readRequest(body) {
     throw gatewayError(400, "geo_read_what_invalid", `what must be one of: ${GEO_READ_WHATS.join(", ")}.`);
   }
   const raw = body.filter ?? {};
+  if(body.what==="analysis"&&Object.keys(raw).some(key=>![...GEO_SCOPE_FIELDS,...GEO_ANALYSIS_FIELDS,"planContextRef"].includes(key)))throw gatewayError(400,"geo_read_filter_invalid","Use only the supported analysis selectors.");
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !readFilterFields.includes(key))) {
     throw gatewayError(400, "geo_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
   }
-  if (body.what !== "analysis" && [...GEO_ANALYSIS_DESCRIPTOR_FIELDS, "rowKey", "columnKey", "expectedDigest"].some(key => raw[key] != null)) throw gatewayError(400, "geo_read_filter_invalid", "Analysis fields require what=analysis.");
+  if (body.what !== "analysis" && [...GEO_ANALYSIS_DESCRIPTOR_FIELDS.filter(key=>key!=="strategyVersion"), "rowKey", "columnKey", "expectedDigest"].some(key => raw[key] != null)) throw gatewayError(400, "geo_read_filter_invalid", "Analysis fields require what=analysis.");
   /** @type {Record<string, any>} */
   const filter = {};
   for (const key of ["round", "groupId", "questionId", "sourceId"]) {
@@ -160,10 +161,17 @@ function readRequest(body) {
   if (raw.offset != null) filter.offset = raw.offset;
   normalizeGeoReadScope(geoReadScopeInput(raw));
   geoErrorFilters(raw);
+  if(raw.errorFingerprint!=null&&body.what!=="diagnosis")throw gatewayError(400,"geo_read_filter_invalid","An exact error group belongs to diagnosis.");
+  if(body.what==="analysis"&&GEO_ERROR_FILTER_FIELDS.some(key=>raw[key]!=null))throw gatewayError(400,"geo_read_filter_invalid","Error list filters do not apply to analysis.");
   geoSourcePage(raw);
   for (const name of GEO_SOURCE_PAGE_FIELDS) if (raw[name] != null) filter[name] = raw[name];
   for (const name of [...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS]) if (raw[name] != null) filter[name] = raw[name];
-  if (body.what === "analysis" && raw.planContextRef && Object.keys(raw).some(key => !["planContextRef","limit","offset"].includes(key))) throw gatewayError(400, "geo_read_filter_invalid", "Read the frozen analysis without replacing its selection.");
+  if (body.what === "analysis" && raw.planContextRef) {
+    if (Object.keys(raw).some(key => !["planContextRef","limit","offset","rowKey","columnKey"].includes(key))
+      || (raw.rowKey != null || raw.columnKey != null) && (typeof raw.rowKey !== "string" || !raw.rowKey || raw.rowKey.length > 160 || raw.columnKey !== "objects"))
+      throw gatewayError(400, "geo_read_filter_invalid", "Read the frozen analysis without replacing its selection.");
+    if (raw.rowKey != null) { filter.rowKey = raw.rowKey; filter.columnKey = "objects"; }
+  }
   if (body.what === "analysis" && !raw.planContextRef) {
     Object.assign(filter, normalizeGeoAnalysisView(Object.fromEntries(GEO_ANALYSIS_DESCRIPTOR_FIELDS.filter(key => raw[key] != null).map(key => [key, raw[key]]))));
     for(const key of ["rowKey","columnKey"])if(raw[key]!=null){if(typeof raw[key]!=="string"||raw[key].length>160)throw gatewayError(400,"geo_read_filter_invalid","Invalid aggregate member.");filter[key]=raw[key];}

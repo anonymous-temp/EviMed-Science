@@ -274,7 +274,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
- *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number }) => Promise<Record<string, any>[]>) | null,
+ *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
  *   now?: () => number,
  * }} dependencies
  *   `memoryTool.forget` is the memory page's own deletion (the file, its revision, the rejection that keeps it from coming
@@ -597,7 +597,20 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!context && !body.target_uri) body.target_uri = `${ctx.userRoot}/memories`;
       if (ctx.shared) await ctx.ensureRegistered();
       const answer = await ctx.sessions.search(ctx.user.id, body);
-      return { status: 200, json: ctx.shared ? await sharedSearchResult(ctx, answer, context) : answer, outcome: "forwarded" };
+      const safe=ctx.shared ? await sharedSearchResult(ctx,answer,context) : answer;
+      if(ctx.shared && capsuleSearch && String(body.query??"").trim() && (!body.target_uri || body.target_uri===`${ctx.userRoot}/memories`)) {
+        let timer;
+        try {
+          const capsule=Promise.resolve().then(()=>capsuleSearch({user:ctx.user,project:ctx.project,query:String(body.query),limit:Number(body.limit)||5,contextPolicy:ctx.memoryContext.policy})).catch(()=>[]);
+          const items=await Promise.race([capsule,new Promise(resolve=>{timer=setTimeout(()=>resolve([]),capsuleWaitMs);})]);
+          const text=capsuleSearchText(/** @type {any} */ (items));
+          if(text) {
+            if(context) safe.result.rendered=[safe.result.rendered,text].filter(Boolean).join("\n");
+            else safe.result.capsuleContext=text;
+          }
+        } finally {clearTimeout(timer);}
+      }
+      return { status: 200, json: safe, outcome: "forwarded" };
     },
     async read(ctx) {
       const uri = await ctx.checkUri(String(ctx.query.get("uri") ?? ""));

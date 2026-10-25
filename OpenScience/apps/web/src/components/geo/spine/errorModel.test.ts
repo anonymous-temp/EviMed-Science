@@ -164,3 +164,17 @@ it("keeps withdrawn judgments in history while excluding them from active and se
   expect(filterErrors([withdrawn], { show: "open" })).toEqual([]);
   expect(filterErrors([withdrawn], { show: "severe" })).toEqual([]);
 });
+
+it('a correction draft never uses current context as a missing original clinical identity',()=>{
+ const current={population:'Children',elements:{dose:'5 mg'},inLabel:true,validUntil:null,evidenceLevel:null};
+ const [claim]=claimRows([row({id:'unknown-original',claimVersion:3,applicability:current,originalErrorAssessment:null,currentClaim:{version:3,applicability:current,temporalBasis:'current_claim_context'}})]);
+ const brief=correctionBrief(claim,'Product');
+ expect(brief).toContain('"claimVersion":null');expect(brief).toContain('"applicability":null');expect(brief).toContain('"originalContextState":"unknown"');
+ expect(brief).toContain('不得用当前主张冒充原始依据');expect(brief).not.toContain('Children');expect(brief).not.toContain('5 mg');
+});
+
+it('a correction draft preserves original conditions while excluding separate current claim information',()=>{
+ const original={population:'Adults',elements:{dose:'10 mg'},inLabel:false,validUntil:null,evidenceLevel:null};
+ const [claim]=claimRows([row({id:'known-original',claimVersion:1,applicability:original,originalErrorAssessment:{statement:{claimVersion:1,applicability:original},claim:null,temporalBasis:'first_preserved_error_assessment'},currentClaim:{version:3,applicability:{...original,population:'Children'},temporalBasis:'current_claim_context'}})]);
+ const brief=correctionBrief(claim,'Product');expect(brief).toContain('Adults');expect(brief).toContain('"inLabel":false');expect(brief).toContain('"claimVersion":1');expect(brief).not.toContain('Children');expect(brief).not.toContain('部分原始判定依据未保留');
+});

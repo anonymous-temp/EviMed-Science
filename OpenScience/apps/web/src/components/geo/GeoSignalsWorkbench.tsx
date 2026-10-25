@@ -16,6 +16,7 @@ import { ProgrammeRunsDrawer } from '@/components/runs/ProgrammeRunsDrawer';
 import { ensureGeoConversationSession } from './geoConversationSession';
 import { useOpenGeoConversation } from './useOpenGeoConversation';
 import { useGeoDestinationPath } from './useGeoPath';
+import { GeoGroupMembers } from './GeoGroupMembers';
 import { engineName } from './geoText';
 
 const kinds: Record<GeoSignal['kind'], string> = { error_observed: '医学说法待核查', source_changed: '资料变化', citation_observed: '新增引用页面', group_changed: '问题群变化', order_anomaly: '投放异常' };
@@ -127,6 +128,13 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
     if (signal.basis.orderId) url.searchParams.set('order', signal.basis.orderId);
     return `${url.pathname}${url.search}${url.hash}`;
   })();
+  const groupAnalysisHref = (side: 'before' | 'after') => {
+    const url = new URL(cleanSignal(destination(geoId, { tab: 'visibility', section: 'trend' })), 'https://evimed.invalid');
+    const session = url.searchParams.get('session');
+    url.search = new URLSearchParams({ selectionRef: signal.basis.sides?.[side].selectionRef ?? '' }).toString();
+    if (session) url.searchParams.set('session', session);
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
   const handle = async (intent: 'analyse' | 'correct' | 'review', previous?: string) => {
     if (busy) return;
     setBusy(true); setError(null);
@@ -135,7 +143,9 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
     try {
       const latestProject = await getGeoProject(geoId);
       if (!current()) return;
-      const sessionId = await ensureGeoConversationSession(project.projectId, previous ? attempt?.sessionId : latestProject.sessionId);
+      const exactSession = previous ? attempt?.sessionId : latestProject.sessionId;
+      if (previous && !exactSession) throw new Error("The original signal conversation is unavailable.");
+      const sessionId = await ensureGeoConversationSession(geoId, project.projectId, exactSession);
       if (!current()) return;
       const body = { mode: 'signal' as const, signalId, expectedSignalRevision: signal.revision, sessionId, intent, focusRefs: focus,
         ...(previous ? { previousContextRef: previous } : {}) };
@@ -167,6 +177,20 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
       {signal.basis.assessedStatement?.applicability?.population && <p className="text-ui text-text-2">适用人群：{signal.basis.assessedStatement.applicability.population}</p>}
       {signal.basis.evidenceAvailability === 'unknown' && <Note action={<Link className="text-link hover:underline" to={cleanSignal(destination(geoId, { tab: 'evidence' }))}>查看现有证据</Link>}>这条历史记录没有完整保留判断依据，不能据此确认医学结论。</Note>}
       {signal.basis.url && /^https?:\/\//.test(signal.basis.url) && <a className="text-ui text-link hover:underline" href={signal.basis.url} target="_blank" rel="noopener noreferrer">打开被引用页面</a>}
+      {signal.kind === 'group_changed' && <>
+        <p className="text-ui text-text-2">{signal.basis.group?.label ?? '问题群'} · {signal.basis.group?.pool} · 问句版本 {signal.basis.group?.questionVersion}</p>
+        <p className="text-caption text-text-3">前次完成：{time(signal.basis.previous?.completedAt ?? null)} · 本次完成：{time(signal.basis.current?.completedAt ?? null)}</p>
+        <p className="text-caption text-text-3">参与比较的平台：{signal.basis.methods?.before.engines.map(engineName).join("、")||"未记录"}</p>
+        <List label="前后观测指标" divided>{signal.basis.cells?.map(cell => <ListRow key={cell.key}
+          title={`${cell.metricId === 'M-01' ? '品牌提及率' : cell.metricId === 'M-03' ? '推荐位提及率' : cell.metricId}：${cell.before.value}% → ${cell.after.value}%`}
+          meta={`前次 ${cell.before.numerator ?? '未知'} / ${cell.before.denominator ?? '未知'}；本次 ${cell.after.numerator ?? '未知'} / ${cell.after.denominator ?? '未知'}；差异 ${cell.delta > 0 ? '+' : ''}${cell.delta} 个百分点`} />)}</List>
+        <Note result={['观测差异绝对值大于 ', { n: signal.basis.policy?.threshold ?? '未知' }, ' 个百分点；噪声未实测，不能据此判断由内容调整造成。分析任务完成仅表示任务已完成。']} />
+        {(['before', 'after'] as const).map(side => <div key={side} className="flex flex-col gap-2">
+          <p className="text-ui text-text-2">{side === 'before' ? '前次' : '本次'}样本：{signal.basis.sides?.[side].count ?? '未知'} 条</p>
+          <GeoGroupMembers key={`${signalId}:${side}:${signal.basisDigest}`} geoId={geoId} signalId={signalId} side={side} basisDigest={signal.basisDigest}/>
+          <Link className="text-ui text-link hover:underline" to={groupAnalysisHref(side)}>查看{side === 'before' ? '前轮' : '后轮'}共同样本</Link>
+        </div>)}
+      </>}
       {signal.kind === 'source_changed' && <>
         <p className="text-ui text-text-2">下列关联是发现变化时记录的版本。新稿完成后，仍需分别核查这些结论及其适用条件。</p>
         {signal.sourceReview && <p className="text-ui text-text-2">已有核查结果 {signal.sourceReview.handled} / {signal.sourceReview.total} 项，关联更新 {signal.sourceReview.updated} 项，无需修改 {signal.sourceReview.unchanged} 项，仍需处理 {signal.sourceReview.remaining} 项。以下为本次 AI 核查记录，可打开结果查看依据。</p>}

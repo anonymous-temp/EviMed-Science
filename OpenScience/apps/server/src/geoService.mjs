@@ -1,5 +1,5 @@
 import { freezeGeoPlanBasis, geoPlanFreshness, geoPlanScopeKey, geoPlanDigest, geoPlanCanonicalScope } from "./geoPlanContext.mjs";
-import { geoErrorOrigin } from "./geoErrors.mjs";
+import { geoErrorClinicalContext } from "./geoErrors.mjs";
 /**
  * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
  * module's switch, readiness and metrics.
@@ -227,7 +227,6 @@ const spacedLabel = (engine) => {
 
 /** @param {any} row */
 function errorView(row) {
-  const preserved = geoErrorOrigin(row.origin_statements ?? [], { claimId: row.claim_id, fingerprint: row.fingerprint }, row.origin_claims ?? [], { includeNonWrong: true });
   return {
     id: String(row.id),
     engine: String(row.engine),
@@ -249,8 +248,7 @@ function errorView(row) {
     // What the statement contradicts: the claim and its quote (对的是什么 / 依据哪份说明书).
     claimId: text(row.claim_id),
     evidenceQuote: text(row.evidence_quote),
-    applicability: preserved ? preserved.applicability ?? null : row.applicability ?? null,
-    claimVersion: preserved ? preserved.claimVersion ?? null : row.claim_version == null ? null : Number(row.claim_version),
+    ...geoErrorClinicalContext(row),
     createdAt: iso(row.created_at),
   };
 }
@@ -630,7 +628,7 @@ export class GeoService {
    * @param {{ id: string }} user
    * @param {{ brandName?: string, coverageDays?: number, engines?: string[] }} input already validated by the route
    * @param {{ createControlProject: (user: any, name: string) => Promise<{ id: string, name: string }>,
-   *   bindSession: (user: any, projectId: string) => Promise<{ sessionId: string, bound: boolean }> }} hooks
+   *   bindSession: (user: any, projectId: string, geoProject?: any) => Promise<{ sessionId: string | null, bound: boolean }> }} hooks
    */
   async createProject(user, input, hooks) {
     const name = input.brandName || GEO_DEFAULT_PROJECT_NAME;
@@ -640,7 +638,7 @@ export class GeoService {
       userId: String(user.id), projectId: control.id, engines, coverageDays: input.coverageDays ?? 90,
       product: input.brandName ? { brandName: input.brandName } : {},
     });
-    const session = await hooks.bindSession(user, control.id);
+    const session = await hooks.bindSession(user, control.id, project);
     this.counters.projectsCreated += 1;
     return { id: project.id, projectId: control.id, sessionId: session.sessionId, bound: session.bound };
   }
@@ -2357,22 +2355,24 @@ export class GeoService {
   }
   async analysisMembers(user, id, input = {}) {
     if(!input.rowKey||!input.columnKey)throw new HttpError(400,"geo_read_filter_invalid","Choose an exact aggregate member.");
-    return readGeoAnalysis(this.store,await this.requireProject(user,id),input);
+    return readGeoAnalysis(this.store,await this.requireProject(user,id),input,false,{service:this});
   }
   async analysisOf(project, input = {}) {
     if (input.planContextRef) {
-      if (Object.keys(input).some(key => !["planContextRef", "limit", "offset"].includes(key))) throw new HttpError(400, "geo_read_filter_invalid", "Use the frozen context without replacing its selection.");
+      if (Object.keys(input).some(key => !["planContextRef", "limit", "offset", "rowKey", "columnKey"].includes(key))
+        || (input.rowKey != null || input.columnKey != null) && (typeof input.rowKey !== "string" || !input.rowKey || input.rowKey.length > 160 || input.columnKey !== "objects"))
+        throw new HttpError(400, "geo_read_filter_invalid", "Use the frozen context without replacing its selection.");
       const row = await this.planContexts?.documents.get(project.userId, "geo-plan-context", input.planContextRef);
       if (!row || row.projectId !== project.projectId || row.payload.geoId !== project.id || !hasGeoFrozenAnalysisContext(row.payload) || row.payload.state !== "bound") throw new HttpError(404, "geo_plan_context_not_found", "The selected analysis is unavailable.");
       await this.requireProject({ id: row.payload.actorId }, project.id);
       return readFrozenGeoAnalysisPage(this.planContexts.documents, project, row, input);
     }
-    return readGeoAnalysis(this.store, project, input);
+    return readGeoAnalysis(this.store, project, input, false, {service:this});
   }
   async selectedExport(user, project, body, exporter) {
     await this.requireProject(user, project.id, "run");
     if (!body.selectionRef || !/^[a-f0-9]{64}$/.test(body.expectedDigest ?? "") || !body.view) throw new HttpError(400, "geo_read_filter_invalid", "Choose the selected analysis and its revision.");
-    const view = await freezeSelectedGeoAnalysis(this.store, project, { selectionRef: body.selectionRef, view: body.view, expectedDigest: body.expectedDigest });
+    const view = await freezeSelectedGeoAnalysis(this.store, project, { selectionRef: body.selectionRef, view: body.view, expectedDigest: body.expectedDigest }, {service:this});
     return exporter.requestFrozen(user, { project: { id: project.projectId, userId: project.userId }, reference: { kind: "geo-selected-analysis", geoId: project.id, selectionRef: view.selection.reference, digest: view.digest, view: view.view }, ...freezeGeoAnalysisDocument(view) }, body.formats ?? ["csv"]);
   }
   /**

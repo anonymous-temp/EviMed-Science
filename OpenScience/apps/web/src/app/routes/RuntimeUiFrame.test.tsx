@@ -3,6 +3,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RuntimeUiFrame } from "./RuntimeUiFrame";
 import { SessionFrameHost } from "../layout/SessionFrameHost";
 import { useProjectStore } from "@/lib/projects";
 import { SessionRoute, GlobalHomeRoute } from "./SessionRoute";
@@ -60,6 +61,8 @@ const billing = (enabled: boolean) => ({
   month: { since: "2026-10-01T00:00:00.000Z", paid: 0, pending: 0 },
   commerce: { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null },
 });
+const nativeGeo=vi.hoisted(()=>({start:vi.fn(),status:vi.fn(),runs:vi.fn(),checks:vi.fn(),capability:vi.fn()}));
+vi.mock("@/lib/geoNativeClient",async original=>({...await original<typeof import("@/lib/geoNativeClient")>(),startGeoConversation:nativeGeo.start,geoConversationStatus:nativeGeo.status,geoConversationRuns:nativeGeo.runs,geoConversationChecks:nativeGeo.checks,geoConversationCapability:nativeGeo.capability}));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 let testNavigate: ReturnType<typeof useNavigate>;
 let testPath = "/app/chat";
@@ -2325,5 +2328,16 @@ describe("conversation project history across global home", () => {
     expect(mocks.me).toHaveBeenCalledWith({ projectId: "project-p" });
     await userEvent.click(screen.getByText("Forward"));
     await waitFor(() => expect(useProjectStore.getState().currentId).toBe("default"));
+  });
+});
+
+
+describe("exact GEO scope in the existing native frame",()=>{
+  it("uses module start/status and signs the exact root without owned-project requests",async()=>{
+    const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
+    nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);
+    render(<MemoryRouter initialEntries={["/app/geo/geo-shared/chat/shared-root"]}><RuntimeUiFrame projectId="same-id" scope={scope} sessionId="shared-root" origin={mocks.profile.uiOrigin}/></MemoryRouter>);
+    await waitFor(()=>expect(mocks.create).toHaveBeenCalledWith("same-id",scope));
+    expect(nativeGeo.start).toHaveBeenCalledWith(scope);expect(mocks.start).not.toHaveBeenCalled();expect(mocks.status).not.toHaveBeenCalled();
   });
 });

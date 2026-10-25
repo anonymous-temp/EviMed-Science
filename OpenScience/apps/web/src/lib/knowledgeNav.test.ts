@@ -124,3 +124,11 @@ describe("where the list was left", () => {
     expect(knowledgeNodeAddress("page:../secret.md", "p1")).toBeNull();
   });
 });
+
+it("round trips an exact logical page receipt in the existing reader address", () => {
+  const knowledge = { projectId: "p1", tree: "wiki" as const, path: "concept/zz-duplicate.md", generationId: `kg_${"a".repeat(32)}`, pageId: "alias-page", pageRevision: 4 };
+  const url = new URL(readerPath("source", {scope:null,kind:"wiki",q:""}, {tab:null,page:null,knowledge}), "http://fixture");
+  expect(readReaderView(url.searchParams)).toEqual({tab:null,page:null,knowledge});
+  url.searchParams.set("kpRevision", "invalid");
+  expect(readReaderView(url.searchParams).knowledge).toBeNull();
+});

@@ -461,7 +461,7 @@ test('scoped signal run and immutable raw routes retain caller identity and sand
 
 test("planning boundary errors belong to the closed registry and tell the person how to recover", async()=>{
   const emitted = new Set();
-  for (const file of ["../src/geoPlanContext.mjs","../src/geoService.mjs","../src/geoGateway.mjs","../src/runtimeUiServer.mjs","../src/server.mjs"]) {
+  for (const file of ["../src/geoPlanContext.mjs","../src/geoService.mjs","../src/geoGateway.mjs","../src/runtimeUiServer.mjs","../src/server.mjs","../src/geoDeliveryImport.mjs","../src/geoPreservedRunImport.mjs","../src/geoAnalysisFrozenPages.mjs","../src/geoSignalInputs.mjs","../src/geoSignals.mjs"]) {
     const source = await readFile(new URL(file,import.meta.url),"utf8");
     for (const [,code] of source.matchAll(/["'](geo_(?:plan_|strategy_)[a-z0-9_]+)["']/g)) emitted.add(code);
   }
@@ -507,4 +507,12 @@ test('owned publication updates preserve the explicit old and new pins at the gu
   assert.deepEqual(calls, [['list', { id: 'reader' }, 'geo_1', { limit: '1', cursor: 'older' }], ['detail', { id: 'reader' }, 'geo_1', 'link_1', { beforeRevision: '3' }], ['confirm', { id: 'reader' }, 'geo_1', 'link_1', input]]);
   assert.equal(f.calls.filter(row => row[0] === 'csrf').length, 3);
   await assert.rejects(f.routes(request('POST', '/api/geo/projects/geo_1/owned-links/link_1/published-version', { ...input, autopublish: true }), response()), { status: 400 });
+});
+
+test('preserved signal member pages use a closed read-only authenticated route',async()=>{
+ const calls=[],signalId='gs_'+'a'.repeat(64),basis='b'.repeat(64);
+ const {routes}=fixture({signals:{members:async(...args)=>{calls.push(args);return {items:[],total:0,nextOffset:null};}}});
+ await routes(request('GET',`/api/geo/projects/geo_1/signals/${signalId}/members?side=before&offset=20&limit=20&expectedBasisDigest=${basis}`),response());
+ assert.equal(calls[0][1],'geo_1');assert.equal(calls[0][2],signalId);assert.deepEqual(calls[0][3],{side:'before',offset:'20',limit:'20',expectedBasisDigest:basis});
+ for(const query of ['side=before&side=after','side=before&round=latest'])await assert.rejects(routes(request('GET',`/api/geo/projects/geo_1/signals/${signalId}/members?${query}`),response()),{status:400});
 });

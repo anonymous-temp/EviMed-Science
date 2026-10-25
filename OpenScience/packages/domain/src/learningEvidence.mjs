@@ -60,6 +60,7 @@ const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, 
  * allowance by giving up the shape first, then the rule, then the end of the quotation.
  * @param {unknown} value
  * @returns {{ evidence: string, verdict: string, rule: string | null, quote: string | null, concerns: { id: string, digest: string }[],
+ *   sourceProjectId?: string, sourceRunIds?: string[], inputReceiptRefs?: string[],
  *   sessionId: string | null, at: string, scope?: string, endedAt?: string, shape?: import('./artifactShape.mjs').ArtifactShape[] } | null}
  */
 export function cleanLearningEvidence(value) {
@@ -85,9 +86,19 @@ export function cleanLearningEvidence(value) {
   const scope = text(record.scope, limits.scope)
   const shape = cleanArtifactShapes(record.shape)
   const endedAt = Number.isFinite(Date.parse(String(record.endedAt ?? ''))) ? new Date(String(record.endedAt)).toISOString() : null
+  // These are pointers only. A consumer must independently verify canonical
+  // run/input/launch receipts; a caller supplying them grants no authority.
+  const identifier = (/** @type {unknown} */ item) => typeof item === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(item)
+  const refs = Array.isArray(record.inputReceiptRefs) && record.inputReceiptRefs.length > 0 && record.inputReceiptRefs.length <= 64
+    && record.inputReceiptRefs.every((/** @type {unknown} */ item) => typeof item === 'string' && /^gni_[a-f0-9]{64}$/.test(item))
+  const runs = Array.isArray(record.sourceRunIds) && record.sourceRunIds.length > 0 && record.sourceRunIds.length <= 64
+    && record.sourceRunIds.every(identifier)
+  const trace = refs && runs && identifier(record.sourceProjectId) ? {sourceProjectId:record.sourceProjectId,
+    sourceRunIds:[...new Set(record.sourceRunIds)],inputReceiptRefs:[...new Set(record.inputReceiptRefs)]} : {}
   const detail = {
     evidence,
     verdict,
+    ...trace,
     rule: text(record.rule, limits.rule) || null,
     quote: text(record.quote, limits.quote) || null,
     concerns,

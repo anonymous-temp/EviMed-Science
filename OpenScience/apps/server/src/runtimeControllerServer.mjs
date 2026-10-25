@@ -1,4 +1,6 @@
+import { verifyContextGeneration } from './runtimeContextGeneration.mjs';
 import {createRuntimeEgressProofStore} from './runtimeEgressProof.mjs';
+import { createOpenVikingCompileObserver } from "./openVikingCompileObserver.mjs";
 import { verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import { createEvolutionVerificationController } from "./evolutionVerificationController.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
@@ -337,6 +339,7 @@ async function prepareControllerSocket(socketPath) {
 
 export function createRuntimeController(overrides = {}, hooks = {}) {
   const config = loadConfig(overrides);
+  const observeOpenVikingCompile = createOpenVikingCompileObserver(config, hooks.openVikingCompileObserver ?? {});
   const documents = createDocumentRenderController(config);
   const intake = createVcrIntakeController(config);
   const skillValidation = createSkillValidationController(config, hooks.skillValidation ?? {});
@@ -600,7 +603,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       const existing = spawnSync(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
       if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
     }
-    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
+    const contextGeneration = payload.contextGeneration ? await verifyContextGeneration(config, project, payload.contextGeneration) : null;
+    const plan = buildRuntimeLaunchPlan(config, project, port, { contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     plan.platformSkillGeneration = platform;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
@@ -746,6 +750,11 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   async function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://runtime.controller");
     try {
+      if (req.method === "GET" && url.pathname === "/v1/openviking/compile-observation") {
+        if (url.search) throw controllerFailure(400, "runtime_controller_payload_invalid", "This observation takes no parameters.");
+        sendJson(res, 200, { data: await observeOpenVikingCompile() });
+        return;
+      }
       if(req.method==='POST'&&url.pathname==='/v1/runtime/evolution-admission'){
         const payload=await readJson(req,1024);assertExactKeys(payload,[]);
         sendJson(res,200,{data:evolutionAdmissionAvailable()});return;
@@ -910,7 +919,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         // Protocol 8 deliberately accepts this exact version-7 citation shape;
         // Selected extension generations add only a fixed opaque immutable reference.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "contextGeneration"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);
