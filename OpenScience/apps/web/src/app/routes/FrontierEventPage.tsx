@@ -27,7 +27,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { openItemConversation } from "@/components/frontier/frontierAsk";
-import { ReaderAsk } from "@/components/frontier/FrontierReader";
+import { AskRows } from "@/components/frontier/FrontierReader";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { Sparkline } from "@/components/frontier/Sparkline";
 import {
@@ -287,7 +287,7 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
             )}
           </Section>
 
-          {askEntry && <ReaderAsk questions={askEntry.questions} onAsk={ask} layout="article" />}
+          {askEntry && <Section title="就此提问" className="mt-0"><AskRows questions={askEntry.questions} onAsk={ask} /></Section>}
 
           {timeline.length > 0 && (
             <div data-frontier-list="event" className="space-y-8">

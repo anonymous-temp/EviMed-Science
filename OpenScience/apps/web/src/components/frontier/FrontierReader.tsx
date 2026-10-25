@@ -940,15 +940,23 @@ export function ReaderAsk({ questions, onAsk, layout, className }: {
   layout: "rail" | "article";
   className?: string;
 }) {
-  const rows = (
-    <List divided label="可以问的问题" className="-mx-2">
+  return layout === "rail"
+    ? <RailBlock label="就此提问"><AskRows questions={questions} onAsk={onAsk} flush /></RailBlock>
+    : <Block ruled label="就此提问" className={className}><AskRows questions={questions} onAsk={onAsk} /></Block>;
+}
+
+/**
+ * The rows of 就此提问 without a heading, for a page that sets its own (the event page's 「概要」 and 「一手材料」 are section headings):
+ * each question opens the conversation with it as the draft, and 「自己提问…」 with the item alone. `flush` lets the rows' own padding
+ * hang outside the column so their text lines up with the heading above (the right column's).
+ */
+export function AskRows({ questions, onAsk, flush = false }: { questions: readonly string[]; onAsk: (question: string | null) => void; flush?: boolean }) {
+  return (
+    <List divided label="可以问的问题" className={flush ? "-mx-2" : undefined}>
       {questions.map((question) => <ListRow key={question} title={question} onOpen={() => onAsk(question)} />)}
       <ListRow title={<span className="text-text-2">自己提问…</span>} onOpen={() => onAsk(null)} />
     </List>
   );
-  return layout === "rail"
-    ? <RailBlock label="就此提问">{rows}</RailBlock>
-    : <Block ruled label="就此提问" className={className}>{rows}</Block>;
 }
 
 /** True while the page's own ground scrolls down through the text (not near its top or its end): the phone's bar steps aside. */
