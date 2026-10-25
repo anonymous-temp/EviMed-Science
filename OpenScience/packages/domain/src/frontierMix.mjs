@@ -166,8 +166,9 @@ export function frontierMixSourceCap(source) {
 }
 
 /**
- * @typedef {{ id: string, genre: string, evidenceType?: string | null, selected?: boolean }} FrontierMixEventMember
- * Another published report of the candidate's event (any day, enabled source), and whether it is selected.
+ * @typedef {{ id: string, genre: string, evidenceType?: string | null, selected?: boolean, rule?: string | null, safety?: boolean }} FrontierMixEventMember
+ * Another published report of the candidate's event (any day, enabled source), and whether it is selected, by which rule, and whether it
+ * is a safety alert.
  */
 
 /** Whether a member is the event's paper: a research paper or preprint, not a review or an opinion. @param {FrontierMixEventMember} member */
@@ -208,6 +209,7 @@ export function frontierMixMergeVerdict(candidate, members = []) {
  *   sourceCap?: number,
  *   eligible: boolean,
  *   summarized: boolean,
+ *   floorEligible?: boolean,
  *   besideSelected?: boolean,
  *   addsValue?: boolean | null,
  *   eventId?: string | null,
@@ -216,13 +218,15 @@ export function frontierMixMergeVerdict(candidate, members = []) {
  * abstract (what the line already asked). `summarized`: it has a Chinese summary (asked of every place under the line).
  * `besideSelected`: the event's one-selected-report rule named another report it adds nothing to (fr-events); `addsValue`:
  * that rule's verdict as given (`event_selection.addsValue`), null when none was asked.
- * `rule`: the `selected_rule` of an item already selected.
+ * `rule`: the `selected_rule` of an item already selected. `floorEligible`: false for a republisher (`frontierFloorEligible`), which
+ * only the line can select.
  */
 
 /**
  * @typedef {{
  *   picks: Array<{ id: string, rule: string, group: FrontierMixGroup }>,
  *   excluded: Array<{ id: string, reason: string, paperId: string | null }>,
+ *   superseded: Array<{ id: string, by: string, reason: 'safety-alert' }>,
  *   plan: {
  *     size: number, aboveLine: number, zhTarget: number,
  *     zhShare: { before: number, after: number },
@@ -325,7 +329,9 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
   const counted = (/** @type {string | null | undefined} */ rule) => /** @type {readonly string[]} */ (FRONTIER_MIX_COUNTED_RULES).includes(String(rule ?? ''))
   const scoreOf = (/** @type {FrontierMixCandidate} */ c) => (c.score == null || !Number.isFinite(Number(c.score)) ? null : Number(c.score))
   const aboveLine = (/** @type {FrontierMixCandidate} */ c) => c.eligible && scoreOf(c) != null && /** @type {number} */ (scoreOf(c)) >= threshold
-  const inBand = (/** @type {FrontierMixCandidate} */ c, /** @type {number} */ from) => c.eligible && c.summarized && scoreOf(c) != null && /** @type {number} */ (scoreOf(c)) >= from
+  // A republisher's item (`frontier-selection.json`) takes no place under the line: a floor, the Chinese margin, the preprint lane and a
+  // rewrite's place all go through here, and an unfilled place beats a pick that rewrites another feed.
+  const inBand = (/** @type {FrontierMixCandidate} */ c, /** @type {number} */ from) => c.eligible && c.floorEligible !== false && c.summarized && scoreOf(c) != null && /** @type {number} */ (scoreOf(c)) >= from
   // What a `genre-floor` place under the line asks of the item's genre (`FRONTIER_MIX_GENRE_FLOOR`).
   const genreFloorOf = (/** @type {FrontierMixCandidate} */ c) => frontierMixGenreFloorScore(genreFloors[c.genre], floorScore, genreFloorMin)
   const capOf = (/** @type {FrontierMixCandidate} */ c) => (Number.isInteger(c.sourceCap) && /** @type {number} */ (c.sourceCap) > 0 ? /** @type {number} */ (c.sourceCap) : FRONTIER_MIX_SOURCE_CAP)
@@ -379,6 +385,20 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
     }
   }
   const blocked = (/** @type {FrontierMixCandidate} */ c) => blockedByMerge(c) || eventHeld.has(c.id)
+
+  // A safety alert is the event's report (c3-select S7, event 036972fb29143a2a: one recall selected twice, once by the line and once by the
+  // safety bypass, which has no event to look at when the alert is published): a report of its event that an arithmetic rule selected
+  // gives its place to it. The pipeline unselects what is named here and points it at the alert; selection stays sticky for everything else.
+  /** @type {FrontierMixResult['superseded']} */
+  const superseded = []
+  for (const members of Object.values(events)) {
+    const alert = members.find((member) => member.safety === true && member.selected === true)
+    if (!alert) continue
+    for (const member of members) {
+      if (member.id === alert.id || member.selected !== true || member.safety === true || !counted(member.rule)) continue
+      if (!superseded.some((entry) => entry.id === member.id)) superseded.push({ id: member.id, by: alert.id, reason: 'safety-alert' })
+    }
+  }
 
   // What is already selected counts (selection is sticky).
   /** @type {Record<string, number>} */
@@ -545,6 +565,7 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
   for (const pick of picks) rules[pick.rule] = (rules[pick.rule] ?? 0) + 1
   return {
     picks,
+    superseded,
     excluded: candidates.filter((c) => excludedBy(c)).map((c) => ({ id: c.id, reason: /** @type {string} */ (excludedBy(c)), paperId: merge.get(c.id)?.paperId ?? null })),
     plan: {
       size, aboveLine: aboveLineCount, zhTarget,

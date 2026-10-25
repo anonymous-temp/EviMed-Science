@@ -50,6 +50,29 @@ function names(entries, part) {
   return Object.freeze(table)
 }
 
+/** The longest journal name a card shows as the source (a stream's items are named for their journal). */
+const MAX_JOURNAL_CHARS = 80
+
+/**
+ * Which sources are a stream over many journals: by the registry's access (`eutils-query`, `europepmc`) or by an id prefix
+ * (`openalex-`, `pubmed-`), as the table says. Checked like the names.
+ * @type {Readonly<{ accesses: ReadonlySet<string>, idPrefixes: readonly string[] }>}
+ */
+const STREAMS = Object.freeze({
+  accesses: new Set((Array.isArray(sourceNameTable.streams?.accesses) ? sourceNameTable.streams.accesses : []).map(String)),
+  idPrefixes: Object.freeze((Array.isArray(sourceNameTable.streams?.idPrefixes) ? sourceNameTable.streams.idPrefixes : []).map(String).filter(Boolean)),
+})
+
+/**
+ * Whether a source is a stream over many journals, so its items are named for their journal.
+ * @param {{ id?: unknown, access?: unknown } | null | undefined} source
+ */
+export function frontierIsStreamSource(source) {
+  const id = typeof source?.id === 'string' ? source.id : ''
+  const access = typeof source?.access === 'string' ? source.access : ''
+  return (access !== '' && STREAMS.accesses.has(access)) || (id !== '' && STREAMS.idPrefixes.some((prefix) => id.startsWith(prefix)))
+}
+
 /**
  * The display-name table: by registry source id, and by owner entity.
  * @type {Readonly<{ sources: Readonly<Record<string, string>>, ownerEntities: Readonly<Record<string, string>> }>}
@@ -60,12 +83,16 @@ export const FRONTIER_SOURCE_DISPLAY_NAMES = Object.freeze({
 })
 
 /**
- * The name a reader sees for a source: the table's name for its id, else for
- * its owner entity, else the registry's own name (else its id).
- * @param {{ id?: unknown, name?: unknown, ownerEntity?: unknown } | null | undefined} source
+ * The name a reader sees for a source: for an item of a stream (a PubMed query, an OpenAlex list, a Europe PMC feed) its journal
+ * (`item_texts.journal`), when the caller has it; else the table's name for the source id, else for its owner entity, else the
+ * registry's own name (else its id). A caller that has the item passes `access` and `journal`; one that has only the source does not,
+ * and a stream then reads as its institution.
+ * @param {{ id?: unknown, name?: unknown, ownerEntity?: unknown, access?: unknown, journal?: unknown } | null | undefined} source
  * @returns {string}
  */
 export function frontierSourceDisplayName(source) {
+  const journal = typeof source?.journal === 'string' ? source.journal.replace(/\s+/g, ' ').trim() : ''
+  if (journal && frontierIsStreamSource(source)) return [...journal].slice(0, MAX_JOURNAL_CHARS).join('')
   const id = typeof source?.id === 'string' ? source.id : ''
   const owner = typeof source?.ownerEntity === 'string' ? source.ownerEntity : ''
   const registered = typeof source?.name === 'string' && source.name.trim() ? source.name.trim() : id

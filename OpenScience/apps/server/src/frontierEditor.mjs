@@ -1428,14 +1428,7 @@ export function frontierEditorDiagnostics(value) {
     editorVersion: typeof value.editorVersion === "string" && /^[a-zA-Z0-9._:-]{1,160}$/.test(value.editorVersion) ? value.editorVersion : null,
     checkedAt, reason: FRONTIER_DIAGNOSTIC_REASONS.includes(value.reason) ? value.reason : null,
     fields: { title_zh: field(value.fields?.title_zh), summary_zh: field(value.fields?.summary_zh) },
-    ...(rawScoresOf(value.scoresRaw) ? { scoresRaw: rawScoresOf(value.scoresRaw) } : {}),
-    ...(practiceOf(value.practice) ? { practice: practiceOf(value.practice) } : {}) };
-}
-
-/** The model's practice proposal as it is kept with an item (c3-select): a reason a reader may be shown, or none. @param {any} value */
-function practiceOf(value) {
-  const reason = typeof value?.reasonZh === "string" ? value.reasonZh.replace(/\s+/g, " ").trim() : "";
-  return value?.changing === true && reason && codePoints(reason) <= FRONTIER_PRACTICE_LIMITS.reasonChars ? { changing: true, reasonZh: reason } : null;
+    ...(rawScoresOf(value.scoresRaw) ? { scoresRaw: rawScoresOf(value.scoresRaw) } : {}) };
 }
 
 /** The edit's sub-scores as the model wrote them (c2-style S9): three integers, or null. @param {any} value */

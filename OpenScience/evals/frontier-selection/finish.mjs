@@ -18,7 +18,8 @@ export function scoredRow(row, answer, { ceilings = true } = {}) {
   const raw = answer.scoresRaw ?? answer.scores ?? null;
   if (!raw) return { n: row.n, total: null, parts: null, error: answer.error ?? "no_scores" };
   const max = domain.FRONTIER_SCORE_MAXIMA;
-  const fixedType = domain.frontierEvidenceFromPublicationTypes(row.publication_types ?? []).evidenceType;
+  // Decided by code, as the pipeline decides it: the PubMed publication types, and a company's newsroom is a press release.
+  const fixedType = domain.frontierEvidenceFromPublicationTypes(row.publication_types ?? []).evidenceType ?? (row.source.type === "company" ? "press-release" : null);
   const evidenceType = fixedType ?? answer.evidenceType ?? row.evidence_type;
   const preprint = row.source.type === "preprint";
   const authority = domain.frontierAuthorityScore({ authority: row.source.authority, evidenceType, preprint });

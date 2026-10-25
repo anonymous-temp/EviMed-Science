@@ -41,6 +41,7 @@ import { FRONTIER_GENRES, agendaLocalDate, frontierGenreDecision, frontierGenreF
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "../../apps/server/src/frontierBrief.mjs";
 import { FRONTIER_GENRE_BATCH, FRONTIER_REASON_VERSION } from "../../apps/server/src/frontierEditor.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "../../apps/server/src/frontierSourceColumns.mjs";
 import { bumpFrontierVersion } from "../../apps/server/src/frontierPersistence.mjs";
 import { FRONTIER_READER_MARGIN, frontierReaderText } from "../../apps/server/src/frontierPipeline.mjs";
 
@@ -107,7 +108,7 @@ const genreOf = (row) => (isFrontierGenre(row.genre) ? row.genre : frontierGenre
 
 const ITEM_FIELDS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.platform, i.channel, i.source_type, i.evidence_type, i.flags,
   i.safety_alert, i.lane, i.genre, i.genre_basis, i.selected, i.score_total, i.published_at, i.visible_at, i.primary_source_id,
-  s.name AS source_name, s.owner_entity AS source_owner`;
+  s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}`;
 
 /**
  * Report, and with `apply` make, the steps over the published items of `[since, until)`, oldest first.
@@ -143,7 +144,7 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       }
     }));
   };
-  const sourceName = (/** @type {any} */ row) => frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name ?? row.primary_source_id, ownerEntity: row.source_owner });
+  const sourceName = (/** @type {any} */ row) => frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name ?? row.primary_source_id, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal });
   const day = (/** @type {any} */ row) => (row.published_at ? agendaLocalDate(timeZone, new Date(row.published_at)) : null);
   const textsOf = async (/** @type {any} */ row) => (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [row.id])).rows[0] ?? null;
 

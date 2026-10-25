@@ -1505,11 +1505,12 @@ export {
   frontierScoreCeilings,
   frontierScoreTier,
 } from './src/frontierSelection.mjs'
-// frontierSourceNames — 2 exports: what a reader calls a source — the
+// frontierSourceNames — 3 exports: what a reader calls a source — the
 // institution, by the registry's owner entity, never the feed or interface the
 // plugin reads it through (the table is `frontier-source-names.json`).
 export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
+  frontierIsStreamSource,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
 // geoVocabulary — 84 exports: 「循证 GEO」's closed vocabularies (pools, engines,
