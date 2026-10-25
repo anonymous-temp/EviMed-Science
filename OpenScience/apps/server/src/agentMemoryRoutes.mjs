@@ -1,10 +1,8 @@
-import { NATIVE_RECORD_ID } from "./nativeMemoryStore.mjs";
 import { createHash } from "node:crypto";
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, nativeRecallSource, recallForAgent } from "./agentMemoryRecall.mjs";
 import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
 import { OBSERVATION_FIELDS, readObservation } from "./agentMemoryObservations.mjs";
-import { parseAsOf } from "./memoryValidity.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
@@ -27,35 +25,31 @@ import { isPlatformAccount } from "./platformAccount.mjs";
  * underneath it, and each one is here because the caller is not ours:
  *
  *  1. **Nothing written here takes effect by itself.** A note arrives as an
- *     `inferred` candidate and every episode-derived record as `pending`
- *     (`recordRun(..., { holdForOwner: true })`); the parameter that would say
- *     otherwise does not exist. A model's claim that its user said something
- *     outright is not the user saying it, and an external agent's claim is one
- *     more step removed. The account owner confirms, or does not. An episode
- *     may add evidence to a memory already in force and never changes one.
+ *     `inferred` candidate and an episode as a pending candidate note; the
+ *     parameter that would say otherwise does not exist. A model's claim that its
+ *     user said something outright is not the user saying it, and an external
+ *     agent's claim is one more step removed. The account owner confirms, or does
+ *     not.
  *  2. **Scope comes from the key.** A key bound to a project cannot read or
  *     write outside it, and no request field can widen that. An integration
  *     key may name the person a request is for (`X-Subject`), and then every
  *     read and write is that person's account and nobody else's; without the
  *     header it is the key's own account — the institution's (agentApiKeys.mjs).
  *  3. **`episodes` is an input, not an import.** An external agent posts what
- *     happened — the turns — and extraction decides what, if anything, is worth
- *     remembering, through the same extractor and the same quote-integrity
- *     checks a run of ours goes through. An endpoint that let a caller insert
- *     records directly would be a way to write memory with no evidence behind
- *     it, which is the one thing the record shape exists to prevent.
+ *     happened — the turns — and what, if anything, is worth remembering is
+ *     decided by the engine's own extraction after the owner confirms (see
+ *     below). An endpoint that let a caller insert memory directly would be a way
+ *     to write memory with no conversation behind it, which is the one thing the
+ *     engine's design refuses.
  *
- *  4. **The engine is the account's, and the API follows it** (2026-10-23). An account's memory is on one of two engines
- *     (`ResearchMemoryStore.memoryEngine`), and this API used to know only the PostgreSQL one: on a native account
- *     `/episodes` answered 202 and wrote nothing, `/recall` read stale copies, and a forget through `/records` changed rows the
- *     engine never reads. Now an account on the native engine is read and acted on through the store the memory page uses
- *     (`nativeMemory`): `/recall` reads the engine's files, `/records`, `/dashboard` and every record act go to them (a forget
- *     removes the file from the engine, with the page's undo), and `/episodes` stages a pending candidate before explicit confirmation
- *     (`memory_engine_unsupported`) — the engine's own extraction writes what it finds with nothing held for the owner, which is
- *     the one thing rule 1 forbids this API from doing. Every answer that reads or acts on an account's memory carries its
- *     engine: `engine` in an object body, `X-Memory-Engine` on every one of them. Notes (`/note`), observations and methods are
- *     the capsule store's and the learning ledger's, and are the same on both engines. The CDSS deployment pins the legacy
- *     engine (`docker-compose.api-only.yml`) and so never meets any of this by default.
+ * An account's memory is the engine's own files (`nativeMemory`, the store the memory page uses): `/recall` reads them, `/records`,
+ * `/dashboard` and every record act go to them (a forget removes the file from the engine, with the page's undo), and `/episodes` stages
+ * a pending candidate note: the whole role-labelled transcript stays in that candidate, and confirming it (`POST /notes/{id}/confirm`)
+ * sends only the person's own statements through the gateway's captured-message filter into a durable admission, from which the
+ * engine's extraction writes what it finds. The legacy engine that kept a second set of records in PostgreSQL — pending records, a confirm
+ * step on them, a platform-side extractor behind `/episodes` — was deleted on 2026-10-25, and with it the `engine` field and the
+ * `X-Memory-Engine` header this API carried for two days. Notes (`/note`), observations and methods are the capsule store's and the
+ * learning ledger's.
  *
  * @module agentMemoryRoutes
  */
@@ -82,7 +76,7 @@ export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
 /** The fields each request body may carry, by operation. A contract test holds
  *  the OpenAPI description's request schemas to exactly these lists. */
 export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
-  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "asOf", "scope", "capsuleIds", "methods"]),
+  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods"]),
   note: Object.freeze(["factKind", "content", "projectId"]),
   episodes: Object.freeze(["projectId", "sessionId", "messages"]),
   observations: OBSERVATION_FIELDS,
@@ -109,16 +103,16 @@ function fields(body, allowed) {
 
 /**
  * @param {{
- *   config: any, apiKeys: any, store: any, researchMemory: any, capsules: any,
- *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, feedbackEvents?: any, observations?: any, nativeMemory?: any,
+ *   config: any, apiKeys: any, store: any, memorySettings: any, capsules: any,
+ *   learning?: any, observations?: any, nativeMemory?: any,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createAgentMemoryRoutes({
-  config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null, learning = null,
-  feedbackEvents = null, observations = null, nativeMemory = null, deleteSubject = null, audit = null,
+  config, apiKeys, store, memorySettings, capsules, learning = null,
+  observations = null, nativeMemory = null, deleteSubject = null, audit = null,
 }) {
   const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
@@ -182,27 +176,12 @@ export function createAgentMemoryRoutes({
     };
 
     /**
-     * Which engine keeps this account's memory. A subject that has no account yet is a new one, and a new account takes the
-     * deployment's default. An unreadable engine identity must never select stale legacy rows.
-     * @param {any} user @returns {Promise<"native" | "legacy">}
-     */
-    const engineOf = async (user) => {
-      if (!user) return config.ovNativeMemoryEnabled === true ? "native" : "legacy";
-      if (typeof researchMemory?.memoryEngine !== "function") return "legacy";
-      let selected;
-      try { selected = await researchMemory.memoryEngine(user.id); }
-      catch { throw new HttpError(503, "memory_engine_unavailable", "The memory engine identity is unavailable."); }
-      if (!["native", "legacy"].includes(selected)) throw new HttpError(503, "memory_engine_unavailable", "The memory engine identity is unavailable.");
-      return selected;
-    };
-    /**
-     * The native store, for an account on that engine — and a refusal by name, never the legacy rows served as that account's
-     * memory, when the deployment cannot reach the engine. Null for an account on the other one, and for a subject with no account.
+     * The memory engine's store for an account — and a refusal by name when the deployment cannot reach the engine. Null for a
+     * subject with no account, which has no memory to read: an empty answer, not a refusal.
      * @param {any} user
      */
     const nativeFor = async (user) => {
-      // A subject with no account has no memory to read on either engine: an empty answer, not a refusal.
-      if (!user || await engineOf(user) !== "native") return null;
+      if (!user) return null;
       if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
       return nativeMemory;
     };
@@ -274,9 +253,6 @@ export function createAgentMemoryRoutes({
       if (input.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(input.scope)) {
         throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory scope.");
       }
-      if (input.asOf != null && parseAsOf(input.asOf) === undefined) {
-        throw new HttpError(400, "agent_memory_payload_invalid", "asOf must be an ISO date such as 2025-06-30.");
-      }
       // The capsules to read instead of the ones in force: at most eight,
       // each named once.
       if (input.capsuleIds !== undefined && (!Array.isArray(input.capsuleIds) || input.capsuleIds.length < 1
@@ -290,25 +266,22 @@ export function createAgentMemoryRoutes({
       }
       const query = boundedString(input.query, "query", 2_000);
       const user = await accountFor({ create: false });
-      // On the native engine the research-memory half is the engine's own files, read as the memory page reads them; the
-      // PostgreSQL copies are not read for such an account (the in-runtime recall never has).
+      // The memory half is the engine's own files, read as the memory page reads them.
       const native = await nativeFor(user);
       // A subject never seen has no memory and no methods of its own; it may
       // still read its institution's named capsules.
-      const result = await recallForAgent({ capsules, memorySubstrate: native ? nativeRecallSource(native) : memorySubstrate, learning },
+      const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false }) : null, learning },
         { user, institution: subject ? keyAccount : null }, {
           query,
           projectId: await projectOf(user, input.projectId),
           limit: input.limit ?? 10,
           factKinds: input.factKinds ?? [],
           since: input.since ?? null,
-          ...(input.asOf ? { asOf: input.asOf } : {}),
           scope: input.scope ?? "all",
           ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
           methods: input.methods ?? "all",
         });
-      const engine = await engineOf(user);
-      sendJson(res, 200, { data: { ...result, engine } }, { "X-Memory-Engine": engine });
+      sendJson(res, 200, { data: result });
       return true;
     }
 
@@ -343,29 +316,16 @@ export function createAgentMemoryRoutes({
       const user = await accountFor({ create: false });
       const scopeId = (await projectOf(user, url.searchParams.get("scopeId"))) ?? "";
       const native = await nativeFor(user);
-      if (native) {
-        // The engine's memories are all in force: a status that excludes `active` (a proposal, a replaced or forgotten one) finds none here.
-        const statuses = filters("status", allowedStatuses);
-        const found = statuses.length && !statuses.includes("active") ? [] : await native.listRecords(user.id, {
-          scopes: filters("scope", allowedScopes), kinds: filters("kind", allowedKinds), scopeId,
-          query: url.searchParams.get("query") ?? "",
-          pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
-        });
-        sendJson(res, 200, { data: found }, { "X-Memory-Engine": "native" });
-        return true;
-      }
-      const records = !user ? [] : await researchMemory.listRecords(user.id, {
-        scopes: filters("scope", allowedScopes),
-        kinds: filters("kind", allowedKinds),
-        // Active only unless asked otherwise: a pending record is a proposal
-        // nobody has agreed to, and an external agent reading it as fact is the
-        // failure the pending state exists to prevent.
-        statuses: filters("status", allowedStatuses).length ? filters("status", allowedStatuses) : ["active"],
-        scopeId,
+      // A subject with no account has no memory: an empty list.
+      if (!native) { sendJson(res, 200, { data: [] }); return true; }
+      // The engine's memories are all in force: a status that excludes `active` (a proposal, a replaced or forgotten one) finds none here.
+      const statuses = filters("status", allowedStatuses);
+      const found = statuses.length && !statuses.includes("active") ? [] : await native.listRecords(user.id, {
+        scopes: filters("scope", allowedScopes), kinds: filters("kind", allowedKinds), scopeId,
         query: url.searchParams.get("query") ?? "",
         pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
       });
-      sendJson(res, 200, { data: records }, { "X-Memory-Engine": await engineOf(user) });
+      sendJson(res, 200, { data: found });
       return true;
     }
 
@@ -386,9 +346,9 @@ export function createAgentMemoryRoutes({
         return {
           id: `${sessionId}:${index}`,
           role: message.role,
-          // The extractor reads DSH's part shape, and an external caller has no
+          // The admission filter reads DSH's part shape, and an external caller has no
           // reason to know it; the one thing it must not lose is which words
-          // were the user's, because the sender is what origin is decided from.
+          // were the user's, because only those are ever forwarded.
           parts: [{ type: "text", text: boundedString(message.text, `messages[${index}].text`, 12_000) }],
           sender: message.role === "user" ? "user" : "assistant",
         };
@@ -397,52 +357,25 @@ export function createAgentMemoryRoutes({
       // A subject's episode belongs to its one project whether or not it is named.
       const projectId = (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null);
       if (!projectId) throw new HttpError(400, "agent_memory_payload_invalid", "An episode belongs to a project; name one.");
-      const project = await store.requireProject(user, projectId);
-      if (await nativeFor(user)) {
-        const entry = await capsules.note(user.id, projectId, {
-          factKind: "project_fact", content: `External session ${sessionId}: ${createHash("sha256").update(JSON.stringify(messages)).digest("hex")}\n${messages.map((message) => `${message.sender}: ${message.parts[0].text}`).join("\n").slice(0,16000)}`,
-          origin: "inferred", review: true, externalSession: { sessionId, messages },
-        });
-        sendJson(res, 202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
-          state: "pending_confirmation", confirm: { path: `${AGENT_MEMORY_PATH}/notes/${encodeURIComponent(entry.id)}/confirm`, expectedRevision: entry.revision } } });
-        return true;
-      }
-      if (!memoryIntelligence) throw new HttpError(503, "product_state_unavailable", "Memory extraction is unavailable.");
-      const run = {
-        id: `ext_${identity.keyId}_${Date.now().toString(36)}`,
-        sessionId,
-        status: "completed",
-        finishedAt: new Date().toISOString(),
-      };
-      // Held for the owner (rule 1): every record this writes is `pending`,
-      // and nothing it says changes or replaces a memory already in force.
-      const outcome = await memoryIntelligence.recordRun({ ...project, userId: user.id }, run, messages, { holdForOwner: true });
-      sendJson(res, 202, {
-        data: {
-          episodeId: run.id,
-          proposed: outcome.proposed,
-          extracted: outcome.extracted,
-          // Zero on this path by construction: nothing an external agent sends
-          // activates a memory on its own. Reported rather than omitted so a
-          // caller can see that it is zero rather than assume it.
-          activated: outcome.activated,
-          pending: outcome.pending,
-          rejected: outcome.rejected,
-        },
+      await store.requireProject(user, projectId);
+      await nativeFor(user);
+      const entry = await capsules.note(user.id, projectId, {
+        factKind: "project_fact", content: `External session ${sessionId}: ${createHash("sha256").update(JSON.stringify(messages)).digest("hex")}\n${messages.map((message) => `${message.sender}: ${message.parts[0].text}`).join("\n").slice(0,16000)}`,
+        origin: "inferred", review: true, externalSession: { sessionId, messages },
       });
+      sendJson(res, 202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
+        state: "pending_confirmation", confirm: { path: `${AGENT_MEMORY_PATH}/notes/${encodeURIComponent(entry.id)}/confirm`, expectedRevision: entry.revision } } });
       return true;
     }
 
     // The dashboard (agentMemoryBoard.mjs): one read, and the person's acts.
     if (action === "dashboard" && method === "GET") {
       requireScope("memory.read");
-      if (!researchMemory?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
+      if (!memorySettings?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       const user = await accountFor({ create: false });
       const native = await nativeFor(user);
-      const board = await memoryBoard({ researchMemory, learning, capsules, observations, nativeMemory: native, projectId: identity.projectId }, user);
-      // A subject with no account yet has no engine to name but the one its account would be given.
-      const engine = await engineOf(user);
-      sendJson(res, 200, { data: { ...board, engine } }, { "X-Memory-Engine": engine });
+      const board = await memoryBoard({ memorySettings, learning, capsules, observations, nativeMemory: native, projectId: identity.projectId }, user);
+      sendJson(res, 200, { data: board });
       return true;
     }
 
@@ -464,16 +397,15 @@ export function createAgentMemoryRoutes({
       requireScope("memory.manage");
       const input = fields(body, ["learningPaused", "recallPaused"]);
       const user = /** @type {any} */ (await accountFor({ create: true }));
-      const engine = await engineOf(user);
-      const settings = await researchMemory.updateSettings(user.id, input);
+      const settings = await memorySettings.updateSettings(user.id, input);
       await trail("settings.update", user, { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused });
-      // On the native engine the pause is the engine's own policy too (what the memory page's switch does); the gateway reads
+      // The pause is the engine's own policy too (what the memory page's switch does); the gateway reads
       // the setting on every request, so the switch has taken effect whether or not the engine could be told now.
-      if (engine === "native" && typeof input.learningPaused === "boolean" && nativeMemory?.configured) {
+      if (typeof input.learningPaused === "boolean" && nativeMemory?.configured) {
         await nativeMemory.setLearning(user.id, !settings.learningPaused)
           .catch((/** @type {any} */ error) => trail("settings.engine", user, { code: String(error?.code ?? "memory_engine_unavailable") }));
       }
-      sendJson(res, 200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused, engine } }, { "X-Memory-Engine": engine });
+      sendJson(res, 200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused } });
       return true;
     }
 
@@ -485,12 +417,12 @@ export function createAgentMemoryRoutes({
       const act = record.act || "edit";
       const native = await nativeFor(user);
       if (identity.projectId) {
-        const existing = await (native && NATIVE_RECORD_ID.test(record.id) ? native : researchMemory).getRecord(user.id, record.id);
+        const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
         if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
       }
-      const outcome = await recordAction({ researchMemory, feedbackEvents, nativeMemory: native }, user, record.id, act, body);
+      const outcome = await recordAction({ nativeMemory: native }, user, record.id, act, body);
       await trail(outcome.event, user, { target: record.id });
-      sendJson(res, 200, { data: outcome.record }, { "X-Memory-Engine": native ? "native" : "legacy" });
+      sendJson(res, 200, { data: outcome.record });
       return true;
     }
 
@@ -521,7 +453,7 @@ export function createAgentMemoryRoutes({
         const existing = await capsules.documents.get(user.id, "fact", note.id);
         if (!existing || existing.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This note belongs to a different project.");
       }
-      const changed = await noteAction({ capsules, researchMemory, nativeMemory }, user, note.id, note.act, body);
+      const changed = await noteAction({ capsules, memorySettings, nativeMemory }, user, note.id, note.act, body);
       await trail(`note.${note.act}`, user, { target: note.id });
       sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
       return true;
@@ -552,7 +484,7 @@ export function createAgentMemoryRoutes({
         rateLimitPerMinute: RATE_LIMIT_PER_MINUTE,
         endpoints: AGENT_MEMORY_ENDPOINTS,
         notes: [
-          "Every episode-derived record stays pending, and every note an unconfirmed candidate, until the account owner confirms it; an episode never changes a memory already in force.",
+          "Every episode stays a pending candidate, and every note an unconfirmed one, until the account owner confirms it; an episode never changes a memory already in force.",
           "A key bound to a project cannot read or write outside it.",
           "An integration key may name the person a request is for in X-Subject; every read and write is then that person's alone.",
         ],

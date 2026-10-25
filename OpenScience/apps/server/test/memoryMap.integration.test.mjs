@@ -88,7 +88,7 @@ async function seed(memory, userId) {
 
 test("the map reads an account's memories, what they rest on and how they changed, and never what must not be drawn", options, async (t) => {
   const { app, base, headers, user, otherHeaders, other } = await fixture(t);
-  const memory = app.researchMemory;
+  const memory = app.memorySettings;
   const made = await seed(memory, user.id);
   await memory.upsertRecord(other.id, fact({ key: "project.theirs", value: "their private memory", summary: "their private memory" }), proof);
 
@@ -152,7 +152,7 @@ test("the map reads an account's memories, what they rest on and how they change
 
 test("the notes of the account's own capsule are marks of the map and the overview's read answers what it counts, through the real routes", options, async (t) => {
   const { app, base, headers, user, otherHeaders } = await fixture(t);
-  const memory = app.researchMemory;
+  const memory = app.memorySettings;
   await memory.upsertRecord(user.id, { ...fact({ scope: "user", scopeId: "", kind: "preference", key: "style.length", value: "short answers first", summary: "short answers first" }) }, proof);
   const capsule = await app.capsuleService.ownCapsule(user.id, { create: true });
   const note = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "writing_style", layer: "profile", content: "Cite page numbers." });
@@ -191,7 +191,7 @@ test("the notes of the account's own capsule are marks of the map and the overvi
 
 test("a memory's links are read from the records that own them, and another account's record is a 404", options, async (t) => {
   const { app, base, headers, user, other, otherHeaders } = await fixture(t);
-  const memory = app.researchMemory;
+  const memory = app.memorySettings;
   const made = await seed(memory, user.id);
   const theirs = await memory.upsertRecord(other.id, fact({ key: "project.theirs", value: "theirs", summary: "theirs" }), proof);
 
@@ -211,7 +211,7 @@ test("a memory's links are read from the records that own them, and another acco
 
 test("topics: grouped by one call when the memories changed, edited without a call, bounded by the day, and gone with a reset", options, async (t) => {
   const { app, user, other } = await fixture(t);
-  const memory = app.researchMemory;
+  const memory = app.memorySettings;
   const config = { memoryTopicsEnabled: true, memoryTopicsDailyRuns: 2, memoryTopicsMinMemories: 6, deepseekProviderEnabled: true, deepseekApiKey: "test-key", memoryExtractionModel: "deepseek-v4-flash" };
   const ids = [];
   for (let index = 0; index < 8; index += 1) {
@@ -297,7 +297,7 @@ test("topics: grouped by one call when the memories changed, edited without a ca
 
 test("the topics routes: the researcher's word over HTTP, refused for what is not theirs", options, async (t) => {
   const { app, base, headers, user, other, otherHeaders } = await fixture(t);
-  const memory = app.researchMemory;
+  const memory = app.memorySettings;
   // The app's own topics are switched on and have no model here, so the grouping is written as the model would have, directly.
   for (let index = 0; index < 14; index += 1) await memory.upsertRecord(user.id, fact({ scope: "user", scopeId: "", kind: "preference", key: `habit.h${index}`, value: `memory ${index}`, summary: `memory ${index}` }), proof);
   const records = await memory.mapRecords(user.id, {});
@@ -330,7 +330,7 @@ test("the topics routes: the researcher's word over HTTP, refused for what is no
 
 test("a line the researcher calls wrong stays out of their map until they take it back, and is nobody else's business", options, async (t) => {
   const { app, base, headers, user, otherHeaders, other } = await fixture(t);
-  const memory = app.researchMemory;
+  const memory = app.memorySettings;
   const made = await seed(memory, user.id);
   await memory.upsertRecord(other.id, fact({ key: "project.theirs", value: "their private memory", summary: "their private memory" }), proof,
     { sourceLinks: [{ type: "doi", id: "10.1056/nejmoa2034577" }] });

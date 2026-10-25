@@ -14,7 +14,7 @@ import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -39,7 +39,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-share-versions-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type) VALUES
     ($1,$5,'development'),($2,$6,'development'),($3,$7,'development'),($4,$8,'development')`,
   [sender, vera, wen, xia, `发送者${tag}`, `Vera ${tag}`, `Wen ${tag}`, `Xia ${tag}`]);

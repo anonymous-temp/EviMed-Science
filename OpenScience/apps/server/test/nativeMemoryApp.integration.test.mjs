@@ -11,7 +11,7 @@ import { gunzipSync } from "node:zlib";
 import { nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
@@ -31,12 +31,12 @@ async function fixture(t, { native = true } = {}) {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-native-app-"));
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl, ovNativeMemoryEnabled: native, openVikingSessions,
+    stateStore: "postgres", requireSharedStateStore: true, databaseUrl, memoryEngineEnabled: native, openVikingSessions,
   });
   // The memory schema is migrated the first time anything asks, and its migration marks every account that already exists
   // as `legacy` (an account that predates the column). A deployment's schema is there long before a new account is, so the
   // fixture's account must not be the one the first migration of a fresh database finds.
-  await migrateResearchMemory(app.store.database);
+  await migrateMemorySettings(app.store.database);
   const username = `native${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const user = await app.store.createUser(username, PASSWORD, "Native fixture");
   const address = await app.listen(0, "127.0.0.1");
@@ -55,7 +55,7 @@ async function fixture(t, { native = true } = {}) {
 
 test("a new account takes the deployment's default engine, and the page reads the engine's files", options, async (t) => {
   const { app, base, headers, user, seed } = await fixture(t);
-  assert.equal(await app.researchMemory.memoryEngine(user.id), "native");
+  assert.equal(await app.memorySettings.memoryEngine(user.id), "native");
   seed("preferences/tone.md", "Plain language, no flattery.", { type: "preferences" });
   const profile = await (await fetch(`${base}/api/memory/profile`, { headers })).json();
   assert.equal(profile.data.engine, "native");
@@ -116,7 +116,7 @@ test("readiness says how many accounts the path walk looked at", options, async 
 
 test("with the native engine off, an account is on the legacy path and the page says so", options, async (t) => {
   const { app, base, headers, user } = await fixture(t, { native: false });
-  assert.equal(await app.researchMemory.memoryEngine(user.id), "legacy");
+  assert.equal(await app.memorySettings.memoryEngine(user.id), "legacy");
   const profile = await (await fetch(`${base}/api/memory/profile`, { headers })).json();
   assert.notEqual(profile.data.engine, "native");
   assert.equal((await fetch(`${base}/api/memory/remember`, { method: "POST", headers, body: JSON.stringify({ text: "x" }) })).status, 400);

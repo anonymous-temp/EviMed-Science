@@ -13,15 +13,15 @@ import { NativeMemoryStore, nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "../src/nativeMemoryWorker.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { HttpError, sendJson } from "../src/security.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-const config = { ovNativeMemoryEnabled: true, memoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, maxJsonBytes: 1_000_000 };
+const config = { memoryEngineEnabled: true, memoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, maxJsonBytes: 1_000_000 };
 
 /** @type {ControlPlaneDatabase} */
 let database;
@@ -29,7 +29,7 @@ const users = [];
 before(async () => {
   if (!url) return;
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
 });
 after(async () => {
   if (!url) return;
@@ -45,12 +45,12 @@ async function fixture(t, { nativeConfigured = true, extract = () => ({}) } = {}
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
   const overlay = new NativeMemoryOverlay({ database });
-  const researchMemory = new ResearchMemoryStore(config, { database });
+  const memorySettings = new MemorySettingsStore(config, { database });
   const nativeMemory = nativeConfigured ? new NativeMemoryStore({ sessions, overlay }) : new NativeMemoryStore({ sessions: { configured: false }, overlay });
-  const worker = new NativeMemoryWorker({ config, researchMemory, sessions, overlay });
+  const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay });
   const audits = [];
   const routes = createMemoryRoutes({
-    config, researchMemory, nativeMemory, feedbackEvents: null,
+    config, memorySettings, nativeMemory, feedbackEvents: null,
     store: { ensureUser: async () => ({ id: userId }), requireProject: async (_user, id) => { if (id === "p_missing") throw new HttpError(404, "project_not_found", "x"); return { id }; } },
     context: async () => ({ user: { id: userId, name: "Native routes test" }, project: { id: "p1" } }),
     audit: async (_ctx, action, outcome, detail) => { audits.push({ action, outcome, detail }); },
@@ -71,7 +71,7 @@ async function fixture(t, { nativeConfigured = true, extract = () => ({}) } = {}
   };
   const engineUser = sessions.engineUser(userId);
   await sessions.register(userId);
-  return { userId, stub, sessions, overlay, researchMemory, call, audits, worker, engineUser, seed: (rel, text, extra) => stub.seedMemory(engineUser, rel, text, extra) };
+  return { userId, stub, sessions, overlay, memorySettings, call, audits, worker, engineUser, seed: (rel, text, extra) => stub.seedMemory(engineUser, rel, text, extra) };
 }
 
 test("the list, the profile and the settings say which engine they are from and keep the legacy shape", options, async (t) => {
@@ -199,8 +199,8 @@ test("an account on the native engine in a deployment that cannot reach the engi
 });
 
 test("an account on the legacy engine keeps the legacy page, and remember is refused by name", options, async (t) => {
-  const { call, researchMemory, userId } = await fixture(t);
-  await researchMemory.setMemoryEngine(userId, "legacy");
+  const { call, memorySettings, userId } = await fixture(t);
+  await memorySettings.setMemoryEngine(userId, "legacy");
   const profile = await call("GET", "/api/memory/profile");
   assert.equal(profile.status, 200);
   assert.notEqual(profile.json.data.engine, "native");

@@ -3,7 +3,7 @@
 // What the unit tests cannot say: the dependents of a calculation and the versions that read a document are jsonb
 // containment lookups on the real result ledger; the memory links are rows moved by one conditional statement; a method's
 // label is a telemetry write that leaves its history, status and body as they were. These run the real
-// `ProductDocuments`, `ResearchMemoryStore` and `LearningService` under the real impact service.
+// `ProductDocuments`, `MemorySettingsStore` and `LearningService` under the real impact service.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -14,7 +14,7 @@ import { KnowledgeChangeService, producingAgenda } from "../src/knowledgeChange.
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -35,7 +35,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
   await migrateProductStore(database);
   documents = new ProductDocuments(database);
-  memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  memory = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
   learning = new LearningService({ documents });
 });
 after(async () => {

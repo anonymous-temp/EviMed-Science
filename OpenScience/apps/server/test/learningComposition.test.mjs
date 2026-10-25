@@ -62,7 +62,7 @@ test("the transcript is captured before anything can decide not to", () => {
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource);
   assert.ok(hook, "onRunFinished is gone; this test now checks nothing");
   const capture = hook[0].indexOf("persistRunTranscript");
-  const memoryGuard = hook[0].indexOf("if (!researchMemory.configured) {");
+  const memoryGuard = hook[0].indexOf("if (!memorySettings.configured) {");
   assert.ok(capture > 0, "the terminal hook no longer persists the transcript");
   assert.ok(memoryGuard > 0, "the memory early-return is gone");
   assert.ok(capture < memoryGuard,
@@ -92,7 +92,7 @@ test("the lessons are queued from the terminal hook by themselves, after the mem
   const extraction = hook.indexOf("memoryIntelligence.recordRun(project, run, messages)");
   const afterMemory = hook.indexOf("await queueLessons(memoryResult);");
   assert.ok(extraction > 0 && afterMemory > extraction, "the lessons must be queued after the extractor reports corrections");
-  const noMemory = hook.indexOf("if (!researchMemory.configured) {");
+  const noMemory = hook.indexOf("if (!memorySettings.configured) {");
   assert.ok(hook.indexOf("await queueLessons(null);", noMemory) > noMemory,
     "a deployment without a memory store still learns from its runs");
   // The first occurrence of this guard belongs to the inbox; the one that keeps the platform's own projects out of memory and
@@ -326,7 +326,7 @@ test("a stop reads the bounded run it releases, and the counters reach the metri
   // L-G7: a run's attributions are read against the methods its runtime carried.
   assert.match(serverSource, /const family = learnedMethodFamilyForRuntime\(\{ projectId: String\(project\.id\), boundedRunId: run\.automated === true \? run\.dispatchId \?\? null : null \}\);/);
   // L-G3: the correction memories a lesson names reach its input.
-  assert.match(serverSource, /readCorrections: researchMemory\.configured/);
+  assert.match(serverSource, /readCorrections: memorySettings\.configured/);
 });
 
 test("a routine's peers are read where they ran, and the evidence a routine is counted from is fed by the runs it is told of", () => {
@@ -354,7 +354,7 @@ test("what later became of a result has its producers: a correction and a recalc
   assert.match(serverSource, /usedMethods: methodFeedback \? \(project, run\) => methodFeedback\.usedForLesson\(project, run\) : null/);
   // The researcher's own switch and a capsule trial apply to it as to every other lesson.
   const join = serverSource.slice(serverSource.indexOf("const methodFeedback ="), serverSource.indexOf("const resultRoutes ="));
-  assert.match(join, /memoryPausedFor\(researchMemory, project\.userId, project\.id, run\.sessionId\)/);
+  assert.match(join, /memoryPausedFor\(memorySettings, project\.userId, project\.id, run\.sessionId\)/);
   assert.match(join, /!state\.learning && !state\.trial/);
 });
 

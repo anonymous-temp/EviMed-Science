@@ -102,7 +102,7 @@ export class CapsuleService {
     this.onActivationChanged = onActivationChanged;
     // A derived index is an optimisation, and the facts it ranks are all in
     // PostgreSQL anyway. When it is down, a recall should return what the
-    // lexical search finds rather than fail — the same choice `memorySubstrate`
+    // lexical search finds rather than fail — the same choice `memoryIndexProvider`
     // makes for research memory. An operator who would rather see the failure
     // sets the strict switch.
     this.strictIndex = Boolean(strictIndex);
@@ -725,7 +725,7 @@ export class CapsuleService {
    * Undo the last change to one entry: its previous revision saved forward, or
    * — for an entry whose only revision is its creation — its removal, which
    * the capsule's trash can still restore. The same one click research memory
-   * offers (`ResearchMemoryStore.undo`), for the same reason: nothing asks
+   * offers (`MemorySettingsStore.undo`), for the same reason: nothing asks
    * first, so everything can be taken back.
    * @param {string} userId @param {string} capsuleId @param {string} entryId @param {{ expectedRevision: number }} input
    * @returns {Promise<{ undone: "restored" | "removed", entry: any }>}

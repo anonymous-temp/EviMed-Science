@@ -32,7 +32,7 @@ async function auditRows(/** @type {string} */ dataDir) {
 
 test("a step of the run-finished hook that throws costs that step, and memory extraction still runs", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-finished-"));
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, researchMemory: memoryStore });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, memorySettings: memoryStore });
   try {
     const address = await app.listen(0, "127.0.0.1");
     const base = `http://127.0.0.1:${address.port}`;
@@ -73,7 +73,7 @@ test("a clinical-privacy check that cannot answer is audited under its step and 
     async clinicalContextsHeld() { asked.push("many"); throw Object.assign(new Error("the privacy store is down"), { code: "privacy_store_down" }); },
   };
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false,
-    researchMemory: memoryStore, operatorMetricsToken: "test-only-metrics-token", vcrPrivacyStore });
+    memorySettings: memoryStore, operatorMetricsToken: "test-only-metrics-token", vcrPrivacyStore });
   try {
     const address = await app.listen(0, "127.0.0.1");
     const base = `http://127.0.0.1:${address.port}`;

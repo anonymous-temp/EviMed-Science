@@ -112,8 +112,8 @@ test("it holds back while learning is paused, an extraction is working or just f
   assert.equal(await few.tick(), "too_few");
   assert.equal(compile(few.stub).length, 0);
   // Learning paused.
-  await f.researchMemory.setSettings?.(f.userId, { learningPaused: true });
-  if (typeof f.researchMemory.setSettings !== "function") await f.database.query("INSERT INTO evimed_memory.settings (user_id, learning_paused) VALUES ($1, true) ON CONFLICT (user_id) DO UPDATE SET learning_paused=true", [f.userId]);
+  await f.memorySettings.setSettings?.(f.userId, { learningPaused: true });
+  if (typeof f.memorySettings.setSettings !== "function") await f.database.query("INSERT INTO evimed_memory.settings (user_id, learning_paused) VALUES ($1, true) ON CONFLICT (user_id) DO UPDATE SET learning_paused=true", [f.userId]);
   assert.equal(await f.tick(), "held_back");
   await f.database.query("UPDATE evimed_memory.settings SET learning_paused=false WHERE user_id=$1", [f.userId]);
   // An extraction still owed.
@@ -198,7 +198,7 @@ test("what a consolidation writes is held to the checks after the fact: an ident
 test("the worker's own pass asks it for every native account, and a pass with it off asks nothing", options, async (t) => {
   const f = await account(t, { consolidate: ({ user }) => ({ updates: [{ uri: `viking://user/${user}/memories/entities/person/p0.md`, text: "Fact number 0, tightened." }] }) });
   f.worker.consolidation = f.consolidation;
-  assert.equal(await f.researchMemory.memoryEngine(f.userId), "native", "an account's engine is decided the first time anything asks");
+  assert.equal(await f.memorySettings.memoryEngine(f.userId), "native", "an account's engine is decided the first time anything asks");
   await f.worker.pass();
   assert.equal(compile(f.stub).length, 1, "the pass submitted this account's consolidation");
   await f.worker.pass();
@@ -206,7 +206,7 @@ test("the worker's own pass asks it for every native account, and a pass with it
   assert.equal(nativeMemoryCounters().consolidations.completed, 1);
   const off = await account(t, { config: { nativeMemoryConsolidationEnabled: false } });
   off.worker.consolidation = off.consolidation;
-  await off.researchMemory.memoryEngine(off.userId);
+  await off.memorySettings.memoryEngine(off.userId);
   await off.worker.pass();
   assert.equal(compile(off.stub).length, 0);
 });

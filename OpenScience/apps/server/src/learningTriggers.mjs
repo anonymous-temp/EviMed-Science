@@ -17,8 +17,7 @@
  *
  *  - **the researcher corrected the assistant** — `correction`, never sampled: a message
  *    typed into a running turn (`AgentRunStore.recordSteeredInput`, counted by the
- *    frame proxy), a result corrected in the page (`result-corrected`), a
- *    `correction` memory the extractor wrote citing their own words, and — the one
+ *    frame proxy), a result corrected in the page (`result-corrected`), and — the one
  *    that was missing — the first message of the next turn when a small model reads
  *    it as a correction, a preference or a rejection of the previous run
  *    (`learningEvidence.mjs`, `afterCorrection`). Whether a sentence is a correction
@@ -87,7 +86,7 @@
 import { METHOD_INDUCTION_MIN_TRAJECTORIES, artifactShapesMatch, isLearningCorrection, isResearcherOwnedWork } from "@evimed/domain";
 import { isInternalProject } from "./internalProjects.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
-import { endedBeforeReset, memoryPausedFor } from "./researchMemory.mjs";
+import { endedBeforeReset, memoryPausedFor } from "./memorySettings.mjs";
 import { sampledByHash } from "./runSampling.mjs";
 import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
 
@@ -247,36 +246,32 @@ export function learningRefusal({ run, runs = [], project = null, internalAgent 
 
 /**
  * Which lessons one finished run is evidence for, at the moment it finishes. Pure, so the rules can be read and tested without a
- * queue. A correction typed into the run (or recorded by the extractor) is one; a delivery repaired inside its own run is the
+ * queue. A correction typed into the run is one; a delivery repaired inside its own run is the
  * other, and only where an operator asks for it. What the run teaches by being left alone is decided later, when it is settled
  * (`routineLessonFor`).
  *
  * `runs` is the ledger of the run's own `project`, where its current record is read.
  *
  * @param {{ run: any, runs: readonly any[], project?: { id?: string | null, userId?: string | null, archivedAt?: string | null } | null,
- *   projection?: any, memoryResult?: any,
+ *   projection?: any,
  *   internalAgent?: (agentId: string) => boolean, guestInfluence?: boolean }} input
  *   `guestInfluence`: the run drew on a received pack no other account has vouched for; each lesson says so.
  * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> }[]}
  */
-export function learningTriggersFor({ run, runs, project = null, projection = null, memoryResult = null, internalAgent = () => false, guestInfluence = false }) {
+export function learningTriggersFor({ run, runs, project = null, projection = null, internalAgent = () => false, guestInfluence = false }) {
   if (learningRefusal({ run, runs, project, internalAgent })) return [];
   const ledgerRun = runs.find((item) => item?.id === run.id) ?? run;
 
   /** @type {{ trigger: string, idempotencyKey: string, payload: Record<string, any> }[]} */
   const lessons = [];
-  const extracted = Array.isArray(memoryResult?.corrections) ? memoryResult.corrections : [];
   const steered = Number(ledgerRun.corrections ?? run.corrections ?? 0);
-  if (steered > 0 || extracted.length > 0) {
+  if (steered > 0) {
     lessons.push({
       trigger: "correction",
       idempotencyKey: `distill:${run.id}:correction`,
       payload: {
         runId: run.id,
         trigger: "correction",
-        // What the researcher corrected, by record, so the excerpt can be read
-        // against it; the text itself stays in the memory store.
-        corrections: extracted.slice(0, 8).map((entry) => ({ recordId: entry.recordId, key: entry.key })),
         steeredCorrections: steered,
       },
     });
@@ -543,10 +538,10 @@ export class LearningTriggers {
    * the settling of it thirty minutes on). Best effort: a lesson that could not be queued must not be the reason a run reports failure,
    * and must not be silent either.
    *
-   * @param {any} project @param {any} run @param {any} [memoryResult]
+   * @param {any} project @param {any} run
    * @returns {Promise<{ queued: string[], skipped: string | null }>}
    */
-  async afterRun(project, run, memoryResult = null) {
+  async afterRun(project, run) {
     const runs = await this.agentRuns.list(project).catch(() => []);
     const refused = await this.refusalFor(project, run, { runs });
     if (refused) return { queued: [], skipped: refused };
@@ -555,7 +550,7 @@ export class LearningTriggers {
     const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
     const guestInfluence = await this.#guestInfluenced(project, run);
     const { lessons, sampledOut } = this.#sampled(run, learningTriggersFor({
-      run, runs, project, projection, memoryResult, internalAgent: () => internal, guestInfluence,
+      run, runs, project, projection, internalAgent: () => internal, guestInfluence,
     }));
     const queued = [];
     for (const lesson of lessons) {

@@ -57,7 +57,7 @@ const memoryDouble = ({ engine = "native", settings = {} } = {}) => ({
   sessionState: async () => ({ trialCapsuleId: null }),
 });
 
-const baseConfig = { ovNativeMemoryEnabled: true, memoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 8_000, nativeMemoryTurnCommitSettleMs: 2_000, nativeMemoryTurnCommitAttempts: 4 };
+const baseConfig = { memoryEngineEnabled: true, memoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 8_000, nativeMemoryTurnCommitSettleMs: 2_000, nativeMemoryTurnCommitAttempts: 4 };
 
 /**
  * A committer over doubles. `states` is what reading the engine's session answers, one entry per read (the last repeats);
@@ -78,12 +78,12 @@ function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine 
       return { status: "ok", result: state };
     },
   };
-  const admission = admit ?? createMemoryAdmission({ config: baseConfig, researchMemory: memoryDouble({ engine, settings }), conversations: {
+  const admission = admit ?? createMemoryAdmission({ config: baseConfig, memorySettings: memoryDouble({ engine, settings }), conversations: {
     running: async () => runs.filter((run) => run.status === "running"),
     runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id),
   } });
   const committer = new NativeTurnCommit({
-    config: { ...baseConfig, ...config }, researchMemory: memoryDouble({ engine, settings }), sessions, admission,
+    config: { ...baseConfig, ...config }, memorySettings: memoryDouble({ engine, settings }), sessions, admission,
     conversations: { runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id) },
     commit: commit ?? (async (request) => { commits.push(request); return { commit: "accepted" }; }),
     setTimer: time.setTimer, clearTimer: time.clearTimer, wait: time.wait,
@@ -283,12 +283,12 @@ async function gatewayFixture(t, { settings = {}, config = {}, runs = [] } = {})
   const stub = await startOpenVikingStub(t);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 4_000, fastTimeoutMs: 1_300 });
-  const researchMemory = memoryDouble({ settings });
+  const memorySettings = memoryDouble({ settings });
   const conversations = {
     running: async () => runs.filter((run) => run.status === "running"),
     runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id),
   };
-  const admission = createMemoryAdmission({ config: baseConfig, researchMemory, conversations });
+  const admission = createMemoryAdmission({ config: baseConfig, memorySettings, conversations });
   /** @type {any[]} */
   const ledger = [];
   const overlay = { configured: true, account: async () => ({ registeredAt: new Date().toISOString() }), noteSession: async () => {}, recordCommit: async (row) => { ledger.push(row); return { inserted: true }; } };
@@ -305,7 +305,7 @@ async function gatewayFixture(t, { settings = {}, config = {}, runs = [] } = {})
   const base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}${MEMORY_GATEWAY_PATH}`;
   const time = clock();
   const committer = new NativeTurnCommit({
-    config: { ...baseConfig, ...config }, researchMemory, sessions, admission, conversations: { runsOf: conversations.runsOf },
+    config: { ...baseConfig, ...config }, memorySettings, sessions, admission, conversations: { runsOf: conversations.runsOf },
     commit: handler.commitSession, setTimer: time.setTimer, clearTimer: time.clearTimer, wait: time.wait,
   });
   const say = (role, text) => fetch(`${base}/api/v1/sessions/${ENGINE_SESSION}/messages`, {

@@ -595,7 +595,7 @@ export interface WebStructuredMemory {
   lastConfirmedAt: string | null;
   expiresAt: string | null;
   /** Who it came from and how established it is, counted from its evidence
-   *  (`recordProvenance` in researchMemory.mjs). Absent from a control plane
+   *  (`recordProvenance` in memorySettings.mjs). Absent from a control plane
    *  older than it. */
   provenance?: WebMemoryProvenance;
   /** The record that replaced this one, and since when it stopped holding —

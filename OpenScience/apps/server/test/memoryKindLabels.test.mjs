@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MEMORY_KINDS, MEMORY_KIND_LABELS_ZH } from "../src/researchMemoryPersistence.mjs";
+import { MEMORY_KINDS, MEMORY_KIND_LABELS_ZH } from "../src/memorySettingsPersistence.mjs";
 
 // A memory is named on screen by its kind, never by its key: the inbox of
 // 2026-09-19 read 「记忆「preference.response_length」原本记的是…」.

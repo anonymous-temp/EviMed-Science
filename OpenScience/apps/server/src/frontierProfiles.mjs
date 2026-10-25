@@ -182,7 +182,7 @@ const MEMORY_MARK = "count(*)::text || ':' || coalesce(sum(r.version), 0)::text 
  * the order given (the store's: by importance). Every provenance counts; run
  * summaries, sensitive and inactive records, and records of a paused or
  * internal project do not.
- * @param {any[]} records `researchMemory.listAllRecords` rows
+ * @param {any[]} records `memorySettings.listAllRecords` rows
  * @param {{ pausedProjects?: string[] }} [settings]
  * @returns {Array<{ id: string, kind: string, text: string }>}
  */
@@ -512,7 +512,7 @@ function codeOf(error) {
 
 export class FrontierProfiles {
   /**
-   * @param {{ database: any, researchMemory?: any, editor?: any, embedder?: any, config?: Record<string, any>,
+   * @param {{ database: any, memorySettings?: any, editor?: any, embedder?: any, config?: Record<string, any>,
    *           budget?: (() => Promise<{ state: string }>) | null, now?: () => Date, dimension?: number,
    *           conversations?: ((userId: string) => Promise<Array<{ projectId: string, run: Record<string, any> }>>) | null,
    *           entityVocabulary?: { enabled?: boolean, keysForText: (input: { texts: string[] }) => Promise<string[]>,
@@ -520,7 +520,7 @@ export class FrontierProfiles {
    *             describe: (keys: string[]) => Promise<Array<{ key: string, label: string }>> } | null,
    *           tags?: { filter: (slug: string) => Promise<{ ids: Iterable<number | string>, tag: { slug: string, name: string } } | null> } | null,
    *           random?: () => number, ranking?: typeof FRONTIER_RANKING }} options
-   *   `researchMemory` the account memory store (`listAllRecords`, `settings`),
+   *   `memorySettings` the account memory store (`listAllRecords`, `settings`),
    *   `editor` a `FrontierEditor` (`extractProfile`), `embedder` the feed's,
    *   `conversations` a reader's own runs across their projects (the run ledger's
    *   `researcherRuns`, composed in `server.mjs`); without it no question is read,
@@ -528,12 +528,12 @@ export class FrontierProfiles {
    *   the library are not read, `tags` the tag tree (`FrontierTagStore`; without it an interest tag is not matched),
    *   `random` the exploration draw's source of [0, 1), `ranking` the constants (`FRONTIER_RANKING`; a test narrows them).
    */
-  constructor({ database, researchMemory = null, editor = null, embedder = null, config = {}, budget = null,
+  constructor({ database, memorySettings = null, editor = null, embedder = null, config = {}, budget = null,
     now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null, tags = null, random = Math.random, ranking = FRONTIER_RANKING }) {
     if (!database) throw new TypeError("The frontier profiles need the product database.");
     this.database = database;
     this.subscriptions = new FrontierSubscriptions({ database });
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.editor = editor;
     this.embedder = embedder;
     this.config = config ?? {};
@@ -567,7 +567,7 @@ export class FrontierProfiles {
 
   /** Whether this deployment can personalize at all: a memory store to read and a model to read it with. */
   get composed() {
-    return Boolean(this.researchMemory?.configured) && this.config.deepseekProviderEnabled === true && Boolean(this.config.deepseekApiKey);
+    return Boolean(this.memorySettings?.configured) && this.config.deepseekProviderEnabled === true && Boolean(this.config.deepseekApiKey);
   }
 
   /** `available`, `unavailable` (the memory store failed lately) or `off` — what `/status` says. */
@@ -585,7 +585,7 @@ export class FrontierProfiles {
 
   /** @param {string} userId @returns {Promise<{ recallPaused: boolean, pausedProjects: string[] }>} */
   async #settings(userId) {
-    const settings = typeof this.researchMemory?.settings === "function" ? await this.researchMemory.settings(userId) : null;
+    const settings = typeof this.memorySettings?.settings === "function" ? await this.memorySettings.settings(userId) : null;
     return { recallPaused: settings?.recallPaused === true, pausedProjects: (settings?.pausedProjects ?? []).map(String) };
   }
 
@@ -904,7 +904,7 @@ export class FrontierProfiles {
     try {
       settings = await this.#settings(userId);
       mark = await this.#memoryMark(userId);
-      records = settings.recallPaused ? [] : await this.researchMemory.listAllRecords(userId);
+      records = settings.recallPaused ? [] : await this.memorySettings.listAllRecords(userId);
       this.memoryFailedAt = null;
     } catch (error) {
       this.memoryFailedAt = now.getTime();

@@ -74,7 +74,7 @@ test("the memory page reads its rows and its search, and the note, status and ti
     assert.equal(gone.status, 404, `${method} ${path} is not a route any more`);
   }
 
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "profile", key: "profile.who",
     value: "临床药师，主攻抗凝治疗", summary: "临床药师，主攻抗凝治疗",
     origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false,
@@ -82,7 +82,7 @@ test("the memory page reads its rows and its search, and the note, status and ti
     observedAt: new Date().toISOString(), weight: 1 });
   // A 「做过的研究」 summary, which recall never serves and the page must still
   // be able to find: searching a drug name is how a person looks for one.
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "project", scopeId: "default", kind: "run_summary", key: "run.session.ses_9",
     value: JSON.stringify({ sessionId: "ses_9", question: "阿司匹林一级预防还值得做吗" }),
     summary: "阿司匹林一级预防还值得做吗", origin: "system", status: "active",
@@ -110,7 +110,7 @@ test("the memory page reads its rows and its search, and the note, status and ti
 
 test("a pending inference is confirmed by the researcher, and a raced edit is refused", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
-  const pending = await app.researchMemory.upsertRecord(user.id, {
+  const pending = await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "response.evidence_depth",
     value: "Prefer primary evidence and explicit uncertainty.",
     summary: "Primary evidence first; uncertainty must remain visible.",
@@ -176,7 +176,7 @@ test("the researcher's switches pause learning and recall without deleting, and 
     assert.equal((await refused.json()).code, "memory_settings_invalid", why);
   }
 
-  const record = await app.researchMemory.upsertRecord(user.id, {
+  const record = await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "response.language",
     value: "Answer in Chinese.", summary: "Chinese answers.", origin: "explicit", status: "active",
     confidence: 1, importance: 0.9, sensitive: false,
@@ -195,13 +195,13 @@ test("the researcher's switches pause learning and recall without deleting, and 
   const unconfirmed = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({}) });
   assert.equal(unconfirmed.status, 400);
   assert.equal((await unconfirmed.json()).code, "memory_reset_confirmation_required");
-  assert.equal((await app.researchMemory.listAllRecords(user.id)).length, 1, "a refused reset deletes nothing");
+  assert.equal((await app.memorySettings.listAllRecords(user.id)).length, 1, "a refused reset deletes nothing");
 
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   assert.equal(reset.status, 200);
   assert.deepEqual((await reset.json()).data, { structured: 1, methods: 0, handbooks: 0, entries: 0, jobs: 0, feedback: 0 });
-  assert.equal((await app.researchMemory.listAllRecords(user.id)).length, 0);
-  assert.ok(await app.researchMemory.resetInstant(user.id), "and the instant of the reset is the account's, for what is learned afterwards");
+  assert.equal((await app.memorySettings.listAllRecords(user.id)).length, 0);
+  assert.ok(await app.memorySettings.resetInstant(user.id), "and the instant of the reset is the account's, for what is learned afterwards");
   const after = await read();
   assert.equal(after.learningPaused, true, "a reset is a clean slate, not a change to the switches");
   assert.equal(after.recallPaused, true);
@@ -232,7 +232,7 @@ test("a reset clears every kind the memory page shows — memories, learned meth
     const received = await app.capsuleService.create(owner, { title: "李主任的工作方式" });
     await documents.put(owner, "capsule", received.id, { ...received.payload, imported: true }, { expectedRevision: received.revision });
     const shared = await app.capsuleService.addEntry(owner, received.id, { factKind: "method_preference", layer: "methods", content: "别人的做法" });
-    await app.researchMemory.upsertRecord(owner, { scope: "user", scopeId: "", kind: "preference", key: "response.language", value: "Answer in Chinese.", summary: "Chinese answers.",
+    await app.memorySettings.upsertRecord(owner, { scope: "user", scopeId: "", kind: "preference", key: "response.language", value: "Answer in Chinese.", summary: "Chinese answers.",
       origin: "explicit", status: "active", confidence: 1, importance: 0.9, sensitive: false },
     { sourceType: "conversation_message", sourceRef: "sessions/s1/messages/m1", quote: "请用中文回答。", observedAt: new Date().toISOString(), weight: 1 });
     return { method, note, document, shared, received };
@@ -322,12 +322,12 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
     method: "POST", headers, body: JSON.stringify({ id: projectId, name: "Project memory deletion" }),
   })).status, 200);
 
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "project", scopeId: projectId, kind: "run_summary", key: "run.project-delete",
     value: "project run", summary: "project run", origin: "system", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
   });
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "tone",
     value: "tables over prose", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
@@ -337,7 +337,7 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
     method: "DELETE", headers, body: JSON.stringify({ confirm: projectId }),
   })).status, 200);
 
-  const exported = await app.researchMemory.exportUserMemory(user.id);
+  const exported = await app.memorySettings.exportUserMemory(user.id);
   assert.deepEqual(exported.records.map((record) => record.key), ["tone"],
     "the project's memory went with it and the account's did not");
 });
@@ -405,22 +405,22 @@ test("deleting a project deletes what its conversations wrote, and not what anot
     assert.equal(put.status, 200, await put.clone().text());
   }
   const base_ = { origin: "inferred", status: "active", confidence: 0.7, importance: 0.5, sensitive: false };
-  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_deleted_one", kind: "follow_up", key: "deleted.followup", value: "Pending.", summary: "p" });
-  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_kept_one", kind: "follow_up", key: "kept.followup", value: "Pending.", summary: "q" });
-  await app.researchMemory.upsertRecord(user.id, { ...base_, scope: "user", scopeId: "", kind: "preference", key: "tone", value: "tables over prose", summary: "" });
+  await app.memorySettings.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_deleted_one", kind: "follow_up", key: "deleted.followup", value: "Pending.", summary: "p" });
+  await app.memorySettings.upsertRecord(user.id, { ...base_, scope: "session", scopeId: "ses_kept_one", kind: "follow_up", key: "kept.followup", value: "Pending.", summary: "q" });
+  await app.memorySettings.upsertRecord(user.id, { ...base_, scope: "user", scopeId: "", kind: "preference", key: "tone", value: "tables over prose", summary: "" });
 
   assert.equal((await fetch(`${base}/api/projects/${projectId}`, {
     method: "DELETE", headers, body: JSON.stringify({ confirm: projectId }),
   })).status, 200);
 
-  const exported = await app.researchMemory.exportUserMemory(user.id);
+  const exported = await app.memorySettings.exportUserMemory(user.id);
   assert.deepEqual(exported.records.map((record) => record.key).sort(), ["kept.followup", "tone"],
     "the deleted project's conversation took its record with it; the other project's and the researcher's stayed");
 });
 
 test("deleting an account takes every memory with it, counted for the audit", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "tone",
     value: "tables over prose", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
@@ -499,7 +499,7 @@ test("deleting a project never waits on the index: the rows go, the withdrawal i
   assert.equal((await fetch(`${base}/api/projects`, {
     method: "POST", headers, body: JSON.stringify({ id: projectId, name: "Index slow" }),
   })).status, 200);
-  const written = await app.researchMemory.upsertRecord(user.id, {
+  const written = await app.memorySettings.upsertRecord(user.id, {
     scope: "project", scopeId: projectId, kind: "run_summary", key: "run.index-slow",
     value: "project run", summary: "project run", origin: "system", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
@@ -510,7 +510,7 @@ test("deleting a project never waits on the index: the rows go, the withdrawal i
   });
   assert.equal(deleted.status, 200, "a timing-out index is not a reason to refuse a deletion");
 
-  assert.deepEqual((await app.researchMemory.exportUserMemory(user.id)).records, [], "the authoritative rows are gone");
+  assert.deepEqual((await app.memorySettings.exportUserMemory(user.id)).records, [], "the authoritative rows are gone");
   assert.equal((await (await fetch(`${base}/api/projects`, { headers })).json()).data
     .filter((/** @type {any} */ project) => project.id === projectId).length, 0, "and so is the project");
 
@@ -519,7 +519,7 @@ test("deleting a project never waits on the index: the rows go, the withdrawal i
   const owed = await db.query("SELECT uri, attempts FROM evimed_memory.index_withdrawals WHERE user_id=$1", [user.id]);
   assert.equal(owed.rowCount, 1, "the withdrawal of the subtree is owed");
   assert.match(owed.rows[0].uri, /\/memories\/evimed\/project\//);
-  await assert.rejects(() => app.researchMemory.getRecord(user.id, written.id), (error) => error.code === "memory_not_found");
+  await assert.rejects(() => app.memorySettings.getRecord(user.id, written.id), (error) => error.code === "memory_not_found");
 
   // The operator sees what the index still owes and for how long.
   const metrics = await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer metrics-secret" } })).text();
@@ -538,14 +538,14 @@ test("deleting a project never waits on the index: the rows go, the withdrawal i
 test("resetting memory never waits on the index either, and the three research subtrees are owed to it", options, async (t) => {
   const index = slowIndex();
   const { app, base, headers, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index });
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "tone",
     value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
   });
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   assert.equal(reset.status, 200, await reset.text());
-  assert.deepEqual((await app.researchMemory.exportUserMemory(user.id)).records, []);
+  assert.deepEqual((await app.memorySettings.exportUserMemory(user.id)).records, []);
   const owed = await app.store.database.query("SELECT uri FROM evimed_memory.index_withdrawals WHERE user_id=$1 ORDER BY uri", [user.id]);
   assert.deepEqual(owed.rows.map((row) => row.uri.split("/memories/evimed/")[1]), ["project", "session", "user"]);
 });
@@ -553,7 +553,7 @@ test("resetting memory never waits on the index either, and the three research s
 test("erasing an account never waits on the index: the account goes and its copies are owed, past the account's own end", options, async (t) => {
   const index = slowIndex();
   const { app, base, headers, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index });
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "tone",
     value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
@@ -589,7 +589,7 @@ test("the app on the index provider hands its store the outbox, and a write uses
   });
   // Through the app's own store instance, which is the object under test: a
   // record is written by the product, not posted by the researcher.
-  const written = await app.researchMemory.upsertRecord(user.id, {
+  const written = await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "tone",
     value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
@@ -603,7 +603,7 @@ test("the app on the index provider hands its store the outbox, and a write uses
 
 test("a deployment on the term matcher writes the same memory and queues nothing", options, async (t) => {
   const { app, user } = await fixture(t);
-  await app.researchMemory.upsertRecord(user.id, {
+  await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "tone",
     value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
@@ -619,11 +619,11 @@ test("one click undoes an automatic write: an edit goes back, a creation goes aw
   // must not be written straight back by the next run's inference.
   const { app, base, headers, user } = await fixture(t);
   const evidence = (quote) => ({ sourceType: "conversation_message", sourceRef: "sessions/s-undo/messages/m1", quote, observedAt: new Date().toISOString(), weight: 1 });
-  const created = await app.researchMemory.upsertRecord(user.id, {
+  const created = await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "preference", key: "preference.table_first",
     value: "证据先用表格呈现", summary: "表格优先", origin: "inferred", status: "active", confidence: 0.6, importance: 0.7, sensitive: false,
   }, evidence("先用表格"), { reason: "conversation evidence created the memory", by: "extraction", runId: "run_a" });
-  const changed = await app.researchMemory.upsertRecord(user.id, { ...created, value: "证据先用文字叙述", summary: "叙述优先" },
+  const changed = await app.memorySettings.upsertRecord(user.id, { ...created, value: "证据先用文字叙述", summary: "叙述优先" },
     evidence("先用文字"), { expectedVersion: created.version, reason: "conversation evidence updated the current memory", by: "extraction", runId: "run_b" });
   assert.deepEqual([changed.revisions.at(-1).by, changed.revisions.at(-1).runId], ["extraction", "run_b"], "a revision says who changed it, in which run");
 
@@ -649,7 +649,7 @@ test("one click undoes an automatic write: an edit goes back, a creation goes aw
 
   // A memory whose only history is its creation: undoing it removes it, and
   // the removal is the researcher rejecting it.
-  const fresh = await app.researchMemory.upsertRecord(user.id, {
+  const fresh = await app.memorySettings.upsertRecord(user.id, {
     scope: "user", scopeId: "", kind: "behavior", key: "behavior.late_night",
     value: "常在深夜工作", summary: "深夜工作", origin: "inferred", status: "active", confidence: 0.6, importance: 0.3, sensitive: false,
   }, evidence("又是深夜"), { reason: "conversation evidence created the memory", by: "extraction" });
@@ -657,7 +657,7 @@ test("one click undoes an automatic write: an edit goes back, a creation goes aw
     method: "POST", headers, body: JSON.stringify({ expectedVersion: fresh.version }),
   })).json()).data;
   assert.equal(removed.undone, "removed");
-  await assert.rejects(app.researchMemory.getRecord(user.id, fresh.id), { code: "memory_not_found" });
+  await assert.rejects(app.memorySettings.getRecord(user.id, fresh.id), { code: "memory_not_found" });
   const rejections = await app.feedbackEvents.list(user.id, { trigger: "memory-rejected" });
   assert.deepEqual(rejections.items.map((item) => [item.detail.key, item.detail.reason]), [["behavior.late_night", "undone"]],
     "the extractor reads this ledger and will not infer it back");
@@ -670,8 +670,8 @@ test("undoing a replacement puts the fact it replaced back in force", options, a
     scope: "project", scopeId: project.id, kind: "project_fact", key, value, summary: value,
     origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false,
   });
-  const old = await app.researchMemory.upsertRecord(user.id, fact("project.dose.old", "利伐沙班 20 mg"));
-  const { record } = await app.researchMemory.supersede(user.id, old.id, fact("project.dose.new", "利伐沙班 15 mg"), null,
+  const old = await app.memorySettings.upsertRecord(user.id, fact("project.dose.old", "利伐沙班 20 mg"));
+  const { record } = await app.memorySettings.supersede(user.id, old.id, fact("project.dose.new", "利伐沙班 15 mg"), null,
     { reason: "conversation evidence replaced an earlier fact", by: "extraction" });
   const undone = (await (await fetch(`${base}/api/memory/records/${record.id}/undo`, {
     method: "POST", headers, body: JSON.stringify({ expectedVersion: record.version }),

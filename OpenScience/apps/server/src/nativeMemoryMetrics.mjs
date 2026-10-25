@@ -17,7 +17,7 @@ export const MEMORY_GATEWAY_MESSAGE_OUTCOMES = Object.freeze(["forwarded", "plat
 export const MEMORY_GATEWAY_COMMIT_OUTCOMES = Object.freeze(["accepted", "nothing_pending", "not_learning", "rate_limited", "failed"]);
 /** Why a caller's conversation is not learned from or read (`memoryAdmission`). */
 export const MEMORY_ADMISSION_REASONS = Object.freeze([
-  "legacy_engine", "engine_unavailable", "internal_project", "automated_run", "paused", "trial", "clinical_context", "subagent", "before_reset",
+  "memory_off", "engine_unavailable", "internal_project", "automated_run", "paused", "trial", "clinical_context", "subagent", "before_reset",
 ]);
 /** What the gateway refuses by name. */
 export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
@@ -51,13 +51,6 @@ export const NATIVE_SKIP_REASONS = Object.freeze([
 export const NATIVE_CONSOLIDATION_OUTCOMES = Object.freeze(["not_due", "unchanged", "too_few", "held_back", "submitted", "completed", "failed", "lost"]);
 /** What a finished consolidation did to the account's files. */
 export const NATIVE_CONSOLIDATION_CHANGES = Object.freeze(["added", "updated", "deleted"]);
-/** Where a native account's turn was found on a runtime that was launched without the memory gateway's address. */
-export const NATIVE_RUNTIME_GATEWAY_PLACES = Object.freeze(["dispatch", "turn_end"]);
-/**
- * What became of a runtime launched for the other memory engine than its account is on now: let go while idle, marked while
- * busy (so that the next dispatch replaces it), replaced at a dispatch between two runs, or left because a turn was running.
- */
-export const NATIVE_RUNTIME_SWITCH_OUTCOMES = Object.freeze(["released", "marked", "adopted", "deferred"]);
 /** What the deterministic after-the-fact checks did, by why: `rejected_line` a verbatim repeat of a line the person removed, `rejected_reworded` a line that contains one, `rejected_judged` one a model judged to say the same. */
 export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged"]);
 /** What became of a call to the model that judges whether a line repeats one the person removed: asked, failed (unreachable, or not the one shape), over the account's day, or no model here. */
@@ -85,8 +78,6 @@ const workerCommits = table(NATIVE_COMMIT_OUTCOMES);
 const workerOperations = table(["added", "updated", "deleted"]);
 const extractionOutcomes = table(NATIVE_EXTRACTION_OUTCOMES);
 const skippedOperations = table(NATIVE_SKIP_REASONS);
-const runtimeWithoutGateway = table(NATIVE_RUNTIME_GATEWAY_PLACES);
-const runtimeSwitches = table(NATIVE_RUNTIME_SWITCH_OUTCOMES);
 const rejectionJudge = table(NATIVE_REJECTION_JUDGE_OUTCOMES);
 const rejectionLines = table(NATIVE_REJECTION_LINE_VERDICTS);
 const consolidations = table(NATIVE_CONSOLIDATION_OUTCOMES);
@@ -134,13 +125,6 @@ export function recordNativeExtraction(operations, { skipped = 0, skipReasons = 
   bump(extractionOutcomes, operations > 0 ? (skippedCount > 0 ? "wrote_and_skipped" : "wrote") : (skippedCount > 0 ? "only_skipped" : "proposed_nothing"));
   for (const [reason, count] of Object.entries(skipReasons)) bump(skippedOperations, skippedOperations.has(reason) ? reason : "other", Number(count) || 0);
 }
-/**
- * A native account's turn found its runtime launched without the memory gateway's address: that conversation has no memory
- * plugin, so it reads nothing and learns nothing, and nothing else says so. @param {string} at where it was found
- */
-export function recordRuntimeWithoutGateway(at) { bump(runtimeWithoutGateway, at); }
-/** What became of a runtime launched for the other engine than its account is on. @param {string} outcome */
-export function recordRuntimeEngineSwitch(outcome) { bump(runtimeSwitches, outcome); }
 /** One pass of the consolidation over an account. @param {string} outcome */
 export function recordNativeConsolidation(outcome) { bump(consolidations, outcome); }
 /** The files a finished consolidation changed. @param {{ added?: number, updated?: number, deleted?: number }} changes */
@@ -160,7 +144,7 @@ export function recordNativePass(ok) { bump(workerPasses, ok ? "completed" : "fa
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, runtimeWithoutGateway, runtimeSwitches, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -173,7 +157,7 @@ export function nativeMemoryCounters() {
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
     workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
-    runtimeWithoutGateway: plain(runtimeWithoutGateway), runtimeSwitches: plain(runtimeSwitches), rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
+    rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
   };
 }
 
@@ -212,10 +196,6 @@ export function nativeMemoryMetricFamilies() {
       help: "Settled native memory commits by what their extraction came to: wrote something, wrote some and was refused some by the engine, was refused everything it proposed, or proposed nothing. A commit that wrote no file is one of the last two: the model proposed nothing (the templates and the conversation), or the engine refused what it proposed (a policy)." },
     { name: "open_science_native_memory_skipped_operations_total", type: "counter", series: series(skippedOperations, "reason"),
       help: "Operations the engine skipped in settled native memory commits, by the engine's own reason code (memory_type_filtered: a type outside the account's allowlist; self_memory_disabled: learning paused; ambiguous_target, no_writable_target, invalid_ranges, page_id_type_mismatch: the proposal did not name a file it could write); any other code is other." },
-    { name: "open_science_native_memory_runtime_without_gateway_total", type: "counter", series: series(runtimeWithoutGateway, "at"),
-      help: "Times a native account's turn was found on a runtime launched without the memory gateway's address (at a dispatch, or at the end of a turn the person typed in the kernel's own frame). That conversation has no memory plugin: it reads nothing and learns nothing. Any growth is an account whose engine was switched under a runtime that is still open; the next dispatch between two runs replaces it." },
-    { name: "open_science_native_memory_runtime_engine_switch_total", type: "counter", series: series(runtimeSwitches, "outcome"),
-      help: "What became of runtimes launched for the other memory engine than their account is on: released while idle, marked while busy, replaced at a dispatch between two runs (adopted), or left because a turn was running (deferred). A running turn is never stopped for it." },
     { name: "open_science_native_memory_rejection_judge_total", type: "counter", series: series(rejectionJudge, "outcome"),
       help: "Calls to the model that judges whether a line the engine wrote repeats one the person removed (one call a commit at most): asked, failed (unreachable, or not the one answer shape: the lines are kept), over the account's day, or unavailable." },
     { name: "open_science_native_memory_rejection_lines_total", type: "counter", series: series(rejectionLines, "verdict"),

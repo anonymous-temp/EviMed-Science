@@ -425,7 +425,7 @@ test("a deployment with no research memory store still dispatches", async () => 
     const result = await startRun(base, "ses_memory_absent");
     assert.equal(result.response.status, 202, JSON.stringify(result.body));
     assert.equal(result.body.data.status, "running");
-  }, { researchMemory: memoryStoreDouble({ configured: false }) });
+  }, { memorySettings: memoryStoreDouble({ configured: false }) });
 });
 
 // A store that exists and cannot answer is the opposite case. Continuing would
@@ -443,7 +443,7 @@ test("a research memory store that cannot answer fails the dispatch and records 
     const runs = await listRuns(base);
     assert.equal(runs.body.data[0].status, "failed");
     assert.equal(runs.body.data[0].errorCode, "memory_unavailable");
-  }, { researchMemory: memoryStoreDouble({ fail: offline }) });
+  }, { memorySettings: memoryStoreDouble({ fail: offline }) });
 });
 
 // The third case, and the one the prompt's old "科研记忆服务暂时不可用" note used
@@ -458,7 +458,7 @@ test("a recall that fails rejects the dispatch even where the store itself is ab
     const result = await startRun(base, "ses_memory_strict");
     assert.equal(result.response.status, 503, JSON.stringify(result.body));
     assert.equal(result.body.code, "memory_index_unavailable");
-  }, { researchMemory: memoryStoreDouble({ configured: false, fail: offline }) });
+  }, { memorySettings: memoryStoreDouble({ configured: false, fail: offline }) });
 });
 
 test("starts immutable open-domain and specialist run identities from research-session bindings", async () => {

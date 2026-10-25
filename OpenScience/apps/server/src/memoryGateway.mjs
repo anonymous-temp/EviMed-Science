@@ -321,7 +321,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
 export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, capsuleSearch = null, now = () => Date.now() }) {
-  const enabled = config.ovNativeMemoryEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
+  const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
   const commitsPerHour = Math.max(0, Number(config.memoryGatewayCommitsPerHour ?? 120) || 0);
@@ -425,9 +425,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    */
   async function commitEngineSession({ user, project, sessionId, admitted, keepRecentCount = 0 }) {
     const nothing = { status: 200, json: ok({ session_id: sessionId, status: "skipped", task_id: null, archive_uri: null, archived: false, reason: "no_messages" }) };
-    if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) {
+    if (!admitted.learn && admitted.learnReason !== "automated_run") {
       recordGatewayCommit("not_learning");
-      recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+      recordGatewayWithheld(admitted.learnReason ?? "memory_off");
       if (admitted.learnReason === "clinical_context") dropClinicalSession(user.id, sessionId);
       return { ...nothing, outcome: "withheld", commit: "not_learning" };
     }
@@ -473,8 +473,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // Policy (memory types, auto-commit) is the deployment's, in `ov.conf`: only the id is the caller's to choose. A
       // caller that is not learned from gets no session upstream at all — an empty one would still be scanned for idle commits.
       // A conversation whose turn in progress the platform started may hold the person's turns too: its session is made.
-      if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) {
-        recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+      if (!admitted.learn && admitted.learnReason !== "automated_run") {
+        recordGatewayWithheld(admitted.learnReason ?? "memory_off");
         return { status: 200, json: local, outcome: "withheld" };
       }
       await ensureRegistered(ctx.user.id);
@@ -483,8 +483,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     async sessionRead(ctx) {
       const sessionId = ctx.match[1];
       const admitted = await ctx.admit(sessionId);
-      if (!admitted.native) {
-        recordGatewayWithheld("legacy_engine");
+      if (admitted.learnReason === "memory_off") {
+        recordGatewayWithheld("memory_off");
         return { status: 200, json: ok({ session_id: sessionId, message_count: 0, commit_count: 0, pending_tokens: 0 }), outcome: "withheld" };
       }
       return { status: 200, json: await /** @type {any} */ (sessions).readSession(ctx.user.id, sessionId), outcome: "forwarded" };
@@ -498,7 +498,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const admitted = await ctx.admit(sessionId, Number.isFinite(spoken) ? spoken : null);
       if (!admitted.learn) {
         recordGatewayMessage("not_learning");
-        recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+        recordGatewayWithheld(admitted.learnReason ?? "memory_off");
         if (admitted.learnReason === "clinical_context") dropClinicalSession(ctx.user.id, sessionId);
         return { ...accepted, outcome: "withheld" };
       }
@@ -535,7 +535,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const context = given.mode === "context";
       const admitted = await ctx.admit(typeof given.session_id === "string" ? given.session_id : null);
       if (!admitted.recall) {
-        recordGatewayWithheld(admitted.recallReason ?? "legacy_engine");
+        recordGatewayWithheld(admitted.recallReason ?? "memory_off");
         return { status: 200, json: ok(context ? { entries: [], rendered: "", digest: "" } : { memories: [], resources: [], skills: [], total: 0 }), outcome: "withheld" };
       }
       if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideNativeMemories(given.target_uri, ctx.userRoot))) {
@@ -552,7 +552,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!insideNativeMemories(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
       const admitted = await ctx.admit(null);
       const missing = { status: 404, json: refusal("NOT_FOUND", "File not found."), outcome: "withheld" };
-      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "legacy_engine"); return missing; }
+      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return missing; }
       if (!nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
       const text = await /** @type {any} */ (sessions).read(ctx.user.id, uri, { timeoutMs: /** @type {any} */ (sessions).fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
@@ -568,7 +568,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!insideNativeMemories(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
       const admitted = await ctx.admit(null);
       const empty = { status: 200, json: { ...ok([]), has_more: false } };
-      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "legacy_engine"); return { ...empty, outcome: "withheld" }; }
+      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return { ...empty, outcome: "withheld" }; }
       if (await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...empty, outcome: "local" };
       /** @type {Record<string, string>} */
       const query = {};
@@ -619,7 +619,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         }
         if (READ_TOOLS.has(name)) {
           if (!admitted.recall) {
-            recordGatewayWithheld(admitted.recallReason ?? "legacy_engine");
+            recordGatewayWithheld(admitted.recallReason ?? "memory_off");
             local.push(toolText(message.id, /** @type {any} */ (NOT_READ)[admitted.recallReason ?? ""] ?? NOT_READ.other));
             continue;
           }
@@ -654,7 +654,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         }
         if (name === "remember") {
           if (!admitted.learn) {
-            recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+            recordGatewayWithheld(admitted.learnReason ?? "memory_off");
             local.push(toolText(message.id, /** @type {any} */ (NOT_KEPT)[admitted.learnReason ?? ""] ?? NOT_KEPT.other));
             continue;
           }
@@ -688,8 +688,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           local.push(rpcError(message.id, -32602, "Only one memory file of the user can be forgotten at a time."));
           continue;
         }
-        if (!admitted.native || admitted.learnReason === "internal_project" || admitted.learnReason === "trial") {
-          recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+        if (admitted.learnReason === "memory_off" || admitted.learnReason === "internal_project" || admitted.learnReason === "trial") {
+          recordGatewayWithheld(admitted.learnReason ?? "memory_off");
           local.push(toolText(message.id, NOT_READ.other));
           continue;
         }

@@ -5,11 +5,11 @@ import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseAr
 import { HttpError } from "./security.mjs";
 
 /**
- * The memory page, the memory map and the account's own operations for an account whose memory is on OpenViking's native
- * engine (2026-10-13).
+ * The memory page, the memory map and the account's own operations over an account's memory: OpenViking's native engine
+ * (2026-10-13), which is the only place an account's memory lives since the legacy engine was deleted (2026-10-25).
  *
- * The engine holds the memories as files its own extraction writes; this module reads them, presents them in the shape the
- * page already reads for the legacy path (`publicRecord` in researchMemory.mjs — so the page changes little), and carries out
+ * The engine holds the memories as files its own extraction writes; this module reads them, presents them in the record shape
+ * the page reads (the shape the platform's own PostgreSQL records had, so the page changed little when it moved), and carries out
  * the person's edits, deletions and requests on them. What the engine has no place for is the overlay's
  * (`nativeMemoryOverlay.mjs`): revisions, the rejection list, project tags, source labels, the commit ledger.
  *
@@ -24,7 +24,7 @@ import { HttpError } from "./security.mjs";
  *    The one place a file is created here is the undo of a forget, and what that loses is said there.
  *  - **Counts are counted here.** The engine's `stats/memories` is the whole account's.
  *
- * What the legacy path has and this one does not (owner-accepted, README §5.4 of the course correction): no line of the
+ * What the legacy records had and this does not (owner-accepted, README §5.4 of the course correction): no line of the
  * profile has its own origin, validity interval, confidence or conflict record; a revision is a file's, not a fact's; and
  * nothing is "pending" for the person to confirm — the engine writes, the person edits or deletes, and every change can be
  * undone in one step.
@@ -38,9 +38,9 @@ import { HttpError } from "./security.mjs";
  * @typedef {(userId: string, refs: { projectId: string, sessionId: string }[]) => Promise<Record<string, string | null>>} ConversationTitles
  */
 
-/** The legacy kind the page labels a native type by; `nativeType` carries the engine's own. A file's type is where it lives
+/** The kind the page labels a native type by (`memoryKinds.mjs`); `nativeType` carries the engine's own. A file's type is where it lives
  *  (`nativeMemoryFile`): the corrections template writes under `preferences/corrections/`, and that is `corrections` here. */
-export const LEGACY_KIND_OF_TYPE = Object.freeze({
+export const PAGE_KIND_OF_TYPE = Object.freeze({
   profile: "profile",
   preferences: "preference",
   corrections: "correction",
@@ -379,7 +379,7 @@ export class NativeMemoryStore {
       id: nativeFileId(file.uri),
       scope: projectScoped ? "project" : "user",
       scopeId: projectScoped ? file.projectId : "",
-      kind: /** @type {Record<string, string>} */ (LEGACY_KIND_OF_TYPE)[file.type] ?? "project_fact",
+      kind: /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[file.type] ?? "project_fact",
       key: file.relPath,
       value: file.body,
       summary: titleOf(file.type, file.relPath, file.body),
@@ -406,7 +406,6 @@ export class NativeMemoryStore {
       })),
       ...(changed.length ? { relations: { validity: { from: null, until: null }, caveats: [], conflicts: [],
         sources: changed.map((source) => ({ type: source.type, id: source.id, state: source.state === "removed" ? "expired" : source.state })) } } : {}),
-      engine: "native",
       nativeType: file.type,
       uri: file.uri,
       contentHash: file.hash,
@@ -442,23 +441,23 @@ export class NativeMemoryStore {
   }
 
   /**
-   * The memory page's list (`GET /api/memory/profile`), in the legacy shape, plus `engine` and `pending`: what the person asked
-   * the page to remember that the engine has not written yet.
+   * The memory page's list (`GET /api/memory/profile`), plus `pending`: what the person asked the page to remember that the engine
+   * has not written yet.
    * @param {string} userId @param {{ holder?: { id: string, name: string } }} [options]
    */
   async profile(userId, { holder = undefined } = {}) {
     const files = await this.files(userId);
     const { titles, records: active } = await this.#withConversationTitles(userId, await this.records(userId, { files }));
-    // What the person forgot rides in the same list as `status: "archived"`, as it does on the other engine: the page's 「已忘记的内容」
-    // reads it from there, and every other reader leaves an archived memory out.
+    // What the person forgot rides in the same list as `status: "archived"`: the page's 「已忘记的内容」 reads it from there, and
+    // every other reader leaves an archived memory out.
     const records = [...active, ...await this.forgotten(userId, { files }).catch(() => [])];
     /** @type {Record<string, any[]>} */
     const groups = {};
-    for (const kind of new Set(Object.values(LEGACY_KIND_OF_TYPE))) groups[kind] = [];
+    for (const kind of new Set(Object.values(PAGE_KIND_OF_TYPE))) groups[kind] = [];
     for (const record of records) (groups[record.kind] ??= []).push(record);
     return {
       ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: 0, episodeCount: 0,
-      conversations: titles, usage: {}, engine: "native", pending: await this.pending(userId),
+      conversations: titles, usage: {}, pending: await this.pending(userId),
     };
   }
 
@@ -470,7 +469,7 @@ export class NativeMemoryStore {
   }
 
   /**
-   * The page's list read with filters (`GET /api/memory/records`): scopes, kinds and a project, as the legacy route takes them.
+   * The page's list read with filters (`GET /api/memory/records`): scopes, kinds and a project.
    * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number }} filters
    */
   async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100 } = {}) {
@@ -513,9 +512,8 @@ export class NativeMemoryStore {
   }
 
   /**
-   * The project tab's card (`GET /api/memory/projects/:id/overview` → `card`), in the legacy card's shape
-   * (`{ slot, recordId, text, updatedAt }[]`, `projectCard` in projectOverview.mjs): read off the sections of the project's
-   * own project-context file, whose headings are the card's words (the template and the legacy card share them).
+   * The project tab's card (`GET /api/memory/projects/:id/overview` → `card`), as `{ slot, recordId, text, updatedAt }[]`: read off
+   * the sections of the project's own project-context file, whose headings are the card's words (the template writes them).
    * @param {string} userId @param {string} projectId
    */
   async projectCard(userId, projectId) {
@@ -570,6 +568,28 @@ export class NativeMemoryStore {
     };
   }
 
+  /**
+   * The memory files that name a source, as rows the impact panel and the knowledge-change labelling read: the file's id, its scope
+   * (a project's file or the account's), the kind the page files it under and the state of the link. Found by the recorded link and
+   * nothing else (`overlay.filesNaming`).
+   * @param {string} userId @param {{ type: string, id: string }} source
+   * @returns {Promise<{ recordId: string, scope: string, scopeId: string, kind: string, status: string, state: string }[]>}
+   */
+  async dependentsOfSource(userId, source) {
+    this.#assertConfigured();
+    const rows = [];
+    for (const link of await this.overlay.filesNaming(source, { userId })) {
+      const file = await this.overlay.file(userId, link.uri);
+      if (!file) continue;
+      rows.push({
+        recordId: nativeFileId(link.uri), scope: file.projectId ? "project" : "user", scopeId: file.projectId ?? "",
+        kind: /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[file.memoryType] ?? "project_fact", status: "active",
+        state: link.state === "removed" ? "expired" : link.state,
+      });
+    }
+    return rows;
+  }
+
   /** The sources one memory names, with the state each is in (`GET /api/memory/records/:id/sources`). @param {string} userId @param {string} id */
   async sourceLinks(userId, id) {
     const { file } = await this.#target(userId, id);
@@ -577,7 +597,7 @@ export class NativeMemoryStore {
   }
 
   /**
-   * What changed by itself since a moment (「刚记住了」), in the legacy change shape: each item carries the version its
+   * What changed by itself since a moment (「刚记住了」): each item carries the version its
    * one-click undo names.
    * @param {string} userId @param {{ since?: string | null, sessionId?: string | null, limit?: number }} options
    */
@@ -599,7 +619,7 @@ export class NativeMemoryStore {
       const projectScoped = PROJECT_MEMORY_TYPES.includes(revision.memoryType) && Boolean(file.projectId);
       out.push({
         id: nativeFileId(revision.uri), key: revision.uri.slice(revision.uri.indexOf("/memories/") + "/memories/".length),
-        kind: /** @type {Record<string, string>} */ (LEGACY_KIND_OF_TYPE)[revision.memoryType] ?? "project_fact",
+        kind: /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[revision.memoryType] ?? "project_fact",
         scope: projectScoped ? "project" : "user", scopeId: projectScoped ? file.projectId : "",
         summary: String(revision.after ?? "").replace(/\s+/g, " ").trim().slice(0, 200), status: "active",
         change: revision.change === "added" ? "created" : "updated", changedAt: revision.changedAt, version: versionOfHash(file.contentHash),
@@ -836,11 +856,11 @@ export class NativeMemoryStore {
       const place = nativeMemoryFile(revision.uri, root);
       if (!place) continue;
       const base = { revision, place, scope: PROJECT_MEMORY_TYPES.includes(place.type) && revision.projectId ? "project" : "user", scopeId: PROJECT_MEMORY_TYPES.includes(place.type) ? revision.projectId ?? "" : "" };
-      const kind = /** @type {Record<string, string>} */ (LEGACY_KIND_OF_TYPE)[place.type] ?? "project_fact";
+      const kind = /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[place.type] ?? "project_fact";
       const record = (/** @type {Record<string, any>} */ over) => ({
         scope: base.scope, scopeId: base.scopeId, kind, origin: "explicit", status: "archived", confidence: 1, importance: 0.5, sensitive: false, evidenceCount: 0,
         createdAt: revision.changedAt, updatedAt: revision.changedAt, lastConfirmedAt: revision.changedAt, expiresAt: null, supersededBy: null, invalidSince: null, validFrom: null,
-        evidence: [], revisions: [], engine: "native", nativeType: place.type, uri: revision.uri, forgottenRevision: revision.id, ...over,
+        evidence: [], revisions: [], nativeType: place.type, uri: revision.uri, forgottenRevision: revision.id, ...over,
       });
       if (revision.change === "deleted") {
         if (live.has(revision.uri)) continue;

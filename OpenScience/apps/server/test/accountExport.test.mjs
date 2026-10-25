@@ -338,7 +338,7 @@ const migrationSources = [
   "evidenceZonePersistence.mjs",
   "frontierEventReading.mjs",
   "usagePersistence.mjs",
-  "researchMemoryPersistence.mjs",
+  "memorySettingsPersistence.mjs",
   // The share schema (`evimed_share`) is two accounts' relation, so its tables name the account by `owner_id` or `recipient_id`, not `user_id`.
   "capsuleShareLinks.mjs",
 ];

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import {
   NATIVE_COMMIT_ORIGINS, NATIVE_REVISION_ACTORS, NATIVE_REVISION_CHANGES, NATIVE_TEXT_LIMIT, migrateNativeMemory,
 } from "./nativeMemoryPersistence.mjs";
@@ -102,7 +102,7 @@ export class NativeMemoryOverlay {
   /** @param {string} text @param {any[]} [values] */
   async #query(text, values = []) {
     if (!this.database) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
-    await migrateResearchMemory(this.database);
+    await migrateMemorySettings(this.database);
     await migrateNativeMemory(this.database);
     return this.database.query(text, values);
   }
@@ -210,7 +210,35 @@ export class NativeMemoryOverlay {
   async account(userId) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_accounts WHERE user_id=$1", [owner(userId)]);
     const row = result.rows[0];
-    return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at), migratedAt: instant(row?.migrated_at) };
+    return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at) };
+  }
+
+  /**
+   * The accounts the memory plane knows: every account with a row in one of the overlay's per-account tables — registered with the
+   * engine by the gateway, the page or this worker, a conversation noted, a commit or an admission recorded. The worker's pass is over
+   * these; an account none of them has ever touched has nothing in the engine to scan, to settle or to erase.
+   * @param {{ limit?: number }} [options] @returns {Promise<string[]>}
+   */
+  async accounts({ limit = 100_000 } = {}) {
+    const result = await this.#query(`SELECT user_id FROM (
+        SELECT user_id FROM evimed_memory.native_accounts UNION SELECT user_id FROM evimed_memory.native_commits
+        UNION SELECT user_id FROM evimed_memory.native_sessions UNION SELECT user_id FROM evimed_memory.native_admissions
+      ) known ORDER BY user_id LIMIT $1`, [Math.max(1, Math.min(1_000_000, Math.trunc(Number(limit)) || 100_000))]);
+    return result.rows.map((/** @type {any} */ row) => String(row.user_id));
+  }
+
+  /**
+   * Whether the memory plane has ever touched this account (`accounts`): whether the engine can hold anything of it that a deletion
+   * owes it. An account that never used memory is erased without asking the engine, so that a deletion does not depend on a service
+   * the account never used.
+   * @param {string} userId @returns {Promise<boolean>}
+   */
+  async touched(userId) {
+    const result = await this.#query(`SELECT (EXISTS (SELECT 1 FROM evimed_memory.native_accounts WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_sessions WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_admissions WHERE user_id=$1)) AS held`, [owner(userId)]);
+    return result.rows[0]?.held === true;
   }
 
   // ---------------------------------------------------------- consolidation
@@ -262,7 +290,7 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1`, [owner(userId), succeeded === true, fingerprint, at.toISOString()]);
   }
 
-  /** @param {string} userId @param {"registered_at" | "scanned_at" | "migrated_at"} column */
+  /** @param {string} userId @param {"registered_at" | "scanned_at"} column */
   async #stamp(userId, column) {
     await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, ${column}) VALUES ($1, clock_timestamp())
       ON CONFLICT (user_id) DO UPDATE SET ${column}=clock_timestamp(), updated_at=date_trunc('second', clock_timestamp())`, [owner(userId)]);
@@ -271,8 +299,6 @@ export class NativeMemoryOverlay {
   noteRegistered(userId) { return this.#stamp(userId, "registered_at"); }
   /** @param {string} userId */
   noteScanned(userId) { return this.#stamp(userId, "scanned_at"); }
-  /** @param {string} userId */
-  noteMigrated(userId) { return this.#stamp(userId, "migrated_at"); }
 
   /** The account was erased from the engine: whatever it is next is a new registration. @param {string} userId */
   async forgetAccount(userId) {

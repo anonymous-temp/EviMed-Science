@@ -156,7 +156,7 @@ function routes({ records = [], settings = { pausedProjects: [] }, projects = ["
   const calls = { requireProject: [], listed: [], work: [] };
   const route = createMemoryRoutes({
     config: { publicUrl: "http://evimed.test" },
-    researchMemory: {
+    memorySettings: {
       async listAllRecords(userId, filters) { calls.listed.push([userId, filters]); return records.filter((record) => record.scopeId === filters.scopeId); },
       async settings() { return settings; },
       async getRecord(_userId, id) { if (id !== "rec_1") throw Object.assign(new Error("Memory not found."), { status: 404, code: "memory_not_found" }); return { id }; },
@@ -220,13 +220,13 @@ test("the sources of a memory: the record is the account's or a 404, and only ty
 
 test("the server composes the overview from the memory store and the project's own run ledger", async () => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-project-overview-"));
-  const researchMemory = {
+  const memorySettings = {
     configured: true,
     async status() { return { configured: true, connected: true, code: null, structured: true }; },
     async listAllRecords() { return [memory("project.design", "回顾性队列", { scopeId: "default" })]; },
     async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
   };
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, researchMemory });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, memorySettings });
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
   try {

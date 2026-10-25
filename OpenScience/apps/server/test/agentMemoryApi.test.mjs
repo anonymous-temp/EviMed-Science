@@ -77,7 +77,7 @@ function fixture(overrides = {}) {
     },
     async note(userId, projectId, input) { calls.push(["note", userId, projectId, input]); return { id: "entry_1", ...input }; },
   };
-  const researchMemory = {
+  const memorySettings = {
     configured: true,
     async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return overrides.records ?? []; },
     async settings(userId) { calls.push(["settings", userId]); return { learningPaused: false, recallPaused: false }; },
@@ -98,7 +98,7 @@ function fixture(overrides = {}) {
     },
   };
   const routes = createAgentMemoryRoutes({
-    config: { ...config, ...overrides.config }, apiKeys, store, researchMemory, capsules,
+    config: { ...config, ...overrides.config }, apiKeys, store, memorySettings, capsules,
     memoryIntelligence: overrides.memoryIntelligence ?? memoryIntelligence, memorySubstrate: overrides.memorySubstrate ?? null,
     deleteSubject: async (ownerId, subjectAccountId) => { calls.push(["deleteSubject", ownerId, subjectAccountId]); return 1; },
     audit: async (event, status, details) => { calls.push(["audit", event, status, details]); },

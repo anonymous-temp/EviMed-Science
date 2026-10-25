@@ -61,7 +61,7 @@ function fixture({ engine = "native", configured = true, subjects = false, known
     async updateEntry(_user,_capsule,id,input){calls.push(["candidate.update",id,input]);return {id,revision:2,payload:{status:input.status}};},
     documents: { async list() { return { items: [] }; }, async get() { return candidateProjectId ? {id:"note-owned",projectId:candidateProjectId,revision:1,payload:{status:"candidate",capsuleId:"capsule",content:"Project fact"}} : null; } },
   };
-  const researchMemory = {
+  const memorySettings = {
     configured: true,
     async memoryEngine(userId) { calls.push(["memoryEngine", userId]); if(engineFailure)throw Error("engine lookup unavailable"); return engine; },
     async listRecords(userId, filters) { calls.push(["legacy.listRecords", userId, filters]); return filters?.statuses?.includes("pending") ? [] : [{ id: "legacy_row" }]; },
@@ -93,7 +93,7 @@ function fixture({ engine = "native", configured = true, subjects = false, known
   };
   const memoryIntelligence = { async recordRun() { calls.push(["recordRun"]); return { proposed: 1, extracted: 1, activated: 0, pending: 1, rejected: 0 }; } };
   const routes = createAgentMemoryRoutes({
-    config: { agentMemoryApiEnabled: true, maxJsonBytes: 1_048_576, ovNativeMemoryEnabled: true, ...config }, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate,
+    config: { agentMemoryApiEnabled: true, maxJsonBytes: 1_048_576, memoryEngineEnabled: true, ...config }, apiKeys, store, memorySettings, capsules, memoryIntelligence, memorySubstrate,
     nativeMemory, audit: async (event, status, details) => { calls.push(["audit", event, details]); },
   });
   const run = async (path, body = undefined, method = undefined, extra = {}) => { const res = response(); await routes(request(path, body, method, extra), res); return res.captured; };

@@ -4,7 +4,7 @@ import { createMemoryRoutes } from "../src/memoryRoutes.mjs";
 
 test("memory holder is derived from the authenticated account, never imported provenance or a query", async () => {
   const seen = [];
-  const route = createMemoryRoutes({ config: {}, researchMemory: { async profile(id) {
+  const route = createMemoryRoutes({ config: {}, memorySettings: { async profile(id) {
     seen.push(id); return { records: [], groups: {}, activeCount: 601, pendingCount: 5, episodeCount: 20, holder: { id: "issuer", name: "Imported issuer" } };
   } }, store: {}, context: async () => ({ user: { id: "alice", name: "Alice", privateCredential: "test-only-private-field" } }),
   feedbackEvents: {}, audit: async () => {}, recordFeedback: async () => {}, decodeRouteComponent: (value) => value });

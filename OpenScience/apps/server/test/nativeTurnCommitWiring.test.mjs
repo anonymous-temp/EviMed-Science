@@ -20,7 +20,7 @@ async function finishOneRun({ engine, automated = false }) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-turn-commit-"));
   /** @type {string[]} */
   const asked = [];
-  const researchMemory = {
+  const memorySettings = {
     configured: true,
     async status() { return { configured: true, connected: true, code: null, structured: true }; },
     async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
@@ -31,7 +31,7 @@ async function finishOneRun({ engine, automated = false }) {
   };
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false,
-    researchMemory, ovNativeMemoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 600_000,
+    memorySettings, memoryEngineEnabled: true, nativeMemoryTurnCommitDebounceMs: 600_000,
     openVikingSessions: { configured: true, async readSession() { throw Object.assign(new Error("no session"), { code: "memory_index_not_found" }); } },
   });
   try {

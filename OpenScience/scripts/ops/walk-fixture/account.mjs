@@ -1,7 +1,7 @@
 /**
  * What an account that has been used for a few weeks holds besides the modules' own data, for the walk's fixture: the things remembered
  * about the person and the project (the memory page and its map), three scheduled tasks, and an inbox of forty-odd notices from two
- * sources. Written through the platform's own stores (`researchMemory.upsertRecord`, `autopilotService.create`,
+ * sources. Written through the platform's own stores (`memorySettings.upsertRecord`, `autopilotService.create`,
  * `notificationService.create`); every sentence is invented.
  */
 
@@ -59,7 +59,7 @@ export async function furnishAccount(app, user, ids, { log }) {
 
   // ---- memory
   for (const [scope, kind, key, value, origin, importance, daysAgo] of MEMORIES) {
-    await app.researchMemory.upsertRecord(user.id, {
+    await app.memorySettings.upsertRecord(user.id, {
       scope, ...(scope === "project" ? { scopeId: "default" } : {}), kind, key, value, origin, status: "active", confidence: origin === "explicit" ? 0.95 : 0.7, importance,
       validFrom: new Date(now - daysAgo * DAY).toISOString(),
     }, null, { by: "user", reason: "walk fixture" });
@@ -68,7 +68,7 @@ export async function furnishAccount(app, user, ids, { log }) {
   // twenty-three (the owner's memory page took more than 30 s to answer) — but not so many that the 记忆地图 folds its marks into clusters: the walk presses the first mark and expects a record's drawer.
   for (let index = 0; index < 60; index += 1) {
     const project = index % 3 === 0;
-    await app.researchMemory.upsertRecord(user.id, {
+    await app.memorySettings.upsertRecord(user.id, {
       scope: project ? "project" : "user", ...(project ? { scopeId: "default" } : {}), kind: project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior",
       key: `${project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior"}.walk_${index}`,
       value: project ? `第 ${index} 项研究事实：纳入第 ${index} 个中心的随访数据，主要结局为糖化血红蛋白较基线的变化。` : index % 3 === 1 ? `偏好 ${index}：引用文献时给出 PMID，比较药物时用表格。` : `习惯 ${index}：每次整理文献都先核对原文数字。`,

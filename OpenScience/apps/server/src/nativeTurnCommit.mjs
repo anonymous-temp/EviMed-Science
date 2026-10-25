@@ -1,7 +1,7 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
 import { isPlatformStartedRun } from "./memoryAdmission.mjs";
-import { recordRuntimeWithoutGateway, recordTurnCommit } from "./nativeMemoryMetrics.mjs";
-import { endedBeforeReset } from "./researchMemory.mjs";
+import { recordTurnCommit } from "./nativeMemoryMetrics.mjs";
+import { endedBeforeReset } from "./memorySettings.mjs";
 import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
 
 /**
@@ -36,8 +36,7 @@ import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
  *  - **Bounded.** Commits in flight at once, conversations waiting for their quiet, and the reads are each a key in
  *    `config.mjs` with a counter (`open_science_native_memory_turn_commits_total`).
  *
- * A legacy account is untouched: the engine is asked once, when the turn ends, and nothing is armed. An engine that does
- * not answer is a counted `failed`, never a fake commit and never a reason for the conversation to wait: the messages stay
+ * An engine that does not answer is a counted `failed`, never a fake commit and never a reason for the conversation to wait: the messages stay
  * pending in the engine's session, and the next turn's commit, the plugin's disposal commit or the engine's idle commit
  * archives them. A restart of the control plane forgets what was armed, and the idle commit is the net for that too.
  *
@@ -65,27 +64,23 @@ export class NativeTurnCommit {
   /**
    * @param {{
    *   config: any,
-   *   researchMemory: { configured?: boolean, memoryEngine: (userId: string) => Promise<string>, resetInstant?: (userId: string) => Promise<string | null> },
+   *   memorySettings: { configured?: boolean, resetInstant?: (userId: string) => Promise<string | null> },
    *   sessions: { configured?: boolean, readSession: (userId: string, sessionId: string) => Promise<any> },
    *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
    *   conversations: { runsOf: (project: any, sessionId: string) => Promise<any[]> },
    *   commit: import("./memoryGateway.mjs").MemoryGatewayCommitSession,
    *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (timer: any) => void, wait?: (ms: number) => Promise<void>,
-   *   runtimeWithoutGateway?: ((project: any) => boolean) | null,
    *   report?: (line: string) => void,
    * }} dependencies
-   *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test. `runtimeWithoutGateway` says whether the
-   *   project's live runtime was launched without the memory gateway's address, which only counts (D2 of the 2026-10-23 review:
-   *   an account switched to the engine under an open runtime is learned from by nobody, and nothing said so).
+   *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test.
    */
-  constructor({ config, researchMemory, sessions, admission, conversations, commit, setTimer = null, clearTimer = null, wait = null, runtimeWithoutGateway = null, report = () => {} }) {
+  constructor({ config, memorySettings, sessions, admission, conversations, commit, setTimer = null, clearTimer = null, wait = null, report = () => {} }) {
     this.config = config ?? {};
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.sessions = sessions;
     this.admission = admission;
     this.conversations = conversations;
     this.commit = commit;
-    this.runtimeWithoutGateway = runtimeWithoutGateway;
     this.setTimer = setTimer ?? ((fn, ms) => { const timer = setTimeout(fn, ms); timer.unref?.(); return timer; });
     this.clearTimer = clearTimer ?? ((timer) => clearTimeout(timer));
     this.wait = wait ?? ((ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); }));
@@ -106,16 +101,15 @@ export class NativeTurnCommit {
   }
 
   get applicable() {
-    return this.config.ovNativeMemoryEnabled === true && this.config.nativeMemoryTurnCommitEnabled !== false && this.config.memoryEnabled !== false
-      && Boolean(this.sessions?.configured && this.researchMemory?.configured);
+    return this.config.memoryEngineEnabled === true && this.config.nativeMemoryTurnCommitEnabled !== false && this.config.memoryEnabled !== false
+      && Boolean(this.sessions?.configured && this.memorySettings?.configured);
   }
 
   /** Whether the engine session of a conversation is waiting for its quiet, for readiness and tests. @param {string} userId @param {string} sessionId */
   isArmed(userId, sessionId) { return this.armed.has(`${userId}\u0000${sessionId}`); }
 
   /**
-   * A run reached a terminal state. Arms (or re-arms) the commit of its conversation when it was an attended turn of an
-   * account on the native engine. Never throws and never waits for the commit.
+   * A run reached a terminal state. Arms (or re-arms) the commit of its conversation when it was an attended turn. Never throws and never waits for the commit.
    * @param {any} project @param {any} run
    * @returns {Promise<void>}
    */
@@ -127,12 +121,6 @@ export class NativeTurnCommit {
       if (isInternalProjectOf(this.config, project.userId, project.id)) return;
       // A turn the platform started — an automated run, a scheduled task, a LoopX continuation — is not the person's.
       if (isPlatformStartedRun(run)) { recordTurnCommit("platform_started"); return; }
-      // A legacy account is untouched; the answer is one settings read, cached by the store's row.
-      if (await this.researchMemory.memoryEngine(String(project.userId)) !== "native") return;
-      // The turn that just ended may have had no memory plugin at all: its runtime was launched before the account moved to
-      // the engine. Counted here for the turns that pass through no dispatch (typed in the kernel's own frame); the next
-      // dispatch replaces such a runtime.
-      if (this.runtimeWithoutGateway?.(project) === true) recordRuntimeWithoutGateway("turn_end");
       this.#arm(project, sessionId, String(run?.finishedAt ?? run?.startedAt ?? "") || null);
     } catch (error) {
       this.report(`native turn commit: ${this.#codeOf(error)}`);
@@ -187,8 +175,8 @@ export class NativeTurnCommit {
 
   /** @param {Armed} entry */
   async #endedBeforeReset(entry) {
-    if (typeof this.researchMemory.resetInstant !== "function") return false;
-    const resetAt = await this.researchMemory.resetInstant(entry.userId).catch(() => null);
+    if (typeof this.memorySettings.resetInstant !== "function") return false;
+    const resetAt = await this.memorySettings.resetInstant(entry.userId).catch(() => null);
     return endedBeforeReset({ finishedAt: entry.endedAt }, resetAt);
   }
 
@@ -204,7 +192,7 @@ export class NativeTurnCommit {
     // conversation that read a patient record and the platform's own projects cost the engine nothing; the gateway's commit
     // asks again at the moment it commits.
     const admitted = await this.admission.admit({ user, project: entry.project, engineSessionId: entry.engineSessionId });
-    if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) { recordTurnCommit("not_learning"); return; }
+    if (!admitted.learn && admitted.learnReason !== "automated_run") { recordTurnCommit("not_learning"); return; }
 
     /** @type {{ pending: number, count: number } | null} */
     let previous = null;

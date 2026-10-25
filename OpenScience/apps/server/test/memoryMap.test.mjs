@@ -333,7 +333,7 @@ function routes(overrides = {}) {
   const calls = [];
   const handler = createMemoryMapRoutes({
     config: { memoryEnabled: true, memoryMapEnabled: true, maxJsonBytes: 100_000 },
-    researchMemory: { configured: true, getRecord: async (_user, id) => { if (id === "mine") return record({ id }); if (id === "secret") return record({ id, sensitive: true }); throw new HttpError(404, "memory_not_found", "Memory not found."); } },
+    memorySettings: { configured: true, getRecord: async (_user, id) => { if (id === "mine") return record({ id }); if (id === "secret") return record({ id, sensitive: true }); throw new HttpError(404, "memory_not_found", "Memory not found."); } },
     sources: [source("records", recordsContribution([record()], {}, { now: NOW, timeZone: "UTC" }))],
     store: {
       requireProject: async (_user, id) => { calls.push(["project", id]); if (id === "theirs") throw new HttpError(404, "project_not_found", "Project not found."); return { id }; },

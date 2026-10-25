@@ -49,12 +49,12 @@ test("through the server: new bytes for a held file label what read the old docu
       const id = `rv_${hex(suffix)}`;
       await documents.put(user.id, "result-version", id, { ...originalResult.payload, versionId: id, inputs: [input] }, { expectedRevision: 0, projectId: project.id });
     }
-    const record = (key, links) => app.researchMemory.upsertRecord(user.id, { scope: "project", scopeId: project.id, kind: "project_fact", key,
+    const record = (key, links) => app.memorySettings.upsertRecord(user.id, { scope: "project", scopeId: project.id, kind: "project_fact", key,
       value: `${key} finding`, summary: key, origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false }, null, { sourceLinks: links });
     const resting = await record("project.trial", [{ type: "knowledge_source", id: first.source.id }]);
     const independent = await record("project.other", [{ type: "knowledge_source", id: `src_${hex("d", 32)}` }]);
     const impacts = async () => (await documents.list(user.id, "result-impact", { projectId: project.id })).items;
-    const stateOf = async record_ => (await app.researchMemory.sourceLinks(user.id, record_.id))[0].state;
+    const stateOf = async record_ => (await app.memorySettings.sourceLinks(user.id, record_.id))[0].state;
 
     // The same bytes again, and a different file, change nothing a result or a memory rests on.
     await app.sourceService.register(user.id, manifest({ path: "knowledge-base/trial-copy.txt" }));
@@ -98,7 +98,7 @@ test("through the server: new bytes for a held file label what read the old docu
     assert.deepEqual(found[0].payload.affected.memories.items, []);
     assert.equal(await stateOf(resting), "current");
     assert.equal(await stateOf(independent), "current");
-    assert.equal((await app.researchMemory.getRecord(user.id, resting.id)).version, resting.version, "labelling moved no version of the memory");
+    assert.equal((await app.memorySettings.getRecord(user.id, resting.id)).version, resting.version, "labelling moved no version of the memory");
 
     const notices = (await app.notificationService.list(user.id, { projectId: project.id })).items;
     assert.equal(notices.length, 1);

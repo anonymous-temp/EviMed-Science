@@ -62,7 +62,7 @@ test("a project's overview is its card, read off its own active memories, for th
   const { user, headers } = me;
   const project = await makeProject(me, "af-2026", "房颤抗凝");
   const other = await makeProject(me, "diabetes-2026", "糖尿病");
-  const write = (projectId, key, value, extra) => app.researchMemory.upsertRecord(user.id, slot(projectId, key, value, extra), proof);
+  const write = (projectId, key, value, extra) => app.memorySettings.upsertRecord(user.id, slot(projectId, key, value, extra), proof);
   const population = await write(project.id, "project.population", "75 岁以上非瓣膜性房颤患者");
   await write(project.id, "project.field", "心血管");
   await write(project.id, "project.outcome", "大出血", { kind: "decision" });
@@ -80,7 +80,7 @@ test("a project's overview is its card, read off its own active memories, for th
   assert.deepEqual([data.capabilities, data.works], [[], []]);
 
   // The project's own switch, read from the same settings the header changes.
-  await app.researchMemory.updateSettings(user.id, { pausedProjects: [project.id] });
+  await app.memorySettings.updateSettings(user.id, { pausedProjects: [project.id] });
   const paused = (await (await fetch(`${base}/api/memory/projects/${project.id}/overview`, { headers })).json()).data;
   assert.equal(paused.paused, true);
   assert.equal((await (await fetch(`${base}/api/memory/projects/${other.id}/overview`, { headers })).json()).data.paused, false);
@@ -91,7 +91,7 @@ test("another account's project is a 404 whatever its memories hold, and so is a
   const owner = await account();
   const stranger = await account();
   const project = await makeProject(owner, "private-study", "私有研究");
-  const record = await app.researchMemory.upsertRecord(owner.user.id, slot(project.id, "project.population", "房颤患者"), proof, {
+  const record = await app.memorySettings.upsertRecord(owner.user.id, slot(project.id, "project.population", "房颤患者"), proof, {
     sourceLinks: [{ type: "knowledge_source", id: `src_${"a".repeat(32)}`, version: null }, { type: "doi", id: "10.1000/xyz", version: null }],
   });
 

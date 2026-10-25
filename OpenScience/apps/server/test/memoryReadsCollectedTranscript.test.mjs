@@ -51,7 +51,7 @@ const until = async (/** @type {() => boolean} */ condition, ms = 10_000) => {
  */
 async function runWith(readConversation, { liveMessages = null } = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-memory-transcript-"));
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, researchMemory: memoryStore });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, memorySettings: memoryStore });
   try {
     const address = await app.listen(0, "127.0.0.1");
     const base = `http://127.0.0.1:${address.port}`;

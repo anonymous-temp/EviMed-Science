@@ -497,7 +497,7 @@ async function composedApp(t, overrides = {}, { beforeListen = null } = {}) {
     // something else gets a deployment without a memory store — the state local
     // development runs in — and the two tests that are about memory inject a
     // store at its own interface.
-    researchMemory: { configured: false, async status() { return { configured: false, connected: false, code: "memory_unconfigured", structured: false }; } },
+    memorySettings: { configured: false, async status() { return { configured: false, connected: false, code: "memory_unconfigured", structured: false }; } },
     ...overrides,
   });
 
@@ -667,7 +667,7 @@ test("the reranker and the index strictness reach both recall paths", async (t) 
     "the capsule index was composed without the research recall's relevance floor");
 
   // And the store both of them hydrate from is the one the routes write to.
-  assert.equal(app.memorySubstrate.store, app.researchMemory);
+  assert.equal(app.memorySubstrate.store, app.memorySettings);
 });
 
 test("startup arms every recurring sweep, and each timer really drives its own sweep", async (t) => {
@@ -1531,7 +1531,7 @@ test("confirming a pending memory over HTTP writes the feedback event the loop n
     createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
   });
   const fixture = await composedApp(t, {
-    researchMemory: memory,
+    memorySettings: memory,
     // The distillation half of this test needs the loop that claims what the
     // ledger queues. Off by default, and the ledger is honest about it: with no
     // claimer composed it enqueues nothing and answers a null job id, so this
@@ -1723,7 +1723,7 @@ test("the memory extractor the composition root built reports a rewritten memory
   };
   const memory = memoryRecordsDouble([language]);
   const fixture = await composedApp(t, {
-    researchMemory: memory,
+    memorySettings: memory,
     deepseekProviderEnabled: true, deepseekApiKey: "composition-extraction-key",
     // The extraction model, answering with the one candidate this test is
     // about: the researcher saying the opposite of what they confirmed before.

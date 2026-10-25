@@ -13,10 +13,10 @@ import { edgeIdOf, isDismissable } from "./memoryMapEdges.mjs";
  *   owns it, so the map cannot disagree with the memory page it opens onto. The one thing that ever writes near it is the topics'
  *   regrouping, which is a separate request (`POST /api/memory/topics/refresh`) with a daily bound of its own.
  * - **Sources, not queries.** The document is assembled from independent sources (`memoryMapSources/*`) that each return what
- *   they have: the memories in PostgreSQL, the knowledge-base documents, the learned methods, the ledgers, the topics. A source
+ *   they have: the memory files, the knowledge-base documents, the learned methods, the ledgers, the topics. A source
  *   that fails costs its part of the map and is named in `missing`; the others are drawn as they would have been (principle 19).
- *   Two sources are seams for packages still being built — the native memory engine (`nativeMemory.mjs`) and the knowledge graph
- *   an OpenViking compile writes (`knowledgeGraph.mjs`) — and contribute nothing until a reader is wired into them.
+ *   The memory engine's files (`nativeMemory.mjs`) and the knowledge graph an OpenViking compile writes (`knowledgeGraph.mjs`) are
+ *   read through the engine, and contribute nothing in a deployment without one.
  * - **A mark is `<type>:<id>`** and carries what a click opens (`open`), so any view's mark opens through one path: the memory
  *   drawer for `record`, the method drawer for `method`, an address of its own for a `page`. A document is not opened in a drawer.
  * - **Never drawn:** a run summary, a sensitive memory, a forgotten one. Who wrote a memory and how sure it is are the platform's
@@ -28,7 +28,7 @@ import { edgeIdOf, isDismissable } from "./memoryMapEdges.mjs";
  * - **The overview is drawn from this document too** (`/app/memory/overview`, one read of `summary,facets,nodes,buckets,events`): the
  *   facets hold the inventories a card needs whole — `aboutYou` (the memories about the person by kind, counted before anything is
  *   folded), `documentTypes` and each project's `documents` (the knowledge base's own count, not the page of marks), and a day's
- *   `document` count in `buckets`. The notes of the account's own capsule are marks of the map (`capsuleNotes.mjs`), for both engines.
+ *   `document` count in `buckets`. The notes of the account's own capsule are marks of the map too (`capsuleNotes.mjs`).
  * - **Range is a server filter and so is focus; topic, kind, dimension and the search are the page's.** A range keeps the marks
  *   that began inside it and whatever they are tied to; the calendar (`buckets`) is always the last year, whatever the range.
  *
@@ -266,7 +266,7 @@ export function egoOf(nodes, edges, focus, depth, limit) {
  *
  * @param {{ sources: import("./memoryMapSources/common.mjs").MapSource[] }} dependencies
  * @param {{ user: { id: string }, projects: { id: string, name: string, kind?: string }[], projectId?: string | null,
- *   range?: unknown, timeZone?: unknown, now?: Date, engine?: "postgres" | "native", focus?: unknown, depth?: unknown, include?: unknown,
+ *   range?: unknown, timeZone?: unknown, now?: Date, focus?: unknown, depth?: unknown, include?: unknown,
  *   dismissedEdges?: ReadonlySet<string> | null }} request
  *   `dismissedEdges`: the ids of the lines the account called wrong (`memoryMapEdges.mjs`), left out of the map. `projects` are the account's own, never the platform's internal ones; `projectId`, when given, has already been checked to be one of them
  */
@@ -283,7 +283,7 @@ export async function buildMemoryMap({ sources }, request) {
 
   /** @type {import("./memoryMapSources/common.mjs").MapSourceRequest} */
   const asked = {
-    user: request.user, projects, projectId, range, timeZone, now, engine: request.engine ?? "postgres", focus: focusText || null, memo: requestMemo(),
+    user: request.user, projects, projectId, range, timeZone, now, focus: focusText || null, memo: requestMemo(),
   };
 
   /** @type {string[]} */
@@ -479,8 +479,6 @@ export async function buildMemoryMap({ sources }, request) {
   /** @type {Record<string, any>} */
   const document = {
     version: 1,
-    // Which kind of account this is, for the page that offers 「记住这一条」 only where the memory can take words typed on it.
-    engine: asked.engine,
     scope: { projectId, range, timeZone, focus, depth: focus ? depth : null },
     status: { topics: topicsStatus },
     summary, facets, nodes, edges,
@@ -500,12 +498,10 @@ export async function buildMemoryMap({ sources }, request) {
  * `/api/memory/records/:id/links` would otherwise be read as a record id with a slash in it.
  *
  * @param {{
- *   config: any, researchMemory: any, sources: import("./memoryMapSources/common.mjs").MapSource[],
+ *   config: any, memorySettings: any, sources: import("./memoryMapSources/common.mjs").MapSource[],
  *   topics?: import("./memoryTopics.mjs").MemoryTopics | null, store: any, context: (req: any, res: any) => Promise<any>,
- *   memoryEngine?: (userId: string) => Promise<"postgres" | "native"> | "postgres" | "native",
  *   projectOf?: (user: any, projectId: string) => Promise<any>,
  *   isInternalProject?: (userId: string, projectId: string) => boolean,
- *   recordLinks?: ((user: any, record: any) => Promise<any>) | null,
  *   edgeCorrections?: import("./memoryMapEdges.mjs").MapEdgeCorrections | null,
  *   accountRecords?: ((userId: string) => Promise<any[]>) | null,
  *   nativeLinks?: ((user: any, recordId: string) => Promise<any>) | null,
@@ -514,11 +510,11 @@ export async function buildMemoryMap({ sources }, request) {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryMapRoutes({
-  config, researchMemory, sources, topics = null, store, context, memoryEngine = () => "postgres", isInternalProject = () => false,
-  recordLinks = null, nativeLinks = null, edgeCorrections = null, accountRecords = null, decodeRouteComponent, audit = null,
+  config, memorySettings, sources, topics = null, store, context, isInternalProject = () => false,
+  nativeLinks = null, edgeCorrections = null, accountRecords = null, decodeRouteComponent, audit = null,
 }) {
-  /** The account's memories as the topics are made from them, from whichever engine holds them. */
-  const topicRecords = (/** @type {string} */ userId) => (accountRecords ? accountRecords(userId) : researchMemory.mapRecords(userId, { projectId: null, limit: 2000 }));
+  /** The account's memories as the topics are made from them: the engine's files, none without an engine. */
+  const topicRecords = (/** @type {string} */ userId) => (accountRecords ? accountRecords(userId) : Promise.resolve([]));
   const enabled = config.memoryEnabled !== false && config.memoryMapEnabled !== false;
   const TOPICS = /^\/api\/memory\/topics(?:\/([^/]+))?$/u;
   const LINKS = /^\/api\/memory\/records\/([^/]+)\/links$/u;
@@ -532,7 +528,7 @@ export function createMemoryMapRoutes({
     const edge = EDGE.exec(pathname);
     if (!isMap && !links && !topic && !edge) return false;
     if (!enabled) throw new HttpError(503, "memory_map_disabled", "The memory map is disabled in this deployment.");
-    if (!researchMemory?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
+    if (!memorySettings?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
 
     if (isMap) {
       if (req.method !== "GET") throw new HttpError(405, "method_not_allowed", "The memory map is read-only.");
@@ -547,7 +543,7 @@ export function createMemoryMapRoutes({
       const dismissedEdges = await edgeCorrections?.dismissed(ctx.user.id).catch(() => null) ?? null;
       const map = await buildMemoryMap({ sources }, {
         user: ctx.user, projects: listed, projectId: project?.id ?? null, dismissedEdges,
-        range: url.searchParams.get("range"), timeZone: url.searchParams.get("timeZone"), engine: await memoryEngine(ctx.user.id),
+        range: url.searchParams.get("range"), timeZone: url.searchParams.get("timeZone"),
         focus: url.searchParams.get("focus"), depth: url.searchParams.get("depth"), include: url.searchParams.get("include"),
       });
       sendJson(res, 200, { data: map });
@@ -572,15 +568,9 @@ export function createMemoryMapRoutes({
       if (req.method !== "GET") throw new HttpError(405, "method_not_allowed", "A memory's links are read-only.");
       const ctx = await context(req, res);
       const recordId = decodeRouteComponent(links[1], "structured memory id");
-      // An account on the native engine: the memory is a file of the engine's, and its links are what the overlay recorded.
-      if (nativeLinks && await memoryEngine(ctx.user.id) === "native") {
-        sendJson(res, 200, { data: await nativeLinks(ctx.user, recordId) });
-        return true;
-      }
-      // The record first: one of another account is a 404.
-      const record = await researchMemory.getRecord(ctx.user.id, recordId);
-      if (record.sensitive || record.kind === "run_summary") throw new HttpError(404, "memory_not_found", "Memory not found.");
-      sendJson(res, 200, { data: recordLinks ? await recordLinks(ctx.user, record) : { rests: [], replaced: [], replacedBy: null, conflicts: [], usedIn: [] } });
+      // The memory is a file of the engine's, and its links are what the overlay recorded.
+      if (!nativeLinks) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+      sendJson(res, 200, { data: await nativeLinks(ctx.user, recordId) });
       return true;
     }
 

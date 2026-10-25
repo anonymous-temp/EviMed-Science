@@ -13,7 +13,7 @@ const hourAgo = () => new Date(Date.now() - 3_600_000).toISOString();
 const hourAhead = () => new Date(Date.now() + 3_600_000).toISOString();
 
 test("an extraction accepted before the reset removes what it wrote, unless the file has been written since", options, async (t) => {
-  const { userId, worker, overlay, researchMemory, sessions, commitConversation, seed, root } = await fixture(t, {
+  const { userId, worker, overlay, memorySettings, sessions, commitConversation, seed, root } = await fixture(t, {
     extract: ({ user, session }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/${session.slice(-4)}.md`, memory_type: "preferences", after: `Said in ${session.slice(-4)}.` }] }),
   });
   const said = [{ role: "user", text: "Remember this.", at: hourAgo() }];
@@ -22,7 +22,7 @@ test("an extraction accepted before the reset removes what it wrote, unless the 
   const plain = await commitConversation("cccc", [{ role: "user", text: "No time on this one." }]);
   const later = await commitConversation("dddd", [{ role: "user", text: "After the reset.", at: hourAhead() }]);
   // The reset happens while these four extractions are in flight; the one for bbbb is then written over by a later conversation.
-  await researchMemory.noteReset(userId);
+  await memorySettings.noteReset(userId);
   seed("preferences/bbbb.md", "Said again, later, by the person.", { type: "preferences" });
   assert.equal(await worker.processCommits({ userId }), 4);
 
@@ -60,10 +60,10 @@ test("the reset takes its instant, then the files, the engine's sessions and the
   stub.sessions.set(`${engineUser}/${session}`, { id: session, user: engineUser, archives: 0, commitCount: 0, messages: [{ role: "user", parts: [{ type: "text", text: "Old." }] }] });
   // A live session is a directory in the engine, listed under the account's `sessions/`.
   stub.files.set(`viking://user/${engineUser}/sessions/${session}/messages.jsonl`, "{}");
-  assert.equal(await server.researchMemory.resetInstant(user.id), null);
+  assert.equal(await server.memorySettings.resetInstant(user.id), null);
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   assert.equal(reset.status, 200, await reset.clone().text());
-  const instant = await server.researchMemory.resetInstant(user.id);
+  const instant = await server.memorySettings.resetInstant(user.id);
   assert.ok(instant, "the instant is on the account");
   assert.equal(stub.sessions.has(`${engineUser}/${session}`), false, "the engine's sessions are deleted");
   assert.equal(await sessions.read(user.id, `viking://user/${engineUser}/memories/preferences/tone.md`), null);

@@ -1,6 +1,6 @@
 /**
  * What rests on a source that changed, other than the result versions themselves (plan 2026-10-02 §11.3 N15): the
- * memories that name it and the learned methods linked to a result that rests on it, each found by a recorded link and
+ * memory files that name it and the learned methods linked to a result that rests on it, each found by a recorded link and
  * labelled with the source's new state.
  *
  * The result side — which versions name the source, which calculations among their value bindings do, the impact rows,
@@ -10,19 +10,20 @@
  *
  * Hidden knowledge:
  *
- * - **A label, never a verdict or a gate.** A memory's link and a method's record gain the state the check found and
- *   why. No memory version moves, no method revision, status or counter moves, nothing is hidden or failed, and recall
- *   and the lifecycle go on as before; what reads the label is recall (which says the memory rests on a source that
- *   changed) and the impact panel. A correction is a notice that the source changed, so the wording of everything built
- *   from here says what changed and what depends on it, never that a conclusion is wrong.
- * - **Recorded links only.** A memory is found by its `record_sources` row (`dependentsOfSource`), a method by the
- *   immutable result version its record names (`methodsLinkedTo`). Neither is ever found by what it says.
+ * - **A label, never a verdict or a gate.** A memory file gains a label line and a method's record gains the state the check
+ *   found and why. Nothing is hidden or failed, no method revision, status or counter moves, and recall and the lifecycle go on
+ *   as before; what reads the label is the memory page and the impact panel. A correction is a notice that the source changed,
+ *   so the wording of everything built from here says what changed and what depends on it, never that a conclusion is wrong.
+ * - **Recorded links only.** A memory file is found by the source its text names, as the overlay recorded it
+ *   (`NativeMemoryStore.dependentsOfSource`), a method by the immutable result version its record names (`methodsLinkedTo`).
+ *   Neither is ever found by what it says.
  * - **A lookup that could not be made is unknown.** It is returned as `{ unknown: reason }`, which the record keeps as
  *   such; a failure here never fails the check that called it, and a failed check never lowers what an earlier one found
- *   (`linkStatesLeftFor`).
+ *   (`NativeMemoryWorker.labelSource`).
  * - **The one record of source changes is read, not re-detected.** `labelSince` takes what `sourceChanges.mjs` recorded
- *   since a position of its feed — whoever detected it: Crossref, the frontier, the evidence zone — and labels the memories
- *   that name those works, with no lookup of its own.
+ *   since a position of its feed — whoever detected it: Crossref, the frontier, the evidence zone — and labels the memory files
+ *   that name those works, with no lookup of its own. (An evidence card or a frontier item a memory rested on was a link the
+ *   legacy records kept and a memory file cannot: the hourly sweep over those was deleted with that engine, 2026-10-25.)
  * - **What is shown follows what the reader may see.** Every memory dependent is labelled (the label is about the
  *   source), but only the ones in this project's scope or the account's own are listed in a project's panel, and only
  *   those in use: a replaced or archived memory is history that still names its source.
@@ -30,82 +31,49 @@
  * @module knowledgeChange
  */
 import { createHash } from "node:crypto";
-import { doiOf, doiOfSourceIdentifier, linkReasonOf, linkStateOf, linkStatesLeftFor, sourceUpdateStatusOfFact } from "@evimed/domain";
+import { doiOf, doiOfSourceIdentifier, linkReasonOf, linkStateOf, sourceUpdateStatusOfFact } from "@evimed/domain";
 import { methodLabel } from "./learningService.mjs";
-import { cardFinding, itemFinding } from "./evidenceZoneSubscription.mjs";
-import { sourceLinkOf } from "./researchMemory.mjs";
 
 /** How many result versions one source change looks up methods for; a link is a handful, and a count is never a ledger. */
 const MAX_VERSIONS = 40;
 
 /**
- * The memories a project's panel lists, as a predicate over a dependent row: in use (a replaced or archived memory is history that
- * still names its source), and in this project's scope or the account's own.
+ * The memories a project's panel lists, as a predicate over a dependent row: in this project's scope or the account's own.
  * @param {string} projectId @returns {(row: any) => boolean}
  */
-const listedIn = (projectId) => (row) => ["active", "pending"].includes(row.status)
-  && (row.scope === "user" || row.scope === "organization" || (row.scope === "project" && row.scopeId === projectId));
+const listedIn = (projectId) => (row) => row.scope === "user" || row.scope === "organization" || (row.scope === "project" && row.scopeId === projectId);
+
 
 /** @param {any} error @returns {string} */
 const codeOf = (error) => (typeof error?.code === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(error.code) ? error.code : "knowledge_change_failed");
 
 /**
- * The memory source link a source identity can be: a published work by its DOI, a knowledge-base document by its `src_`
- * id. Anything else (a preserved file's path) names nothing a memory records, so it is no link.
- * @param {{ id?: string, doi?: string, cardId?: string, itemId?: string }} ref @returns {{ type: string, id: string } | null}
+ * The source a memory file can name for a source identity: a published work by its DOI, a knowledge-base document by its `src_`
+ * id. Anything else (a preserved file's path, an evidence card) names nothing a memory file records, so it is no link.
+ * @param {{ id?: string, doi?: string }} ref @returns {{ type: string, id: string } | null}
  */
 export function memoryLinkOf(ref) {
-  // An evidence card or a frontier item names itself (F19): the identifiers are the zone's and the feed's own, never a DOI.
-  const named = ref?.cardId ? sourceLinkOf({ type: "evidence_card", id: String(ref.cardId) })
-    : ref?.itemId ? sourceLinkOf({ type: "frontier_item", id: String(ref.itemId) }) : null;
-  if (named) return { type: named.type, id: named.id };
   const doi = doiOf(ref?.doi ?? ref?.id);
-  const link = doi ? sourceLinkOf({ type: "doi", id: doi }) : sourceLinkOf({ type: "knowledge_source", id: String(ref?.id ?? "") });
-  return link ? { type: link.type, id: link.id } : null;
+  if (doi) return { type: "doi", id: doi };
+  const id = String(ref?.id ?? "");
+  return /^src_[a-f0-9]{32}$/.test(id) ? { type: "knowledge_source", id } : null;
 }
 
 export class KnowledgeChangeService {
   /**
-   * `memory` is the research-memory store (`dependentsOfSource`, `markSourceLinks`), `methods` the learning service
-   * (`methodsLinkedTo`, `recordSourceChange`). Either absent, its class is reported unknown, never none.
+   * `native` is the memory engine's side (`labelSource` writes the label line into the files that name a source,
+   * `dependentsOfSource` lists them), `methods` the learning service (`methodsLinkedTo`, `recordSourceChange`). Either absent, its
+   * class is reported unknown, never none.
    * `sourceChanges` is the one record of what was published about a work after it was published (`sourceChanges.mjs`).
-   * `evidence` reads the state of an evidence card or a frontier item by id (`createEvidenceLinkStates`); absent, the two kinds are not looked at.
    * `pages` is the knowledge pages' service (`knowledgePageService.mjs`): the pages that quote a source are found by the
    * `dependsOn` their records hold and labelled stale, and the project is queued for a recompile; absent, the class is unknown.
-   * @param {{ memory?: any, native?: { labelSource: (userId: string, source: { type: string, id: string }, state: string) => Promise<number> } | null, methods?: any, pages?: any, sourceChanges?: any, evidence?: { cardStates: (ids: readonly string[]) => Promise<Map<string, any>>, itemStates: (ids: readonly string[]) => Promise<Map<string, any>> } | null,
-   *   report?: (code: string) => void, now?: () => Date }} dependencies
+   * @param {{ native?: { labelSource: (userId: string, source: { type: string, id: string }, state: string) => Promise<number>,
+   *     dependentsOfSource: (userId: string, source: { type: string, id: string }) => Promise<any[]> } | null,
+   *   methods?: any, pages?: any, sourceChanges?: any, report?: (code: string) => void, now?: () => Date }} dependencies
    */
-  constructor({ memory = null, native = null, methods = null, pages = null, sourceChanges = null, evidence = null, report = () => {}, now = () => new Date() }) {
+  constructor({ native = null, methods = null, pages = null, sourceChanges = null, report = () => {}, now = () => new Date() }) {
     this.native = native;
-    this.memory = memory; this.methods = methods; this.wiki = pages; this.sourceChanges = sourceChanges; this.evidence = evidence; this.report = report; this.now = now;
-  }
-
-  /**
-   * Label the memories that name an evidence card or a frontier item the zone or the feed has since taken back, replaced or marked
-   * as resting on a changed source: the same label a retracted DOI gives (`markSourceLinks`: `retracted` or `changed`, with a short
-   * reason such as `card_withdrawn`), by recorded link only, and never moving a memory's version or withholding it. One bounded pass
-   * over the links not yet looked at; `ownerId` narrows it to one account. A lookup that cannot be made is `unknown`, never "clean".
-   * @param {{ ownerId?: string | null, limit?: number }} [options]
-   * @returns {Promise<{ checked?: number, labelled?: number, unknown?: string }>}
-   */
-  async sweepEvidenceLinks({ ownerId = null, limit = 500 } = {}) {
-    if (!this.evidence || !this.memory?.linkedEvidenceSources) return { unknown: "unavailable" };
-    try {
-      const links = await this.memory.linkedEvidenceSources({ userId: ownerId, limit });
-      const [cards, items] = await Promise.all([
-        this.evidence.cardStates([...new Set(links.filter((/** @type {any} */ link) => link.type === "evidence_card").map((/** @type {any} */ link) => link.id))]),
-        this.evidence.itemStates([...new Set(links.filter((/** @type {any} */ link) => link.type === "frontier_item").map((/** @type {any} */ link) => link.id))]),
-      ]);
-      let labelled = 0;
-      for (const link of links) {
-        const finding = link.type === "evidence_card" ? cardFinding(cards.get(link.id)) : itemFinding(items.get(link.id));
-        if (!finding || link.state === finding.state) continue;
-        const from = linkStatesLeftFor(finding.state);
-        if (!from.includes(link.state)) continue;
-        labelled += (await this.memory.markSourceLinks(link.userId, { type: link.type, id: link.id }, { state: finding.state, reason: finding.reason, onlyFrom: from })).recordIds.length;
-      }
-      return { checked: links.length, labelled };
-    } catch (error) { this.report(codeOf(error)); return { unknown: "lookup_failed" }; }
+    this.methods = methods; this.wiki = pages; this.sourceChanges = sourceChanges; this.report = report; this.now = now;
   }
 
   /**
@@ -136,7 +104,7 @@ export class KnowledgeChangeService {
   }
 
   /**
-   * Label the memories that rest on a source with what a check found, and list the ones this project may be shown.
+   * Label the memory files that name a source with what a check found, and list the ones this project may be shown.
    * @param {string} ownerId @param {string} projectId @param {{ id: string, doi?: string }} ref
    * @param {{ state: string, reason?: string, updates?: any[] }} checked the source update status (`statusProjection`)
    * @returns {Promise<{ items?: any[], total?: number, unknown?: string }>}
@@ -144,23 +112,12 @@ export class KnowledgeChangeService {
   async memories(ownerId, projectId, ref, checked) {
     const link = memoryLinkOf(ref);
     if (!link) return { items: [], total: 0 };
-    if (!this.memory || this.memory.configured === false) return { unknown: "unavailable" };
-    // An account whose memory is the native engine's: the memory files that name the source gain (or lose) the label line.
-    // Besides, never instead — the PostgreSQL records a switched account keeps for its fallback window are labelled as ever.
-    if (this.native) await this.native.labelSource(ownerId, link, linkStateOf(checked)).catch((/** @type {unknown} */ error) => this.report(codeOf(error)));
+    if (!this.native) return { unknown: "unavailable" };
     try {
-      const dependents = await this.memory.dependentsOfSource(ownerId, link);
-      if (!dependents.length) return { items: [], total: 0 };
-      const next = linkStateOf(checked);
-      const from = linkStatesLeftFor(next);
-      /** @type {Set<string>} */
-      let moved = new Set();
-      if (dependents.some((/** @type {any} */ row) => row.state !== next && from.includes(row.state))) {
-        moved = new Set((await this.memory.markSourceLinks(ownerId, link, { state: next, reason: linkReasonOf(checked), onlyFrom: from })).recordIds);
-      }
-      const shown = dependents.filter(listedIn(projectId));
-      return { total: shown.length, items: shown.map((/** @type {any} */ row) => ({ recordId: row.recordId, scope: row.scope, kind: row.kind,
-        state: moved.has(row.recordId) ? next : row.state })) };
+      // The memory files that name the source gain (or lose) the label line, and the ones this project may be shown are listed.
+      await this.native.labelSource(ownerId, link, linkStateOf(checked));
+      const shown = (await this.native.dependentsOfSource(ownerId, link)).filter(listedIn(projectId));
+      return { total: shown.length, items: shown.map((/** @type {any} */ row) => ({ recordId: row.recordId, scope: row.scope, kind: row.kind, state: row.state })) };
     } catch (error) {
       this.report(codeOf(error));
       return { unknown: "lookup_failed" };
@@ -262,9 +219,9 @@ export class KnowledgeChangeService {
   async #readMemories(ownerId, projectId, ref) {
     const link = memoryLinkOf(ref);
     if (!link) return { items: [] };
-    if (!this.memory || this.memory.configured === false) return { unknown: "unavailable" };
+    if (!this.native) return { unknown: "unavailable" };
     try {
-      const rows = (await this.memory.dependentsOfSource(ownerId, link)).filter(listedIn(projectId));
+      const rows = (await this.native.dependentsOfSource(ownerId, link)).filter(listedIn(projectId));
       return { items: rows.map((/** @type {any} */ row) => ({ recordId: row.recordId, scope: row.scope, kind: row.kind, state: row.state })) };
     } catch (error) { this.report(codeOf(error)); return { unknown: "lookup_failed" }; }
   }

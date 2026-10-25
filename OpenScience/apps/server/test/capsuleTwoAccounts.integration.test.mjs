@@ -22,7 +22,7 @@ import { capsuleSearchText } from "../src/memoryGateway.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { ResidentProfiles } from "../src/residentProfile.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -45,7 +45,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-two-accounts-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$3,'development'),($2,$4,'development')", [A, B, `Ada ${tag}`, `Bo ${tag}`]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$3,'Work',1048576),($2,$3,'Work',1048576)", [A, B, PROJECT]);
   documents = new ProductDocuments(database);

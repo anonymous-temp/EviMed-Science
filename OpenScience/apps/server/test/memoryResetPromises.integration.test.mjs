@@ -18,7 +18,7 @@ import { resetLearnedMemory } from "../src/memoryReset.mjs";
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { ResearchMemoryStore, endedBeforeReset } from "../src/researchMemory.mjs";
+import { MemorySettingsStore, endedBeforeReset } from "../src/memorySettings.mjs";
 import { eraseRetiredMemos, retiredMemosOwner } from "../src/retiredMemos.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 
@@ -43,7 +43,7 @@ before(async () => {
   await migrateProductStore(database);
   await migrateNotifications(database);
   await migrateUsageLedger(database);
-  store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  store = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
   jobs = new ProductJobs(database);
 });
 after(async () => {

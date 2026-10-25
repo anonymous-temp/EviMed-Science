@@ -246,9 +246,9 @@ test("personalization is off without a memory store or a model, and unavailable 
   const database = { query: async () => ({ rows: [] }) };
   const config = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key" };
   assert.equal(new FrontierProfiles({ database, config }).state(), "off", "no memory store");
-  assert.equal(new FrontierProfiles({ database, config: {}, researchMemory: { configured: true } }).state(), "off", "no model to read it with");
+  assert.equal(new FrontierProfiles({ database, config: {}, memorySettings: { configured: true } }).state(), "off", "no model to read it with");
   let now = new Date("2026-09-22T04:00:00Z");
-  const profiles = new FrontierProfiles({ database, config, researchMemory: { configured: true }, now: () => now });
+  const profiles = new FrontierProfiles({ database, config, memorySettings: { configured: true }, now: () => now });
   assert.equal(profiles.state(), "available");
   profiles.memoryFailedAt = now.getTime();
   assert.equal(profiles.state(), "unavailable");
@@ -271,7 +271,7 @@ function recordingDatabase({ fail = false } = {}) {
 
 test("a star, an unstar or a new question marks the profile due; an item opened only while there is nothing yet; a hide drops only the ranking", async () => {
   const database = recordingDatabase();
-  const profiles = new FrontierProfiles({ database, researchMemory: { configured: true } });
+  const profiles = new FrontierProfiles({ database, memorySettings: { configured: true } });
   await profiles.noteItemAction("u1", "star");
   await profiles.noteItemAction("u1", "unstar");
   await profiles.noteItemAction("u1", "read");
@@ -296,7 +296,7 @@ test("a star, an unstar or a new question marks the profile due; an item opened 
 
 test("a mark that cannot be written fails nothing: it is counted, and the profile waits for its day", async () => {
   const database = recordingDatabase({ fail: true });
-  const profiles = new FrontierProfiles({ database, researchMemory: { configured: true } });
+  const profiles = new FrontierProfiles({ database, memorySettings: { configured: true } });
   await profiles.noteItemAction("u1", "star");
   await profiles.noteItemAction("u1", "hide");
   profiles.noteConversation("u1", { id: "run_1", question: "问题" });

@@ -24,7 +24,7 @@ const memoryDouble = ({ resetAt = RESET, withReset = true } = {}) => ({
   ...(withReset ? { resetInstant: async () => resetAt } : {}),
 });
 
-const admit = (runs, when, researchMemory = memoryDouble()) => createMemoryAdmission({ config: { memoryEnabled: true }, researchMemory,
+const admit = (runs, when, memorySettings = memoryDouble()) => createMemoryAdmission({ config: { memoryEnabled: true }, memorySettings,
   conversations: { running: async () => runs.filter((run) => run.status === "running"), runsOf: async () => runs } })
   .admit({ user: { id: USER }, project, engineSessionId: `dsh-${SID}`, at: when });
 
@@ -55,13 +55,13 @@ test("an account that never reset, a store that cannot say, and one that fails a
   assert.equal((await admit(ledger, at("2026-10-20T09:00:00.000Z"), failing)).learn, true, "a reset that cannot be read stops no conversation from being learned from");
 });
 
-function committer({ resetAt = RESET, researchMemory = null } = {}) {
+function committer({ resetAt = RESET, memorySettings = null } = {}) {
   resetNativeMemoryMetrics();
   /** @type {Set<{ fn: () => void }>} */ const timers = new Set();
   const commits = [];
   const instance = new NativeTurnCommit({
-    config: { ovNativeMemoryEnabled: true, memoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 8_000, nativeMemoryTurnCommitSettleMs: 0, nativeMemoryTurnCommitAttempts: 2 },
-    researchMemory: researchMemory ?? memoryDouble({ resetAt }), sessions: { configured: true, readSession: async () => ({ result: { pending_tokens: 100, message_count: 2 } }) },
+    config: { memoryEngineEnabled: true, memoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 8_000, nativeMemoryTurnCommitSettleMs: 0, nativeMemoryTurnCommitAttempts: 2 },
+    memorySettings: memorySettings ?? memoryDouble({ resetAt }), sessions: { configured: true, readSession: async () => ({ result: { pending_tokens: 100, message_count: 2 } }) },
     admission: { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: SID }) },
     conversations: { runsOf: async () => [] },
     commit: async (request) => { commits.push(request); return { commit: "accepted" }; },
@@ -87,7 +87,7 @@ test("a commit armed by a turn that ended before the reset does not run after it
   assert.equal(nativeMemoryCounters().turnCommits.committed, 1);
 
   // No reset, no instant to read, a run with no time: committed as before.
-  for (const options of [{ resetAt: null }, { researchMemory: memoryDouble({ withReset: false }) }]) {
+  for (const options of [{ resetAt: null }, { memorySettings: memoryDouble({ withReset: false }) }]) {
     const plain = committer(options);
     await plain.instance.noteRunFinished(project, { id: "run-3", sessionId: SID, status: "succeeded", finishedAt: "2026-10-20T11:59:00.000Z" });
     plain.fire();

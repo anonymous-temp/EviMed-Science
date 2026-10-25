@@ -8,7 +8,7 @@ import { ProductDocuments } from "../src/productStore.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost"].includes(parsed.hostname)); assert.match(parsed.pathname,/evimed_test/); }
@@ -23,7 +23,7 @@ before(async()=>{
   database=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:4,databaseConnectionTimeoutMs:2000});
   // An export reads the research-memory records too (what the researcher said
   // about how they work), so that schema is part of the fixture.
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Transfer owner','development'),($2,'Transfer recipient','development')",[owner,recipient]);
   documents=new ProductDocuments(database);capsules=new CapsuleService(documents);
   identities=new CapsuleIdentityStore(directory);transfers=new CapsuleTransferService({documents,capsules,identities,dataDir:directory});

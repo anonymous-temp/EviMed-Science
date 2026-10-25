@@ -12,7 +12,7 @@ import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { createSourceDependents } from "../src/sourceDependents.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -31,7 +31,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
   await migrateProductStore(database);
   documents = new ProductDocuments(database);
-  memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  memory = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
   learning = new LearningService({ documents });
 });
 after(async () => {

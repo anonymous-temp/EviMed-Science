@@ -12,7 +12,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_RANKING, FrontierProfiles, encodeVector } from "../src/frontierProfiles.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { insertSource } from "./helpers/frontierFixtures.mjs";
 import { insertComposedItem, resetFrontier, testEmbedder, vectorAt } from "./helpers/frontierComposeFixtures.mjs";
 
@@ -40,7 +40,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 2_000 });
   await migrateFrontier(database, { dimension: 1024 });
   for (const id of Object.values(users)) await database.query("INSERT INTO evimed_control.users(id, name, auth_type) VALUES ($1, $1, 'development')", [id]);
-  memory = new ResearchMemoryStore({}, { database });
+  memory = new MemorySettingsStore({}, { database });
   memories.project = await memory.upsertRecord(users.reader, { scope: "user", kind: "project_fact", key: "project.sglt2",
     value: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析", summary: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析",
     origin: "explicit", status: "active", confidence: 1, importance: 0.9 }, evidence("我在做 SGLT2 心衰的 Meta 分析"));
@@ -91,7 +91,7 @@ const PHRASES = [
 ];
 
 function profiles({ embedder = { ...testEmbedder, embedQuery: async (text) => PHRASES.find((phrase) => phrase.text === text)?.vector ?? vectorAt(0, 9) },
-  researchMemory = memory, budget = async () => ({ state: "ok" }), now = () => NOW, phrases = PHRASES } = {}) {
+  memorySettings = memory, budget = async () => ({ state: "ok" }), now = () => NOW, phrases = PHRASES } = {}) {
   const calls = [];
   const editor = {
     available: true,
@@ -103,7 +103,7 @@ function profiles({ embedder = { ...testEmbedder, embedQuery: async (text) => PH
     },
   };
   // The exploration draw takes the first of its pool, so a test knows which item it is.
-  return { calls, profiles: new FrontierProfiles({ database, researchMemory, editor, embedder, config: CONFIG, budget, now, random: () => 0,
+  return { calls, profiles: new FrontierProfiles({ database, memorySettings, editor, embedder, config: CONFIG, budget, now, random: () => 0,
     conversations: async (userId) => RUNS[userId] ?? [] }) };
 }
 
@@ -249,7 +249,7 @@ test("off for a reader who paused recall; nothing yet for one with nothing to re
   assert.equal(calls.length, 1);
   assert.deepEqual([calls[0].memories, calls[0].questions, calls[0].items],
     [[], [], [{ text: "非奈利酮用于射血分数保留心衰", starred: true }]]);
-  const broken = profiles({ researchMemory: { configured: true, settings: async () => ({ recallPaused: false, pausedProjects: [] }),
+  const broken = profiles({ memorySettings: { configured: true, settings: async () => ({ recallPaused: false, pausedProjects: [] }),
     listAllRecords: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); } } }).profiles;
   await assert.rejects(broken.refreshUser(users.reader), { code: "memory_unavailable" });
   assert.equal(broken.state(), "unavailable");
@@ -257,10 +257,10 @@ test("off for a reader who paused recall; nothing yet for one with nothing to re
   const degraded = await broken.forYou({ id: users.reader }, hydrate);
   assert.deepEqual([degraded.state, degraded.items.map((entry) => entry.slot)], ["available", ["explore"]]);
   // A store that cannot say whether the reader paused recall answers nothing it cannot stand behind.
-  const silent = profiles({ researchMemory: { configured: true, settings: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); },
+  const silent = profiles({ memorySettings: { configured: true, settings: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); },
     listAllRecords: async () => [] } }).profiles;
   assert.deepEqual(await silent.forYou({ id: users.reader }, hydrate), { state: "unavailable", basis: null, items: [] });
-  const modelless = new FrontierProfiles({ database, researchMemory: memory, config: { frontierAudience: "all" } });
+  const modelless = new FrontierProfiles({ database, memorySettings: memory, config: { frontierAudience: "all" } });
   assert.equal(modelless.state(), "off");
   assert.deepEqual(await modelless.forYou({ id: users.reader }, hydrate), { state: "off", basis: null, items: [] });
 });
@@ -406,7 +406,7 @@ test("a reader the model knows nothing of is ranked from what they stated: onboa
   const slug = `sglt2-${suffix}`;
   await tagItems(slug, "SGLT2 抑制剂", [items.tagged.id]);
   const { FrontierTagStore } = await import("../src/frontierTags.mjs");
-  const reader = new FrontierProfiles({ database, researchMemory: memory, editor: { available: true, extractProfile: async () => ({ phrases: [], specialties: [], error: null }) },
+  const reader = new FrontierProfiles({ database, memorySettings: memory, editor: { available: true, extractProfile: async () => ({ phrases: [], specialties: [], error: null }) },
     embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG, now: () => NOW, random: () => 0, tags: new FrontierTagStore({ database, now: () => NOW }) });
   const before = await reader.forYou({ id: users.fresh }, hydrate);
   assert.equal(before.onboarding, true, "nothing known and nothing answered: the card is shown");
@@ -430,7 +430,7 @@ test("a reader the model knows nothing of is ranked from what they stated: onboa
   const prefs = await reader.prefs(users.fresh);
   assert.deepEqual([prefs.role, prefs.specialties, prefs.interests, prefs.interestTags], ["pharmacist", ["cardiology"], [slug], [{ slug, name: "SGLT2 抑制剂" }]]);
   // Changed an hour later from 管理关注: the answer moves, its first time stays (a changed answer is not a second onboarding).
-  const later = new FrontierProfiles({ database, researchMemory: memory, config: CONFIG, now: () => new Date(NOW.getTime() + 3_600_000), tags: reader.tags });
+  const later = new FrontierProfiles({ database, memorySettings: memory, config: CONFIG, now: () => new Date(NOW.getTime() + 3_600_000), tags: reader.tags });
   const changed = await later.savePrefs(users.fresh, { specialties: ["cardiology", "oncology"], done: true });
   assert.deepEqual([changed.specialties, changed.onboardedAt], [["cardiology", "oncology"], prefs.onboardedAt]);
   // Skipping is an answer too, for a reader who has not given one.
@@ -442,7 +442,7 @@ test("what the reader reads leans their block: papers read to the end come befor
   const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), specialties: ["cardiology"], selected: true, scoreTotal: 88 };
   const news = await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "Cardiology news" });
   const paper = await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology trial" });
-  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
     now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
   await reader.savePrefs(users.fresh, { specialties: ["cardiology"], done: true });
   const neutral = await reader.forYou({ id: users.fresh }, hydrate);
@@ -477,7 +477,7 @@ test("what the reader said was not their specialty lowers it for them for ninety
   await insertComposedItem(database, { ...recent, title: "Oncology B", specialties: ["oncology"], scoreTotal: 86 });
   await insertComposedItem(database, { ...recent, title: "Cardiology A", specialties: ["cardiology"], scoreTotal: 80 });
   assert.ok(oncology);
-  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
     now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
   const order = async (userId = users.fresh) => {
     await database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [userId]);
@@ -513,7 +513,7 @@ test("「看过了」 keeps an item out and counts against no genre; any other h
   const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), selected: true, specialties: ["cardiology"] };
   await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "Cardiology news", scoreTotal: 88 });
   await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology trial", scoreTotal: 76 });
-  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
     now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
   await reader.savePrefs(users.fresh, { specialties: ["cardiology"], done: true });
   // Their last week: four news items seen, then hidden — with the reason in both records the way the page writes it.

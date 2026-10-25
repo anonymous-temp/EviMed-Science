@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 
 /** The store's surface, at the interface, with no database behind it. The
  *  routes below read and write exactly these three calls. */
@@ -41,7 +41,7 @@ function researchMemoryDouble(record) {
 }
 
 test("memory status reports an unconfigured store without pretending to be connected", async () => {
-  const store = new ResearchMemoryStore({}, { database: null });
+  const store = new MemorySettingsStore({}, { database: null });
   assert.equal(store.configured, false);
   assert.deepEqual(await store.status(), {
     configured: false,
@@ -71,7 +71,7 @@ test("the feedback routes are reachable and name the dependency they need", asyn
     evidence: [], revisions: [], createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
   });
   const app = createWebApiApp({
-    dataDir, port: 0, runtimeMode: "mock", devAuth: true, researchMemory: memory,
+    dataDir, port: 0, runtimeMode: "mock", devAuth: true, memorySettings: memory,
   });
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;

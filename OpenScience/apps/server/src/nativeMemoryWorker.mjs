@@ -12,7 +12,7 @@ import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openV
 /**
  * The overlay's worker: what the native memory engine did, read into the overlay, and what it cannot do for itself, done.
  *
- * Each pass, for every account on the native engine:
+ * Each pass, for every account the memory plane knows (`overlay.accounts()`):
  *  1. **Registration.** An account the engine's admin routes do not know cannot have its settings changed or be deleted;
  *     the gateway registers on first sight, this catches what it could not.
  *  2. **The commit ledger.** The gateway writes a row for every commit it forwarded; the engine's own idle commits never
@@ -31,7 +31,6 @@ import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openV
  *  5. **Replay.** A failed extraction is never retried upstream: its archive keeps the messages and a `.failed.json`. The
  *     messages are committed again as a new session, with a cap and a back-off, so one rate-limited minute does not lose a
  *     conversation for good.
- *  6. **Runtimes.** An idle runtime launched for the engine its account is no longer on is let go, so the next one is right.
  *
  * Source labels (`labelSource`) are written here too, on the call of whoever learns that a source changed.
  *
@@ -117,8 +116,8 @@ export function extractionFacts(diff, task = null) {
 
 export class NativeMemoryWorker {
   /**
-   * @param {{ config: any, researchMemory: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
-   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, runtimeManager?: any, nativeMemory?: any,
+   * @param {{ config: any, memorySettings: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
+   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, nativeMemory?: any,
    *   projectOfSession?: ((userId: string, sessionId: string) => Promise<string | null>) | null,
    *   rejectionJudge?: ReturnType<typeof import("./nativeMemoryRejections.mjs").createRejectionJudge> | null,
    *   now?: () => Date, report?: (line: string) => void }} dependencies
@@ -126,12 +125,11 @@ export class NativeMemoryWorker {
    *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
    *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, researchMemory, sessions, overlay, runtimeManager = null, nativeMemory = null, projectOfSession = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
     this.config = config ?? {};
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.sessions = sessions;
     this.overlay = overlay;
-    this.runtimeManager = runtimeManager;
     this.nativeMemory = nativeMemory;
     this.projectOfSession = projectOfSession;
     this.rejectionJudge = rejectionJudge;
@@ -149,7 +147,7 @@ export class NativeMemoryWorker {
   }
 
   get applicable() {
-    return this.config.ovNativeMemoryEnabled === true && Boolean(this.sessions?.configured && this.overlay?.configured && this.researchMemory?.configured);
+    return this.config.memoryEngineEnabled === true && Boolean(this.sessions?.configured && this.overlay?.configured && this.memorySettings?.configured);
   }
 
   /** What readiness reports: whether the worker applies here, whether it is running, and what its last pass did. */
@@ -181,8 +179,7 @@ export class NativeMemoryWorker {
     let commits = 0;
     let accounts = 0;
     try {
-      const native = await this.researchMemory.accountsOnEngine("native");
-      for (const { userId } of native) {
+      for (const userId of await this.overlay.accounts()) {
         accounts += 1;
         try {
           await this.#register(userId);
@@ -195,7 +192,6 @@ export class NativeMemoryWorker {
           this.report(`native memory worker: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
         }
       }
-      await this.runtimeManager?.releaseMemoryEngineRuntimes?.().catch(() => []);
       this.last = { at: this.now().toISOString(), ok: true, accounts, commits, error: null };
       recordNativePass(true);
     } catch (error) {
@@ -320,8 +316,8 @@ export class NativeMemoryWorker {
    * @param {any} commit @param {any} diff @returns {Promise<number | null>} files removed, or null when the commit is not from before a reset
    */
   async #undoBeforeReset(commit, diff) {
-    if (typeof this.researchMemory?.resetInstant !== "function") return null;
-    const resetAt = await this.researchMemory.resetInstant(commit.userId).catch(() => null);
+    if (typeof this.memorySettings?.resetInstant !== "function") return null;
+    const resetAt = await this.memorySettings.resetInstant(commit.userId).catch(() => null);
     if (!resetAt) return null;
     const raw = await this.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`).catch(() => null);
     let latest = Number.NEGATIVE_INFINITY;
@@ -369,12 +365,7 @@ export class NativeMemoryWorker {
       return false;
     };
     if (!await authorized()) return false;
-    if (await this.researchMemory.memoryEngine(userId) !== "native") {
-      await this.overlay.abandonCommit(userId, commit.archiveUri, "the account is no longer on the native engine");
-      recordNativeCommit("abandoned");
-      return true;
-    }
-    const settings = await this.researchMemory.settings(userId);
+    const settings = await this.memorySettings.settings(userId);
     if (settings.learningPaused || (commit.projectId && settings.pausedProjects.includes(commit.projectId))) {
       await this.overlay.abandonCommit(userId, commit.archiveUri, "learning is paused");
       recordNativeCommit("abandoned");
@@ -701,10 +692,13 @@ export class NativeMemoryWorker {
    * @returns {Promise<number>} files labelled or unlabelled
    */
   async labelSource(userId, source, state) {
-    if (!this.applicable || await this.researchMemory.memoryEngine(userId) !== "native") return 0;
+    if (!this.applicable) return 0;
     let touched = 0;
     for (const link of await this.overlay.filesNaming(source, { userId })) {
       if (link.state === state) continue;
+      // A check moves a link only where it adds knowledge: a correction never lowers a retraction, and a check that could not answer
+      // never undoes a finding (`unknown` is only ever what a link nobody had found a change on becomes).
+      if ((state === "changed" && link.state === "retracted") || (state === "unknown" && link.state !== "current")) continue;
       await this.overlay.markSource(userId, link.uri, source, state);
       const held = await this.overlay.file(userId, link.uri);
       if (await this.#writeLabel(userId, link.uri, held?.memoryType ?? "project_facts", source, state)) touched += 1;

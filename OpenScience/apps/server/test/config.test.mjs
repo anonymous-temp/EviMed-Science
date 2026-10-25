@@ -196,8 +196,6 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT: ["eq", "userDailySpendLimit", "budget"],
   OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT: ["eq", "userWeeklySpendLimit", "budget"],
   OPEN_SCIENCE_USER_RUN_SPEND_LIMIT: ["eq", "userRunSpendLimit", "budget"],
-  OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ["eq", "memoryContextLimit", "prompt budget"],
-  OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ["eq", "memoryContextMaxChars", "prompt budget"],
   OPEN_SCIENCE_GATE_REPAIR_ROUNDS: ["eq", "gateRepairRounds", "0 since the 2026-09-17 ruling"],
   OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD: ["eq", "llmRoutingConfidenceThreshold", "classifier policy"],
   // Cadences: how often and how long a worker holds work.
@@ -702,10 +700,8 @@ test("the kernel is not selectable, and the variable that used to select it is r
 });
 
 // The same property, for the memory service that was retired into a schema of
-// the control-plane database. A renamed budget is the dangerous half: an
-// operator who had raised OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT would otherwise go
-// back to eight memories per prompt and be told nothing at all.
-test("the retired memory variables are refused by name, and the budget keeps its meaning under the new one", () => {
+// the control-plane database (and that schema's records have since gone too).
+test("the retired memory variables are refused by name", () => {
   const retired = {
     OPEN_SCIENCE_MEMOS_URL: "http://memos.internal",
     OPEN_SCIENCE_MEMOS_ACCESS_TOKEN: "pat",
@@ -730,12 +726,10 @@ test("the retired memory variables are refused by name, and the budget keeps its
   }
 
   const config = loadConfig({ dataDir: "/tmp/os-config-memory" });
-  assert.equal(config.memoryContextLimit, 8);
-  assert.equal(config.memoryContextMaxChars, 20_000);
   assert.equal(config.requireMemos, undefined, "the requirement flag is gone: the store exists with the database");
-  const raised = loadConfig({ dataDir: "/tmp/os-config-memory", memoryContextLimit: 12, memoryContextMaxChars: 40_000 });
-  assert.equal(raised.memoryContextLimit, 12);
-  assert.equal(raised.memoryContextMaxChars, 40_000);
+  // The legacy memory engine's recall budget went with it (2026-10-25).
+  assert.equal(config.memoryContextLimit, undefined);
+  assert.equal(config.memoryContextMaxChars, undefined);
 });
 
 test("the reranker defaults to the pins the index's own compatibility is recorded under", async () => {
@@ -938,14 +932,15 @@ test("owner-approved registration and one-credit-per-CNY defaults preserve an ex
   assert.equal(disabled.evimedCreditsPerCny, 0);
 });
 
-test("OpenViking as an engine: the two switches follow whether the engine is the deployment's index, and the levers are checked", () => {
-  // Each switch gates behaviour another module implements, so its default has to be a fact about the deployment and not
-  // an opinion: on exactly when there is an engine to build on. A literal `true` would switch native memory on for a
-  // deployment that pinned the term matcher.
+test("OpenViking as an engine: the knowledge switch follows whether the engine is the deployment's index, memory is a fact (the engine is configured), and the levers are checked", () => {
+  // The knowledge switch gates behaviour another module implements, so its default has to be a fact about the deployment and not
+  // an opinion: on exactly when there is an engine to build on. A literal `true` would switch it on for a deployment that pinned the
+  // term matcher. Memory has no lever: every account's memory is the engine's, so `memoryEngineEnabled` is whether it is configured,
+  // whichever component ranks the capsule's facts.
   const engine = { openVikingUrl: "http://evimed-openviking:1933", openVikingApiKey: "root-key-of-a-fixture" };
   const base = configUnder({ ...HOSTED_ENV });
   assert.equal(base.ovKnowledgeEnabled, false);
-  assert.equal(base.ovNativeMemoryEnabled, false);
+  assert.equal(base.memoryEngineEnabled, false);
   assert.equal(base.openVikingModelDailyBudgetCny, 50);
   assert.equal(base.openVikingEngineCheckMs, 1_800_000);
   assert.equal(base.openVikingModelKey, "");
@@ -954,25 +949,28 @@ test("OpenViking as an engine: the two switches follow whether the engine is the
 
   const withEngine = loadConfig({ rootDir: repoRoot, ...engine });
   assert.equal(withEngine.ovKnowledgeEnabled, true);
-  assert.equal(withEngine.ovNativeMemoryEnabled, true);
-  // Named `openviking`, the same; pinned to the term matcher, both off though the engine is configured.
-  assert.equal(loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "openviking" }).ovNativeMemoryEnabled, true);
+  assert.equal(withEngine.memoryEngineEnabled, true);
+  // Named `openviking`, the same; pinned to the term matcher, the knowledge switch is off though the engine is configured and memory stays on.
+  assert.equal(loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "openviking" }).memoryEngineEnabled, true);
   const pinned = loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "builtin" });
   assert.equal(pinned.ovKnowledgeEnabled, false);
-  assert.equal(pinned.ovNativeMemoryEnabled, false);
+  assert.equal(pinned.memoryEngineEnabled, true);
   // An unreadable root key is no engine.
-  assert.equal(loadConfig({ rootDir: repoRoot, openVikingUrl: engine.openVikingUrl, openVikingApiKey: "" }).ovKnowledgeEnabled, false);
+  const unreadable = loadConfig({ rootDir: repoRoot, openVikingUrl: engine.openVikingUrl, openVikingApiKey: "" });
+  assert.equal(unreadable.ovKnowledgeEnabled, false);
+  assert.equal(unreadable.memoryEngineEnabled, false);
 
-  // The operator's word wins in both directions, one switch at a time.
+  // The operator's word wins on the knowledge switch, and the memory engine is not one of the operator's words.
   const saved = process.env;
   try {
     process.env = { ...HOSTED_ENV, OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED: "false" };
     const oneOff = loadConfig({ rootDir: repoRoot, ...engine });
     assert.equal(oneOff.ovKnowledgeEnabled, false);
-    assert.equal(oneOff.ovNativeMemoryEnabled, true);
+    assert.equal(oneOff.memoryEngineEnabled, true);
+    // A leftover of the retired lever is not read: memory is not on because it says so.
     process.env = { ...HOSTED_ENV, OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED: "true", OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: "0", OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS: "600000" };
     const forced = loadConfig({ rootDir: repoRoot });
-    assert.equal(forced.ovNativeMemoryEnabled, true);
+    assert.equal(forced.memoryEngineEnabled, false);
     assert.equal(forced.openVikingModelDailyBudgetCny, 0, "0 is no cap, like every spend limit here");
     assert.equal(forced.openVikingEngineCheckMs, 600_000);
     // Empty reads as unset: `Number("")` is 0, and an unset budget must not become "no cap" by accident.

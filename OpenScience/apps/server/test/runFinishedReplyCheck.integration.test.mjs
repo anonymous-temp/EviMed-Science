@@ -35,7 +35,7 @@ async function finishedRun(/** @type {boolean} */ clinical, /** @type {string} *
     async clinicalContextsHeld(/** @type {string} */ _userId, /** @type {string} */ _projectId, /** @type {unknown[]} */ contexts) { return contexts.map(() => clinical); },
   };
   const app = createWebApiApp({ dataDir, stateStore: "postgres", databaseUrl: isolated.url, databasePoolMax: 4, port: 0, runtimeMode: "mock", devAuth: true,
-    runTitlesEnabled: false, memoryExtractionEnabled: false, researchMemory: memoryStore, reviewEnabled: true, learningEnabled: false, frontierEnabled: false,
+    runTitlesEnabled: false, memoryExtractionEnabled: false, memorySettings: memoryStore, reviewEnabled: true, learningEnabled: false, frontierEnabled: false,
     geoEnabled: false, vcrEnabled: false, vcrPrivacyStore });
   try {
     const address = await app.listen(0, "127.0.0.1");

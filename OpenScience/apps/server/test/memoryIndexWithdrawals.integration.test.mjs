@@ -8,7 +8,7 @@ import { MemoryIndexWorker } from "../src/memoryIndexWorker.mjs";
 import { MemoryIndexing } from "../src/memoryIndexing.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { projectMemoryUri, researchMemoryRoots, sessionMemoryUri, userMemoryRoot } from "../src/openVikingClient.mjs";
 
 /**
@@ -161,7 +161,7 @@ test("deleting a project's memory removes its rows and owes the index the subtre
   const ledger = new MemoryIndexWithdrawals({ database, openViking: index });
   await ledger.migrate();
   await clear();
-  const store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
+  const store = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
   await store.upsertRecord(owner, {
     scope: "project", scopeId: "paper3", kind: "preference", key: "withdrawal.test", value: "Prefer primary evidence.",
     summary: "Primary evidence.", origin: "inferred", status: "active", confidence: 0.7, importance: 0.9,
@@ -189,7 +189,7 @@ test("deleting a project's memory removes what its conversations wrote and owes 
   const ledger = new MemoryIndexWithdrawals({ database, openViking: index });
   await ledger.migrate();
   await clear();
-  const store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
+  const store = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
   const session = (scopeId, key) => store.upsertRecord(owner, {
     scope: "session", scopeId, kind: "follow_up", key, value: `Pending: ${key}.`, summary: key,
     origin: "inferred", status: "active", confidence: 0.7, importance: 0.5,
@@ -226,7 +226,7 @@ test("a project's conversations are found from its run summaries when the caller
   const ledger = new MemoryIndexWithdrawals({ database, openViking: index });
   await ledger.migrate();
   await clear();
-  const store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
+  const store = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database, withdrawals: ledger });
   const base = { origin: "inferred", status: "active", confidence: 0.7, importance: 0.5 };
   // One run summary per conversation, keyed by the lower-cased id (`memoryIntelligence.mjs`).
   await store.upsertRecord(owner, { ...base, scope: "project", scopeId: "paper6", kind: "run_summary", key: "run.session.ses_mixedcase6", value: "{}", summary: "run" });

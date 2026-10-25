@@ -385,7 +385,7 @@ async function runNativeMode() {
   // The memory gateway, in process: the request the plugin sends is rewritten the way production rewrites it.
   const TOKEN = "recall-eval-token";
   const handler = createMemoryGatewayHandler({
-    config: { ovNativeMemoryEnabled: true, memoryEnabled: true },
+    config: { memoryEngineEnabled: true, memoryEnabled: true },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: options.user, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => ({ id }), requireProject: async (_user, id) => ({ id, userId: options.user }) },
     sessions, admission: { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) },

@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CHANGE_LINK_STATES } from "@evimed/domain";
 import { loadConfig } from "../src/config.mjs";
-import { MEMORY_SOURCE_STATES } from "../src/researchMemoryPersistence.mjs";
+import { MEMORY_SOURCE_STATES } from "../src/memorySettingsPersistence.mjs";
 import { KnowledgeChangeService, memoryLinkOf, producingAgenda } from "../src/knowledgeChange.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";

@@ -70,20 +70,19 @@ services:
   # The context engine: a third-party service (OpenViking, deps-version.json
   # `openviking`) that holds two kinds of thing since v0.5.0.
   #
-  # Derived: copies of the records PostgreSQL owns — research memory and capsule
-  # facts — ranked for recall. Every hit is hydrated back from PostgreSQL before
-  # it reaches anyone, and that part of a lost volume costs one
-  # `pnpm rebuild:memory-index --all`.
+  # Derived: copies of the capsule's facts, which PostgreSQL owns, ranked for
+  # recall. Every hit is hydrated back from PostgreSQL before it reaches anyone,
+  # and that part of a lost volume costs one `pnpm rebuild:memory-index --all`.
   #
-  # Original: an account's native memory (extracted here from sessions, with the
+  # Original: an account's memory (extracted here from sessions, with the
   # templates mounted below), the documents pushed as resources, and the pages
   # and graph its Compile writes from them. That part exists nowhere else, so
   # the volume is in the backup (docker-compose.backup.yml,
   # docs/WEB_OPERATIONS_RUNBOOK.md) and a lost one is a restore.
   #
-  # It is in the base stack rather than an overlay because both recall paths
-  # rank through it, and a deployment that skipped the overlay would silently
-  # fall back to term matching.
+  # It is in the base stack rather than an overlay because every account's memory
+  # is kept in it: there is no second memory engine to fall back to, and a
+  # deployment that skipped it has memory off.
   evimed-openviking:
     image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217}
     environment:
@@ -400,10 +399,9 @@ services:
       OPEN_SCIENCE_REQUIRE_SHARED_STATE_STORE: "true"
       OPEN_SCIENCE_DATABASE_URL_FILE: /run/secrets/database-url
       OPEN_SCIENCE_SESSION_TTL_MS: ${OPEN_SCIENCE_SESSION_TTL_MS:-604800000}
-      OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED: ${OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED:-true}
       # The code's budget, not a second one: a 30000 here overrode config.mjs's
-      # 120000 in production, and an extraction of a deep run's conversation
-      # (tens of seconds on its own) aborted with nothing remembered (2026-09-19).
+      # 120000 in production (2026-09-19). The model calls this bounds are the memory side's (the map's topic grouping, the
+      # rejection judge).
       OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-120000}
       # Three memory switches the server read and no compose file passed, so
       # setting them in .env did nothing and said nothing (2026-09-16).
@@ -427,13 +425,6 @@ services:
       # Publishes an account's memory to whoever holds one of its API keys;
       # off unless a deployment decides otherwise (docs/AGENT_MEMORY_API.md).
       OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:
-      # Comma-separated project id prefixes extraction never writes for, e.g.
-      # `eval-memory-ablation` so a paired evaluation's arms hold still.
-      OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES:
-      # mem stream: how long an inferred memory lives after it was last
-      # observed (config.mjs `memoryInferredTtlDays`). Value-less: unset keeps
-      # the code's default.
-      OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS:
       # How many times the control plane sends a finished package back to the
       # run after its own gate has read it. Unset is 0: findings are attached to
       # the delivery instead (config.mjs `gateRepairRounds`).
@@ -511,10 +502,8 @@ services:
       OPEN_SCIENCE_MODEL_GATEWAY_RESERVATION_MAX_OUTPUT_TOKENS:
       OPEN_SCIENCE_REQUIRE_DURABLE_USAGE_LEDGER:
       OPEN_SCIENCE_EVIMED_WORKLOAD_TOKEN_TTL_SECONDS:
-      # Memory extraction's model, and how long run summaries and transcripts
-      # are kept, in days.
+      # The model the memory side's own calls use (topics, the rejection judge), and how long run transcripts are kept, in days.
       OPEN_SCIENCE_MEMORY_EXTRACTION_MODEL:
-      OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS:
       OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS:
       # 「知识页」 (knowledgePageService.mjs): when the engine's Compile is run for a project; the switch itself is
       # OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED below. Value-less, so unset the code's defaults hold.
@@ -575,12 +564,11 @@ services:
       # the Compile runtime's identity, the two pinned skills). Value-less: unset keeps
       # config.mjs's default, 30 minutes.
       OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS:
-      # What is built on the engine, each behind its own switch. Value-less on
-      # purpose: unset, each is on exactly when the engine is this deployment's
-      # index (config.mjs `openVikingEngineSettings`), and a literal default
-      # here would switch them on for a deployment that pinned `builtin`.
+      # What is built on the engine's Resources and Compile has its own switch. Value-less on purpose: unset, it is on exactly when
+      # the engine is this deployment's index (config.mjs `openVikingEngineSettings`), and a literal default here would switch it on
+      # for a deployment that pinned `builtin`. Memory has no switch of its own: an account's memory is the engine's, and it is on
+      # exactly when OpenViking is configured (`config.memoryEngineEnabled`, not a lever).
       OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED:
-      OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED:
       # The reranker orders what a recall already hydrated from PostgreSQL, so
       # it runs here rather than in the index: the index's own reranked endpoint
       # navigates by directory abstracts that no language model generates for
@@ -598,8 +586,6 @@ services:
       # index hits at or above this score (0–1); value-less so the code default (0.75)
       # applies when unset.
       OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE:
-      OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ${OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT:-8}
-      OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ${OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS:-20000}
       # The standing profile a conversation is handed up front and the recall tool's
       # answer size (review M6); value-less so the code defaults (24, 5, 8) apply when
       # unset.

@@ -8,7 +8,7 @@ import { EvidenceZoneSubscriptions, createEvidenceLinkStates, forgetEvidenceCard
 import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
 import { migrateEvidenceZones } from "../src/evidenceZonePersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
@@ -30,7 +30,7 @@ before(async () => {
   for (const project of ["p1", "p2"]) await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Subscribed',1048576)", [reader, project]);
   documents = new ProductDocuments(database);
   subscriptions = new EvidenceZoneSubscriptions({ database, documents, enabled: true, maxPerProject: 2, maxItems: 3 });
-  memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  memory = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
   published = `ez_${hex32()}`; draft = `ez_${hex32()}`; card = `ec_${hex32()}`;
   await database.query("INSERT INTO evimed_frontier.evidence_zones(id,user_id,title,state) VALUES($1,$2,'房颤抗凝','published'),($3,$2,'未发布的专区','draft')", [published, owner, draft]);
   await database.query(`INSERT INTO evimed_frontier.evidence_cards(id,zone_id,user_id,title,subtype,summary,sources,state,content,claims,producer)

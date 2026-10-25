@@ -299,12 +299,12 @@ test("a conversation trying someone else's capsule reads none of the researcher'
 test("a conversation's first step asks what its own state adds: the pack a trial is trying, and nothing for any other", async (t) => {
   const { sessionDispatchNotes } = await import("../src/memorySessions.mjs");
   const asked = [];
-  const researchMemory = { configured: true, async sessionState(userId, projectId, sessionId) {
+  const memorySettings = { configured: true, async sessionState(userId, projectId, sessionId) {
     asked.push([userId, projectId, sessionId]);
     return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null };
   } };
   const capsules = { async trialContext(_userId, capsuleId) { return `<evimed-capsule-trial>${capsuleId}：李主任的工作方式</evimed-capsule-trial>`; } };
-  const sessions = { ...sessionsDouble([]), notes: (userId, projectId, sessionId) => sessionDispatchNotes({ researchMemory, capsules }, userId, projectId, sessionId) };
+  const sessions = { ...sessionsDouble([]), notes: (userId, projectId, sessionId) => sessionDispatchNotes({ memorySettings, capsules }, userId, projectId, sessionId) };
   const f = await fixture(t, { sessions });
   const trial = await f.request("session", { sessionId: "ses_trial" });
   assert.equal(trial.status, 200);

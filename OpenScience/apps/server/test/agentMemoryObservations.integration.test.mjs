@@ -16,7 +16,7 @@ import { recallForAgent } from "../src/agentMemoryRecall.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -37,7 +37,7 @@ before(async () => {
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Hospital','development')", [hospital]);
   const documents = new ProductDocuments(database);
   const learning = new LearningService({ documents });
-  const researchMemory = new ResearchMemoryStore({}, { database });
+  const memorySettings = new MemorySettingsStore({}, { database });
   // The model's line, as the gateway would return it.
   const writer = new HabitWriter({ deepseekProviderEnabled: true, deepseekApiKey: "unit-test-key", deepseekModel: "deepseek-v4-flash" }, {
     callModel: async (_context, call) => {
@@ -45,11 +45,11 @@ before(async () => {
       return { choices: [{ message: { content: JSON.stringify({ title: "脾胃气虚证多用太子参", summary: "脾胃气虚证的候选方里，你多以太子参代替党参。" }) } }] };
     },
   });
-  services = { researchMemory, learning, observations: new AgentObservations({ database, learning, researchMemory, writer }) };
+  services = { memorySettings, learning, observations: new AgentObservations({ database, learning, memorySettings, writer }) };
   const keys = new AgentApiKeyStore(database);
   doctor = { id: (await keys.subjectAccount(hospital, "doc-7")).userId };
   paused = { id: (await keys.subjectAccount(hospital, "doc-8")).userId };
-  await researchMemory.updateSettings(paused.id, { learningPaused: true });
+  await memorySettings.updateSettings(paused.id, { learningPaused: true });
 });
 after(async () => {
   if (!database) return;

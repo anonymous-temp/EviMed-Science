@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { projectCard as projectCardOf } from "../src/projectOverview.mjs";
 import { ResidentProfiles } from "../src/residentProfile.mjs";
 
@@ -26,7 +26,7 @@ before(async () => {
   if (!url) return;
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 8, databaseConnectionTimeoutMs: 5_000 });
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) SELECT id,'Resident owner','development' FROM unnest($1::text[]) AS id", [[owner, other]]);
-  store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  store = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
 });
 after(async () => {
   if (!database) return;

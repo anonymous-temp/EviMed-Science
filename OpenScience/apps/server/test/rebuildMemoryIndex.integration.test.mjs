@@ -69,8 +69,8 @@ test("the rebuild command restores both halves of the index from the control-pla
   await documents.put(userId, "fact", "fact-one",
     { capsuleId: "capsule-one", factKind: "preference", layer: "stable", content: "prefers tables over prose", status: "approved" },
     { expectedRevision: 0 });
-  const { ResearchMemoryStore } = await import("../src/researchMemory.mjs");
-  const memory = new ResearchMemoryStore({}, { database });
+  const { MemorySettingsStore } = await import("../src/memorySettings.mjs");
+  const memory = new MemorySettingsStore({}, { database });
   await memory.upsertRecord(userId, {
     scope: "user", scopeId: "", kind: "preference", key: "reporting.format",
     value: "prefers tables over prose", summary: "", origin: "explicit", status: "active",

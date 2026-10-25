@@ -17,7 +17,7 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -36,7 +36,7 @@ before(async () => {
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Hospital','development')", [hospital]);
   const documents = new ProductDocuments(database);
   services = {
-    researchMemory: new ResearchMemoryStore({}, { database }),
+    memorySettings: new MemorySettingsStore({}, { database }),
     learning: new LearningService({ documents }),
     capsules: new CapsuleService(documents),
     documents,
@@ -52,7 +52,7 @@ after(async () => {
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
 test("a proposal waits for the doctor, and confirming it makes it theirs, with the evidence it came with", options, async () => {
-  const proposal = await services.researchMemory.upsertRecord(doctor.id, {
+  const proposal = await services.memorySettings.upsertRecord(doctor.id, {
     scope: "user", scopeId: "", kind: "preference", key: "preference.herb_count", value: "药味控制在 12 味以内", summary: "药味不超过 12 味",
     origin: "explicit", status: "pending", confidence: 1, importance: 0.8, sensitive: false,
   }, { sourceType: "conversation_message", sourceRef: "sessions/external-1/messages/0", quote: "我一般开 12 味以内", observedAt: "2026-09-26T00:00:00.000Z", weight: 1 },
@@ -73,7 +73,7 @@ test("a proposal waits for the doctor, and confirming it makes it theirs, with t
 });
 
 test("an edit leaves what it used to say as 曾经如此, forgetting and restoring move it, and undo takes the last act back", options, async () => {
-  let record = (await services.researchMemory.listRecords(doctor.id, { statuses: ["active"] }))[0];
+  let record = (await services.memorySettings.listRecords(doctor.id, { statuses: ["active"] }))[0];
   record = (await recordAction(services, doctor, record.id, "edit", { expectedVersion: record.version, summary: "药味不超过 10 味", value: "药味控制在 10 味以内" })).record;
   let board = await memoryBoard(services, doctor);
   assert.deepEqual(board.records[0].wasTrue.map((item) => item.summary), ["药味不超过 12 味"]);

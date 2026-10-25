@@ -12,7 +12,7 @@ import { BOARD_SOURCES, memoryBoard, methodAction, methodDetail, noteAction, rec
 
 const NOW = new Date("2026-09-27T00:00:00.000Z");
 
-/** A record as `researchMemory` returns one. @param {Record<string, any>} overrides */
+/** A record as `memorySettings` returns one. @param {Record<string, any>} overrides */
 function record(overrides) {
   return {
     id: "r1", kind: "preference", scope: "user", scopeId: "", key: "preference.x", value: "v", summary: "s",
@@ -63,7 +63,7 @@ test("a record row says where it came from, how established it is, how often it 
     record({ id: "r4", status: "archived" }),
     record({ id: "r5", kind: "run_summary" }),
   ];
-  const board = await memoryBoard({ researchMemory: memoryDouble(records), now: () => NOW }, { id: "u1" });
+  const board = await memoryBoard({ memorySettings: memoryDouble(records), now: () => NOW }, { id: "u1" });
   assert.deepEqual(board.switches, { learningPaused: false, recallPaused: true });
   assert.deepEqual(board.records.map((row) => row.id), ["r1"], "in force only; a run summary is never a row");
   const [row] = board.records;
@@ -93,7 +93,7 @@ test("a note an outside agent proposed waits in the dashboard, and a received pa
       },
     },
   };
-  const board = await memoryBoard({ researchMemory: memoryDouble([]), capsules, now: () => NOW }, { id: "u1" });
+  const board = await memoryBoard({ memorySettings: memoryDouble([]), capsules, now: () => NOW }, { id: "u1" });
   assert.deepEqual(board.pending.map((item) => [item.type, item.id, item.summary, item.revision]), [["note", "runtime-note:1", "药味不超过 12 味", 1]]);
 });
 
@@ -109,7 +109,7 @@ test("a habit is new for fourteen days, says it was learned from prescription ed
   };
   const basis = new Map([["m0", { observed: 9, related: 12 }]]);
   const observations = { basis: async () => basis, neverLearned: async () => [{ herb: "附子", count: 3 }] };
-  const board = await memoryBoard({ researchMemory: memoryDouble([]), learning, observations, now: () => NOW }, { id: "u1" });
+  const board = await memoryBoard({ memorySettings: memoryDouble([]), learning, observations, now: () => NOW }, { id: "u1" });
   assert.deepEqual(board.neverLearned, [{ herb: "附子", count: 3 }], "「不学习」: what was seen and never learned from");
   assert.deepEqual(board.habits.map((habit) => [habit.id, habit.status, habit.isNew]), [["m0", "approved", true], ["m1", "retired", false]]);
   assert.equal(board.habits[0].source, "observed");
@@ -117,42 +117,42 @@ test("a habit is new for fourteen days, says it was learned from prescription ed
   assert.deepEqual(board.habits[0].basis, { observed: 9, related: 12 });
   const changes = board.recentChanges.filter((change) => change.type === "habit");
   assert.deepEqual(changes.map((change) => [change.methodId, change.undo.action]), [["m1", "restore"], ["m0", "retire"]]);
-  const old = await memoryBoard({ researchMemory: memoryDouble([]), learning, now: () => new Date("2026-10-20T00:00:00.000Z") }, { id: "u1" });
+  const old = await memoryBoard({ memorySettings: memoryDouble([]), learning, now: () => new Date("2026-10-20T00:00:00.000Z") }, { id: "u1" });
   assert.equal(old.habits[0].isNew, false, "past fourteen days it is not new");
 });
 
 test("a subject with no memory yet reads an empty dashboard and nothing is created", async () => {
-  const board = await memoryBoard({ researchMemory: { settings() { throw new Error("must not read"); } } }, null);
+  const board = await memoryBoard({ memorySettings: { settings() { throw new Error("must not read"); } } }, null);
   assert.deepEqual(board, { engine: "legacy", switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] });
 });
 
 test("confirming makes a proposal the person's own, forgetting archives it, and each act is remembered for the extractor", async () => {
   const pending = record({ id: "r2", status: "pending", origin: "inferred", version: 3 });
-  const researchMemory = memoryDouble([pending, record({ id: "r1" })]);
+  const memorySettings = memoryDouble([pending, record({ id: "r1" })]);
   const remembered = [];
   const feedbackEvents = {
     async recordMemoryUpdate(userId, input) { remembered.push(["update", userId, input.before.status, input.after.status]); },
     async recordMemoryDeletion(userId, input) { remembered.push(["deletion", userId, input.reason]); },
   };
-  const confirmed = await recordAction({ researchMemory, feedbackEvents }, { id: "u1" }, "r2", "confirm", { expectedVersion: 3 });
-  const write = researchMemory.calls.find((entry) => entry[0] === "upsertRecord");
+  const confirmed = await recordAction({ memorySettings, feedbackEvents }, { id: "u1" }, "r2", "confirm", { expectedVersion: 3 });
+  const write = memorySettings.calls.find((entry) => entry[0] === "upsertRecord");
   assert.equal(write[2].status, "active");
   assert.equal(write[2].origin, "explicit", "the person's own statement now");
   assert.equal(write[3].reason, "user confirmed a pending memory", "the reason the record's basis reads as 「你确认过」");
   assert.equal(write[3].by, "user");
   assert.equal(confirmed.event, "memory.record.confirm");
-  await assert.rejects(() => recordAction({ researchMemory }, { id: "u1" }, "r2", "confirm", { expectedVersion: 2 }), (error) => error.code === "memory_conflict");
-  await assert.rejects(() => recordAction({ researchMemory }, { id: "u1" }, "r1", "confirm", { expectedVersion: 1 }), (error) => error.code === "memory_not_pending");
+  await assert.rejects(() => recordAction({ memorySettings }, { id: "u1" }, "r2", "confirm", { expectedVersion: 2 }), (error) => error.code === "memory_conflict");
+  await assert.rejects(() => recordAction({ memorySettings }, { id: "u1" }, "r1", "confirm", { expectedVersion: 1 }), (error) => error.code === "memory_not_pending");
 
-  await recordAction({ researchMemory, feedbackEvents }, { id: "u1" }, "r1", "forget", { expectedVersion: 1 });
-  assert.equal(researchMemory.calls.filter((entry) => entry[0] === "upsertRecord").at(-1)[2].status, "archived");
-  await recordAction({ researchMemory, feedbackEvents }, { id: "u1" }, "r1", "edit", { expectedVersion: 1, summary: "改过的一句" });
-  const edit = researchMemory.calls.filter((entry) => entry[0] === "upsertRecord").at(-1);
+  await recordAction({ memorySettings, feedbackEvents }, { id: "u1" }, "r1", "forget", { expectedVersion: 1 });
+  assert.equal(memorySettings.calls.filter((entry) => entry[0] === "upsertRecord").at(-1)[2].status, "archived");
+  await recordAction({ memorySettings, feedbackEvents }, { id: "u1" }, "r1", "edit", { expectedVersion: 1, summary: "改过的一句" });
+  const edit = memorySettings.calls.filter((entry) => entry[0] === "upsertRecord").at(-1);
   assert.deepEqual([edit[2].summary, edit[2].origin], ["改过的一句", "manual"]);
-  await recordAction({ researchMemory, feedbackEvents }, { id: "u1" }, "r1", "undo", { expectedVersion: 1 });
+  await recordAction({ memorySettings, feedbackEvents }, { id: "u1" }, "r1", "undo", { expectedVersion: 1 });
   assert.deepEqual(remembered.map((entry) => entry[0]), ["update", "update", "update", "deletion"]);
   assert.equal(remembered.at(-1)[2], "undone", "an undone write is a rejection the next extraction respects");
-  await assert.rejects(() => recordAction({ researchMemory }, { id: "u1" }, "r1", "edit", { expectedVersion: 1, origin: "explicit" }),
+  await assert.rejects(() => recordAction({ memorySettings }, { id: "u1" }, "r1", "edit", { expectedVersion: 1, origin: "explicit" }),
     (error) => error.code === "agent_memory_payload_invalid", "no field says whose it is");
 });
 

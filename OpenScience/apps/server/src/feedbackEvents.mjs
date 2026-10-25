@@ -22,18 +22,15 @@
  *
  * Idempotency is the event's own identity, not a timestamp. A memory event is
  * identified by the record and the version the change produced, so replaying
- * the same PATCH is the same event; an adoption is identified by its
+ * the same request is the same event; an adoption is identified by its
  * deliverable, because adopting twice is one fact; an edit is identified by the
  * content it produced, because two different edits are two lessons and the same
  * edit reported twice is one.
  *
- * What is live today, and what waits on a surface. The three memory triggers
- * are the ones the product writes by itself: the memory PATCH and DELETE routes
- * record them. A removal (`memory-rejected`) is read back, whole, by extraction
- * (`rejectedMemoryKeys`) so that an inference does not write a memory the
- * researcher took out straight back, and by the timeline; an acceptance and an
- * edit are read only by the evolution roll-up, and nothing yet answers the
- * extractor's own thresholds from them. The two deliverable triggers
+ * What is live today, and what waits on a surface. The three memory triggers (`memory-inference-accepted`, `memory-value-edited`,
+ * `memory-rejected`) were written by the legacy memory engine's page routes and are no longer produced (that engine was deleted on
+ * 2026-10-25: a memory file's edits and removals are the overlay's revisions and its rejection list, `nativeMemoryOverlay.mjs`); the
+ * words stay in the vocabulary because the ledger holds rows of them, which the timeline and the evolution roll-up still read. The two deliverable triggers
  * are the only ones the producer below reads, and no page posts them yet: they
  * have an HTTP route (`POST /api/feedback/events`) and a typed client function
  * (`reportWebDeliverableFeedback` in `apps/web/src/lib/apiClient.ts`), and
@@ -117,13 +114,6 @@ function boundedText(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-/** A value's identity without its text; the empty string stays empty, so an
- * edit from or to nothing is still visible. @param {unknown} value */
-function valueDigest(value) {
-  const text = String(value ?? "");
-  return text ? createHash("sha256").update(text).digest("hex").slice(0, 32) : "";
-}
-
 /** @param {unknown} value @param {string} field */
 function feedbackTime(value, field) {
   const time = value == null ? new Date() : new Date(String(value));
@@ -198,65 +188,6 @@ function event(row) {
   } : null;
 }
 
-/**
- * Which feedback events one structured-memory update produced.
- *
- * A pure function on the record before and after, so "what did the researcher
- * just tell us" is decided in one readable place and can be tested without a
- * database. Three of them, because they mean three different things: accepting
- * an inference says the extractor was right, editing a value says it was close
- * but wrong, and archiving says it should not have been learned at all.
- *
- * The version the change produced is the identity: replaying the same PATCH
- * lands on the same event id and writes nothing.
- *
- * @param {any} before @param {any} after
- * @returns {{trigger:string,identity:string[],detail:Record<string,any>}[]}
- */
-export function memoryFeedbackEvents(before, after) {
-  if (!before || !after) return [];
-  const version = String(after.version ?? 0);
-  const key = boundedText(after.key ?? before.key, 255);
-  const events = [];
-  if (before.status === "pending" && after.status === "active") {
-    events.push({
-      trigger: "memory-inference-accepted",
-      identity: [version],
-      detail: { key, kind: after.kind ?? before.kind, previousOrigin: before.origin ?? null, version: after.version ?? null },
-    });
-  }
-  if (String(before.value ?? "") !== String(after.value ?? "")) {
-    // The fact of the edit, never its text. This table has no delete path, so a
-    // value copied here outlives the memory the researcher later deletes — the
-    // reason `recordMemoryDeletion` below stores a key, a kind and a version and
-    // no value at all. A digest keeps what the consumer this substrate is for
-    // needs: whether the value changed, and whether a later edit went back to
-    // one the researcher had before. And a record the extractor marked
-    // sensitive carries no digest either: a short value is guessable from an
-    // unsalted digest, and that flag is the extractor saying this is exactly
-    // the content worth guessing. Either side of the change setting it is
-    // enough: the same PATCH can clear the flag and rewrite the value, and the
-    // value being replaced was still sensitive when it was written.
-    const sensitive = Boolean(after.sensitive) || Boolean(before.sensitive);
-    events.push({
-      trigger: "memory-value-edited",
-      identity: [version],
-      detail: {
-        key, kind: after.kind ?? before.kind, version: after.version ?? null, sensitive,
-        ...(sensitive ? {} : { previousValueDigest: valueDigest(before.value), nextValueDigest: valueDigest(after.value) }),
-      },
-    });
-  }
-  if (before.status !== "archived" && after.status === "archived") {
-    events.push({
-      trigger: "memory-rejected",
-      identity: [version],
-      detail: { key, kind: after.kind ?? before.kind, version: after.version ?? null, reason: "archived" },
-    });
-  }
-  return events;
-}
-
 /** Append-only feedback ledger, and the one producer that reads it. */
 export class FeedbackEvents {
   /** @param {{database:any,jobs?:any,now?:()=>Date,onRecorded?:((event:any)=>Promise<any>)|null,evolutionSignals?:any}} dependencies */
@@ -316,40 +247,6 @@ export class FeedbackEvents {
       try{await this.evolutionSignals?.record({userId:user,projectId,eventId:id,moduleId:trigger.startsWith("memory-")?"memory":"evidence",kind:signalKind,capability:"unknown",operation:trigger.startsWith("memory-")?"recall":"edit",dataShape:"none",version:detail.version??null});}catch{/* feedback remains recorded */}
     }
     return { event: recorded, created, distillJob };
-  }
-
-  /**
-   * Every event one structured-memory update produced.
-   * @param {string} userId @param {{before:any,after:any,projectId?:string|null}} input
-   */
-  async recordMemoryUpdate(userId, { before, after, projectId = null }) {
-    const results = [];
-    for (const item of memoryFeedbackEvents(before, after)) {
-      results.push(await this.record(userId, {
-        trigger: item.trigger, subject: { type: "memory-record", id: String(after.id ?? before.id ?? "") },
-        identity: item.identity, detail: item.detail, projectId,
-      }));
-    }
-    return results;
-  }
-
-  /**
-   * Deleting a memory is rejecting it. The version is the one that was deleted,
-   * so deleting the same record twice is one event. Undoing the write that
-   * created a memory is the same rejection, said as `undone`.
-   * @param {string} userId @param {{record:any,projectId?:string|null,reason?:"deleted"|"undone"}} input
-   */
-  async recordMemoryDeletion(userId, { record, projectId = null, reason = "deleted" }) {
-    return this.record(userId, {
-      trigger: "memory-rejected",
-      subject: { type: "memory-record", id: String(record?.id ?? "") },
-      identity: [String(record?.version ?? 0)],
-      detail: {
-        key: boundedText(record?.key, 255), kind: record?.kind ?? null, version: record?.version ?? null,
-        reason: reason === "undone" ? "undone" : "deleted",
-      },
-      projectId,
-    });
   }
 
   /**

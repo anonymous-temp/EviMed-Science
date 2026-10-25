@@ -290,13 +290,16 @@ function boundedInteger(value, fallback, min, max, name) {
  *   thousand short commits) and 0 reads as no cap, like every spend limit here;
  *   the budget exists for the runaway — a compile resubmitted in a loop, an
  *   auto-commit storm — not for an ordinary day.
- * - **The two switches default to whether the engine is this deployment's
- *   index.** `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (resources, Compile, the wiki
- *   and the graph) and `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED` (sessions, native
- *   extraction, the memory plugin) each gate the behaviour its own module
- *   implements; unset, each is on exactly when an OpenViking URL and its key
- *   are configured and no other index provider is named. Set true without the
+ * - **One switch, and one fact.** `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (resources,
+ *   Compile, the wiki and the graph) defaults to whether the engine is this
+ *   deployment's index: on exactly when an OpenViking URL and its key are
+ *   configured and no other index provider is named. Set true without the
  *   engine it stays a statement nobody can honour, and readiness says so.
+ *   Memory has no switch of its own any more: an account's memory is the
+ *   engine's (the legacy engine that kept it in PostgreSQL was deleted on
+ *   2026-10-25), so `memoryEngineEnabled` is a fact derived here, not a lever —
+ *   an OpenViking URL and its key are configured — and a deployment without
+ *   them has memory off, reported as a status, never a fallback.
  *
  * @param {Record<string, any>} overrides
  * @param {{ value: string, source: string, error: string | null }} modelSecret
@@ -320,8 +323,9 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
   }
   const provider = String(overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "").trim();
   const url = String(overrides.openVikingUrl ?? process.env.OPEN_SCIENCE_OPENVIKING_URL ?? "").trim();
-  // The rule `memorySubstrate.memoryIndexSelection` applies, restated because that module reads a finished config.
-  const engineSelected = Boolean(url) && Boolean(rootSecret.value) && !rootSecret.error && (provider === "" || provider === "openviking");
+  const engineConfigured = Boolean(url) && Boolean(rootSecret.value) && !rootSecret.error;
+  // The rule `memoryIndexProvider.memoryIndexSelection` applies, restated because that module reads a finished config.
+  const engineSelected = engineConfigured && (provider === "" || provider === "openviking");
   return {
     openVikingModelKey: modelSecret.value,
     openVikingModelKeySource: modelSecret.source,
@@ -341,7 +345,9 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     openVikingBackupStateFile: String(overrides.openVikingBackupStateFile ?? process.env.OPEN_SCIENCE_OPENVIKING_BACKUP_STATE_FILE ?? "").trim(),
     openVikingBackupMaxAgeSeconds: backupMaxAgeSeconds,
     ovKnowledgeEnabled: overrides.ovKnowledgeEnabled ?? boolEnv("OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED", engineSelected),
-    ovNativeMemoryEnabled: overrides.ovNativeMemoryEnabled ?? boolEnv("OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED", engineSelected),
+    // Derived, not an operator lever (see above): whether the memory engine is configured here. A pinned `builtin` index provider
+    // chooses how the capsule's facts are ranked and has no say over where an account's memory lives.
+    memoryEngineEnabled: overrides.memoryEngineEnabled ?? engineConfigured,
   };
 }
 
@@ -1542,8 +1548,8 @@ export function loadConfig(overrides = {}) {
     ["OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE", "research memory needs no credential of its own; remove this variable"],
     ["OPEN_SCIENCE_MEMOS_REQUEST_TIMEOUT_MS", "research memory is an in-process store; remove this variable"],
     ["OPEN_SCIENCE_REQUIRE_MEMOS", "research memory exists exactly when the control-plane database does; remove this variable"],
-    ["OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT", "set OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT instead"],
-    ["OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS", "set OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS instead"],
+    ["OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT", "the memory context budget is gone with the legacy memory engine; remove this variable"],
+    ["OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS", "the memory context budget is gone with the legacy memory engine; remove this variable"],
     ["OPEN_SCIENCE_MEMOS_ENGINE_URL", "the recall index is OpenViking; set OPEN_SCIENCE_OPENVIKING_URL instead"],
     ["OPEN_SCIENCE_REQUIRE_MEMORY_INDEX", "set OPEN_SCIENCE_MEMORY_INDEX_STRICT instead"],
     // The MinerU container read its input from a shared staging directory
@@ -2726,17 +2732,8 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS ??
       24 * 60 * 60 * 1000,
     ),
-    // How much of a recall reaches the prompt: how many memories, and how many
-    // characters they may spend between them. The budget is product policy, so
-    // it is the same number whichever component ranked the candidates.
-    memoryContextLimit: Number(
-      overrides.memoryContextLimit ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT ?? 8,
-    ),
-    memoryContextMaxChars: Number(
-      overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
-    ),
-    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, research
-    // records and capsule entries together, inside the 1,500 tokens the block is held to. What is always present is paid for on
+    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, capsule entries,
+    // inside the 1,500 tokens the block is held to. What is always present is paid for on
     // every request and takes attention from the question, so it is capped; the rest is the recall tool's, and the line beside
     // the profile says how many there are.
     memoryProfileMaxRecords: Number(
@@ -2822,7 +2819,7 @@ export function loadConfig(overrides = {}) {
     // record itself stays authoritative in the control-plane database either
     // way, so this switch changes recall quality and nothing else. Unset, the
     // index is selected exactly when it is configured (an OpenViking URL and
-    // its key) — `memorySubstrate.memoryIndexSelection` decides, and readiness
+    // its key) — `memoryIndexProvider.memoryIndexSelection` decides, and readiness
     // says which way and why.
     memoryIndexProvider: String(
       overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "",
@@ -3250,48 +3247,15 @@ export function loadConfig(overrides = {}) {
     // conversation. Off until a deployment is fused with the shell.
     researchHandoffEnabled:
       overrides.researchHandoffEnabled ?? boolEnv("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED", false),
-    memoryExtractionEnabled:
-      overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
-    // Projects extraction never writes for, by id prefix. Empty by default.
-    //
-    // A paired evaluation manipulates the very records extraction upserts, so
-    // it has to run with extraction off — and until now the only way to do that
-    // was the deployment-wide switch above, flipped by hand before the batch
-    // and flipped back after it. Twice in two days that was a container
-    // recreate in the middle of a live deployment, and the failure mode when
-    // somebody forgets the second flip is a memory page that stays empty
-    // forever and looks exactly like "nothing worth remembering happened".
-    //
-    // A prefix rather than an exact id because an eval allocates one project
-    // per batch (`eval-memory-ablation-v3`, then v4); the operator registers
-    // `eval-` once.
-    memoryExtractionExcludedProjectPrefixes: String(overrides.memoryExtractionExcludedProjectPrefixes
-      ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES ?? "")
-      .split(",").map((value) => value.trim()).filter(Boolean),
-    // Extraction runs after the reply is already delivered, so a generous budget
-    // costs the user nothing. The measured request takes 40-46s against
-    // deepseek-v4-pro, so the old 30s ceiling aborted every single one.
+    // The model calls the memory side makes on the researcher's behalf (the topic grouping, the rejection judge): they run after the
+    // reply is already delivered, so a generous budget costs the user nothing. The legacy engine's extraction, which these keys
+    // were named for, was deleted on 2026-10-25; the names stay because deployments set them.
     memoryExtractionTimeoutMs: Number(
       overrides.memoryExtractionTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS ?? 120_000,
     ),
-    // Structured extraction rather than reasoning, so the flash tier fits: it
-    // measures ~22s against the pro model's ~38s on the same prompt.
+    // Structured judgement rather than reasoning, so the flash tier fits.
     memoryExtractionModel: String(
       overrides.memoryExtractionModel ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_MODEL ?? defaultDeepSeekModel,
-    ),
-    // How long a per-run episodic memory stays recallable. The profile
-    // extracted from those runs has no expiry.
-    memoryRunSummaryTtlDays: Number(
-      overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
-    ),
-    // mem stream (2026-09-20): how long an inferred memory lives after it was
-    // last observed. With no confirmation step (owner ruling 2026-09-19) an
-    // inference takes effect at once, so what keeps "one stressful week" from
-    // hardening into the profile is that a pattern not seen again fades; each
-    // re-observation extends it, and a statement the researcher made does not
-    // fade at all. 0 = never.
-    memoryInferredTtlDays: Number(
-      overrides.memoryInferredTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS ?? 90,
     ),
     allowRuntimeHostNetwork:
       overrides.allowRuntimeHostNetwork ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_HOST_NETWORK", false),

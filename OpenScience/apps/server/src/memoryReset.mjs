@@ -12,7 +12,7 @@ const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-ev
  *
  * Hidden knowledge: the memory page shows four kinds of thing, kept in two
  * stores — the structured memories (`evimed_memory.records`, which
- * `ResearchMemoryStore.purgeUserMemory` deletes) and, in the product ledger,
+ * `MemorySettingsStore.purgeUserMemory` deletes) and, in the product ledger,
  * the learned methods, the capability handbooks and the notes of the
  * researcher's own capsules. The reset used to clear only the first and say it
  * had cleared everything; the page then still showed every method and handbook
@@ -32,7 +32,7 @@ const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-ev
  * correction or an adoption from, and a ledger that outlived the reset would
  * teach the next lesson from what the researcher asked to forget. The
  * conversations that were already over are held against the reset's instant
- * (`ResearchMemoryStore.noteReset`) by the readers, not deleted: they are the
+ * (`MemorySettingsStore.noteReset`) by the readers, not deleted: they are the
  * researcher's conversations, and a reset does not touch those.
  *
  * Deleted outright, with their history, inside one transaction — the memory

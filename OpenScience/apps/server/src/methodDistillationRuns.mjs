@@ -48,7 +48,7 @@ import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
 import { learnedMethodId, methodScopeOf } from "./learningService.mjs";
 import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
-import { endedBeforeReset } from "./researchMemory.mjs";
+import { endedBeforeReset } from "./memorySettings.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The file the run reads its frozen input from. */
@@ -313,7 +313,6 @@ function anchoredExcerpts({ runId, trigger, messages, interventions, rootSession
  * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[],
  *   shapes?: Record<string, any> | null,
  *   peerRuns?: {runId: string, run?: any, shapes?: Record<string, any> | null, transcript: {header: any, messages: any[]} | null}[],
- *   correctionRecords?: {recordId: string, key?: string | null, text: string}[],
  *   methodsUsed?: {invoked?: any[], handbooks?: any[], passedOver?: any[], unresolved?: any[]} | null}} input
  *   `methodsUsed`: what the run read, resolved to revisions with what became of the results produced under each
  *   (`MethodFeedbackService.usedForLesson`); absent when this deployment cannot say, which is not "none".
@@ -333,12 +332,7 @@ export function buildDistillationInput(input) {
   const anchored = input.transcript
     ? anchoredExcerpts({ runId: input.run?.id ?? "", trigger: input.trigger, messages: input.transcript.messages, interventions: trajectory.interventions, rootSessionId })
     : { excerpts: [], dropped: { sensitive: 0, bounded: 0 } };
-  const corrections = [
-    ...steered.corrections,
-    ...(input.correctionRecords ?? [])
-      .filter((record) => record && typeof record.text === "string" && record.text.trim())
-      .map((record) => ({ source: /** @type {"memory"} */ ("memory"), recordId: String(record.recordId ?? ""), key: record.key ?? null, text: record.text.slice(0, 4000) })),
-  ].slice(0, MAX_CORRECTIONS);
+  const corrections = steered.corrections.slice(0, MAX_CORRECTIONS);
   const feedback = (input.feedback ?? []).slice(0, 20);
   return {
     schemaVersion: 1,
@@ -500,14 +494,13 @@ export function unionEvidence(earlier, added) {
  * What a lesson is about, as one text to find the library's nearest methods by: the rules and words the person gave, what they
  * first asked, and the shape of what was left. The nearest eight by meaning are what the distiller is shown first
  * (`MethodSimilarity.nearest`); the eight most recently written were shown until 2026-10-23.
- * @param {{ run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], correctionRecords?: {text: string}[], shapes?: Record<string, any> | null }} input
+ * @param {{ run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], shapes?: Record<string, any> | null }} input
  * @returns {string}
  */
 export function lessonQueryText(input) {
   const trajectory = trajectoryDigest(input.transcript, input.run ?? {}, { shapes: input.shapes, reactions: reactionsOf(input.feedback) });
   const words = [
     ...trajectory.interventions.flatMap((entry) => [entry.rule ?? "", entry.text]),
-    ...(input.correctionRecords ?? []).map((record) => record.text),
     ...trajectory.requests.slice(0, 2).map((entry) => entry.text),
     ...trajectory.artifacts.flatMap((artifact) => [artifact.format, ...(artifact.shape?.labels ?? [])]),
   ];
@@ -528,12 +521,6 @@ export function distillationDispatchId(runId, trigger, discriminator = "") {
 
 export class MethodDistillationRuns {
   /**
-   * `readCorrections` reads the correction memories a `correction` lesson
-   * names (`job.payload.corrections`) — the researcher's own words, quoted and
-   * checked when the extractor wrote them — so they open the input rather than
-   * stay behind a record id the run cannot resolve. Optional: without it the
-   * corrections typed into the run itself still come first.
-   *
    * `resolveProject` resolves one project of the lesson's own account, for a
    * `routine` peer that ran in another of the researcher's projects
    * (`lessonPeers`). Optional: without it such a peer reads as unavailable.
@@ -548,7 +535,6 @@ export class MethodDistillationRuns {
    * degrades, they are the library's most recently written. `resolveRun` reads one run's ledger record in a project, for the
    * digest of a routine's peer; without it a peer is digested from its transcript alone.
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any, jobs?: any, notifications?: any,
-   *   readCorrections?: ((userId: string, recordIds: string[]) => Promise<{recordId: string, key?: string | null, text: string}[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
    *   usedMethods?: ((project: any, run: any) => Promise<any>) | null,
    *   resetInstant?: ((userId: string) => Promise<string | null>) | null,
@@ -556,7 +542,7 @@ export class MethodDistillationRuns {
    *   resolveRun?: ((project: any, runId: string) => Promise<any>) | null,
    *   onEvidence?: ((counts: { kept: number, dropped: number }) => void) | null}} dependencies
    */
-  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null, resolveProject = null, usedMethods = null, resetInstant = null,
+  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, resolveProject = null, usedMethods = null, resetInstant = null,
     similarity = null, resolveRun = null, onEvidence = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
@@ -567,7 +553,6 @@ export class MethodDistillationRuns {
     this.learning = learning;
     this.jobs = jobs;
     this.notifications = notifications;
-    this.readCorrections = readCorrections;
     this.resolveProject = resolveProject;
     this.usedMethods = usedMethods;
     this.resetInstant = resetInstant;
@@ -620,19 +605,13 @@ export class MethodDistillationRuns {
   async execute({ job, project, run, feedback = [], repairIssues = [] }) {
     const trigger = String(job.payload?.trigger ?? "");
     const transcript = await readRunTranscript(project, run.id).catch(() => null);
-    const recordIds = Array.isArray(job.payload?.corrections)
-      ? job.payload.corrections.map((entry) => String(entry?.recordId ?? "")).filter(Boolean).slice(0, MAX_CORRECTIONS)
-      : [];
-    const correctionRecords = recordIds.length && this.readCorrections
-      ? await this.readCorrections(job.userId, recordIds).catch(() => [])
-      : [];
     // What the run left, read for its shape: the digest says what kind of thing it made, not only where it put it.
     const files = [...new Set(["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(run?.[field]) ? run[field] : [])
       .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
     const shapes = files.length ? await readArtifactShapes(project, files).catch(() => ({})) : {};
     // The researcher's whole library, ranked by what this lesson is about: a method learnt in another project is the one to amend,
     // not a near-duplicate to write beside it.
-    const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, correctionRecords, shapes }));
+    const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, shapes }));
     // Each peer by run and project; a lesson queued before 2026-09-28 names
     // run ids only, all in its own project (`lessonPeers`).
     const peers = trigger === "routine"
@@ -652,7 +631,7 @@ export class MethodDistillationRuns {
       });
     }
     const methodsUsed = this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords, methodsUsed, shapes });
+    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, methodsUsed, shapes });
     const dispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
     const identity = await this.dispatch({
       userId: job.userId,
@@ -720,8 +699,7 @@ export class MethodDistillationRuns {
     }
     const signal = context.signal ?? lessonSignal({
       trigger: String(job.payload?.trigger ?? ""),
-      corrections: [...(Array.isArray(job.payload?.corrections) ? job.payload.corrections : []),
-        ...(Number(job.payload?.steeredCorrections ?? 0) > 0 ? [{ steered: true }] : [])],
+      corrections: Number(job.payload?.steeredCorrections ?? 0) > 0 ? [{ steered: true }] : [],
       feedback: Array.isArray(job.payload?.feedback) ? job.payload.feedback : [],
     });
     // Where the lesson came from: the job's own project, or — when that

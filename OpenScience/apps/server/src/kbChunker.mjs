@@ -16,7 +16,7 @@
  * prefix is stored beside it, never inside it.
  */
 
-import { searchTokens } from "./memoryRecallPolicy.mjs";
+import { searchTokens } from "./searchTokens.mjs";
 
 /** Split past this many estimated tokens (plan §3.2: ~1000). */
 export const KB_CHUNK_TARGET_TOKENS = 1000;

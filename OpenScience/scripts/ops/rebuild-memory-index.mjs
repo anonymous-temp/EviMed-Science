@@ -172,11 +172,11 @@ async function rebuildCapsules({ database, jobs, indexing, userIds, failurePolic
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [{ loadConfig }, { createStore }, { ResearchMemoryStore }, { OpenVikingClient },
+  const [{ loadConfig }, { createStore }, { MemorySettingsStore }, { OpenVikingClient },
     { MemorySubstrate }, { MemoryIndexing }, { ProductJobs }, { memoryIndexFailurePolicy }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/store.mjs"),
-    import("../../apps/server/src/researchMemory.mjs"),
+    import("../../apps/server/src/memorySettings.mjs"),
     import("../../apps/server/src/openVikingClient.mjs"),
     import("../../apps/server/src/memorySubstrate.mjs"),
     import("../../apps/server/src/memoryIndexing.mjs"),
@@ -188,9 +188,9 @@ async function main() {
   const store = createStore(config);
   const database = "database" in store ? store.database : null;
   try {
-    const researchMemory = new ResearchMemoryStore(config, { database });
+    const memorySettings = new MemorySettingsStore(config, { database });
     const openViking = new OpenVikingClient(config);
-    const substrate = new MemorySubstrate(config, { store: researchMemory, openViking });
+    const substrate = new MemorySubstrate(config, { store: memorySettings, openViking });
 
     if (!substrate.active) {
       // Not an error worth a stack trace: the likely cause is running this on a

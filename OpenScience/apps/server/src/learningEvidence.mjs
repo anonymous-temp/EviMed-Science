@@ -41,7 +41,7 @@ import { readArtifactShapes } from "./artifactShapes.mjs";
 import { CONVERSATION_SCOPE, leftFiles, learningScopeOf, routineLessonFor, routinePeriodMs } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { endedBeforeReset } from "./researchMemory.mjs";
+import { endedBeforeReset } from "./memorySettings.mjs";
 
 /** The job kind that settles one run, and the key it is queued under. */
 export const SETTLE_JOB_KIND = "learning-evidence";

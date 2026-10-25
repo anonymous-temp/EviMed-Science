@@ -78,7 +78,7 @@ test("through the server: dependents, the vault, the delivered files and the com
     await add("wiki/doac.md", { docType: "document" });
 
     // What rests on the first: a memory that names it, a result that read its bytes (and one of a stranger's that did not).
-    const memory = await app.researchMemory.upsertRecord(owner.user.id, { scope: "project", scopeId: projectId, kind: "project_fact", key: "project.population",
+    const memory = await app.memorySettings.upsertRecord(owner.user.id, { scope: "project", scopeId: projectId, kind: "project_fact", key: "project.population",
       value: "纳入 18 岁以上非瓣膜性房颤患者", summary: "纳入 18 岁以上非瓣膜性房颤患者", origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false },
     null, { sourceLinks: [{ type: "knowledge_source", id: trial.source.id }] });
     const versionId = `rv_${hex("3")}`;

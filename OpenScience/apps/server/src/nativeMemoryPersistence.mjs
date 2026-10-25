@@ -22,7 +22,7 @@
  *    go when the rejection does (the person's restatement, a reset, the account); the revisions' text of a hard delete is still
  *    scrubbed from the history.
  *
- * What this does not hold, and the legacy path did (owner-accepted, README §5.4 of the course correction): a line of
+ * What this does not hold, and the legacy engine's records did (owner-accepted, README §5.4 of the course correction): a line of
  * `profile.md` has no origin, no validity interval, no confidence and no conflict record of its own — those were
  * columns of one row per fact, and the engine's profile is one file. They exist here at file granularity only.
  *
@@ -34,7 +34,7 @@ import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
 const migrations = new WeakMap();
 
-export const NATIVE_COMMIT_ORIGINS = Object.freeze(["gateway", "tool", "scan", "page", "replay", "migration"]);
+export const NATIVE_COMMIT_ORIGINS = Object.freeze(["gateway", "tool", "scan", "page", "replay"]);
 /**
  * `pending`: accepted by the engine, its diff not read yet. `completed`: its diff is in the revisions. `failed`: the
  * extraction failed and a replay is owed. `replayed`: its messages were committed again as another archive.
@@ -54,9 +54,10 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_accounts (
   user_id text PRIMARY KEY REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   registered_at timestamptz(3),
   scanned_at timestamptz(3),
-  migrated_at timestamptz(3),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
+-- The replay of the legacy engine's records into the engine left a mark here; the replay is deleted (2026-10-25).
+ALTER TABLE evimed_memory.native_accounts DROP COLUMN IF EXISTS migrated_at;
 CREATE TABLE IF NOT EXISTS evimed_memory.native_admissions (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   candidate_id text NOT NULL CHECK (char_length(candidate_id) BETWEEN 1 AND 200),

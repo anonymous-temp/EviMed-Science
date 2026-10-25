@@ -39,7 +39,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
   const sessions = new OpenVikingSessions(client, { timeoutMs, fastTimeoutMs: Math.round(timeoutMs / 3) });
   const failures = [];
   const handler = createMemoryGatewayHandler({
-    config: { ovNativeMemoryEnabled: true, memoryEnabled: true, ...config },
+    config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER }) },
     sessions, admission, overlay, memoryTool, capsuleSearch,
@@ -386,7 +386,7 @@ test("requests and bodies are bounded, and the bound is counted", async (t) => {
 });
 
 test("with the native engine off in the deployment the gateway is not there", async (t) => {
-  const { stub, call } = await fixture(t, { config: { ovNativeMemoryEnabled: false } });
+  const { stub, call } = await fixture(t, { config: { memoryEngineEnabled: false } });
   const off = await call("GET", "/health");
   assert.equal(off.status, 404);
   assert.equal(off.json.error.code, "memory_gateway_disabled");
@@ -409,7 +409,7 @@ test("admission: a captured message belongs to the turn it was spoken in, then t
   const sid = "session_0123456789abcdef0123456789abcdef";
   const at = (hour, minute = 0) => Date.parse(`2026-10-14T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`);
   const iso = (hour) => new Date(at(hour)).toISOString();
-  const admit = (runs, when) => createMemoryAdmission({ config: { memoryEnabled: true }, researchMemory: memoryDouble(),
+  const admit = (runs, when) => createMemoryAdmission({ config: { memoryEnabled: true }, memorySettings: memoryDouble(),
     conversations: { running: async () => runs.filter((run) => run.status === "running"), runsOf: async () => runs } })
     .admit({ user: { id: USER }, project: { id: "p1", userId: USER }, engineSessionId: `dsh-${sid}`, at: when });
   const ledger = [
@@ -442,7 +442,7 @@ test("a scheduled execution's instruction never reaches the engine as the person
     { id: "run_1", sessionId: sid, status: "succeeded", effectiveRouteReason: "autopilot:routine", kernelRequestIds: ["req_1"], startedAt: at(1), finishedAt: at(2) },
   ];
   const admission = createMemoryAdmission({
-    config: { memoryEnabled: true }, researchMemory: memoryDouble(),
+    config: { memoryEnabled: true }, memorySettings: memoryDouble(),
     conversations: { running: async () => ledger.filter((run) => run.status === "running"), runsOf: async (_project, id) => ledger.filter((run) => run.sessionId === id) },
   });
   const { stub, call } = await fixture(t, { admission });
@@ -485,52 +485,52 @@ test("admission: who is learned from and who is read for, by reason", async () =
     parentOf: (id, running) => (id === "session_child" ? running[0]?.id ?? null : null) });
   const admit = (options, caller = { user, project, engineSessionId }) => createMemoryAdmission({ config: { memoryEnabled: true }, ...options }).admit(caller);
 
-  const person = await admit({ researchMemory: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running" }]) });
+  const person = await admit({ memorySettings: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running" }]) });
   assert.deepEqual([person.native, person.learn, person.recall, person.sessionId], [true, true, true, sid]);
 
-  const legacy = await admit({ researchMemory: memoryDouble({ engine: "legacy" }) });
+  const legacy = await admit({ memorySettings: memoryDouble({ engine: "legacy" }) });
   assert.deepEqual([legacy.native, legacy.learn, legacy.recall, legacy.learnReason], [false, false, false, "legacy_engine"]);
 
-  const internal = await admit({ researchMemory: memoryDouble() }, { user, project: { id: "evimed-learning", userId: USER }, engineSessionId });
+  const internal = await admit({ memorySettings: memoryDouble() }, { user, project: { id: "evimed-learning", userId: USER }, engineSessionId });
   assert.deepEqual([internal.learn, internal.recall, internal.learnReason], [false, false, "internal_project"]);
 
-  const paused = await admit({ researchMemory: memoryDouble({ settings: { learningPaused: true } }) });
+  const paused = await admit({ memorySettings: memoryDouble({ settings: { learningPaused: true } }) });
   assert.deepEqual([paused.learn, paused.recall, paused.learnReason], [false, true, "paused"]);
-  const recallPaused = await admit({ researchMemory: memoryDouble({ settings: { recallPaused: true } }) });
+  const recallPaused = await admit({ memorySettings: memoryDouble({ settings: { recallPaused: true } }) });
   assert.deepEqual([recallPaused.learn, recallPaused.recall, recallPaused.recallReason], [true, false, "paused"]);
-  const projectPaused = await admit({ researchMemory: memoryDouble({ settings: { pausedProjects: ["p1"] } }) });
+  const projectPaused = await admit({ memorySettings: memoryDouble({ settings: { pausedProjects: ["p1"] } }) });
   assert.deepEqual([projectPaused.learn, projectPaused.recall], [false, false]);
 
-  const trial = await admit({ researchMemory: memoryDouble({ trial: sid }) });
+  const trial = await admit({ memorySettings: memoryDouble({ trial: sid }) });
   assert.deepEqual([trial.learn, trial.recall, trial.learnReason], [false, false, "trial"]);
 
   for (const run of [{ automated: true }, { effectiveRouteReason: "autopilot:agenda-1" }, { effectiveRouteReason: "loopx-continuation" }, { effectiveRouteReason: "adopted:runtime-ui:loopx-continuation" },
     // An independent verification and the evidence programme's own episodes and verifications: dispatched with `automated` unset.
     ...[VERIFICATION_ROUTE_REASON, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, evidenceProgrammeRouteReason("evidence-update"), "geo:probe", "vcr:analysis", "platform-evolution"]
       .map((effectiveRouteReason) => ({ effectiveRouteReason }))]) {
-    const automated = await admit({ researchMemory: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running", ...run }]) });
+    const automated = await admit({ memorySettings: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running", ...run }]) });
     assert.deepEqual([automated.learn, automated.recall, automated.learnReason], [false, true, "automated_run"], JSON.stringify(run));
     assert.equal(isPlatformStartedRun(run), true);
   }
   // The person's turn after a continuation is theirs again: the turn in progress decides, not the conversation's history.
-  const after = await admit({ researchMemory: memoryDouble(), conversations: runs([
+  const after = await admit({ memorySettings: memoryDouble(), conversations: runs([
     { id: "r2", sessionId: sid, status: "running", startedAt: "2026-10-13T02:00:00Z" }, { id: "r1", sessionId: sid, status: "succeeded", automated: true, startedAt: "2026-10-13T01:00:00Z" }]) });
   assert.equal(after.learn, true);
 
-  const internalAgent = await admit({ researchMemory: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running", agentId: "method-distillation" }]),
+  const internalAgent = await admit({ memorySettings: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running", agentId: "method-distillation" }]),
     internalAgent: async (id) => id === "method-distillation" });
   assert.equal(internalAgent.learn, false);
 
-  const clinical = await admit({ researchMemory: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running" }]),
+  const clinical = await admit({ memorySettings: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running" }]),
     clinicalContext: async (_user, _project, contexts) => contexts.some((context) => context.runId === "r1") });
   assert.deepEqual([clinical.learn, clinical.recall, clinical.learnReason], [false, true, "clinical_context"]);
 
-  const child = await admit({ researchMemory: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running" }]) },
+  const child = await admit({ memorySettings: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running" }]) },
     { user, project, engineSessionId: "dsh-session_child" });
   assert.deepEqual([child.learn, child.learnReason], [false, "subagent"]);
 
   // The engine's templates are the never-keep rules: while they cannot be confirmed nothing is sent, and reading goes on.
-  const unready = await admit({ researchMemory: memoryDouble(), engineReady: () => ({ ok: false, code: "openviking_memory_templates_missing" }) });
+  const unready = await admit({ memorySettings: memoryDouble(), engineReady: () => ({ ok: false, code: "openviking_memory_templates_missing" }) });
   assert.deepEqual([unready.learn, unready.recall, unready.learnReason], [false, true, "engine_unavailable"]);
 });
 

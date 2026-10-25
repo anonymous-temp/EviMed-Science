@@ -10,7 +10,7 @@ import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 import { createSourceChanges, recordFrontierNotices } from "../src/sourceChanges.mjs";
 import { createSourceUpdateLookup } from "../src/sourceUpdates.mjs";
@@ -30,7 +30,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 8, databaseConnectionTimeoutMs: 5_000 });
   await migrateProductStore(database);
   documents = new ProductDocuments(database);
-  memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  memory = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
   learning = new LearningService({ documents });
 });
 after(async () => {
