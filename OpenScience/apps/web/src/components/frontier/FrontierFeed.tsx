@@ -77,7 +77,9 @@ export function FeedList({
     <FilterChip pressed={unread.pressed} className="shrink-0" onClick={() => unread.onChange(!unread.pressed)}>只看未读</FilterChip>
   );
   return (
-    <div id="frontier-list-top" className="isolate space-y-8">
+    // A block of its own (the walk judges a control against the content of its block): 只看未读 above a list it emptied is the list's
+    // control, not one standing under 精选's safety strip.
+    <section id="frontier-list-top" className="isolate space-y-8">
       {error && (
         <div role="alert" className="flex flex-wrap items-center gap-3 text-ui text-text-2">
           <span>未能刷新</span>
@@ -128,6 +130,6 @@ export function FeedList({
         );
       })}
       {listing.nextCursor && <Button variant="secondary" loading={loadingMore} onClick={onMore}>加载更多</Button>}
-    </div>
+    </section>
   );
 }
