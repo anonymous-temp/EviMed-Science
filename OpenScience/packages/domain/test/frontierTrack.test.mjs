@@ -109,7 +109,7 @@ test('a congress is called by its Latin code with its year; its Chinese name whe
   assert.equal(frontierCongressCode(ESMO), 'ESMO 2026')
   assert.equal(frontierCongressCode(/** @type {any} */ (frontierCongressById('asn-kidney-week-2026'))), 'ASN 2026')
   assert.equal(frontierCongressCode(/** @type {any} */ (frontierCongressById('gw-icc-2026'))), 'GW-ICC 2026')
-  assert.equal(frontierCongressCode({ name_zh: '某大会', name_en: 'Some Meeting', keywords_zh: ['某大会'], keywords_en: [] }), '某大会')
+  assert.equal(frontierCongressCode(/** @type {any} */ ({ name_zh: '某大会', name_en: 'Some Meeting', keywords_zh: ['某大会'], keywords_en: [] })), '某大会')
   for (const congress of FRONTIER_CONGRESSES) assert.ok(frontierCongressCode(congress).length > 0, congress.id)
 })
 

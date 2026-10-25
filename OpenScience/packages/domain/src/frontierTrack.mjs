@@ -191,6 +191,7 @@ export function frontierCongressItemWindow(congress) {
  * @param {{ start: string, end: string }} congress @param {string} today @param {number} [grace] days after the end that are still recapped
  */
 export function frontierCongressRecapDays(congress, today, grace = 1) {
+  /** @type {string[]} */
   const days = []
   const last = frontierShiftDay(congress.end, grace)
   if (today < congress.start || today > last) return days

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:0ea5af0b6de3ebafe9fafe3757ff5e5e2fd1bb88adf68cf0bc065f2a71235f0c",
+  "version": "sha256:b505030b94144f14566934212bada195715d5ae7b5ee4a35de590a209feef7ea",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 38,
@@ -688,7 +688,7 @@
     {
       "name": "mcp__evimed__frontier_search",
       "source": "mcp",
-      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query EviMed's own evidence cards. Use it when a question asks what is new or recent; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card.",
+      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query EviMed's own evidence cards. Use it when a question asks what is new or recent, or to read an item named frontier:<id>; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -770,6 +770,11 @@
             "minimum": 1,
             "maximum": 20,
             "default": 8
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{12,32}$",
+            "description": "One item's id, as in frontier:<id>: reads that item (its text, 导读 and 要点) and takes no other field."
           }
         },
         "additionalProperties": false
