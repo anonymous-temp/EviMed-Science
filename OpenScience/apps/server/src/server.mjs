@@ -8694,6 +8694,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcr,
     vcrService: vcr?.service ?? null,
     capsuleService,
+    packOutcomes,
     pluginService,
     extensionService,
     skillLibraryService,
