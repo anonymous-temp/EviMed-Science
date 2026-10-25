@@ -1,6 +1,7 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
+import { GEO_NOTIFY_SEVERITIES, errorNoticeKey } from "./geoErrors.mjs";
 import { budgetOpen } from "./geoMarketStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -1578,7 +1579,18 @@ export class GeoOrchestrator {
         AND e.notified_at IS NULL AND e.created_at >= now() - make_interval(days => $2)
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.schedule_marks m WHERE m.geo_project_id = e.geo_project_id AND m.key = 'notice:error:' || e.id)
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT $3`, [project.id, GEO_RUN_RULES.noticeScanDays, GEO_RUN_RULES.noticesPerTick])).rows;
-    for (const error of errors) await this.#notice(project, `notice:error:${error.id}`, () => this.notifier?.wrongOurs(project, error));
+    // An urgent error is here only when the measurement's own notice did not go out (the inbox refused it): it is told under the key
+    // of the telling it is (`errorNoticeKey`, a reopened error's sighting), and marked told once the inbox took it, so the measurement's
+    // retry stops (2026-10-25: a refused S3/S4 notice was marked told and nothing tried it again).
+    for (const error of errors) {
+      const urgent = GEO_NOTIFY_SEVERITIES.includes(String(error.severity));
+      const key = urgent ? errorNoticeKey({ id: String(error.id), firstSnapshotId: error.first_snapshot_id ?? null, lastSnapshotId: error.last_snapshot_id ?? null }) : null;
+      const told = await this.#notice(project, `notice:error:${error.id}`, () => this.notifier?.wrongOurs(project, error, { key }));
+      if (told && urgent) {
+        await this.store.query(`UPDATE evimed_geo.errors SET notified_at = now() WHERE id = $1 AND geo_project_id = $2 AND notified_at IS NULL`,
+          [String(error.id), project.id]);
+      }
+    }
     const held = (await this.store.query(`SELECT a.id, a.title FROM evimed_geo.articles a WHERE a.geo_project_id = $1 AND a.safety = 'open'
         AND a.status <> 'withdrawn'
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.schedule_marks m WHERE m.geo_project_id = a.geo_project_id AND m.key = 'notice:article-safety:' || a.id)

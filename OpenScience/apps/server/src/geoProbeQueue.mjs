@@ -321,6 +321,7 @@ export class GeoProbeBreaker {
  * @property {Record<string, number>} inclusionTotals   what the inclusion channel did, since this process started (submitted, polled, done, failed, expired)
  * @property {any} upstream
  * @property {Set<string>} alerted
+ * @property {Map<string, { refusals: number, at: number }>} notifyRetry   error id → the inbox's refusals of its notice in a row, and when it is tried next
  * @property {string} owner
  */
 
@@ -353,6 +354,7 @@ export function geoMeasureState(key) {
     inclusionTotals: {},
     upstream: null,
     alerted: new Set(),
+    notifyRetry: new Map(),
     owner: `geo-probe-${process.pid}-${randomId().slice(0, 8)}`,
   };
   if (key) states.set(key, state);

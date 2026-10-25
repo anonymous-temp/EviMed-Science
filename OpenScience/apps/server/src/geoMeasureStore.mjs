@@ -913,10 +913,15 @@ export class GeoMeasureStore {
     await this.query(`UPDATE evimed_geo.errors SET ${sets.join(", ")} WHERE id = $1`, [errorId, ...values]);
   }
 
-  /** Urgent errors not yet notified. @param {string[]} severities @param {number} limit */
+  /**
+   * Urgent errors not yet notified, of projects that still exist: a deleted project's untold error has nobody to tell, and read first
+   * (the oldest) it held the head of the queue for good while the notices behind it waited.
+   * @param {string[]} severities @param {number} limit
+   */
   async errorsToNotify(severities, limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE notified_at IS NULL AND status <> 'closed' AND severity = ANY($1::text[])
-      ORDER BY created_at LIMIT $2`, [severities, limit]);
+    const result = await this.query(`SELECT e.* FROM evimed_geo.errors e JOIN evimed_geo.projects p ON p.id = e.geo_project_id AND p.deleted_at IS NULL
+      WHERE e.notified_at IS NULL AND e.status <> 'closed' AND e.severity = ANY($1::text[])
+      ORDER BY e.created_at, e.id LIMIT $2`, [severities, limit]);
     return result.rows.map(errorRow);
   }
 

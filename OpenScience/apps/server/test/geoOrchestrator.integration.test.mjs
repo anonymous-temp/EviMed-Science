@@ -643,6 +643,21 @@ test("a weekly round that heard no answer is no week: monitoring is not done by 
   await finishRun(world, control, world.dispatched.indexOf(reports()[0]));
 });
 
+test("an urgent error the measurement could not tell is told by the program under its telling's key, and marked told (2026-10-25)", options, async () => {
+  const world = harness();
+  const { project, userId } = await newProject();
+  // Reopened: first seen in s1, back in s2; the inbox refused the measurement's notice of the reopening.
+  await q(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, statement, severity, status, first_snapshot_id, last_snapshot_id)
+    VALUES ($1, $2, $3, 'dosing', 'deepseek', '把玛仕度肽说成每天注射一次', 'S3', 'open', 's1', 's2')`, [`err-u-${project.id}`, userId, project.id]);
+  await world.orchestrator.advance(project.id);
+  const told = world.notices.filter((notice) => notice.title === "DeepSeek 把玛仕度肽说成每天注射一次");
+  assert.deepEqual(told.map((notice) => notice.idempotencyKey), [`geo:wrong_ours:err-u-${project.id}:seen:s2`], "the reopening, not the first telling");
+  const [row] = await q(`SELECT notified_at FROM evimed_geo.errors WHERE id = $1`, [`err-u-${project.id}`]);
+  assert.notEqual(row.notified_at, null, "the measurement stops trying it");
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.notices.filter((notice) => notice.title === "DeepSeek 把玛仕度肽说成每天注射一次").length, 1);
+});
+
 test("a diagnosis is done only when its metrics exist; past the grace operators are alerted and the program waits", options, async () => {
   const { world, project } = await lockedProgram();
   const round = world.enqueued[0].id;

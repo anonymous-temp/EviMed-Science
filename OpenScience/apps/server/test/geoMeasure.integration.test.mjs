@@ -362,6 +362,45 @@ test("an S3 error notifies once, is confirmed by ten fresh asks, closes only aft
   }
 });
 
+test("an S3 notice the inbox refused leaves the error untold and is tried again after a wait; a deleted project's error waits for nobody (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_t");
+  const h = await harness();
+  /** @type {any[]} */
+  const tries = [];
+  const deps = { ...h.deps, notify: (/** @type {any} */ event) => { tries.push(event); return tries.length === 1 ? false : undefined; } };
+  try {
+    await enqueueRound(deps, { geoProjectId: "geo_t", kind: "baseline" });
+    await tickProbe({ ...deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...deps, maxAsks: 10 });
+    await tickParse({ ...deps, maxParse: 20 });
+    assert.equal(tries.length, 1, "the parse tick told it once");
+    const untold = async () => (await rows(`SELECT id, notified_at FROM evimed_geo.errors WHERE geo_project_id = 'geo_t' AND severity = 'S3'`))[0];
+    const error = await untold();
+    assert.equal(error.notified_at, null, "the inbox refused it: not told");
+
+    assert.equal((await tickErrors(deps)).notified, 0);
+    assert.equal(tries.length, 1, "not asked again within its wait");
+    h.clock.advance(61_000);
+    assert.equal((await tickErrors(deps)).notified, 1);
+    assert.deepEqual(tries.map((event) => event.idempotencyKey), [`geo:wrong_ours:${error.id}:first`, `geo:wrong_ours:${error.id}:first`],
+      "the same telling, under the same key");
+    assert.notEqual((await untold()).notified_at, null);
+    await tickErrors(deps);
+    assert.equal(tries.length, 2, "told once it went out");
+
+    // A deleted project's untold error is not read first for ever.
+    await seed("geo_t2");
+    await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, statement, severity, status, created_at)
+      VALUES ('ge_gone', 'user_geo_t2', 'geo_t2', 'f-gone', 'deepseek', '讲错', 'S4', 'open', '2026-01-01T00:00:00Z')`);
+    await database.query(`UPDATE evimed_geo.projects SET deleted_at = now() WHERE id = 'geo_t2'`);
+    assert.deepEqual((await store.errorsToNotify(["S3", "S4"], 10)).map((row) => row.id), []);
+  } finally {
+    await h.probe.close();
+  }
+});
+
 test("a wrong statement whose error was never written is recorded by the housekeeping, notified and queued for confirmation, once (Q-6)", options, async () => {
   await reset();
   await seed("geo_q6", { engines: ["deepseek"] });
