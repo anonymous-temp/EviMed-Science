@@ -21,8 +21,9 @@
  * provisional, as every threshold of the loop is until it has a distribution), once for that hash. Only a run the researcher left alone
  * (`LearningEvidence.settle`, after every refusal of the loop: the researcher's own attended work, not paused, not clinical, not a trial, not automated)
  * counts, and a snippet that carries a credential or an identifier is dropped before it is stored. The occurrences are kept in `evimed_learning.script_uses`,
- * with the source of each (bounded), so that the distillation is shown the variants and not only the one that completed the count; a project's deletion
- * and a memory reset take them, an account's deletion too, and they are in the account's export.
+ * with the source of each (bounded), so that the distillation is shown the variants and not only the one that completed the count; they are kept for the
+ * window and no longer (each write drops the account's older rows), a project's deletion and a memory reset take them, an account's deletion too, and they
+ * are in the account's export.
  *
  * Nothing here gates anything. A script that never reaches a method costs the researcher nothing, and a run's own work was done long before.
  *
@@ -290,6 +291,9 @@ export class ScriptUses {
       [userId, script.hash, runId, sessionId, projectId, scope, at.toISOString(), script.source.slice(0, SCRIPT_LIMITS.snippetChars)]);
       added += Number(inserted.rowCount ?? 0);
     }
+    // What is older than the window counts for nothing and is not kept: a program of the person's is held for ninety days and no longer.
+    await this.database.query("DELETE FROM evimed_learning.script_uses WHERE user_id=$1 AND occurred_at < $2",
+      [userId, new Date(this.now().getTime() - this.windowMs).toISOString()]);
     return added;
   }
 

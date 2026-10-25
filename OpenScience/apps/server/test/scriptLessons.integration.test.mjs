@@ -51,8 +51,10 @@ test("one row per script and run; the recurrence counts runs and conversations i
   assert.equal(await uses.record(owner, run("run_1", "conv_a", "p_one", 1, [{ hash: HASH, source: "print(1)" }])), 0, "the same script of the same run is one row");
   await uses.record(owner, run("run_2", "conv_a", "p_one", 2, [{ hash: HASH, source: "print(2)" }, { hash: OTHER, source: "print(9)" }]));
   await uses.record(owner, run("run_3", "conv_b", "p_two", 3, [{ hash: HASH, source: "print(3)" }]));
-  // Outside the window it is not a recurrence, however many there are; another account's is not this one's.
+  // Outside the window it is not a recurrence, however many there are, and it is not kept: the next write drops it. Another account's is not this one's.
   await uses.record(owner, run("run_old", "conv_z", "p_two", 120, [{ hash: HASH, source: "print(0)" }]));
+  const held = await database.query("SELECT run_id FROM evimed_learning.script_uses WHERE user_id=$1 AND run_id='run_old'", [owner]);
+  assert.equal(held.rowCount, 0, "a program older than the window is dropped by the write that follows it");
   await uses.record(stranger, run("run_s", "conv_s", null, 1, [{ hash: HASH, source: "print(4)" }]));
   const seen = await uses.recurrence(owner, HASH);
   assert.deepEqual([seen.runs, seen.conversations, seen.scope], [3, 2, "conversation"]);
