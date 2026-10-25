@@ -1999,7 +1999,7 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
   // c3-ask: the feed holds no such item (withdrawn, or an id nobody published) — a reader's page, or the run asked by id.
-  frontier_item_not_found: '这条前沿动态找不到了，可能已经撤下。',
+  frontier_item_not_found: '这条动态已不再提供。',
   vcr_split_invalid: '请为验证指定患者、时间或中心划分，并检查日期顺序。',
   vcr_history_perturbation_invalid: '请指定要省略的事件代码或有效的历史起始日期。',
   vcr_benchmark_invalid: '请按试验效果模板提供比较记录和已有证据的引用。',
