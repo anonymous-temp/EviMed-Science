@@ -33,7 +33,6 @@ import {
   VCR_MEMBER_ROLE_LABELS_ZH,
   VCR_MODEL_RISK_LABELS_ZH,
   VCR_MODEL_TIER_LABELS_ZH,
-  VCR_REFERRAL_STATE_LABELS_ZH,
   VCR_REVIEW_KIND_LABELS_ZH,
   VCR_STEP_LABELS_ZH,
   VCR_VALUE_SOURCE_LABELS_ZH,
@@ -51,7 +50,6 @@ import type {
   VcrMemberRole,
   VcrModelRisk,
   VcrModelTier,
-  VcrReferralState,
   VcrReviewKind,
   VcrStepKey,
   VcrValue,
@@ -74,7 +72,6 @@ export const jobStateLabel = table<VcrJobState>(VCR_JOB_STATE_LABELS_ZH);
 export const jobWaitLabel = table<VcrJobWait>(VCR_JOB_WAIT_LABELS_ZH);
 export const criterionStateLabel = table<VcrCriterionState>(VCR_CRITERION_STATE_LABELS_ZH);
 export const eligibilityLabel = table<VcrEligibility>(VCR_ELIGIBILITY_SUMMARY_LABELS_ZH);
-export const referralStateLabel = table<VcrReferralState>(VCR_REFERRAL_STATE_LABELS_ZH);
 export const memberRoleLabel = table<VcrMemberRole>(VCR_MEMBER_ROLE_LABELS_ZH);
 export const modelTierLabel = table<VcrModelTier>(VCR_MODEL_TIER_LABELS_ZH);
 export const modelRiskLabel = table<VcrModelRisk>(VCR_MODEL_RISK_LABELS_ZH);

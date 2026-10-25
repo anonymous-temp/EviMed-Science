@@ -1,4 +1,4 @@
-import { VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TAB_LABELS_ZH, VCR_TABS } from "@evimed/domain";
+import { VCR_STEP_LABELS_ZH, VCR_STEPS } from "@evimed/domain";
 import { describe, expect, it } from "vitest";
 import type { VcrStepKey, VcrStepStatus, VcrStudy } from "@/lib/vcrClient";
 import { hasDefinition, isVcrTab, resolveVcrTab, stepsOfTab, tabDot, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath, vcrWorkflowSteps } from "./vcrTabs";
@@ -7,16 +7,12 @@ const steps = (status: Partial<Record<VcrStepKey, VcrStepStatus>>, extra: Partia
   Object.fromEntries(VCR_STEPS.map((step) => [step, { status: status[step as VcrStepKey] ?? "none", ...(extra[step as VcrStepKey] ?? {}) }])) as VcrStudy["steps"];
 
 describe("the study page's tabs", () => {
-  it("is the domain's set with the domain's names, in the page's reading order", () => {
-    expect(VCR_TAB_ITEMS.map((tab) => tab.key).sort()).toEqual([...VCR_TABS].sort());
-    expect(VCR_TAB_ITEMS.map((tab) => tab.label)).toEqual(["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"]);
-    for (const tab of VCR_TAB_ITEMS) {
-      expect(tab.label).toBe((VCR_TAB_LABELS_ZH as Record<string, string>)[tab.key]);
-    }
+  it("shows six result workspaces while retaining legacy individual-patient addresses", () => {
+    expect(VCR_TAB_ITEMS.map(tab => tab.key)).toEqual(["overview", "matching", "population", "comparator", "trial", "data"]);
+    expect(VCR_TAB_ITEMS.map(tab => tab.label)).toEqual(["总览", "匹配", "人群与患者", "对照", "试验", "依据"]);
+    expect(resolveVcrTab("patients")).toEqual({ tab: "patients", moved: false });
   });
 
-  // The design spec caps a page at seven tabs; the vocabulary is what holds
-  // the line, and this is the assertion that notices if it stops.
   it("is at most seven", () => {
     expect(VCR_TAB_ITEMS.length).toBeLessThanOrEqual(7);
   });

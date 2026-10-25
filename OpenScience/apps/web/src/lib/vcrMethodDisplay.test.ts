@@ -5,13 +5,13 @@ import { vcrCalculationPath, vcrMethodPath } from "./vcrMethodLocation";
 describe("task display over canonical protocols", () => {
   const methods = Object.entries(VCR_JOB_METHODS).filter(([, method]) => !method.startsWith("forecast.")).map(([id, method]) => ({ id, method, name: method }));
   const all = completeMethodCatalogue(methods);
-  it("preserves all 32 R and four forecast protocols and consolidates only four patient seed entries", () => {
-    expect(all).toHaveLength(36); expect(methodEntries(all)).toHaveLength(33); expect(patientModes(all)).toHaveLength(4);
-    expect(completeMethodCatalogue(all)).toHaveLength(36);
+  it("preserves every R and forecast protocol and consolidates only four patient seed entries", () => {
+    expect(all).toHaveLength(methods.length + 4); expect(methodEntries(all)).toHaveLength(all.length - 3); expect(patientModes(all)).toHaveLength(4);
+    expect(completeMethodCatalogue(all)).toHaveLength(all.length);
   });
   it("assigns every protocol purpose, input and output without changing its identity", () => {
     for (const method of all) { expect(methodTask(method.method!)).not.toBe("其他方法"); expect(methodPurpose(method).purpose).not.toBe("配置此方法并保留计算结果。"); }
-    expect(methodTask("matching.evaluate")).toBe("招募与匹配"); expect(methodTask("comparator.covariate_sets")).toBe("稳健性分析");
+    expect(methodTask("matching.evaluate")).toBe("入组预测与匹配"); expect(methodTask("comparator.covariate_sets")).toBe("稳健性分析");
   });
   it("keeps a multi-method calculation container separate and addresses historical method and job together", () => {
     expect(vcrCalculationPath("calculation_1")).toBe("/app/capabilities/calculations/calculation_1");

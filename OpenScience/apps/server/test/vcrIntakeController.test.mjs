@@ -551,6 +551,7 @@ test('a record whose reference is malformed, or a controller with no host path f
 // --- the route, through the controller's own socket ---------------------------
 
 test('the controller serves the intake operations at protocol 11 and refuses anything else', async t => {
+  t.mock.method(os, 'freemem', () => 8 * 1024 * 1024 * 1024);
   const f = await fixture(t);
   const shortRoot = await fs.realpath(await fs.mkdtemp(path.join('/tmp', 'vi-')));
   t.after(() => fs.rm(shortRoot, { recursive: true, force: true }));

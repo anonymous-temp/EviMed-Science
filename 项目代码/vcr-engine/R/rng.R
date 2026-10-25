@@ -112,3 +112,27 @@ vcr_map_streams <- function(streams, fn, cores = 1L, indices = NULL) {
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# Paired scenarios reuse a member's random draws; replicate r takes an independent L'Ecuyer stream.
+vcr_patient_randomization <- function(job) {
+  set.seed(job[["seed"]], kind = VCR_RNG_KIND)
+  replicate <- as.integer(job[["scenario"]][["pairing"]][["replicate"]] %||% 1L)
+  if (replicate > 1L) for (i in seq_len(replicate - 1L)) assign(".Random.seed", parallel::nextRNGStream(get(".Random.seed", envir = .GlobalEnv)), envir = .GlobalEnv)
+  list(policy = if (is.null(job[["scenario"]][["pairing"]])) "scenario_seed" else "common_random_numbers_by_member",
+    pairingKey = job[["scenario"]][["pairing"]][["key"]], replicate = replicate, seed = job[["seed"]],
+    replicateStreams = "L'Ecuyer-CMRG nextRNGStream", causalIndividualEffectIdentified = FALSE)
+}
+
+# An immutable input row, not a job id or outcome parameter, identifies the same synthetic member.
+vcr_patient_ids <- function(job, population, n) {
+  legacy <- job[["method"]] %in% c("patients.continuous", "patients.binary", "patients.time_to_event", "patients.longitudinal") && identical(job[["methodVersion"]], "1.0.0")
+  if (legacy) return(paste0("vp_", vapply(seq_len(n), function(i) substr(vcr_sha256(paste(job[["seed"]], job[["jobId"]] %||% "", i, sep = ":")), 1L, 12L), character(1))))
+  tables <- Filter(function(input) !is.null(input[["location"]]), job[["inputs"]])
+  matching <- Filter(function(input) identical(input[["id"]], attr(population, "vcrInputId")), tables)
+  selected <- if (length(matching)) matching[[1L]] else if (length(tables)) tables[[1L]] else NULL
+  basis <- if (!is.null(population) && !is.null(selected)) {
+    if (vcr_table_source(population) %in% c("observed", "extracted", "calculated", "imputed")) selected[["id"]] else selected[["hash"]]
+  } else job[["scenario"]][["pairing"]][["key"]] %||% paste0("seed:", job[["seed"]])
+  rows <- if (is.null(population)) seq_len(n) else rownames(population)
+  paste0("vp_", vapply(rows, function(i) substr(vcr_sha256(paste(basis, i, sep = ":")), 1L, 12L), character(1)))
+}

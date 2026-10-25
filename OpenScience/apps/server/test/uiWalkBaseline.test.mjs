@@ -83,6 +83,7 @@ test("the walk's own lists are read from the page table and nowhere else", () =>
   assert.equal(ROUTES.length, walk.PAGE_TEMPLATES.views.filter((view) => view.route).length);
   assert.deepEqual(GEO_TABS.map(([, segment]) => segment), ["", "/visibility", "/accuracy", "/questions", "/sources", "/actions", "/plan", "/evidence"]);
   assert.equal(VCR_TABS_WALK.length, 7);
+  assert.equal(walk.PAGE_TEMPLATES.views.filter(view => view.module === "vcr" && !view.variant).length, 6);
   for (const name of [...ROW_CLICK_PAGES, ...Object.keys(SECTION_SHAPES_BY_PAGE), ...Object.keys(BUDGET_BY_PAGE)]) {
     assert.ok(walk.PAGE_TEMPLATES.views.some((view) => view.view === name), `${name} is a view of the table`);
   }

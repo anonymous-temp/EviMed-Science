@@ -345,6 +345,7 @@ export const MEASURE_META = Object.freeze({
   type_one_error: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.type_one_error, unit: "%", percent: true },
   coverage: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.coverage, unit: "%", percent: true },
   assurance: { label: "成功把握", unit: "%", percent: true },
+  duration_months: { label: "平均研究时长", unit: "个月" },
   power_at_prior_mean: { label: "先验均值处的功效", unit: "%", percent: true },
   assurance_simulated: { label: "成功把握（仿真复核）", unit: "%", percent: true },
   bias: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.bias },
@@ -355,6 +356,7 @@ export const MEASURE_META = Object.freeze({
   expected_analyses: { label: "期望分析次数" },
   required_total: { label: "所需样本量", unit: "例" },
   required_per_arm: { label: "每组所需样本量", unit: "例" },
+  required_treatment: { label: "试验组所需样本量", unit: "例" },
   required_control: { label: "对照组所需样本量", unit: "例" },
   required_patients: { label: "所需患者数", unit: "例" },
   required_events: { label: "所需事件数", unit: "个" },
@@ -750,6 +752,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 
 /** How an engine method is named on the model library's method rows. */
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+  "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
   "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并",
@@ -833,7 +836,7 @@ export const VALIDATION_LABELS = Object.freeze(/** @type {Record<string, string>
 }));
 /** What kind of model a card says it is, in Chinese. */
 export const MODEL_TYPE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  literature_parameterized_reference: "文献参数参考仿真",
-  mathematical_simulation: "数学仿真", fitted_prediction_model: "拟合预测", generative: "生成模型", mechanistic: "机制模型",
+  literature_parameterized_reference: "文献参数参考仿真", published_prognostic_equation: "已发表预后方程", fitted_population_baseline: "已拟合人群基线",
+  mathematical_simulation: "数学仿真", fitted_prediction_model: "拟合预测", registered_prediction_model: "已登记预测模型", generative: "生成模型", mechanistic: "机制模型",
 }));
 

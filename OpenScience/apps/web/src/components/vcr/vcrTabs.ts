@@ -10,12 +10,12 @@ import type { VcrStepKey, VcrStudy, VcrTabKey } from "@/lib/vcrClient";
  * things computed from it. The set is the domain's `VCR_TABS` — the order is the page's, because the domain's list is the order the
  * schema was written in.
  */
-export const VCR_TAB_ORDER: readonly VcrTabKey[] = Object.freeze(["overview", "data", "population", "patients", "comparator", "trial", "matching"]);
+export const VCR_TAB_ORDER: readonly VcrTabKey[] = Object.freeze(["overview", "matching", "population", "comparator", "trial", "data"]);
 
 export const VCR_TAB_ITEMS: ReadonlyArray<{ key: VcrTabKey; label: string }> = Object.freeze(
   VCR_TAB_ORDER.map((key) => Object.freeze({
     key,
-    label: (VCR_TAB_LABELS_ZH as Record<string, string>)[key],
+    label: key === "population" ? "人群与患者" : key === "data" ? "依据" : key === "matching" ? "匹配" : (VCR_TAB_LABELS_ZH as Record<string, string>)[key],
   })),
 );
 
@@ -71,7 +71,7 @@ export function hasDefinition(study: Pick<VcrStudy, "steps">): boolean {
 }
 
 export function isVcrTab(value: string | null | undefined): value is VcrTabKey {
-  return !!value && VCR_TAB_ITEMS.some((tab) => tab.key === value);
+  return value === "patients" || !!value && VCR_TAB_ITEMS.some((tab) => tab.key === value);
 }
 
 /**

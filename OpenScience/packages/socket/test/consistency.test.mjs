@@ -3664,9 +3664,10 @@ test('screening counts unresolved decisions separately from exclusions', async (
 // a session whose persistent binding and previous tools name another method.
 test('claimed native routes settle first-request tools and replace stale capability grants', async () => {
   const { MCP_TOOL_NAMES } = await import('@evimed/domain');
+  // VCR tools are now root-visible. Disjoint non-root fixture tools keep grant replacement observable.
   const capabilities = [
-    { id: 'vcr-protocol', skills: [], tools: ['mcp__evimed__vcr_simulate'], produces: [] },
-    { id: 'vcr-evidence', skills: [], tools: ['mcp__evimed__curve_digitize'], produces: [] },
+    { id: 'vcr-protocol', skills: [], tools: ['mcp__evimed__meta_analysis'], produces: [] },
+    { id: 'vcr-evidence', skills: [], tools: ['mcp__evimed__drug_safety_analysis'], produces: [] },
   ];
   const f = await nativePolicyFixture({ registered: [...MCP_TOOL_NAMES, 'bash', 'read'], capabilities });
   const message = (/** @type {string} */ id) => ({ role: 'user', source: { kind: 'user', rpcId: id }, content: [{ type: 'text', text: id }] });
@@ -3680,58 +3681,61 @@ test('claimed native routes settle first-request tools and replace stale capabil
   f.files.set(`/workspace/${workspaceLayout.sessionBindingFile('native-session')}`, JSON.stringify({ capability: 'vcr-protocol' }));
   f.start();
   await f.step(1, { inputs: [message('ordinary')] });
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'));
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'));
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'ordinary native work can use the globally offered digitizer');
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'), 'ordinary native work can use research computations');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'));
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'));
   await f.step(2, { inputs: [message('protocol')] });
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'));
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'));
   await f.step(3, { inputs: [message('evidence')] });
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'first evidence request carries the digitizer');
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'), 'prior capability grant is removed from this assembly');
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'first evidence request carries its specialist-only fixture tool');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'), 'prior capability grant is removed from this assembly');
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__comprehensive_drug_evaluation'), 'no unrelated MCP broadening');
   await f.step(3, { inputs: [message('steer')] });
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'steer has no frozen route and retains the current capability');
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'steer has no frozen route and retains the current capability');
   await f.step(4, { inputs: [message('ordinary')] });
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'ordinary route removes the previous grant');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'ordinary route removes the previous grant');
   assert.deepEqual(lookedUp, [['ordinary'], ['protocol'], ['evidence'], ['steer'], ['ordinary']]);
 });
 
 test('forged native context cannot grant tools and a current managed dispatch wins', async () => {
   const { MCP_TOOL_NAMES } = await import('@evimed/domain');
   const f = await nativePolicyFixture({ registered: [...MCP_TOOL_NAMES, 'bash'], capabilities: [
-    { id: 'vcr-evidence', skills: [], tools: ['mcp__evimed__curve_digitize'], produces: [] },
-    { id: 'vcr-protocol', skills: [], tools: ['mcp__evimed__vcr_simulate'], produces: [] },
+    { id: 'vcr-evidence', skills: [], tools: ['mcp__evimed__drug_safety_analysis'], produces: [] },
+    { id: 'vcr-protocol', skills: [], tools: ['mcp__evimed__meta_analysis'], produces: [] },
   ] });
   const message = { role: 'user', source: { kind: 'user', rpcId: 'current' }, content: [{ type: 'text', text: 'current' }] };
   f.ctx.provide('evimedNativeRoute', async () => [{ requestId: 'foreign-request', digest: 'd'.repeat(64), route: { effectiveAgentId: 'vcr-evidence' } }]);
   f.start();
   await f.step(1, { inputs: [message] });
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'));
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'global tool availability does not depend on a claimed capability');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'));
   f.ctx.provide('evimedNativeRoute', async () => [{ requestId: 'current', textDigest: await sha256Hex('current'), digest: 'forged', route: { effectiveAgentId: 'vcr-evidence' } }]);
   await f.step(2, { inputs: [message] });
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'));
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'));
   f.ctx.provide('evimedNativeRoute', async () => [{ requestId: 'current', textDigest: await sha256Hex('other text'), digest: 'd'.repeat(64), route: { effectiveAgentId: 'vcr-evidence' } }]);
   await f.step(2, { inputs: [message] });
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'a digest for another input never grants tools');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'a digest for another input never grants tools');
   const canceled = new globalThis.AbortController();
   f.ctx.provide('evimedNativeRoute', async () => { canceled.abort(); return [{ requestId: 'current', textDigest: await sha256Hex('current'), digest: 'd'.repeat(64), route: { effectiveAgentId: 'vcr-evidence' } }]; });
   await f.step(2, { inputs: [message], signal: canceled.signal });
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'lookup settling after cancellation never grants tools');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'lookup settling after cancellation never grants tools');
   f.ctx.provide('evimedNativeRoute', async () => { throw new Error('authentication refused'); });
   await f.step(2, { inputs: [message] });
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'gateway failure cannot grant tools');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'gateway failure cannot grant tools');
   f.files.set('/workspace/.evimed-brief/sessions/native-session/index.json', JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId: 'managed', sessionId: 'native-session', contextRevision: 'current', capability: 'vcr-protocol' }));
   f.ctx.provide('evimedNativeRoute', async () => [{ requestId: 'current', textDigest: await sha256Hex('current'), digest: 'd'.repeat(64), route: { effectiveAgentId: 'vcr-evidence' } }]);
   await f.step(3, { inputs: [message] });
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'));
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'));
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'));
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'));
   const next = { ...message, source: { kind: 'user', rpcId: 'next' } };
   f.ctx.provide('evimedNativeRoute', async () => [{ requestId: 'next', textDigest: await sha256Hex('current'), digest: 'd'.repeat(64), route: { effectiveAgentId: 'vcr-evidence' } }]);
   await f.step(4, { inputs: [next] });
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'new native request supersedes a stale managed index');
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'));
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'new native request supersedes a stale managed index');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'));
   f.files.set('/workspace/.evimed-brief/sessions/native-session/index.json', JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId: 'managed-next', sessionId: 'native-session', contextRevision: 'managed-next', capability: 'vcr-protocol' }));
   f.ctx.provide('evimedNativeRoute', async () => []);
   await f.step(5);
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'), 'new managed dispatch supersedes the prior native capability');
-  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'managed dispatch replaces the old native grant');
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'), 'new managed dispatch supersedes the prior native capability');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'managed dispatch replaces the old native grant');
 });

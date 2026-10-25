@@ -18,13 +18,6 @@
   "selected": null,
   "gaps": [],
   "pendingReview": null,
-  "ledger": [],
-  "forecast": null,
-  "sites": [],
-  "followup": [],
   "protocol": null,
-  "abilities": {
-    "contact": true
-  },
   "counts": null
 }

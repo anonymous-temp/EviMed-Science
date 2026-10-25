@@ -2,11 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy } from "@/lib/vcrClient";
 import {
   NotApplicableCard, NotEstimableCard, PartialResultNote, Stale, StaleBar, VcrOffPage, VcrStepFailed, VcrStepPending, VCR_OFF_SENTENCE,
 } from "./VcrStates";
+import { TabFrame, makeFrameSpies } from "./__fixtures__/tabFrame";
 import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "./__fixtures__/serverFixtures";
 
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
@@ -27,7 +27,8 @@ vi.mock("@/lib/projects", () => ({
 function Where() {
   return <p data-testid="where">{useLocation().pathname}</p>;
 }
-const draw = (node: React.ReactElement) => render(<MemoryRouter initialEntries={["/app/virtual-research/std_1/patients"]}>{node}<Where /></MemoryRouter>);
+const frame = makeFrameSpies();
+const draw = (node: React.ReactElement) => render(<MemoryRouter initialEntries={["/app/virtual-research/std_1/patients"]}><TabFrame studyId="std_1" spies={frame}>{node}</TabFrame><Where /></MemoryRouter>);
 /** The study as the readers turn the server's own answer into a page's props. */
 const emptyStudy = () => readVcrStudy(fixture("empty/study.json"));
 const ev201 = () => readVcrStudy(fixture("ev201/study.json"));
@@ -36,6 +37,7 @@ beforeEach(() => {
   toasts.success.mockReset();
   toasts.error.mockReset();
   store.select.mockClear();
+  frame.openChat.mockClear();
 });
 
 describe("the module being off", () => {
@@ -213,7 +215,7 @@ describe("a step with nothing yet", () => {
     it("opens the study's conversation view, in the same page, from that button", async () => {
       draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step="evidence" />);
       await userEvent.click(screen.getByRole("button", { name: "说明研究问题" }));
-      expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_2/chat");
+      expect(frame.openChat).toHaveBeenCalledWith();
       expect(store.select).not.toHaveBeenCalled();
     });
   });
@@ -282,29 +284,14 @@ describe("a step with nothing yet", () => {
     expect(screen.queryByText(/只有公开资料时的一句话。/)).toBeNull();
   });
 
-  // The button starts the step and takes the reader nowhere: the page's strip says what happens next.
-  it("starts the step from its button and stays where it is — there is no conversation to be sent to", async () => {
+  it("opens an unsent task draft in the existing conversation without a run POST or project switch", async () => {
     installVcrServer(network.productRequest);
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
     await userEvent.click(screen.getByRole("button", { name: "找证据、整理假设卡" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "evidence" }));
-    expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1/patients");
+    expect(frame.openChat).toHaveBeenCalledWith(expect.stringContaining(`当前研究（${STUDY_ID}）`));
+    expect(frame.openChat).toHaveBeenCalledWith(expect.stringContaining("先说明还缺哪些输入"));
+    expect(network.productRequest).not.toHaveBeenCalled();
     expect(store.select).not.toHaveBeenCalled();
-  });
-
-  // A step asked for twice is two runs: the second click does nothing (CW-18).
-  it("holds one request at a time while it waits for the answer", async () => {
-    let release: (value: unknown) => void = () => {};
-    installVcrServer(network.productRequest, {
-      [`POST /vcr/studies/${STUDY_ID}/run`]: () => new Promise((resolve) => { release = resolve; }),
-    });
-    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
-    const button = screen.getByRole("button", { name: "找证据、整理假设卡" });
-    await userEvent.click(button);
-    await userEvent.click(button);
-    expect(network.productRequest.mock.calls.filter(([path]) => String(path).endsWith("/run"))).toHaveLength(1);
-    release({ accepted: true, runId: "run_1", step: "evidence", queuedBehind: [] });
-    await waitFor(() => expect(button).not.toHaveAttribute("aria-busy", "true"));
   });
 
   // Starting a step is `run`'s: a reader who cannot start one is told why, and is not offered a button the route would refuse.
@@ -317,19 +304,11 @@ describe("a step with nothing yet", () => {
     expect(document.querySelector("[data-empty][data-reason]")).not.toBeNull();
   });
 
-  // A start that cannot be taken says the sentence of what holds the project, not 「定时任务」.
-  it("says what holds a project that cannot take the start — a study's own step is not a scheduled task", async () => {
-    installVcrServer(network.productRequest, {
-      [`POST /vcr/studies/${STUDY_ID}/run`]: () => {
-        throw new WebApiError("held", { status: 423, code: "runtime_reserved_for_autopilot", details: { reason: "module-step" } });
-      },
-    });
-    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
-    await userEvent.click(screen.getByRole("button", { name: "找证据、整理假设卡" }));
-    await waitFor(() => expect(toasts.error).toHaveBeenCalledTimes(1));
-    const said = String(toasts.error.mock.calls[0][0]);
-    expect(said).toContain("研究里的一个步骤");
-    expect(said).not.toContain("定时任务");
+  it("shows the unavailable prerequisite in place of a start action", () => {
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" blocked="证据库暂时不可用，请稍后重试。" />);
+    expect(screen.getByText("证据库暂时不可用，请稍后重试。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "找证据、整理假设卡" })).toBeNull();
+    expect(frame.openChat).not.toHaveBeenCalled();
   });
 });
 

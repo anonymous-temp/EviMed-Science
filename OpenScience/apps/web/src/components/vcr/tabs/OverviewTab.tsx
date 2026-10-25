@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { VCR_STEPS, VCR_STEP_STATUS_LABELS_ZH } from "@evimed/domain";
-import { runVcrStep, type VcrAttention, type VcrCountKey, type VcrStepKey, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
+import { type VcrAttention, type VcrCountKey, type VcrStepKey, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
 import { relativeTime } from "@/lib/runPresentation";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { Button } from "@/components/ui/Button";
@@ -13,8 +13,7 @@ import { Section } from "@/components/ui/Section";
 import { VcrCountsBand } from "../VcrCounts";
 import { VcrNoDefinition } from "../VcrStates";
 import { useStudyFrame } from "../studyFrameContext";
-import { useVcrRun } from "../useVcrRun";
-import { hasDefinition, VCR_STEP_TABS, vcrTabPath } from "../vcrTabs";
+import { VCR_STEP_TABS, vcrTabPath } from "../vcrTabs";
 import { stepName } from "../vcrActivity";
 
 /**
@@ -34,7 +33,7 @@ import { stepName } from "../vcrActivity";
  */
 export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const { headline, counts, attention, deliverables } = study.overview;
-  if (!hasDefinition(study) && !headline && deliverables.length === 0) return <VcrNoDefinition study={study} />;
+  if (!study.question?.trim() && !headline && !counts && deliverables.length === 0) return <VcrNoDefinition study={study} />;
   const sentence = headline ?? study.question;
   return (
     <div className="flex flex-col gap-6">
@@ -76,10 +75,12 @@ function failedSteps(study: Pick<VcrStudy, "steps">): VcrStepKey[] {
 
 /** The seven steps, in order, each a row that opens the tab that holds it. */
 function StepList({ study, studyId }: { study: VcrStudy; studyId: string }) {
+  const started = (VCR_STEPS as readonly VcrStepKey[]).filter(step => study.steps[step]?.requested === true || study.steps[step]?.status && study.steps[step]?.status !== "none");
+  if (!started.length) return null;
   return (
-    <Section title="研究进度">
-      <List label="七个步骤" divided>
-        {(VCR_STEPS as readonly VcrStepKey[]).map((step) => {
+    <Section title="研究记录">
+      <List label="已开展的任务" divided>
+        {started.map((step) => {
           const record = study.steps[step];
           const status = record?.status ?? "none";
           const state = RAIL[status] ?? "todo";
@@ -125,7 +126,6 @@ function attentionTab(item: VcrAttention): VcrTabKey | null {
  */
 function Attention({ items, study, studyId }: { items: readonly VcrAttention[]; study: VcrStudy; studyId: string }) {
   const frame = useStudyFrame();
-  const { run, busy } = useVcrRun(study);
   const mayRun = study.abilities.includes("run");
   const failed = failedSteps(study);
   let failedAt = 0;
@@ -139,7 +139,7 @@ function Attention({ items, study, studyId }: { items: readonly VcrAttention[]; 
     else if (item.kind === "step_failed") {
       const step = failed[failedAt++];
       if (step && mayRun) {
-        action = <Button size="sm" variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>接着做</Button>;
+        action = <Button size="sm" variant="secondary" onClick={() => frame?.openChat(`继续研究 ${studyId} 中未完成的${stepName(step)}，先检查已保存结果和失败原因，复用有效部分。`)}>接着做</Button>;
       }
     } else if (item.kind === "stale") {
       action = <Button size="sm" variant="text" onClick={() => frame?.openPanel("changes")}>看变更记录</Button>;

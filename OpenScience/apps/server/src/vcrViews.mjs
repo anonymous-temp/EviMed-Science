@@ -87,6 +87,7 @@ export function budgetView(budget) {
 
 /** The words a job kind is shown as. */
 export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+  fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用已发表的预后模型",
   forecast_trajectories: '纵向结果预测', evaluate_forecast: '预测与观测验证', compare_forecasts: '预测情景比较', benchmark_trial_effect: '试验效果预测验证',
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
   literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告",
@@ -484,46 +485,6 @@ export function presentSummary({ study, results, allResults, stale, jobs, scenar
 }
 
 /**
- * 「招募待办」: what a coordinator has to confirm or chase, from the referral
- * ledger. Only the studies where this account may contact patients.
- * @param {ReadonlyArray<{ study: Record<string, any>, referrals: readonly Record<string, any>[], sites: readonly Record<string, any>[] }>} groups
- * @param {Date} now
- */
-export function presentTodos(groups, now) {
-  /** @type {Array<Record<string, any>>} */
-  const todos = [];
-  for (const { study, referrals, sites } of groups) {
-    const ready = referrals.filter((referral) => referral.state === "contactable");
-    if (ready.length) {
-      todos.push({
-        id: `${study.id}:contact`, kind: "contact", studyId: study.id,
-        title: ready.length === 1 ? `${ready[0].subjectKey} 待确认联系` : `${ready[0].subjectKey} 等 ${ready.length} 人待确认联系`,
-        detail: study.name, action: { label: "去确认", tab: "matching" },
-      });
-    }
-    const needs = referrals.filter((referral) => referral.state === "needs_evidence");
-    if (needs.length) {
-      todos.push({
-        id: `${study.id}:evidence`, kind: "evidence", studyId: study.id,
-        title: `${needs.length} 人待补证`, detail: study.name, action: { label: "去看缺口", tab: "matching" },
-      });
-    }
-    for (const site of sites) {
-      const verified = site.verifiedAt ? new Date(site.verifiedAt).getTime() : null;
-      const days = verified === null ? null : Math.floor((now.getTime() - verified) / 86_400_000);
-      if (days === null || days > 90) {
-        todos.push({
-          id: `${study.id}:site:${site.id}`, kind: "site", studyId: study.id,
-          title: `${site.name} 的资料${days === null ? "还没有核实过" : `已 ${days} 天没有核实`}`, detail: study.name,
-          action: { label: "去看中心", tab: "matching" },
-        });
-      }
-    }
-  }
-  return todos.slice(0, 12);
-}
-
-/**
  * 「最近复核」 across the account's studies.
  * @param {ReadonlyArray<{ study: Record<string, any>, reviews: readonly Record<string, any>[] }>} groups @param {Date} now
  */
@@ -871,7 +832,7 @@ export function presentDeliverable(row, index, all, now) {
 // --- designs (shared by the overview and the trial tab) ------------------------------------------------------------------
 
 /** The measure names a design's table reads, whichever stage computed them. */
-const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "cost"]);
+const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "duration_months", "cost"]);
 
 /**
  * What a design has been computed with, by stage: the analytic size, the simulated operating characteristics and the success
@@ -978,7 +939,7 @@ function crossCheckOf(stages) {
  * @returns {{ designs: Array<Record<string, any>>, rows: Array<Record<string, any>> }}
  */
 export function presentDesigns(bundle) {
-  const { scenarios, stale, executions, grid, decisions, forecastResults = [] } = bundle;
+  const { scenarios, stale, executions, grid, decisions } = bundle;
   // The newest row of each label is the design; older rows are its history.
   /** @type {Map<string, Record<string, any>>} */
   const latest = new Map();
@@ -1044,17 +1005,10 @@ export function presentDesigns(bundle) {
       if (!stage) continue;
       for (const measure of stage.measures) {
         const measureName = String(object(measure).name ?? "");
-        if (!DESIGN_MEASURES.includes(measureName)) continue;
+        if (!DESIGN_MEASURES.includes(measureName) || (measureName === "duration_months" && name !== "simulation")) continue;
         measures[measureName === "required_total" ? "sample_size" : measureName] = measureValue(measure, {
           kind: "trial_scenario", result: stage.result, execution: executionOfStage(name) ?? execution, staleMark, tab: "trial" });
       }
-    }
-    // Duration comes from the accrual forecast filed for this design, never
-    // from the design's own simulation.
-    const forecast = forecastResults.find((/** @type {any} */ entry) => entry.subjectId === scenario.id || entry.subjectId === scenario.resultId);
-    const lastPatient = forecast ? list(forecast.measures).find((/** @type {any} */ entry) => ["last_patient_in_months", "expected_completion_time"].includes(String(object(entry).name))) : null;
-    if (forecast && lastPatient) {
-      measures.duration_months = measureValue(lastPatient, { kind: "accrual_forecast", result: forecast, tab: "trial" });
     }
     const cost = numeric(object(scenario.configuration).cost ?? object(object(scenario.configuration).cost).value);
     if (cost !== null && !measures.cost) {

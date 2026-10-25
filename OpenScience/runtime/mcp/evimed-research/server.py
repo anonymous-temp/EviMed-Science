@@ -1892,7 +1892,7 @@ def _managed_status_with_wait(status_call, arguments):
 # wrapper (packages/harness-port/src/engineContext.mjs) attaches it to exactly
 # these, replacing anything a model wrote under that name;
 # apps/server/test/engineToolContract.test.mjs holds the two rosters equal.
-ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", "kb_search", "kb_browse", *specialist_jobs.SPECS})
+ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", "kb_search", "kb_browse", "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", *specialist_jobs.SPECS})
 
 
 def call_tool(name, arguments):
@@ -2254,18 +2254,19 @@ def _dispatch(name, arguments, execution_context=None):
         return result
     if name in ("vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"):
         try:
-            if name == "vcr_read":
-                result = vcr_platform.read(arguments)
-            elif name == "vcr_write":
-                result = vcr_platform.write(arguments)
-            elif name == "vcr_simulate":
-                result = vcr_platform.simulate(arguments)
-            elif name == "trial_registry_record":
-                result = vcr_platform.registry_record(arguments)
-            elif name == "curve_digitize":
-                result = vcr_platform.digitize(arguments)
-            else:
-                result = vcr_platform.evidence_pool(arguments)
+            with vcr_platform.invocation(execution_context):
+                if name == "vcr_read":
+                    result = vcr_platform.read(arguments)
+                elif name == "vcr_write":
+                    result = vcr_platform.write(arguments)
+                elif name == "vcr_simulate":
+                    result = vcr_platform.simulate(arguments)
+                elif name == "trial_registry_record":
+                    result = vcr_platform.registry_record(arguments)
+                elif name == "curve_digitize":
+                    result = vcr_platform.digitize(arguments)
+                else:
+                    result = vcr_platform.evidence_pool(arguments)
         except vcr_platform.VcrPlatformError as error:
             # The same three next steps as GEO's, for the same reasons: a
             # malformed call is the run's to fix, an outage may pass, and a

@@ -27,25 +27,7 @@
       "evidenceGaps": []
     }
   ],
-  "timeline": [
-    {
-      "id": "fac_4",
-      "variable": "age",
-      "value": 58,
-      "unit": "year",
-      "at": "2026-09-10T00:00:00.000Z",
-      "assertion": "affirmed",
-      "experiencer": null,
-      "medicationState": null,
-      "correctionOf": null,
-      "superseded": false,
-      "conflictFactIds": [],
-      "correctionReason": null,
-      "document": null,
-      "quote": null,
-      "locator": null
-    }
-  ],
+  "timeline": [],
   "headline": "1 人已评估，1 人全部满足，0 人至少有 1 条未知或待复评。",
   "partner": {
     "name": null,
@@ -97,9 +79,7 @@
   "candidates": [
     {
       "id": "P-0192",
-      "referralId": null,
       "summary": "2 条满足 · 0 条未知 · 0 条待复评",
-      "site": null,
       "eligibility": "eligible",
       "open": [],
       "priority": null
@@ -108,9 +88,7 @@
   "selected": {
     "candidate": {
       "id": "P-0192",
-      "referralId": null,
       "summary": "2 条满足 · 0 条未知 · 0 条待复评",
-      "site": null,
       "eligibility": "eligible",
       "open": [],
       "priority": null
@@ -151,26 +129,8 @@
         "text": "年龄 ≥ 18 岁",
         "state": "satisfied",
         "applicable": true,
-        "evidence": {
-          "quote": "age = 63 year",
-          "locator": {
-            "field": "age",
-            "snapshotId": ""
-          },
-          "source": "数据快照字段「age」",
-          "at": "9 月 10 日"
-        },
-        "evidenceItems": [
-          {
-            "quote": "age = 63 year",
-            "locator": {
-              "field": "age",
-              "snapshotId": ""
-            },
-            "source": "数据快照字段「age」",
-            "at": "9 月 10 日"
-          }
-        ],
+        "evidence": null,
+        "evidenceItems": [],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -183,26 +143,8 @@
         "text": "ECOG 体能评分 0–1",
         "state": "satisfied",
         "applicable": true,
-        "evidence": {
-          "quote": "ecog = 1",
-          "locator": {
-            "field": "ecog",
-            "snapshotId": ""
-          },
-          "source": "数据快照字段「ecog」",
-          "at": "9 月 10 日"
-        },
-        "evidenceItems": [
-          {
-            "quote": "ecog = 1",
-            "locator": {
-              "field": "ecog",
-              "snapshotId": ""
-            },
-            "source": "数据快照字段「ecog」",
-            "at": "9 月 10 日"
-          }
-        ],
+        "evidence": null,
+        "evidenceItems": [],
         "request": null,
         "requestNote": null,
         "decidedBy": "code",
@@ -213,26 +155,15 @@
       "text": "符合：全部适用的入排条件都满足",
       "note": null
     },
-    "canContact": false,
-    "referralId": null,
-    "referralState": null,
     "priority": null,
     "reviewedBy": null,
-    "reviewedByName": null,
-    "trace": []
+    "reviewedByName": null
   },
   "gaps": [],
   "pendingReview": null,
-  "ledger": [],
-  "forecast": null,
-  "sites": [],
-  "followup": [],
   "protocol": {
     "version": 1,
     "title": "EV-201 方案 v1"
-  },
-  "abilities": {
-    "contact": true
   },
   "counts": {
     "realPatients": 1,

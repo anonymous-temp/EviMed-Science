@@ -102,6 +102,7 @@ import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
+import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
 export const Z_95 = 1.959963984540054;
@@ -228,7 +229,7 @@ export function twoSidedZ(level) {
  * `NCT0136` is not a number of the text, and `[0]` in a field path is a
  * position, not a value.
  */
-const NUMBER_TOKEN = /(?<![\w.])[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.,])[+-]?\d+(?:\.\d+)?(?![\d.])/g;
+const NUMBER_TOKEN = /(?<![\w.])[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.,])[+-]?\d+(?:\.\d+)?(?!\d|\.\d)/g;
 
 /**
  * Is a field path present in the preserved text? A rendered line starts with
@@ -333,7 +334,8 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   else if (!String(sourceText ?? "").trim()) state = "source_unavailable";
   else if (!quoteIsPresent(sourceText, quote)) state = "quote_not_found";
   else if (derived) {
-    const missing = inputs.filter((path) => !pathIsInSource(sourceText, path));
+    const missing = inputs.filter((path) => extraction?.locator?.kind === "literature_text"
+      ? !quoteIsPresent(sourceText, path) : !pathIsInSource(sourceText, path));
     state = !inputs.length ? "derived_inputs_missing" : missing.length ? "derived_input_not_found" : "verified";
   } else {
     if (value !== null && !numberIsInQuote(quote, value, { unit: extraction?.unit })) unanchored.push("value");
@@ -1136,6 +1138,8 @@ export function poolTargetOf(raw) {
  */
 export function createVcrEvidencePipeline({ store, registry = null, jobs = null, now = () => new Date(), logger = null } = { store: null }) {
   if (!store) throw new TypeError("The evidence pipeline needs its store.");
+  /** @type {{resolve:Function}|null} */
+  let literatureSources = null;
 
   /** @param {string} message @param {Record<string, unknown>} detail */
   const note = (message, detail) => { logger?.info?.(message, detail); };
@@ -1197,6 +1201,25 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   }
 
   const pipeline = {
+    /** Existing source intake is attached after the shared SourceService is composed. @param {{resolve:Function}} sources */
+    attachSources(sources) { literatureSources = sources; },
+    /** @param {{userId:string,studyId:string,baselineTable:any[],bindings:any[]}} input */
+    verifyBaselineTable(input) { return verifyLiteratureBaseline({ store, ...input }); },
+    /** Review uses the same source reader, never the run's statement that a source exists.
+     * @param {{userId:string,projectId:string,items:any[]}} input */
+    async verifyPreservedItems({ userId, projectId, items }) {
+      const verified = [];
+      for (const item of items) {
+        const locator = item.locator;
+        if (locator?.kind !== "literature_text" || locator.verification !== "verified" || !literatureSources) continue;
+        try {
+          await literatureSources.resolve({ userId, projectId, source: { sourceId: locator.sourceId,
+            generation: locator.generation, textSha256: locator.sourceHash }, quote: item.quote, locator, unit: item.unit });
+          verified.push(String(item.id));
+        } catch { /* A source unavailable now is an unresolved reference, while the historical item remains preserved. */ }
+      }
+      return verified;
+    },
     get engineReady() { return typeof jobs?.enqueue === "function"; },
     get registryReady() { return Boolean(registry?.configured); },
     registryCoverage() { return registry?.coverage?.() ?? []; },
@@ -1445,23 +1468,28 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * does not hold is refused: the record is fetched with the `precedent` write
      * first, which is what preserves its text.
      *
-     * @param {{ userId: string, studyId: string, item: Record<string, any> }} input
+     * @param {{ userId: string, studyId: string, projectId?: string, item: Record<string, any> }} input
      * @returns {Promise<{ status: string, id?: string, state?: string, code?: string, message?: string }>}
      */
-    async addEvidenceItem({ userId, studyId, item }) {
+    async addEvidenceItem({ userId, studyId, projectId = "", item }) {
       const registryName = String(item.registry ?? "clinicaltrials.gov");
       const registryId = String(item.registryId ?? "");
-      const precedent = await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
-      if (!precedent) {
+      const literature = item.literatureSource ? await literatureSources?.resolve({ userId, projectId,
+        source: item.literatureSource, quote: String(item.quote ?? ""), locator: item.locator, unit: String(item.unit ?? "") }) : null;
+      if (item.literatureSource && !literature) return { status: "refused", code: "vcr_evidence_unverified", message: "Preserved literature sources are unavailable." };
+      const precedent = literature ? null : await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
+      if (!literature && !precedent) {
         return { status: "refused", code: "vcr_precedent_not_in_study",
           message: `${registryId} 还不在本研究的先例里；先用 vcr_write what:"precedent" 取回这条登记记录。` };
       }
       const derived = ["calculated", "imputed", "predicted"].includes(String(item.valueSource ?? ""));
+      const sourceText = literature?.text ?? String(precedent?.record_text ?? "");
+      const sourceHash = literature?.locator.sourceHash ?? precedent?.record_hash ?? null;
       const checkedAt = now().toISOString();
       const timepoint = item.timepoint;
       const checkedTarget = timepoint && typeof timepoint === 'object' ? verifyExtraction({
         extraction:{value:timepoint.value,quote:String(timepoint.quote ?? ''),valueSource:'extracted'},
-        sourceText:String(precedent.record_text ?? ''),checkedAt}) : null;
+        sourceText,checkedAt}) : null;
       const timeUnit = {days:1,weeks:7}[String(timepoint?.unit)];
       const targetVerified = checkedTarget?.verified === true && Number.isFinite(timepoint?.value) && timepoint.value > 0
         && timeUnit != null && quoteIsPresent(String(timepoint.quote),String(timepoint.unit))
@@ -1473,26 +1501,31 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           value: item.value ?? null, valueText: item.valueText ?? "", unit: item.unit ?? "",
           ciLow: item.ciLow ?? null, ciHigh: item.ciHigh ?? null, sampleSize: item.sampleSize ?? null, events: item.events ?? null,
           valueSource: derived ? String(item.valueSource) : "extracted",
-          quote: String(item.quote ?? ""), sourceRef: `${registryName}:${registryId}`,
-          locator: { kind: "registry_field", ...(item.locator && typeof item.locator === "object" ? {
+          quote: String(item.quote ?? ""), sourceRef: literature?.sourceRef ?? `${registryName}:${registryId}`,
+          locator: { ...(literature?.locator ?? { kind: "registry_field", ...(item.locator && typeof item.locator === "object" ? {
             path: typeof item.locator.path === "string" ? item.locator.path : undefined,
             inputs: Array.isArray(item.locator.inputs) ? item.locator.inputs.map(String) : undefined,
-          } : {}), recordHash: precedent.record_hash ?? null, authoredBy: "run" },
+            parts: item.locator.parts,
+          } : {}), recordHash: precedent?.record_hash ?? null }), authoredBy: "run" },
           endpointKey: String(item.endpointKey ?? ""),
           enrollmentKind: item.enrollmentKind ?? null,
-          historicalBaseline: item.historicalBaseline === true,
+          historicalBaseline: !derived && item.enrollmentKind !== "estimated" && item.historicalBaseline === true,
           applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
           // `candidateFrom` and `source` are the run's own statements, kept beside the verdict and read by nothing that decides it.
           detail: { outcome: item.outcome ?? null, note: item.note ?? null,
+            evidenceKind: ["baseline", "outcome", "design"].includes(item.evidenceKind) ? item.evidenceKind : "outcome",
+            sourceStanding: literature ? (derived ? "article_derived" : "article_reported")
+              : (derived ? "registry_derived" : item.enrollmentKind === "estimated" ? "registry_planned" : "registry_reported"),
+            verificationScope: derived ? "quoted_inputs_only" : "quotation_and_numbers",
             ...(item.candidateFrom ? { candidateFrom: item.candidateFrom } : {}), ...(item.source ? { source: String(item.source) } : {}),
             target:timepoint ? {horizonDays:targetVerified ? timepoint.value*timeUnit : null,arm:item.arm,armRole:item.armRole,
               verification:targetVerified ? 'verified' : 'unverified',quote:timepoint.quote,unit:timepoint.unit,value:timepoint.value,
-              sourceHash:precedent.record_hash ?? null} : null },
+              sourceHash} : null },
         },
-        sourceText: String(precedent.record_text ?? ""),
+        sourceText,
         checkedAt,
       });
-      const appended = await store.appendEvidenceItems({ userId, studyId, precedentId: precedent.id, items: [checked.item] });
+      const appended = await store.appendEvidenceItems({ userId, studyId, precedentId: precedent?.id ?? null, items: [checked.item] });
       if (item.candidateFrom) {
         counters.cardCandidates += 1;
         if (checked.verified) counters.cardCandidatesVerified += 1;
@@ -1522,9 +1555,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * in the same arm (CS-26).
      *
      * @param {{ userId: string, studyId: string, parameter: string, endpointKey?: string, armRole?: string,
-     *   target?: any, poolingMethod?: string, calibres?: readonly string[] | null, scale?: string }} input
+     *   target?: any, poolingMethod?: string, calibres?: readonly string[] | null, scale?: string, conversationOrigin?: any }} input
      */
-    async poolParameter({ userId, studyId, parameter, endpointKey = "", armRole = "", target = {}, poolingMethod = "random_effects_reml", calibres: wanted = null, scale = "" }) {
+    async poolParameter({ userId, studyId, parameter, endpointKey = "", armRole = "", target = {}, poolingMethod = "random_effects_reml", calibres: wanted = null, scale = "", conversationOrigin = null }) {
       const role = armRole || defaultArmRoleOf(parameter);
       if (!String(endpointKey ?? "").trim()) {
         return { status: "refused", code: "vcr_pool_endpoint_key_required", parameter,
@@ -1579,7 +1612,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
             idempotencyKey: `vcr-pool:${studyId}:${parameter}:${endpointKey}:${role}:${calibre.name}:${built.job.seed}`,
             // What the pool is about, and the name its result is filed under:
             // three calibres are three results, not one superseding the others.
-            detail: { origin: "evidence", subjectId: `pool:${parameter}:${endpointKey}:${role}:${calibre.name}`, ...built.about },
+            runId: conversationOrigin?.runId ?? null,
+            detail: { origin: "evidence", subjectId: `pool:${parameter}:${endpointKey}:${role}:${calibre.name}`, ...built.about, ...(conversationOrigin ? {conversationOrigin} : {}) },
           });
           // `vcrJobs.enqueue` answers `{ job, created }`; a bare `{ jobId }`
           // is read too so a double in a test does not have to build a row.
@@ -1795,6 +1829,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           sampleSize: row.sample_size, events: row.events, valueSource: row.value_source,
           verification: row.locator?.verification ?? "no_quote", historicalBaseline: row.historical_baseline,
           enrollmentKind: row.enrollment_kind, quote: row.quote, sourceRef: row.source_ref,
+          locator: row.locator, evidenceKind: row.detail?.evidenceKind ?? null, sourceStanding: row.detail?.sourceStanding ?? null,
+          verificationScope: row.detail?.verificationScope ?? null,
           ...(row.detail?.candidateFrom ? { candidateFrom: row.detail.candidateFrom } : {}),
           registry: precedents.get(String(row.precedent_id))?.registry ?? null,
           registryId: precedents.get(String(row.precedent_id))?.registry_id ?? null,

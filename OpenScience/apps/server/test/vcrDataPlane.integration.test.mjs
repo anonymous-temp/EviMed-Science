@@ -283,13 +283,13 @@ test("AC-17 every judgment is on the record, allowed and refused alike", options
 
 test("AC-17 members and their roles survive a round trip through the real schema", options, async () => {
   const studyId = await seedStudy();
-  await members.add({ actor: OWNER, studyId, userId: "vcr-doc", role: "site" });
+  await members.add({ actor: OWNER, studyId, userId: "vcr-doc", role: "data_manager" });
   await members.add({ actor: OWNER, studyId, userId: "vcr-doc", role: "clinical_reviewer" });
   const listed = await members.list({ actor: OWNER, studyId });
   const doctor = listed.find((person) => person.userId === "vcr-doc");
-  assert.deepEqual(doctor.roles, ["clinical_reviewer", "site"]);
-  assert.deepEqual(await store.rolesOf(studyId, "vcr-doc"), ["clinical_reviewer", "site"]);
-  assert.equal((await members.remove({ actor: OWNER, studyId, userId: "vcr-doc", role: "site" })).removed, true);
+  assert.deepEqual(doctor.roles, ["clinical_reviewer", "data_manager"]);
+  assert.deepEqual(await store.rolesOf(studyId, "vcr-doc"), ["clinical_reviewer", "data_manager"]);
+  assert.equal((await members.remove({ actor: OWNER, studyId, userId: "vcr-doc", role: "data_manager" })).removed, true);
   assert.deepEqual(await store.rolesOf(studyId, "vcr-doc"), ["clinical_reviewer"]);
   await assert.rejects(() => members.add({ actor: "vcr-doc", studyId, userId: "x", role: "viewer" }),
     (error) => error.status === 403);
@@ -630,4 +630,34 @@ test("a unit the field map left out is the dictionary's, and a study with no sub
   const bare = await seedStudy();
   assert.deepEqual(await plane.subjectTableForMatching({ studyId: bare, principal: OWNER, purpose: "vcr" }), { available: false, reason: "no_subject_table" });
   assert.equal(await plane.subjectTableIdentity(bare), null);
+});
+
+test("selected table-cell evidence is source-bound, grant-aware and recorded as a revocable cloud dependency", options, async () => {
+  const studyId = await seedStudy();
+  const { source, snapshot } = await seedSnapshot(studyId);
+  const cloud = new VcrDataPlane({ store, access, config: { vcrDataPlaneDir: dataPlaneDir, deepseekBaseUrl: "https://api.example.org", vcrProviderAgreements: true } });
+  const table = await plane.subjectTableForMatching({ studyId, principal: OWNER, purpose: "vcr" });
+  const subjectKey = table.rows[0][table.header.indexOf("USUBJID")];
+  const request = { studyId, snapshotId: snapshot.id, subjectKey, field: "age", principal: OWNER, purpose: "vcr", external: true,
+    cloudContext: { sessionId: "cell-native-session", runId: "cell-run" } };
+  const cell = await cloud.subjectTableEvidence(request);
+  assert.equal(cell.value, Number(table.rows[0][table.header.indexOf("age")]));
+  assert.equal(cell.locator.snapshotId, snapshot.id);
+  assert.equal(cell.locator.subjectKey, subjectKey);
+  assert.equal(cell.locator.sourceId, source.id);
+  assert.equal(cell.locator.sourceHash.length, 64);
+  assert.equal(cell.quote, `age = ${cell.value} year`);
+  const recorded = await q("SELECT projection_id FROM evimed_vcr.cloud_reads WHERE study_id=$1 AND session_id='cell-native-session'", [studyId]);
+  assert.ok(recorded.length > 0);
+  assert.ok(recorded.every(row => cell.locator.sourceFileIds.includes(row.projection_id)));
+  const audit = await q("SELECT detail FROM evimed_vcr.audit WHERE study_id=$1 AND action='table.cloud_read'", [studyId]);
+  assert.equal(audit[0].detail.basis, "deployment_agreements");
+  assert.equal(audit[0].detail.value, undefined);
+  await assert.rejects(cloud.subjectTableEvidence({ ...request, principal: "outside" }));
+  await assert.rejects(cloud.subjectTableEvidence({ ...request, studyId: await seedStudy() }));
+  await assert.rejects(plane.subjectTableEvidence(request), { code: "vcr_cloud_processing_not_authorized" });
+  await cloud.setCloudPermission({ studyId, sourceId: source.id, actor: OWNER, permission: { status: "revoked" } });
+  await assert.rejects(cloud.subjectTableEvidence(request), { code: "vcr_cloud_processing_not_authorized" });
+  const local = await cloud.subjectTableEvidence({ ...request, external: false, cloudContext: null });
+  assert.equal(local.value, cell.value, "page access uses the actual viewer's grant and never claims cloud permission");
 });

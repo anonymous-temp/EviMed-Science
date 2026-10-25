@@ -150,6 +150,56 @@
             }
           }
         },
+        "duration_months": {
+          "value": 18.7,
+          "text": null,
+          "unit": "个月",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 18.4648,
+            "high": 18.9352,
+            "level": 95
+          },
+          "mcse": 0.12,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "平均研究时长",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "方案的模拟运行"
+              },
+              {
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.12"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_1",
+              "tab": "trial"
+            }
+          }
+        },
         "assurance": {
           "value": 58,
           "text": null,
@@ -196,40 +246,6 @@
             "ref": {
               "kind": "result",
               "id": "res_1",
-              "tab": "trial"
-            }
-          }
-        },
-        "duration_months": {
-          "value": 11.7,
-          "text": null,
-          "unit": "个月",
-          "source": "predicted",
-          "interval": {
-            "kind": "prediction",
-            "low": 9.2,
-            "high": 15,
-            "level": 80
-          },
-          "mcse": 0.05,
-          "review": "ai_set",
-          "precision": 2,
-          "reason": null,
-          "stale": false,
-          "detail": {
-            "kind": "run",
-            "title": "末例入组",
-            "fields": [
-              {
-                "label": "蒙特卡洛标准误",
-                "value": "0.05"
-              }
-            ],
-            "quote": null,
-            "quoteSource": null,
-            "ref": {
-              "kind": "result",
-              "id": "res_4",
               "tab": "trial"
             }
           }
@@ -443,6 +459,56 @@
             }
           }
         },
+        "duration_months": {
+          "value": 22.4,
+          "text": null,
+          "unit": "个月",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 22.106,
+            "high": 22.694,
+            "level": 95
+          },
+          "mcse": 0.15,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "平均研究时长",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "方案的模拟运行"
+              },
+              {
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.15"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_2",
+              "tab": "trial"
+            }
+          }
+        },
         "assurance": {
           "value": 71,
           "text": null,
@@ -489,40 +555,6 @@
             "ref": {
               "kind": "result",
               "id": "res_2",
-              "tab": "trial"
-            }
-          }
-        },
-        "duration_months": {
-          "value": 16.4,
-          "text": null,
-          "unit": "个月",
-          "source": "predicted",
-          "interval": {
-            "kind": "prediction",
-            "low": 13.9,
-            "high": 19.3,
-            "level": 80
-          },
-          "mcse": 0.05,
-          "review": "ai_set",
-          "precision": 2,
-          "reason": null,
-          "stale": false,
-          "detail": {
-            "kind": "run",
-            "title": "末例入组",
-            "fields": [
-              {
-                "label": "蒙特卡洛标准误",
-                "value": "0.05"
-              }
-            ],
-            "quote": null,
-            "quoteSource": null,
-            "ref": {
-              "kind": "result",
-              "id": "res_5",
               "tab": "trial"
             }
           }
@@ -736,6 +768,56 @@
             }
           }
         },
+        "duration_months": {
+          "value": 25.6,
+          "text": null,
+          "unit": "个月",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 25.2472,
+            "high": 25.9528,
+            "level": 95
+          },
+          "mcse": 0.18,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "平均研究时长",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "方案的模拟运行"
+              },
+              {
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.18"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_3",
+              "tab": "trial"
+            }
+          }
+        },
         "assurance": {
           "value": 74,
           "text": null,
@@ -782,40 +864,6 @@
             "ref": {
               "kind": "result",
               "id": "res_3",
-              "tab": "trial"
-            }
-          }
-        },
-        "duration_months": {
-          "value": 19.6,
-          "text": null,
-          "unit": "个月",
-          "source": "predicted",
-          "interval": {
-            "kind": "prediction",
-            "low": 16.7,
-            "high": 23.2,
-            "level": 80
-          },
-          "mcse": 0.05,
-          "review": "ai_set",
-          "precision": 2,
-          "reason": null,
-          "stale": false,
-          "detail": {
-            "kind": "run",
-            "title": "末例入组",
-            "fields": [
-              {
-                "label": "蒙特卡洛标准误",
-                "value": "0.05"
-              }
-            ],
-            "quote": null,
-            "quoteSource": null,
-            "ref": {
-              "kind": "result",
-              "id": "res_6",
               "tab": "trial"
             }
           }
@@ -912,7 +960,7 @@
     },
     {
       "key": "duration_months",
-      "label": "末例入组中位",
+      "label": "平均研究时长",
       "unit": "月"
     },
     {
@@ -1156,38 +1204,54 @@
       "name": "单臂 + 文献对照",
       "items": [
         {
-          "key": "last_patient_in",
-          "label": "末例入组",
+          "key": "trial_duration",
+          "label": "平均研究时长",
           "value": {
-            "value": 11.7,
+            "value": 18.7,
             "text": null,
             "unit": "个月",
             "source": "predicted",
             "interval": {
-              "kind": "prediction",
-              "low": 9.2,
-              "high": 15,
-              "level": 80
+              "kind": "monte_carlo",
+              "low": 18.4648,
+              "high": 18.9352,
+              "level": 95
             },
-            "mcse": 0.05,
+            "mcse": 0.12,
             "review": "ai_set",
-            "precision": 2,
+            "precision": 1,
             "reason": null,
             "stale": false,
             "detail": {
               "kind": "run",
-              "title": "末例入组",
+              "title": "平均研究时长",
               "fields": [
                 {
+                  "label": "方法",
+                  "value": "方案的模拟运行"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
                   "label": "蒙特卡洛标准误",
-                  "value": "0.05"
+                  "value": "0.12"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
                 }
               ],
               "quote": null,
               "quoteSource": null,
               "ref": {
                 "kind": "result",
-                "id": "res_4",
+                "id": "res_1",
                 "tab": "trial"
               }
             }
@@ -1200,38 +1264,54 @@
       "name": "2:1 随机",
       "items": [
         {
-          "key": "last_patient_in",
-          "label": "末例入组",
+          "key": "trial_duration",
+          "label": "平均研究时长",
           "value": {
-            "value": 16.4,
+            "value": 22.4,
             "text": null,
             "unit": "个月",
             "source": "predicted",
             "interval": {
-              "kind": "prediction",
-              "low": 13.9,
-              "high": 19.3,
-              "level": 80
+              "kind": "monte_carlo",
+              "low": 22.106,
+              "high": 22.694,
+              "level": 95
             },
-            "mcse": 0.05,
+            "mcse": 0.15,
             "review": "ai_set",
-            "precision": 2,
+            "precision": 1,
             "reason": null,
             "stale": false,
             "detail": {
               "kind": "run",
-              "title": "末例入组",
+              "title": "平均研究时长",
               "fields": [
                 {
+                  "label": "方法",
+                  "value": "方案的模拟运行"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
                   "label": "蒙特卡洛标准误",
-                  "value": "0.05"
+                  "value": "0.15"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
                 }
               ],
               "quote": null,
               "quoteSource": null,
               "ref": {
                 "kind": "result",
-                "id": "res_5",
+                "id": "res_2",
                 "tab": "trial"
               }
             }
@@ -1244,38 +1324,54 @@
       "name": "1:1 随机 + 一次期中分析",
       "items": [
         {
-          "key": "last_patient_in",
-          "label": "末例入组",
+          "key": "trial_duration",
+          "label": "平均研究时长",
           "value": {
-            "value": 19.6,
+            "value": 25.6,
             "text": null,
             "unit": "个月",
             "source": "predicted",
             "interval": {
-              "kind": "prediction",
-              "low": 16.7,
-              "high": 23.2,
-              "level": 80
+              "kind": "monte_carlo",
+              "low": 25.2472,
+              "high": 25.9528,
+              "level": 95
             },
-            "mcse": 0.05,
+            "mcse": 0.18,
             "review": "ai_set",
-            "precision": 2,
+            "precision": 1,
             "reason": null,
             "stale": false,
             "detail": {
               "kind": "run",
-              "title": "末例入组",
+              "title": "平均研究时长",
               "fields": [
                 {
+                  "label": "方法",
+                  "value": "方案的模拟运行"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
                   "label": "蒙特卡洛标准误",
-                  "value": "0.05"
+                  "value": "0.18"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
                 }
               ],
               "quote": null,
               "quoteSource": null,
               "ref": {
                 "kind": "result",
-                "id": "res_6",
+                "id": "res_3",
                 "tab": "trial"
               }
             }

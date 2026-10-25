@@ -4,7 +4,6 @@ import { ChevronRight, CircleCheck, CircleDashed, Download } from "lucide-react"
 import {
   downloadVcrRecords,
   getVcrPatients,
-  runVcrStep,
   type VcrCalibrationRow,
   type VcrPatientsTab as PatientsData,
   type VcrStudy,
@@ -24,13 +23,11 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrTornadoChart } from "../VcrDiagrams";
 import { VcrNumber } from "../VcrNumber";
-import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
-import { useVcrRun } from "../useVcrRun";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
-import { VcrLongitudinalPanel, hasLongitudinal, useLongitudinal } from "../VcrLongitudinalPanel";
+import { VcrLongitudinalPanel, useLongitudinal } from "../VcrLongitudinalPanel";
 import { CalibrationStrip } from "../patients/CalibrationStrip";
 import { DistributionGrid } from "../patients/DistributionGrid";
 import { ModelRecordDrawer } from "../patients/ModelRecordDrawer";
@@ -75,19 +72,20 @@ export function PatientsTab({ studyId, study, onStudyChanged }: { studyId: strin
   const { state, reload } = useVcrLoad(`${studyId}:patients`, () => getVcrPatients(studyId));
   const longitudinal = useLongitudinal(studyId);
   const [view, setView] = useState<"patients" | "forecast">("patients");
-  const forecastData = longitudinal.state.kind === "ready" && hasLongitudinal(longitudinal.state.data) ? longitudinal.state.data : null;
-  const shown = forecastData && view === "forecast" ? "forecast" : "patients";
-  const switcher: ToolbarChips | null = forecastData
-    ? {
+  const forecastData = longitudinal.state.kind === "ready" && longitudinal.state.data.available !== false ? longitudinal.state.data : null;
+  const shown = view;
+  const switcher: ToolbarChips = {
       kind: "chips",
       label: "视图",
       neutral: "patients",
       value: shown,
       onChange: (next) => setView(next === "forecast" ? "forecast" : "patients"),
       options: [{ value: "patients", label: "虚拟患者" }, { value: "forecast", label: "预测验证" }],
-    }
-    : null;
+    };
 
+  if (shown === "forecast" && longitudinal.state.kind === "error") return <ForecastState switcher={switcher}><VcrTabError message={longitudinal.state.message} onRetry={longitudinal.reload} /></ForecastState>;
+  if (shown === "forecast" && longitudinal.state.kind === "loading") return <ForecastState switcher={switcher}><VcrTabSkeleton /></ForecastState>;
+  if (shown === "forecast" && !forecastData) return <ForecastState switcher={switcher}><Note action={null}>当前工作空间尚未启用纵向预测。已有患者记录仍可查看。</Note></ForecastState>;
   if (shown === "forecast" && forecastData) {
     return (
       <VcrLongitudinalPanel
@@ -99,9 +97,14 @@ export function PatientsTab({ studyId, study, onStudyChanged }: { studyId: strin
       />
     );
   }
-  if (state.kind === "loading") return <VcrTabSkeleton />;
-  if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
+  if (state.kind === "loading") return <ForecastState switcher={switcher}><VcrTabSkeleton /></ForecastState>;
+  if (state.kind === "error") return <ForecastState switcher={switcher}><VcrTabError message={state.message} onRetry={reload} /></ForecastState>;
   return <PatientsView studyId={studyId} study={study} data={state.data} switcher={switcher} reload={reload} onStudyChanged={onStudyChanged} />;
+}
+
+function ForecastState({ switcher, children }: { switcher: ToolbarChips; children: React.ReactNode }) {
+  useVcrToolbar({ filters: [switcher] });
+  return <>{children}</>;
 }
 
 function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }: {
@@ -113,12 +116,10 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
   onStudyChanged?: () => void;
 }) {
   const frame = useStudyFrame();
-  const { run, busy } = useVcrRun(study);
   const [params, setParams] = useSearchParams();
   const [arm, setArm] = useState<string | null>(null);
   const [columns, setColumns] = useState<Record<string, string>>({});
   const [modelOpen, setModelOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const patient = params.get("patient");
 
@@ -161,7 +162,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "记录暂时无法下载，请稍后重试。" })))
       .finally(() => setDownloading(false));
   };
-  const regenerate = () => { void run(() => runVcrStep(studyId, "patients"), "这一步无法开始，请稍后重试。"); };
+  const ask = (request: string) => frame?.openChat(`${request}。当前研究 ${studyId}，患者结果 ${records?.result ?? "尚无"}，模型 ${data.model?.id ?? "尚未指定"}。请读取当前版本、说明适用范围并保留原结果。`);
 
   // --- the band's one row ------------------------------------------------------------------------------------------------
   const filters: ToolbarFilter[] = [];
@@ -197,8 +198,8 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
   }
   if (!nothing) {
     if (records) actions.push({ key: "download", label: "下载 CSV", icon: Download, loading: downloading, onSelect: download });
-    if (mayRun && !working) actions.push({ key: "regenerate", label: "重新生成", loading: busy, onSelect: regenerate });
-    if (mayWrite) actions.push({ key: "settings", label: "改设定", quiet: true, onSelect: () => setSettingsOpen(true) });
+    if (mayRun && !working) actions.push({ key: "regenerate", label: "重新生成", onSelect: () => ask("生成一个可配对比较的虚拟患者版本") });
+    if (mayWrite) actions.push({ key: "settings", label: "改设定", quiet: true, onSelect: () => ask("调整虚拟患者设定") });
   }
   const any = Object.keys(columns).length > 0 || arm !== null;
   useVcrToolbar(filters.length > 0 || actions.length > 0
@@ -222,9 +223,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
           onClose={() => setModelOpen(false)}
         />
       )}
-      {settingsOpen && (
-        <VcrSettingsDrawer studyId={studyId} kind="population" title="改人群设定" onClose={() => setSettingsOpen(false)} onSaved={changed} />
-      )}
+
     </>
   );
 

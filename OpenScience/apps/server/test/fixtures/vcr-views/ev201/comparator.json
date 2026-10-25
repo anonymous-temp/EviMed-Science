@@ -1,4 +1,12 @@
 {
+  "selection": {
+    "id": "cmp_1",
+    "version": 2,
+    "resultId": "res_8",
+    "resultVersion": 1,
+    "route": "literature_control"
+  },
+  "predictionBenchmark": null,
   "headline": "文献对照：有限制地估计，12 个月 RMST 5.900 个月。",
   "routes": [
     {
@@ -21,6 +29,13 @@
       "reason": null,
       "note": null,
       "selected": true
+    },
+    {
+      "route": "model_comparator",
+      "state": "scenario",
+      "reason": null,
+      "note": null,
+      "selected": false
     },
     {
       "route": "hybrid_control",
@@ -165,7 +180,7 @@
         "quoteSource": null,
         "ref": {
           "kind": "result",
-          "id": "res_11",
+          "id": "res_8",
           "tab": "comparator"
         }
       }
@@ -205,7 +220,7 @@
       "quoteSource": null,
       "ref": {
         "kind": "result",
-        "id": "res_11",
+        "id": "res_8",
         "tab": "comparator"
       }
     }

@@ -1,40 +1,37 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { Plus, UsersRound } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router";
+import { Plus, UsersRound, ScanSearch, GitCompareArrows, FlaskConical } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   getVcrHome,
   isVcrOff,
   useVcrFeature,
   type VcrHome,
-  type VcrRecruitTodo,
   type VcrStudySummary,
 } from "@/lib/vcrClient";
-import { useProjectStore } from "@/lib/projects";
-import { VcrStudyBrief } from "@/components/vcr/VcrStudyBrief";
+import { useAskAbout } from "@/components/memory/useAskAbout";
+import { VCR_TASKS } from "@/components/vcr/frameVcrOptions";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
-import { vcrChatPath } from "@/lib/studyLocation";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
+import { Tag } from "@/components/ui/Tag";
+import { Disclosure } from "@/components/ui/Disclosure";
 import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
-import { VcrStepProgress } from "@/components/vcr/VcrStepProgress";
 import { ToolbarSlotContext } from "@/components/vcr/studyFrameContext";
 import { VcrDefinitionsPanel } from "@/components/vcr/VcrKnowledge";
-import { VcrModelsPanel } from "@/components/vcr/VcrModelsPanel";
 import { VcrPrecedentsPanel } from "@/components/vcr/VcrPrecedentsPanel";
 import { tierLabel } from "@/components/vcr/vcrText";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
 
-type HomeTab = "studies" | "models" | "precedents" | "definitions";
+type HomeTab = "studies" | "precedents" | "definitions";
 
 const TABS: ReadonlyArray<{ value: HomeTab; label: string }> = Object.freeze([
   { value: "studies", label: "研究" },
-  { value: "models", label: "方法库" },
   { value: "precedents", label: "参考试验" },
   { value: "definitions", label: "人群定义" },
 ]);
@@ -55,26 +52,24 @@ const STATE_WORDS: Record<Exclude<StudyFilter, "all">, string> = { need: "需要
 const STATE_RANK: Record<StudyState, number> = { need: 0, running: 1, other: 2, done: 3 };
 
 /**
- * Where a study stands, read off what the row carries: a line the server marked as needing the reader (or a coordinator's todo) is
- * 需要你; a step under way is 进行中; all seven done is 已完成. A study that is none of these is only listed under 全部.
+ * A study is complete when its requested work is complete; unrequested work never contributes to its status.
  */
-export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention">, todos: readonly VcrRecruitTodo[] = []): StudyState {
+export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention">): StudyState {
   const records = Object.values(study.steps);
-  if (todos.length > 0 || study.attention.some((line) => line.tone === "attention")) return "need";
+  if (study.attention.some((line) => line.tone === "attention")) return "need";
   if (records.some((record) => record?.status === "running" || record?.status === "queued")) return "running";
-  const steps = ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"] as const;
-  if (steps.every((step) => study.steps[step]?.status === "done" || study.steps[step]?.status === "minimal")) return "done";
+  const requested = records.filter(record => record?.requested === true);
+  if (requested.length > 0 && requested.every(record => record?.status === "done" || record?.status === "minimal")) return "done";
   return "other";
 }
 
 /**
- * The study list and one New Study action. New Study opens a local brief; meaningful save, material selection or Start creates the
- * owned draft. Existing library query links remain compatible without competing with the study list as landing-page tabs.
+ * Four intents open unsent drafts in the native composer. Historical calculations remain readable below the active research list.
  */
 export function VcrHomePage() {
   const feature = useVcrFeature();
-  const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const ask = useAskAbout();
+  const [params] = useSearchParams();
   const tab = (TABS.find((item) => item.value === params.get("tab"))?.value ?? "studies") as HomeTab;
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
   const [reloads, setReloads] = useState(0);
@@ -101,9 +96,9 @@ export function VcrHomePage() {
   }, [feature, reloads]);
 
   const ready = listing.kind === "ready" ? listing.home : null;
-  const studies = useMemo(() => ready?.studies ?? [], [ready]);
-  const todosOf = useCallback((study: VcrStudySummary): VcrRecruitTodo[] => (ready?.todos ?? []).filter((todo) => todo.studyId === study.id), [ready]);
-  const stateOf = useCallback((study: VcrStudySummary) => studyStateOf(study, todosOf(study)), [todosOf]);
+  const studies = useMemo(() => ready?.studies.filter(study => study.purpose !== "calculation") ?? [], [ready]);
+  const history = useMemo(() => ready?.studies.filter(study => study.purpose === "calculation") ?? [], [ready]);
+  const stateOf = studyStateOf;
 
   const needle = query.trim().toLowerCase();
   const counts = useMemo(() => {
@@ -123,29 +118,7 @@ export function VcrHomePage() {
 
   if (feature === "off" || listing.kind === "off") return <VcrOffPage />;
 
-  const start = () => setParams({ new: "1" });
-  const newStudy = <Button onClick={start}><Plus size={16} aria-hidden="true" />新建研究</Button>;
-  if (params.get("new") === "1") return <PageShell title="新建研究" width="wide" back={<Link to="/app/virtual-research" className="rounded text-ui text-link">虚拟临床研究</Link>}>
-    <VcrStudyBrief onStarted={async (created, _answer, isCurrent) => {
-      if (!isCurrent()) return false;
-      const store = useProjectStore.getState();
-      if (!store.projects.some(project => project.id === created.projectId)) await store.load();
-      if (!isCurrent()) return false;
-      let landed = false;
-      await useProjectStore.getState().select(created.projectId, () => { if (isCurrent()) { navigate(vcrChatPath(created.id), { flushSync: true }); landed = true; } });
-      return landed;
-    }} onDataRequested={async (created, isCurrent) => {
-      if (!isCurrent()) return false;
-      const store = useProjectStore.getState();
-      if (!store.projects.some(project => project.id === created.projectId)) await store.load();
-      if (!isCurrent()) return false;
-      let landed = false;
-      await useProjectStore.getState().select(created.projectId, () => { if (isCurrent()) { navigate(`${vcrTabPath(created.id, "data")}?intake=1`, { flushSync: true }); landed = true; } });
-      return landed;
-    }} />
-  </PageShell>;
-  // The empty state carries the button, so the header does not.
-  const none = tab === "studies" && feature !== "loading" && ready !== null && ready.studies.length === 0;
+  const newStudy = <Button onClick={() => ask("我想开展虚拟临床研究，问题是：")}><Plus size={16} aria-hidden="true" />开始研究对话</Button>;
 
   // A state with no study in it is not a chip: 0 is not a filter.
   const filters: ToolbarFilter[] = [];
@@ -173,7 +146,7 @@ export function VcrHomePage() {
 
   return (
     <HomeFrame
-      actions={tab === "studies" && !none ? newStudy : undefined}
+      actions={tab === "studies" ? newStudy : undefined}
       toolbar={{
         ...(tab !== "studies" ? { label: TABS.find(item => item.value === tab)?.label ?? "研究" } : {}),
         ...(onStudies ? {
@@ -184,32 +157,45 @@ export function VcrHomePage() {
         } : {}),
       }}
     >
-      {tab === "models" ? <VcrModelsPanel />
-        : tab === "precedents" ? <VcrPrecedentsPanel />
+      {tab === "studies" && !needle && state === "all" && <section aria-label="开始研究任务" className="mb-8">
+        <List label="研究任务" divided>
+          {VCR_TASKS.map((task, index) => {
+            const Icon = [ScanSearch, UsersRound, GitCompareArrows, FlaskConical][index];
+            return <li key={task.id} className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 px-2 py-4 md:grid-cols-[auto_10rem_1fr]">
+              <Icon size={20} aria-hidden="true" className="mt-2 text-text-3" />
+              <Button variant="text" aria-label={task.label} aria-describedby={`vcr-input-${task.id}`} onClick={() => ask(task.draft)} className="h-auto justify-start px-0 py-1 text-body font-semibold">{task.label}</Button>
+              <span className="col-start-2 flex min-w-0 flex-col gap-2 md:col-start-3">
+                <span className="text-ui text-text">{task.summary}</span>
+                <span id={`vcr-input-${task.id}`} data-vcr-data-requirement={task.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-caption text-text-2"><Tag>{task.inputLabel}</Tag><span className="max-w-measure">{task.requirement}</span></span>
+              </span>
+            </li>;
+          })}
+        </List>
+      </section>}
+      {tab === "precedents" ? <VcrPrecedentsPanel />
           : tab === "definitions" ? <VcrDefinitionsPanel />
             : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
               : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
-                : listing.home.studies.length === 0
+                : studies.length === 0
                   ? (
                     <EmptyState
                       icon={UsersRound}
-                      title="还没有研究"
+                      title="研究结果会保留在这里"
                       description={(
                         <>
-                          <p>用 已有证据和你的数据</p>
-                          <p>得到 模拟人群、试验方案和样本量，再匹配合适的患者</p>
+                          <p>从上方任务或首页对话开始。AI 会读取资料、调用计算，并把可复用的人群、患者与方案保存在研究中。</p>
                         </>
                       )}
-                      action={newStudy}
                     />
                   )
                   : shown.length === 0
                     ? <EmptyState icon={UsersRound} title="没有匹配的研究" action={<Button variant="secondary" onClick={() => { setQuery(""); setState("all"); }}>清除筛选</Button>} />
                     : (
                       <List label="研究" divided>
-                        {shown.map((study) => <StudyRow key={study.id} study={study} todos={todosOf(study)} />)}
+                        {shown.map((study) => <StudyRow key={study.id} study={study} />)}
                       </List>
                     )}
+      {tab === "studies" && history.length > 0 && <div className="mt-6"><Disclosure summary={`历史独立计算 · ${history.length}`}><List label="历史独立计算" divided>{history.map(study => <StudyRow key={study.id} study={study} />)}</List></Disclosure></div>}
     </HomeFrame>
   );
 }
@@ -235,10 +221,8 @@ function HomeFrame({ actions, toolbar, children }: { actions: ReactNode; toolbar
  * One study: its name and data tier, the question it asks, what it has found, how far it has come — and, when it waits for somebody,
  * the one thing to do about it. The title is the row's link (stretched over it); the steps and the cue are links of their own, above it.
  */
-function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly VcrRecruitTodo[] }) {
-  const need = todos[0] ?? null;
+function StudyRow({ study }: { study: VcrStudySummary }) {
   const line = study.attention.find((item) => item.tone === "attention") ?? null;
-  const described = Boolean(study.question) || ["done", "minimal", "stale"].includes(study.steps.definition?.status ?? "");
   return (
     <li className="relative flex flex-col gap-3 px-2 py-5 hover:bg-surface-1">
       <div className="min-w-0">
@@ -257,20 +241,19 @@ function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly Vc
         {study.question && <p className="mt-1 text-caption text-text-2">{study.question}</p>}
         {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
       </div>
-      {study.purpose !== "calculation" && <VcrStepProgress studyId={study.id} steps={study.steps} described={described} paused={study.status === "paused"} />}
-      {(need || line) && (
+      {line && (
         // Above the stretched title, so its link stays a link.
-        <div data-vcr-need="" data-vcr-todo={need ? "" : undefined} className="relative z-sticky">
+        <div data-vcr-need="" className="relative z-sticky">
           <Note
             tone="warn"
             action={(
-              <Link to={vcrTabPath(study.id, need ? need.action?.tab ?? "matching" : line?.tab ?? line?.action?.tab ?? "overview")} className="shrink-0 rounded text-link hover:underline">
-                {need ? need.action?.label ?? "去处理" : line?.action?.label ?? "去处理"}
+              <Link to={vcrTabPath(study.id, line?.tab ?? line?.action?.tab ?? "overview")} className="shrink-0 rounded text-link hover:underline">
+                {line?.action?.label ?? "去处理"}
               </Link>
             )}
           >
             需要你
-            {` · ${need ? (todos.length > 1 ? `${need.title}，另有 ${todos.length - 1} 件待办` : need.title) : line?.text}`}
+            {` · ${line?.text}`}
           </Note>
         </div>
       )}

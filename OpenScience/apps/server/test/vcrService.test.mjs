@@ -26,9 +26,9 @@ test("AC-01 the module is invisible unless it is on and open to this account", (
   assert.equal(vcrAudienceAllows(operators, null), false);
 });
 
-test("AC-01 the study page has exactly seven tabs, and the runtime's vocabularies are closed", () => {
+test("the read vocabulary retains legacy patient addresses and the runtime writes remain closed", () => {
   assert.deepEqual([...VCR_TABS], ["overview", "population", "patients", "comparator", "trial", "matching", "data"]);
-  assert.equal(VCR_TABS.length, 7, "the design spec caps a page at seven tabs");
+  assert.equal(VCR_TABS.length, 7, "seven API projections support six visible workspaces and legacy addresses");
   // The two vocabularies a run may name. Numbers are on neither write list.
   for (const forbidden of ["results", "counts", "measures", "execution"]) {
     assert.equal(VCR_WRITE_WHATS.includes(forbidden), false, forbidden);
@@ -39,18 +39,18 @@ test("AC-01 the study page has exactly seven tabs, and the runtime's vocabularie
 test("which comparator routes a data tier can reach is deterministic, not a model's opinion", () => {
   const t0 = vcrRouteOptions("T0");
   assert.deepEqual(t0.filter((option) => option.available).map((option) => option.route),
-    ["literature_control", "hybrid_control"]);
+    ["literature_control", "model_comparator", "hybrid_control"]);
   const t2 = vcrRouteOptions("T2");
   assert.deepEqual(t2.filter((option) => option.available).map((option) => option.route),
-    ["external_control", "literature_control", "hybrid_control"]);
+    ["external_control", "literature_control", "model_comparator", "hybrid_control"]);
   const t3 = vcrRouteOptions("T3");
-  assert.deepEqual(t3.filter((option) => !option.available).map((option) => option.route), ["model_comparator"], "T3 reaches every route the engine can compute");
-  // The model-prediction comparator is listed and never offered, at any tier.
+  assert.deepEqual(t3.filter((option) => !option.available).map((option) => option.route), [], "T3 can reach every route, subject to task-specific inputs");
+  // The model route is available at each tier; its selected data and immutable equation are checked per task.
   for (const tier of ["T0", "T1", "T2", "T3"]) {
     const model = vcrRouteOptions(tier).find((option) => option.route === "model_comparator");
-    assert.deepEqual([model?.supported, model?.available], [false, false], tier);
+    assert.deepEqual([model?.supported, model?.available], [true, true], tier);
   }
-  assert.deepEqual([...VCR_UNSUPPORTED_COMPARATOR_ROUTES], ["model_comparator"]);
+  assert.deepEqual([...VCR_UNSUPPORTED_COMPARATOR_ROUTES], []);
   // The table is the domain's, not this module's second copy of it.
   for (const option of t0) assert.equal(option.minimumTier, VCR_ROUTE_MIN_TIER[option.route]);
 });
@@ -224,6 +224,8 @@ const LONGITUDINAL_INPUTS = /** @type {const} */ ([
   ["残差标准差", ["truth.sd"]],
   ["每次随访前退出的概率", ["dropoutPerVisit"]],
   ["协变量效应（取自已存人群）", ["truth.covariateEffects"]],
+  ["目标队列规则", ["cohortRules"]],
+  ["同队列的配对模拟标识", ["pairing.key", "pairing.replicate"]],
 ]);
 
 test("the trajectory model's card lists exactly the inputs its own schema reads, and says what it is not", () => {
@@ -407,7 +409,7 @@ function adoptingService() {
 test("a model is adopted as the first call shape unless its card says otherwise, and an unknown shape is refused by name", async () => {
   const { saved, service } = adoptingService();
   const plain = /** @type {any} */ (await service.adoptModel({ id: "u1" }, { name: "fitted-os", version: "1.0.0", card: { inputs: ["年龄"] } }));
-  assert.equal(saved[0].card.type, "fitted_prediction_model");
+  assert.equal(saved[0].card.type, "registered_prediction_model");
   assert.equal(saved[0].risk, null, "an omitted assessment is unknown, never low risk");
   assert.equal(saved[0].endpointType, null);
   assert.equal(saved[0].applicability.population, undefined, "source identity alone is not clinical applicability");

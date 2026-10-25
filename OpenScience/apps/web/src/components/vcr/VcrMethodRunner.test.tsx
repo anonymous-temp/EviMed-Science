@@ -42,7 +42,7 @@ describe("shared method workbench", () => {
     expect(methodKind("comparator.evalue")).toBe("evalue");
     expect(methodKind("model_comparator")).toBeNull();
     expect(methodKind("matching.evaluate")).toBeNull();
-    expect(methodTask("matching.evaluate")).toBe("招募与匹配");
+    expect(methodTask("matching.evaluate")).toBe("入组预测与匹配");
     expect(methodTask("comparator.covariate_sets")).toBe("稳健性分析");
     expect(validateScenario("comparator.evalue", schemaDefault(VCR_SCENARIO_SCHEMAS["comparator.evalue"] as never)).length).toBeGreaterThan(0);
   });

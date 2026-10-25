@@ -1,9 +1,8 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { X } from "lucide-react";
 import { VCR_MEMBER_ROLES } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
-  getVcrMatching,
   getVcrMembers,
   removeVcrMember,
   setVcrMembers,
@@ -33,15 +32,9 @@ const memberName = (member: { name?: string | null }) => member.name ?? NO_VALUE
  * field-level grant in the module.
  *
  * Hidden knowledge:
- *  - **One account, several roles.** The single physician at a small site is
- *    the coordinator and the clinical reviewer, so a role is added and removed
- *    one at a time — the removal names its role, and the account keeps the
- *    others.
+ *  - **One account, several roles.** Review and data permissions are granted and removed independently.
  *  - **The owner is the lead without a row.** It is listed first and its role
  *    has no way out: the study must never end up with nobody who can manage it.
- *  - **A `site` member names its site**, because a site reads and moves only
- *    its own referrals and a site role without one would do nothing. The sites
- *    are the study's own (the matching tab's 中心).
  *  - One request at a time: every control is disabled while one is in flight.
  */
 export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClose: () => void }) {
@@ -49,25 +42,10 @@ export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClos
   const [busy, setBusy] = useState<string | null>(null);
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<VcrMemberRole>("clinical_reviewer");
-  const [siteId, setSiteId] = useState("");
-  const [sites, setSites] = useState<Array<{ id: string; name: string }> | null>(null);
   const roleId = useId();
-  const siteFieldId = useId();
-
-  // The sites are read once, when the role that needs one is first picked.
-  useEffect(() => {
-    if (role !== "site" || sites !== null) return undefined;
-    let live = true;
-    void getVcrMatching(studyId, { view: "sites" }).then(
-      (data) => { if (live) setSites((data.sites ?? []).map((site) => ({ id: site.id, name: site.name }))); },
-      () => { if (live) setSites([]); },
-    );
-    return () => { live = false; };
-  }, [role, sites, studyId]);
 
   const account = userId.trim();
-  const needsSite = role === "site";
-  const valid = ACCOUNT_ID.test(account) && (!needsSite || siteId !== "");
+  const valid = ACCOUNT_ID.test(account);
 
   const work = (key: string, request: () => Promise<unknown>, done: string, failure: string) => {
     if (busy) return;
@@ -117,7 +95,7 @@ export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClos
             event.preventDefault();
             if (!valid) return;
             work("add", () => setVcrMembers(studyId, {
-              userId: account, role, ...(needsSite ? { detail: { siteId } } : {}),
+              userId: account, role,
             }), "已添加。", "成员暂时无法添加，请稍后重试。");
           }}
         >
@@ -128,15 +106,6 @@ export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClos
               {VCR_MEMBER_ROLES.map((each) => <option key={each} value={each}>{memberRoleLabel(each as VcrMemberRole)}</option>)}
             </select>
           </div>
-          {needsSite && (
-            <div>
-              <label htmlFor={siteFieldId} className="mb-2 block text-ui text-text">所属中心</label>
-              <select id={siteFieldId} value={siteId} onChange={(event) => setSiteId(event.target.value)} className={inputClasses()}>
-                <option value="">选择中心</option>
-                {(sites ?? []).map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-              </select>
-            </div>
-          )}
           <div className="flex justify-end">
             <Button type="submit" loading={busy === "add"} disabled={!valid || busy !== null}>添加</Button>
           </div>

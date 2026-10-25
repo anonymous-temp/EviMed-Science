@@ -6,6 +6,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
+import { ReviewService } from "../src/reviewService.mjs";
+import { migrateReview } from "../src/reviewPersistence.mjs";
+import { setTimeout as delay } from "node:timers/promises";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -25,7 +28,7 @@ const OWNER = `own${suffix}`;
 /** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */ let isolated = null;
 /** What the runtime was asked, in order. */
 const record = { starts: /** @type {any[]} */ ([]), reserved: /** @type {any[]} */ ([]), prompts: /** @type {any[]} */ ([]), dispatches: /** @type {any[]} */ ([]),
-  minted: /** @type {string[]} */ ([]), noRoom: false, busy: false, failPrompt: "", nativeQueued: false };
+  reviewFetches:0, minted: /** @type {string[]} */ ([]), noRoom: false, busy: false, failPrompt: "", nativeQueued: false };
 
 before(async () => {
   if (!databaseUrl) return;
@@ -37,6 +40,8 @@ before(async () => {
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
     rateLimitMaxRequests: 100_000, authRateLimitMaxRequests: 1_000, modelGatewaySigningSecret: randomBytes(32).toString("hex"),
+    reviewEnabled:true,reviewRepliesEnabled:true,reviewPollMs:60000,dashscopeApiKey:'test-only-review-key',
+    reviewFetch:async()=>{record.reviewFetches++;throw new Error('This fixture must not call a reviewer model');},
     llmRoutingEnabled: false, vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane,
     vcrEngineUrl: "http://engine.test:8080", vcrEngineToken: "t".repeat(40), vcrEngineReceiptKey: "r".repeat(40),
     vcrFetch: async (/** @type {any} */ url) => {
@@ -348,4 +353,133 @@ test("terminal intake state and goal release roll back together when the Postgre
   assert.deepEqual((await app.vcr.store.studyById(study.id)).steps, before.steps);
   await app.vcr.orchestrator.onRunFinished(project, { ...run, status: "succeeded" });
   assert.equal((await app.vcr.store.studyById(study.id)).steps.definition.held, false);
+});
+test('native job continuation preserves an initiating ordinary pin while current session is specialist-bound',options,async()=>{
+ const app=context.app;
+ const user=await app.store.userById((await app.store.createUser(`pin${randomUUID().slice(0,8)}`,PASSWORD,"Pin fixture")).id);
+ await app.store.createProject(user,'continuation-pin','Continuation pin fixture');
+ const project=await app.store.requireProject(user,'continuation-pin');
+ await mkdir(project.metaDir,{recursive:true});await mkdir(project.workspaceDir,{recursive:true});
+ const sessions=app.agentRuns.researchSessions,registry=await sessions.agentRegistry;
+ const answer=registry.get('open-domain-answer'),specialist=registry.get('vcr-protocol');
+ await sessions.put(project,'continuation-pin-root',{mode:'specialist',agentId:specialist.id,agentVersion:specialist.version});
+ const binding={...await sessions.get(project,'continuation-pin-root'),mode:'open-domain',agentId:null,agentVersion:null,runtimeAgent:null};
+ const original=(await app.agentRuns.reserveRun(project,binding,{dispatchId:'original-calculation-pin',baselineCursor:null,question:'Original aggregate calculation question',
+  effectiveAgentId:answer.id,effectiveAgentVersion:answer.version,effectiveRuntimeAgent:answer.runtimeAgent,effectiveRouteReason:'open-domain'})).run;
+ await app.agentRuns.finishInternal(project,original.id,{status:'succeeded',artifacts:[]});
+ const study=await app.vcr.store.taskContext({userId:user.id,projectId:project.id,rootSessionId:'continuation-pin-root'});
+ await app.vcr.store.query(`INSERT INTO evimed_vcr.conversation_completions (id,study_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload)
+  VALUES ('completion_pin_fixture',$1,$2,$3,'continuation-pin-root','none','vcr-completion-pin-fixture',$4,$5::jsonb)`,[study.id,user.id,project.id,'a'.repeat(64),JSON.stringify({state:'failed',runId:original.id,callId:'original_call',resultId:null,error:{code:'synthetic_failure'}})]);
+ const previous=app.runtimeManager.dispatchPrompt;const prompts=[];record.busy=false;
+ app.runtimeManager.dispatchPrompt=async(_project,session,request)=>{prompts.push({session,...request});return{accepted:true};};
+ try {
+  await app.vcr.completions.deliver();
+  assert.equal(prompts.length,1);
+  assert.equal(prompts[0].session,'continuation-pin-root');assert.equal(prompts[0].agent,answer.runtimeAgent);
+  assert.equal(prompts[0].routedCapability,null);assert.ok(!prompts[0].system.includes('专项会话继续遵循已注册专项能力'));
+  assert.equal((await sessions.get(project,'continuation-pin-root')).agentId,specialist.id);
+  const resumed=(await app.agentRuns.list(project)).find(run=>run.dispatchId==='vcr-completion-pin-fixture');
+  assert.equal(resumed.effectiveAgentId,answer.id);assert.equal(resumed.question,'Original aggregate calculation question');assert.equal(resumed.automated,true);
+  await app.agentRuns.finishInternal(project,resumed.id,{status:'succeeded',artifacts:[]});
+ } finally {app.runtimeManager.dispatchPrompt=previous;}
+});
+
+test('an ended ordinary conversation queues its own task study and delayed numeric review revalidates the saved scope',options,async()=>{
+ const app=context.app,user=await app.store.userById((await app.store.createUser(`reply${randomUUID().slice(0,7)}`,PASSWORD,'Reply fixture')).id);
+ await app.store.createProject(user,'ordinary-reply-scope','Ordinary reply scope');const project=await app.store.requireProject(user,'ordinary-reply-scope');
+ await mkdir(project.metaDir,{recursive:true});await mkdir(project.workspaceDir,{recursive:true});
+ const sessions=app.agentRuns.researchSessions,registry=await sessions.agentRegistry,answer=registry.get('open-domain-answer');
+ await sessions.put(project,'ordinary-reply-a',{mode:'open-domain'});
+ const legacy=await app.vcr.store.createStudy({userId:user.id,projectId:project.id,name:'Other project study'});await app.vcr.store.setConversationSession(legacy.id,'canonical-other');
+ const a=await app.vcr.store.taskContext({userId:user.id,projectId:project.id,rootSessionId:'ordinary-reply-a'}),b=await app.vcr.store.taskContext({userId:user.id,projectId:project.id,rootSessionId:'ordinary-reply-b'});
+ for(const [study,value] of [[legacy,11],[a,71],[b,91]]) await app.vcr.store.recordResult({studyId:study.id,userId:user.id,kind:'trial_scenario',conclusion:'estimable',counts:{generatedRecords:0},measures:[{name:'required_n',value}],diagnostics:{}});
+ await migrateReview(app.vcr.store.database);
+ const previousTranscript=app.runtimeManager.sessionTranscript,previousConsider=ReviewService.prototype.considerReply;
+ let actualReview=null,scopeRequest=null;const now=Date.now();app.runtimeManager.sessionTranscript=async(_project,sessionId)=>({sessionId,truncated:false,turns:[{startSeq:1,end:{kind:'completed'}}],messages:[{role:'user',source:'user',sourceRequestId:scopeRequest,turnStartSeq:1,seq:1,time:now,parts:[{type:'text',text:'计算样本量'}]},{role:'tool',source:'system',turnStartSeq:1,seq:2,time:now+1,parts:[{type:'tool',tool:'mcp__evimed__vcr_read',callId:'scope-results',status:'completed',input:{what:'results'},output:'study result 71'}]},{role:'assistant',source:'system',turnStartSeq:1,seq:3,time:now+2,parts:[{type:'text',text:'这次计算得到样本量 71。'}]}]});
+ ReviewService.prototype.considerReply=async function(...args){actualReview=this;return previousConsider.apply(this,args);};
+ try {
+  const run=(await app.agentRuns.reserveRun(project,await sessions.get(project,'ordinary-reply-a'),{dispatchId:'ordinary-reply-dispatch',baselineCursor:null,question:'计算样本量',effectiveAgentId:answer.id,effectiveAgentVersion:answer.version,effectiveRuntimeAgent:answer.runtimeAgent,effectiveRouteReason:'default'})).run;
+  scopeRequest=run.kernelRequestIds.at(-1);
+  await app.agentRuns.finishInternal(project,run.id,{status:'succeeded',artifacts:[]});
+  let row=null;for(let attempt=0;attempt<40 && !row;attempt++){row=await app.vcr.store.one('SELECT * FROM evimed_review.reply_checks WHERE run_id=$1',[run.id]);if(!row)await delay(25);}
+  assert.ok(row,'ordinary open-domain numeric reply is queued');assert.equal(row.study_id,a.id);assert.equal(row.session_id,'ordinary-reply-a');assert.ok(actualReview);
+  const identity={userId:user.id,projectId:project.id,runId:run.id,sessionId:row.session_id,studyId:row.study_id,turnSeq:row.turn_seq};
+  const own=await actualReview.vcrFacts(identity);assert.equal(own.studyId,a.id);assert.deepEqual(own.results.flatMap(result=>result.measures).map(measure=>measure.value),[71]);
+  assert.equal(await actualReview.vcrFacts({...identity,sessionId:'ordinary-reply-b'}),null);assert.equal(await actualReview.vcrFacts({...identity,studyId:b.id}),null);assert.equal(await actualReview.vcrFacts({...identity,runId:'missing_run'}),null);
+  await app.vcr.store.softDeleteStudy(a.id,user.id);assert.equal(await actualReview.vcrFacts(identity),null);
+  const fetches=record.reviewFetches;await actualReview.processReplyChecks('scope-regression');assert.equal(record.reviewFetches,fetches);
+  const checked=await app.vcr.store.one('SELECT status,verdicts FROM evimed_review.reply_checks WHERE run_id=$1',[run.id]);assert.equal(checked.status,'done');assert.deepEqual(checked.verdicts,[]);
+ } finally {app.runtimeManager.sessionTranscript=previousTranscript;ReviewService.prototype.considerReply=previousConsider;}
+});
+
+test('a prior task does not send standalone or mixed calculation numbers to the VCR-only reviewer',options,async()=>{
+ const app=context.app,user=await app.store.userById((await app.store.createUser(`gate${randomUUID().slice(0,7)}`,PASSWORD,'Review gate fixture')).id);
+ await app.store.createProject(user,'reply-participation','Reply participation');const project=await app.store.requireProject(user,'reply-participation');
+ await mkdir(project.metaDir,{recursive:true});await mkdir(project.workspaceDir,{recursive:true});
+ const sessions=app.agentRuns.researchSessions,answer=(await sessions.agentRegistry).get('open-domain-answer');await sessions.put(project,'reply-gate-root',{mode:'open-domain'});
+ const study=await app.vcr.store.taskContext({userId:user.id,projectId:project.id,rootSessionId:'reply-gate-root'});
+ await app.vcr.store.recordResult({studyId:study.id,userId:user.id,kind:'matching',conclusion:'estimable',counts:{generatedRecords:0},measures:[{name:'matched_patients',value:71}],diagnostics:{}});
+ await migrateReview(app.vcr.store.database);
+ const priorTranscript=app.runtimeManager.sessionTranscript,priorConsider=ReviewService.prototype.considerReply;let review=null,counter=0;const observed=new Map(),history=[];
+ app.runtimeManager.sessionTranscript=async(_project,sessionId)=>({sessionId,truncated:false,turns:history.filter(message=>message.role==='user').map(message=>({startSeq:message.turnStartSeq,end:{kind:'completed'}})),messages:history});
+ ReviewService.prototype.considerReply=async function(identity,run,reply,scope){review=this;observed.set(run.id,scope.studyId);return priorConsider.call(this,identity,run,reply,scope);};
+ const finish=async(reply,tools,extra={})=>{
+  counter++;const run=(await app.agentRuns.reserveRun(project,await sessions.get(project,'reply-gate-root'),{
+   dispatchId:extra.dispatchId ?? `participation-${counter}`,dispatchFingerprint:extra.fingerprint ?? null,baselineCursor:null,question:'当前任务',effectiveAgentId:answer.id,effectiveAgentVersion:answer.version,effectiveRuntimeAgent:answer.runtimeAgent,effectiveRouteReason:extra.route ?? 'default'})).run;
+  const turn=counter*10;
+  history.push({role:'user',source:'user',sourceRequestId:run.kernelRequestIds.at(-1),turnStartSeq:turn,seq:turn+1,time:Date.now(),parts:[{type:'text',text:'当前任务'}]},
+    ...tools.map((tool,index)=>({role:'tool',source:'system',turnStartSeq:turn,seq:turn+index+2,time:Date.now(),parts:[{type:'tool',tool,callId:`gate-tool-${counter}-${index}`,status:'completed',input:tool.endsWith('research_calculate') ? {action:'status',jobId:'standalone'} : {what:'results'},output:tool.endsWith('research_calculate') ? 'receipt-bound standalone result 331' : 'study result 71'}]})),
+    {role:'assistant',source:'system',turnStartSeq:turn,seq:turn+tools.length+2,time:Date.now(),parts:[{type:'text',text:reply}]});
+  await app.agentRuns.finishInternal(project,run.id,{status:'succeeded',artifacts:[]});for(let attempt=0;attempt<80 && !observed.has(run.id);attempt++)await delay(25);assert.ok(observed.has(run.id));return run;
+ };
+ try {
+  const initialVcr=await finish('已读取研究资料。',['vcr_read']);assert.equal(observed.get(initialVcr.id),study.id);
+  const unrelated=await finish('今天完成了 5 项工作。',[]);assert.equal(observed.get(unrelated.id),null);
+  const standalone=await finish('这次计算需要 331 例事件。',['mcp__evimed__research_calculate']);assert.equal(observed.get(standalone.id),null);
+  assert.equal(await app.vcr.store.one('SELECT id FROM evimed_review.reply_checks WHERE run_id=$1',[standalone.id]),null);
+  assert.equal(await review.vcrFacts({userId:user.id,projectId:project.id,runId:standalone.id,sessionId:'reply-gate-root',studyId:study.id}),null,'delayed rows also reject standalone sources');
+  const mixed=await finish('研究计数为 71，独立计算需要 331 例事件。',['vcr_read','research_calculate']);assert.equal(observed.get(mixed.id),null);
+  const actual=await finish('这次研究匹配了 72 人。',['mcp__evimed__vcr_read']);assert.equal(observed.get(actual.id),study.id);
+  // Simulate an already queued broad-scope row from before this eligibility fix.
+  await priorConsider.call(review,{userId:user.id,projectId:project.id},standalone,{replyText:'这次计算需要 331 例事件。',turnSeq:3},{studyId:study.id});
+  let calls=0;const previousFetch=review.fetchImpl;review.fetchImpl=async()=>{calls++;const event={choices:[{delta:{content:JSON.stringify({claims:[{sentence:0,numbers:['72']}]})}}],usage:{prompt_tokens:10,completion_tokens:10}};return new Response(`data: ${JSON.stringify(event)}\n\ndata: [DONE]\n\n`,{status:200,headers:{'content-type':'text/event-stream'}});};
+  try {await review.processReplyChecks('participation-review');} finally {review.fetchImpl=previousFetch;}
+  const checked=await app.vcr.store.one('SELECT verdicts FROM evimed_review.reply_checks WHERE run_id=$1',[actual.id]);assert.ok(checked.verdicts.some(verdict=>verdict.by==='vcr-results' && verdict.verdict==='unsupported' && verdict.reason.includes('72')));
+  const skipped=await app.vcr.store.one('SELECT verdicts FROM evimed_review.reply_checks WHERE run_id=$1',[standalone.id]);assert.deepEqual(skipped.verdicts,[]);assert.equal(calls,1,'only current VCR work asks the numeric reviewer');
+  const queued=await app.vcr.jobs.enqueue({studyId:study.id,userId:user.id,kind:'design_analytic',scenario:{design:{kind:'two_arm_fixed'},endpoint:{type:'binary'},truth:{controlRate:0.3,treatmentRate:0.5}},idempotencyKey:'completion-source'});
+  await app.vcr.store.query("UPDATE evimed_vcr.jobs SET state='failed',finished_at=now() WHERE id=$1",[queued.job.id]);
+  for(const [kind,fingerprint] of [['vcr','b'.repeat(64)],['replay','c'.repeat(64)]]) await app.vcr.store.query(`INSERT INTO evimed_vcr.conversation_completions
+   (id,study_id,job_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,state)
+   VALUES ($1,$2,$3,$4,$5,'reply-gate-root','none',$6,$7,$8::jsonb,'delivered')`,[`gate_${kind}`,kind==='vcr' ? study.id:null,kind==='vcr' ? queued.job.id:null,user.id,project.id,`vcr-completion-gate-${kind}`,fingerprint,JSON.stringify(kind==='replay' ? {replayId:'standalone',runId:standalone.id}:{runId:actual.id})]);
+  const trueCompletion=await finish('研究结果是 71。',[],{route:'vcr-job-completion',dispatchId:'vcr-completion-gate-vcr',fingerprint:'b'.repeat(64)});assert.equal(observed.get(trueCompletion.id),study.id);
+  const genericCompletion=await finish('独立计算需要 331 例事件。',[],{route:'vcr-job-completion',dispatchId:'vcr-completion-gate-replay',fingerprint:'c'.repeat(64)});assert.equal(observed.get(genericCompletion.id),null);
+ } finally {app.runtimeManager.sessionTranscript=priorTranscript;ReviewService.prototype.considerReply=priorConsider;}
+});
+test('generated signed-result completion IDs pass real dispatch validation including legacy maximum retry repair',options,async()=>{
+ const app=context.app,user=await app.store.userById((await app.store.createUser(`ids${randomUUID().slice(0,8)}`,PASSWORD,'Completion identity fixture')).id);
+ await app.store.createProject(user,'completion-real-identities','Completion real identities');const project=await app.store.requireProject(user,'completion-real-identities');
+ await mkdir(project.metaDir,{recursive:true});await mkdir(project.workspaceDir,{recursive:true});
+ const sessions=app.agentRuns.researchSessions,answer=(await sessions.agentRegistry).get('open-domain-answer');await sessions.put(project,'completion-real-root',{mode:'open-domain'});
+ const original=(await app.agentRuns.reserveRun(project,await sessions.get(project,'completion-real-root'),{dispatchId:'original-completion-id',baselineCursor:null,question:'Original signed aggregate result',effectiveAgentId:answer.id,effectiveAgentVersion:answer.version,effectiveRuntimeAgent:answer.runtimeAgent,effectiveRouteReason:'default'})).run;
+ await app.agentRuns.finishInternal(project,original.id,{status:'succeeded',artifacts:[]});
+ const realReplay='replay_c12192dc82a3d0bb8d1b3dfd3c4d639062d54ebe2cab149a382719ae81a94d49';
+ const realResult='rv_82019a67bd80f1c0e148f24961b76601554a3a4f4d7109d8653253ee3c3199b8';
+ const previous=app.runtimeManager.dispatchPrompt;const prompts=[];record.busy=false;app.runtimeManager.dispatchPrompt=async(_project,sessionId,request)=>{prompts.push({sessionId,...request});return{accepted:true};};
+ try {
+  for(const [index,generation] of [0,2147483647].entries()){
+   const replayId=index===0 ? realReplay : `replay_${'b'.repeat(64)}`;
+   const payload={recordType:'result-replay',state:'succeeded',cleanup:'confirmed',requestedBy:user.id,outputVersionId:realResult,initial:{continuation:{schema:1,kind:'native-calculation'},producer:{sessionId:'completion-real-root',runId:original.id,callId:`completed-call-${index}`}}};
+   await app.vcr.store.query(`INSERT INTO evimed_product.documents (user_id,kind,id,project_id,payload) VALUES ($1,'result-replay',$2,$3,$4::jsonb)`,[user.id,replayId,project.id,JSON.stringify(payload)]);
+   await app.vcr.completions.reconcileReplays();let row=await app.vcr.store.one("SELECT * FROM evimed_vcr.conversation_completions WHERE payload->>'replayId'=$1",[replayId]);
+   assert.equal(row.dispatch_id.length,47);assert.equal(row.fingerprint.length,64);
+   if(generation){await app.vcr.store.query('UPDATE evimed_vcr.conversation_completions SET dispatch_id=$2,dispatch_generation=$3 WHERE id=$1',[row.id,`vcr-completion-${row.fingerprint}`,generation]);}
+   await app.vcr.completions.deliver();row=await app.vcr.store.one('SELECT * FROM evimed_vcr.conversation_completions WHERE id=$1',[row.id]);
+   assert.equal(row.state,'delivered');assert.equal(row.dispatch_id.length,47,'legacy identity is repaired before runtime admission');
+   const dispatchId=`${row.dispatch_id}${generation ? `-retry-${generation}` : ''}`;assert.ok(dispatchId.length<=64);if(generation)assert.equal(dispatchId.length,64);
+   const resumed=(await app.agentRuns.list(project)).find(run=>run.dispatchId===dispatchId);assert.ok(resumed,'actual dispatch normalizer and folded ledger accept generated identity');assert.equal(resumed.dispatchFingerprint,row.fingerprint);assert.equal(resumed.sessionId,'completion-real-root');
+   assert.equal(prompts.length,index+1);assert.equal(prompts.at(-1).runId,resumed.id);
+   const starts=record.starts.length;await app.vcr.completions.deliver();assert.equal(prompts.length,index+1);assert.equal(record.starts.length,starts,'settled completion cannot restart the kernel on later ticks');
+   await app.agentRuns.finishInternal(project,resumed.id,{status:'succeeded',artifacts:[]});
+  }
+ } finally {app.runtimeManager.dispatchPrompt=previous;}
 });

@@ -1084,9 +1084,9 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:9391940d7a6e7f333e07a300836aad4a263e233857a829b1c684b2c3c6a54351",
+      "digest": "sha256:fa4bfdea3f0d8c7bfd52bf714d4e65543e0ffa75e2dac121b2c90777fbd9e15b",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"8b5df0588fcd81857c29fbf864b45cc01ee22b40b0782115e23094df7ac6b827"}],
+      "references": [{"path":"capability.yaml","sha256":"8d52392689d8581df251406de1e1dfc1ed613a3d02554d10a889ae03fad306ab"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1107,6 +1107,7 @@
         {
           "name": "vcr-cohort-snapshot",
           "kind": "deliverable",
+          "summary": "Execute the requested population, individual prediction, comparator or trial-design analysis through deterministic tools. Preserve source and model scope, counts, uncertainty and exact result versions; do not start unrelated steps.",
           "summaryZh": "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。",
           "accepts": ["step","populationDefinition","comparatorRoute","designs","endpointType","targetMcse","dataTier"],
           "produces": ["analysis-report.md","results.json"],
@@ -1115,6 +1116,7 @@
         {
           "name": "vcr-comparator-analysis",
           "kind": "deliverable",
+          "summary": "Execute the requested population, individual prediction, comparator or trial-design analysis through deterministic tools. Preserve source and model scope, counts, uncertainty and exact result versions; do not start unrelated steps.",
           "summaryZh": "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。",
           "accepts": ["step","populationDefinition","comparatorRoute","designs","endpointType","targetMcse","dataTier"],
           "produces": ["comparability.md"],
@@ -1123,6 +1125,7 @@
         {
           "name": "vcr-simulation-report",
           "kind": "deliverable",
+          "summary": "Execute the requested population, individual prediction, comparator or trial-design analysis through deterministic tools. Preserve source and model scope, counts, uncertainty and exact result versions; do not start unrelated steps.",
           "summaryZh": "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。",
           "accepts": ["step","populationDefinition","comparatorRoute","designs","endpointType","targetMcse","dataTier"],
           "produces": ["simulation.json"],
@@ -1137,9 +1140,9 @@
       "origin": "capability",
       "version": "1.3.0",
       "source": {"kind":"release"},
-      "digest": "sha256:7039b7761561991faf68aef12ec2bff013bb4f919f7b6d4ff8d4a93a30b3e010",
+      "digest": "sha256:cf77eaf035798967b8ebb3791bd8116f566750c88715a8cae6a257e3023d8021",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"d3a35159b0cfbb67f7698f7ab28dfe56de7c5eaf98a87de747d0575f3c2c0cf0"}],
+      "references": [{"path":"capability.yaml","sha256":"c78f3bd070f0fbb8d2960471f69162c51fb34d4cbde68eb4744815f2f9275b7c"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1163,6 +1166,7 @@
         {
           "name": "vcr-study-package",
           "kind": "deliverable",
+          "summary": "Retrieve and preserve registry and publication evidence, verify numerical values and units, and produce source-bound assumptions for the requested research task.",
           "summaryZh": "按 PICO 找同类试验，逐项抽数并核对原文，交引擎合并，写成带预测区间的假设卡。",
           "accepts": ["studyId","parameters","registries","endpointKeys","population","eraYear","eraWindowYears","region","line","biomarker"],
           "produces": ["evidence-parameters.md","results.json","precedents.md","applicability.md","revision-notes.md"],
@@ -1182,9 +1186,9 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:1fc11ef39df8f94a3bcda4d44488cbe2a6fa53821593eeb8e08b8eea8080342a",
+      "digest": "sha256:3219196a687d31d936f72f7989bba835b794d1c810d102b0c576eb8ac67663f4",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"3c5e1aa2b528c497098c0feac0068a2cc81eda56a9b69612a639a1d0d592fba3"}],
+      "references": [{"path":"capability.yaml","sha256":"08c1ad999e60211bec8ff9a3364fe4fb2ab8d832ab5760e025c15709a5f7364c"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1202,10 +1206,11 @@
         {
           "name": "vcr-matching-assessment",
           "kind": "deliverable",
-          "summaryZh": "把入排条件结构化，逐条判定候选人并交回待补证据与筛选漏斗，联系患者前等人确认。",
-          "accepts": ["studyId","protocolVersionId","subjectKeys","direction","asOf","draftMaterials"],
-          "produces": ["matching-assessment.md","matching.json","criterion-funnel.md","recruitment-drafts.md","revision-notes.md"],
-          "limits": ["资格判定由平台代码计算，不设统一准确率门槛，也不引用外部产品的准确率。","缺证据一律记「未知」，不会替患者补全；任一排除标准未知时整体不判为「符合」。","联系患者前必须由协调员逐人确认，本能力不会代为联系。","提供可下载的 AI 草稿，不提供材料审批或发布通道。"]
+          "summary": "Assess eligibility in either direction using original case records and source-bound trial criteria. Preserve unknown states, criterion evidence and recheck needs; no recruitment operations.",
+          "summaryZh": "双向核对患者资料与试验条件，保留逐条证据、未知项和复评需要。",
+          "accepts": ["studyId","protocolVersionId","subjectKeys","direction","asOf"],
+          "produces": ["matching-assessment.md","matching.json","criterion-funnel.md","revision-notes.md"],
+          "limits": ["资格判定由平台代码计算，不设统一准确率门槛，也不引用外部产品的准确率。","缺证据一律记「未知」，不会替患者补全；任一排除标准未知时整体不判为「符合」。"]
         }
       ]
     },
@@ -1216,9 +1221,9 @@
       "origin": "capability",
       "version": "1.1.2",
       "source": {"kind":"release"},
-      "digest": "sha256:53974699f37be559e748284bf8d59e6e9f8c3edda4b2a699c7b64fbff27eb709",
+      "digest": "sha256:06ced90fcaa5f27faf9299a5c3f106bf39fe25c6dd4249f912c1119a8a4781d6",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"cb35e9f41281043aea8dc1c1d1e1218476529df98cadb57b56af8d9e77e97663"}],
+      "references": [{"path":"capability.yaml","sha256":"0a2f22ed0d210c01556a793feb4de90cea74eed5fc5ceb68b2d7f0bf189c6531"}],
       "dependencies": [
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1232,6 +1237,7 @@
         {
           "name": "vcr-study-package",
           "kind": "deliverable",
+          "summary": "Produce an explicitly requested study package, model-analysis document or regulator-facing preparation from saved evidence and computations, without new calculations or invented certainty.",
           "summaryZh": "把研究的定义、假设、结果与执行记录写成可检查、可复现的研究包，数字由结果渲染。",
           "accepts": ["studyId","kind","audience","outputLanguage"],
           "produces": ["study-package.md","results.json","assumption-register.md","execution-record.md","cde-communication-pack.md"],
@@ -1246,9 +1252,9 @@
       "origin": "capability",
       "version": "1.3.4",
       "source": {"kind":"release"},
-      "digest": "sha256:775e3e2f67d0a49ce41e6600fc873acb4d35c5b06ba648d0ff27f26ce03c8215",
+      "digest": "sha256:888b116d0ce0c99cedc9de4bc1b63de3c9a4ba74c081bd9ca0e0ae9bfea4c423",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"93335324494b06a22341f21a804c4b3d0e492c1631ae615f60578bb649ee5aed"}],
+      "references": [{"path":"capability.yaml","sha256":"e51aff68fe32a25eeade7ec8b32407bbbdeed621e90ceacd0a2fa7113dffab56"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"evidence_pool","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1269,6 +1275,7 @@
         {
           "name": "vcr-study-package",
           "kind": "deliverable",
+          "summary": "Conversation-native virtual clinical research: interpret the requested task, ground its evidence, preserve versioned objects, call exact computation and explain results. Full protocol definitions are optional and task-specific.",
           "summaryZh": "在对话里完成研究定义、合成人群、样本量和方案模拟。",
           "accepts": ["question","protocolText","dataTier","intendedUse","endpointType","registryId"],
           "produces": ["study-definition.md","criteria.json","results.json"],
@@ -3339,9 +3346,9 @@
       "origin": "evimed",
       "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:7a3fa7a8d623b01ef7f815109c558b58c73bcc9c65ad70cdc9b9013c1bcbe226",
+      "digest": "sha256:9137497b1acd4a2a7b5f832fe21f53904f1484ea1273915e67710dd775116901",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agent.yaml","sha256":"e8b2a1b5103af83bbb7a957858c6c0c6fd49e72e77fc5282d876bf64361929ad"}]
+      "references": [{"path":"agent.yaml","sha256":"d90a8749f9e67a171491453f5e063dd33b2c62b3debbb0ca85688b1fddec59bf"}]
     },
     {
       "schemaVersion": 1,

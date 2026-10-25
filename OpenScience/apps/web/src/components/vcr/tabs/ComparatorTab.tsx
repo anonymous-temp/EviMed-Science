@@ -71,7 +71,7 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
   // so they do not count as a result.
   const prior = data.prior ?? [];
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
-    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict;
+    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark;
   // The route in view: the one the study uses until the reader presses another. On a narrow page the record replaces the list.
   const used = data.routes.find((route) => route.selected)?.route ?? data.routes[0]?.route ?? null;
   const [looking, setLooking] = useState<string | null>(null);
@@ -158,6 +158,11 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
 function UsedRoute({ data }: { data: ComparatorData }) {
   const frame = useStudyFrame();
   const prior = data.prior ?? [];
+  const displayedRoute = data.selection?.route || data.routes.find(route => route.selected)?.route || "未提供";
+  const displayedResults = data.selection?.resultId ? [data.selection.resultId] : [...new Set([data.rmst?.value, data.median, ...data.diagnostics.map(row => row.value), ...prior.map(row => row.value)]
+    .flatMap(value => value?.detail?.ref?.kind === "result" ? [value.detail.ref.id] : []))];
+  const selection = data.selection ? `，对照对象 ${data.selection.id} v${data.selection.version ?? "未提供"}${data.selection.resultVersion !== null ? `，结果版本 v${data.selection.resultVersion}` : ""}` : "";
+  const assessmentDraft = `${VCR_ASSESS_COMPARABILITY_DRAFT} 当前研究 ${frame?.studyId ?? "未提供"}，对照路线 ${displayedRoute}${selection}，已显示的结果 ${displayedResults.join("、") || "未提供标识"}。请限定于上述已保存结果与其证据，逐项解释差异和缺失条件；无法定位时先说明，不替换为更新的结果。`;
   // The server's own sentence about where the estimate holds ends in a pointer to the band beside it; the band is the statement.
   const estimand = data.estimand && data.estimand.rows.length > 0 ? data.estimand : null;
 
@@ -215,6 +220,7 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
   return (
     <>
+      {data.predictionBenchmark && <PredictionBenchmark data={data.predictionBenchmark} />}
       {estimandRows.length > 0 && (
         <Section title="估计目标" toolbar={estimand?.source ? <SourceTag source={estimand.source} /> : undefined}>
           <FactList rows={estimandRows} />
@@ -225,7 +231,7 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
       {data.dimensions.length > 0 && (
         <Section title="可比性">
-          <DimensionBand dimensions={data.dimensions} onAssess={frame ? () => frame.openChat(VCR_ASSESS_COMPARABILITY_DRAFT) : null} />
+          <DimensionBand dimensions={data.dimensions} onAssess={frame ? () => frame.openChat(assessmentDraft) : null} />
         </Section>
       )}
 
@@ -251,6 +257,29 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       {data.methods && data.methods.length > 0 && <Methods methods={data.methods} />}
     </>
   );
+}
+
+function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predictionBenchmark"]> }) {
+  const condition = ({ control: "对照条件", natural_history: "自然病程", standard_care: "标准治疗" } as Record<string, string>)[data.sourceCondition ?? ""] ?? data.sourceCondition;
+  const endpoint = data.endpoint;
+  const endpointType = ({ continuous: "连续结局", binary: "二分类结局", time_to_event: "时间结局" } as Record<string, string>)[endpoint?.type ?? ""] ?? endpoint?.type;
+  const unit = ({ days: "天", weeks: "周", months: "月", years: "年" } as Record<string, string>)[endpoint?.timeUnit ?? ""] ?? endpoint?.timeUnit;
+  const limits: Record<string, string> = {
+    "Transportability and calibration in this target population have not been established.": "模型在目标人群中的可迁移性和校准尚未建立。",
+    "Predictions are not observed control outcomes or an independent increase in sample size.": "预测值不能视为已观察到的对照结局，也不增加独立样本量。",
+  };
+  return <Section title="模型预测基准">
+    <FactList rows={[
+      ...(condition ? [{ label: "模型条件", value: condition }] : []),
+      ...(endpoint ? [{ label: "预测终点", value: [endpointType, endpoint.horizon !== null ? `${endpoint.horizon} ${unit ?? ""}` : null].filter(Boolean).join(" · ") }] : []),
+      ...(data.mean ? [{ label: "人群预测均值", value: <VcrNumber label="人群预测均值" value={data.mean} /> }] : []),
+      ...(data.outcomeSd ? [{ label: "预测结局标准差", value: <VcrNumber label="预测结局标准差" value={data.outcomeSd} /> }] : []),
+      ...(data.relativeScore ? [{ label: "平均相对预后评分", value: <VcrNumber label="平均相对预后评分" value={data.relativeScore} /> }] : []),
+      ...(!data.absoluteRiskAvailable ? [{ label: "绝对风险", value: "未提供适用的基线风险；只报告可支持的相对预测量。" }] : []),
+      { label: "解释范围", value: "模型条件下的预测基准，不识别治疗效果。" },
+      ...data.limits.map(limit => ({ label: "局限", value: limits[limit] ?? limit })),
+    ]} />
+  </Section>;
 }
 
 /** A route that is not the one in use: what it is, what it would need and where that is brought in. */

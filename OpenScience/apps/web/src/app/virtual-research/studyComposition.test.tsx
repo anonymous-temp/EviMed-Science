@@ -43,28 +43,28 @@ beforeEach(() => {
 });
 
 describe("T3 — a study, at each of its tabs", () => {
-  it("has the same band on every tab: the seven tabs, the same rows, sticky, and the toolbar's row drawn or reserved", async () => {
-    const tabsSeen: string[][] = [];
+  it("has six result destinations and one sticky contextual toolbar, including compatible individual links", async () => {
+    const viewsSeen: string[] = [];
     const rows: number[] = [];
     for (const suffix of TABS) {
       const { container, unmount } = drawStudy(`/app/virtual-research/${STUDY_ID}${suffix}`);
       await screen.findByRole("heading", { level: 1, name: /EV-201/ });
       await waitFor(() => expect(container.querySelector("[data-vcr-loading]")).toBeNull());
       // Every tab's body is held to the whole page's rules: 匹配与招募 was the last one with tags in its controls (R19 VCRT put them out).
-      const facts = expectComposed(container, { stepRail: true, tablists: 0 });
+      const facts = expectComposed(container, { stepRail: false, tablists: 0 });
       expect(facts.header, `${suffix || "总览"}: the header`).not.toBeNull();
       expect(facts.headerPrimaryActions.length).toBeLessThanOrEqual(1);
       expect(facts.controlsBelowContent, `${suffix || "总览"}: no control under the content it controls`).toEqual([]);
       expect(facts.chrome, `${suffix || "总览"}: the band`).toHaveClass("sticky", "top-0");
       // The tab row is the one row of views; whatever the tab holds inside itself is the tab's own business (its body's, not the band's).
-      const rail = within(facts.chrome as HTMLElement).getByRole("navigation", { name: "研究进度" });
-      tabsSeen.push([...rail.querySelectorAll("[data-rail-step]")].map(step => step.getAttribute("data-rail-step") ?? ""));
+      expect(facts.chrome!.querySelector("[data-step-rail]")).toBeNull();
+      viewsSeen.push(within(facts.chrome as HTMLElement).getByRole("button", { name: /^查看：/ }).textContent ?? "");
       rows.push((facts.chrome as HTMLElement).children.length);
       expect(container.querySelector("#vcr-tab-panel")).toBeInTheDocument();
       expect(within(facts.chrome as HTMLElement).getByRole("button", { name: /^查看：/ })).toBeInTheDocument();
       unmount();
     }
-    expect(tabsSeen.every((ids) => ids.length === 7 && ids.join() === tabsSeen[0].join())).toBe(true);
+    expect(new Set(viewsSeen).size).toBe(6);
     // The strip (while work is going on, which the fixture's job is), the tab row and the toolbar's row: the same on all seven.
     expect(new Set(rows).size).toBe(1);
   });
@@ -82,8 +82,8 @@ describe("T3 — a study, at each of its tabs", () => {
   it("is the conversation view with the band over it, and no tab selected", async () => {
     const { container } = drawStudy(`/app/virtual-research/${STUDY_ID}/chat`);
     await screen.findByRole("region", { name: "研究对话" });
-    const facts = expectComposed(container, { stepRail: true, tablists: 0 });
-    expect(facts.chrome!.querySelectorAll("[data-rail-step]")).toHaveLength(7);
+    const facts = expectComposed(container, { stepRail: false, tablists: 0 });
+    expect(facts.chrome!.querySelectorAll("[data-rail-step]")).toHaveLength(0);
     expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();

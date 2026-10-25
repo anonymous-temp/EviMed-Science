@@ -33,6 +33,7 @@ export const ENGINE_BACKED_INTEGRATION_TESTS = Object.freeze([
   "vcrEngineContract.integration.test.mjs",
   "vcrIntake.integration.test.mjs",
   "vcrKnowledgeEngine.integration.test.mjs",
+  "vcrModelScience.integration.test.mjs",
   "resultReplayLifecycle.integration.test.mjs",
 ]);
 

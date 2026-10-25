@@ -46,7 +46,7 @@ describe("模型与方法", () => {
     installVcrServer(network.productRequest, { "GET /vcr/models": payload });
     draw(<VcrModelsPanel />);
     await userEvent.click(await screen.findByText("文献参数与模型来源"));
-    await userEvent.click(await screen.findByRole("button", { name: "招募与匹配" }));
+    await userEvent.click(await screen.findByRole("button", { name: "入组预测与匹配" }));
     await userEvent.click(screen.getByText(payload.methods[0].name));
     await userEvent.click(screen.getByText('科学假设与方法依据'));
     expect(await screen.findByRole('link', { name: '查看验证来源' })).toHaveAttribute('href', 'https://example.org/ci/101');
@@ -146,7 +146,7 @@ describe("模型与方法", () => {
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     await userEvent.click(document.querySelector("[data-vcr-model='mdl_2']") as HTMLElement);
     expect(await screen.findByRole("heading", { name: "二分类终点参考仿真器" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "招募与匹配" }));
+    await userEvent.click(screen.getByRole("button", { name: "入组预测与匹配" }));
     expect(document.querySelector("[data-vcr-method='mth_1']")).not.toBeNull();
   });
 

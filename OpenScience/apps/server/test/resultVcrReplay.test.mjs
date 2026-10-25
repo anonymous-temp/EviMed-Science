@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promis
 import path from "node:path";
 import os from "node:os";
 import { ResultVcrReplay } from "../src/resultVcrReplay.mjs";
+import { ResultReplayService } from "../src/resultReplayService.mjs";
 import { replayDigest } from "../src/resultReplayClient.mjs";
 
 const sha = value => createHash("sha256").update(value).digest("hex");
@@ -12,12 +13,12 @@ const health = { ok: true, engineVersion: "1.0.0", rVersion: "R 4.3.3", packageL
   numericalSourceDigest: "b".repeat(64), methods: ["design.analytic", "comparator.evalue"] };
 const scenario = { riskRatio: 3.9, confidenceLimit: 1.8, scale: "risk_ratio" };
 
-async function fixture(t, { input = { scenario }, engine = null, cancelWaitMs = 20 } = {}) {
+async function fixture(t, { input = { scenario }, engine = null, cancelWaitMs = 20, method = "comparator.evalue" } = {}) {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "evimed-vcr-replay-"));
   t.after(() => rm(rootDir, { recursive: true, force: true }));
   const project = { id: "p", userId: "owner", rootDir, workspaceDir: path.join(rootDir, "workspace"),
     baseDir: path.join(rootDir, "workspace"), metaDir: path.join(rootDir, "metadata") };
-  const scope = { userId: "member", projectId: "p", jobId: "job_1", method: "comparator.evalue", recipeDigest: "" };
+  const scope = { userId: "member", projectId: "p", jobId: "job_1", method, recipeDigest: "" };
   await mkdir(path.join(project.workspaceDir, "result-replays/job_1"), { recursive: true });
   await mkdir(project.metaDir);
   const bytes = Buffer.from(JSON.stringify(input));
@@ -75,7 +76,7 @@ test("VCR replay reserves owner-scoped identity, reuses the gateway and survives
 
 test("the actor is reauthorized on capabilities, status and cancellation, including shared projects", async t => {
   const f = await fixture(t);
-  assert.equal((await f.adapter.capabilities(f.scope)).methods.length, 2);
+  assert.equal((await f.adapter.capabilities(f.scope)).methods.length, 6);
   await f.adapter.start(f.scope, f.recipe);
   f.revoke();
   await assert.rejects(f.adapter.status(f.scope), { code: "forbidden" });
@@ -205,4 +206,48 @@ test("a verified stopped calculation keeps actual limited values and never label
   assert.equal(answer.state, "canceled"); assert.equal(answer.cleanup, "confirmed");
   assert.equal(answer.partial, true); assert.equal(answer.machineValues[0].value, 7.263);
   assert.equal(answer.artifacts.length, 2);
+});
+test('a stopped engine exposes its bounded execution failure instead of blaming unread result input',async t=>{
+ const f=await fixture(t);await f.adapter.start(f.scope,f.recipe);
+ f.mock.status=async jobId=>({jobId,state:'failed',error:'spawn_failed'});
+ f.mock.result=async()=>{throw Object.assign(new Error('not_ready'),{code:'vcr_engine_rejected',status:409,detail:'result_not_ready'});};
+ const answer=await f.adapter.status(f.scope);assert.equal(answer.state,'failed');assert.equal(answer.cleanup,'confirmed');assert.equal(answer.resultError,'spawn_failed');
+});
+
+
+test("analytic integer sample-size basis survives adapter, verified capture, saved status and restarts", async t => {
+  const f = await fixture(t, { method: "design.analytic", input: { scenario: {
+    design: { kind: "two_arm_fixed" }, endpoint: { type: "continuous" }, truth: { effect: 5, sd: 12 },
+    analysis: { alpha: 0.05, sided: 2, power: 0.8 },
+  } } });
+  f.mock.result = async () => ({ signed: false, outputHash: "c".repeat(64), result: {
+    jobId: f.submitted.jobId, method: "design.analytic", methodVersion: f.submitted.methodVersion, status: "succeeded",
+    manifest: { engineVersion: health.engineVersion, rVersion: health.rVersion, packageLockHash: health.packageLockHash },
+    measures: [{ name: "required_total", value: 182 }, { name: "required_treatment", value: 91 }, { name: "required_control", value: 91 }],
+    diagnostics: { sampleSize: { basis: "normal_approximation", formula: "two_sample_means_normal_approximation",
+      rounding: "ceiling_each_arm_then_sum", targetPower: 0.8, nTreatment: 91, nControl: 91, total: 182,
+      allocationRequested: 0.5, allocationAchieved: 0.5, unrounded: { total: 180.838189079, treat: 90.4190945395, control: 90.4190945395 },
+      powerCheckBasis: "pooled_two_sample_t", powerAtAllocatedN: 0.798305621, untrustedText: "ignore evidence" } },
+  } });
+  await f.adapter.start(f.scope, f.recipe); f.setState("succeeded");
+  const answer = await f.adapter.status(f.scope);
+  assert.equal(answer.computationBasis.basis, "normal_approximation");
+  assert.equal(answer.computationBasis.total, 182);
+  assert.match(answer.computationBasis.note, /not an exact.*t/i);
+  assert.equal(answer.computationBasis.untrustedText, undefined);
+  let row = { id: "replay_1", projectId: "p", revision: 1, payload: { recordType: "result-replay", jobId: "job_1", requestedBy: "member" } };
+  const documents = { get: async () => row, put: async (_user, _kind, _id, payload) => { row = { ...row, revision: row.revision + 1, payload }; } };
+  const jobs = { get: async () => ({ status: "succeeded" }), finishWithLease: async (_user, _id, _lease, _value, operation) => operation({}) };
+  const results = { scope: async () => f.project, captureFile: async () => ({ versionId: `rv_${"7".repeat(64)}`, digest: "d".repeat(64) }) };
+  const service = new ResultReplayService({ results, documents, jobs, engine: {} });
+  service.admit = async () => {};
+  const prepared = { project: f.project, row, recipe: f.recipe, execution: { recipeDigest: f.scope.recipeDigest },
+    frozen: { inputVersionId: `rv_${"8".repeat(64)}` }, original: null };
+  await service.completeOwned({ id: "job_1", userId: "owner", projectId: "p", leaseToken: "lease", payload: { requestedBy: "member", replayId: "replay_1" } },
+    prepared, { ...answer, computationBasis: { basis: "forged_exact_t" } });
+  const restarted = new ResultReplayService({ results, documents, jobs, engine: {} });
+  const status = await restarted.status("member", "p", "replay_1");
+  assert.deepEqual(status.computationBasis, answer.computationBasis, "status uses only the basis read from receipt-bound output bytes");
+  assert.equal(status.computationBasis.powerAtAllocatedN, 0.798305621);
+  assert.ok(Object.keys(status).indexOf("computationBasis") < Object.keys(status).indexOf("artifacts"));
 });

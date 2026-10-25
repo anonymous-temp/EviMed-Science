@@ -1,28 +1,97 @@
 ---
 name: vcr-matching
-description: Two-way eligibility matching for a 「虚拟临床研究」 study — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps and a recruitment draft.
+description: Two-way eligibility matching for a 「虚拟临床研究」 study — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps. Matching ends at scientific assessment.
 metadata:
   evimed-agent: vcr-matching
 ---
 
-# 虚拟临床研究 — 匹配与招募
+# Evidence-backed patient and trial matching
 
-你按试验方案给受试者做预筛。工作语言与交付文字一律简体中文。
+Support both directions: identify trials for one person, or assess an authorized
+patient collection against a protocol. Work in Chinese unless requested otherwise.
+Matching ends with criterion evidence, unknowns, exclusions and recheck needs.
 
-## 先理解这一件事
+## Current operating contract
 
-**你只抽证据，判定由代码做。**
+Work in the originating native conversation. Complete the user's requested task;
+do not start a seven-step programme or unrelated research after it. A full study
+package is an explicit request, not a prerequisite for a calculation or matching.
+Use the existing composer, tools, saved objects and result views. Do not send the
+user to a method catalogue, parameter form or study-creation form.
 
-平台里有一个确定性的评估器。它读入排条件和你写下的、带出处的患者事实，逐条给出四种状态之一——
-满足 / 不满足 / 未知 / 待复评（Kleene 三值逻辑），再由这些状态算出这位受试者的总体结论：
-符合 / 不符合 / 证据不足 / 待复评。这个结论你不写、不争、不四舍五入。你的工作是：
+The four task families are patient matching; population and individual patients;
+comparators; and trial-design simulation. A cohort is a collection (observed,
+selected or generated). A virtual patient is one generated member or a supported
+individual prediction. Neither name proves a digital twin or a counterfactual
+clinical outcome. Trial simulation compares designs under stated assumptions;
+it is not remote trial operations and does not prove a drug works.
 
-1. 有需要时，把方案的一条条入排条件写成结构化的要求；
-2. 为每位受试者找到这些要求需要的事实，每个事实都写明出自哪份文档、哪一段文字、平台最早什么时候能看到；
-3. 回答那几条只有语言才能判的条件，并附上支持这个回答的原句；
-4. 写下还缺什么、去哪里能补上。
+Use available context first. For a new research object, `vcr_write` with
+`{"what":"task_context"}` obtains the authenticated conversation's scope. Never
+invent session/project/study identifiers or create a second conversation. A narrow
+aggregate sample-size/power question can use `research_calculate` without a study.
+Read existing results before calculating again. Preserve exact object, model,
+source and result versions when comparing or changing a result.
 
-一个既抽证据又下结论的模型，错的答案会穿着一套讲得通的理由出现。分工就是为了让结论可以核对。
+Numbers must come from preserved source literals or deterministic tools. Use
+`vcr_simulate` action `shape` to discover current fields, units and examples;
+examples are illustrative, never evidence or default patient data. Save the
+requested object, then explicitly enqueue its computation with its `subjectId`
+when applicable. Writing an object is not proof that its calculation completed.
+A short job may finish in the tool call; a long job returns to this same conversation
+through the durable completion path. Do independent work while it runs; do not
+busy-poll, use shell sleeps or claim a queued job succeeded. Existing budget limits
+still apply, without adding new approvals or model-certification gates.
+
+Highlight prerequisites per operation, not for the entire platform:
+- One-person matching needs an original case message or owned attachment, not a
+  pre-uploaded dataset or full PICO. Batch real-cohort/matching work needs authorized
+  patient data plus eligibility criteria.
+- Literature-driven synthetic populations and design simulation can start without
+  patient-level data. Retrieve and preserve parameter evidence first; do not start
+  by asking the user to fill a statistical parameter sheet.
+- Real external-control effect estimation needs comparable exposure, outcomes,
+  index time, covariates and follow-up. Pre-enrollment data, exit date/reason and
+  post-trial routine care do not reveal hidden trial treatment or outcomes. Never
+  carry exposure forward across that gap or turn missingness into no treatment.
+- Individual prediction needs an executable model within its endpoint, population,
+  units and horizon. Preserve partial results and state the specific missing input.
+
+No contact, referral, site CRM, recruitment funnel, coordinator assignment,
+recruitment materials or follow-up operations are part of this workflow. Retain
+scientific visit schedules, longitudinal observations, criterion feasibility
+counts, eligibility rechecks and abstract accrual/dropout design assumptions.
+Unknown eligibility is never exclusion, a negative finding or zero. A registry's
+recruitment status is dated research metadata, not available site capacity.
+
+Keep observed people, events, effective sample size, generated records and
+reconstructed pseudo-patients distinct. Source-bound numbers/quotations and
+numerical tests do not establish transportability, clinical validation or
+regulatory acceptance. Model-predicted comparators are descriptive benchmarks;
+they do not identify treatment effects or replace randomized controls.
+
+## Start from an original case
+
+Use `vcr_write` what `patient_context`, data `{messageSeq?}` to preserve an actual
+human message or data `{sourceId}` for an owned uploaded original. Reuse the
+returned `subjectKey`/`documentId`. Do not invent patient facts, original text,
+patient identifiers, source times or a source-processing permission. For a patient
+looking for trials, search and read the dated registry record, then register
+`candidate_trial` criteria. No internal trial protocol or study-definition card is
+a prerequisite for that direction. A record without original eligibility text has
+unknown coverage, not an eligible verdict.
+
+Use original wording and exact document or authorized table-cell evidence.
+`vcr_read` matching with a selected subject and `candidate_trials` for a selected
+trial preserve granted per-criterion quotes/locators in both directions. Individual
+clinical evidence and counts of criteria are not population disclosure cells;
+aggregate people-count protections remain in force. Revoked sources and hidden
+trial intervals cannot be restored by paraphrasing, model memory or fill-forward.
+
+The evaluator computes the final verdict. The model interprets only language
+criteria with cited evidence. A human override stays distinguished from the model's
+or code's judgment. Describe supplementary evidence as scientific gaps; do not
+create a contact/referral workflow or promise enrollment.
 
 ## 一、读方案，必要时结构化
 
@@ -57,7 +126,7 @@ metadata:
 病历文档用 `mcp__evimed__vcr_read` `{ "what": "subject_document" }` 读：
 
 - 不带 `filter`：有文档的受试者及文档数；
-- `{ "subjectKey": "P-001" }`：这位受试者的文档清单（`id`、名称、字数、平台可见时间）；
+- `{ "subjectKey": "P-001" }`：这位患者的文档清单（`id`、名称、字数、平台可见时间）；
 - `{ "subjectKey": "P-001", "documentId": "…", "offset": 0 }`：文档的一段文字（返回 UTF-16 位置；续读使用返回的 `nextOffset`，保留跨段重叠，记录尚未处理的范围）。
 
 这是读病历的唯一入口；不要用知识库检索代替它，那里的内容不带受试者身份，也不进事实的核对。
@@ -72,7 +141,7 @@ metadata:
 ```
 
 - `variable`：小写英文加下划线，**与入排条件里的 `variable` 完全一致**（性别写 `sex`，值 `女` / `female` 平台都认得；不认得的编码，条件按「未知」处理）。
-- `polarity`：`affirmed`（确有）、`negated`（明确否认，否认史是 `negated`，不是「没有这个事实」）、`hypothetical`（拟行、不除外、可能）、`family`（家族史）。**只有 `affirmed` 才是这位受试者的事实。**
+- `polarity`：`affirmed`（确有）、`negated`（明确否认，否认史是 `negated`，不是「没有这个事实」）、`hypothetical`（拟行、不除外、可能）、`family`（家族史）。**只有 `affirmed` 才是这位患者的事实。**
 - `value` 和 `unit`：数值型的事实要写，`value` 必须是引文里印着的数，单位照文档写；数值和单位缺一个，条件判「未知」。
 - 时间：`occurredAt` 是事情发生的日期（缺日期的事实，时间窗类条件判「未知」）；`recordedAt` 是写入病历的时间；`visibleAt` 平台默认取文档的可见时间，**你写的不能早于文档进入平台的时间**。
 - `surface`：你实际读到的词；`quote`：包含 `surface` 的原句，**逐字照抄**。`documentId` 是上面读到的文档 id。
@@ -83,7 +152,7 @@ metadata:
 
 ## 三、只回答需要语言的条件
 
-有 `language` 节点的条件，`mcp__evimed__vcr_read` `{ "what": "matching", "filter": { "subjectKey": "P-001" } }` 的 `requests[]` 会列出这位受试者还欠的回答（`criterionKey`）。用 `what: "language_judgment"` 回答：
+有 `language` 节点的条件，`mcp__evimed__vcr_read` `{ "what": "matching", "filter": { "subjectKey": "P-001" } }` 的 `requests[]` 会列出这位患者还欠的回答（`criterionKey`）。用 `what: "language_judgment"` 回答：
 
 ```json
 { "what": "language_judgment", "items": [ {
@@ -91,7 +160,7 @@ metadata:
   "evidence": [ { "documentId": "<文档 id>", "quote": "患者本人可理解研究内容并签署知情同意" } ] } ] }
 ```
 
-`state` 只有三种：`satisfied`、`not_satisfied`、`unknown`。排除标准里的语言节点，回答的是原句说的情况在这位受试者身上是否成立（成立就是 `satisfied`），取反由平台做。判为满足或不满足必须带原句证据，原句的核对方式和事实的一样；
+`state` 只有三种：`satisfied`、`not_satisfied`、`unknown`。排除标准里的语言节点，回答的是原句说的情况在这位患者身上是否成立（成立就是 `satisfied`），取反由平台做。判为满足或不满足必须带原句证据，原句的核对方式和事实的一样；
 `unknown` 在病历没有说清时是正确答案，不带证据。**「未知」永远不是「不满足」**：没有治疗史的记录不满足洗脱期，育龄女性没有妊娠检查不是阴性。
 只要有一条适用的排除标准是「未知」，这个人就不能是「符合」——这是算术，不是判断，评估器替你做。
 
@@ -99,48 +168,24 @@ metadata:
 
 事实和回答都写完后：`mcp__evimed__vcr_simulate` `{ "action": "start", "kind": "match_criteria" }`，**不带 `scenario`、不带 `inputs`**——
 平台冻结本次选择的条件、受试者名单、事实与语言回答。可传 `selection: { protocolVersionIds: [...], subjectKeys: [...], direction: "patient_to_trial", asOf: "..." }`，一次最多十个方案；返回各方案的作业，分别查询。单方案可用 `protocolVersionId`。不指定时默认当前方案。后续分批用 `selection: { snapshotId: inputSnapshotId, offset: nextOffset }`，不要重新抽取未改变的文档。`start` 会在工具里短暂等一下，几秒能算完的直接带回结果；没算完就告诉用户在评估什么、算完有通知，然后结束这一轮或接着做不依赖它的事，不要循环查 `status`，也不要用命令行等待；下一轮用户问起时再读下面的结果。
-作业成功后，平台自己完成三件事：保存每位受试者的评估、把「候选」建成转介记录（状态 `candidate`）、通知协调员。**转介记录是平台建的，你不建，也不改状态。**
+After completion the platform preserves assessments and their evidence, and returns the result to the originating conversation. It creates no referral, contact, coordinator notification or recruitment action.
 评估之后才写入的事实不在这一次里，再排一次即可。
 
 再读 `{ "what": "matching", "filter": { "subjectKey": "P-001" } }`：`assessment` 里有总体结论 `summary`、`criteriaCounts`、逐条的 `judgments`（`state`、`decidedBy`、`recheckAt`、`evidence[]` 的 `quote` 与位置）、`evidenceGaps`。
-`decidedBy` 为 `code` 的是评估器判的，`model` 的是你回答的语言条件；`overrideState` 不为空，说明协调员改判过——以人的为准，不要复述成你的判断。
+`decidedBy` 为 `code` 的是评估器判的，`model` 的是你回答的语言条件；`overrideState` 不为空，说明临床复核者改判过——以人的为准，不要复述成你的判断。
 `pending_recheck` 带 `recheckAt`：到期平台会自己重评，不用等你。
 
 ## 五、写交付物
 
-- `matching.json` —— 结构化评估。每位受试者一项：`subjectKey`、`asOf`、`summary`、`judgments[]`（`criterionId`、`state`、`applicable`、`decidedBy`、`recheckAt`、`evidence[]`）、`evidenceGaps[]`。
+- `matching.json` —— 结构化评估。每位患者一项：`subjectKey`、`asOf`、`summary`、`judgments[]`（`criterionId`、`state`、`applicable`、`decidedBy`、`recheckAt`、`evidence[]`）、`evidenceGaps[]`。
   **`summary` 抄 `mcp__evimed__vcr_read` 读回的，不要自己算。**
-- `matching-assessment.md` —— 协调员读的：每位受试者为什么可能合适、还缺什么、怎么补。每个「满足」和「不满足」都引它的原句。数字取自评估，不凭记忆。
+- `matching-assessment.md` —— 研究者读的：每位患者为什么可能合适、还缺什么、怎么补。每个「满足」和「不满足」都引它的原句。数字取自评估，不凭记忆。
 - `criterion-funnel.md`（可选）—— 哪一条单独排除了最多的候选人。这是申办方最想知道的答案：一条让试验失去患者的条件，在方案还是草稿时可以改。
-- `recruitment-drafts.md` (optional): downloadable draft questionnaires, patient explanations and coordinator wording, each question linked to its criterion. Label the first line “草稿”. This release has no materials approval, publication or patient self-service channel. Do not claim that drafting or AI review authorizes sending anything to patients; ordinary referral contact consent remains a separate existing authority.
 - `revision-notes.md`（可选）—— 后台。关于你自己的过程、改了什么、为什么，只写在这里。
 
 正文里的数（人数、比例）要在 `matching.json` 里有同样的字段；小人数的格子平台读给你的时候已经隐去，隐去的就写「少于十人」，不要猜。
 
 交付前先用 `evimed_package_check{deliverableId}` 看一次提交会给出的判定（不消耗提交），改完再 `evimed_submit_deliverable`。
-
-## 六、中心与随访（招募协作时）
-
-- 中心档案：
-  ```json
-  { "what": "site", "items": [ { "name": "<中心名称>", "capacity": { "slots": <可入组名额>, "activationPlannedOn": "2026-10-15" },
-    "contacts": [ { "name": "<联系人>" } ], "activatedOn": "2026-05-01",
-    "accrualPrior": { "alpha": <大于 0 的数>, "beta": <大于 0 的数>, "screenFailureRate": 0.3 } } ] }
-  ```
-  写已有的中心时带它的 `id`，新建不写 `id`。`accrualPrior` 只有这三个数（`alpha`、`beta` 是大于 0 的数，`screenFailureRate` 在 0 和 1 之间）；
-  历史入组数由转介台账算，你手填的会被拒。「最后核实时间」是人签的，你不写；没有核实时间的中心档案不支持任何产能结论。
-- 随访片段：
-  ```json
-  { "what": "followup", "items": [
-    { "subjectKey": "P-001", "kind": "study_specific", "exitDate": "2026-08-01", "exitReason": "患者要求退出" },
-    { "subjectKey": "P-001", "kind": "post_exit", "windowStart": "2026-08-02",
-      "observations": [ { "variable": "ecog", "value": 1, "unit": "分", "at": "2026-08-10" } ] } ] }
-  ```
-  `kind` 是 `routine_care`（常规诊疗）、`study_specific`（试验期间）或 `post_exit`（出组后）。
-  试验期间的片段只写 `exitDate` 和 `exitReason`，**照文档原样写**，不要转换成别的东西；试验期间的治疗、结局、随机分组、进展日期、末次给药日期看不到，不能写成观察（写了会被拒，回 `vcr_exit_field_not_derivable`）。片段在出组日结束，`windowEnd` 不写，或与 `exitDate` 相同。同一位受试者已经记录过出组，再写一条不同的出组日期或原因时，已记录的照原样保留，新的一条作为说明追加，并在返回值里告诉你（`vcr_exit_date_rewritten`、`vcr_exit_reason_rewritten`）。
-  出组后的片段写 `windowStart`（必填）和 `observations[]`（`{ variable, value, unit, at }`）。
-- 入组预测：`mcp__evimed__vcr_simulate` `{ "action": "start", "kind": "accrual_forecast", "scenario": { "target": <入组目标例数>, "byTimes": [6, 12, 18] } }`，
-  可选 `eventTarget` 和 `eventHazard`（要一起写）。**各中心的速率来自中心档案和转介台账，你不写 `sites`**；档案里没有的东西（例如没有筛选史就没有筛选失败率）回答里会说明，不会被当成 0。
 
 ## 七、排序，以及它不是什么
 
@@ -149,25 +194,17 @@ metadata:
 
 一位受试者若只因为某条 `language` 条件被判不符合，进入「待复核排除」，不要从名单里拿走——假排除率的分母就靠它。
 
-## 八、人要停一下的地方
-
-**联系患者之前必须有人确认。** 协调员逐人确认，不是批量确认。你从不给患者发消息，不请求发消息，不把草稿写成看起来像已发出的样子。
-你准备的是确认页的内容：这个人为什么可能合适、还缺什么证据、怎么补。台账在没有具名确认人时拒绝进入「已联系 / 有意向 / 已转诊」，这个拒绝不是拿来绕开的。
-
-另外两个停点不归你：超出研究算力预算的计算，和临床安全发现。其余一切照常进行，不要问。
-
 ## 九、不要声称什么
 
-不要把任何已发表的匹配准确率——我们的或别人的——当作承诺。流传的那些数字是在合成病例上测出来的，遇到真实的纵向病历就不成立，
-而读同一份病历的两位医生也只是部分一致。我们的评估报告四种状态之间的混淆、符合者召回、假排除率、阳性预测值和需筛人数，
+Benchmark accuracy applies to its evaluated data, criteria and reference labels, not to every disease or clinical setting. Report local confusion states, eligible recall, false exclusion, precision and screening effort when actually measured.
 Report inter-rater agreement and disagreements as properties of that reference set, not a universal ceiling or a substitute for clinical validation.
 
 ## 十、给患者找试验
 
 用户要为某位受试者找可参加的试验时（页面上的「为该患者找试验」，或在对话里直接说），做的是同一件事的另一头：不是一份方案找患者，而是一位患者找试验。条件的文法、事实的写法、语言条件的回答、判定由评估器做，都和上面一样。
 
-- 候选试验来自试验登记平台：`mcp__evimed__clinical_trial_search` 找正在招募或即将招募的，凭这位受试者的诊断、分期、生物标志物、年龄、性别和所在地区挑；有希望的用 `mcp__evimed__trial_registry_record` 读登记记录。本研究已经有的候选试验在 `mcp__evimed__vcr_read` `{ "what": "candidate_trials" }` 里，不必重复写。
-- 一个试验写成一项候选试验：`what: "candidate_trial"`，`registryId`、`subjectKeys`（这位受试者）和 `criteria`——登记记录里入选和排除标准的原句，一条一条按第一节的写法结构化，`sourceText` 逐字照抄，判不了的写成 `language`。试验的名称、分期、状态和中心由平台从登记记录读，你不写。写入时平台就把这位受试者对照这个试验判了，判定在返回值里。条件里的 `variable` 用这位受试者已有事实的变量名（`mcp__evimed__vcr_read` 读到的那些，例如已有 `egfr` 就不要另写 `gfr`）：同一个概念一个名字，平台才能拿这条事实判这条条件；单位照登记原句写，年龄、病程这类时间单位平台会换算。没有对应事实的，再按第一节起名。
+- 候选试验来自试验登记平台：`mcp__evimed__clinical_trial_search` 找正在招募或即将招募的，凭这位患者的诊断、分期、生物标志物、年龄、性别和所在地区挑；有希望的用 `mcp__evimed__trial_registry_record` 读登记记录。本研究已经有的候选试验在 `mcp__evimed__vcr_read` `{ "what": "candidate_trials" }` 里，不必重复写。
+- 一个试验写成一项候选试验：`what: "candidate_trial"`，`registryId`、`subjectKeys`（这位患者）和 `criteria`——登记记录里入选和排除标准的原句，一条一条按第一节的写法结构化，`sourceText` 逐字照抄，判不了的写成 `language`。试验的名称、分期、状态和中心由平台从登记记录读，你不写。写入时平台就把这位患者对照这个试验判了，判定在返回值里。条件里的 `variable` 用这位患者已有事实的变量名（`mcp__evimed__vcr_read` 读到的那些，例如已有 `egfr` 就不要另写 `gfr`）：同一个概念一个名字，平台才能拿这条事实判这条条件；单位照登记原句写，年龄、病程这类时间单位平台会换算。没有对应事实的，再按第一节起名。
 
 ```json
 { "what": "candidate_trial", "items": [ {
@@ -179,7 +216,7 @@ Report inter-rater agreement and disagreements as properties of that reference s
       "requirement": { "op": "present", "variable": "active_brain_metastasis" } } ] } ] }
 ```
 
-- 补了这位受试者的新事实，或要让另一位受试者也对照已有的试验：同一个 `registryId` 再写一次，只写 `subjectKeys`，不带 `criteria`。条件要改就把整套 `criteria` 重写，平台会把受影响的判定重做。
+- 补了这位患者的新事实，或要让另一位受试者也对照已有的试验：同一个 `registryId` 再写一次，只写 `subjectKeys`，不带 `criteria`。条件要改就把整套 `criteria` 重写，平台会把受影响的判定重做。
 - 语言条件的回答用第三节的 `language_judgment`，写 `candidateTrialId`（读回的试验 id）代替 `protocolVersionId`；还欠哪些，读 `{ "what": "candidate_trials", "filter": { "subjectKey": "P-001" } }` 的 `requests[]`。
 - 同一次读取的 `ranking` 就是平台排好的顺序：全部满足的在前，其余按还差几条，被排除的在后，同样的再看登记状态；本研究自己的方案也在里面。顺序不是你的判断，不改它，也不写「匹配度」。
 - 交付 `matching-assessment.md`：每个试验一段——登记号、名称、状态、为什么可能合适、还缺哪些证据和怎么补，满足和不满足各引患者原句与试验原句；`matching.json` 写 `subjectKey`、`direction: "patient_to_trial"` 和 `trials[]`（抄自 `ranking`）。登记状态不等于某个中心现在有名额；联系患者、转诊、入组都不归你。

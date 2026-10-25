@@ -101,7 +101,7 @@
     "uncertainty": null
   },
   "records": {
-    "result": "res_10",
+    "result": "res_7",
     "rows": 2000,
     "arms": [
       {
@@ -723,7 +723,7 @@
               "quoteSource": null,
               "ref": {
                 "kind": "result",
-                "id": "res_10",
+                "id": "res_7",
                 "tab": "patients"
               }
             }
@@ -776,7 +776,7 @@
               "quoteSource": null,
               "ref": {
                 "kind": "result",
-                "id": "res_10",
+                "id": "res_7",
                 "tab": "patients"
               }
             }

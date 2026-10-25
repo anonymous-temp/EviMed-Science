@@ -3,30 +3,128 @@ name: vcr-analysis
 description: 「虚拟临床研究」的人群、虚拟患者、对照与试验四步：按数据档位选路，把每个对象按引擎认识的字段写下来，平台交引擎算，读回来讲清楚。
 ---
 
-# 人群、虚拟患者、对照与试验
+# Population, patient, comparator and trial research
 
-## 模型不产生数字
+Interpret the requested analysis, invoke exact tools and explain the saved result.
+Do not perform statistical estimation in prose or manually fabricate a trajectory.
 
-**这一条排在最前面，因为它是整个板块成立的前提。** 你不做统计：样本量、功效、I 类错误、偏倚、覆盖率、有效样本量、标准化差异、RMST、入组时间分布、蒙特卡洛标准误——每一个都来自 `mcp__evimed__vcr_read` 读到的已保存结果，或引擎的作业。你负责的是：说清楚要算什么、把对象写对、读回结果、判断它可信到什么程度、讲清楚它意味着什么。
+## Current operating contract
 
-心算出来的、"按经验大约"的、从记忆里搬来的数，一律不得写进交付物。需要而没有的数，写清楚缺它、缺的原因、由哪一步能补上。
+Work in the originating native conversation. Complete the user's requested task;
+do not start a seven-step programme or unrelated research after it. A full study
+package is an explicit request, not a prerequisite for a calculation or matching.
+Use the existing composer, tools, saved objects and result views. Do not send the
+user to a method catalogue, parameter form or study-creation form.
 
-## 先读
+The four task families are patient matching; population and individual patients;
+comparators; and trial-design simulation. A cohort is a collection (observed,
+selected or generated). A virtual patient is one generated member or a supported
+individual prediction. Neither name proves a digital twin or a counterfactual
+clinical outcome. Trial simulation compares designs under stated assumptions;
+it is not remote trial operations and does not prove a drug works.
 
-写任何对象之前，先读两样，因为下面的写法取决于它们：
+Use available context first. For a new research object, `vcr_write` with
+`{"what":"task_context"}` obtains the authenticated conversation's scope. Never
+invent session/project/study identifiers or create a second conversation. A narrow
+aggregate sample-size/power question can use `research_calculate` without a study.
+Read existing results before calculating again. Preserve exact object, model,
+source and result versions when comparing or changing a result.
 
-- `mcp__evimed__vcr_read` `what: "definition"`——**终点类型（连续、二分类、事件时间）决定所有方法分支**，也决定场景里 `endpoint.type` 写什么。
-- `mcp__evimed__vcr_read` `what: "assumptions"`——已有的假设卡。卡里有的参数，平台会直接放进场景（见「假设卡里的数」），你不要在对象里再写一遍。
+Numbers must come from preserved source literals or deterministic tools. Use
+`vcr_simulate` action `shape` to discover current fields, units and examples;
+examples are illustrative, never evidence or default patient data. Save the
+requested object, then explicitly enqueue its computation with its `subjectId`
+when applicable. Writing an object is not proof that its calculation completed.
+A short job may finish in the tool call; a long job returns to this same conversation
+through the durable completion path. Do independent work while it runs; do not
+busy-poll, use shell sleeps or claim a queued job succeeded. Existing budget limits
+still apply, without adding new approvals or model-certification gates.
 
-要引用一个数时才读 `what: "results"`；带 `stale` 的结果过期了，平台会按新版本自动重算，你只需要读回来。
+Highlight prerequisites per operation, not for the entire platform:
+- One-person matching needs an original case message or owned attachment, not a
+  pre-uploaded dataset or full PICO. Batch real-cohort/matching work needs authorized
+  patient data plus eligibility criteria.
+- Literature-driven synthetic populations and design simulation can start without
+  patient-level data. Retrieve and preserve parameter evidence first; do not start
+  by asking the user to fill a statistical parameter sheet.
+- Real external-control effect estimation needs comparable exposure, outcomes,
+  index time, covariates and follow-up. Pre-enrollment data, exit date/reason and
+  post-trial routine care do not reveal hidden trial treatment or outcomes. Never
+  carry exposure forward across that gap or turn missingness into no treatment.
+- Individual prediction needs an executable model within its endpoint, population,
+  units and horizon. Preserve partial results and state the specific missing input.
 
-## 你写对象，平台交给引擎算
+No contact, referral, site CRM, recruitment funnel, coordinator assignment,
+recruitment materials or follow-up operations are part of this workflow. Retain
+scientific visit schedules, longitudinal observations, criterion feasibility
+counts, eligibility rechecks and abstract accrual/dropout design assumptions.
+Unknown eligibility is never exclusion, a negative finding or zero. A registry's
+recruitment status is dated research metadata, not available site capacity.
 
-用 `mcp__evimed__vcr_write` 写人群、虚拟患者集、对照和试验方案。**写下去，平台就把这个对象冻结成一个引擎作业，算完把结果存回来**，不需要你自己排作业。直接排计算（`mcp__evimed__vcr_simulate`）只在对话里一句话问"要多少例"这类问题时用，而且每一次计算都要说它算的是哪个对象：先写一个试验方案对象，再把它的 id 作为 `subjectId`（解析、模拟、成功把握是同一份结果的几个部分，几个方案是几份结果，互不顶替）。`action: "start"` 会在工具里短暂等一下，几秒能算完的直接带回结果；没算完就告诉用户在算什么、结果会出现在研究页哪个页签、算完有通知，然后结束这一轮或接着做不依赖它的事；不要循环查 `status`，也不要用命令行等待。下一轮用户问起时用 `mcp__evimed__vcr_read` 读结果。作业超出研究的计算预算会停在确认处，只有研究者的确认能放行它，不要对它轮询；照实告诉用户在等什么、大概多少机时，然后继续做不依赖它的部分。
+Keep observed people, events, effective sample size, generated records and
+reconstructed pseudo-patients distinct. Source-bound numbers/quotations and
+numerical tests do not establish transportability, clinical validation or
+regulatory acceptance. Model-predicted comparators are descriptive benchmarks;
+they do not identify treatment effects or replace randomized controls.
 
-**对象里只能写引擎认识的字段。** 多写一个字段、拼错一个字段（比如脱落率没有写成 `accrual.dropoutAnnual`），这个对象不会被算，而是被拒绝并说出字段的路径——引擎从不悄悄忽略一个参数。**写之前先读，不要凭印象起名字**：用 `mcp__evimed__vcr_simulate` `{ "action": "shape", "kind": "<作业类型>" }` 读这个方法认识的全部字段（类型、单位、范围、默认值、必填还是可选、按哪种终点或设计才读）和一个有效示例；试验方案用 `design_analytic` 和 `design_simulation`，虚拟患者集用 `generate_patients*`。被拒绝时，拒绝的话里已经列出那个位置引擎读的字段，照着改，不必再猜。零效应情景写 `truth.null: true`（布尔值），脱落只有 `accrual.dropoutAnnual` 一种写法（每 12 个时间单位的比例）；`alpha` 是总 α，`sided` 写 1 或 2。**`accrual`（入组、随访、脱落）只有事件时间终点才有**：二分类和连续终点的虚拟患者集与试验方案不写 `accrual`，写了就是多写的字段，照样被拒绝。
+## Source-bound model paths
 
-### 步骤 3：人群
+Read `vcr_read` what `models`; use what `model_source` with `filter.sourceId` for
+preserved numeric occurrences and exact source identity. Register executable
+published equations only through their typed/source-bound profile. Explicitly
+state transforms, centering, scaling, units and the Cox baseline reference.
+Unknown reference or baseline cannot produce absolute Cox risks.
+
+`fit_survival_model` fits an intercept-only population survival baseline using
+exponential, Weibull, lognormal or loglogistic distributions. Reconstructed curves
+remain pseudo-IPD. Select and declare the original treatment group before using a
+fit as a control baseline; unobserved treatment intervals remain unknown. Fitted
+curves are not individual clinical models. Current reference-patient/design
+adapters cover exponential and Weibull; retain other fitted curves without
+silently replacing their distributions.
+
+`apply_prognostic_model` applies a saved, immutable linear/logistic/Cox equation to
+the selected authorized baseline population. It must not change the requested
+endpoint, discard a selected cohort or switch to an unrelated snapshot. Missing
+predictors/units/categories stay unavailable. Published equations with fixed
+coefficients do not quantify coefficient uncertainty. A continuous design needs
+outcome variance including residual variance, not the SE of predicted means.
+
+Trial configurations may reference a saved `modelResultId`, `modelResultVersion`
+and `modelParameterQuantile` (`p10`, `p50`, `p90`, default `p50`). A grid can use
+these references in `dimensions.base` and request `modelParameterQuantile: "all"`.
+These are fitted-median parameter-uncertainty scenarios with shape held fixed,
+not patient-time percentiles, a joint posterior or assurance. Treatment effect
+always comes from separate evidence or an explicitly labeled assumption. A single
+survival-risk horizon must not silently become an exponential survival curve.
+
+## Inspect populations and individuals
+
+Use `vcr_read` what `generated_records`, `filter.id` equal to the saved result ID,
+and optionally `filter.subjectKey` for one member. The service checks the actual
+generated lineage; a synthetic label alone does not authorize model egress of
+empirical/upload-derived records. Read permitted partial results instead of
+reconstructing inaccessible rows in prose. A longitudinal record contains multiple
+observations of one person; do not count visits as additional patients.
+
+When pairing scenarios, retain the immutable cohort and recorded random-stream
+policy. Shared random numbers reduce comparison noise; they do not identify an
+individual treatment effect. Independent Monte Carlo replicates remain independent.
+
+## Evidence before parameters
+
+For literature populations, `definition.baselineBindings` identifies each variable
+and statistic with a verified `evidenceId` and explicit `unit`; categorical
+`proportions` also identify `index`. The platform verifies numeric values, source
+units and reported baseline status before enqueueing. Only actually used evidence
+and assumption versions belong to the result's lineage. A derived value with only
+quoted inputs is not a verified reported baseline; keep it as an explicit
+exploratory assumption or provide the supported computation evidence.
+
+The method examples below are reference shapes for the requested computation.
+They do not require a complete study definition or a fixed order of methods.
+
+## Reference: populations
 
 数据档位决定从哪里开始：
 
@@ -69,7 +167,7 @@ description: 「虚拟临床研究」的人群、虚拟患者、对照与试验�
 
 筛选流程每一步都要单列三个数：保留、排除、**无法判断**。把「无法判断」并进「排除」，是这一步最常见也最贵的错误。
 
-### 步骤 4：虚拟患者
+## Reference: individual patients
 
 在库里选能覆盖这个人群和这个终点的**最高一级**模型（`validated` > `data` > `literature` > `scenario`）。选不到就用文献模型或情景模型，并在报告里写明是哪一级、为什么。
 
@@ -141,7 +239,7 @@ description: 「虚拟临床研究」的人群、虚拟患者、对照与试验�
 
 An assessment's `issues` describe missing information; the record is retained and can be completed in a new version. Event-history models use the cloud forecast or external-file path described below. Do not send them through the statistical patient-set generator or substitute a different model when an API is unavailable.
 
-### 步骤 5：对照
+## Reference: comparators
 
 `mcp__evimed__vcr_read` `what: "comparator"` 会回来 `routes`——这个数据档位能走哪几条路线，是确定性的。路线、最低档位和引擎做的事：
 
@@ -203,7 +301,7 @@ A single recorded arm is a benchmark, not a comparison. For a receipt containing
 
 **「不可估计」是一份完成的结果，而且不由你宣布。** 一条路线数据档位够不着，或引擎判定熵平衡无解、共同支持域外比例越界、加权后有效样本量低于下限、关键协变量标准化差异 ≥ 0.1、τ 超过随访、重建未过质控、MAP 先验冲突，平台都会把它存成「不可估计」，带触发的规则和缺口清单，照常交付。你不要在对象里自己写结论。你要做的是读回来，把缺什么、缺到什么程度、补上之后能回答什么讲清楚。
 
-### 步骤 6：试验
+## Reference: trial design
 
 按 ADEMP 五段组织场景，`mcp__evimed__vcr_write` `what: "trial_scenario"`，通常写三个方案并排比。`design` 和 `endpointType` 是对象自己的字段，其余都在 `configuration` 里，字段名就是引擎的字段名：
 

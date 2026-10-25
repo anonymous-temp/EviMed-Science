@@ -124,7 +124,7 @@ class _Gateway(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802 - http.server naming
         body = self.rfile.read(int(self.headers.get("content-length") or 0))
-        type(self).seen.append({"path": self.path, "authorization": self.headers.get("authorization"), "body": json.loads(body)})
+        type(self).seen.append({"path": self.path, "authorization": self.headers.get("authorization"), "execution_context": self.headers.get("X-EviMed-Execution-Context"), "body": json.loads(body)})
         operation = self.path.rsplit("/", 1)[-1]
         answer = type(self).answers.get(operation, (404, {"error": "Not found.", "code": "not_found"}))
         # A list is a scripted sequence: each request takes the next answer, and the last one stays.
@@ -168,6 +168,19 @@ class _GatewayCase(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.server = load_server()
+
+
+class NativeVcrContextTests(_GatewayCase):
+    def test_server_preserves_native_context_and_does_not_reuse_it_on_the_next_call(self):
+        server = load_server()
+        context = {"v": 1, "sessionId": "native", "callId": "call", "rootCallId": "root-call", "provider": "deepseek-official", "model": "deepseek-v4-pro"}
+        _Gateway.answers["read"] = (200, {"data": {"what": "study", "available": True}})
+        answer = server.call_tool("vcr_read", {"what": "study", "__evimed_execution_context": context})
+        self.assertEqual(answer["status"], "success")
+        self.assertEqual(json.loads(_Gateway.seen[-1]["execution_context"]), context)
+        self.assertNotIn("__evimed_execution_context", _Gateway.seen[-1]["body"])
+        server.call_tool("vcr_read", {"what": "study"})
+        self.assertIsNone(_Gateway.seen[-1]["execution_context"])
 
 
 class VcrToolDefinitionTests(unittest.TestCase):
@@ -292,8 +305,9 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual((match["runStates"], match["keys"]), ([], []))
         self.assertTrue(any("empty scenario" in note for note in match["notes"]))
         accrual = vcr_platform.shape({"kind": "accrual_forecast"})["data"]
-        self.assertEqual(accrual["runStates"], ["target", "eventTarget", "eventHazard", "byTimes"])
-        self.assertEqual([line.split(":", 1)[0] for line in accrual["keys"]], ["target", "eventTarget", "eventHazard", "byTimes"])
+        self.assertNotIn("runStates", accrual)
+        self.assertNotIn("builtByPlatform", accrual)
+        self.assertTrue({"sites", "target", "eventTarget", "eventHazard", "screenFailure", "byTimes"} <= {line.split(":", 1)[0] for line in accrual["keys"]})
         # An event target is counted among every patient, enrolled and still to enrol, and the shape says what happens beyond them.
         self.assertTrue(any("eventTarget counts events among every patient the forecast follows" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
 

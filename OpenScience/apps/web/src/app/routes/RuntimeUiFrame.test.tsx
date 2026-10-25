@@ -2064,15 +2064,15 @@ describe("虚拟临床研究 in the conversation", () => {
     return { view, frame, post, vcrPosts };
   }
 
-  it("tells the chip where the study starts, what it is for, and the six starting points of a new study", async () => {
+  it("tells the chip where the study starts, what it is for, and the four task intents of a new study", async () => {
     const { view, vcrPosts } = await openVcrConversation("vcr-analysis");
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     const [options] = vcrPosts();
     expect(options).toMatchObject({ sessionId: "session-a", controls: true, canSetUse: true, start: "auto", intendedUse: "exploratory" });
-    expect(options.startOptions.map((choice: { label: string }) => choice.label)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
+    expect(options.startOptions).toEqual([]);
     expect(options.useOptions.map((choice: { label: string }) => choice.label)).toEqual(["探索", "研究设计支持", "指定研究分析", "申报准备"]);
     expect(options.starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
+      .toEqual(["患者匹配", "人群与患者", "合成对照", "虚拟试验"]);
     view.unmount();
   });
 
@@ -2122,7 +2122,7 @@ describe("虚拟临床研究 in the conversation", () => {
     const { view, frame, vcrPosts } = await openVcrConversation("vcr-protocol", study({ abilities: ["read", "write"] }));
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     expect(vcrPosts()[0]).toMatchObject({ controls: true, canSetUse: false });
-    expect(vcrPosts()[0].startOptions).toHaveLength(5);
+    expect(vcrPosts()[0].startOptions).toHaveLength(0);
     emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 4, sessionId: "session-a", intendedUse: "design_support" });
     await act(async () => { await Promise.resolve(); });
     expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
@@ -2138,12 +2138,12 @@ describe("虚拟临床研究 in the conversation", () => {
     const { view, vcrPosts } = await openVcrConversation("vcr-protocol", null);
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     expect(vcrPosts()[0]).toMatchObject({ controls: false, startOptions: [] });
-    expect(vcrPosts()[0].starters).toHaveLength(6);
+    expect(vcrPosts()[0].starters).toHaveLength(4);
     expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
     view.unmount();
   });
 
-  it("finds the study that 「新建研究」 has just made — a draft the home list leaves out — by its project, so the six starters and the chip's options are there", async () => {
+  it("finds the study that 「新建研究」 has just made — a draft the home list leaves out — by its project, so the four starters and the chip's permitted options are there", async () => {
     // The study a conversation belongs to is read by the project; the list (which has no draft in it) is never asked.
     const { view, vcrPosts } = await openVcrConversation("vcr-protocol", study({ status: "draft", name: "未命名研究" }));
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
@@ -2151,7 +2151,7 @@ describe("虚拟临床研究 in the conversation", () => {
     expect(vcr.getVcrHome).not.toHaveBeenCalled();
     expect(vcrPosts()[0]).toMatchObject({ sessionId: "session-a", controls: true, canSetUse: true, start: "auto", intendedUse: "exploratory" });
     expect(vcrPosts()[0].starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
+      .toEqual(["患者匹配", "人群与患者", "合成对照", "虚拟试验"]);
     view.unmount();
   });
 

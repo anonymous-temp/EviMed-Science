@@ -17,7 +17,7 @@ import { validatePopulationProfile } from "@evimed/domain";
 import { createVcrRecords } from "../src/vcrRecords.mjs";
 import { vcrCalibration } from "../src/vcrCalibration.mjs";
 import {
-  VCR_ROWS_PAGE_MAX, clearRowTableCache, coxHazardRatio, kaplanMeier, loadRowTable, outcomeStatistics, pageOfFile, pageOfTable, patientRecord,
+  VCR_ROWS_PAGE_MAX, clearRowTableCache, coxHazardRatio, kaplanMeier, loadRowTable, outcomeStatistics, pageOfFile, pageOfTable, patientRecord, patientRecordOfFile, patientSummaryTable,
   profileOfTable, readCsvRows,
 } from "../src/vcrRows.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
@@ -72,14 +72,14 @@ function records() {
     res_changed: { id: "res_changed", kind: "patient_set", executionId: "ex_vp", subjectId: "pts_1", tables: [{ ...table("virtual-patients", PATIENTS_LOCATION, PATIENTS, 2000), sha256: sha("other bytes") }], diagnostics: {} },
   });
   const executions = /** @type {Record<string, any>} */ ({
-    ex_vp: { method: "patients.time_to_event", inputs: [], finished_at: "2026-10-07T11:05:00Z" },
-    ex_pop: { method: "population.scenario", inputs: [], finished_at: "2026-10-07T11:00:00Z" },
+    ex_vp: { method: "patients.time_to_event", receipt: { signed: true }, inputs: [], finished_at: "2026-10-07T11:05:00Z" },
+    ex_pop: { method: "population.scenario", receipt: { signed: true }, inputs: [], finished_at: "2026-10-07T11:00:00Z" },
     ex_real: { method: "cohort.build", inputs: [{ kind: "snapshot", id: "snp_1", valueSource: "observed" }], finished_at: "2026-10-07T11:00:00Z" },
   });
   /** @type {any[]} */
   const audits = [];
   const store = {
-    async result(/** @type {string} */ _studyId, /** @type {string} */ id) { return results[id] ?? null; },
+    async result(/** @type {string} */ askedStudyId, /** @type {string} */ id) { return askedStudyId === study.id ? results[id] ?? null : null; },
     async one(/** @type {string} */ sql, /** @type {any[]} */ values) {
       if (/FROM evimed_vcr\.executions e JOIN/.test(sql)) return { scenario: { endpoint: { type: "time_to_event" }, truth: { controlMedian: 4.1, hazardRatio: 0.6 } } };
       if (/FROM evimed_vcr\.executions/.test(sql)) return executions[String(values[0])] ?? null;
@@ -88,7 +88,7 @@ function records() {
     },
     async audit(/** @type {any} */ entry) { audits.push(entry); },
   };
-  return { module: createVcrRecords({ store, config: { vcrDataPlaneDir: plane } }), audits };
+  return { module: createVcrRecords({ store, config: { vcrDataPlaneDir: plane } }), audits, results, executions };
 }
 
 // --- the reader --------------------------------------------------------------------------------------------------------------
@@ -275,4 +275,89 @@ test("the payloads the web renders the virtual patients from", async () => {
   const censored = first.rows.find((row) => row.status === 0) ?? first.rows[1];
   check("ev201/patients-record-censored.json", await module.record(study, "res_vp", String(censored.patientId), "patient_set"));
   check("ev201/population-rows.json", await module.rows(study, "res_pop", { limit: 8, kind: "population" }));
+});
+
+
+test("longitudinal pages count people once and retain every chronological observation in the record", async () => {
+  const file = path.join(plane, "longitudinal-persons.csv");
+  await fs.writeFile(file, "patientId,arm,visit,time,y,age,source\nP1,0,3,12,30,60,synthetic\nP2,1,1,0,5,40,synthetic\nP1,0,1,0,10,60,synthetic\nP1,0,2,6,20,60,synthetic\nP2,1,2,6,8,40,synthetic\n");
+  const table = await loadRowTable(file);
+  const page = pageOfTable(table, {});
+  assert.equal(page.ok, true);
+  assert.equal(page.all, 2); assert.equal(page.total, 2);
+  assert.deepEqual(page.rows.map(row => [row.patientId, row.observationCount, row.lastObservationTime, row.lastObservedValue]), [["P1",3,12,30],["P2",2,6,8]]);
+  assert.deepEqual(page.arms.map(arm => [arm.value,arm.n]), [["1",1],["0",1]]);
+  const record = patientRecord(table, "P1");
+  assert.equal(record.observationCount, 3);
+  assert.deepEqual(record.observations.map(row => [row.visit,row.time,row.y]), [[1,0,10],[2,6,20],[3,12,30]]);
+  assert.equal(record.baseline.some(row => row.key === "visit" || row.key === "y"), false);
+  assert.equal(record.trajectories, null, "a visit series is not a pair of counterfactual outcomes");
+  assert.equal(patientSummaryTable(table).rows.length, 2);
+  assert.equal(pageOfTable(table, { filters: { lastObservedValue: "20..40" } }).total, 1);
+});
+
+test("an oversized visit table never mislabels visit counts as people, while a selected full patient remains readable", async () => {
+  const file = path.join(plane, "longitudinal-persons.csv");
+  const prefix = await loadRowTable(file, { maxCells: 10 });
+  assert.equal(prefix.complete, false);
+  assert.deepEqual(await pageOfFile(file, {}), { ok: false, issue: { error: "too_large", column: "patientId" } });
+  const record = await patientRecordOfFile(file, "P1");
+  assert.equal(record.observationCount, 3);
+  assert.deepEqual(record.observations.map(row => row.time), [0,6,12]);
+  assert.equal(await patientRecordOfFile(file, "missing"), null);
+});
+
+
+test("conversation reads actual bounded generated members and selected records, including small synthetic samples", async () => {
+  const { module } = records();
+  const page = await module.modelRead(study, "res_vp", { limit: 2 });
+  assert.equal(page.available, true); assert.equal(page.source, "synthetic"); assert.equal(page.rows.length, 2);
+  const selected = await module.modelRead(study, "res_vp", { subjectKey: page.rows[0].patientId });
+  assert.equal(selected.record.id, page.rows[0].patientId);
+  assert.equal((await module.modelRead({ id: "another-study" }, "res_vp", {})).available, false);
+});
+test("a synthetic flag alone never releases uploaded or empirical-derived rows to the conversation", async () => {
+  const { module, executions, results } = records();
+  executions.ex_vp.inputs = [{ kind: "snapshot_file", id: "uploaded", valueSource: "synthetic" }];
+  assert.equal((await module.modelRead(study, "res_vp")).available, false);
+  const parent = results.res_pop.tables[0];
+  executions.ex_vp.inputs = [{ kind: "snapshot_file", id: "res_pop:population", valueSource: "synthetic", hash: parent.sha256, location: parent.location }];
+  assert.equal((await module.modelRead(study, "res_vp", { limit: 1 })).available, true);
+  executions.ex_pop.method = "population.synthpop";
+  assert.equal((await module.modelRead(study, "res_vp")).available, false);
+  executions.ex_pop.method = "population.scenario";
+  executions.ex_vp.inputs[0].hash = sha("other");
+  assert.equal((await module.modelRead(study, "res_vp")).available, false);
+});
+test("missing producer receipts and cyclic generated lineage stay unavailable", async () => {
+  const { module, executions, results } = records();
+  executions.ex_vp.receipt = {};
+  assert.equal((await module.modelRead(study, "res_vp")).available, false);
+  executions.ex_vp.receipt = { signed: true };
+  const parent = results.res_pop.tables[0], child = results.res_vp.tables[0];
+  executions.ex_vp.inputs = [{ kind: "snapshot_file", id: "res_pop:population", valueSource: "synthetic", hash: parent.sha256, location: parent.location }];
+  executions.ex_pop.inputs = [{ kind: "snapshot_file", id: "res_vp:virtual-patients", valueSource: "synthetic", hash: child.sha256, location: child.location }];
+  assert.equal((await module.modelRead(study, "res_vp")).available, false);
+});
+
+
+test("predictions on a verified generated cohort can be inspected without treating observed-target predictions as synthetic", async () => {
+  const { module, executions, results } = records();
+  const text = "patientId,score,prediction,reason,source,modelTier\nvp_target,-1,0.2689414214,,predicted,literature\n";
+  const location = "derived/std_1/job_prediction/prognostic-predictions.csv";
+  await fs.mkdir(path.dirname(path.join(plane, location)), { recursive: true });
+  await fs.writeFile(path.join(plane, location), text);
+  results.res_prediction = { id: "res_prediction", kind: "patient_set", executionId: "ex_prediction", tables: [{ name: "prognostic-predictions", location, sha256: sha(text), rows: 1 }] };
+  const parent = results.res_pop.tables[0];
+  executions.ex_prediction = { method: "model.prognostic_apply", receipt: { signed: true }, inputs: [{ kind: "snapshot_file", id: "res_pop:population", valueSource: "synthetic", hash: parent.sha256, location: parent.location }] };
+  const page = await module.modelRead(study, "res_prediction");
+  assert.equal(page.available, true); assert.equal(page.source, "predicted"); assert.equal(page.targetClass, "synthetic");
+  const record = await module.record(study, "res_prediction", "vp_target", "patient_set");
+  assert.equal(record.source, "predicted"); assert.equal(record.targetClass, "synthetic");
+  assert.equal(record.outcome.find(row => row.key === "prediction").value, 0.2689414214);
+  const streamed = await patientRecordOfFile(path.join(plane, location), "vp_target", { prediction: true });
+  assert.equal(streamed.outcome.find(row => row.key === "score").value, -1);
+  executions.ex_prediction.inputs = [{ kind: "analysis_table", id: "observed", valueSource: "observed" }];
+  assert.equal((await module.modelRead(study, "res_prediction")).available, false);
+  await assert.rejects(module.record(study, "res_prediction", "vp_target"), { code: "vcr_records_not_synthetic" });
 });

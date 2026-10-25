@@ -1,3 +1,4 @@
+import { RESULT_R_REPLAY_METHOD_KINDS } from './resultReplay.mjs'
 /**
  * The selected research package: what a recipient is handed to check a result and to reuse the way it was made (plan
  * 2026-10-02 §5.6, §11.3 N16).
@@ -84,7 +85,7 @@ export const RESULT_PACKAGE_EXCLUSIONS = Object.freeze([
 export const RESULT_PACKAGE_SCAN_LIMIT_BYTES = 8 * 1024 * 1024
 
 /** The methods whose engine is the R service; every other admitted method is the Python adapter's. */
-const R_ENGINE_METHODS = Object.freeze(['design.analytic', 'comparator.evalue'])
+const R_ENGINE_METHODS = Object.freeze(Object.keys(RESULT_R_REPLAY_METHOD_KINDS))
 
 /**
  * The variable the Python adapter reads each method's engine root from (`METHODS` in

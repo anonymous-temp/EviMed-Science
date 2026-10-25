@@ -706,20 +706,3 @@ describe("CapabilitiesPage", () => {
     });
   });
 });
-
-
-it("puts seven task entries before professional capabilities, searches methods, and keeps capability failure independent", async () => {
-  mocks.getVcrModels.mockResolvedValue({ models: [], methods: [
-    { id: "population", method: "population.scenario", name: "Reference population" }, { id: "binary", method: "patients.binary", name: "Binary simulator" }, { id: "continuous", method: "patients.continuous", name: "Continuous simulator" },
-    { id: "pool", method: "evidence.pool", name: "Evidence pooling" }, { id: "entropy", method: "comparator.entropy_balance", name: "Entropy balance" }, { id: "analytic", method: "design.analytic", name: "Analytic design" }, { id: "evalue", method: "comparator.evalue", name: "E-value" }, { id: "matching", method: "matching.evaluate", name: "Matching" },
-  ] });
-  mocks.listWebResearchAgents.mockResolvedValue(agents);
-  mocks.allowance.mockResolvedValue(billingOff); forgetResearchBilling();
-  renderPage();
-  const tasks = await screen.findByRole("list", { name: "选择计算任务" });
-  expect(within(tasks).getAllByRole("button")).toHaveLength(7);
-  expect(screen.queryByRole("button", { name: "使用文献参数" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Binary simulator" })).toBeNull();
-  await userEvent.type(screen.getByLabelText("搜索工具"), "E-value");
-  expect(await screen.findByRole("button", { name: "E-value" })).toBeInTheDocument();
-});

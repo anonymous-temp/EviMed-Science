@@ -1401,6 +1401,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_export_not_found',
   'vcr_model_invalid',
   'vcr_member_role_invalid',
+  'vcr_recruitment_retired',
   'vcr_referral_not_found',
   'vcr_forbidden',
   'vcr_unavailable',
@@ -1501,6 +1502,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
+  'vcr_completion_origin_invalid', 'vcr_completion_origin_unavailable', 'vcr_completion_unavailable', 'vcr_invocation_unavailable', 'vcr_job_advance_failed', 'vcr_model_version_changed', 'vcr_patient_context_invalid',
   'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
   'registry_reported_not_site_confirmed',
   'vcr_clinical_fact_invalid',
@@ -2166,6 +2168,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_export_not_found: '找不到这次导出，可能已被清理；重新导出即可。',
   vcr_model_invalid: '模型卡填得不完整：要有名字、版本和层级。',
   vcr_member_role_invalid: '成员角色只能选研究负责人、临床复核、统计复核、数据管理、招募协调员、中心或只读查看者。',
+  vcr_recruitment_retired: '招募与随访运营已停用；匹配评估仍可使用。',
   vcr_referral_not_found: '找不到这条转诊记录。',
   vcr_pack_not_found: '找不到这份知识包，或它不属于你的账号；刷新知识包列表后重选。',
   vcr_pack_invalid: '这份知识包不符合规定的结构，没有保存；按提示的字段修改后再写。',
@@ -2202,6 +2205,13 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_not_found: '所选模型的这个版本不可用，请从模型库选择确切的模型版本；其他研究继续。',
   registry_unsupported: '本部署尚未接入这个注册库，不把未查询当成没有记录。',
   registry_terms_forbid_commercial_use: '这个注册库的使用条款禁止商业使用，所以不接入；它没有被查询，不等于没有记录。',
+  vcr_completion_origin_invalid: '这项结果的原始对话标识不完整，无法自动续接；已保存的结果仍可查看。',
+  vcr_completion_origin_unavailable: '这项结果的原始对话暂不可用，自动续接等待恢复；已保存的结果仍可查看。',
+  vcr_completion_unavailable: '结果续接服务暂不可用；计算结果仍保留在研究中。',
+  vcr_invocation_unavailable: '这次工具调用没有可核对的当前对话来源，请从原对话重新发起。',
+  vcr_job_advance_failed: '计算已结束，但结果关联尚未完成，系统会重试；不要重复提交计算。',
+  vcr_model_version_changed: '所选模型版本已变化，请读取确切版本后重新配置；已有结果保留。',
+  vcr_patient_context_invalid: '请选择当前对话中的原始用户消息或本项目的已上传资料，不能把改写内容作为患者原始记录。',
   vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
   vcr_evidence_source_is_card: '证据条目的出处写成了证据卡的页面，没有保存；卡只是线索，去读它列出的原始来源，再按原文写这一条。',
   vcr_number_format_unknown: '报告里引用的数字格式不认识；改用平台支持的写法。',

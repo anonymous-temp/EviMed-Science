@@ -298,6 +298,13 @@ vcr_n_means <- function(delta, sd = 1, alpha = 0.025, power = 0.9,
   list(total = n_total, treat = n_total * allocation, control = n_total * (1 - allocation))
 }
 
+#' Allocate the normal-approximation requirement by independently rounding each arm up.
+#' The realized fraction can differ from the requested one; no exact block ratio is promised.
+vcr_integer_allocation <- function(n) {
+  treatment <- ceiling(n$treat); control <- ceiling(n$control)
+  list(treatment = treatment, control = control, total = treatment + control)
+}
+
 vcr_power_means <- function(delta, sd, n_treat, n_control, alpha = 0.025, sided = 1) {
   se <- sd * sqrt(1 / n_treat + 1 / n_control)
   df <- n_treat + n_control - 2

@@ -87,8 +87,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   const { target, doc1, doc2, docS2, s1, s2, projection } = f;
   const textLocation = (await vcr.dataStore.getSourceFile(target.id, doc1.id)).location;
   const aliasInPlane = path.join(directory, 'alias-of-chart-1');
-  const referralBefore = (await vcr.matchStore.listReferrals({ studyId: target.id })).find(row => row.subjectKey === s1);
-  assert.ok(referralBefore && !['withdrawn', 'screen_failed'].includes(referralBefore.state));
+  assert.equal(typeof vcr.matchStore.listReferrals,"undefined");
   const manifest = await vcr.store.one('SELECT location, projection_hash, manifest_hash FROM evimed_vcr.document_projections WHERE id=$1', [projection.id]);
   const assessmentBefore = (await vcr.matchStore.listAssessments({ studyId: target.id, subjectKey: s1 }))[0];
   const judgmentsBefore = (await vcr.matchStore.getAssessment(assessmentBefore.id, target.id)).judgments;
@@ -97,7 +96,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   // The trials the patient was judged against (「给患者找试验」) quote the chart as well.
   const trial = await vcr.patientTrials.writeTrial(target, { subjectKeys: [s1], trial: { registry: 'clinicaltrials.gov', registryId: 'NCT06000099', title: 'Synthetic trial', phase: 'PHASE2',
     status: 'RECRUITING', conditions: ['NSCLC'], locations: { total: 1, countries: ['China'], sites: [] }, url: 'https://clinicaltrials.gov/study/NCT06000099', recordHash: 'd'.repeat(64),
-    retrievedAt: '2026-10-10T07:00:00.000Z', eligibilityText: '' }, criteria: [{ kind: 'inclusion', criterionType: 'demographic', sourceText: 'Age >= 18',
+    retrievedAt: '2026-10-10T07:00:00.000Z', eligibilityText: 'Age >= 18' }, criteria: [{ kind: 'inclusion', criterionType: 'demographic', sourceText: 'Age >= 18',
     requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18, unit: 'year' }, applicability: null, sourceLocator: {}, evidenceNeeded: [], reviewState: 'ai_set' }] });
   assert.equal(trial.evaluation.evaluated.length, 1, JSON.stringify(trial.evaluation));
   const candidateEvidence = async () => (await vcr.store.rows('SELECT evidence FROM evimed_vcr.candidate_trial_judgments')).flatMap(row => row.evidence);
@@ -106,7 +105,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   await fs.link(path.join(directory, textLocation), aliasInPlane);
 
   const report = await vcr.dataPlane.withdrawSubject({ studyId: target.id, subjectKey: s1, actor: 'owner', reason: 'patient request' });
-  assert.deepEqual([report.files, report.projections, report.referralsClosed], [2, 1, 1]);
+  assert.deepEqual([report.files, report.projections], [2, 1]);
   assert.equal(report.factsRemoved, 1, 'the fact no evaluation used is deleted');
   assert.equal(report.factsRedacted, 2, 'the facts the evaluation was frozen on keep their rows');
   assert.equal(report.judgmentsRedacted, 1);
@@ -187,10 +186,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   assert.equal(second.diagnostics.errors, 1);
   assert.deepEqual(second.diagnostics.errorCodes, ['vcr_subject_withdrawn']);
 
-  // Their referral closed as 退出, so nobody contacts them.
-  const referralAfter = (await vcr.matchStore.listReferrals({ studyId: target.id })).find(row => row.subjectKey === s1);
-  assert.equal(referralAfter.state, 'withdrawn');
-  assert.equal((await vcr.matchStore.listReferralEvents(referralAfter.id)).at(-1).note, '知情同意已撤回');
+  assert.equal('referralsClosed' in report,false,'withdrawal no longer queries retired tables');
 
   // The audit trail keeps the hashes and counts and never a word.
   const audits = await vcr.store.rows("SELECT action, object, detail FROM evimed_vcr.audit WHERE study_id=$1 AND action IN ('subject.withdraw','source.file.erase','document.projection.retire')", [target.id]);

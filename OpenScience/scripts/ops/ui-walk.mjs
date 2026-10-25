@@ -191,11 +191,10 @@ const WALK_TABLES = {
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"frontier-topic","discovered":true,"pattern":"/app/frontier/topics/:topicId","family":"frontier-topic","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a hot-event topic's reading page: 12/400 meta, 14/400 the question and the peg, 16/400 the cited overview, 16/600 the items' titles, 18/600 the three section headings, 24/600 the title — 6 pairs (c2-leads 2026-10-25, measured with the walk's functions at both sizes)","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
-      {"view":"method-workbench","primaryPlacement":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
+      {"view":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
       {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"calculation-workbench","template":"T1","rows":true},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
-      {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","budgetOverride":{"borders":4},"budgetNote":"a list beside its record: the band's hairline and the table's header rule (one kind), the selected tab's underline, the rows' faint rules (list, fact list and table share one kind) and the divider between the list and the record (r19-guards2, measured)","rows":false},
       {"view":"virtual-research-precedents","route":"/app/virtual-research?tab=precedents","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
@@ -231,13 +230,13 @@ const WALK_TABLES = {
       {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
       {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
       {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"compact","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the compact workflow): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
-      {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-comparator","module":"vcr","tab":"/comparator","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-trial","module":"vcr","tab":"/trial","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-matching","module":"vcr","tab":"/matching","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-data","module":"vcr","tab":"/data","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-overview","module":"vcr","workflow":"objects","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-population","module":"vcr","workflow":"objects","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-patients","module":"vcr","workflow":"objects","variant":"population","tab":"/population?level=individual","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-comparator","module":"vcr","workflow":"objects","tab":"/comparator","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-trial","module":"vcr","workflow":"objects","tab":"/trial","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-matching","module":"vcr","workflow":"objects","tab":"/matching","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-data","module":"vcr","workflow":"objects","tab":"/data","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"evidence-matrix","discovered":true,"pattern":"/app/runs/:runId/files/*","family":"run-file","template":"T5","budget":"data","rows":false}
     ],
     "unwalked": [
@@ -414,7 +413,7 @@ exports.methodTask = methodTask;
 exports.methodEntryId = methodEntryId;
 exports.methodEntries = methodEntries;
 exports.completeMethodCatalogue = completeMethodCatalogue;
-exports.METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "招募与匹配"];
+exports.METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "入组预测与匹配"];
 const PATIENT_MODES = ["patients.binary", "patients.continuous", "patients.time_to_event", "patients.longitudinal"];
 const ROBUSTNESS = ["comparator.evalue", "comparator.covariate_sets", "comparator.negative_control", "comparator.tipping_point", "forecast.evaluate", "forecast.compare", "forecast.trial_benchmark"];
 function methodTask(method) {
@@ -422,6 +421,8 @@ function methodTask(method) {
         return exports.METHOD_FAMILIES[0];
     if (method.startsWith("patients.") || method === "forecast.trajectories")
         return exports.METHOD_FAMILIES[1];
+    if (method.startsWith("model."))
+        return exports.METHOD_FAMILIES[2];
     if (method.startsWith("evidence."))
         return exports.METHOD_FAMILIES[2];
     if (/^(accrual|matching)\./.test(method))
@@ -710,13 +711,18 @@ export async function discoverCalculationHistory(context, base, studies, failure
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
  * Each is None where the module is off for the account or the list is empty — the home pages are walked either way. A page left out
  * for want of an id is a notice, never a pass that looks like a walk.
- * @param {any} context a logged-in browser context @param {string} base @param {Array<string | Finding>} notices @param {string[]} failures
+ * @param {any} context a logged-in browser context @param {string} base @param {Array<string | Finding>} notices @param {string[]} failures @param {string[]} [only]
  * @returns {Promise<{ routes: Array<[string, string]>, matrix: string | null, pdfTitle: string | null, keyless: string[] }>}
  */
-async function discoverRoutes(context, base, notices, failures) {
+async function discoverRoutes(context, base, notices, failures, only = []) {
   /** @type {Array<[string, string]>} */
   const routes = [];
-  const skip = (name, why) => notices.push(`${name}: not walked — ${why}`);
+  const skip = (name, why) => {
+    const view = name.split(":")[0];
+    const selected = only.length === 0 || only.some(choice => choice === view || budgetKey(choice) === budgetKey(view)
+      || view === "vcr-*@2" && choice.startsWith("vcr-"));
+    if (selected) notices.push(`${name}: not walked — ${why}`);
+  };
 
   const geo = (await readData(context, base, "/api/geo/projects", failures))?.projects;
   const geoId = Array.isArray(geo) && typeof geo[0]?.id === "string" ? geo[0].id : null;
@@ -1628,7 +1634,7 @@ export async function readModuleResult(page, target) {
 /** Expected result choices, including the canonical conversation only where it exists. */
 export function moduleViewLabels(module, programme = true, canonical = false) {
   if (module === "geo") return ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
-  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"] : ["总览", "定义与证据", "人群", "匹配与招募"])];
+  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "匹配", "人群与患者", "对照", "试验", "依据"] : ["总览", "匹配", "人群与患者", "依据"])];
 }
 
 /** Standalone walk mirror of vcrTabs.vcrTabPath, studyLocation.vcrChatPath, geoLocation.geoChatPath and
@@ -1642,8 +1648,8 @@ export function moduleViewAddressHolds(module, label, initial, before, after, { 
   const match = start.pathname.match(module === "geo" ? /^\/app\/geo\/([^/]+)/u : programme ? /^\/app\/virtual-research\/([^/]+)/u : /^\/app\/capabilities\/calculations\/([^/]+)/u);
   if (!match) return false;
   const id = match[1];
-  const labels = module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"];
-  const keys = module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "data", "population", "patients", "comparator", "trial", "matching"];
+  const labels = module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "匹配", "人群与患者", "对照", "试验", "依据"];
+  const keys = module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "matching", "population", "comparator", "trial", "data"];
   const key = keys[labels.indexOf(label)];
   const base = module === "geo" ? `/app/geo/${id}` : programme ? `/app/virtual-research/${id}` : `/app/capabilities/calculations/${id}`;
   const path = to.pathname.replace(/\/$/u, "");
@@ -1673,7 +1679,7 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
   await readModuleResult(page, `${module} initial view`);
   const initial = page.url();
-  const expected = module === "geo" ? 8 : 7;
+  const expected = module === "geo" ? 8 : 0;
   const rail = page.locator("[data-page-chrome] [data-step-rail]");
   const steps = rail.locator("[data-rail-step]");
   const ids = await steps.evaluateAll((items) => items.map((item) => item.getAttribute("data-rail-step")));
@@ -1791,7 +1797,7 @@ export function compositionFindings(name, viewportName, c) {
   for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
   if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
   if (template) {
-    if ((view?.module || view?.band) && c.viewSelector) {
+    if ((view?.module || view?.band) && c.viewSelector && view?.workflow !== "objects") {
       const expected = (view.module ?? view.band) === "vcr" ? 7 : 8;
       if (!c.stepRail || c.stepRail.folded || c.stepRail.count !== expected) add("step-rail", `the module must show all ${expected} workflow steps`);
       if (c.stepRail?.steps?.some((step) => !step.state || !step.href || !step.stateVisible)) add("step-rail", "a workflow step has no visible state or destination");
@@ -1799,7 +1805,11 @@ export function compositionFindings(name, viewportName, c) {
     }
     // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
-    if (template.stepRail === "every-tab") {
+    if (view?.workflow === "objects") {
+      if (c.stepRail || tablists.length > 0) add("step-rail", "the research workspace must not restore retired step navigation");
+      if (!c.chrome || c.viewSelector?.count !== 1) add("chrome", "the research workspace must expose one pinned result-view selector");
+    }
+    if (template.stepRail === "every-tab" && view?.workflow !== "objects") {
       if (!c.chrome) add("chrome", "a module page has no band ([data-page-chrome]) for its steps and tabs");
       if (!c.stepRail && !dotted && view?.workflow !== "compact") add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
     }
@@ -3833,7 +3843,7 @@ async function main() {
     // researcher's does not. Presentation only, as in the app (`useOperator`): an unreadable answer is a researcher.
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
     const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
-    const found = await discoverRoutes(context, base, notices, failures);
+    const found = await discoverRoutes(context, base, notices, failures, setting.only);
     const everything = [...ROUTES, ...found.routes];
     // A name that is no view of this walk is a typo that would walk nothing and pass.
     const unknown = setting.only.filter((name) => !everything.some(([view]) => view === name || budgetKey(view) === name));

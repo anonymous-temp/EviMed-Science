@@ -141,7 +141,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
         {defined ? pack : null}
         <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
         <VcrRegistryCoverage sources={data.registryCoverage} />
-        {defined ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
+        {defined || study.question?.trim() ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
       </div>
     );
   }

@@ -150,7 +150,7 @@ test("the home list is exactly the browser's VcrHome", options, async () => {
   assert.ok(row.conclusion?.text, "a conclusion sentence rendered from a result");
   assert.ok(row.attention.length > 0);
   check("ev201/home.json", home);
-  assert.ok(Array.isArray(home.todos) && home.todos.length > 0, "a lead may contact patients, so 招募待办 is there");
+  assert.equal("todos" in home,false,"home has no recruitment workload");
   const reviewer = await service.listStudies({ id: "u_stat" });
   assert.equal(reviewer.todos, undefined, "a statistical reviewer has no recruiting role, so the column is absent");
   assert.equal(reviewer.studies.length, 1, "a member sees the study they belong to and nothing else");
@@ -224,13 +224,11 @@ test("the matching tab answers each view and the candidate it is asked for", opt
   check("ev201/matching-p0201.json", asked);
   // The one person whose referral is waiting on a coordinator's confirmation.
   const waiting = await service.tab({ id: seeded.owner }, seeded.study.id, "matching", new URLSearchParams("candidate=P-0192"));
-  assert.equal(waiting.selected.canContact, true);
-  assert.ok(waiting.selected.referralId, "the contact confirms a referral, not a candidate key");
+  assert.equal("canContact" in waiting.selected,false);
+  assert.equal("referralId" in waiting.selected,false);
   check("ev201/matching-p0192.json", waiting);
   for (const view of ["referral", "sites", "followup"]) {
-    const answer = await service.tab({ id: seeded.owner }, seeded.study.id, "matching", new URLSearchParams(`view=${view}`));
-    assert.equal(answer.view, view);
-    check(`ev201/matching-${view}.json`, answer);
+    await assert.rejects(service.tab({ id: seeded.owner }, seeded.study.id, "matching", new URLSearchParams(`view=${view}`)),{status:410,code:"vcr_recruitment_retired"});
   }
 });
 

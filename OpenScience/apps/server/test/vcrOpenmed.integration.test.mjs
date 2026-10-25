@@ -57,7 +57,7 @@ test('a project holds a study for the privacy hook exactly when the account can 
   assert.equal(await vcr.store.holdsStudy('owner', target.projectId), true);
   assert.equal(await vcr.store.holdsStudy('stranger', target.projectId), false, 'another account holds none in this project');
   assert.equal(await vcr.store.holdsStudy('owner', `${target.projectId}_other`), false, 'nor does the owner in a project without one');
-  await database.query("INSERT INTO evimed_vcr.members (study_id, user_id, role, invited_by) VALUES ($1,'colleague','site','owner')", [target.id]);
+  await database.query("INSERT INTO evimed_vcr.members (study_id, user_id, role, invited_by) VALUES ($1,'colleague','viewer','owner')", [target.id]);
   assert.equal(await vcr.store.holdsStudy('colleague', target.projectId), true, 'a member reads the study, so its cached conversations are theirs to revalidate');
   await vcr.store.softDeleteStudy(target.id, 'owner');
   assert.equal(await vcr.store.holdsStudy('owner', target.projectId), true, 'a hidden study still owns cached clinical conversations');
@@ -274,7 +274,7 @@ test('a patient panel queues both protocols, persists distinct outcomes and acco
     { [protocols[0]]: 'eligible', [protocols[1]]: 'ineligible' });
   // The referral ledger follows the study's current protocol (the later one, age >= 65), for which this person is ineligible:
   // the earlier protocol's panel verdict of eligible is recorded above and makes no referral (E-05).
-  assert.deepEqual(await vcr.matchStore.listReferrals({ studyId: target.id }), []);
+  assert.equal(typeof vcr.matchStore.listReferrals,"undefined");
   assert.deepEqual(await vcr.matchStore.listAssessments({ studyId: other.id }), []);
 });
 
@@ -422,10 +422,10 @@ test('study-scoped enrichment can be removed without deleting prior facts or cha
   await write(enabled,'criteria',[rule('Consent')]); await write(native,'criteria',[rule('Consent')]);
   const selected=new Set([enabled.id]);
   const seam=vcrMatchingSeam({matchStore:vcr.matchStore,store:vcr.store,clinicalEnabled:target=>selected.has(target.id)});
-  assert.equal((await seam.runtimeRead(enabled,{})).factContract.schema,1);
-  assert.equal((await seam.runtimeRead(native,{})).factContract,null);
+  assert.equal((await seam.runtimeRead(enabled,{kind:"contract"})).factContract.schema,1);
+  assert.equal((await seam.runtimeRead(native,{kind:"contract"})).factContract,null);
   selected.clear();
-  assert.equal((await seam.runtimeRead(enabled,{})).factContract,null);
+  assert.equal((await seam.runtimeRead(enabled,{kind:"contract"})).factContract,null);
 });
 
 test('binding a disease pack preserves its selected body across later catalogue changes', options, async t => {
@@ -462,17 +462,20 @@ test('deleting an unfrozen source removes derived facts and projection files whi
 test('clinical enrichment is on for every study unless the deployment lists study ids, which then restrict it', options, async () => {
   const first = await study(), second = await study();
   await write(first, 'criteria', [rule('Consent')]); await write(second, 'criteria', [rule('Consent')]);
-  // No list: every study gets the fact contract and its terminology, and `clinical` is written and kept for each.
+  // No list: every study can explicitly read its contract and terminology; compact result reads do not repeat them.
   for (const target of [first, second]) {
-    const view = await vcr.matching.runtimeRead(target, {});
-    assert.equal(view.factContract?.schema, 1, 'the contract is part of the read of every study');
-    assert.ok(view.terminology !== undefined, 'and so is the terminology slot');
+    const compact=await vcr.matching.runtimeRead(target,{});
+    assert.equal('factContract' in compact,false,'results stay compact');
+    const view=await vcr.matching.runtimeRead(target,{kind:'contract'});
+    assert.equal(view.factContract?.schema,1,'the clinical contract is explicitly available for every study');
+    const terminology=await vcr.matching.runtimeRead(target,{kind:'terminology'});
+    assert.ok(terminology.terminology!==undefined,'terminology remains explicitly available');
   }
   const written = await write(second, 'fact', [{ subjectKey: 'P-enrich', variable: 'age', value: 62, unit: 'year', documentId: 'sfl_unread', quote: '年龄 62 岁', surface: '62',
     clinical: { schema: 1, assertion: 'affirmed', experiencer: 'patient' } }]);
   assert.equal(written.ids.length, 0, 'a fact of a document nobody read is refused for its quote, not for being clinical');
   // A list restricts: only a study on it keeps the contract, and the others read as they did before it.
   const restricted = composeVcr({ config: { vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: directory, deepseekBaseUrl: origin, vcrClinicalStudyIds: [first.id] }, productDatabase: database });
-  assert.equal((await restricted.matching.runtimeRead(first, {})).factContract?.schema, 1);
-  assert.equal((await restricted.matching.runtimeRead(second, {})).factContract, null);
+  assert.equal((await restricted.matching.runtimeRead(first, {kind:"contract"})).factContract?.schema, 1);
+  assert.equal((await restricted.matching.runtimeRead(second, {kind:"contract"})).factContract, null);
 });

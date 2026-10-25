@@ -16,7 +16,7 @@ import { useStudyFrame } from "./studyFrameContext";
 import { useVcrRun } from "./useVcrRun";
 import { leadJob, runDetailLine, stepAction, stepName } from "./vcrActivity";
 import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_GIVES, VCR_STEP_NOUNS } from "./vcrText";
-import { hasDefinition, VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
+import { VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
 
 /**
  * The states every 「虚拟临床研究」 surface shares.
@@ -143,13 +143,14 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
   start?: VcrStepStart;
 }) {
   const frame = useStudyFrame();
-  const { run, busy } = useVcrRun(study);
+  const busy = false;
   const state = study.steps[step];
   const mayRun = study.abilities.includes("run");
   const activity = study.activity ?? frame?.activity ?? null;
   const here = activityOfStep(activity, step);
   const action = stepAction(step);
   const cancel = () => { void cancelVcrStudy(studyId).then(() => frame?.refresh()).catch(() => undefined); };
+
 
   // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
   const allowanceWait = stepAllowanceWait(state);
@@ -183,8 +184,10 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
     );
   }
   if (state?.status === "failed") return <VcrStepFailed studyId={studyId} study={study} step={step} />;
+  // Legacy draft rows requested every workflow step before the first question existed.
+  // They describe no active work and must not claim to be queued.
+  if (!study.question?.trim() && !study.definition && !activity) return <VcrNoDefinition study={study} />;
   // Nothing waits in a queue for a study nobody has described: the one thing missing is the first sentence, and it is said that way.
-  if (!hasDefinition(study)) return <VcrNoDefinition study={study} />;
   // Asked for and not started by the programme yet: it is in line, whatever the strip has not heard of. A step a cancel held is not in
   // line — it was stopped, and nothing starts it but a person's press — so it offers its start like a step never asked for.
   if (state?.status === "none" && state.requested === true && state.held !== true) {
@@ -200,12 +203,13 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
   const needs = (VCR_STEP_NEEDS as Record<string, readonly string[]>)[step] ?? [];
   for (const need of needs) {
     const key = need as VcrStepKey;
+    if (key === "definition" && !study.definition) continue;
     const note = study.stepSummaries[key]?.note;
     uses.push({ label: `${key === "definition" ? "研究定义" : stepName(key)}${note ? ` ${note}` : ""}`, to: vcrTabPath(studyId, VCR_STEP_TABS[key]) });
   }
   const cards = study.stepSummaries.evidence?.note;
   if (cards && step !== "evidence" && step !== "definition") uses.push({ label: cards, to: vcrTabPath(studyId, "data") });
-  const startHere = blocked ? undefined : start ? start.onStart : mayRun ? () => { void run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。"); } : undefined;
+  const startHere = blocked ? undefined : start ? start.onStart : mayRun && frame ? () => frame.openChat(`请根据当前研究（${studyId}）已有资料完成${stepName(step)}，先说明还缺哪些输入，再调用适用工具。`) : undefined;
   return (
     <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4">
       <StepState

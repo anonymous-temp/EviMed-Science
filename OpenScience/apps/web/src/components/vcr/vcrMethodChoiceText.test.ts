@@ -16,8 +16,8 @@ function choices(node: Schema, path = ""): Choice[] {
   if (node.values && !Array.isArray(node.values)) rows.push(...choices(node.values, `${path}.{key}`));
   return rows;
 }
-it("covers all declared choices and authored examples of all32R methods", () => {
-  const methods = Object.values(VCR_JOB_METHODS).filter(method => !method.startsWith("forecast."));
+it("covers all declared choices and authored examples of all preserved method-form choices", () => {
+  const methods = Object.values(VCR_JOB_METHODS).filter(method => !method.startsWith("forecast.") && !method.startsWith("model."));
   expect(methods).toHaveLength(32);
   let count = 0; const values = new Set<string>();
   for (const method of methods) {
@@ -31,7 +31,7 @@ it("covers all declared choices and authored examples of all32R methods", () => 
     }
     for (const example of VCR_SCENARIO_EXAMPLES[method]) expect(methodExampleLabel(method, example.label), `${method}:${example.label}`).toMatch(/[\u3400-\u9fff]/);
   }
-  expect(count).toBe(123); expect(values.size).toBe(127); expect(Object.values(VCR_SCENARIO_EXAMPLES).flat()).toHaveLength(38);
+  expect(count).toBe(127); expect(values.size).toBe(127); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(38);
   for (const value of [...VCR_ROW_RULE_OPS, ...VCR_ROW_RULE_COMPARATORS]) expect(ruleChoiceLabel(value)).not.toBe(value);
   expect(Object.keys(VCR_LONGITUDINAL_METHODS)).toHaveLength(4);
 });

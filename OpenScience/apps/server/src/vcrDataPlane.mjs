@@ -1854,7 +1854,7 @@ export function tablesNeededBy(method, endpointType, derived) {
   /** @type {("subject" | "events")[]} */
   const wanted = ["subject"];
   // Methods whose outcome is always an event time, and the weighting methods that read one when the endpoint says so.
-  const timeToEvent = ["comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"].includes(method)
+  const timeToEvent = ["model.survival_fit", "comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"].includes(method)
     || (["comparator.entropy_balance", "comparator.propensity_weight", "comparator.covariate_sets", "comparator.prognostic_adjustment", "comparator.tipping_point"].includes(method)
       && endpointType === "time_to_event");
   if (timeToEvent) wanted.push("events");
@@ -2922,6 +2922,21 @@ export class VcrDataPlane {
     const kind = String(input.kind ?? input.jobKind ?? "");
     const method = String(input.method ?? (/** @type {Record<string, string>} */ (VCR_JOB_METHODS))[kind] ?? "");
     const wants = input.include ?? tablesNeededBy(method, input.endpointType ?? null, tables.map((table) => table.shape));
+    const needsScientificUnits = ["model.prognostic_apply", "model.survival_fit"].includes(method);
+    const sourceUnit = (column, tableName = null) => {
+      const matches = entries.filter(entry => entry.column === column && (!tableName || entry.table === tableName));
+      if (!matches.length || matches.some(entry => !entry.unit)) return "unknown";
+      const values = [...new Set(matches.map(entry => entry.unit))];
+      return values.length === 1 ? values[0] : "unknown";
+    };
+    const analysisUnits = table => {
+      const grouped = new Map();
+      for (const column of table.derivedFrom?.columns ?? []) {
+        const units = grouped.get(column.name) ?? new Set(); units.add(sourceUnit(column.source)); grouped.set(column.name, units);
+      }
+      return Object.fromEntries([...grouped].map(([name, units]) => [name, units.size === 1 ? [...units][0] : "unknown"]));
+    };
+
     const dataFiles = snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data");
     const identifyingNames = new Set(
       (snapshot.profile?.tables ?? []).flatMap((/** @type {any} */ table) => (table.columns ?? [])
@@ -2959,7 +2974,7 @@ export class VcrDataPlane {
     /** @type {Map<string, string>} */
     const why = new Map(decision.fields.denied.map((denial) => [denial.field, denial.code === "vcr_field_sealed" ? "sealed" : denial.code === "vcr_field_identifying" ? "identifying" : "not_granted"]));
 
-    /** @type {{ kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[]} */
+    /** @type {{ kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string>, columnUnits?: Record<string, string> }[]} */
     const inputs = [];
     /** @type {{ id: string, kind: string, shape?: string, reason: string, fields: string[] }[]} */
     const withheld = [];
@@ -2975,7 +2990,7 @@ export class VcrDataPlane {
       if (!missing.length) {
         const labels = engineColumnSources(table.derivedFrom?.columnSources, table.columns, table.valueSource);
         inputs.push({ kind: "analysis_table", id, shape: table.shape, location: table.location, hash: table.sha256, valueSource: table.valueSource,
-          ...(labels ? { columnSources: labels } : {}) });
+          ...(labels ? { columnSources: labels } : {}), ...(needsScientificUnits ? { columnUnits: analysisUnits(table) } : {}) });
         if (table.outcomeBearing) for (const column of mapped.map((item) => item.source)) if (outcomeColumns.has(column)) outcomeRead.add(column);
         continue;
       }
@@ -2989,7 +3004,7 @@ export class VcrDataPlane {
         // and by the columns it holds: a held-back imputed column does not label the columns that are handed over
         const labels = engineColumnSources(table.derivedFrom?.columnSources, carried.map((column) => column.name), viewSource);
         inputs.push({ kind: "analysis_table", id, shape: table.shape, location: written.location, hash: written.sha256, valueSource: viewSource,
-          ...(labels ? { columnSources: labels } : {}) });
+          ...(labels ? { columnSources: labels } : {}), ...(needsScientificUnits ? { columnUnits: analysisUnits(table) } : {}) });
         continue;
       }
       withheld.push({ id, kind: "analysis_table", shape: table.shape, reason: why.get(missing[0]) ?? "not_granted", fields: missing });
@@ -3022,7 +3037,7 @@ export class VcrDataPlane {
         const heldSources = Object.fromEntries(keep.map((name) => [rename[name] ?? name, columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)]));
         const labels = engineColumnSources(heldSources, Object.keys(heldSources), viewSource);
         inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource,
-          ...(labels ? { columnSources: labels } : {}) });
+          ...(labels ? { columnSources: labels } : {}), ...(needsScientificUnits ? { columnUnits: Object.fromEntries(keep.map(name => [rename[name] ?? name, sourceUnit(name, file.name)])) } : {}) });
         for (const name of keep) if (outcomeColumns.has(name)) outcomeRead.add(name);
       }
     }
@@ -3457,7 +3472,7 @@ export class VcrDataPlane {
    * from a value the reader may not have. The bytes are verified against the hash the registry holds, parsed in memory and
    * handed to the caller, which never writes a cell anywhere: nothing here reaches `evimed_vcr`, a run's workspace or a reply.
    *
-   * @param {{ studyId: string, principal: string, purpose?: string | null }} entry
+   * @param {{ studyId: string, principal: string, purpose?: string | null, snapshotId?:string }} entry
    * @returns {Promise<{ available: true, snapshotId: string, sha256: string, header: string[], rows: string[][],
    *     columns: { name: string, source: string, concept: string, unit: string | null, type: string | null }[], valueSource: string,
    *     withheld: { shape?: string, reason: string, fields: string[] }[] }
@@ -3466,7 +3481,9 @@ export class VcrDataPlane {
   async subjectTableForMatching(entry) {
     this.root();
     const studyId = String(entry.studyId ?? "");
-    const found = ID_PATTERN.test(studyId) ? await this.#latestSubjectTable(studyId) : null;
+    const snapshot = entry.snapshotId ? await this.#snapshot(studyId, entry.snapshotId) : null;
+    const table = snapshot ? (await this.store.listAnalysisTables({ snapshotId: snapshot.id, studyId })).find(item => item.shape === "subject") : null;
+    const found = snapshot ? (table ? { snapshot, table } : null) : ID_PATTERN.test(studyId) ? await this.#latestSubjectTable(studyId) : null;
     if (!found) return { available: false, reason: "no_subject_table" };
     const resolved = await this.resolveSnapshotInputs({
       studyId, snapshotId: found.snapshot.id, principal: String(entry.principal), purpose: entry.purpose ?? null, include: ["subject"], kind: "match_criteria",
@@ -3494,6 +3511,38 @@ export class VcrDataPlane {
     });
     return { available: true, snapshotId: found.snapshot.id, sha256: input.hash, header: parsed.header, rows: parsed.rows, columns, valueSource: input.valueSource,
       withheld: resolved.withheld.map((item) => ({ ...(item.shape ? { shape: item.shape } : {}), reason: item.reason, fields: item.fields })) };
+  }
+
+  /** One explicitly selected individual's cell, re-read from the exact snapshot under current source permissions.
+   * Counts and aggregate profiles keep their existing suppression; this read never releases a roster or identifier column.
+   * @param {{studyId:string,snapshotId:string,subjectKey:string,field:string,principal:string,purpose?:string|null,external?:boolean,cloudContext?:any}} entry
+   */
+  async subjectTableEvidence(entry) {
+    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
+    const source = await this.store.sourceInStudy(entry.studyId, snapshot.sourceId);
+    if (!source || source.status === "withdrawn") throw refuse(403, "vcr_source_withdrawn", "The source is unavailable.");
+    if ((await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set()).has(entry.subjectKey)) return null;
+    const authorization = entry.external === false ? null : this.#cloudBasis(source);
+    const table = await this.subjectTableForMatching(entry);
+    if (!table.available) return null;
+    const column = table.columns.find(item => item.name === entry.field);
+    const at = table.header.indexOf(entry.field);
+    const keyAt = table.header.indexOf("USUBJID");
+    if (!column || at < 0 || keyAt < 0 || entry.field === "USUBJID") return null;
+    const selected = table.rows.filter(row => row[keyAt] === entry.subjectKey);
+    if (selected.length !== 1) return null;
+    const raw = String(selected[0][at] ?? "").trim();
+    if (!raw) return null;
+    const value = ["integer", "number"].includes(String(column.type)) && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+    const original = (await this.store.listAnalysisTables({ studyId: entry.studyId, snapshotId: snapshot.id })).find(item => item.shape === "subject");
+    const sourceFileIds = snapshot.fileHashes.filter(file => file.role === "data").map(file => file.id);
+    await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal,
+      action: authorization ? "table.cloud_read" : "table.individual_read", object: snapshot.id,
+      detail: { field: entry.field, sourceHash: original.sha256, ...(authorization ? this.#basisDetail(authorization) : {}) } });
+    if (authorization && entry.cloudContext) for (const id of sourceFileIds) await this.store.recordCloudRead(entry.studyId, id, entry.cloudContext);
+    return { quote: `${entry.field} = ${raw}${column.unit ? ` ${column.unit}` : ""}`, value, unit: column.unit,
+      locator: { snapshotId: snapshot.id, field: entry.field, subjectKey: entry.subjectKey, sourceId: source.id, sourceFileIds,
+        sourceColumn: column.source, sourceHash: original.sha256, authorizedViewHash: table.sha256 }, valueSource: table.valueSource };
   }
 
   /**

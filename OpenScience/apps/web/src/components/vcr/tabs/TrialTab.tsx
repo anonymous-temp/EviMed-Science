@@ -25,7 +25,6 @@ import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
 import { RegulatoryContactForm, VcrRegulatoryLog } from "../VcrRegulatoryLog";
 import { VcrScheduleCard } from "../VcrSchedule";
 import { VcrNumber } from "../VcrNumber";
-import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useStudyFrame, useVcrPrimary, useVcrToolbar } from "../studyFrameContext";
@@ -53,6 +52,12 @@ const NOT_RUN = "还没算";
  */
 export const VCR_ADD_DESIGN_DRAFT = "再加一个试验方案：";
 export const VCR_CHANGE_ASSUMPTION_DRAFT = "我想改一下试验的假设：";
+
+/** Saved scenario and result identities, taken from the view rather than inferred from its letter. */
+function designContext(design: VcrDesign): string {
+  const results = [...new Set(Object.values(design.measures).map(value => value.detail?.ref).filter(ref => ref?.kind === "result").map(ref => ref!.id))];
+  return `${design.id} (${design.code} ${design.name})${results.length ? `，结果 ${results.join("、")}` : ""}`;
+}
 
 type TrialView = "designs" | "schedule" | "regulatory";
 
@@ -95,7 +100,6 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const [view, setView] = useState<TrialView>("designs");
   const [choosing, setChoosing] = useState(false);
   const [registering, setRegistering] = useState(false);
-  const [editing, setEditing] = useState<VcrDesign | null>(null);
   const [recording, setRecording] = useState(false);
   const [opened, setOpened] = useState<VcrDesign | null>(null);
 
@@ -118,7 +122,8 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const shown: TrialView = views.some((entry) => entry.value === view) ? view : views[0]?.value ?? "designs";
 
   // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
-  const draft = (text: string) => () => frame?.openChat(text);
+  const draft = (text: string) => () => frame?.openChat(`${text} 当前研究 ${studyId}，当前方案版本：${data.designs.map(designContext).join("；") || "尚无"}。先读取上述版本，并保留原计算结果。`);
+  const editDesign = (design: VcrDesign) => frame?.openChat(`调整试验方案 ${designContext(design)}，研究 ${studyId}。先读取该版本及其证据参数，建立新版本并比较把握度、周期和假设变化。`);
 
   const actions: VcrToolbarAction[] = [];
   if (shown === "designs" && !nothing) {
@@ -178,7 +183,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
             noneRan={noneRan}
             failed={failed}
             onOpen={setOpened}
-            onEdit={canWrite ? setEditing : null}
+            onEdit={canWrite && frame ? editDesign : null}
           />
         </Stale>
       )}
@@ -225,18 +230,9 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
         </Drawer>
       )}
 
-      {opened && <DesignRecordDrawer design={opened} onClose={() => setOpened(null)} onEdit={canWrite ? () => { setEditing(opened); setOpened(null); } : null} />}
+      {opened && <DesignRecordDrawer design={opened} onClose={() => setOpened(null)} onEdit={canWrite && frame ? () => { editDesign(opened); setOpened(null); } : null} />}
 
-      {editing && (
-        <VcrSettingsDrawer
-          studyId={studyId}
-          kind="trial_scenario"
-          objectId={editing.id}
-          title={`改设定：${editing.code} ${editing.name}`}
-          onClose={() => setEditing(null)}
-          onSaved={reload}
-        />
-      )}
+
     </div>
   );
 }
@@ -296,7 +292,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
             xKey="duration_months"
             yKey="assurance"
             sizeKey="cost"
-            xLabel="末例入组中位（月）"
+            xLabel="平均研究时长（月）"
             yLabel="成功把握"
             sizeLabel="气泡面积 = 成本"
           />
@@ -601,7 +597,7 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
         value={goal}
         onChange={(event) => setGoal(event.target.value)}
         rows={3}
-        placeholder="先写比较目标，再选一个方案。例如：成功把握不低于 70% 的前提下，末例入组不晚于 18 个月，成本最低……"
+        placeholder="先写比较目标，再选一个方案。例如：成功把握不低于 70% 的前提下，平均研究时长不超过 18 个月，成本最低……"
       />
       <fieldset>
         <legend className="text-caption text-text-3">选定方案</legend>

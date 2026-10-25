@@ -208,41 +208,6 @@
       "createdAt": "2026-09-27T01:07:00.000Z"
     }
   ],
-  "todos": [
-    {
-      "id": "std_1:contact",
-      "kind": "contact",
-      "studyId": "std_1",
-      "title": "P-0192 待确认联系",
-      "detail": "EV-201 二线 NSCLC：单臂 II 期还是随机",
-      "action": {
-        "label": "去确认",
-        "tab": "matching"
-      }
-    },
-    {
-      "id": "std_1:evidence",
-      "kind": "evidence",
-      "studyId": "std_1",
-      "title": "1 人待补证",
-      "detail": "EV-201 二线 NSCLC：单臂 II 期还是随机",
-      "action": {
-        "label": "去看缺口",
-        "tab": "matching"
-      }
-    },
-    {
-      "id": "std_1:site:ste_07",
-      "kind": "site",
-      "studyId": "std_1",
-      "title": "中心 07 的资料还没有核实过",
-      "detail": "EV-201 二线 NSCLC：单臂 II 期还是随机",
-      "action": {
-        "label": "去看中心",
-        "tab": "matching"
-      }
-    }
-  ],
   "reviews": [
     {
       "id": "rvw_1",

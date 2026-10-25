@@ -465,6 +465,30 @@
       "message": "/meta-analysis 把这些试验合并成一个效应量",
       "expect": "meta-analysis",
       "note": "a leading /<capability-id> routes by name; the model is not asked"
+    },
+    {
+      "id": "vcr-native-matching",
+      "source": "VCR reset 2026-10-25",
+      "message": "Here is a synthetic patient summary and a trial protocol. Match the patient to its criteria and show unknown items with source evidence.",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-native-population",
+      "source": "VCR reset 2026-10-25",
+      "message": "Generate a virtual cohort from these declared published baseline assumptions, then inspect one virtual patient without treating the rows as observations.",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-native-comparator",
+      "source": "VCR reset 2026-10-25",
+      "message": "Assess whether these trial and external-control datasets can support a comparator, and explain missingness and time-zero alignment before analysis.",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-native-design",
+      "source": "VCR reset 2026-10-25",
+      "message": "Compare two virtual trial designs using the saved cohort and control model. Show simulated power and study duration with explicit assumptions.",
+      "expect": "none"
     }
   ]
 }

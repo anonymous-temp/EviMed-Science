@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_EXPORT_OUTLINES, VCR_RUN_CAPABILITIES, VcrOrchestrator,
+  VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_EXPORT_OUTLINES, VCR_RUN_CAPABILITIES, VcrOrchestrator,
   vcrAssumptionConflicts, vcrBindAssumptions, vcrBuildStages, vcrDefaultBrief, vcrDesignPriorFrom, vcrDispatchId, vcrEvidenceProduct, vcrExportBriefLines,
   vcrGapsForRule, vcrIdleStepStatus, vcrJobKindFor, vcrModelApplicabilityIssues, vcrPopulationVariables,
   vcrProductsOfSteps, vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
@@ -349,7 +349,7 @@ test("a runtime reserved for another dispatch is not the export's run; the resea
 test("there are exactly seven notices, and they are the domain's seven: the five of the plan, the new-evidence notice of the flywheel (F24) and the end of a computation somebody asked for (R10)", () => {
   assert.equal(VCR_NOTICE_KINDS, VCR_NOTIFICATION_KINDS);
   assert.deepEqual([...VCR_NOTICE_KINDS],
-    ["package_ready", "not_estimable", "budget_confirm", "new_candidates", "accrual_off_forecast", "new_evidence", "job_finished"]);
+    ["package_ready", "not_estimable", "budget_confirm", "new_evidence", "job_finished"]);
 });
 
 test("a finished computation says what was computed and the one number a reader wants first, from the engine's own measures", async () => {
@@ -416,13 +416,11 @@ test("each notice states the fact, in the study's own words, keyed by its own ev
   await notifier.notEstimable(study, { resultId: "res_1", rule: "effective_sample_size_below_floor", what: "对照分析",
     gaps: ["同期治疗数据"] });
   await notifier.budgetConfirm(study, { id: "job_1", cpuSecondsLimit: 1_800 });
-  await notifier.accrualOffForecast(study, { forecastId: "fct_1", predicted: 120, actual: 84, byMonth: "2027-03" });
 
   assert.deepEqual(sent.map((item) => item.idempotencyKey), [
     "vcr:std_1:package:study_package:exp_1:u1",
     "vcr:std_1:not-estimable:res_1:u1",
     "vcr:std_1:budget:job_1:u1",
-    "vcr:std_1:accrual:fct_1:u1",
   ]);
   assert.match(sent[0].title, /^EV-201 二线 NSCLC：研究包完成$/);
   assert.match(sent[0].body, /方案 B 成功把握 71%，高于方案 A；还有 3 项缺口/);
@@ -430,8 +428,7 @@ test("each notice states the fact, in the study's own words, keyed by its own ev
   assert.match(sent[1].body, /有效样本量低于下限/);
   assert.match(sent[1].body, /缺：同期治疗数据/);
   assert.match(sent[2].body, /约 30 分钟机时/);
-  assert.match(sent[3].body, /预测 120 例，实际 84 例/);
-  assert.deepEqual(sent.map((item) => item.severity), ["info", "attention", "attention", "attention"]);
+  assert.deepEqual(sent.map((item) => item.severity), ["info", "attention", "attention"]);
   for (const item of sent) {
     assert.equal(item.source.type, "vcr");
     assert.match(item.source.id, /^std_1\//);
@@ -439,29 +436,13 @@ test("each notice states the fact, in the study's own words, keyed by its own ev
   }
 });
 
-test("new candidates go to the coordinators and the lead, not to the statistician", async () => {
-  const { sent, notifier } = notifierFixture({
-    members: [
-      { userId: "lead", role: "lead" },
-      { userId: "coordinator", role: "recruiter" },
-      { userId: "site", role: "site" },
-      { userId: "statistician", role: "statistical_reviewer" },
-      { userId: "viewer", role: "viewer" },
-    ],
-  });
-  await notifier.newCandidates(study, { batchKey: "2026-09-28", candidates: 12, needsEvidence: 4 });
-  assert.deepEqual(sent.map((item) => item.userId).sort(), ["coordinator", "lead", "site"]);
-  assert.match(sent[0].title, /有 12 位新的匹配候选，其中 4 人还缺证据/);
-  assert.match(sent[0].body, /联系之前需要协调员逐人确认/);
-  // One event, many readers: the key carries the reader so the inbox does not
-  // fold a coordinator's copy into the lead's.
-  assert.equal(new Set(sent.map((item) => item.idempotencyKey)).size, 3);
+test("the notifier has no recruitment side effects or operational deviation notices",()=>{
+ const {notifier}=notifierFixture();assert.equal(typeof notifier.newCandidates,"undefined");assert.equal(typeof notifier.accrualOffForecast,"undefined");
 });
 
-test("with no coordinator named, the owner hears it: a notice nobody gets did not happen", async () => {
-  const { sent, notifier } = notifierFixture({ members: [{ userId: "statistician", role: "statistical_reviewer" }] });
-  await notifier.newCandidates(study, { batchKey: "2026-09-28", candidates: 3 });
-  assert.deepEqual(sent.map((item) => item.userId), ["u1"]);
+test("research notices do not resolve recruiters or contact roles",async()=>{
+ const {notifier,sent}=notifierFixture({members:[{userId:"old-recruiter",role:"recruiter"}]});
+ await notifier.packageReady(study,{exportId:"exp_safe"});assert.deepEqual(sent.map(row=>row.userId),["u1"]);
 });
 
 test("an inbox that is down is counted and does not stop a tick; a replay is taken as already sent", async () => {
@@ -494,8 +475,8 @@ test("a study with no name is still named in a notice", () => {
   assert.equal(vcrStudyName({ name: "x".repeat(50) }).length, 30, "a title never runs away");
 });
 
-test("the accrual tolerance is a number with a reason, and a study may set its own", () => {
-  assert.equal(VCR_ACCRUAL_TOLERANCE, 0.2);
+test("recruitment notifications are absent from the active domain catalogue",()=>{
+ assert.equal(VCR_NOTICE_KINDS.includes("new_candidates"),false);assert.equal(VCR_NOTICE_KINDS.includes("accrual_off_forecast"),false);
 });
 
 
@@ -741,7 +722,7 @@ test("populations, patient sets and grids are built as their own schemas, and a 
   assert.equal(ready.stages[0].jobKind, "generate_patients");
   assert.deepEqual(ready.stages[0].derived, [{ from: "object", table: "population" }]);
   assert.equal(ready.stages[0].scenario.truth.hazardRatio, 0.7, "the cards' truth is laid over the patients too");
-  assert.deepEqual(ready.stages[0].detail, { modelId: "reference-time-to-event", modelVersion: "1.0.0", timeUnitBasis: { unit: "months", basis: "assumed" } },
+  assert.deepEqual(ready.stages[0].detail, { modelId: "mdl_reference", modelVersion: "1.0.0", populationId: "pop_1", populationVersion: null, timeUnitBasis: { unit: "months", basis: "assumed" } },
     "and the scenario says the unit its times are in, which here nobody stated");
   const noEndpoint = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, scenario: { design: { nTreat: 6 } } } }, { ...context, definition: null, populations: [{ id: "pop_1", resultId: "r" }] }));
   assert.equal(noEndpoint.refused.code, "vcr_scenario_endpoint_missing");

@@ -6,7 +6,6 @@ import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { PatientsTab } from "./PatientsTab";
 import { renderTab } from "../__fixtures__/tabFrame";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
-import { VCR_NO_DEFINITION } from "../vcrText";
 
 /**
  * 虚拟患者, the owner's page (R19; audit B §4.5): a list of people with their record, not one example patient and a pile of cards.
@@ -315,11 +314,7 @@ describe("虚拟患者 · the charts", () => {
     expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
   });
 
-  it("says the first sentence is missing on a study nobody has described", async () => {
-    installVcrServer(network.productRequest, { [tab("patients")]: fixture("empty/patients.json") });
-    renderTab(<PatientsTab studyId={STUDY_ID} study={readVcrStudy(fixture("empty/study.json"))} />);
-    expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
-  });
+
 });
 
 describe("虚拟患者 · what the people are measured against", () => {
@@ -421,7 +416,7 @@ describe("虚拟患者 · what the band offers", () => {
     await screen.findByRole("table", { name: "患者" });
     await userEvent.click(within(band(container)).getByRole("button", { name: "下载 CSV" }));
     await waitFor(() => expect(click).toHaveBeenCalled());
-    expect(String(web.fetchWithWebAuth.mock.calls[0][0])).toMatch(/\/vcr\/studies\/std_1\/records\/res_10\.csv$/);
+    expect(String(web.fetchWithWebAuth.mock.calls[0][0])).toMatch(/\/vcr\/studies\/std_1\/records\/res_7\.csv$/);
     expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe("virtual-patients.csv");
 
     click.mockClear();
@@ -432,27 +427,9 @@ describe("虚拟患者 · what the band offers", () => {
     click.mockRestore();
   });
 
-  it("generates again with one request and stays on the page: no navigation, no toast that promises a result", async () => {
-    const { container, spies } = draw();
-    await screen.findByRole("table", { name: "患者" });
-    await userEvent.click(within(band(container)).getByRole("button", { name: "重新生成" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "patients" }));
-    expect(network.productRequest.mock.calls.filter(([path, method]) => String(path).endsWith("/run") && method === "POST")).toHaveLength(1);
-    await waitFor(() => expect(spies.refresh).toHaveBeenCalled());
-    expect(toasts.success).not.toHaveBeenCalled();
-    expect(screen.getByTestId("where")).toHaveTextContent("");
-  });
 
-  it("opens the settings that made the people, as the population's own numbers", async () => {
-    installVcrServer(network.productRequest, {
-      [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: { kind: "population", objectId: "pop_1", title: "人群设定", settings: [{ path: "n", label: "生成记录数", value: 1000, unit: "条", integer: true, min: 1, max: null }] },
-    });
-    const { container } = draw();
-    await screen.findByRole("table", { name: "患者" });
-    await userEvent.click(within(band(container)).getByRole("button", { name: "改设定" }));
-    const drawer = await screen.findByRole("dialog", { name: "改人群设定" });
-    expect(await within(drawer).findByLabelText("生成记录数（条）")).toHaveValue(1000);
-  });
+
+
 });
 
 describe("虚拟患者 · a study with no people yet", () => {
@@ -465,7 +442,7 @@ describe("虚拟患者 · a study with no people yet", () => {
       return node as HTMLElement;
     });
     expect(within(recipe).getByRole("button", { name: "生成虚拟患者" })).toBeInTheDocument();
-    expect(container.querySelector("[data-page-chrome]")).toBeNull();
+    expect(screen.getByRole("button", { name: "预测验证" })).toBeInTheDocument();
     expect(screen.queryByText("预测与验证")).toBeNull();
     expect(screen.queryByText("模型评估")).toBeNull();
     expect(container.querySelector("[data-vcr-example]")).toBeNull();
@@ -481,7 +458,7 @@ describe("虚拟患者 · a study with no people yet", () => {
       return node as HTMLElement;
     });
     expect(running).toHaveTextContent("生成虚拟患者");
-    expect(container.querySelector("[data-page-chrome]")).toBeNull();
+    expect(screen.getByRole("button", { name: "预测验证" })).toBeInTheDocument();
     expect(screen.queryByText("预测与验证")).toBeNull();
     expect(screen.queryByRole("button", { name: /导入/ })).toBeNull();
   });
@@ -491,21 +468,19 @@ describe("虚拟患者 · the second view, 预测验证", () => {
   const history = { id: "history-1", kind: "history", createdAt: "2026-01-01", hash: "h", summary: { origin: "2026-01-01", subjects: 40, events: 80 } };
   const longitudinal = (records: unknown[]) => ({ available: true, records, providers: [], templates: { events: { columns: ["subject_id"], example: ["synthetic"] }, prediction: { schema: 1 } } });
 
-  it("exists only when there is follow-up history or a prediction: with none the band has no switch and the tab no panel", async () => {
-    installVcrServer(network.productRequest, { [tab("longitudinal")]: longitudinal([]) });
+  it("keeps independently available longitudinal records reachable when the patients endpoint fails", async () => {
+    installVcrServer(network.productRequest, { [tab("patients")]: () => { throw new Error("patients unavailable"); }, [tab("longitudinal")]: longitudinal([history]) });
     const { container } = draw();
-    await screen.findByRole("table", { name: "患者" });
-    expect(within(band(container)).queryByRole("button", { name: "预测验证" })).toBeNull();
-    expect(screen.queryByLabelText("输入历史")).toBeNull();
+    await screen.findByRole("button", { name: "重试" });
+    await userEvent.click(within(band(container)).getByRole("button", { name: "预测验证" }));
+    expect(await screen.findByLabelText("输入历史")).toBeInTheDocument();
+    await userEvent.click(within(band(container)).getByRole("button", { name: "虚拟患者" }));
+    expect(await screen.findByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
-  it("is left alone, with no error line, when the records cannot be read", async () => {
-    // The longitudinal route is not in the fixture server: it answers with a failure, and the patients view is unaffected.
-    const { container } = draw();
-    await screen.findByRole("table", { name: "患者" });
-    expect(within(band(container)).queryByRole("button", { name: "预测验证" })).toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
+
+
+
 
   it("is a switch in the band, beside the other view, and swaps the body — the band keeps its one row", async () => {
     installVcrServer(network.productRequest, { [tab("longitudinal")]: longitudinal([history]) });

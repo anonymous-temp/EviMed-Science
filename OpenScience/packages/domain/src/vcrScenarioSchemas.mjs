@@ -320,6 +320,8 @@ const SIMULATE_FIELDS = {
 
 /** A generator: two arms drawn from one endpoint family's reference simulator. */
 const patientsFields = () => ({
+  cohortRules: COHORT_STEPS,
+  pairing: object({ key: req(string({ minLength: 1, maxLength: 200 })), replicate: req(integer({ min: 1, max: 10000 })) }),
   design: req(object({ nTreat: req(integer({ min: 1, max: 1_000_000 })), nControl: integer({ min: 0, max: 1_000_000 }) })),
   endpoint: req(ENDPOINT()),
   truth: req(object(truthFields({ generator: true, extra: { covariateEffects: COVARIATE_EFFECTS } }), { exactlyOne: truthGroups() })),
@@ -414,7 +416,39 @@ const SINGLE_ARM_DESIGN = is('design.kind', 'single_arm')
  * Per method: the object the engine's `scenario` must be. Read by
  * `validateScenario` here and by `vcr_validate_job` in R from the snapshot.
  */
+const PROGNOSTIC_TERM = object({
+  column: req(COLUMN), coefficient: req(number()), unit: req(string({ maxLength: 80 })),
+  transform: req(string({ values: ['identity', 'log', 'log1p', 'square', 'indicator'] })),
+  center: req(number()), scale: req(number({ gt: 0 })),
+  category: string({ maxLength: 100 }), levels: array(string({ maxLength: 100 }), { min: 2, max: 100, unique: true }),
+});
+const PROGNOSTIC_TERMS = req(array(PROGNOSTIC_TERM, { min: 1, max: 100 }));
+const PROGNOSTIC_MODEL = { t: 'variant', on: 'family', variants: {
+  linear: { intercept: req(number()), residualSd: number({ gt: 0 }), terms: PROGNOSTIC_TERMS },
+  logistic: { intercept: req(number()), terms: PROGNOSTIC_TERMS },
+  cox: { terms: PROGNOSTIC_TERMS, baseline: object({ reference: req(string({ values: ['zero', 'centered'] })), survival: req(number({ min: 0, max: 1 })), horizon: req(number({ gt: 0 })), timeUnit: req(string({ values: [...VCR_TIME_UNITS] })) }) },
+} };
+
 export const VCR_SCENARIO_SCHEMAS = deepFreeze({
+  'model.survival_fit': object({
+    inputId: req(INPUT_REF), timeColumn: req(COLUMN), statusColumn: req(COLUMN),
+    statusEncoding: req(string({ values: ['event', 'censor'] })), idColumn: COLUMN,
+    distribution: req(string({ values: ['exponential', 'weibull', 'lognormal', 'loglogistic'] })),
+    timeUnit: req(string({ values: [...VCR_TIME_UNITS] })),
+    horizons: req(array(number({ gt: 0 }), { min: 1, max: 100, increasing: true })),
+    sourceCondition: string({ values: ['unspecified', 'control', 'natural_history', 'standard_care'], default: 'unspecified' }),
+    armColumn: { ...COLUMN, reqWhen: is('sourceCondition', 'control', 'natural_history', 'standard_care') }, armValue: string({ maxLength: 80 }),
+    parameterColumn: COLUMN, parameterValue: string({ maxLength: 80 }),
+  }, { requires: { armColumn: ['armValue'], armValue: ['armColumn'], parameterColumn: ['parameterValue'], parameterValue: ['parameterColumn'] } }),
+  'model.prognostic_apply': object({
+    inputId: req(INPUT_REF), idColumn: req(COLUMN), cohortRules: COHORT_STEPS,
+    sourceCondition: req(string({ values: ['control', 'natural_history', 'standard_care'] })),
+    endpoint: req(object({ type: req(string({ valuesBy: { path: 'model.family', map: { linear: ['continuous'], logistic: ['binary'], cox: ['time_to_event'] } } })),
+      horizon: req(number({ gt: 0 })), timeUnit: req(string({ values: [...VCR_TIME_UNITS] })) })),
+    inputUnits: req({ t: 'map', values: string({ maxLength: 80 }), min: 1, max: 100 }),
+    model: req(PROGNOSTIC_MODEL),
+  }),
+
   'profile.snapshot': object({}),
 
   'cohort.build': object({
@@ -493,6 +527,8 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   // random, monotone). The effect is required, as in every generator: a typo must not read as "no effect". Covariate effects take
   // their covariates from a stored population and are refused without one.
   'patients.longitudinal': object({
+  cohortRules: COHORT_STEPS,
+  pairing: object({ key: req(string({ minLength: 1, maxLength: 200 })), replicate: req(integer({ min: 1, max: 10000 })) }),
     design: req(object({ nTreat: req(integer({ min: 1, max: 1_000_000 })), nControl: integer({ min: 0, max: 1_000_000 }) })),
     endpoint: req(ENDPOINT()),
     visits: req(array(number({ min: 0, unit: 'time units' }), { min: 2, max: 50, increasing: true })),

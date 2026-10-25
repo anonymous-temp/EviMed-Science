@@ -161,7 +161,7 @@ test("a reply in a study's conversation that reports a number the engine did not
   const reply = "1:1 固定设计需要 845 例事件，约 11,800 名患者。\n模拟功效 91.5%，不过我估计在 93.1% 左右也说得过去。\n你想先看哪个方案？";
   assert.ok(await review.considerReply(identity, { id: "run_vcr_1", sessionId: "chat-vcr" }, { replyText: reply, question: "样本量？", turnSeq: 3 }, { studyId: "std_1" }));
   assert.equal(await review.processReplyChecks("worker-vcr"), 1);
-  assert.deepEqual(calls, [identity]);
+  assert.deepEqual(calls, [{...identity,runId:"run_vcr_1",sessionId:"chat-vcr",studyId:"std_1",turnSeq:3}]);
   const [check] = await review.replyChecksForSession(identity, "chat-vcr");
   assert.equal(check.status, "done");
   assert.equal(check.verdicts.length, 2, "11,800 is 11,799 to three digits only if the engine computed it: it did not here");

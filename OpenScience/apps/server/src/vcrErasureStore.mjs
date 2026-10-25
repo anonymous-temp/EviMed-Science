@@ -81,7 +81,7 @@ export function redactedEvidence(evidence, erased) {
 
 /** The store of withdrawals, retirements and basis marks. @extends VcrStoreBase */
 export class VcrErasureStore extends VcrStoreBase {
-  /** @param {{ database: any, matchStore?: { transitionReferral: Function } | null, statementTimeoutMs?: number }} options */
+  /** @param {{ database: any, matchStore?: any, statementTimeoutMs?: number }} options */
   constructor({ database, matchStore = null, statementTimeoutMs }) {
     super({ database, ...(statementTimeoutMs ? { statementTimeoutMs } : {}) });
     this.matchStore = matchStore;
@@ -275,7 +275,7 @@ export class VcrErasureStore extends VcrStoreBase {
 
   /**
    * A subject's consent withdrawn: every document of theirs, and the projections of them, is erased; what was read from them
-   * is deleted or redacted; they leave every roster; their open referrals close as 「退出」. Idempotent: asked again, it finds
+   * is deleted or redacted; they leave every roster; their scientific evidence remains marked as withdrawn. Idempotent: asked again, it finds
    * the same documents (already erased) and answers the files to overwrite again.
    * @param {{ studyId: string, userId: string, actor: string, subjectKey: string, reason?: string }} input
    */
@@ -286,22 +286,16 @@ export class VcrErasureStore extends VcrStoreBase {
       const known = await this.#holdsSubject(client, studyId, subjectKey, files.length);
       if (!known) return null;
       const erased = await this.#erase(client, { studyId, userId, actor, fileIds: files.map((/** @type {any} */ row) => String(row.id)), subjectKey, cause: "withdrawn", reason });
-      let referralsClosed = 0;
-      for (const referral of (await client.query(
-        `SELECT id FROM ${VCR_SCHEMA}.referrals WHERE study_id=$1 AND subject_key=$2 AND state NOT IN ('withdrawn','screen_failed')`, [studyId, subjectKey])).rows) {
-        const moved = await this.matchStore?.transitionReferral({ referralId: referral.id, studyId, to: "withdrawn", actor, userId, note: "知情同意已撤回", guard: () => ({ ok: true }), client });
-        if (moved?.ok) referralsClosed += 1;
-      }
       await client.query(`INSERT INTO ${VCR_SCHEMA}.subject_withdrawals (study_id, subject_key, withdrawn_by, detail)
         VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (study_id, subject_key) DO NOTHING`, [studyId, subjectKey, actor, JSON.stringify({ reason })]);
       await this.audit({ client, studyId, userId, actor, action: "subject.withdraw", object: subjectKey,
-        detail: { ...erased.counts, referralsClosed, reason } });
-      return { subjectKey, ...erased, counts: { ...erased.counts, referralsClosed } };
+        detail: { ...erased.counts, reason } });
+      return { subjectKey, ...erased, counts: erased.counts };
     });
   }
 
   /**
-   * Whether the study holds this subject at all: a document, a fact, an assessment, a referral or a candidate row. A subject
+   * Whether the study holds this subject at all: a document, a fact, an assessment or a candidate row. A subject
    * the study has never heard of is not withdrawn (and not made up).
    * @param {any} client @param {string} studyId @param {string} subjectKey @param {number} documents
    */
@@ -311,7 +305,6 @@ export class VcrErasureStore extends VcrStoreBase {
       `SELECT (EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2)
-        OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.referrals WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_candidates WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1 AND subject_key=$2)) AS held`, [studyId, subjectKey])).rows[0];
     return row?.held === true;

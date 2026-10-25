@@ -53,7 +53,6 @@ export const VCR_SCENARIO_HELP_VERSION = 1
 export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
   pool_evidence: Object.freeze(['parameter', 'endpointKey', 'calibres', 'armRole', 'target', 'method']),
   match_criteria: Object.freeze([]),
-  accrual_forecast: Object.freeze(['target', 'eventTarget', 'eventHazard', 'byTimes']),
 })
 
 /**
@@ -263,6 +262,8 @@ const ADULT = [{ name: 'adult', rule: AGE_RULE }]
  * @type {Readonly<Record<string, ReadonlyArray<{ label: string, scenario: Record<string, any> }>>>}
  */
 export const VCR_SCENARIO_EXAMPLES = Object.freeze({
+  'model.survival_fit': [{ label: 'Fit a Weibull baseline to a selected right-censored endpoint', scenario: { inputId: 'snp_example', idColumn: 'USUBJID', timeColumn: 'AVAL', statusColumn: 'CNSR', statusEncoding: 'censor', distribution: 'weibull', timeUnit: 'months', horizons: [6, 12, 24] } }],
+  'model.prognostic_apply': [{ label: 'Apply a source-bound logistic equation; illustrative coefficients only', scenario: { inputId: 'snp_example', idColumn: 'USUBJID', sourceCondition: 'control', endpoint: { type: 'binary', horizon: 12, timeUnit: 'months' }, inputUnits: { age: 'years' }, model: { family: 'logistic', intercept: -3, terms: [{ column: 'age', coefficient: 0.02, transform: 'identity', unit: 'years', center: 50, scale: 1 }] } } }],
   'profile.snapshot': [{ label: 'nothing to state: the snapshot is the input', scenario: {} }],
   'cohort.build': [{ label: 'two inclusion steps on a subject table', scenario: {
     rules: [{ name: 'adult', rule: AGE_RULE }, { name: 'no prior therapy', rule: { op: 'any', operands: [{ op: 'missing', column: 'prior' }, { op: 'compare', column: 'prior', comparator: 'eq', value: false }] }, unknownAs: 'include' }],
@@ -389,12 +390,21 @@ function designNotes(method) {
 }
 
 /**
- * What a row's type and range cannot say: the scale a number is on. Read by the model that writes the scenario, next to the rows.
- * @type {Readonly<Record<string, readonly string[]>>}
+ * What a row's type and range cannot say: the scale and pairing policy a number uses.
+ * @type {readonly string[]}
  */
+const PATIENT_PAIRING_NOTES = Object.freeze(["A selected immutable population uses a stable cohort pairing key by default. Explicit pairing.key and pairing.replicate select the comparison group and an independent L'Ecuyer-CMRG replicate stream. Common random numbers require the same key, seed, method and member ordering; changing the replicate changes random draws, while member identity stays fixed. A paired synthetic scenario does not identify an individual causal effect."])
+
+/** @type {Readonly<Record<string, readonly string[]>>} */
 const METHOD_NOTES = Object.freeze({
+  'patients.continuous': PATIENT_PAIRING_NOTES,
+  'patients.binary': PATIENT_PAIRING_NOTES,
+  'patients.time_to_event': PATIENT_PAIRING_NOTES,
+  'patients.longitudinal': PATIENT_PAIRING_NOTES,
+  'model.survival_fit': ['Uses survival::survreg with a fixed intercept-only formula and four closed distributions. It fits a population baseline, not an individual digital twin.', 'Declare and select the source treatment group before using a fit as a control baseline. Never infer exposure across an unobserved trial period. Select exactly one time/event row per observed patient; CNSR is a censor indicator and must use statusEncoding=censor. Reconstructed pseudo-IPD retains its source and omitted reconstruction uncertainty.', 'Median P10/P50/P90 describe delta-method parameter uncertainty, not patient-time percentiles or trial success probabilities. Baseline scenarios hold fitted shape fixed. Only exponential and Weibull currently have patient/design adapters; other fitted curves remain available. Observed survival-time units must agree with the frozen field map.'],
+  'model.prognostic_apply': ['Apply only an immutable source-bound typed equation. Missing predictors, category mappings or units stay unknown; never fill them with zero. Observed predictor units come from the selected frozen field map, while synthetic units are explicit scenario declarations. Source horizon units stay bound to the literal publication.', 'A Cox equation without baseline survival yields relative scores only. Baseline centering, horizon and units must match the publication.', 'Predicted control outcomes are descriptive benchmarks. They do not identify treatment effects, replace observed controls or increase effective sample size.'],
   'accrual.poisson_gamma': Object.freeze([
-    'eventTarget counts events among every patient the forecast follows: the patients still to enrol and the patients already enrolled (the sum of sites[].enrolled, which the platform fills from the study\'s ledger), so it is at most the target, or the patients already enrolled if there are more (scenario_value_invalid at eventTarget above that). The events of the enrolled patients are simulated, not read: the engine is given no observed event count, so it draws how long each enrolled patient has been followed from how long the site has been open (sites[].exposureTime) and an event time after enrolment from eventHazard; diagnostics.eventForecast says how many events that drew as already happened. With every patient already enrolled, last_patient_in_months is 0 and target_events_months is still forecast. Write eventHazard with eventTarget.',
+    'eventTarget counts events among every patient the forecast follows: the patients still to enrol and the patients already enrolled (the sum of explicitly supplied sites[].enrolled design assumptions; no operational ledger is read), so it is at most the target, or the patients already enrolled if there are more (scenario_value_invalid at eventTarget above that). The events of the enrolled patients are simulated, not read: the engine is given no observed event count, so it draws how long each enrolled patient has been followed from how long the site has been open (sites[].exposureTime) and an event time after enrolment from eventHazard; diagnostics.eventForecast says how many events that drew as already happened. With every patient already enrolled, last_patient_in_months is 0 and target_events_months is still forecast. Write eventHazard with eventTarget.',
   ]),
   'comparator.map_prior': Object.freeze([
     'tauPrior is the prior on the between-study spread tau, on the analysis scale (a logit for events / n): half_normal has density proportional to exp(-tau^2 / (2 scale^2)), half_cauchy proportional to 1 / (1 + (tau / scale)^2) over the whole half line, and uniform is flat on [0, scale] and zero beyond scale. With two historical studies a half-Cauchy prior leaves the predictive spread without a finite value (diagnostics.tauPrior says so); three or more, or a half-normal prior, make it finite. current.estimate and current.se are on the analysis scale as well: the logit of the control rate (and its standard error on that scale) on the events / n path, the scale of historical.estimate on the estimate / se path.',

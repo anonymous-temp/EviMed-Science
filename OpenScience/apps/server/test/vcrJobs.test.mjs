@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatesForJob,
-  VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
+  VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrBindScientificInputUnits, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
 import { VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
@@ -305,4 +305,26 @@ test("the jobs that are about one of the study's objects are told from those tha
   }
   // a job that is about no object of these five is not asked for one
   for (const kind of ["pool_evidence", "reconstruct_km", "accrual_forecast", "match_criteria", "profile_snapshot"]) assert.equal(vcrJobObjectKind(kind), null, kind);
+});
+
+
+test("a survival-baseline fit binds a verified reconstruction to inputId without widening comparator sources", () => {
+  const entry = { resultId: "res_1", table: "reconstructed-ipd", bindTo: "inputId" };
+  const resolved = { id: "res_1:reconstructed-ipd", valueSource: "reconstructed" };
+  assert.deepEqual(vcrBindReconstruction("fit_survival_model", { distribution: "weibull" }, [entry], [resolved]),
+    { ok: true, scenario: { distribution: "weibull", inputId: resolved.id } });
+  assert.equal(vcrBindReconstruction("fit_survival_model", { inputId: "forged" }, [entry], [resolved]).ok, false);
+  assert.equal(vcrBindReconstruction("weight_comparator", {}, [entry], [resolved]).ok, false);
+  assert.equal(vcrBindReconstruction("fit_survival_model", {}, [entry], [{ ...resolved, valueSource: "synthetic" }]).ok, false);
+  assert.equal(vcrResultKindFor("fit_survival_model"), "model_fit");
+  assert.equal(vcrResultKindFor("apply_prognostic_model"), "model_prediction");
+});
+
+test('frozen observed-table units replace caller labels, while synthetic units stay declared assumptions',()=>{
+  const scenario={inputId:'snp:1',inputUnits:{age:'years'},model:{terms:[{column:'age',unit:'years',transform:'identity'}]}};
+  const input={id:'snp:1',valueSource:'observed',columnUnits:{age:'months'}};
+  const bound=vcrBindScientificInputUnits('model.prognostic_apply',scenario,[input]);assert.equal(bound.scenario.inputUnits.age,'months');assert.equal(bound.detail.basis,'frozen_snapshot_field_map');
+  const missing=vcrBindScientificInputUnits('model.prognostic_apply',scenario,[{...input,columnUnits:{}}]);assert.equal(missing.scenario.inputUnits.age,'unknown');
+  const synthetic=vcrBindScientificInputUnits('model.prognostic_apply',scenario,[{...input,valueSource:'synthetic'}]);assert.equal(synthetic.scenario.inputUnits.age,'years');assert.equal(synthetic.detail.basis,'declared_synthetic_scenario');
+  assert.throws(()=>vcrBindScientificInputUnits('model.survival_fit',{inputId:'snp:1',timeColumn:'age',timeUnit:'years'},[input]),{code:'vcr_model_not_applicable'});
 });

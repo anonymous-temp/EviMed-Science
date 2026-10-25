@@ -39,18 +39,18 @@ import { fetchWebMe, fetchWithWebAuth, WebApiError, webApiBase, type WebMe } fro
 import { productRequest } from "./productClient";
 import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
 import {
-  assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
+  assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody,
   definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody,
-  studyPatchBody, transitionBody, trialSearchBody,
-  type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
+  studyPatchBody, trialSearchBody,
+  type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
   type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody, type VcrQualityBasis,
-  type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrRegulatoryContactBody, type VcrReviewBody, type VcrTransitionBody,
+  type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrRegulatoryContactBody, type VcrReviewBody,
 } from "./vcrBodies";
 
 export type {
-  VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
+  VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
   VcrDefinitionUseBody, VcrJobBody, VcrQualityBasis, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
-  VcrPatchBody, VcrRegulatoryContactBody, VcrReviewBody, VcrTransitionBody,
+  VcrPatchBody, VcrRegulatoryContactBody, VcrReviewBody,
 } from "./vcrBodies";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -84,16 +84,13 @@ export const VCR_ACTIONS: readonly VcrAction[] = Object.freeze(["cohort", "patie
 export type VcrJobState = "queued" | "running" | "succeeded" | "failed" | "canceled" | "awaiting_budget";
 export type VcrCriterionState = "satisfied" | "not_satisfied" | "unknown" | "pending_recheck";
 export type VcrEligibility = "eligible" | "ineligible" | "insufficient_evidence" | "pending";
-export type VcrReferralState =
-  | "candidate" | "needs_evidence" | "contactable" | "contacted" | "interested" | "referred"
-  | "site_responded" | "screening" | "enrolled" | "screen_failed" | "withdrawn";
 export type VcrComparatorRoute =
   | "prognostic_adjustment" | "external_control" | "literature_control" | "model_comparator" | "hybrid_control";
 export type VcrExportKind =
   | "study_package" | "cde_communication_pack" | "simulation_report" | "validation_pack"
   | "model_analysis_plan" | "model_analysis_report";
 export type VcrMemberRole =
-  | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "recruiter" | "site" | "viewer";
+  | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "viewer";
 /** The four counts that appear wherever a sample size does (`VCR_COUNT_KEYS`). */
 export type VcrCountKey =
   | "realPatients" | "events" | "effectiveSampleSize" | "generatedRecords"
@@ -254,7 +251,7 @@ export interface VcrPartial {
 
 /** One row of the home list (`GET /api/vcr/studies`). */
 export interface VcrStudySummary {
-  purpose?: "programme" | "calculation";
+  purpose?: "programme" | "calculation" | "task";
   id: string;
   projectId: string;
   name: string;
@@ -269,16 +266,6 @@ export interface VcrStudySummary {
   attention: VcrAttention[];
   updatedAt: string;
   createdAt?: string | null;
-}
-
-/** 「招募待办」, for an account with a recruiting role only. */
-export interface VcrRecruitTodo {
-  id: string;
-  kind: "contact" | "evidence" | "site";
-  title: string;
-  detail?: string | null;
-  studyId?: string | null;
-  action?: { label: string; tab?: VcrTabKey | null } | null;
 }
 
 export interface VcrReviewSummary {
@@ -308,8 +295,6 @@ export interface VcrReviewNote {
 /** The home page's payload. */
 export interface VcrHome {
   studies: VcrStudySummary[];
-  /** Present only for an account with `contact_patients`; absent otherwise. */
-  todos?: VcrRecruitTodo[];
   reviews?: VcrReviewNote[];
   /** The projects of the account's drafts (studies nobody has described yet): not in the list, and the sidebar leaves them out. */
   draftProjectIds: string[];
@@ -546,7 +531,7 @@ export interface VcrConversationRef {
 
 /** One study (`GET /api/vcr/studies/:id`). */
 export interface VcrStudy {
-  purpose?: "programme" | "calculation";
+  purpose?: "programme" | "calculation" | "task";
   id: string;
   projectId: string;
   name: string;
@@ -953,6 +938,13 @@ export interface VcrDimension {
 }
 
 export interface VcrComparatorTab {
+  selection?: { id: string; version: number | null; resultId: string | null; resultVersion: number | null; route: string } | null;
+  predictionBenchmark?: {
+    sourceCondition: string | null;
+    endpoint: { type: string; horizon: number | null; timeUnit: string | null } | null;
+    mean: VcrValue | null; outcomeSd: VcrValue | null; relativeScore: VcrValue | null;
+    absoluteRiskAvailable: boolean; causalEffectIdentified: false; limits: string[];
+  } | null;
   headline?: string | null;
   routes: VcrRoute[];
   curves: VcrCurve[];
@@ -1078,8 +1070,6 @@ export interface VcrTrialTab {
 export interface VcrCandidate {
   /** The subject's own key; also what `?candidate=` names. */
   id: string;
-  /** The referral this person has, when there is one: what 「确认后联系」 confirms. */
-  referralId?: string | null;
   summary: string;
   site?: string | null;
   eligibility: VcrEligibility;
@@ -1182,7 +1172,7 @@ export interface VcrMatchingTab {
   comparisons?: Array<{ protocol: VcrProtocolChoice; summary: string | null; asOf: string | null; evidenceGaps: Array<{ variable: string; reason: string }> }>;
   timeline?: VcrClinicalTimelineEntry[];
   /** The sub-tab the payload is for. */
-  view: "matching" | "referral" | "sites" | "followup";
+  view: "matching";
   /** False when the package is not composed here; the tab says so and nothing else waits. */
   available?: boolean;
   unavailable?: { code: string; message: string } | null;
@@ -1208,46 +1198,17 @@ export interface VcrMatchingTab {
     criteria: VcrCriterionJudgement[];
     /** 「不能判为符合：排除标准 E3 未知」 — always the reason, never a bare no. */
     verdict?: { text: string; note?: string | null } | null;
-    /** The only human stop in the module (plan §10.1). */
-    canContact?: boolean;
-    referralId?: string | null;
-    referralState?: VcrReferralState | null;
     priority?: VcrCandidate["priority"];
     /** Whether somebody countersigned — the page offers the countersignature only where nobody has. Never shown: see `reviewedByName`. */
     reviewedBy?: string | null;
     /** Who countersigned, by name (a neutral label when the account is gone). */
     reviewedByName?: string | null;
-    /** Every move on this person's referral, oldest first: to where, when, by whom — a name, never an account id (plan §7.2). */
-    trace?: Array<{ state: VcrReferralState; at: string | null; by: string | null; note: string | null }>;
   } | null;
   /** The main gaps across the undecidable ones. */
   gaps: Array<{ code: string; label: string; detail?: string | null; count: number | null }>;
   /** Excluded on a model's word alone: they wait here for a person (plan §7.1). */
   pendingReview?: { count: number; subjects: string[] } | null;
-  /** The referral ledger, one entry per state. */
-  ledger?: Array<{ state: VcrReferralState; count: number | null; note?: string | null; waiting?: boolean }>;
-  /** Predicted against actual enrolment. */
-  forecast?: {
-    target?: number | null;
-    xLabels?: string[];
-    actual?: Array<{ x: number; y: number | null }>;
-    median?: Array<{ x: number; y: number | null }>;
-    band?: Array<{ x: number; low: number | null; high: number | null }>;
-    markers?: Array<{ x: number; label: string }>;
-    rows?: VcrMetric[];
-    basis?: string[];
-    at?: string | null;
-  } | null;
   protocol?: { version: number; title: string | null } | null;
-  abilities?: { contact: boolean };
-  sites?: Array<{
-    id: string; name: string; place?: string | null; state: string; stateNote?: string | null;
-    capacity?: string | null; competing?: string | null; referred?: number | null;
-    waiting?: number | null; enrolled?: number | null; checkedAt?: string | null; alert?: string | null;
-    /** What the site still lacks to take referrals, and how many contacts it has (plan §7.2). */
-    needs?: string[]; contacts?: number;
-  }>;
-  followup?: Array<{ id: string; label: string; kind: string; detail?: string | null; at?: string | null }>;
   counts: VcrCounts | null;
 }
 
@@ -1770,8 +1731,8 @@ export function readVcrStudy(raw: unknown): VcrStudy {
   const value = obj(raw);
   const conversation = obj(value.conversation);
   return {
-    purpose: value.purpose === "calculation" ? "calculation" : "programme",
     ...(value as unknown as VcrStudy),
+    purpose: value.purpose === "calculation" || value.purpose === "task" ? value.purpose : "programme",
     conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true,
       ...(conversation.submitted === true ? { submitted: true } : {}), ...(conversation.awaitingInput === true ? { awaitingInput: true } : {}) },
     activity: readVcrActivity(value.activity),
@@ -1796,6 +1757,7 @@ export function readVcrSummary(raw: unknown): VcrStudySummary {
   const value = obj(raw);
   return {
     ...(value as unknown as VcrStudySummary),
+    purpose: value.purpose === "calculation" || value.purpose === "task" ? value.purpose : "programme",
     steps: readSteps(value.steps),
     conclusion: value.conclusion && typeof value.conclusion === "object" ? value.conclusion as VcrStudySummary["conclusion"] : null,
     attention: readAttention(value.attention),
@@ -1806,7 +1768,6 @@ export function readVcrHome(raw: unknown): VcrHome {
   const value = obj(raw);
   return {
     studies: arr(value.studies).map(readVcrSummary),
-    ...(Array.isArray(value.todos) ? { todos: arr(value.todos) as unknown as VcrRecruitTodo[] } : {}),
     ...(Array.isArray(value.reviews) ? { reviews: arr(value.reviews) as unknown as VcrReviewNote[] } : {}),
     draftProjectIds: strings(value.draftProjectIds),
   };
@@ -2032,8 +1993,20 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
   const rmst = obj(value.rmst);
   const gaps = obj(value.gaps);
   const verdict = obj(value.verdict);
+  const selection = obj(value.selection);
+  const benchmark = obj(value.predictionBenchmark);
+  const endpoint = obj(benchmark.endpoint);
   return {
     ...(value as unknown as VcrComparatorTab),
+    selection: typeof selection.id === "string" ? { id: selection.id, version: finite(selection.version), resultId: text(selection.resultId), resultVersion: finite(selection.resultVersion), route: text(selection.route) ?? "" } : null,
+    predictionBenchmark: Object.keys(benchmark).length ? {
+      sourceCondition: text(benchmark.sourceCondition),
+      endpoint: typeof endpoint.type === "string" ? { type: endpoint.type, horizon: finite(endpoint.horizon), timeUnit: text(endpoint.timeUnit) } : null,
+      mean: benchmark.mean ? readVcrValue(benchmark.mean) : null,
+      outcomeSd: benchmark.outcomeSd ? readVcrValue(benchmark.outcomeSd) : null,
+      relativeScore: benchmark.relativeScore ? readVcrValue(benchmark.relativeScore) : null,
+      absoluteRiskAvailable: benchmark.absoluteRiskAvailable === true, causalEffectIdentified: false, limits: strings(benchmark.limits),
+    } : null,
     routes: arr(value.routes) as unknown as VcrRoute[],
     curves: readCurves(value.curves),
     rmst: Object.keys(rmst).length ? { value: readVcrValue(rmst.value), tau: finite(rmst.tau), label: text(rmst.label) } : null,
@@ -2142,12 +2115,13 @@ function readPatientTrials(raw: unknown): VcrPatientTrials {
 }
 
 export function readVcrMatching(raw: unknown): VcrMatchingTab {
-  const value = obj(raw);
-  const selected = obj(value.selected);
-  const forecast = obj(value.forecast);
+  const value = { ...obj(raw) };
+  const selected = { ...obj(value.selected) };
+  for (const key of ["ledger", "forecast", "sites", "followup", "abilities"]) delete value[key];
+  for (const key of ["canContact", "referralId", "referralState", "trace"]) delete selected[key];
   return {
     ...(value as unknown as VcrMatchingTab),
-    view: (["matching", "referral", "sites", "followup"].includes(String(value.view)) ? value.view : "matching") as VcrMatchingTab["view"],
+    view: "matching",
     unavailable: value.unavailable && typeof value.unavailable === "object" ? value.unavailable as VcrMatchingTab["unavailable"] : null,
     funnel: arr(value.funnel) as unknown as VcrMatchingTab["funnel"],
     candidates: arr(value.candidates).map((item) => ({ ...(item as unknown as VcrCandidate), open: arr(item.open) as unknown as VcrCandidate["open"] })),
@@ -2156,20 +2130,11 @@ export function readVcrMatching(raw: unknown): VcrMatchingTab {
       candidate: { ...(selected.candidate as unknown as VcrCandidate), open: arr(obj(selected.candidate).open) as unknown as VcrCandidate["open"] },
       facts: arr(selected.facts) as unknown as NonNullable<VcrMatchingTab["selected"]>["facts"],
       criteria: arr(selected.criteria) as unknown as VcrCriterionJudgement[],
-      trace: arr(selected.trace) as unknown as NonNullable<NonNullable<VcrMatchingTab["selected"]>["trace"]>,
     } : null,
     // What is not an object is no page of trials (the raw key is dropped, not passed through): the tab reads as the other direction's.
     patientTrials: value.patientTrials && typeof value.patientTrials === "object" ? readPatientTrials(value.patientTrials) : undefined,
     gaps: arr(value.gaps) as unknown as VcrMatchingTab["gaps"],
     pendingReview: value.pendingReview && typeof value.pendingReview === "object" ? value.pendingReview as VcrMatchingTab["pendingReview"] : null,
-    ledger: arr(value.ledger) as unknown as VcrMatchingTab["ledger"],
-    forecast: Object.keys(forecast).length ? {
-      ...(forecast as Loose),
-      rows: arr(forecast.rows).map(readMetric), basis: strings(forecast.basis),
-      xLabels: strings(forecast.xLabels), actual: arr(forecast.actual), median: arr(forecast.median), band: arr(forecast.band), markers: arr(forecast.markers),
-    } as VcrMatchingTab["forecast"] : null,
-    sites: arr(value.sites) as unknown as VcrMatchingTab["sites"],
-    followup: arr(value.followup) as unknown as VcrMatchingTab["followup"],
     counts: readVcrCounts(value.counts),
   };
 }
@@ -2708,63 +2673,6 @@ export function setVcrMembers(studyId: string, input: VcrMemberBody) {
  */
 export function removeVcrMember(studyId: string, userId: string, role?: VcrMemberRole) {
   return productRequest<unknown>(`${study(studyId)}/members/${id(userId)}${role ? `?role=${encodeURIComponent(role)}` : ""}`, "DELETE");
-}
-
-/**
- * The first of the three human stops: a coordinator confirms, person by
- * person, before anyone outside the platform is contacted (plan §10.1). The id
- * is the person's referral, not the candidate's key.
- */
-export function contactVcrReferral(studyId: string, referralId: string, input: VcrContactBody = {}) {
-  return productRequest<unknown>(`${study(studyId)}/referrals/${id(referralId)}/contact`, "POST", contactBody(input));
-}
-
-/**
- * One move on the referral ledger — 「请求补证」 is `to: "needs_evidence"`. The
- * route refuses a move into a contact state that no person has confirmed, and
- * a site moves only its own referrals; this is not a way round either.
- */
-export function transitionVcrReferral(studyId: string, referralId: string, input: VcrTransitionBody) {
-  return productRequest<{ referral: { id: string; state: VcrReferralState } | null; notices?: string[] }>(
-    `${study(studyId)}/referrals/${id(referralId)}/transition`, "POST", transitionBody(input));
-}
-
-/** One row of the referral ledger, as the ledger route answers it. */
-export interface VcrReferral {
-  id: string;
-  subjectKey: string;
-  state: VcrReferralState;
-  siteId: string | null;
-  assessmentId: string | null;
-  /** The account that confirmed the contact, once one did (the first human stop): whether one did. Shown as `contactApprovedByName`. */
-  contactApprovedBy: string | null;
-  /** The coordinator who confirmed, by name (a neutral label when the account is gone). */
-  contactApprovedByName: string | null;
-  contactApprovedAt: string | null;
-  screenFailReason: string | null;
-  enrolledOn: string | null;
-  updatedAt: string | null;
-}
-
-export function readVcrReferrals(raw: unknown): VcrReferral[] {
-  return arr(obj(raw).referrals).map((entry) => {
-    const row = obj(entry);
-    return {
-      id: String(row.id ?? ""), subjectKey: String(row.subjectKey ?? ""), state: String(row.state ?? "candidate") as VcrReferralState,
-      siteId: text(row.siteId), assessmentId: text(row.assessmentId), contactApprovedBy: text(row.contactApprovedBy),
-      contactApprovedByName: text(row.contactApprovedByName), contactApprovedAt: text(row.contactApprovedAt), screenFailReason: text(row.screenFailReason), enrolledOn: text(row.enrolledOn),
-      updatedAt: text(row.updatedAt),
-    };
-  }).filter((row) => row.id !== "");
-}
-
-/**
- * The referral ledger: every referral the caller may read — a site sees only its
- * own — one row per person, at the state the ledger holds them in.
- */
-export async function getVcrReferrals(studyId: string, query: { state?: VcrReferralState } = {}): Promise<VcrReferral[]> {
-  const search = query.state ? `?state=${encodeURIComponent(query.state)}` : "";
-  return readVcrReferrals(await productRequest<unknown>(`${study(studyId)}/referrals${search}`));
 }
 
 /**

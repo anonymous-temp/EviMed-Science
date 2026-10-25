@@ -2,13 +2,14 @@ import { VCR_ENGINE_METHODS, VCR_SCENARIO_SCHEMAS, VCR_JOB_METHODS, VCR_LONGITUD
 import type { VcrModels } from "@/lib/vcrClient";
 
 export type VcrMethod = VcrModels["methods"][number];
-export const METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "招募与匹配"] as const;
-export const FAMILY_PURPOSES = ["描述数据、应用队列条件或构建人群", "二分类、连续、生存与纵向结局模拟", "汇总研究参数与重建文献曲线", "加权、调整和比较研究效应", "解析计算、模拟与设计方案比较", "偏倚、缺失与预测验证", "中心招募预测与入排标准匹配"];
+export const METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "入组预测与匹配"] as const;
+export const FAMILY_PURPOSES = ["描述数据、应用队列条件或构建人群", "二分类、连续、生存与纵向结局模拟", "汇总研究参数与重建文献曲线", "加权、调整和比较研究效应", "解析计算、模拟与设计方案比较", "偏倚、缺失与预测验证", "研究入组时间预测与入排标准核对"];
 const PATIENT_MODES = ["patients.binary", "patients.continuous", "patients.time_to_event", "patients.longitudinal"];
 const ROBUSTNESS = ["comparator.evalue", "comparator.covariate_sets", "comparator.negative_control", "comparator.tipping_point", "forecast.evaluate", "forecast.compare", "forecast.trial_benchmark"];
 export function methodTask(method: string): string {
   if (/^(profile|cohort|population)\./.test(method)) return METHOD_FAMILIES[0];
   if (method.startsWith("patients.") || method === "forecast.trajectories") return METHOD_FAMILIES[1];
+  if (method.startsWith("model.")) return METHOD_FAMILIES[2];
   if (method.startsWith("evidence.")) return METHOD_FAMILIES[2];
   if (/^(accrual|matching)\./.test(method)) return METHOD_FAMILIES[6];
   if (ROBUSTNESS.includes(method)) return METHOD_FAMILIES[5];
@@ -34,6 +35,8 @@ export function completeMethodCatalogue(methods: VcrMethod[]): VcrMethod[] {
 }
 // Display wording only: parameter types, examples, validation and execution remain the domain's.
 const TASKS: Record<string, [string, string, string]> = {
+  "model.survival_fit": ["从保留的生存证据拟合参数基线，区分观测与重建数据。", "生存时间、事件、数据来源与分布族", "拟合基线、适用范围与不确定性"],
+  "model.prognostic_apply": ["按已发表方程及明确的变换计算预后量。", "已引用方程、协变量与适用的基线风险", "受适用范围约束的绝对或相对预测量"],
   "profile.snapshot": ["查看数据的分布、缺失与基本特征。", "已保存数据快照", "列分布与缺失概况"],
   "cohort.build": ["按明确条件建立研究队列，保留未知值的处理。", "数据快照、筛选条件与未知值策略", "纳入、排除与未知记录的计数"],
   "population.scenario": ["按声明的分布与相关性生成研究人群。", "人数、变量分布、相关性与约束", "合成人群与分布检查"],
