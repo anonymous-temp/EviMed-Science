@@ -218,6 +218,8 @@ function fakeEditor(provider = { balanceSpent: false }) {
         specialties: ["cardiology"], evidenceType: item.evidenceFixed?.type ?? "observational",
         entities: { drugs: ["司美格鲁肽"], trials: [], orgs: [], diseases: [] },
         scores: { impact, novelty, relevance }, flags: marker(item.titleRaw, "flag") ? [marker(item.titleRaw, "flag")] : [],
+        // c2-style S9: the model's own numbers ride beside the scored ones and are kept in the diagnostics only.
+        scoresRaw: { impact: share, novelty: share - impact, relevance: share - impact - novelty },
       } };
     },
   };
@@ -538,6 +540,7 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(done.editor_diagnostics.attempts, 1);
   assert.equal(done.editor_diagnostics.editorVersion, FRONTIER_EDITOR_VERSION);
   assert.deepEqual(done.editor_diagnostics.fields, { title_zh: ["passed"], summary_zh: ["passed"] });
+  assert.deepEqual(done.editor_diagnostics.scoresRaw, { impact: 60, novelty: 30, relevance: 10 }, "c2-style S9: the model's raw sub-scores, before the scale's end");
   assert.ok(done.rescored_at);
   assert.deepEqual(await changes(Number(done.id)), ["published", "rescored", "selected"]);
   assert.equal(done.timeline_at.toISOString(), titleOnly.timeline_at.toISOString());

@@ -175,8 +175,8 @@ const REASON_LENS_LINE = FRONTIER_GENRES.filter((genre) => FRONTIER_REASON_LENSE
  * 2026-10-25: 820 of 838 WeChat titles were shown as written, 275 of them with ！, ？, 刚刚 or 重磅).
  * @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>}
  */
-export const FRONTIER_TITLE_GUIDES_ZH = Object.freeze(Object.fromEntries(FRONTIER_GENRES.map((genre) =>
-  [genre, `${FRONTIER_STYLE_CARDS[genre].title}（例：${FRONTIER_STYLE_CARDS[genre].exemplars[0].title}）`])));
+export const FRONTIER_TITLE_GUIDES_ZH = /** @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>} */ (Object.freeze(Object.fromEntries(
+  FRONTIER_GENRES.map((genre) => [genre, `${FRONTIER_STYLE_CARDS[genre].title}（例：${FRONTIER_STYLE_CARDS[genre].exemplars[0].title}）`]))));
 const TITLE_GUIDE_LINE = FRONTIER_GENRES.map((genre) => `${FRONTIER_GENRE_LABELS_ZH[genre]}写${FRONTIER_TITLE_GUIDES_ZH[genre]}`).join("；");
 
 /**
@@ -1328,11 +1328,11 @@ export function frontierEditorDiagnostics(value) {
     editorVersion: typeof value.editorVersion === "string" && /^[a-zA-Z0-9._:-]{1,160}$/.test(value.editorVersion) ? value.editorVersion : null,
     checkedAt, reason: FRONTIER_DIAGNOSTIC_REASONS.includes(value.reason) ? value.reason : null,
     fields: { title_zh: field(value.fields?.title_zh), summary_zh: field(value.fields?.summary_zh) },
-    ...(scoresRaw(value.scoresRaw) ? { scoresRaw: scoresRaw(value.scoresRaw) } : {}) };
+    ...(rawScoresOf(value.scoresRaw) ? { scoresRaw: rawScoresOf(value.scoresRaw) } : {}) };
 }
 
 /** The edit's sub-scores as the model wrote them (c2-style S9): three integers, or null. @param {any} value */
-function scoresRaw(value) {
+function rawScoresOf(value) {
   const ok = (/** @type {unknown} */ n) => Number.isInteger(n) && /** @type {number} */ (n) >= -1000 && /** @type {number} */ (n) <= 1000;
   return value && ok(value.impact) && ok(value.novelty) && ok(value.relevance) ? { impact: value.impact, novelty: value.novelty, relevance: value.relevance } : null;
 }
@@ -2102,7 +2102,7 @@ export class FrontierEditor {
     // the title only if it passed on its own, structure from the latest
     // answer where it passed, else the screening verdict.
     this.#countIssues(this.counters.finalIssues, last.kinds);
-    if (last.chineseTitle) this.counters.chineseTitles[/** @type {"kept" | "rewritten" | "refused"} */ (last.chineseTitle)] += 1;
+    if (last.chineseTitle) this.counters.chineseTitles[last.chineseTitle] += 1;
     const defaults = item.defaults ?? {};
     const keep = (/** @type {string} */ field) => !last.failed.has(field) && !last.failed.has("answer");
     const titleZh = item.isChinese ? last.output.titleZh
@@ -2141,9 +2141,9 @@ export class FrontierEditor {
     return result;
   }
 
-  /** @param {{ output: FrontierEditOutput, reasonKinds: FrontierProseIssueKind[] }} verified a published answer */
+  /** @param {{ output: FrontierEditOutput, reasonKinds: FrontierProseIssueKind[], chineseTitle?: "kept" | "rewritten" | "refused" | null }} verified a published answer */
   #countReason(verified) {
-    if (verified.chineseTitle) this.counters.chineseTitles[/** @type {"kept" | "rewritten" | "refused"} */ (verified.chineseTitle)] += 1;
+    if (verified.chineseTitle) this.counters.chineseTitles[verified.chineseTitle] += 1;
     if (verified.reasonKinds.length) {
       for (const kind of new Set(verified.reasonKinds)) this.counters.reasonDropped[kind] = (this.counters.reasonDropped[kind] ?? 0) + 1;
     } else if (!verified.output.reasonZh) this.counters.reasonEmpty += 1;

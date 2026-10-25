@@ -60,9 +60,10 @@ const formulaOpening = (text) => FORMULA_OPENINGS.find((phrase) => String(text ?
 /**
  * What one case's texts measure, against its source.
  * @param {{ lead?: string | null, reason?: string | null, summary?: string | null, brief?: any, title?: string | null }} written
- * @param {{ source: string, limit: number, genre: string, titleRaw?: string, chinese?: boolean }} context
+ * @param {{ source: string, limit: number, genre: string, titleRaw?: string, chinese?: boolean, thin?: boolean }} context `thin` a record with no
+ *   text (`textSource` summary): the advice-added count is read on these only (elsewhere a word like 替代 is a 替代治疗)
  */
-export function metricsOf(written, { source, limit, genre, titleRaw = "", chinese = false }) {
+export function metricsOf(written, { source, limit, genre, titleRaw = "", chinese = false, thin = false }) {
   const numbers = checkNumbers({ lead: written.lead ?? "", reason: written.reason ?? "", summary: written.summary ?? "",
     brief: briefText(written.brief) }, source);
   const shape = FRONTIER_BRIEF_FIELDS[/** @type {keyof typeof FRONTIER_BRIEF_FIELDS} */ (genre)] ?? null;
@@ -82,7 +83,7 @@ export function metricsOf(written, { source, limit, genre, titleRaw = "", chines
       numbersMissing: checkNumbers({ title: written.title }, `${titleRaw}\n${source}`).missing.map((entry) => entry.raw) } : null,
     givenUsed: RESULT_GENRES.includes(genre) ? givenUsed(source, [written.lead ?? "", briefText(written.brief)].join("\n")) : null,
     leakage: leakage([written.title, written.lead, written.summary, written.reason, briefText(written.brief)].filter(Boolean).join("\n"), `${titleRaw}\n${source}`, EXEMPLARS),
-    advice: adviceAdded([written.lead, written.summary, briefText(written.brief)].filter(Boolean).join("\n"), source),
+    advice: thin ? adviceAdded([written.lead, written.summary, briefText(written.brief)].filter(Boolean).join("\n"), source) : null,
   };
 }
 
@@ -120,8 +121,8 @@ async function main() {
       const input = { sourceName: item.sourceName, titleRaw: item.titleRaw, titleZh: row.after.title ?? item.titleZh ?? null, text: entry.text, kind: entry.textSource, post: item.platform === "x" };
       const source = readerNumberSource(buildLeadInput(input));
       const limit = frontierLeadLimit(entry.text);
-      row.metrics = { before: metricsOf({ ...entry.before, title: item.titleZh ?? (chinese ? item.titleRaw : null) }, { source, limit, genre: entry.expectGenre, titleRaw: item.titleRaw, chinese }),
-        after: metricsOf(row.after, { source, limit, genre: row.after.genre, titleRaw: item.titleRaw, chinese }) };
+      row.metrics = { before: metricsOf({ ...entry.before, title: item.titleZh ?? (chinese ? item.titleRaw : null) }, { source, limit, genre: entry.expectGenre, titleRaw: item.titleRaw, chinese, thin: entry.textSource === "summary" }),
+        after: metricsOf(row.after, { source, limit, genre: row.after.genre, titleRaw: item.titleRaw, chinese, thin: entry.textSource === "summary" }) };
     }
     run.summary = summarize(run.results);
     const out = values.out ?? values.rescore;
@@ -212,8 +213,8 @@ async function runCase(editor, entry, skipEdit) {
   return {
     id: entry.id, expectGenre: entry.expectGenre, genreAccepted: entry.acceptGenres.includes(genre), textChars: entry.textChars, textSource: kind,
     before: entry.before, after,
-    metrics: { before: metricsOf({ ...entry.before, title: item.titleZh ?? (chinese ? item.titleRaw : null) }, { source, limit, genre: entry.expectGenre, titleRaw: item.titleRaw, chinese }),
-      after: metricsOf(after, { source, limit, genre, titleRaw: item.titleRaw, chinese }) },
+    metrics: { before: metricsOf({ ...entry.before, title: item.titleZh ?? (chinese ? item.titleRaw : null) }, { source, limit, genre: entry.expectGenre, titleRaw: item.titleRaw, chinese, thin: entry.textSource === "summary" }),
+      after: metricsOf(after, { source, limit, genre, titleRaw: item.titleRaw, chinese, thin: entry.textSource === "summary" }) },
   };
 }
 

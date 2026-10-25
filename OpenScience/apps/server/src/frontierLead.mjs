@@ -49,7 +49,8 @@ const LEAD_CORE = [
  * follow; ct-write W0 before it). One short paragraph per genre, appended to the shared rules.
  * @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>}
  */
-export const FRONTIER_LEAD_GUIDES = Object.freeze(Object.fromEntries(FRONTIER_GENRES.map((genre) => [genre, FRONTIER_STYLE_CARDS[genre].lead])));
+export const FRONTIER_LEAD_GUIDES = /** @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>} */ (Object.freeze(
+  Object.fromEntries(FRONTIER_GENRES.map((genre) => [genre, FRONTIER_STYLE_CARDS[genre].lead]))));
 
 /**
  * The genre's two exemplars, written by us on real public items (`frontierStyle.mjs`), said as what to learn from them: the order
