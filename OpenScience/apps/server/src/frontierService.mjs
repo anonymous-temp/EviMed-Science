@@ -191,9 +191,9 @@ export function frontierAuthor(value) {
 }
 
 /**
- * The 「可能改变实践」 label of an item: `{ reason }` once the mix admitted it (`practice_changing`) and a reason is held; otherwise null.
+ * The 「可能改变实践」 label of a 精选 item: `{ reason }` once the mix admitted it (`practice_changing`) and a reason is held; otherwise null.
  * A proposal that was not admitted is never served.
- * @param {{ practice_changing?: unknown, practice_zh?: unknown }} row @returns {{ reason: string } | null}
+ * @param {{ practice_changing?: unknown, practice_zh?: unknown, selected?: unknown }} row @returns {{ reason: string } | null}
  */
 export function frontierPracticeLabel(row) {
   const reason = typeof row?.practice_zh === "string" ? row.practice_zh.replace(/\s+/g, " ").trim() : "";
