@@ -1817,9 +1817,16 @@ export class GeoService {
         const cards = page(view.cards);
         return { zoneId: view.zoneId, cards: cards.items, total: cards.total, more: cards.more };
       }
+      // The page's diagnosis, its two lists paged like every other read: the errors it lists and the round's other metrics, one offset
+      // for both. 2026-10-25: both were cut at the limit with no offset, and the second was named `more`, so the answer could never
+      // say there was a next page; the errors behind a long list are read whole with `errors`, whose counts this answer keeps.
       case "diagnosis": {
-        const view = await this.diagnosisOf(project, filter.round ?? null);
-        return { ...view, errors: view.errors.slice(0, limit), more: view.more.slice(0, limit) };
+        const { more: otherMetrics, ...view } = await this.diagnosisOf(project, filter.round ?? null);
+        const errors = page(view.errors);
+        const metrics = page(otherMetrics);
+        const more = errors.more || metrics.more;
+        return { ...view, errors: errors.items, errorsTotal: errors.total, otherMetrics: metrics.items, otherMetricsTotal: metrics.total, more,
+          ...(more ? { nextOffset: offset + limit } : {}) };
       }
       case "metrics": {
         const values = [project.id];
