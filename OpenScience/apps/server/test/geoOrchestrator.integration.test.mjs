@@ -605,6 +605,44 @@ test("a baseline that measured no answer fails the diagnosis: no 「诊断完成
   assert.equal(world.notices.filter((notice) => notice.title === "玛仕度肽：诊断完成").length, 1);
 });
 
+test("a weekly round that heard no answer is no week: monitoring is not done by it and no weekly report is written for it (2026-10-25)", options, async () => {
+  const world = harness({ at: "2026-10-01T00:00:00Z" });
+  const { project, control } = await newProject();
+  // Monitoring alone: what it needs upstream is the diagnosis, so the only run the program may send is the weekly report.
+  await store.setStep(project.id, "monitoring", { requested: true });
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  await world.orchestrator.advance(project.id);
+  // The set is the diagnosis' minimal one: its round is a single step.
+  const diagnosis = world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.step === "diagnosis");
+  assert.ok(diagnosis);
+  await finishRound(diagnosis.id, { finishedAt: "2026-09-28T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "minimal");
+  const weeklyOf = (/** @type {string} */ week) => world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.week === week);
+  const reports = () => world.dispatched.filter((run) => run.geoProjectId === project.id && run.reason === "geo:export-weekly");
+
+  // The probe host is down: the week's round closes with every job skipped. Cells were still written for such a round before
+  // 2026-10-25, and the program read them as a measured week.
+  world.setClock("2026-10-04T19:10:00Z"); // Monday 2026-10-05 03:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  await finishRound(weeklyOf("2026-10-05").id, { answers: 0, finishedAt: "2026-10-04T19:20:00Z" });
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).monitoring, "running", "a week with no answer is not 「第 1 周」");
+  assert.deepEqual(reports(), [], "no weekly report of a week nothing was measured in");
+
+  // The next week is heard: it is the first week, and it gets its report.
+  world.setClock("2026-10-11T19:10:00Z");
+  await world.orchestrator.tickSchedules();
+  await finishRound(weeklyOf("2026-10-12").id, { finishedAt: "2026-10-11T19:20:00Z" });
+  await world.orchestrator.advance(project.id);
+  const steps = (await reload(project.id)).steps;
+  assert.deepEqual([steps.monitoring.status, steps.monitoring.note], ["done", "第 1 周"]);
+  assert.deepEqual(reports().map((run) => run.dispatchId), ["geo-export-weekly-2026-10-12-a1"]);
+  await finishRun(world, control, world.dispatched.indexOf(reports()[0]));
+});
+
 test("a diagnosis is done only when its metrics exist; past the grace operators are alerted and the program waits", options, async () => {
   const { world, project } = await lockedProgram();
   const round = world.enqueued[0].id;

@@ -801,6 +801,49 @@ test("a noise round writes the noise bands, and the net effect is not computed b
   }
 });
 
+test("a round no engine answered in is not measured: the last net effect stands and the sources keep their citation counts (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_z");
+  const NEWS = [{ title: "新闻", url: "https://news.example.org/a" }];
+  const h = await harness({ answers: ({ question }) => (question === Q1 ? { answer: A_RIGHT, searchResults: NEWS } : { answer: A_RIGHT }) });
+  try {
+    const measureOne = async (/** @type {string} */ kind) => {
+      const round = await enqueueRound(h.deps, { geoProjectId: "geo_z", kind });
+      await tickProbe({ ...h.deps, maxAsks: 10 });
+      await tickParse({ ...h.deps, maxParse: 20 });
+      await tickMetrics(h.deps);
+      return round.roundId;
+    };
+    await measureOne("baseline");
+    h.clock.advance(7 * 86_400_000);
+    const answered = await measureOne("weekly");
+    const sources = async () => rows(`SELECT domain, cited, mentions_ours FROM evimed_geo.sources WHERE geo_project_id = 'geo_z' ORDER BY domain`);
+    const counted = await sources();
+    assert.ok(counted.some((row) => row.domain === "news.example.org" && Object.keys(row.cited).length > 0), "the answered week counted its citations");
+    const latestNet = async () => (await rows(`SELECT round_id FROM evimed_geo.metrics WHERE geo_project_id = 'geo_z' AND metric_id = 'NET'
+      ORDER BY computed_at DESC, id LIMIT 1`))[0]?.round_id ?? null;
+    assert.equal(await latestNet(), answered);
+
+    // The next week the probe host is down: every engine paused, every job skipped.
+    h.clock.advance(7 * 86_400_000);
+    const empty = await enqueueRound(h.deps, { geoProjectId: "geo_z", kind: "weekly" });
+    const closed = await store.finishRound(empty.roundId, { now: h.clock.now(), skip: [{ engines: ["deepseek", "doubao"], code: "engine_paused" }] });
+    assert.equal(closed?.status, "partial");
+    assert.equal((await store.roundsToMeasure(["weekly"], 10)).includes(empty.roundId), false, "nothing to measure");
+    await tickMetrics(h.deps);
+    assert.deepEqual(await rows(`SELECT id FROM evimed_geo.metrics WHERE round_id = $1`, [empty.roundId]), [], "no cell is written for it");
+
+    // Even measured by hand, it writes no net effect and leaves the citation counts alone.
+    h.clock.advance(60_000);
+    await measureRound(h.deps, empty.roundId);
+    assert.deepEqual(await rows(`SELECT id FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'NET'`, [empty.roundId]), []);
+    assert.equal(await latestNet(), answered, "the net effect of the last week with answers stands");
+    assert.deepEqual(await sources(), counted, "the counts the market ranks outlets by are untouched");
+  } finally {
+    await h.probe.close();
+  }
+});
+
 test("the net effect reads the arms' earlier cells: an insufficient cell with counts pools, one without is no observation, a computed row keeps its band (Q-2)", options, async () => {
   await reset();
   await seed("geo_n");

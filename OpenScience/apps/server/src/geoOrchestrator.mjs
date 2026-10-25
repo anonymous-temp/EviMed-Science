@@ -117,6 +117,16 @@ const TURN = Object.freeze({ program: "orchestrator_served_at", schedule: "sched
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Whether the round aliased `alias` holds an answer — a valid or refused one, the answers every number is made of. A round whose
+ * jobs were all skipped (its engines paused) or all failed measured nothing, and nothing that counts measured weeks, picks the week a
+ * report is about or dates a baseline may read it as one. Production, 2026-10-25: the probe host was unreachable for days, every round
+ * closed with no answer, and the next weekly round would have been reported on and counted as 「第 N 周」.
+ * @param {string} alias a rounds alias of the query it goes into (a closed set of this file's own)
+ */
+const holdsAnswer = (alias) => `EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id = ${alias}.id
+  AND answered.status IN ('valid', 'refusal'))`;
+
 /** @param {unknown} error */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_orchestrator_failed");
 /**
@@ -1088,8 +1098,9 @@ export class GeoOrchestrator {
   /** Step 8 is the schedule's: armed once the diagnosis is in, done with its first weekly round. @param {any} project @param {ReturnType<typeof wantedSteps>} plan */
   async #monitoring(project, plan) {
     if (!plan.want.has("monitoring") || !FINISHED.has(project.steps.diagnosis.status)) return project;
-    const weeks = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'weekly'
-      AND status IN ('done', 'partial')`, [project.id])).rows[0]?.n ?? 0);
+    // A week counts when its round heard an answer.
+    const weeks = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = 'weekly'
+      AND r.status IN ('done', 'partial') AND ${holdsAnswer("r")}`, [project.id])).rows[0]?.n ?? 0);
     return this.#step(project, "monitoring", weeks > 0 ? { status: "done", note: `第 ${weeks} 周` } : { status: "running" });
   }
 
@@ -1215,7 +1226,8 @@ export class GeoOrchestrator {
 
   /**
    * The latest weekly round whose numbers are in, when it has no export yet:
-   * the weekly report run.
+   * the weekly report run. A week whose round heard no answer has no numbers
+   * to report and is passed over (`holdsAnswer`); the week before it stands.
    * @param {any} project @param {ReturnType<typeof wantedSteps>} plan @returns {Promise<RunSpec | null>}
    */
   async #weeklyExport(project, plan) {
@@ -1235,7 +1247,7 @@ export class GeoOrchestrator {
     if (!plan.want.has("monitoring")) return null;
     const row = (await this.store.query(`SELECT m.key, m.round_id FROM evimed_geo.schedule_marks m JOIN evimed_geo.rounds r ON r.id = m.round_id
       WHERE m.geo_project_id = $1 AND starts_with(m.key, 'weekly:') AND m.state = 'done' AND r.status IN ('done', 'partial')
-        AND EXISTS (SELECT 1 FROM evimed_geo.metrics x WHERE x.round_id = r.id)
+        AND EXISTS (SELECT 1 FROM evimed_geo.metrics x WHERE x.round_id = r.id) AND ${holdsAnswer("r")}
       ORDER BY m.key DESC LIMIT 1`, [project.id])).rows[0];
     return row ? { monday: String(row.key).slice("weekly:".length), roundId: String(row.round_id) } : null;
   }
