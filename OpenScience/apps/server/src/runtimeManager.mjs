@@ -4652,8 +4652,19 @@ export class RuntimeManager {
     if (outcome.status === "rejected") throw outcome.reason;
     const policy = authorization.value, runtime = outcome.value;
     const current = await this.contextPolicyFor(project);
-    if (!sameContextPolicy(policy, current) || this.runtimes.get(key) !== runtime
-      || runtime?.workspaceDir !== project.workspaceDir || this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) {
+    const authorityChanged = !sameContextPolicy(policy, current) || runtime?.workspaceDir !== project.workspaceDir;
+    const runtimeGone = this.runtimes.get(key) !== runtime || this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key);
+    // A background runtime a researcher's start retired as soon as it came up
+    // (`yieldBackgroundRuntimes`) is gone by the time its own caller gets here.
+    // Said as the yield it is, the name its owner reads as "ask again later"
+    // (`RUNTIME_YIELDED_CODE`); it was refused as an authority change and so
+    // counted as the work's failure (`backgroundRuntimeYield.test.mjs`, 2026-10-25).
+    if (!authorityChanged && runtimeGone && this.recentlyYielded(key)) {
+      const error = new HttpError(409, RUNTIME_YIELDED_CODE, "The runtime was released to a researcher's start; this work resumes later.");
+      error.definitivelyRejected = true;
+      throw error;
+    }
+    if (authorityChanged || runtimeGone) {
       throw new HttpError(409, "runtime_context_unverified", "The runtime or project authority changed during startup.");
     }
     this.assertBoundedStartOwnership(project, options.boundedScope ?? null);
