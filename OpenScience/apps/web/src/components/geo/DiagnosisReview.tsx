@@ -190,7 +190,7 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
           <p className="text-ui text-text-2">原判定：{prior ? verdictWords[prior.verdict] : "较早判定未载入"} · 当前判定：{current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}</p>
           <p className="text-ui text-text-2">适用条件：{applicable ? [applicable.population, ...Object.entries(applicable.elements ?? {}).map(([key, value]) => `${key}：${String(value)}`)].filter(Boolean).join("；") || "尚未记录" : "尚未记录"}</p>
           {claimDetail && <p className="text-ui text-text-2">依据：{safeWebHref(claimDetail.sourceRef) ? <a className="text-link" href={safeWebHref(claimDetail.sourceRef)!} target="_blank" rel="noreferrer">{claimDetail.sourceLabel || "查看引用来源"}</a> : claimDetail.sourceLabel || "原始证据"} · 正确说法：{claimDetail.statement}</p>}
-          <p className="text-ui text-text-2">依据原文：{current?.evidence ?? prior?.evidence ?? "尚无可核验引文"}</p>
+          <p className="text-ui text-text-2">依据原文：{current?.evidence ?? prior?.evidence ?? "尚无可核对的引文"}</p>
           {canEdit && canRun && ready.assessmentVersion && current && <Button variant="secondary" size="sm" onClick={() => { setEditing(statementKey); setNote(""); setRequestKey(crypto.randomUUID()); }}>反馈并复核判定</Button>}
           {editing === statementKey && <div className="flex flex-col gap-2">
             <Textarea label="反馈理由与适用条件" value={note} maxLength={4000} onChange={event => setNote(event.target.value)} />
