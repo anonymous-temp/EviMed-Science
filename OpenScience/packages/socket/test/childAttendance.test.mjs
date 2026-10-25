@@ -4,6 +4,7 @@ import { ChildAttendance } from '../src/childAttendance.mjs'
 
 test('a child keeps the attendance it inherited until it settles, then nothing of it is kept', () => {
   const children = new ChildAttendance()
+  /** @type {string[]} */
   const asked = []
   const parents = new Map([['scheduled-root', true], ['person-root', false]])
   const parentUnattended = (/** @type {string} */ id) => { asked.push(id); return parents.get(id) === true }
@@ -25,6 +26,7 @@ test('a child keeps the attendance it inherited until it settles, then nothing o
 
 test('a child with no parent id or no id of its own records nothing and makes no parent state', () => {
   const children = new ChildAttendance()
+  /** @type {string[]} */
   const asked = []
   children.inherit('orphan', '', (/** @type {string} */ id) => { asked.push(id); return true })
   children.inherit('', 'scheduled-root', (/** @type {string} */ id) => { asked.push(id); return true })

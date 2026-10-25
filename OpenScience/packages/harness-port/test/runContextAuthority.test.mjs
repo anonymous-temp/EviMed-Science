@@ -51,8 +51,9 @@ test('one receipts file per session, bounded and unambiguous across sessions', (
   assert.notEqual(path, attendanceReceiptsFileFor('session-two'))
   assert.throws(() => attendanceReceiptsFileFor(''))
   // Receipts never accumulate: the file keeps the latest inputs of its session, a repeated request replaces its own.
-  let file = null
-  for (let n = 0; n < ATTENDANCE_RECEIPTS_KEPT + 10; n += 1) file = appendAttendanceReceipt(file, signed({ contextRevision: `request-${n}` }))
+  /** @type {ReturnType<typeof appendAttendanceReceipt>} */
+  let file = appendAttendanceReceipt(null, signed({ contextRevision: 'request-0' }))
+  for (let n = 1; n < ATTENDANCE_RECEIPTS_KEPT + 10; n += 1) file = appendAttendanceReceipt(file, signed({ contextRevision: `request-${n}` }))
   assert.equal(file.receipts.length, ATTENDANCE_RECEIPTS_KEPT)
   assert.equal(attendanceReceiptFor(file, 'request-0'), null)
   assert.equal(attendanceReceiptFor(file, `request-${ATTENDANCE_RECEIPTS_KEPT + 9}`)?.contextRevision, `request-${ATTENDANCE_RECEIPTS_KEPT + 9}`)
@@ -67,6 +68,7 @@ test('one receipts file per session, bounded and unambiguous across sessions', (
 test('a receipt binds the exact input text: its digest is signed, and cannot be added, removed or changed', () => {
   const digest = attendanceInputDigest('每周一提醒我检查新文献')
   assert.match(digest, /^[a-f0-9]{64}$/)
+  /** @type {Record<string, any>} */
   const value = signed({ unattended: false, inputDigest: digest })
   assert.equal(verifyRunContextAuthority(value, expected)?.inputDigest, digest)
   assert.equal(verifyRunContextAuthority({ ...value, inputDigest: attendanceInputDigest('another text') }, expected), null)
