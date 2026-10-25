@@ -54,6 +54,27 @@ export const GEO_PROBE_LOCK_KEY = "evimed_geo_probe";
 export const GEO_NIGHT_ROUND_KINDS = Object.freeze(["baseline", "weekly", "noise"]);
 
 /**
+ * The question set recurring measurement reads (a baseline, a weekly re-measure, a sentinel, a noise round): the newest set saved
+ * under a recurring agreement, else the newest locked set saved without one, else (none locked yet) the newest version any live
+ * measured question carries. A set imported under a one-shot agreement is measured only through its explicit start
+ * (`geoStartDiagnosis`), so it never replaces the set monitoring reads: importing one silently stopped every recurring round
+ * (2026-10-25). `oneShot` names the one-shot versions; `version` is null when nothing else is left to measure; `locked` says the
+ * set is one the programme measures (saved under a recurring agreement, or locked), not the newest draft.
+ * @param {{ query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }> }} db @param {string} geoProjectId
+ * @returns {Promise<{ version: number | null, contract: Record<string, any> | null, locked: boolean, oneShot: number[] }>}
+ */
+export async function geoMonitoringSet(db, geoProjectId) {
+  const sets = (await db.query(`SELECT version, contract, locked_at FROM evimed_geo.question_sets WHERE geo_project_id = $1 ORDER BY version DESC`,
+    [geoProjectId])).rows;
+  const oneShot = sets.filter((set) => set.contract?.samplingMode === "one_shot").map((set) => Number(set.version));
+  const chosen = sets.find((set) => set.contract && set.contract.samplingMode !== "one_shot") ?? sets.find((set) => !set.contract && set.locked_at);
+  if (chosen) return { version: Number(chosen.version), contract: chosen.contract ?? null, locked: true, oneShot };
+  const latest = (await db.query(`SELECT max(set_version) AS version FROM evimed_geo.questions WHERE geo_project_id = $1 AND is_measured
+      AND retired_at IS NULL AND NOT (set_version = ANY($2::integer[]))`, [geoProjectId, oneShot])).rows[0]?.version;
+  return { version: latest == null ? null : Number(latest), contract: null, locked: false, oneShot };
+}
+
+/**
  * The SQL test that a round heard an answer: one valid or refused snapshot. A round that closed with its engines paused or the
  * probe host down (2026-10-25) heard none, and is never "the latest", the baseline, a week or a source count's round.
  * @param {string} alias the rounds alias of the query it goes into (a literal of the caller's own SQL, never input)
@@ -377,21 +398,14 @@ export class GeoMeasureStore {
   }
 
   /**
-   * The measured questions of the project's current question set: the latest
-   * locked set, else (no set locked yet) the latest version any measured
-   * question carries.
+   * The measured questions of the set recurring measurement reads (`geoMonitoringSet`).
    * @param {string} geoProjectId
    */
   async measuredQuestions(geoProjectId) {
     const rows = await this.questions(geoProjectId, { measuredOnly: true });
     if (!rows.length) return { setVersion: null, questions: [] };
-    let setVersion = Math.max(...rows.map((row) => row.setVersion));
-    const latest = (await this.query(`SELECT version, contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 ORDER BY version DESC LIMIT 1`, [geoProjectId])).rows[0];
-    if (latest?.contract) return { setVersion: Number(latest.version), questions: rows.filter((row) => row.setVersion === Number(latest.version)) };
-    const locked = await this.query(`SELECT max(version) AS version FROM evimed_geo.question_sets WHERE geo_project_id = $1 AND locked_at IS NOT NULL`,
-      [geoProjectId]);
-    if (locked.rows[0]?.version != null) setVersion = Number(locked.rows[0].version);
-    return { setVersion, questions: rows.filter((row) => row.setVersion === setVersion) };
+    const { version } = await geoMonitoringSet(this, geoProjectId);
+    return version == null ? { setVersion: null, questions: [] } : { setVersion: version, questions: rows.filter((row) => row.setVersion === version) };
   }
 
   // ───────────────────────── rounds and jobs ─────────────────────────
