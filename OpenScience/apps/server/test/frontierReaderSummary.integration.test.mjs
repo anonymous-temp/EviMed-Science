@@ -13,6 +13,7 @@ import { FrontierEvents } from "../src/frontierEvents.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_TEXT_GIVE_UP_MS, FRONTIER_TEXT_HOLD_MS, FrontierPipeline } from "../src/frontierPipeline.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
+import { frontierTrackInstructions } from "../src/frontierTrackFacts.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { TEST_VOCABULARY, insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
 
@@ -115,6 +116,8 @@ function editorWith(behaviour = {}) {
       }
       // The reader's 就此提问 questions (c3-ask) are another call of the same kind: none here, and not a judgement of the text.
       if (instructions === FRONTIER_ASK_INSTRUCTIONS) return { questions: [] };
+      // 追踪's record of an approval or a guideline (c3-track) is read from the same text: none here, and not a judgement of the text either.
+      if (instructions === frontierTrackInstructions("approval") || instructions === frontierTrackInstructions("guideline")) return { none: true };
       this.tidyCalls += 1;
       return { drop: [] };
     },
