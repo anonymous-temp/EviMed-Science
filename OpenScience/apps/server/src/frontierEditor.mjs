@@ -311,6 +311,13 @@ export const FRONTIER_SCORE_INSTRUCTIONS = [
 export const FRONTIER_PICK_BAR_ZH = "有临床意义结局的随机试验、Meta 分析或大型队列（来自可信的期刊或主要会议）；主要的国家或国际指南及其重大更新；有临床后果的审批、安全警示、召回或说明书变更（FDA、国家药监局、EMA、PMDA、MHRA 等）；影响国内诊疗或药品可及性的卫生政策和医保变化；真正值得关注的疫情和公共卫生事件；各方都关心的大型行业事件（大额交易、关键试验的读出、首个获批）；以及对以上内容有实质补充的专家解读。小型单中心回顾性研究、病例报告、基础研究、方案和登记、地方性共识、例行的机构消息和会议通知、对已有条目的转述都不够格。";
 
 /**
+ * Which scoring wrote an item's parts (`items.editor_diagnostics.scoreVersion`): a hash of the rubric, the genres' anchors and the
+ * practice rule, so a change to any of them makes every item written under the older words owe a score
+ * (`scripts/ops/frontier-rewrite.mjs --steps score`) and an item written under these words does not.
+ */
+export const FRONTIER_SCORE_VERSION = `frontier-score-1.${createHash("sha256").update(`${FRONTIER_SCORE_RUBRIC_ZH}\n${SCORE_ANCHOR_LINE}\n${FRONTIER_PRACTICE_RULE_ZH}`).digest("hex").slice(0, 12)}`;
+
+/**
  * The comparative pass (c3-select S2, tested on the gold set): a batch of the day's candidates side by side and one question - which of
  * these belong in 精选 today - the way an editor chooses from a pile, where a pointwise score has to guess the pile's level.
  */

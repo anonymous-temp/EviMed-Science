@@ -6,7 +6,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_BRIEF_VERSION } from "../src/frontierBrief.mjs";
-import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION } from "../src/frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION, FRONTIER_SCORE_VERSION } from "../src/frontierEditor.mjs";
 import { FRONTIER_LEAD_VERSION } from "../src/frontierLead.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { estimateRewriteCost, frontierRewrite, parseArguments } from "../../../scripts/ops/frontier-rewrite.mjs";
@@ -86,7 +86,8 @@ function fakeEditor() {
 }
 
 test("the arguments: a window of at most thirty days, the steps by name, a resume point", () => {
-  assert.deepEqual(parseArguments([]), { apply: false, days: 30, since: null, steps: ["genre", "lead", "brief", "reason"], concurrency: 4, limit: 100_000 });
+  assert.deepEqual(parseArguments([]), { apply: false, days: 30, since: null, steps: ["genre", "lead", "brief", "reason"], concurrency: 4, limit: 100_000, minOldTotal: 50 });
+  assert.deepEqual(parseArguments(["--steps", "reason,score,genre", "--min-old-total", "40"]), { apply: false, days: 30, since: null, steps: ["genre", "score", "reason"], concurrency: 4, limit: 100_000, minOldTotal: 40 }, "score only by name, after genre");
   assert.deepEqual(parseArguments(["--apply", "--steps", "reason,genre", "--since", "2026-10-01T00:00:00Z"]).steps, ["genre", "reason"]);
   assert.throws(() => parseArguments(["--days", "31"]));
   assert.throws(() => parseArguments(["--steps", "summary"]));
@@ -147,4 +148,58 @@ test("a run that stops says so", options, async () => {
   const result = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, apply: true, steps: ["genre"] });
   assert.equal(result.failed, 1);
   assert.equal(result.genre.written, 2, "code's answers are written; the batch the model could not answer waits for the next run");
+});
+
+test("score: items an older scoring wrote are scored again under the ceilings, the proposal is held and admitted for the day, a failed answer keeps the score; a second run finds nothing", options, async () => {
+  await insertSource(database, "medrxiv", { name: "medRxiv", source_type: "preprint", authority: 2, owner_entity: "medRxiv" });
+  await insertSource(database, "ema", { name: "EMA", source_type: "regulator", lane: "regulatory", authority: 5, owner_entity: "EMA" });
+  const approval = await insertItem(database, { sourceId: "ema", sourceType: "regulator", evidenceType: "regulatory-decision", title: "EMA approves a drug", selected: true, selectedRule: "threshold", visibleAt: "2026-10-12T00:00:00Z", timelineAt: "2026-10-12T03:00:00Z" });
+  const preprint = await insertItem(database, { sourceId: "medrxiv", sourceType: "preprint", evidenceType: "other", title: "A preprint", visibleAt: "2026-10-12T01:00:00Z", timelineAt: "2026-10-12T04:00:00Z" });
+  const refused = await insertItem(database, { title: "The model fails on this one", visibleAt: "2026-10-12T02:00:00Z", timelineAt: "2026-10-12T05:00:00Z" });
+  const low = await insertItem(database, { title: "Under the old total", visibleAt: "2026-10-12T02:30:00Z", timelineAt: "2026-10-12T06:00:00Z" });
+  const old = { [approval.id]: 88, [preprint.id]: 76, [refused.id]: 70, [low.id]: 40 };
+  for (const [id, total] of Object.entries(old)) await database.query("UPDATE evimed_frontier.items SET score_total = $2, genre = $3, genre_basis = 'code', editor_diagnostics = '{}'::jsonb WHERE id = $1",
+    [id, total, id === preprint.id ? "preprint" : id === approval.id ? "approval" : "paper"]);
+  await database.query("UPDATE evimed_frontier.items SET evidence_basis = 'registry' WHERE id = $1", [approval.id]);
+  const asked = /** @type {string[]} */ ([]);
+  const editor = {
+    async scoreItem(/** @type {any} */ item) {
+      asked.push(item.titleRaw);
+      if (item.titleRaw.startsWith("The model fails")) return { scores: null, scoresRaw: null, practice: null, error: "frontier_score_invalid" };
+      const approvalItem = item.titleRaw.startsWith("EMA");
+      return { scores: { impact: 28, novelty: 19, relevance: 17 }, scoresRaw: { impact: 28, novelty: 19, relevance: 17 }, error: null,
+        practice: approvalItem ? { changing: true, reasonZh: "首个口服药获批，成人患者多了一线选择。" } : { changing: true, reasonZh: "预印本也提出了。" } };
+    },
+  };
+  const report = await frontierRewrite({ database, editor, threshold: 68, since: SINCE, until: UNTIL, steps: ["score"] });
+  assert.deepEqual(asked, [], "the report asks nothing");
+  assert.equal(report.score.items, 3, "the one under the old total of 50 is not asked about");
+  assert.deepEqual(report.calls, { score: 3 });
+  const day = estimateRewriteCost({ score: 1_500 }, REFERENCE_PRICE_LIST.model["deepseek-flash"]);
+  assert.ok(day.cny > 1.5 && day.cny < 2.5, `a day of 1,500 items costs about ¥1.8 to score: ${day.cny}`);
+
+  const applied = await frontierRewrite({ database, editor, threshold: 68, since: SINCE, until: UNTIL, steps: ["score"], apply: true });
+  assert.equal(applied.failed, 0);
+  assert.deepEqual(applied.score.moved, { up: 1, down: 1, same: 0 }, "the approval rose (94 from 88), the preprint fell under its ceilings (55 from 76)");
+  assert.deepEqual([applied.score.written, applied.score.kept, applied.score.capped, applied.score.practiceProposed, applied.score.labelled], [2, 1, 1, 2, 1]);
+  const rows = new Map((await database.query("SELECT * FROM evimed_frontier.items")).rows.map((row) => [String(row.id), row]));
+  const a = rows.get(approval.id);
+  assert.deepEqual([a.score_impact, a.score_novelty, a.score_relevance], [28, 19, 17], "no ceiling holds an approval of a regulator");
+  assert.equal(a.score_total, a.score_authority + 28 + 19 + 17);
+  assert.deepEqual([a.editor_diagnostics.scoreVersion, a.editor_diagnostics.scoresRaw, a.editor_diagnostics.capped], [FRONTIER_SCORE_VERSION, { impact: 28, novelty: 19, relevance: 17 }, undefined]);
+  assert.deepEqual([a.practice_changing, a.practice_zh], [true, "首个口服药获批，成人患者多了一线选择。"], "the day's cap is one and the approval is selected and admissible");
+  const p = rows.get(preprint.id);
+  assert.deepEqual([p.score_impact, p.score_novelty, p.score_relevance], [18, 14, 17], "a preprint's ceilings: 28 -> 18, 19 -> 14");
+  assert.deepEqual(p.editor_diagnostics.capped, ["genre:preprint"]);
+  assert.deepEqual([p.practice_changing, p.practice_zh, p.selected], [false, "预印本也提出了。", false], "held, not admitted: not selected, and a preprint never carries it");
+  const r = rows.get(refused.id);
+  assert.deepEqual([r.score_total, r.editor_diagnostics.scoreVersion], [70, undefined], "a failed answer keeps the score there was, and is asked again next time");
+  assert.equal(rows.get(low.id).score_total, 40);
+  assert.deepEqual([...new Set(asked)].sort(), ["A preprint", "EMA approves a drug", "The model fails on this one"].sort());
+  assert.equal(rows.get(approval.id).selected, true, "selection is never touched");
+
+  asked.length = 0;
+  const again = await frontierRewrite({ database, editor, threshold: 68, since: SINCE, until: UNTIL, steps: ["score"], apply: true });
+  assert.equal(again.score.items, 1, "only the refused one is owed");
+  assert.deepEqual(asked, ["The model fails on this one"]);
 });

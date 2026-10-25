@@ -95,7 +95,7 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
-import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH } from "./frontierEditor.mjs";
+import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION } from "./frontierEditor.mjs";
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
@@ -177,6 +177,39 @@ export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
  * floor's until the genre mix replaced the lane floor (ct-mix 2026-10-24).
  */
 export const FRONTIER_LANE_FLOOR_SCORE = 62;
+/**
+ * The parts an item is written with: the model's three parts and the authority term, under the ceilings the platform holds
+ * (`@evimed/domain` `frontierScoreCeilings`: the genre, a decided evidence type, a preprint, a registry-class source, the study's design
+ * when c3-faith has read it) and a republisher's grade capped. One function for the pipeline's score and the rescore command.
+ * @param {{ scores: { impact: number, novelty: number, relevance: number }, source: any, itemSourceId?: string | null, evidenceType: string | null,
+ *   evidenceFixed: boolean, genre: string | null, studyFacts?: any }} input
+ * @returns {{ parts: { authority: number, impact: number, novelty: number, relevance: number }, reasons: string[] }}
+ */
+export function frontierFinalScore({ scores, source, itemSourceId = null, evidenceType, evidenceFixed, genre, studyFacts = null }) {
+  const preprint = source?.source_type === "preprint";
+  // The registry's own grade: the ceilings cap a republisher's, and say so (`republisher`).
+  const authority = frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint });
+  return frontierScoreCeilings({ parts: { authority, ...scores }, genre, evidenceType, evidenceFixed, sourceType: source?.source_type ?? null,
+    authority: source?.authority, sourceId: source?.id ?? itemSourceId, preprint, studyFacts: studyFacts && typeof studyFacts === "object" ? studyFacts : null });
+}
+
+/**
+ * What the day's practice admission reads of the day's published items (`#admitPractice`, and the rescore command's): the selected ones,
+ * with their score, whether a label is admitted already, whether the editor proposed one (`practice_zh` holds its reason) and whether
+ * they may carry it (`frontierPracticeAdmissible`). Rows need the mix query's columns (`evidence_type`, `flags`, `source_authority`,
+ * `source_source_type`, `genre` inputs).
+ * @param {any[]} rows @param {Set<string>} [chosen] ids selected by this round, not yet in `rows`' `selected`
+ */
+export function frontierPracticeCandidates(rows, chosen = new Set()) {
+  return rows.filter((row) => row.selected === true || chosen.has(String(row.id))).map((row) => {
+    const flags = Array.isArray(row.flags) ? row.flags : [];
+    return { id: String(row.id), score: row.score_total == null ? null : Number(row.score_total), admitted: row.practice_changing === true,
+      proposed: typeof row.practice_zh === "string" && row.practice_zh.trim() !== "",
+      admissible: frontierPracticeAdmissible({ genre: frontierMixGenre(row), evidenceType: row.evidence_type, authority: row.source_authority,
+        preprint: row.source_source_type === "preprint", flags }) };
+  });
+}
+
 /**
  * A source's authority grade (1-5) as the score reads it: the registry's, and for a republisher (`frontier-selection.json`: a feed whose
  * texts are another feed's rewrite) capped at its table's grade.
@@ -2172,10 +2205,8 @@ export class FrontierPipeline {
       // The score the card shows: the model's three parts and the authority term, with the ceilings the platform holds (the genre,
       // a decided evidence type, a preprint, a registry-class source, the study's design when read) and a republisher's authority
       // capped (`@evimed/domain` `frontierScoreCeilings`). The model's own numbers stay in `editor_diagnostics.scoresRaw`.
-      const authorityTerm = frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint: source?.source_type === "preprint" });
-      const ceiled = scores ? frontierScoreCeilings({ parts: { authority: authorityTerm, ...scores }, genre: genre.genre, evidenceType,
-        evidenceFixed: evidenceBasis === "pubmed-types" || evidenceBasis === "registry", sourceType: source?.source_type ?? null,
-        authority: source?.authority, sourceId: source?.id ?? item.primary_source_id, preprint: source?.source_type === "preprint", studyFacts }) : null;
+      const ceiled = scores ? frontierFinalScore({ scores, source, itemSourceId: item.primary_source_id, evidenceType,
+        evidenceFixed: evidenceBasis === "pubmed-types" || evidenceBasis === "registry", genre: genre.genre, studyFacts }) : null;
       // A title-only stand-in has no parts to cap: its authority term alone is written, with a republisher's grade capped.
       const scoreAuthority = ceiled ? ceiled.parts.authority : frontierAuthorityScore({
         authority: frontierSourceGrade(source, item.primary_source_id), evidenceType, preprint: source?.source_type === "preprint" });
@@ -2201,10 +2232,12 @@ export class FrontierPipeline {
         safetyAlert, fields.verification, fields.editorVersion,
         fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION,
         practiceReason !== undefined, practiceReason ?? null]);
-      if (output && ceiled?.reasons.length) {
-        // What lowered a part is kept with the model's raw numbers, for the operator and for fitting a ceiling; it is not served.
+      if (output && ceiled) {
+        // Which scoring wrote the parts, and what lowered one, are kept with the model's raw numbers, for the operator and for fitting a
+        // ceiling; neither is served.
         await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = CASE WHEN editor_diagnostics->>'schemaVersion' = '1'
-            THEN editor_diagnostics || $2::jsonb ELSE editor_diagnostics END WHERE id = $1`, [item.id, JSON.stringify({ capped: ceiled.reasons })]);
+            THEN editor_diagnostics || $2::jsonb ELSE editor_diagnostics END WHERE id = $1`,
+        [item.id, JSON.stringify({ scoreVersion: FRONTIER_SCORE_VERSION, ...(ceiled.reasons.length ? { capped: ceiled.reasons } : {}) })]);
       }
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
@@ -2420,15 +2453,8 @@ export class FrontierPipeline {
    */
   async #admitPractice(client, rows, picks) {
     const chosen = new Set(picks.map((pick) => String(pick.id)));
-    const selected = rows.filter((row) => row.selected === true || chosen.has(String(row.id)));
-    const candidates = selected.map((row) => {
-      const flags = Array.isArray(row.flags) ? row.flags : [];
-      return { id: String(row.id), score: row.score_total == null ? null : Number(row.score_total), admitted: row.practice_changing === true,
-        proposed: typeof row.practice_zh === "string" && row.practice_zh.trim() !== "",
-        admissible: frontierPracticeAdmissible({ genre: frontierMixGenre(row), evidenceType: row.evidence_type, authority: row.source_authority,
-          preprint: row.source_source_type === "preprint", flags }) };
-    });
-    const { admit } = frontierPracticeAdmit(candidates, { selectedCount: selected.length });
+    const candidates = frontierPracticeCandidates(rows, chosen);
+    const { admit } = frontierPracticeAdmit(candidates, { selectedCount: candidates.length });
     let admitted = 0;
     for (const id of admit) {
       const updated = await client.query(`UPDATE evimed_frontier.items SET practice_changing = true, updated_at = clock_timestamp()
