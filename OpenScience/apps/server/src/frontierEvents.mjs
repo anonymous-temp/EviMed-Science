@@ -844,10 +844,36 @@ function codeOf(error) {
   return typeof value?.code === "string" && /^[a-z0-9_]{2,80}$/.test(value.code) ? value.code : "frontier_events_failed";
 }
 
-/** An event's title from one of its reports: the Chinese title, else the original. @param {any} item */
+/** A link inside a title: a post that ends in its address names no event by it. */
+const TITLE_LINK = /\bhttps?:\/\/\S+/giu;
+
+/** A title as an event is named by it: one line, its links taken out. @param {unknown} value */
+function titleText(value) {
+  return String(value ?? "").replace(TITLE_LINK, " ").replace(/\s+/g, " ").trim();
+}
+
+/** An event's title from one of its reports: the Chinese title, else the original without its links. @param {any} item */
 function eventTitle(item) {
-  const text = String(item?.title_zh || item?.title_raw || "").replace(/\s+/g, " ").trim();
-  return [...text].slice(0, 200).join("");
+  const zh = titleText(item?.title_zh);
+  return [...(zh || titleText(item?.title_raw))].slice(0, 200).join("");
+}
+
+/**
+ * An event's title from its visible members (G10, 2026-10-25): the first member with a Chinese title — the first-hand reports
+ * before the others, each side in the order the event heard of them — else the first original title that says something once its
+ * links are taken out (a post that is only an address says nothing), else the first report's owner. Never a bare link, and never a
+ * raw English title while any member has a Chinese one.
+ * @param {ReadonlyArray<{ role?: string | null, title_zh?: string | null, title_raw?: string | null, owner_entity?: string | null }>} members
+ * @returns {string}
+ */
+export function frontierEventTitle(members) {
+  const ordered = [...members.filter((member) => member?.role === "primary"), ...members.filter((member) => member?.role !== "primary")];
+  const chinese = ordered.find((member) => titleText(member?.title_zh));
+  if (chinese) return eventTitle(chinese);
+  const original = ordered.find((member) => titleText(member?.title_raw));
+  if (original) return eventTitle(original);
+  const owner = ordered.map((member) => titleText(member?.owner_entity)).find(Boolean);
+  return [...(owner || titleText(ordered[0]?.title_raw) || "未命名事件")].slice(0, 200).join("");
 }
 
 /** A report's own words for 「最新进展」: its Chinese title, else its original. @param {any} item */
@@ -1614,11 +1640,12 @@ export class FrontierEvents {
       const counts = frontierEventCounts({ members, now });
       const lead = rows.find((row) => row.role === "primary") ?? rows[0];
       const keys = [...new Set(rows.flatMap((row) => Array.isArray(row.entity_keys) ? row.entity_keys : []))].slice(0, 64);
+      const title = frontierEventTitle(rows);
       // The overview's title names the event once written (`writeDigests`); until then its first primary source's does.
       await client.query(`UPDATE evimed_frontier.events SET title_zh = coalesce(digest_title_zh, $2), lane = $3, entity_keys = $4, source_count_72h = $5, report_count = $6,
           entity_count = $7, has_primary = $8, heat = $9, heat_updated_at = $10, first_at = $11, last_at = $12,
           status = CASE WHEN $12::timestamptz < $13::timestamptz THEN 'settled' ELSE 'developing' END, updated_at = clock_timestamp()
-        WHERE id = $1`, [eventId, eventTitle(lead), lead.lane, keys, counts.sourceCount72h,
+        WHERE id = $1`, [eventId, title, lead.lane, keys, counts.sourceCount72h,
         counts.reportCount, counts.entityCount, counts.hasPrimary, frontierEventHeat({ members, now }), now, counts.firstAt, counts.lastAt,
         new Date(now.getTime() - FRONTIER_EVENT_WINDOW_MS)]);
     }
@@ -1645,21 +1672,25 @@ export class FrontierEvents {
       const candidates = (await client.query(`SELECT id, public_id, last_at FROM evimed_frontier.events
         WHERE merged_into IS NULL AND last_at >= $1::timestamptz`, [cut])).rows ?? [];
       const byEvent = await this.#members(client, candidates.map((row) => String(row.id)));
-      /** @type {Array<{ id: string, publicId: string, heat: number, lastAt: Date | null, eligible: boolean, sourceCount72h: number, reportCount: number }>} */
+      /** @type {Array<{ id: string, publicId: string, heat: number, lastAt: Date | null, eligible: boolean, sourceCount72h: number, reportCount: number, title: string | null }>} */
       const scored = [];
       for (const row of candidates) {
-        const members = this.#asMembers(byEvent.get(String(row.id)) ?? []);
+        const rows = byEvent.get(String(row.id)) ?? [];
+        const members = this.#asMembers(rows);
         const counts = frontierEventCounts({ members, now });
         const heat = members.length ? frontierEventHeat({ members, now }) : 0;
         scored.push({ id: String(row.id), publicId: row.public_id, heat, lastAt: counts.lastAt ?? row.last_at,
-          eligible: members.length > 0 && frontierHotEligible(counts), sourceCount72h: counts.sourceCount72h, reportCount: counts.reportCount });
+          eligible: members.length > 0 && frontierHotEligible(counts), sourceCount72h: counts.sourceCount72h, reportCount: counts.reportCount,
+          // G10: an event named before a member's Chinese title arrived (or by a post that was only an address) is named again here,
+          // so the list a reader sees is not waiting for the event's next report.
+          title: rows.length ? frontierEventTitle(rows) : null });
       }
       if (scored.length) {
         await client.query(`UPDATE evimed_frontier.events e SET heat = u.heat, heat_updated_at = $5, source_count_72h = u.recent,
-            report_count = u.reports, updated_at = clock_timestamp()
-          FROM unnest($1::bigint[], $2::float8[], $3::integer[], $4::integer[]) AS u(id, heat, recent, reports) WHERE e.id = u.id`,
+            report_count = u.reports, title_zh = coalesce(e.digest_title_zh, u.title, e.title_zh), updated_at = clock_timestamp()
+          FROM unnest($1::bigint[], $2::float8[], $3::integer[], $4::integer[], $6::text[]) AS u(id, heat, recent, reports, title) WHERE e.id = u.id`,
         [scored.map((event) => event.id), scored.map((event) => event.heat), scored.map((event) => event.sourceCount72h),
-          scored.map((event) => event.reportCount), now]);
+          scored.map((event) => event.reportCount), now, scored.map((event) => event.title)]);
       }
       const previous = (await client.query(`SELECT ranking FROM evimed_frontier.hot_snapshots ORDER BY taken_at DESC LIMIT 1`)).rows?.[0]?.ranking;
       const before = new Map((Array.isArray(previous) ? previous : []).map((entry) => [String(entry?.eventId), Number(entry?.rank)]));
