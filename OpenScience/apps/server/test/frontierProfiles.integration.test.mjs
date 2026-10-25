@@ -28,7 +28,9 @@ const suffix = randomUUID().slice(0, 8);
 const users = { reader: `reader_${suffix}`, paused: `paused_${suffix}`, empty: `empty_${suffix}`, fresh: `fresh_${suffix}` };
 const NOW = new Date("2026-09-22T04:00:00Z");
 const hoursAgo = (hours) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
-const CONFIG = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierAudience: "all", kbEmbeddingDimension: 1024 };
+// The fixture's scores (50-99) are drawn for a selection line of 82, the default until c3-select moved it to 64; the line is pinned here so the
+// pool of items "of 精选 quality" is the one the assertions count.
+const CONFIG = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierAudience: "all", kbEmbeddingDimension: 1024, frontierSelectThreshold: 82 };
 let database;
 let memory;
 const memories = {};

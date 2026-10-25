@@ -6,12 +6,14 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { FRONTIER_ASK_INSTRUCTIONS } from "../src/frontierAsk.mjs";
 import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { FrontierEvents } from "../src/frontierEvents.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_TEXT_GIVE_UP_MS, FRONTIER_TEXT_HOLD_MS, FrontierPipeline } from "../src/frontierPipeline.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
+import { frontierTrackInstructions } from "../src/frontierTrackFacts.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { TEST_VOCABULARY, insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
 
@@ -112,6 +114,10 @@ function editorWith(behaviour = {}) {
         this.briefInputs.push(String(messages[1].content));
         return behaviour.brief ? behaviour.brief(String(messages[1].content)) : { points: {} };
       }
+      // The reader's 就此提问 questions (c3-ask) are another call of the same kind: none here, and not a judgement of the text.
+      if (instructions === FRONTIER_ASK_INSTRUCTIONS) return { questions: [] };
+      // 追踪's record of an approval or a guideline (c3-track) is read from the same text: none here, and not a judgement of the text either.
+      if (instructions === frontierTrackInstructions("approval") || instructions === frontierTrackInstructions("guideline")) return { none: true };
       this.tidyCalls += 1;
       return { drop: [] };
     },
@@ -232,18 +238,20 @@ test("G2: a record whose entry says too little is looked at once and left as it 
 });
 
 test("G11: an item with nothing to read leaves the claim queue once its entry has waited FRONTIER_TEXT_GIVE_UP_MS, and stops being claimed", options, async () => {
+  // A journal below the top tier: fourteen days (a top journal's papers are waited for twenty-one, c3-primary).
+  await insertSource(database, "minor-journal", { name: "Minor Journal", authority: 3, access: "crossref-issn" });
   /** @param {string} title @param {number} waitedMs */
   async function waiting(title, waitedMs) {
     const received = new Date(NOW.getTime() - waitedMs);
     const inserted = await database.query(`INSERT INTO evimed_frontier.items (public_id, primary_source_id, canonical_url, identity_key, title_raw, lang, lane, source_type,
         first_seen_at, timeline_at, state, verification, evidence_type)
-      VALUES ($1,'nejm',$2,$3,$4,'en','evidence','journal',$5,$5,'scored','passed','rct') RETURNING id`,
+      VALUES ($1,'minor-journal',$2,$3,$4,'en','evidence','journal',$5,$5,'scored','passed','rct') RETURNING id`,
     [`t${randomUUID().replace(/-/g, "").slice(0, 15)}`, `https://example.org/${title}`, `url:${sha256(title)}`, title, received]);
     const id = String(inserted.rows[0].id);
     await database.query("INSERT INTO evimed_frontier.item_texts (item_id, model_input, model_input_sha256) VALUES ($1, $2, $3)", [id, title, sha256(title)]);
     seq += 1;
     await database.query(`INSERT INTO evimed_frontier.entries (plugin_entry_id, plugin_seq, source_id, identity_key, url, canonical_url, title_raw, first_seen_at, received_at, content_sha256, state, item_id)
-      VALUES ($1,$2,'nejm',$3,$4,$4,$5,$6,$6,$7,'held',$8)`,
+      VALUES ($1,$2,'minor-journal',$3,$4,$4,$5,$6,$6,$7,'held',$8)`,
     [`nejm:${seq}`, 820_000 + seq, `url:${sha256(title)}`, `https://example.org/${title}`, title, received, sha256(`${seq}`), id]);
     return id;
   }

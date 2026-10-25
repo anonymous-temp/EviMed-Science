@@ -77,13 +77,13 @@ def realign(records: list[dict[str, Any]], *, dois: list[str], pmids: list[str])
 
 
 async def lookup(fetcher: Any, endpoints: Endpoints, *, dois: list[str], pmids: list[str],
-                 trace: Trace) -> dict[str, dict[str, Any]]:
+                 trace: Trace, priority: str = "normal") -> dict[str, dict[str, Any]]:
     """PubMed records keyed ``pmid:<n>`` and ``doi:<doi>`` for what was asked, realigned (module docstring)."""
     asked_dois = sorted({d.lower() for d in dois if d})
     asked_pmids = sorted({p for p in pmids if p and p.isdigit()})
     found_pmids = list(asked_pmids)
     for batch in _batches(asked_dois, DOIS_PER_SEARCH):
-        attempt = await get(fetcher, esearch_url(endpoints, batch))
+        attempt = await get(fetcher, esearch_url(endpoints, batch), priority=priority)
         if attempt.result is None:
             trace.record(attempt, "pubmed_esearch")
             continue
@@ -97,7 +97,7 @@ async def lookup(fetcher: Any, endpoints: Endpoints, *, dois: list[str], pmids: 
     records: dict[str, dict[str, Any]] = {}
     dropped = 0
     for batch in _batches(found_pmids, PMIDS_PER_FETCH):
-        attempt = await get(fetcher, efetch_url(endpoints, batch))
+        attempt = await get(fetcher, efetch_url(endpoints, batch), priority=priority)
         if attempt.result is None:
             trace.record(attempt, "pubmed_efetch")
             continue

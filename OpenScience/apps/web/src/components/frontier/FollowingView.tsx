@@ -6,6 +6,7 @@ import {
   addFrontierFollow,
   frontierErrorMessage,
   FRONTIER_FOLLOWS_CHANGED,
+  FRONTIER_FOLLOWS_SEEN,
   listFrontierFollows,
   type FrontierFollow,
 } from "@/lib/frontierClient";
@@ -26,6 +27,7 @@ import type { FollowChoice } from "./FrontierControls";
 import { FollowedEvidenceZones } from "./FollowedEvidenceZones";
 import { FrontierOnboarding } from "./FrontierOnboarding";
 import { FrontierSkeleton } from "./FrontierSkeleton";
+import { TypedFollowInput } from "./TypedFollowInput";
 
 /** What the reader follows, read once for the whole 关注 view: the topics of the feed, the evidence zones, and whether they answered. */
 export interface FollowingState {
@@ -77,7 +79,9 @@ export function useFollowing(enabled: boolean): FollowingState {
     load();
     // A follow made elsewhere (a card's menu, the drawer) changes what this view holds.
     window.addEventListener(FRONTIER_FOLLOWS_CHANGED, load);
-    return () => { active = false; window.removeEventListener(FRONTIER_FOLLOWS_CHANGED, load); };
+    // A follow's feed was opened: the counts beside the follows are read again.
+    window.addEventListener(FRONTIER_FOLLOWS_SEEN, load);
+    return () => { active = false; window.removeEventListener(FRONTIER_FOLLOWS_CHANGED, load); window.removeEventListener(FRONTIER_FOLLOWS_SEEN, load); };
   }, [enabled, attempt]);
   const retry = useCallback(() => { setError(null); setAttempt((value) => value + 1); }, []);
   return {
@@ -104,8 +108,11 @@ export function followChoiceParam(choice: FollowChoice): string {
 
 /** The kinds a follow can be, in the reader's words and in the order the list groups them. */
 const KIND_GROUPS: ReadonlyArray<[FrontierFollow["kind"], string]> = [
-  ["specialty", "专科"], ["tag", "标签"], ["drug", "药物"], ["topic", "主题"], ["source", "来源"], ["event", "事件"],
+  ["query", "关注词"], ["specialty", "专科"], ["tag", "标签"], ["drug", "药物"], ["topic", "主题"], ["source", "来源"], ["event", "事件"],
 ];
+
+/** The server stops counting here (`FRONTIER_FOLLOW_COUNT_CAP`): a number this high reads 「99+」. */
+const NEW_COUNT_CAP = 99;
 
 /** A follow as the list and its token say it: a tag with its 「#」. */
 export function followLabel(follow: FrontierFollow): string {
@@ -145,12 +152,14 @@ export async function followAnswers(answer: FrontierPrefs | undefined, held: rea
  * Every entry is an address (`follow=`), so Back and a shared link land on it; `onPick` hears the choice (on a phone it closes the
  * 「筛选」 sheet the list is the first section of). A column beside the entry on a wide screen.
  */
-export function FollowList({ state, choice, hrefFor, onManage, onPick, titled = false }: {
+export function FollowList({ state, choice, hrefFor, onManage, onPick, onAdded, titled = false }: {
   state: FollowingState;
   choice: FollowChoice;
   hrefFor: (choice: FollowChoice) => string;
   onManage: () => void;
   onPick?: () => void;
+  /** With it the list ends in 「关注一个药物、试验或问题」, and a follow made there opens (c3-watch, 2026-10-25). */
+  onAdded?: (follow: FrontierFollow) => void;
   /** Named on the page (a section of the 「筛选」 sheet among the filters' groups). */
   titled?: boolean;
 }) {
@@ -159,7 +168,7 @@ export function FollowList({ state, choice, hrefFor, onManage, onPick, titled = 
     <li key={followChoiceParam(entry)}>
       <Link to={hrefFor(entry)} aria-current={current(entry) ? "page" : undefined} className={navItemClasses({ current: current(entry) })} onClick={onPick}>
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {count !== undefined && <span className="shrink-0 text-caption tabular-nums text-text-3" aria-label={`${count} 条新动态`}>{count}</span>}
+        {count !== undefined && <span className="shrink-0 text-caption tabular-nums text-text-3" aria-label={`${count >= NEW_COUNT_CAP ? `至少 ${NEW_COUNT_CAP}` : count} 条新动态`}>{count >= NEW_COUNT_CAP ? `${NEW_COUNT_CAP}+` : count}</span>}
       </Link>
     </li>
   );
@@ -170,6 +179,8 @@ export function FollowList({ state, choice, hrefFor, onManage, onPick, titled = 
         {item({ kind: "foryou" }, "与我相关")}
         {item({ kind: "all" }, "全部关注")}
       </ul>
+      {/* What the reader wants to hear about, in their own words, stays at the top: the list under it grows with every follow. */}
+      {onAdded && <TypedFollowInput held={state.topics} compact onAdded={onAdded} />}
       {KIND_GROUPS.map(([kind, word]) => {
         const follows = state.topics.filter((follow) => follow.kind === kind);
         if (follows.length === 0) return null;

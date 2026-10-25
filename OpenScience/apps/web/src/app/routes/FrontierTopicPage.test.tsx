@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
@@ -45,7 +46,8 @@ function page(overrides: Partial<TopicPageData> = {}): TopicPageData {
 
 function Probe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
+  const intent = (location.state as { runtimeUiIntent?: { draft?: string; originReference?: unknown } } | null)?.runtimeUiIntent;
+  return <div data-testid="location" data-origin={intent?.originReference ? "yes" : undefined} data-draft={intent?.draft}>{location.pathname}</div>;
 }
 
 function renderTopic(id = "a1b2c3d4e5f6a7b8") {
@@ -66,6 +68,15 @@ beforeEach(() => {
 });
 
 describe("a topic page", () => {
+  it("offers 就此提问: the topic's question in the composer as a draft, the topic named under it, and no origin (a topic is not an item the assistant reads)", async () => {
+    renderTopic();
+    await userEvent.click(await screen.findByRole("button", { name: "就此提问" }));
+    const where = screen.getByTestId("location");
+    expect(where).toHaveTextContent("/app/chat");
+    expect(where.getAttribute("data-draft")).toBe("健康成年人跑步等运动时发生心源性猝死的风险有多大，谁需要先做检查？\n\n前沿动态热点话题：“运动会诱发心源性猝死吗？风险有多大”");
+    expect(where).not.toHaveAttribute("data-origin");
+  });
+
   it("heads the page with the question, the field and the way back; the event is one attributed line", async () => {
     renderTopic();
     expect(await screen.findByRole("heading", { level: 1, name: "运动会诱发心源性猝死吗？风险有多大" })).toBeInTheDocument();

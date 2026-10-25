@@ -44,6 +44,7 @@ function fixture(config, userId = "reader") {
     async listFollows() { return { follows: [] }; },
     async createFollow(_user, body) { return { follow: { id: "1", ...body } }; },
     async deleteFollow() { return { deleted: true }; },
+    async markFollowSeen(user, id) { calls.push(["seen", user.id, id]); return { follow: { id, newItems: 0 } }; },
     async operateItem(id, action, input) { calls.push([`ops-${action}`, id, input.reason]); return { item: { id, state: action === "withdraw" ? "withdrawn" : "published" } }; },
     async setSourceEnabled(id, enabled) { return { source: { id, enabled } }; },
     async weeklies(params) { return { weeklies: [{ weekStart: "2026-09-21", limit: params.get("limit") }] }; },
@@ -113,6 +114,16 @@ test("a reader's writes take no fields they do not name, and the CSRF check runs
   const removed = response();
   await routes(request("DELETE", "/api/frontier/follows/7"), removed);
   assert.deepEqual(removed.json(), { data: { deleted: true } });
+  // Something typed (c3-watch): the kind and the words ride in the same fields; opening a follow's feed is one more POST, with no body.
+  const typedFollow = response();
+  await routes(request("POST", "/api/frontier/follows", { body: { kind: "query", label: "GLP-1 和胰腺炎" } }), typedFollow);
+  assert.equal(typedFollow.json().data.follow.label, "GLP-1 和胰腺炎");
+  const seen = response();
+  await routes(request("POST", "/api/frontier/follows/7/seen", { body: {} }), seen);
+  assert.deepEqual(seen.json(), { data: { follow: { id: "7", newItems: 0 } } });
+  assert.ok(calls.some((call) => call[0] === "seen" && call[2] === "7"));
+  await assert.rejects(routes(request("POST", "/api/frontier/follows/7/seen", { body: { extra: 1 } }), response()), { code: "frontier_payload_invalid" });
+  await assert.rejects(routes(request("GET", "/api/frontier/follows/7/seen"), response()), { code: "not_found" });
 });
 
 test("a hide may say why, by one of the feed's words; nothing else takes a reason and nothing else rides in a hide (c2-hide)", async () => {
@@ -171,6 +182,7 @@ test("route labels fold ids so a dashboard row is a route", () => {
   assert.equal(frontierRoutePattern("/api/frontier/items/abc123"), "/api/frontier/items/:id");
   assert.equal(frontierRoutePattern("/api/frontier/items/abc123/star"), "/api/frontier/items/:id/:action");
   assert.equal(frontierRoutePattern("/api/frontier/follows/12"), "/api/frontier/follows/:id");
+  assert.equal(frontierRoutePattern("/api/frontier/follows/12/seen"), "/api/frontier/follows/:id/seen");
   assert.equal(frontierRoutePattern("/api/frontier/ops/sources/nejm/enabled"), "/api/frontier/ops/sources/:id/enabled");
   assert.equal(frontierRoutePattern("/api/frontier/events/e1"), "/api/frontier/events/:id");
   assert.equal(frontierRoutePattern("/api/frontier/whatever/x/y"), "/api/frontier/:route");

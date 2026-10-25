@@ -4,7 +4,7 @@ import type { FrontierHideReason, FrontierItem } from "@/lib/frontierClient";
 import { FilterChip } from "@/components/ui/FilterChips";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { INLINE_ACTION } from "./frontierText";
-import { HIDE_REASONS, hideReasonLabel } from "./frontierHide";
+import { hideReasonLabel, hideReasonsFor } from "./frontierHide";
 import type { FrontierHideStripControls } from "./useFrontierHide";
 
 /**
@@ -69,7 +69,7 @@ export function FrontierHideStrip({ item, grouped = false, noted, onReason, onUn
         ) : (
           <>
             <span className="mr-1">已隐藏 · 说说原因（可不选）</span>
-            {HIDE_REASONS.map((reason, index) => (
+            {hideReasonsFor(item).map((reason, index) => (
               <FilterChip key={reason} ref={index === 0 ? first : undefined} className="max-w-full min-w-0 bg-surface hover:bg-surface-3" onClick={() => onReason(reason)}>
                 <span className="truncate">{hideReasonLabel(reason, item)}</span>
               </FilterChip>
@@ -106,7 +106,7 @@ export function FrontierHideReasonMenu({ item, onChoose, anchorClassName }: {
   }, []);
   const items: MenuEntry[] = [
     { heading: "说说原因（可不选）" },
-    ...HIDE_REASONS.map((reason) => ({ label: hideReasonLabel(reason, item), onSelect: () => onChoose(reason) })),
+    ...hideReasonsFor(item).map((reason) => ({ label: hideReasonLabel(reason, item), onSelect: () => onChoose(reason) })),
     "separator",
     { label: "不说原因，直接隐藏", onSelect: () => onChoose(null) },
   ];

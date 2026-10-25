@@ -19,6 +19,8 @@ export function frontierFollowPredicate(follow, param) {
     return `coalesce(i.event_id IN (SELECT id FROM evimed_frontier.events WHERE public_id = ${key}
       UNION SELECT event_id FROM evimed_frontier.event_aliases WHERE public_id = ${key}), false)`;
   }
+  // A typed follow lists what was matched to it (frontierFollowMatches.mjs), once each.
+  if (follow.kind === "query") return `EXISTS (SELECT 1 FROM evimed_frontier.follow_matches fm WHERE fm.item_id = i.id AND fm.follow_id = ${param(follow.id)}::bigint)`;
   if (follow.kind === "topic") {
     const query = tsqueryLiteral(follow.key);
     return query ? `i.lexemes @@ ${param(query)}::tsquery` : "FALSE";

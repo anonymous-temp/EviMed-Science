@@ -57,7 +57,7 @@ from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
 from .social.wechat import is_article as is_wechat_article
-from .store import (StoreResult, claim_texts, insert_fetch, redeliver, reliability_24h, reliability_24h_all,
+from .store import (StoreResult, claim_texts, reopen_top_journal_texts, insert_fetch, redeliver, reliability_24h, reliability_24h_all,
                     save_text_result, store_entries, text_failure, text_outcomes, text_outcomes_all)
 
 log = logging.getLogger("knowledge_plugin.scheduler")
@@ -747,6 +747,9 @@ class Crawler:
                         if purged_max > watermark:
                             await meta_set(conn, "purged_through_seq", purged_max)
             done["entries"] = purged
+            reopened = await reopen_top_journal_texts(conn, now)
+            if reopened:
+                done["texts_reopened"] = reopened
             deleted = await (await conn.execute(
                 """DELETE FROM evimed_knowledge.seen_keys WHERE (source_id, key_sha256) IN (
                      SELECT source_id, key_sha256 FROM evimed_knowledge.seen_keys WHERE last_seen_at < %s LIMIT %s)

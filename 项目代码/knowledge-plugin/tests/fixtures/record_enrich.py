@@ -250,10 +250,22 @@ def paper_row(doi: str, source_id: str | None = None, *, first_seen: str = "2026
         "source_egress": source["egress"] if source else "direct",
         "source_type": source["source_type"] if source else "journal",
         "source_config": source["config"] if source else {}, "attempts": attempts,
+        "source_authority": source["authority"] if source else None,
     }
 
 
 PAPER_CASES = {
+    # c3-primary 2026-10-25, the top journals' papers the platform held: NEJM's tarlatamab-durvalumab trial (no PubMed or Europe PMC
+    # record a day after first sight; OpenAlex has the abstract), an NEJM letter (OpenAlex gives its opening), The Lancet's RISE UP
+    # comment (no abstract anywhere), a JAMA trial (PubMed's record in Publisher status, no abstract; the feed a summary) and a
+    # Gastroenterology cohort (PubMed without abstract; the feed carries the opening paragraph with its reference marks).
+    "enrich/paper-primaries": lambda: [
+        paper_row("10.1056/nejmoa2609482", "j-0028-4793", first_seen="2026-10-24T09:00:00+00:00"),
+        paper_row("10.1056/nejmc2609433", "j-0028-4793", first_seen="2026-10-21T09:00:00+00:00"),
+        paper_row("10.1016/s0140-6736(26)02046-5", "j-0140-6736", first_seen="2026-10-23T09:00:00+00:00"),
+        paper_row("10.1001/jama.2026.16509", "j-0098-7484", first_seen="2026-10-14T09:00:00+00:00"),
+        paper_row("10.1053/j.gastro.2026.09.022", "j-0016-5085", first_seen="2026-10-20T09:00:00+00:00"),
+    ],
     # Only OpenAlex has the abstract (an Elsevier-hosted journal: Crossref and PubMed without it; the page refuses us).
     "enrich/paper-openalex": lambda: [paper_row("10.1016/s1001-9294(22)00007-4")],
     # A closed Springer article, structured abstract on its landing page through the direct exit.
@@ -363,7 +375,17 @@ FEEDS = {
 }
 
 
-async def record_feeds_case(name: str = "enrich/paper-feeds") -> dict:
+# c3-primary 2026-10-25: the feeds of top journals whose items carry reference marks or a closing heading (Gastroenterology and Mayo
+# Clinic Proceedings: the opening paragraph; Gut: the key-points box) and a feed item that says nothing.
+FEEDS_C3 = {
+    "gastro-inpress": "https://www.gastrojournal.org/inpress.rss",
+    "mayo-inpress": "https://www.mayoclinicproceedings.org/inpress.rss",
+    "gut-ahead": "https://gut.bmj.com/rss/ahead.xml",
+    "jno-new": "https://jamanetwork.com/rss/site_214/187.xml",
+}
+
+
+async def record_feeds_case(name: str = "enrich/paper-feeds", feeds: dict | None = None) -> dict:
     from knowledge_plugin.enrich import feeds as feeds_step
 
     case_dir = HERE / name
@@ -374,7 +396,7 @@ async def record_feeds_case(name: str = "enrich/paper-feeds") -> dict:
     cache = feeds_step.FeedCache()
     read: dict = {}
     try:
-        for key, url in FEEDS.items():
+        for key, url in (feeds or FEEDS).items():
             trace = Trace()
             items = await feeds_step.read_feed(fetcher, url, source_id=None, egress="direct", trace=trace, cache=cache)
             read[key] = {"url": url, "items": None if items is None else len(items), "notes": trace.notes,
@@ -447,6 +469,10 @@ def main(argv: list[str]) -> int:
         if name == "enrich/paper-pages":
             provenance = asyncio.run(record_pages_case())
             print(name, json.dumps(provenance["pages"])[:1200], flush=True)
+            continue
+        if name == "enrich/paper-feeds-c3":
+            provenance = asyncio.run(record_feeds_case(name, FEEDS_C3))
+            print(name, json.dumps(provenance["feeds"])[:800], flush=True)
             continue
         if name == "enrich/paper-feeds":
             provenance = asyncio.run(record_feeds_case())

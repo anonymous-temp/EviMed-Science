@@ -37,6 +37,7 @@
  */
 
 import { DISPLAY_TIME_ZONE, FRONTIER_SOURCE_TYPE_LABELS_ZH, agendaLocalDate, frontierSourceDisplayName } from "@evimed/domain";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import { isChineseProse } from "./frontierEditor.mjs";
 import { FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
@@ -206,7 +207,7 @@ export class FrontierActions {
     const row = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.selected, i.safety_alert,
         i.score_total, i.lang, i.doi, i.pmid,
         i.registry_ids, i.canonical_url, i.published_at, i.timeline_at, i.date_precision, i.source_type, i.primary_source_id,
-        s.name AS source_name, s.owner_entity AS source_owner,
+        s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS},
         t.item_id AS text_id, t.abstract_raw, t.abstract_zh, t.journal, t.authors_short, t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
@@ -215,7 +216,7 @@ export class FrontierActions {
     // The record a reader keeps names the institution, not the feed (plan 2026-09-23 §6.5 #5), and carries the 推荐理由 the reader
     // shows: a selected or near-line item's (frontierService.mjs).
     return { ...row, reason_zh: frontierReaderWorthy(row, frontierSelectThreshold(this.config)) ? row.reason_zh : null,
-      source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }) };
+      source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }) };
   }
 
   /**

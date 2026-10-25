@@ -1,0 +1,6707 @@
+{
+ "at": "2026-10-25T13:41:36.290Z",
+ "model": "deepseek-flash",
+ "versions": {
+  "editor": "frontier-editor-1.82a5e5c7cdff",
+  "lead": "frontier-lead-3.256c559f2083",
+  "brief": "frontier-brief-2.f9f25137d61b",
+  "reason": "frontier-reason-2.e89b39c4ec28"
+ },
+ "usage": {
+  "calls": 136,
+  "cacheHit": 121344,
+  "cacheMiss": 119129,
+  "output": 26656,
+  "cny": 0.456
+ },
+ "summary": {
+  "thinRecords": null,
+  "all": {
+   "before": {
+    "cases": 32,
+    "reasonFormula": 11,
+    "reasonEmpty": 13,
+    "withAbsences": 3,
+    "absencePhrases": 3,
+    "numbersMissing": 13,
+    "leadOverLimit": 2,
+    "leadCharsMean": 312,
+    "briefCoverageMean": null,
+    "quotesVerbatim": null,
+    "leadStyle": {
+     "chars": 9976,
+     "sentences": 117,
+     "meanSentenceChars": 85.3,
+     "shareOver80": 0.444,
+     "shareOver120": 0.214,
+     "shareNumbers4": 0.47,
+     "shareCommas4": 0.137,
+     "fenbiePer1k": 0.501,
+     "dashPer1k": 0,
+     "reversalPer1k": 0,
+     "colonSetupPer1k": 0.1
+    },
+    "proseStyle": {
+     "chars": 16273,
+     "sentences": 204,
+     "meanSentenceChars": 79.5,
+     "shareOver80": 0.392,
+     "shareOver120": 0.152,
+     "shareNumbers4": 0.402,
+     "shareCommas4": 0.103,
+     "fenbiePer1k": 0.307,
+     "dashPer1k": 0,
+     "reversalPer1k": 0,
+     "colonSetupPer1k": 0.061
+    },
+    "titles": {
+     "chinese": {
+      "n": 8,
+      "hook": 4,
+      "question": 0,
+      "exclamation": 4,
+      "hype": 1,
+      "siteSuffix": 2,
+      "columnTag": 5,
+      "named": 8,
+      "resultVerb": 0,
+      "numbersMissing": 0,
+      "meanChars": 44,
+      "kept": 8
+     },
+     "translated": {
+      "n": 24,
+      "hook": 0,
+      "question": 0,
+      "exclamation": 0,
+      "hype": 0,
+      "siteSuffix": 0,
+      "columnTag": 0,
+      "named": 10,
+      "resultVerb": 7,
+      "numbersMissing": 0,
+      "meanChars": 25
+     }
+    },
+    "absoluteGivenUsed": "11/14",
+    "harmGivenUsed": "9/11",
+    "leakageCases": 0,
+    "adviceAdded": 0
+   },
+   "after": {
+    "cases": 32,
+    "reasonFormula": 0,
+    "reasonEmpty": 32,
+    "withAbsences": 2,
+    "absencePhrases": 2,
+    "numbersMissing": 0,
+    "leadOverLimit": 0,
+    "leadCharsMean": 127,
+    "briefCoverageMean": 0.8,
+    "quotesVerbatim": "21/21",
+    "leadStyle": {
+     "chars": 4058,
+     "sentences": 48,
+     "meanSentenceChars": 84.5,
+     "shareOver80": 0.458,
+     "shareOver120": 0.146,
+     "shareNumbers4": 0.542,
+     "shareCommas4": 0.146,
+     "fenbiePer1k": 0.739,
+     "dashPer1k": 0,
+     "reversalPer1k": 0,
+     "colonSetupPer1k": 0.246
+    },
+    "proseStyle": {
+     "chars": 15801,
+     "sentences": 256,
+     "meanSentenceChars": 60.8,
+     "shareOver80": 0.18,
+     "shareOver120": 0.027,
+     "shareNumbers4": 0.395,
+     "shareCommas4": 0.039,
+     "fenbiePer1k": 0.253,
+     "dashPer1k": 0,
+     "reversalPer1k": 0.063,
+     "colonSetupPer1k": 0.759
+    },
+    "titles": {
+     "chinese": {
+      "n": 0,
+      "hook": 0,
+      "question": 0,
+      "exclamation": 0,
+      "hype": 0,
+      "siteSuffix": 0,
+      "columnTag": 0,
+      "named": 0,
+      "resultVerb": 0,
+      "numbersMissing": 0,
+      "meanChars": 0,
+      "kept": 0
+     },
+     "translated": {
+      "n": 0,
+      "hook": 0,
+      "question": 0,
+      "exclamation": 0,
+      "hype": 0,
+      "siteSuffix": 0,
+      "columnTag": 0,
+      "named": 0,
+      "resultVerb": 0,
+      "numbersMissing": 0,
+      "meanChars": 0
+     }
+    },
+    "absoluteGivenUsed": "7/8",
+    "harmGivenUsed": "4/5",
+    "leakageCases": 0,
+    "adviceAdded": 0
+   },
+   "scores": {
+    "all": {
+     "n": 0,
+     "allMax": 0,
+     "impactMax": 0,
+     "impact": null,
+     "novelty": null,
+     "relevance": null
+    },
+    "byGenre": {}
+   },
+   "scoresRaw": {
+    "all": {
+     "n": 0,
+     "allMax": 0,
+     "impactMax": 0,
+     "impact": null,
+     "novelty": null,
+     "relevance": null
+    },
+    "byGenre": {}
+   },
+   "genreAccepted": "32/32",
+   "errors": 0,
+   "briefDropped": {
+    "number": 1,
+    "length": 7,
+    "link": 1,
+    "language": 1
+   },
+   "faith": {
+    "drafts": 44,
+    "mismatchBefore": 0,
+    "mismatchAfterRepair": 0,
+    "rateBefore": 0,
+    "rateAfterRepair": 0,
+    "outcomes": {
+     "clean": 44
+    }
+   }
+  },
+  "byGenre": {
+   "paper": {
+    "before": {
+     "cases": 8,
+     "reasonFormula": 0,
+     "reasonEmpty": 6,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 8,
+     "leadOverLimit": 1,
+     "leadCharsMean": 284,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null,
+     "leadStyle": {
+      "chars": 2272,
+      "sentences": 27,
+      "meanSentenceChars": 84.1,
+      "shareOver80": 0.37,
+      "shareOver120": 0.259,
+      "shareNumbers4": 0.407,
+      "shareCommas4": 0.222,
+      "fenbiePer1k": 0.44,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0.44
+     },
+     "proseStyle": {
+      "chars": 3526,
+      "sentences": 45,
+      "meanSentenceChars": 78.1,
+      "shareOver80": 0.356,
+      "shareOver120": 0.156,
+      "shareNumbers4": 0.289,
+      "shareCommas4": 0.156,
+      "fenbiePer1k": 0.284,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0.284
+     },
+     "titles": {
+      "chinese": {
+       "n": 2,
+       "hook": 1,
+       "question": 0,
+       "exclamation": 1,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 1,
+       "named": 2,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 47,
+       "kept": 2
+      },
+      "translated": {
+       "n": 6,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 2,
+       "resultVerb": 1,
+       "numbersMissing": 0,
+       "meanChars": 28
+      }
+     },
+     "absoluteGivenUsed": "1/1",
+     "harmGivenUsed": "4/4",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "after": {
+     "cases": 8,
+     "reasonFormula": 0,
+     "reasonEmpty": 8,
+     "withAbsences": 1,
+     "absencePhrases": 1,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 133,
+     "briefCoverageMean": 0.76,
+     "quotesVerbatim": "7/7",
+     "leadStyle": {
+      "chars": 1062,
+      "sentences": 12,
+      "meanSentenceChars": 88.5,
+      "shareOver80": 0.583,
+      "shareOver120": 0.167,
+      "shareNumbers4": 0.5,
+      "shareCommas4": 0.083,
+      "fenbiePer1k": 0.942,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0.942
+     },
+     "proseStyle": {
+      "chars": 4239,
+      "sentences": 66,
+      "meanSentenceChars": 63.3,
+      "shareOver80": 0.212,
+      "shareOver120": 0.03,
+      "shareNumbers4": 0.394,
+      "shareCommas4": 0.045,
+      "fenbiePer1k": 0.236,
+      "dashPer1k": 0,
+      "reversalPer1k": 0.236,
+      "colonSetupPer1k": 2.123
+     },
+     "titles": {
+      "chinese": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0,
+       "kept": 0
+      },
+      "translated": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0
+      }
+     },
+     "absoluteGivenUsed": "1/1",
+     "harmGivenUsed": "4/4",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "genreAccepted": 8
+   },
+   "preprint": {
+    "before": {
+     "cases": 8,
+     "reasonFormula": 1,
+     "reasonEmpty": 4,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 2,
+     "leadOverLimit": 0,
+     "leadCharsMean": 332,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null,
+     "leadStyle": {
+      "chars": 2658,
+      "sentences": 31,
+      "meanSentenceChars": 85.7,
+      "shareOver80": 0.516,
+      "shareOver120": 0.161,
+      "shareNumbers4": 0.613,
+      "shareCommas4": 0.097,
+      "fenbiePer1k": 0.752,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "proseStyle": {
+      "chars": 4135,
+      "sentences": 54,
+      "meanSentenceChars": 76.4,
+      "shareOver80": 0.407,
+      "shareOver120": 0.111,
+      "shareNumbers4": 0.519,
+      "shareCommas4": 0.074,
+      "fenbiePer1k": 0.484,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "titles": {
+      "chinese": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0,
+       "kept": 0
+      },
+      "translated": {
+       "n": 8,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 3,
+       "resultVerb": 3,
+       "numbersMissing": 0,
+       "meanChars": 21
+      }
+     },
+     "absoluteGivenUsed": "6/7",
+     "harmGivenUsed": "1/1",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "after": {
+     "cases": 8,
+     "reasonFormula": 0,
+     "reasonEmpty": 8,
+     "withAbsences": 1,
+     "absencePhrases": 1,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 136,
+     "briefCoverageMean": 0.83,
+     "quotesVerbatim": "8/8",
+     "leadStyle": {
+      "chars": 1085,
+      "sentences": 14,
+      "meanSentenceChars": 77.5,
+      "shareOver80": 0.286,
+      "shareOver120": 0.071,
+      "shareNumbers4": 0.5,
+      "shareCommas4": 0.214,
+      "fenbiePer1k": 1.843,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "proseStyle": {
+      "chars": 4569,
+      "sentences": 77,
+      "meanSentenceChars": 58.4,
+      "shareOver80": 0.143,
+      "shareOver120": 0.013,
+      "shareNumbers4": 0.39,
+      "shareCommas4": 0.039,
+      "fenbiePer1k": 0.657,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0.219
+     },
+     "titles": {
+      "chinese": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0,
+       "kept": 0
+      },
+      "translated": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0
+      }
+     },
+     "absoluteGivenUsed": "6/7",
+     "harmGivenUsed": "0/1",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "genreAccepted": 8
+   },
+   "conference": {
+    "before": {
+     "cases": 8,
+     "reasonFormula": 6,
+     "reasonEmpty": 2,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 340,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null,
+     "leadStyle": {
+      "chars": 2722,
+      "sentences": 29,
+      "meanSentenceChars": 93.9,
+      "shareOver80": 0.414,
+      "shareOver120": 0.31,
+      "shareNumbers4": 0.552,
+      "shareCommas4": 0.172,
+      "fenbiePer1k": 0.367,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "proseStyle": {
+      "chars": 4593,
+      "sentences": 53,
+      "meanSentenceChars": 86.4,
+      "shareOver80": 0.396,
+      "shareOver120": 0.226,
+      "shareNumbers4": 0.491,
+      "shareCommas4": 0.151,
+      "fenbiePer1k": 0.218,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "titles": {
+      "chinese": {
+       "n": 6,
+       "hook": 3,
+       "question": 0,
+       "exclamation": 3,
+       "hype": 1,
+       "siteSuffix": 2,
+       "columnTag": 4,
+       "named": 6,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 43,
+       "kept": 6
+      },
+      "translated": {
+       "n": 2,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 2,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 33
+      }
+     },
+     "absoluteGivenUsed": "4/6",
+     "harmGivenUsed": "4/6",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "after": {
+     "cases": 8,
+     "reasonFormula": 0,
+     "reasonEmpty": 8,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 116,
+     "briefCoverageMean": 0.93,
+     "quotesVerbatim": "6/6",
+     "leadStyle": {
+      "chars": 925,
+      "sentences": 10,
+      "meanSentenceChars": 92.5,
+      "shareOver80": 0.5,
+      "shareOver120": 0.3,
+      "shareNumbers4": 0.7,
+      "shareCommas4": 0.2,
+      "fenbiePer1k": 0,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "proseStyle": {
+      "chars": 4080,
+      "sentences": 63,
+      "meanSentenceChars": 63.7,
+      "shareOver80": 0.206,
+      "shareOver120": 0.048,
+      "shareNumbers4": 0.54,
+      "shareCommas4": 0.048,
+      "fenbiePer1k": 0,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "titles": {
+      "chinese": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0,
+       "kept": 0
+      },
+      "translated": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0
+      }
+     },
+     "absoluteGivenUsed": "0/0",
+     "harmGivenUsed": "0/0",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "genreAccepted": 8
+   },
+   "trial": {
+    "before": {
+     "cases": 8,
+     "reasonFormula": 4,
+     "reasonEmpty": 1,
+     "withAbsences": 3,
+     "absencePhrases": 3,
+     "numbersMissing": 3,
+     "leadOverLimit": 1,
+     "leadCharsMean": 291,
+     "briefCoverageMean": null,
+     "quotesVerbatim": null,
+     "leadStyle": {
+      "chars": 2324,
+      "sentences": 30,
+      "meanSentenceChars": 77.5,
+      "shareOver80": 0.467,
+      "shareOver120": 0.133,
+      "shareNumbers4": 0.3,
+      "shareCommas4": 0.067,
+      "fenbiePer1k": 0.43,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "proseStyle": {
+      "chars": 4019,
+      "sentences": 52,
+      "meanSentenceChars": 77,
+      "shareOver80": 0.404,
+      "shareOver120": 0.115,
+      "shareNumbers4": 0.288,
+      "shareCommas4": 0.038,
+      "fenbiePer1k": 0.249,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "titles": {
+      "chinese": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0,
+       "kept": 0
+      },
+      "translated": {
+       "n": 8,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 3,
+       "resultVerb": 3,
+       "numbersMissing": 0,
+       "meanChars": 25
+      }
+     },
+     "absoluteGivenUsed": "0/0",
+     "harmGivenUsed": "0/0",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "after": {
+     "cases": 8,
+     "reasonFormula": 0,
+     "reasonEmpty": 8,
+     "withAbsences": 0,
+     "absencePhrases": 0,
+     "numbersMissing": 0,
+     "leadOverLimit": 0,
+     "leadCharsMean": 123,
+     "briefCoverageMean": 0.68,
+     "quotesVerbatim": "0/0",
+     "leadStyle": {
+      "chars": 986,
+      "sentences": 12,
+      "meanSentenceChars": 82.2,
+      "shareOver80": 0.5,
+      "shareOver120": 0.083,
+      "shareNumbers4": 0.5,
+      "shareCommas4": 0.083,
+      "fenbiePer1k": 0,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0
+     },
+     "proseStyle": {
+      "chars": 2913,
+      "sentences": 50,
+      "meanSentenceChars": 57.3,
+      "shareOver80": 0.16,
+      "shareOver120": 0.02,
+      "shareNumbers4": 0.22,
+      "shareCommas4": 0.02,
+      "fenbiePer1k": 0,
+      "dashPer1k": 0,
+      "reversalPer1k": 0,
+      "colonSetupPer1k": 0.687
+     },
+     "titles": {
+      "chinese": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0,
+       "kept": 0
+      },
+      "translated": {
+       "n": 0,
+       "hook": 0,
+       "question": 0,
+       "exclamation": 0,
+       "hype": 0,
+       "siteSuffix": 0,
+       "columnTag": 0,
+       "named": 0,
+       "resultVerb": 0,
+       "numbersMissing": 0,
+       "meanChars": 0
+      }
+     },
+     "absoluteGivenUsed": "0/0",
+     "harmGivenUsed": "0/0",
+     "leakageCases": 0,
+     "adviceAdded": 0
+    },
+    "genreAccepted": 8
+   }
+  }
+ },
+ "results": [
+  {
+   "id": "paper-519fe6559cbbf042",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "该2期试验在高瘤负荷转移性激素初治前列腺癌患者中评估他拉唑帕利联合恩扎卢胺对比恩扎卢胺单药。联合组12个月PSA<0.2应答率为73%，达到预设疗效阈值，但未在未筛选生物标志物人群中确立优于单药的额外临床获益，且毒性增加。",
+    "reason": null,
+    "lead": "在高瘤负荷转移性激素初治前列腺癌（mHNPC）患者中，恩扎卢胺联合他拉唑帕利达到主要终点：随机分组后12个月确认的PSA<0.2 ng/ml应答率为73.0%（27/37，95%CI 55.9–86.2），超过预设40%的疗效阈值（P<0.001）；对照组恩扎卢胺单药为64.7%（11/17，95%CI 38.3–85.8），两组事后比较无显著差异（P=0.54）。该研究为随机2期ZZ-FIRST试验，54例患者先接受2个周期恩扎卢胺导入后按1:2随机分为联合组37例和单药组17例，中位随访3.6年。联合组≥3级不良事件发生率为68%，单药组为35%，以贫血为主（41%）；联合组还发生2例治疗相关致死性髓系肿瘤，患者存在潜在基因组易感性。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "在高瘤负荷转移性激素初治前列腺癌患者中，恩扎卢胺联合他拉唑帕利组12个月时PSA<0.2 ng/ml的比例为73%（95% CI 56–86%），达到预设疗效阈值（P<0.001）；对照组为64.7%（95% CI 38–86%，组间探索性比较P=0.54）。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "在缺乏HRR基因改变的高瘤负荷转移性激素初治前列腺癌中，他拉唑帕利联合恩扎卢胺是否较恩扎卢胺单药带来额外获益。"
+      },
+      {
+       "key": "design",
+       "label": "设计与对象",
+       "text": "随机2期试验，54例高瘤负荷mHNPC患者先接受2周期恩扎卢胺导入，再按1:2随机分为恩扎卢胺组（n=17）和恩扎卢胺联合他拉唑帕利组（n=37）。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "主要终点达标：联合组12个月PSA<0.2 ng/ml应答率为73%（95%CI 56–86%），超过预设疗效阈值（P<0.001）。",
+        "对照组12个月PSA<0.2应答率为64.7%（95%CI 38–86%），两组探索性比较P=0.54。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "联合组≥3级不良事件发生率为68%，恩扎卢胺单药组为35%，联合组以贫血为主（41%）；联合组发生2例致死性治疗相关髓系肿瘤，患者存在潜在基因组易感性。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "该研究为生物标志物未选择人群，未确立联合方案较恩扎卢胺单药明确的额外临床获益。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Overall, talazoparib plus enzalutamide demonstrated clinical activity in patients with high-volume mHNPC but did not establish clear additional clinical benefit over enzalutamide alone in this biomarker-unselected population, while being associated with increased toxicity.",
+      "zh": "总体而言，他拉唑帕利联合恩扎卢胺在高瘤负荷mHNPC患者中显示出临床活性，但在这一未按生物标志物选择的人群中，并未确立较恩扎卢胺单药明确的额外临床获益，同时伴有毒性增加。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 323,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 111,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 33,
+     "numbersMissing": [
+      "lead:27/37",
+      "lead:55.9",
+      "lead:86.2",
+      "lead:40%",
+      "lead:38.3",
+      "lead:85.8",
+      "lead:3.6"
+     ],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 323,
+      "sentences": 3,
+      "sentenceChars": 323,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 3,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 435,
+      "sentences": 5,
+      "sentenceChars": 434,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 3,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 35,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 130,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 39,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 6,
+     "briefCoverage": 1,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 130,
+      "sentences": 1,
+      "sentenceChars": 130,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 586,
+      "sentences": 8,
+      "sentenceChars": 578,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 5,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 1
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "paper-2953d334549de2da",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 2058,
+   "textSource": "abstract",
+   "before": {
+    "summary": "该 3 期试验安全性人群分析显示，在抗血小板治疗基础上加用 asundexian，大出血、大出血或临床相关非大出血及任何出血均未显著增加，但下消化道出血更常见。提示需关注该药的消化道出血风险。",
+    "reason": null,
+    "lead": "在非心源性缺血性卒中或高危 TIA 患者中，抗血小板治疗基础上加用 asundexian 未显著增加大出血、大出血或临床相关非大出血（CRNM）及任何出血，但下消化道出血更多见。该分析基于 OCEANIC-STROKE 安全性人群，asundexian 组 6124 例、安慰剂组 6130 例，按 ISTH 标准分类并在治疗期间分析。大出血发生率分别为 1.9%（117 例）与 1.7%（107 例），csHR 1.10（95% CI 0.85–1.44）；大出血或 CRNM 为 5.5% 与 5.0%，csHR 1.12（0.96–1.30）；任何出血为 12.5% 与 12.3%，csHR 1.02（0.93–1.13）。症状性颅内出血为 0.7% 与 0.6%。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "在非心源性缺血性卒中或高危TIA患者中，抗血小板治疗基础上加用asundexian未显著增加大出血：asundexian组117例（1.9%）、安慰剂组107例（1.7%），原因别风险比1.10（95% CI 0.85-1.44）。大出血或临床相关非大出血分别为5.5%和5.0%，任何出血为12.5%和12.3%。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "在非心源性缺血性卒中或高危TIA患者中，抗血小板治疗基础上加用asundexian的出血类别、部位和关键亚组表现如何？"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "大出血：asundexian组117例（1.9%），安慰剂组107例（1.7%），csHR 1.10（95% CI 0.85–1.44），P=0.46。",
+        "大出血或CRNM出血：asundexian组339例（5.5%），安慰剂组307例（5.0%），csHR 1.12（95% CI 0.96–1.30），P=0.16。",
+        "任何出血：asundexian组763例（12.5%），安慰剂组752例（12.3%），csHR 1.02（95% CI 0.93–1.13），P=0.65。",
+        "下消化道出血：asundexian组102例（1.7%），安慰剂组59例（1.0%），csHR 1.75（95% CI 1.27–2.41），以直肠出血为主。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "症状性颅内出血：asundexian组41例（0.7%），安慰剂组36例（0.6%）。；任何消化道出血：asundexian组186例（3.0%），安慰剂组147例（2.4%），csHR 1.28（95% CI 1.03–1.59）。。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "分析为while-on-treatment，事件截至末次给药后2天，并将死亡和永久停药作为竞争风险。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Asundexian added to antiplatelet therapy reduced ischemic stroke without significantly increasing major, major or CRNM, or any bleeding. Lower gastrointestinal bleeding was more frequent with asundexian, whereas treatment effects on major and major or CRNM bleeding were consistent across prespecified subgroups.",
+      "zh": "在抗血小板治疗基础上加用asundexian减少了缺血性卒中，且未显著增加大出血、大出血或CRNM出血或任何出血。asundexian组下消化道出血更常见，而大出血及大出血或CRNM出血的治疗效应在各预设亚组中一致。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "design",
+      "reason": "number"
+     }
+    ],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 338,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 96,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 23,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 338,
+      "sentences": 4,
+      "sentenceChars": 338,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 435,
+      "sentences": 6,
+      "sentenceChars": 434,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 36,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 158,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 60,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 158,
+      "sentences": 2,
+      "sentenceChars": 158,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 819,
+      "sentences": 12,
+      "sentenceChars": 809,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 8,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 6
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "paper-a22fbba07fefbe41",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 2050,
+   "textSource": "abstract",
+   "before": {
+    "summary": "该系统评价纳入14项随机试验、4192例经影像筛选的发病超4.5小时或醒后/不明发病时间卒中患者。静脉溶栓提高90天极佳功能结局与功能独立，但症状性颅内出血风险升高，90天死亡率无显著差异。",
+    "reason": null,
+    "lead": "在影像筛选下，对发病超过4.5小时或醒后、不明发病时间的急性缺血性卒中患者，静脉溶栓仍能改善功能结局且不增加90天死亡。该结论来自一项更新系统评价与Meta分析，纳入14项随机试验、4192例患者，比较阿替普酶或替奈普酶与最佳药物治疗。溶栓组90天极佳功能结局（mRS 0–1）风险比为1.22（95% CI 1.16–1.29），功能独立（mRS 0–2）风险比为1.12（95% CI 1.06–1.18），阿替普酶和替奈普酶均贡献了上述获益。症状性颅内出血风险升高（RR 2.58，95% CI 1.58–4.22），90天死亡风险无显著差异（RR 1.15，95% CI 0.97–1.35）。作者认为，这支持以组织窗而非严格时间窗来指导急性缺血性卒中的溶栓决策。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "在影像筛选下，发病超过4.5小时或醒后/不明时间发病的急性缺血性卒中患者接受静脉溶栓（阿替普酶或替奈普酶），90天极佳功能结局（mRS 0–1）优于最佳药物治疗，风险比为1.22（95% CI 1.16–1.29），功能独立（mRS 0–2）也改善，风险比为1.12（95% CI 1.06–1.18）。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "在影像筛选下，对发病超过4.5小时或醒后、不明发病时间的急性缺血性卒中患者，静脉溶栓是否有效？"
+      },
+      {
+       "key": "design",
+       "label": "设计与对象",
+       "text": "系统评价与Meta分析，检索PubMed、Embase和Cochrane Central至2026年2月，纳入14项随机试验、4192例患者，比较静脉溶栓（阿替普酶或替奈普酶）与最佳药物治疗。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "静脉溶栓提高90天极佳功能结局（mRS 0–1），RR 1.22（95% CI 1.16–1.29）。",
+        "静脉溶栓提高功能独立（mRS 0–2），RR 1.12（95% CI 1.06–1.18）。",
+        "阿替普酶和替奈普酶均对上述获益有贡献。"
+       ]
+      },
+      {
+       "key": "safety",
+       "label": "安全性",
+       "text": "溶栓增加症状性颅内出血风险，RR 2.58（95% CI 1.58–4.22）。；90天死亡率无显著差异，RR 1.15（95% CI 0.97–1.35）。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "In patients selected using advanced imaging, intravenous thrombolysis performed after 4.5 hours improves functional outcomes without increasing mortality, supporting a tissue-based rather than strictly time-based approach to treating acute ischemic stroke.",
+      "zh": "在经高级影像筛选的患者中，4.5小时后进行静脉溶栓可改善功能结局且不增加死亡率，支持以组织为基础而非严格以时间为基础的方法治疗急性缺血性卒中。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 336,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 95,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 31,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 336,
+      "sentences": 5,
+      "sentenceChars": 336,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 432,
+      "sentences": 7,
+      "sentenceChars": 431,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 29,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": true,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 152,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 42,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 152,
+      "sentences": 1,
+      "sentenceChars": 152,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 569,
+      "sentences": 9,
+      "sentenceChars": 561,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 5,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "paper-a3b13490c8ce49e1",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 514,
+   "textSource": "abstract",
+   "before": {
+    "summary": "读者来信回应Robertson等的观点文章，认为腺苷可能通过降低兴奋性毒性，在足月围产期窒息后发挥神经保护作用，并提及Peter Marro等的研究及胎仔缺氧动物模型中腺苷代谢相关酶发育的研究作为支持。",
+    "reason": "围绕新生儿缺氧缺血性脑病用药安全，提示临床在权衡咖啡因使用与腺苷神经保护机制时需更谨慎评估。",
+    "lead": "这封致编辑信针对 Robertson 等人关于缺氧缺血性脑病的 Viewpoint 文章提出，足月围产期窒息后不应使用咖啡因。作者回顾，早前有实验室工作提示腺苷可能通过降低兴奋性毒性在围产期窒息后发挥神经保护作用，Peter Marro 等人的研究支持这一观点；此前还有动物胎缺氧模型研究了腺苷代谢相关酶的胎儿发育，强调腺苷对胎儿脑的重要性。信中没有给出新的临床数据或安全性结果。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这封致编辑的信针对Robertson等发表的Viewpoint提出，足月围产期窒息后不应使用咖啡因，理由是腺苷可能通过降低兴奋性毒性发挥神经保护作用。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "足月围产期窒息后腺苷是否通过降低兴奋性毒性发挥神经保护作用，以及缺氧缺血性脑病是否应使用咖啡因。"
+      },
+      {
+       "key": "design",
+       "label": "设计与对象",
+       "text": "致编辑来信，评述Robertson等的Viewpoint文章，引用Peter Marro等的研究及胎缺氧动物模型中腺苷代谢酶胎儿发育的研究。"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "为致编辑来信，未报告原始研究数据。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 190,
+     "leadLimit": 129,
+     "leadOverLimit": true,
+     "summaryChars": 101,
+     "reasonChars": 46,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 0,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 190,
+      "sentences": 3,
+      "sentenceChars": 190,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 339,
+      "sentences": 5,
+      "sentenceChars": 337,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 14,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 75,
+     "leadLimit": 129,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [
+      "未报告"
+     ],
+     "numbersChecked": 0,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 3,
+     "briefCoverage": 0.5,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 75,
+      "sentences": 1,
+      "sentenceChars": 75,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 214,
+      "sentences": 4,
+      "sentenceChars": 210,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-51bf22054a9315d1",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "一项回顾性分析纳入50例子宫内膜癌术后阴道复发患者，评估CT引导近距离放疗的疗效。中位随访44.8个月，3年局部控制率为85.6%，总生存率为87.1%，无病生存率为46.0%；HR-CTV D90≥67.3 Gy者3年局部控制率为100%，低于该剂量者为64.2%。远处转移仍是主要失败部位。",
+    "reason": "对子宫内膜癌术后阴道复发患者行CT引导近距离放疗时，可参考HR-CTV D90与局部控制的剂量关系，用于评估靶区剂量覆盖是否充分。",
+    "lead": "日本一项单中心回顾性研究纳入2014年1月至2024年6月接受CT引导近距离放疗的50例子宫内膜癌术后阴道复发患者，评估其疗效与晚期毒性。全组中位随访44.8个月，3年局部控制率、区域无复发生存率、无远处转移生存率、无病生存率和总生存率分别为85.6%、82.9%、65.1%、46.0%和87.1%；30例患者接受了中位总剂量50 Gy的外照射放疗，高危临床靶区（HR-CTV）中位总剂量（EQD2）为70.5 Gy。单因素分析显示HR-CTV D90是局部控制的显著预后因素（p=0.009），D90≥67.3 Gy者3年局部控制率为100%，低于该阈值者为64.2%；多因素分析中肿瘤可显影性和术后风险分层是无远处转移生存的显著预后因素。作者结论为CT引导近距离放疗可获得较好的局部控制，但远处转移仍是主要失败部位。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本显示，CT引导近距离放疗对子宫内膜癌术后阴道复发有较好的局部控制，但远处转移仍是主要失败部位。研究回顾性分析了50例接受CT引导近距离放疗的患者，中位随访44.8个月，3年局部控制率为85.6%，3年总生存率为87.1%，3年无病生存率为46.0%。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "CT引导近距离放疗对子宫内膜癌术后阴道复发的治疗效果如何？"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "回顾性分析2014年1月至2024年6月单中心接受CT引导近距离放疗的子宫内膜癌术后阴道复发患者，共50例。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "3年局部控制率、区域无复发生存率、无远处转移生存率、无病生存率和总生存率分别为85.6%、82.9%、65.1%、46.0%和87.1%。",
+        "30例接受了中位总剂量50 Gy的外照射放疗。",
+        "高危临床靶区中位总剂量（EQD2）为70.5 Gy，中位随访44.8个月。",
+        "单因素分析中HR-CTV D90是局部控制的显著预后因素（p=0.009）；HR-CTV D90≥67.3 Gy者3年局部控制率为100%，<67.3 Gy者为64.2%。"
+       ]
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "为单中心回顾性研究。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "CT-guided BT provides favorable local control in patients with vaginal recurrence after endometrial cancer surgery. However, distant metastases remain a major site of failure.",
+      "zh": "CT引导近距离放疗对子宫内膜癌术后阴道复发患者提供了良好的局部控制。然而，远处转移仍是主要的失败部位。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "results",
+      "reason": "length"
+     }
+    ],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 361,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 147,
+     "reasonChars": 65,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 30,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 361,
+      "sentences": 4,
+      "sentenceChars": 361,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 3,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 575,
+      "sentences": 8,
+      "sentenceChars": 573,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 4,
+      "commas4": 1,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 22,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 138,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 29,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 138,
+      "sentences": 2,
+      "sentenceChars": 138,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 506,
+      "sentences": 11,
+      "sentenceChars": 497,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 4,
+      "commas4": 1,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-22c8fe7b807a0ac4",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 8285,
+   "textSource": "body",
+   "before": {
+    "summary": "Y-MIND 将友谊长椅青少年版改编后由非专业教师咨询员在加纳 6 所高中实施，67 名 15 至 18 岁中重度抑郁青少年随机接受常规强化照护或联合 Y-MIND。治疗质量 94.8%、胜任度 86.6%，Y-MIND 组抑郁症状严重度较低，但研究并非为验证疗效而设计。",
+    "reason": null,
+    "lead": "在加纳纳夫龙戈6所高中开展的可行性整群随机试验Y-MIND显示，由非专业教师-辅导员向15–18岁中重度抑郁（PHQ-9总分>9）青少年提供简短心理治疗可行且可接受。研究2024年7–8月入组67人，按1:2随机分为常规强化照护联合Y-MIND组43人和单纯常规强化照护组24人，5个月主要结局评估完成率95.5%（64人）。青少年对干预可行性的评分为4.3（0.5），治疗质量评分94.8%（95%CI 93.0–96.6），治疗胜任力86.6%（95%CI 81.2–92.2）。Y-MIND组抑郁症状严重程度低于对照组，多数参与者在第5个月随访时达到症状缓解，但研究并非为确证疗效而设计，作者认为应推进至充分把握度的试验以评估临床效果、成本效果及在低收入和中等收入国家常规学校环境中的可扩展性。试验注册号NCT06740084。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本显示，在加纳高中开展由非专业教师辅导员提供的简短心理治疗（Y-MIND）具有可行性，并观察到抑郁症状减轻的初步迹象。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "评估由非专业教师辅导员在加纳高中实施的简短心理治疗（Y-MIND）的可行性，并为后续确证性试验提供依据。"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "可行性整群随机对照试验，在加纳Navrongo的6所高中招募15–18岁、PHQ-9总分>9、疑似中重度抑郁的青少年；学校按1:2随机分配至单纯强化常规照护（EUC）或EUC联合Y-MIND。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "2024年7–8月共入组并分配67人，其中EUC联合Y-MIND组43人（64%），单纯EUC组24人（36%）。",
+        "64人（95.5%）完成5个月主要结局评估，EUC联合Y-MIND组41人（95.3%），单纯EUC组23人（95.8%）。",
+        "青少年对Y-MIND实施可行性的评分为4.3（0.5）。",
+        "治疗质量评分为94.8%（95% CI: 93.0–96.6），治疗胜任力为86.6%（95% CI: 81.2–92.2）。"
+       ]
+      },
+      {
+       "key": "funding",
+       "label": "资助与利益冲突",
+       "text": "由National Institutes of Health Research资助（NIHR133384）；作者声明无利益冲突。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "The Y-MIND school-based psychological treatment model demonstrated good acceptability and feasibility, with high recruitment, retention, treatment adherence, and provider competence. While preliminary findings indicate potential improvements in depressive symptoms, the study was not designed to establish effectiveness.",
+      "zh": "Y-MIND校本心理治疗模式显示出良好的可接受性和可行性，招募、保留、治疗依从性和提供者胜任力均较高。虽然初步结果提示抑郁症状可能改善，但本研究并非为确定有效性而设计。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "results",
+      "reason": "length"
+     }
+    ],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 367,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 136,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 367,
+      "sentences": 5,
+      "sentenceChars": 367,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 3,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 504,
+      "sentences": 7,
+      "sentenceChars": 503,
+      "over80": 3,
+      "over120": 0,
+      "numbers4": 4,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 24,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 71,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 31,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 71,
+      "sentences": 1,
+      "sentenceChars": 71,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 586,
+      "sentences": 10,
+      "sentenceChars": 577,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 4,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-83dfe9d6fac56159",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 7195,
+   "textSource": "body",
+   "before": {
+    "summary": "研究对2005至2019年间分离自人、动物宿主和环境水样的443株ST474空肠弯曲菌进行全基因组测序，识别出6个亚群，其宿主关联、持续性和重组模式各异。Clade E与单一禽类供应商相关，占人类病例的34.5%；Clade F在人类病例高峰后从Clade E演化而来。",
+    "reason": null,
+    "lead": "新西兰2005至2019年收集人、动物宿主和环境水体来源的空肠弯曲菌ST474分离株443株进行全基因组测序，并结合2018/9年病例对照研究分离株作基因组比较，识别出6个宿主关联、持续性和重组模式各异的亚群。Clade E在流行初期与单一禽类供应商相关，占人病例的34.5%；人病例高峰后由Clade E演化出Clade F，同样与禽类相关，其出现伴随整合元件CJIE5丢失、获得多个可能来自不同祖先谱系的重组片段以及甲硫氨酸生物合成操纵子metAB丢失。Clades A-D在14年监测期内于人病例中检出频率低，且与多种宿主相关。该研究提示水平基因转移在病原体演化及适应新生态位中起作用，并可能影响公共卫生。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本对2005至2019年新西兰人、动物宿主和环境水体来源的443株空肠弯曲菌ST474做了全基因组测序，识别出6个亚群，各亚群在宿主关联、持续性和重组模式上不同。Clade E在流行初期与单一禽类供应商相关，占人感染病例的34.5%。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "新西兰家禽相关空肠弯曲菌ST474谱系如何演化、分化并持续存在，其基因组流行病学特征是什么。"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "对2005至2019年采集的人、动物宿主和环境水体来源ST474分离株进行全基因组测序，共443株；纳入2018/9年病例对照研究的分离株，与其他序列型和克隆群做基因组比较。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "鉴定出6个ST474亚群（clade），在宿主关联、持续性、同源重组模式和可移动遗传元件组成上存在差异。",
+        "Clade E在流行初期与单一的家禽供应商相关，占人病例的34.5%。",
+        "Clade F在人病例高峰后由Clade E衰退过程中出现，同样与家禽相关。",
+        "Clade F出现时伴随整合元件CJIE5丢失、获得多个重组片段及甲硫氨酸生物合成操纵子metAB丢失。"
+       ]
+      },
+      {
+       "key": "funding",
+       "label": "资助与利益冲突",
+       "text": "由Biotechnology and Biological Sciences Research Council资助（BB/X011011/1、BB/V018221/1）；作者声明无竞争利益。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "This longitudinal study sheds light on the evolutionary processes that result in strain emergence and differentiation, highlighting the role of horizontal gene transfer in the evolution and adaptation of this pathogen to new niches, and the subsequent impact on public health.",
+      "zh": "这项纵向研究揭示了导致菌株出现和分化的演化过程，突出水平基因转移在该病原体演化及适应新生态位中的作用，以及随之而来的公共卫生影响。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "results",
+      "reason": "length"
+     }
+    ],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 306,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 135,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 306,
+      "sentences": 4,
+      "sentenceChars": 306,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 442,
+      "sentences": 6,
+      "sentenceChars": 441,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 27,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": true,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 129,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 13,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 129,
+      "sentences": 2,
+      "sentenceChars": 129,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 608,
+      "sentences": 10,
+      "sentenceChars": 599,
+      "over80": 3,
+      "over120": 0,
+      "numbers4": 3,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-d46b8c90610518cb",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 2557,
+   "textSource": "body",
+   "before": {
+    "summary": "中国医学科学院肿瘤医院樊英教授在2026年ESMO年会报告III期HORIZON-Breast06研究，瑞康曲妥珠单抗（SHR-A1811）治疗HER2低表达晚期乳腺癌，总体人群中位PFS为16.4个月，化疗组为6.8个月（HR 0.27，95%CI 0.21~0.34），两个共同主要终点均达成。OS数据尚不成熟，为描述性分析；瑞康曲妥珠单抗组≥3级治疗相关不良事件发生率为84.1%，间质性肺病报告7例（2.5%）。",
+    "reason": "可了解HER2低表达晚期乳腺癌中ADC对比化疗的PFS获益与血液学毒性、间质性肺病监测要点，为后续用药选择和安全性随访提供参考。",
+    "lead": "中国医学科学院肿瘤医院樊英教授在2026年ESMO年会报告III期HORIZON-Breast06研究，国产HER2 ADC瑞康曲妥珠单抗（SHR-A1811）头对头击败化疗，用于HER2低表达晚期乳腺癌，结果同步发表于JAMA。研究随机入组551例转移阶段既往化疗不超过1线的患者，瑞康曲妥珠单抗组277例、化疗组274例，中位随访18.0个月。总体人群中位PFS为16.4个月对6.8个月，疾病进展或死亡风险降低73%（HR 0.27，95%CI 0.21~0.34，P<0.001）；化疗初治人群为16.6个月对6.8个月（HR 0.25），两个共同主要终点均达成，HR阳性与HR阴性亚组获益一致。总体人群客观缓解率为75.5%对41.2%。OS数据尚不成熟，12个月OS率为90.6%对81.4%（HR 0.67）。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "HORIZON-Breast06 III期研究显示，国产HER2 ADC瑞康曲妥珠单抗（SHR-A1811）头对头优于化疗，在HER2低表达晚期乳腺癌总体人群中把中位PFS从6.8个月延长到16.4个月，疾病进展或死亡风险降低73%（HR 0.27）。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的研究",
+       "text": "HORIZON-Breast06研究，评估瑞康曲妥珠单抗（SHR-A1811）治疗HER2低表达晚期乳腺癌，由中国医学科学院肿瘤医院樊英教授在2026年ESMO年会早期与晚期乳腺癌专场以LBA13汇报，结果同步发表于JAMA。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "551例患者1:1随机分组。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "HER2低表达（IHC 1+，或IHC 2+且ISH阴性）占乳腺癌45%~55%，是乳腺癌中最大的群体，传统治疗下获益有限。",
+        "总体人群12个月OS率为90.6% vs 81.4%（HR 0.67，95%CI 0.48~0.94），OS数据尚不成熟，为描述性分析。",
+        "HR阴性人群PFS为18.5个月 vs 6.8个月（HR 0.34）；PD-L1阳性者ORR为95.2% vs 42.9%。",
+        "瑞康曲妥珠单抗组≥3级TRAE发生率为84.1%，化疗组为67.9%；ILD报告7例（2.5%）。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为该研究在PFS上显示优效性，各预设亚组获益一致，安全性可控且ILD发生率低。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "与化疗相比，瑞康曲妥珠单抗在PFS上显示出优效性；在HR阴性、HR阳性等预设亚组中，PFS获益保持一致；安全性可控，ILD发生率低。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 362,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 210,
+     "reasonChars": 64,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 36,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 362,
+      "sentences": 5,
+      "sentenceChars": 362,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 4,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 638,
+      "sentences": 8,
+      "sentenceChars": 636,
+      "over80": 3,
+      "over120": 2,
+      "numbers4": 6,
+      "commas4": 2,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 34,
+      "question": false,
+      "exclamation": true,
+      "hype": true,
+      "columnTag": true,
+      "siteSuffix": true,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 126,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 29,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 126,
+      "sentences": 1,
+      "sentenceChars": 126,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 545,
+      "sentences": 8,
+      "sentenceChars": 536,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 6,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-8912a69dbbc47347",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 1870,
+   "textSource": "body",
+   "before": {
+    "summary": "中山大学肿瘤防治中心王树森教授在2026年ESMO年会报告随机III期APEX-Breast01研究结果：双表位HER2靶向抗体偶联药物TQB2102对比研究者选择化疗，在HR+/HER2低表达复发或转移性乳腺癌患者中中位PFS为16.4个月对5.5个月，HR 0.29（P<0.0001），全部HER2低表达人群结果一致。TQB2102组≥3级治疗相关不良事件发生率为69.1%，化疗组为42.4%，以中性粒细胞减少和白细胞降低为主。",
+    "reason": "可了解HER2低表达晚期乳腺癌后线ADC对比化疗的疗效与血液学毒性谱，为后续治疗选择、中性粒细胞监测和间质性肺病识别提供参考。",
+    "lead": "中山大学肿瘤防治中心王树森教授在2026年ESMO年会报告随机III期APEX-Breast01研究（LBA27）结果：双表位HER2靶向ADC TQB2102用于既往未接受过晚期化疗的HER2低表达复发或转移性乳腺癌，HR+人群（主要终点）中位PFS为16.4个月，研究者选择化疗（卡培他滨、紫杉醇或白蛋白紫杉醇）为5.5个月，HR 0.29（P<0.0001），疾病进展风险下降71%。截至2026年5月31日共随机543例（TQB2102组269例、化疗组274例），HR+患者461例（84.9%，其中91.3%既往用过CDK4/6抑制剂）；全部HER2低表达人群PFS结果与主要终点一致（16.4个月 vs 5.5个月，HR 0.29）。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "随机III期APEX-Breast01研究显示，在既往未接受过晚期化疗的HER2低表达复发或转移性乳腺癌患者中，双表位HER2 ADC TQB2102较研究者选择化疗显著延长无进展生存期：HR+/HER2低表达人群的中位PFS为16.4个月对5.5个月，HR 0.29，全部HER2低表达人群结果一致。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的研究",
+       "text": "2026 ESMO年会（LBA27）报告的随机III期APEX-Breast01研究，由中山大学肿瘤防治中心王树森教授报告，比较TQB2102与研究者选择化疗（TPC）治疗HER2低表达复发或转移性乳腺癌。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "HR+/HER2低表达人群TQB2102组中位PFS 16.4个月，化疗组5.5个月，HR 0.29（P<0.0001）；全部HER2低表达人群结果一致。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "研究纳入既往未接受过晚期化疗的HER2低表达复发或转移性乳腺癌患者，HR+亚组91.3%既往接受过CDK4/6抑制剂。",
+        "TQB2102为双表位HER2靶向抗体偶联药物，给药方案为7.5mg/kg每3周一次。",
+        "HER2低表达晚期乳腺癌后线治疗长期依赖传统化疗，疗效与精准性皆受限。",
+        "HR+与HR-人群一致获益，提示适用人群可进一步拓宽。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为TQB2102有望成为既往未化疗的HER2低表达晚期乳腺癌后线治疗新选择，这项III期阳性结果有望打破临床僵局；随着治疗线序前移，个体化、精准化后线治疗策略有望重塑全程治疗格局。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "该研究数据表明，TQB2102有望成为既往未化疗的HER2低表达晚期乳腺癌后线治疗的新选择，HR+与HR-人群一致获益进一步拓宽了适用人群。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 324,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 218,
+     "reasonChars": 63,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 27,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 324,
+      "sentences": 2,
+      "sentenceChars": 324,
+      "over80": 2,
+      "over120": 2,
+      "numbers4": 2,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 607,
+      "sentences": 5,
+      "sentenceChars": 605,
+      "over80": 3,
+      "over120": 3,
+      "numbers4": 4,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 54,
+      "question": false,
+      "exclamation": true,
+      "hype": false,
+      "columnTag": true,
+      "siteSuffix": true,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 151,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 151,
+      "sentences": 1,
+      "sentenceChars": 151,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 597,
+      "sentences": 8,
+      "sentenceChars": 588,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 5,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-b481bb334038ed86",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 12000,
+   "textSource": "body",
+   "before": {
+    "summary": "IDEAYA与Servier在ESMO 2026公布darovasertib治疗转移性和原发性葡萄膜黑色素瘤的3项试验数据。OptimUM-01中，初治患者（n=13）中位无进展生存期7.4个月、中位总生存期27.1个月；经tebentafusp治疗后患者（n=15）中位无进展生存期5.7个月、中位总生存期12.1个月。OptimUM-09显示，新辅助治疗患者中超过80%出现肿瘤缩小，57%实现保眼。",
+    "reason": "可了解GNAQ/11突变葡萄膜黑色素瘤中darovasertib联合克唑替尼的单臂试验数据及其与历史基准的比较方式，为关注这一罕见肿瘤的靶向治疗进展提供参考。",
+    "lead": "darovasertib联合克唑替尼在葡萄膜黑色素瘤的3项临床试验数据在ESMO 2026公布，覆盖转移性和原发灶新辅助治疗两个场景。OptimUM-01的2期扩展数据显示，在101例HLA-A*02:01阳性转移性患者中，初治患者（13例）中位PFS为7.4个月、中位OS为27.1个月，既往仅接受tebentafusp的2线患者（15例）中位PFS为5.7个月、中位OS为12.1个月；总体ORR为22.1%，常见治疗相关不良事件为腹泻（82%）、恶心（76%）、外周水肿（70%）和呕吐（57%），因不良事件停药者9例（8.9%）。OptimUM-02的亚组分析显示，在HLA-A*02:01阴性初治患者中，该联合方案相比研究者选择治疗在多个临床相关亚组中ORR和PFS改善一致。"
+   },
+   "after": {
+    "genre": "industry",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "IDEAYA Biosciences 在 ESMO 2026 公布 darovasertib 联合克唑替尼治疗葡萄膜黑色素瘤的 3 项试验数据。OptimUM-01 中，13 例初治转移性患者的 ORR 为 36.4%，中位 PFS 7.4 个月，中位 OS 27.1 个月。",
+    "brief": {
+     "genre": "industry",
+     "points": [
+      {
+       "key": "event",
+       "label": "事件",
+       "text": "IDEAYA Biosciences在ESMO 2026公布darovasertib联合克唑替尼治疗葡萄膜黑色素瘤的3项临床试验数据。"
+      },
+      {
+       "key": "asset",
+       "label": "资产与阶段",
+       "text": "darovasertib联合crizotinib，用于GNAQ/11突变实体瘤，覆盖转移性和原发性葡萄膜黑色素瘤；OptimUM-01为1/2期单臂研究，OptimUM-02为2/3期注册试验，OptimUM-09为2期新辅助研究。"
+      },
+      {
+       "key": "data",
+       "label": "关键数据",
+       "text": "OptimUM-01初治患者（n=13）中位PFS 7.4个月，中位OS 27.1个月。；OptimUM-01既往tebentafusp治疗患者（n=15）中位PFS 5.7个月，中位OS 12.1个月。。"
+      },
+      {
+       "key": "benchmark",
+       "label": "对标",
+       "text": "文献meta分析显示初治mUM中位PFS 2.8个月、中位OS约12个月，历史ORR通常约5%。"
+      },
+      {
+       "key": "next",
+       "label": "下一步",
+       "text": "OptimUM-02于2026年ASCO报告阳性结果，1L HLA-A*02:01阴性患者BICR评估中位PFS 6.9个月。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 343,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 202,
+     "reasonChars": 79,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 34,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 343,
+      "sentences": 3,
+      "sentenceChars": 343,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 626,
+      "sentences": 7,
+      "sentenceChars": 624,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 35,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 138,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 26,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 138,
+      "sentences": 2,
+      "sentenceChars": 138,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 541,
+      "sentences": 8,
+      "sentenceChars": 534,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 5,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-49f4c1407a90c299",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 5441,
+   "textSource": "body",
+   "before": {
+    "summary": "2026年ESMO大会将公布默克两款靶向药物在腱鞘巨细胞瘤（TGCT）和硬纤维瘤（DT）领域的5项研究。Ⅲ期MANEUVER研究2年分析显示，匹米替尼治疗不可切除、有症状TGCT的客观缓解率（RECIST v1.1）为76.2%（95% CI 63.8–86.0），中位缓解持续时间尚未达到，关节活动度、僵硬、疼痛和躯体功能改善持续至2年，安全性与既往分析一致。",
+    "reason": "可了解匹米替尼在TGCT的2年疗效与安全性数据，以及尼罗司他因不良事件减量后疗效稳定的剂量管理思路，为罕见软组织肿瘤的长期用药监测与患者沟通提供参考。",
+    "lead": "2026年ESMO大会将公布匹米替尼与尼罗司他共5项肉瘤领域研究，其中Ⅲ期MANEUVER研究2年分析显示，匹米替尼治疗不可切除、有症状TGCT的客观缓解率（RECIST v1.1）在第1年至第2年间为76.2%，按肿瘤体积评分由74.6%升至77.8%，中位缓解持续时间尚未达到，关节活动度、僵硬、疼痛和躯体功能等患者相关结局的早期改善持续至2年并进一步改善，安全性与既往分析一致。该研究94例患者按2:1随机分配，中位治疗时长22.5个月，中位剂量强度85%。同期EQ-5D-5L分析显示，匹米替尼组生活质量改善维持至第49周。硬纤维瘤方面，DeFi研究事后分析中42%患者因不良事件由150 mg每日两次减量至100 mg每日两次，减量后疗效指标相近、安全性改善。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "Ⅲ期MANEUVER研究2年随访显示，匹米替尼治疗不可切除、有症状TGCT的疗效持续：第1年至第2年RECIST v1.1的ORR为76.2%，按肿瘤体积评分由74.6%升至77.8%，中位缓解持续时间未达到；关节活动度、僵硬、疼痛和躯体功能等患者相关结局的早期改善维持至2年，安全性与既往一致。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "MANEUVER研究中匹米替尼组RECIST v1.1的ORR为76.2%（95% CI 63.8–86.0），TVS的ORR由74.6%升至77.8%，中位缓解持续时间未达到。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "EQ-5D-5L分析显示基线TGCT患者效用值低于年龄性别校正一般人群，匹米替尼组改善维持至第49周。",
+        "DeFi事后分析中42%患者因TEAE减量至100 mg BID，减量后2年无事件生存率75% vs 79%，ORR 48% vs 38%。",
+        "西班牙单中心真实世界研究中8例尼罗司他患者PR率42%、DCR 100%，中位至缓解4.8个月。",
+        "网状Meta分析纳入4项RCT、365例患者，尼罗司他ORR效应最强（OR 8.20），但≥3级不良事件毒性估计值最高（OR 6.13）。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为5项研究覆盖Ⅲ期长期随访、患者报告结局、剂量策略、真实世界验证和间接比较，为TGCT与DT的疗效、安全性和患者相关结局提供了循证依据。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "在晚期DT中，系统性治疗方案的疗效均优于慰剂组，其中尼罗司他 在ORR方面显示出最有利的估计值；而PLD/ VEGF-TKIs 在1年和2年固定时间点的PFS方面表现更优。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "subject",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 335,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 181,
+     "reasonChars": 75,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 335,
+      "sentences": 4,
+      "sentenceChars": 335,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 593,
+      "sentences": 7,
+      "sentenceChars": 591,
+      "over80": 2,
+      "over120": 2,
+      "numbers4": 3,
+      "commas4": 2,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 64,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": true,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 148,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 33,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 4,
+     "briefCoverage": 0.8,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 148,
+      "sentences": 1,
+      "sentenceChars": 148,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 554,
+      "sentences": 7,
+      "sentenceChars": 546,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 5,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-a3a8cf72a8d6bf9f",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 1683,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "一项单中心随机双盲安慰剂对照试验在80例65至80岁单侧股骨粗隆间骨折行PFNA内固定的患者中，比较入院后即行超声引导下髂筋膜间隙阻滞使用脂质体布比卡因133 mg稀释至40 mL与等量生理盐水的效果，主要终点为入院当晚Leeds睡眠评价问卷评分。两组均接受相同的多模式基础镇痛、标准化腰麻及舒芬太尼PCIA；按每组40例、合并标准差52分计算，可检出约34分的组间差异（80%把握度，双侧α=0.05），并预留10%脱落。",
+    "reason": "可了解以睡眠质量作为区域阻滞主要终点的设计思路，以及盲法评估感觉阻滞、密封信封分配隐藏和标准化多模式镇痛的具体做法，为围术期疼痛与谵妄相关研究提供参考。",
+    "lead": "一项单中心随机双盲安慰剂对照试验计划纳入80例65-80岁、ASA II-III级、拟在椎管内麻醉下接受单侧股骨粗隆间骨折闭合复位PFNA内固定的患者，按1:1随机分组，评估入院后即刻超声引导下髂筋膜间隙阻滞（FICB）使用脂质体布比卡因133 mg对围术期睡眠质量的影响。干预组以生理盐水稀释至40 mL行髂上FICB，对照组以相同技术注射40 mL生理盐水；两组均接受相同的多模式基线镇痛、标准化腰麻、术中右美托咪定输注及术后舒芬太尼PCIA。主要终点为入院当晚（干预后第1夜）的LSEQ评分，次要终点包括手术当晚及术后第2夜的LSEQ评分、腕戴活动记录仪客观睡眠参数、焦虑评分、术后疼痛评分、围术期舒芬太尼用量、补救镇痛、术后谵妄发生率、首次下床时间、术后住院时长及不良事件。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项前瞻性、随机、安慰剂对照、双盲、单中心试验计划入组80例65-80岁、拟在椎管内麻醉下行单侧股骨粗隆间骨折闭合复位及PFNA固定的患者，按1:1随机分组。入组后干预组即接受超声引导下髂筋膜间隙阻滞，注射脂质体布比卡因133 mg（稀释至40 mL），对照组以相同技术注射40 mL生理盐水。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "前瞻性、随机、安慰剂对照、双盲、单中心试验，按1:1随机分为2组。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "纳入80例65-80岁、ASA分级II-III、拟在椎管内麻醉下行单侧股骨粗隆间骨折闭合复位及PFNA固定的患者。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "干预组在入院入组后即行超声引导下髂筋膜间隙阻滞，注射脂质体布比卡因133 mg以生理盐水稀释至40 mL；对照组以相同技术注射40 mL生理盐水。"
+      },
+      {
+       "key": "endpoint",
+       "label": "主要终点",
+       "text": "主要终点为入院当晚（干预后第1晚）的利兹睡眠评估问卷（LSEQ）评分。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "每组计划样本量为40例，按80%把握度、双侧alpha=0.05检测主要结局约34分的组间差异，并考虑10%脱落率。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 341,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 212,
+     "reasonChars": 76,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 23,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 341,
+      "sentences": 3,
+      "sentenceChars": 341,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 631,
+      "sentences": 6,
+      "sentenceChars": 629,
+      "over80": 5,
+      "over120": 2,
+      "numbers4": 3,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 27,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": true,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 147,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 23,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 5,
+     "briefCoverage": 0.71,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 147,
+      "sentences": 2,
+      "sentenceChars": 147,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 409,
+      "sentences": 7,
+      "sentenceChars": 403,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-34d55a775c67ac07",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 280,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "一项前瞻性临床注册研究已完成，共入组258例接受经导管主动脉瓣置换（TAVR）的患者，评估MANTA血管闭合器在大口径股动脉穿刺闭合中的安全性与临床结局。研究聚焦按说明书使用、患者选择合适且血管入路规范的标准诊疗场景，目前仅登记为已完成状态，未见结果数据。",
+    "reason": "关注TAVR术后股动脉大口径穿刺闭合的医生，可留意该注册研究后续公布的安全性与临床结局数据，用于评估按说明书使用MANTA闭合器的适用人群与入路条件。",
+    "lead": "一项前瞻性临床注册研究发布了MANTA血管闭合器在经导管主动脉瓣置换（TAVR）常规诊疗中应用的结果。该研究旨在收集按说明书使用MANTA、经规范患者筛选和血管入路评估的TAVR患者股动脉大孔径穿刺点闭合的真实世界结局数据。MANTA在美国和加拿大获批用于10-20F器械或鞘（外径12-25F）血管内操作后股动脉穿刺点闭合以减少止血时间，在以色列14F和18F器械分别对应10-14F和15-18F器械或鞘。此次为结果登记发布，具体终点数据需查阅完整结果。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "一项在美国和加拿大开展的注册研究公布了MANTA血管闭合器在TAVR术中按标签使用的结局数据，共入组258例患者。研究考察标准治疗TAVR手术中，在适当患者选择和正确血管穿刺的前提下，使用MANTA闭合股动脉大孔径穿刺点的当代结局。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "前瞻性临床注册研究，评估标准治疗 TAVR 手术中按标签使用 MANTA 血管闭合器的结局。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "接受标准治疗 TAVR 手术并使用 MANTA 血管闭合器的患者，已完成 258 例入组。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "按标签使用 MANTA 血管闭合器，包括适当的患者选择和正确的血管穿刺。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "status",
+      "reason": "link"
+     }
+    ],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 229,
+     "leadLimit": 195,
+     "leadOverLimit": true,
+     "summaryChars": 128,
+     "reasonChars": 75,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 5,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 229,
+      "sentences": 4,
+      "sentenceChars": 229,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 434,
+      "sentences": 7,
+      "sentenceChars": 432,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 28,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": true,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 116,
+     "leadLimit": 195,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 2,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 3,
+     "briefCoverage": 0.43,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 116,
+      "sentences": 2,
+      "sentenceChars": 116,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 247,
+      "sentences": 5,
+      "sentenceChars": 243,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-8fa7c07e994bba75",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 776,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "巴西单中心前瞻性研究评估针灸联合优化常规药物治疗与单用优化常规药物治疗对慢性肾脏病成人慢性疼痛的疗效，入组110例，患者接受保守治疗、腹膜透析或血液透析。因部分参与者在分配前表达针灸偏好并被直接分入针灸组，实际分配并非完全随机；针灸计划每周1次、约4个月共16次，至少完成10次方纳入疗效评价。",
+    "reason": "可了解在透析与保守治疗肾病人群中开展针灸辅助镇痛研究的实际分配偏倚来源，以及疗程完成度如何界定，为设计非药物镇痛试验提供参考。",
+    "lead": "一项单中心前瞻性研究评估了在优化常规药物治疗基础上加用个体化针灸，对接受保守治疗或肾脏替代治疗的成人慢性肾病患者慢性疼痛的疗效。针灸组每周治疗1次、约4个月，计划16次、至少10次纳入疗效评价；对照组仅用优化药物治疗并每月随访约4个月。原方案拟用计算机生成序列按1:1随机分组，但招募中部分符合条件者在分组前表达了针灸偏好并拒绝可能被分到单纯药物组，这些受试者未按随机序列直接进入针灸组，实际分配并非完全随机。方案原纳入保守治疗或腹膜透析患者，2025年9月25日获批的修订新增血液透析患者，首例血透患者于2025年9月29日入组。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项单中心前瞻性研究在保守治疗或肾脏替代治疗的慢性肾脏病成人慢性疼痛患者中，比较个体化针刺联合优化常规药物治疗与单用优化常规药物治疗，针刺组计划每周1次、共16次、约4个月，至少完成10次才纳入疗效评价，对照组每月随访约4个月。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "单中心前瞻性试验；原计划按计算机生成序列1:1随机，实际因部分受试者表达针刺偏好并拒绝单用常规药物，分配并非完全随机。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "纳入接受保守治疗或肾脏替代治疗的慢性肾脏病成人慢性疼痛患者；原方案纳入保守治疗或腹膜透析患者，2025年9月25日获批的修正案增加血液透析患者。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "干预组在优化常规药物治疗基础上加个体化针刺，每周1次、约4个月，计划16次、至少10次方纳入疗效评价；对照组单用优化常规药物治疗，约4个月每月随访。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "首例血液透析受试者于2025年9月29日入组，即在修正案获批之后。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 266,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 147,
+     "reasonChars": 63,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 18,
+     "numbersMissing": [
+      "summary:110"
+     ],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 266,
+      "sentences": 4,
+      "sentenceChars": 266,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 478,
+      "sentences": 7,
+      "sentenceChars": 476,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 3,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 20,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 114,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 18,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 4,
+     "briefCoverage": 0.57,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 114,
+      "sentences": 1,
+      "sentenceChars": 114,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 357,
+      "sentences": 5,
+      "sentenceChars": 352,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "paper-94aed1e949c7ee71",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 1339,
+   "textSource": "body",
+   "before": {
+    "summary": "贝勒医学院Benjamin Deneen团队在Nature发表研究，构建CD51-FLP小鼠模型，首次在体内直接比较CD51⁺与CD51⁻两个星形胶质细胞亚群，证实二者在形态、电生理特性和发育时序上存在差异，属于功能特化的亚群。CD51⁺细胞选择性促进发育期皮层突触形成，并推动海马神经回路可塑性；机制上，皮层依赖分泌GPC6，海马依赖CD51分子本身。卒中后CD51⁺星形胶质细胞通过增强突触重塑改善功能恢复。",
+    "reason": null,
+    "lead": "研究团队构建CD51-FLP小鼠模型，在体内直接比较CD51⁺与CD51⁻两个星形胶质细胞亚群，发现二者在形态、电生理特性和发育时序上均不同，属于功能特化的亚群：CD51⁺细胞选择性促进发育期皮层突触形成，并推动海马神经回路可塑性，皮层中依赖分泌GPC6，海马中则依赖CD51分子本身。在中风模型中，CD51⁺星形胶质细胞通过增强突触重塑改善功能恢复。核心证据来自小鼠，人类脑内是否存在同样的CD51⁺/⁻分工尚未直接验证，CD51在其他细胞类型上的表达也可能带来混杂效应。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "贝勒医学院Benjamin Deneen团队用CD51-FLP小鼠模型在体内区分出CD51⁺与CD51⁻两群星形胶质细胞，证实二者是功能特化的亚群：CD51⁺细胞选择性促进发育期皮层突触形成，并推动海马神经回路可塑性。机制上，皮层依赖分泌GPC6，海马则依赖CD51分子本身。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "CD51⁺与CD51⁻星形胶质细胞在形态、电生理特性和发育时序上存在差异；CD51⁺细胞选择性促进发育期皮层突触形成，并推动海马神经回路可塑性。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "研究构建CD51-FLP小鼠模型，首次可在体内直接比较CD51⁺和CD51⁻两个星形胶质细胞亚群。",
+        "机制上按脑区分岔：皮层依赖分泌GPC6促突触形成，海马则依赖CD51分子本身驱动可塑性。",
+        "中风后CD51⁺星形胶质细胞通过增强突触重塑显著改善功能恢复，提示其作为卒中康复靶点的潜力。",
+        "核心证据来自小鼠，人类脑内是否存在同样的CD51⁺/⁻分工尚未直接验证。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为星形胶质细胞的分子异质性不是噪声，而是实实在在的“工种分工”，CD51这条分界线第一次把分子亚群和功能亚群画上了等号。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "星形胶质细胞的分子异质性不是噪声，而是实实在在的“工种分工”。CD51这条分界线，第一次把分子亚群和功能亚群之间画上了等号。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "subject",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 237,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 206,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 2,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 237,
+      "sentences": 3,
+      "sentenceChars": 237,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 1
+     },
+     "proseStyle": {
+      "chars": 444,
+      "sentences": 6,
+      "sentenceChars": 443,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 2,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 1
+     },
+     "title": {
+      "chars": 45,
+      "question": false,
+      "exclamation": true,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 138,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 2,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 4,
+     "briefCoverage": 0.8,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 138,
+      "sentences": 2,
+      "sentenceChars": 138,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 1
+     },
+     "proseStyle": {
+      "chars": 456,
+      "sentences": 8,
+      "sentenceChars": 448,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 1,
+      "colonSetup": 2
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "paper-e88e52bc5ce14989",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 1467,
+   "textSource": "body",
+   "before": {
+    "summary": "复旦大学高明君团队在 Developmental Cell 在线发表研究，鉴定出由 B3 结构域转录因子 OsVAL2、DOF 转录因子 OsDOF3 及其下游靶标 OsCSE 组成的免疫信号级联。OsVAL2-OsDOF3-OsCSE 模块促进木质素沉积和细胞壁强化，从而赋予水稻对稻瘟病、纹枯病和白叶枯病的广谱抗病性；ROD1 与 OsVAL2 相互作用并将其隔离在细胞质中，阻止其核积累和免疫程序启动。",
+    "reason": null,
+    "lead": "复旦大学高明君团队鉴定出由B3结构域转录因子OsVAL2、DOF转录因子OsDOF3及其下游靶标OsCSE（编码咖啡酰莽草酸酯酶）组成的免疫信号级联，该OsVAL2-OsDOF3-OsCSE模块通过促进木质素沉积和细胞壁强化赋予水稻广谱抗病性；ROD1则与OsVAL2相互作用并将其隔离在细胞质中，阻止其核积累和免疫程序启动。研究为机制性发现，论文发表于Developmental Cell，具体样本量、随访及田间抗病数据在原文中未见。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "复旦大学高明君团队鉴定出水稻中一条由B3结构域转录因子OsVAL2、DOF转录因子OsDOF3及其下游靶标OsCSE组成的免疫信号级联，该模块通过促进木质素沉积和细胞壁强化赋予水稻广谱抗病性。机制上，Ca²⁺传感器ROD1与OsVAL2互作并将其隔离在细胞质中，阻止其核积累和免疫程序启动，从而维持免疫稳态。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "研究鉴定出由B3结构域转录因子OsVAL2、DOF转录因子OsDOF3及其下游靶标OsCSE组成的免疫信号级联；该模块促进木质素沉积和细胞壁强化，赋予广谱抗病性。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "Ca²⁺信号是植物免疫的中枢调控机制，免疫激活时初始Ca²⁺内流由CNGC2、CNGC4、OSCA1.3、OSCA1.7、GLR等通道介导。",
+        "ACD6被视为病原体感知期间介导Ca²⁺内流的离子通道样蛋白；NLRs寡聚化形成抗病小体作为非经典离子通道诱导强效Ca²⁺内流。",
+        "辅助NLRs NRG1.1和ADR1形成Ca²⁺通透性非选择性阳离子通道，对TNL介导的免疫至关重要。",
+        "该发现揭示维持免疫稳态的时空调控机制，突出细胞壁重塑在作物抗病性中的关键作用。"
+       ]
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "该发现揭示了一种维持免疫稳态的时空调控机制，突出了细胞壁重塑在作物抗病性中的关键作用。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "subject",
+      "reason": "length"
+     }
+    ],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 218,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 204,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 0,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 218,
+      "sentences": 2,
+      "sentenceChars": 218,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 423,
+      "sentences": 4,
+      "sentenceChars": 422,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 48,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": true,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 154,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 6,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 3,
+     "briefCoverage": 0.6,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 154,
+      "sentences": 2,
+      "sentenceChars": 154,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 466,
+      "sentences": 7,
+      "sentenceChars": 459,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "paper-f73b708c7f39c9d0",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 6000,
+   "textSource": "body",
+   "before": {
+    "summary": "该系统评价纳入14项随机对照试验、786例强迫症患者，比较强化CBT与非活性对照及其他积极治疗。强化CBT对非活性/最小干预对照的强迫症状改善显著（SMD=-1.74），对积极心理治疗或药物治疗则不显著；抑郁、焦虑及家庭顺应亦有改善，证据确定性低至极低。",
+    "reason": null,
+    "lead": "一项纳入14项随机对照试验、共786例强迫症患者的Meta分析显示，强化认知行为治疗（CBT）的疗效随对照类型而异：与无干预或最小干预对照相比，强迫症状改善显著（SMD=-1.74，95%CI -2.53至-0.95，p<0.001）；与积极心理治疗或药物治疗相比，差异不显著。强化CBT在抑郁、焦虑和家庭顺应性方面也带来显著改善。探索性Meta回归提示，每周治疗时数越高，症状减轻幅度越大，但纳入研究数量有限，需谨慎解读。随访分析提示强迫症状改善可维持，但次要结局数据有限；各结局的证据确定性为低至极低，异质性较大且可能存在发表偏倚。该研究将强化CBT定义为6周内至少12小时、以暴露与反应预防为主要技术的治疗。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "在强迫症患者中，强化认知行为治疗（CBT）相比非活性或最小干预对照可显著改善症状，合并效应量SMD为-1.74（95%CI -2.53至-0.95），但与活性心理治疗或药物治疗相比差异不显著。该Meta分析纳入14项随机对照试验、共786例患者，同时发现抑郁、焦虑和家庭顺应性也有改善。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "强化认知行为治疗（CBT）相比非活性对照和其他积极治疗，对强迫症（OCD）症状、抑郁、焦虑和家庭顺应性的效果如何？"
+      },
+      {
+       "key": "design",
+       "label": "设计与对象",
+       "text": "系统综述与Meta分析，纳入14项随机对照试验、共786例患者；比较强化CBT与非活性/最小干预对照、积极心理治疗或药物治疗；评估治疗后及随访时的标准化均数差（SMD）。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "治疗后，强化CBT相对非活性/最小干预对照的OCD症状改善显著：SMD=-1.74，95%CI[-2.53,-0.95]，p<0.001。",
+        "强化CBT相对积极心理治疗或药物治疗的OCD症状差异不显著。",
+        "抑郁、焦虑和家庭顺应性也均有显著改善。",
+        "探索性Meta回归提示，每周治疗强度（小时/周）越高，症状减轻越多，但研究数量有限，需谨慎解读。"
+       ]
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "各结局的证据确信度为低至极低；异质性较大且可能存在发表偏倚，需谨慎解读。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Intensive CBT appears superior to non-active controls, while its advantage over active treatments remains uncertain and the certainty of the evidence is low to very low.",
+      "zh": "强化CBT似乎优于非活性对照，但其相对积极治疗的优势仍不确定，证据确信度为低至极低。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 307,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 127,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 307,
+      "sentences": 5,
+      "sentenceChars": 307,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 2,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 435,
+      "sentences": 7,
+      "sentenceChars": 434,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 2,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 24,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 143,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 13,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 143,
+      "sentences": 2,
+      "sentenceChars": 143,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 538,
+      "sentences": 10,
+      "sentenceChars": 529,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "paper-2d28083749ce8138",
+   "expectGenre": "paper",
+   "genreAccepted": true,
+   "textChars": 6000,
+   "textSource": "body",
+   "before": {
+    "summary": "西班牙一家三级医院回顾性分析了2016–2024年108例耳念珠菌血流感染患者，24例（22.2%）发生转移性感染，心内膜炎最常见（7.4%），骨关节感染、脑膜炎和肝脾感染各占3.7%。多变量Fine–Gray回归显示，心脏装置或人工瓣膜与转移性感染独立相关（亚分布HR 2.89，95% CI 1.21–6.91），但该关联在仅纳入接受超声心动图检查患者的敏感性分析中减弱。",
+    "reason": "对携带心脏植入装置或人工瓣膜的耳念珠菌血流感染患者，可参考该研究评估超声心动图筛查与转移灶监测的必要性，并关注持续血流感染与死亡风险的关联。",
+    "lead": "西班牙瓦伦西亚一家900张床位的三级医院回顾性分析了2016年5月至2024年12月108例成人耳念珠菌（Candidozyma auris）血流感染患者，其中24例（22.2%）发生转移性感染，心内膜炎最常见（7.4%），骨关节感染、脑膜炎和肝脾感染各占3.7%，脉络膜视网膜炎1例（0.9%）。以死亡为竞争风险的多因素Fine–Gray回归显示，携带心脏装置或人工瓣膜是转移性感染的唯一独立相关因素（亚分布HR 2.89，95% CI 1.21–6.91），但该关联在仅纳入接受超声心动图检查患者的敏感性分析中减弱；第5天landmark分析中持续念珠菌血症的风险升高但无统计学意义（亚分布HR 2.67，95% CI 0.86–8.32）。"
+   },
+   "after": {
+    "genre": "paper",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "西班牙一家三级医院2016–2024年收治的108例耳念珠菌（Candidozyma auris）血流感染患者中，24例（22.2%）发生转移性感染，其中心内膜炎最常见（7.4%），骨关节感染、脑膜炎和肝脾感染各占3.7%。",
+    "brief": {
+     "genre": "paper",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "耳念珠菌（Candidozyma auris）血流感染后转移性感染的特征、预测因素及结局如何？"
+      },
+      {
+       "key": "design",
+       "label": "设计与对象",
+       "text": "西班牙瓦伦西亚一家900张床位的三级医院2016年5月至2024年12月的回顾性观察研究，纳入108例成人耳念珠菌血流感染患者，按有无转移性感染分组比较。"
+      },
+      {
+       "key": "results",
+       "label": "主要结果",
+       "items": [
+        "108例中24例（22.2%）发生转移性感染；心内膜炎最常见（7.4%），骨关节感染、脑膜炎、肝脾感染各占3.7%。",
+        "多因素Fine–Gray回归中，心脏装置或人工瓣膜与转移性感染独立相关（亚分布HR 2.89 [95% CI 1.21–6.91]），但仅限于接受超声心动图检查患者的敏感性分析中该关联减弱。",
+        "第5天landmark分析中，持续性念珠菌血症与转移性感染风险升高相关但无统计学意义（亚分布HR 2.67 [95% CI 0.86–8.32]）。",
+        "时间依赖分析中，转移性感染与60天死亡增加相关（校正HR 2.21 [95% CI 1.04–4.67]），90天亦相关（校正HR 2.26 [95% CI 1.09–4.67]）。"
+       ]
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Our findings support echocardiography in patients with intracardiac devices.",
+      "zh": "我们的研究结果支持对携带心内装置的患者进行超声心动图检查。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 323,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 188,
+     "reasonChars": 70,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [
+      "lead:0.9%"
+     ],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 323,
+      "sentences": 2,
+      "sentenceChars": 323,
+      "over80": 2,
+      "over120": 2,
+      "numbers4": 2,
+      "commas4": 2,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 583,
+      "sentences": 5,
+      "sentenceChars": 581,
+      "over80": 4,
+      "over120": 2,
+      "numbers4": 3,
+      "commas4": 2,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 28,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 112,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 37,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 4,
+     "briefCoverage": 0.67,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 112,
+      "sentences": 1,
+      "sentenceChars": 112,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 591,
+      "sentences": 8,
+      "sentenceChars": 583,
+      "over80": 3,
+      "over120": 0,
+      "numbers4": 5,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-59b112cabfe97327",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 1315,
+   "textSource": "body",
+   "before": {
+    "summary": "2026 年 ESMO 大会上，康诺亚首次公布靶向 CDH17 的抗体偶联药物 CM518D1 的首次人体 I/II 期研究数据。截至 2026 年 5 月 8 日共纳入 84 例晚期实体瘤患者（71 例结直肠癌），既往中位治疗 3 线；4.8 mg/kg 剂量扩展组中位随访 4.1 个月，客观缓解率 33.3%，仅 1 例待确认，中位起效时间 2.8 个月。研究仍在进行，尚未达到最大耐受剂量，未发生导致死亡的治疗相关不良事件。",
+    "reason": null,
+    "lead": "2026 年 ESMO 大会上，康诺亚首次公布靶向 CDH17 的抗体偶联药物 CM518D1 的首次人体 I/II 期研究（NCT07019779）数据，这是全球第 2 款公布临床数据的 CDH17 ADC。截至 2026 年 5 月 8 日共纳入 84 例晚期实体瘤患者（71 例结直肠癌、10 例胃食管交界处癌、3 例胰腺癌），既往中位治疗 3 线；剂量递增阶段 21 例（1.6-8.0 mg/kg）尚未达到最大耐受剂量，剂量扩展阶段 63 例接受 4.8、5.8 或 6.8 mg/kg。最常见的治疗相关不良事件为贫血、白细胞计数下降、中性粒细胞计数下降、低白蛋白血症和恶心，未发生导致死亡的治疗相关不良事件。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "康诺亚在2026年ESMO大会上首次公布靶向CDH17的抗体偶联药物CM518D1的首次人体I/II期数据，这是全球第2款披露临床数据的CDH17 ADC。截至2026年5月8日共纳入84例晚期实体瘤患者（71例结直肠癌），既往中位治疗3线。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的研究",
+       "text": "康诺亚在研 CDH17 ADC CM518D1 的首次人体 I/II 期临床试验（NCT07019779），数据在 2026 年 ESMO 大会公布。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "截至 2026 年 5 月 8 日纳入 84 例晚期实体瘤患者，未达到最大耐受剂量，未发生导致死亡的 TRAE；4.8 mg/kg 扩展组 CRC 患者 ORR 为 33.3%，中位起效时间 2.8 个月。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "CM518D1 为全球第 2 款公布临床数据的 CDH17 ADC，另一款为普众发现的 AMT-676。",
+        "全球尚无 CDH17 ADC 获批上市，进度最快的处于 II 期临床，来自普众发现。",
+        "另有 12 款 CDH17 ADC 在开展 I/II 期临床试验，其中 11 款由国内企业开发。",
+        "CDH17 是消化道实体瘤领域的新兴靶点，相关 ADC 整体处于早期研究阶段。"
+       ]
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "研究认为，CM518D1 在 CDH17 阳性晚期实体瘤患者中展现出良好的安全性，并具有令人鼓舞的初步临床疗效。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 310,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 216,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 29,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 310,
+      "sentences": 3,
+      "sentenceChars": 310,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 527,
+      "sentences": 6,
+      "sentenceChars": 526,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 4,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 31,
+      "question": false,
+      "exclamation": true,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": false,
+      "harmGiven": true,
+      "harmUsed": true
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 121,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 19,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 4,
+     "briefCoverage": 0.8,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 121,
+      "sentences": 2,
+      "sentenceChars": 121,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 488,
+      "sentences": 8,
+      "sentenceChars": 480,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 5,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-76c74f137e4becca",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 4373,
+   "textSource": "body",
+   "before": {
+    "summary": "欧洲肿瘤内科学会年会启幕，29项中国新药研究入选突破性摘要，其中5项进入仅12席的主席论坛，另有24项入选口头报告和快速口头报告。与中国企业相关的近160项研究中，抗体偶联药物约占三分之一，双/三特异性抗体、小分子抑制剂/TKI、免疫检查点/单抗各约20%，瘤种集中在消化道肿瘤、肺癌和乳腺癌。",
+    "reason": null,
+    "lead": "2026年ESMO年会在西班牙启幕，中国有29项新药研究入选突破性摘要（LBA），其中5项进入仅12席的主席论坛，另有24项入选口头报告和快速口头报告。主席论坛将公布多项III期结果：赛沃替尼联合奥希替尼的SAFFRON研究（LBA6，n≈338，29国）在奥希替尼治疗后进展的EGFR突变伴MET过表达和/或扩增NSCLC中，PFS主要终点与OS关键次要终点均达统计学显著改善；依沃西联合化疗对比度伐利尤单抗联合化疗一线治疗胆道癌的HARMONi-GI1（LBA8）预设中期分析OS主要终点阳性，PFS与ORR同步达成；芦康沙妥珠单抗TroFuse-005（LBA11）在晚期或复发性子宫内膜癌中OS与PFS双重主要终点均达标、ORR达成。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "2026年ESMO年会上，29项中国新药研究入选突破性摘要，其中5项进入仅12席的主席论坛。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的研究",
+       "text": "2026年ESMO年会中国创新药研究，包括29项中国新药研究入选LBA、5项入选主席论坛；文章重点解读7家中国企业的研究。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "SAFFRON研究显示赛沃替尼联合奥希替尼的PFS主要终点与OS关键次要终点均达统计学显著改善；HARMONi-GI1预设中期分析显示OS主要终点阳性；TroFuse-005的OS与PFS双重主要终点均达标。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "中国入选LBA的新药研究达29项，其中5项进入仅12席的主席论坛。",
+        "与中国企业相关的近160项研究中ADC约占三分之一，双/三特异性抗体、小分子抑制剂/TKI、免疫检查点/单抗各约20%。",
+        "研发集中在消化道肿瘤、肺癌和乳腺癌三大亚洲人群高发领域。",
+        "多个同靶点横向对照将在详细数据公布后初见分晓。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "作者认为，ESMO上越来越多的III期研究显示中国创新药已处于全球验证的关键时刻，量变已经引发质变，同时竞争依然非常激烈。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "综合来看，ESMO大会上越来越多的III期研究表明，中国创新药已处于全球验证的关键时刻，量变已经引发质变。与此同时，竞争依然非常激烈，多个同靶点横向对照将在详细数据公布后初见分晓。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 321,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 147,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 14,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 321,
+      "sentences": 2,
+      "sentenceChars": 321,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 469,
+      "sentences": 4,
+      "sentenceChars": 468,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 3,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 21,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 46,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 14,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 46,
+      "sentences": 1,
+      "sentenceChars": 46,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 425,
+      "sentences": 8,
+      "sentenceChars": 416,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-868e562d8ffda422",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 6000,
+   "textSource": "body",
+   "before": {
+    "summary": "日本研究团队在小鼠中发现，大豆来源的溶血磷脂酰胆碱类化合物LPC70可减轻高盐饮食引起的高血压、物体识别记忆下降和社交互动减少，并改变肾脏与脑内前列腺素信号通路。该结果来自动物实验，尚不能外推到人群。",
+    "reason": "了解高盐饮食除升压外对认知与社交行为的潜在影响，以及前列腺素信号作为干预靶点的动物实验思路，可为减盐宣教和代谢相关研究设计提供参考。",
+    "lead": "日本藤田医科大学的研究团队发现，大豆来源的溶血卵磷脂LPC70可减轻高盐饮食小鼠的血压升高、物体识别记忆下降和社交互动减少，相关机制涉及前列腺素信号在肾脏和脑内的选择性调节。研究在喂食高盐饲料的小鼠中观察到，高盐使肾脏COX-2与PGE2受体EP3表达升高、前额叶皮层PGD2受体DP1表达降低，补充LPC70后血压改善、上述肾脏改变被抑制、DP1表达恢复而DP2未变，同时循环花生四烯酸水平偏低的小鼠在给予LPC70后PGE2和PGD2生成增加。高盐组小鼠的一般活动量和焦虑样行为无明显变化，提示受损的是较复杂的认知与社交功能。作者指出，这些结果来自动物实验，LPC70能否在人群中降低高盐相关的心血管与认知损害，仍需临床研究验证。该研究由辻制油株式会社资助，2026年7月1日发表于Neurochemistry International第197卷。"
+   },
+   "after": {
+    "genre": "news",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "日本藤田医科大学的研究团队在小鼠中发现，大豆来源的溶血磷脂酰胆碱制剂LPC70可减轻高盐饮食引起的血压升高、物体识别记忆下降和社交互动减少，而小鼠的一般活动量和焦虑样行为没有明显变化。",
+    "brief": {
+     "genre": "news",
+     "points": [
+      {
+       "key": "finding",
+       "label": "主要发现",
+       "text": "高盐饮食小鼠出现血压升高、社交互动减少和物体识别记忆受损，补充LPC70后血压改善、社交互动和物体识别记忆测试表现更好。"
+      },
+      {
+       "key": "source",
+       "label": "出处",
+       "text": "藤田医科大学；研究发表于Neurochemistry International第197卷。"
+      },
+      {
+       "key": "design",
+       "label": "研究设计",
+       "text": "日本研究团队以高盐饮食小鼠为对象，观察LPC70对血压、行为及前列腺素信号的影响。"
+      },
+      {
+       "key": "facts",
+       "label": "关键数字",
+       "items": [
+        "高盐饮食小鼠出现血压升高、社交互动减少和物体识别记忆受损。",
+        "高盐饮食小鼠的一般活动和焦虑样行为无显著变化。",
+        "高盐饮食使肾脏COX-2和PGE2受体EP3表达增加，LPC70可减少这些升高。",
+        "高盐饮食降低前额叶皮层PGD2受体DP1表达，LPC70恢复其表达且不改变DP2。"
+       ]
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 377,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 100,
+     "reasonChars": 66,
+     "reasonFormula": "了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 4,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 377,
+      "sentences": 5,
+      "sentenceChars": 377,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 545,
+      "sentences": 8,
+      "sentenceChars": 543,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 30,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 92,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 1,
+     "numbersMissing": [],
+     "briefFields": 4,
+     "briefPresent": 4,
+     "briefCoverage": 1,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 92,
+      "sentences": 1,
+      "sentenceChars": 92,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 381,
+      "sentences": 8,
+      "sentenceChars": 372,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "conference-a51e9eaf0a3aa2e3",
+   "expectGenre": "conference",
+   "genreAccepted": true,
+   "textChars": 3782,
+   "textSource": "body",
+   "before": {
+    "summary": "苏州大学附属第一医院陶敏教授在2026年CSCO学术年会上分析ROS1阳性非小细胞肺癌不同抑制剂疗效差异的原因，指出药物结构特性、基线状态和后续治疗选择是三大因素。TRIDENT-1研究中瑞普替尼一线扩展队列中位OS达74.6个月，主要队列中位OS尚未达到；回顾性AURORA-ROS1研究显示一线使用二代/新一代药物中位OS为80个月，一代/早一代为56个月。",
+    "reason": "可帮助理解ROS1阳性NSCLC一线药物代际差异与真实世界生存数据，为靶向药物选择和耐药后再活检策略提供参考。",
+    "lead": "苏州大学附属第一医院陶敏教授在2026年CSCO年会上解读了不同ROS1抑制剂长期生存数据存在差异的原因，并指出二代/新一代药物在总生存期上更具优势。差异主要来自药物分子结构与血脑屏障透过性、入组患者基线状态以及后续治疗选择的不同；二代药物可抑制一代药物常见耐药靶点G2032R。TRIDENT-1研究中瑞普替尼一线扩展队列中位OS达74.6个月，主要队列中位OS尚未达到；回顾性AURORA-ROS1研究显示，一线使用二代/新一代抑制剂的中位PFS和中位OS分别为48个月和80个月，而一代/早一代药物为17个月和56个月。陶敏据此建议一线优先使用二代/新一代ROS1抑制剂，并强调耐药后二次活检明确机制、探索联合治疗及围术期应用。目前国内已有5款ROS1抑制剂获批上市，瑞普替尼等已纳入国家医保。"
+   },
+   "after": {
+    "genre": "commentary",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "苏州大学附属第一医院陶敏教授在2026 CSCO年会上解读ROS1阳性NSCLC不同抑制剂疗效差异的原因，认为药物结构特性是最重要因素，二代药物可抑制一代药物常见耐药靶点G2032R并具有更好的颅内穿透性。",
+    "brief": {
+     "genre": "commentary",
+     "points": [
+      {
+       "key": "subject",
+       "label": "解读的研究",
+       "text": "2026年第29届CSCO学术年会（2026年9月16日至19日，山东济南）期间，苏州大学附属第一医院陶敏教授接受访谈，解读ROS1抑制剂疗效差异。"
+      },
+      {
+       "key": "result",
+       "label": "原始结果",
+       "text": "TRIDENT-1研究中瑞普替尼中位OS达74.6个月；AURORA-ROS1显示一线用二代/新一代ROS1抑制剂中位PFS 48个月、中位OS 80个月，一代/早一代为17个月和56个月。"
+      },
+      {
+       "key": "analysis",
+       "label": "解读要点",
+       "items": [
+        "国内已有5款ROS1抑制剂获批上市，2026年7月美国FDA批准齐德沙替尼后全球共6款。",
+        "一代/早一代药物为克唑替尼、恩曲替尼、安奈克替尼；二代/新一代为瑞普替尼、他雷替尼、齐德沙替尼。",
+        "一代/早一代ORR约70%、中位PFS约15-20个月、中位OS约2年；二代/新一代ORR提高约10%，PFS延长至35-45个月。",
+        "ALK阳性NSCLC中CROWN研究显示洛拉替尼一线PFS可达7年以上，中位PFS尚未达到。"
+       ]
+      },
+      {
+       "key": "view",
+       "label": "作者观点",
+       "text": "陶敏教授认为，临床应优先使用二代/新一代ROS1抑制剂并做好全程安全管理；耐药后需二次活检明确机制，并探索联合治疗及围术期应用。"
+      }
+     ],
+     "quote": {
+      "key": "remark",
+      "label": "原文观点",
+      "text": "首先需要明确ROS1抑制剂的一线用药策略，在临床实践中需优先使用二代/新一代ROS1抑制剂，并做好全程安全管理，从而达到更长的生存时间。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 350,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 181,
+     "reasonChars": 55,
+     "reasonFormula": "可帮助",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 14,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 350,
+      "sentences": 5,
+      "sentenceChars": 350,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 588,
+      "sentences": 8,
+      "sentenceChars": 586,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 56,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": true,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": true,
+      "kept": true,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": false,
+      "harmGiven": true,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 103,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 27,
+     "numbersMissing": [],
+     "briefFields": 5,
+     "briefPresent": 5,
+     "briefCoverage": 1,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 103,
+      "sentences": 1,
+      "sentenceChars": 103,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 549,
+      "sentences": 8,
+      "sentenceChars": 540,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 4,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-e392b7e48b67a7f8",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 885,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "Children's National Research Institute 登记的一项 60 例试点随机试验已完成并发布结果，评估由糖尿病照护与教育专家主导的行为干预，通过 3 次远程医疗课程和同伴家长顾问支持，改善 10-15 岁 1 型糖尿病青少年及其家长的持续葡萄糖监测使用。",
+    "reason": "关注青少年1型糖尿病血糖管理的研究者可参考其配对随机、延迟干预对照与定量定性混合方法，用于设计CGM使用促进或糖尿病教育类行为干预试验。",
+    "lead": "一项针对10-15岁1型糖尿病青少年的行为干预先导随机试验公布了结果，该干预由认证糖尿病照护与教育专家（CDCES）主导，通过3次远程医疗课程教授青少年与家长围绕CGM数据的问题解决和沟通技巧，并配合同伴家长顾问支持。研究计划招募60对青少年与家长，随机分为立即干预组和延迟干预组（作为标准照护对照），在CGM启用后1年内基线和3个随访点采集A1c、CGM指标、CGM负担与获益、糖尿病痛苦及糖尿病相关家庭冲突等医学与心理社会数据，采用定量与定性分析评估可行性、可接受性和影响。原文未给出具体结果数据。该先导试验结果将用于设计多中心随机临床试验以评估疗效，长期目标是形成可整合进常规糖尿病教育与照护的行为策略。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项试点随机试验在10-15岁1型糖尿病青少年及其父母中，评估由认证糖尿病护理与教育专家主导的行为干预对持续葡萄糖监测（CGM）使用的影响，计划招募60对青少年-父母二元组，随机分为立即干预组和延迟干预（标准照护）对照组。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "试点随机试验，采用二元组研究设计，参与者随机分配至立即干预组或延迟干预组。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "拟招募60名10-15岁1型糖尿病青少年及其父母，以青少年-父母二元组形式入组。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "干预组接受3次远程医疗会话，由CDCES教授CGM数据相关问题解决与沟通技能，并辅以同伴家长顾问联系；对照组为延迟干预，接受标准照护。"
+      },
+      {
+       "key": "endpoint",
+       "label": "主要终点",
+       "text": "评估干预的可行性、可接受性和影响；在基线及CGM启动后第一年内3个随访时间点收集A1c、CGM指标、CGM负担与获益、糖尿病痛苦及糖尿病相关家庭冲突等数据。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "已登记结果。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 305,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 142,
+     "reasonChars": 68,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [
+      "未给出"
+     ],
+     "numbersChecked": 13,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 305,
+      "sentences": 4,
+      "sentenceChars": 305,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 517,
+      "sentences": 6,
+      "sentenceChars": 515,
+      "over80": 3,
+      "over120": 2,
+      "numbers4": 3,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 26,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": true,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 111,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 14,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 5,
+     "briefCoverage": 0.71,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 111,
+      "sentences": 1,
+      "sentenceChars": 111,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 345,
+      "sentences": 6,
+      "sentenceChars": 339,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-4d355c9522432929",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 397,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "香港大学申办的一项前瞻性、双组、评估者盲法随机对照试验，计划纳入152对痴呆患者与照护者组合（共304人），按1:1随机分配至Empower-ICE_Fit干预组或主动对照组。干预组接受为期8周的赋能式居家改造项目，包括1次约90分钟家访、3次线上咨询、3次电话或微信随访及1次线上强化课程；对照组维持常规照护并在基线获得居家安全宣教书。",
+    "reason": "可了解以内在能力与居家环境匹配为切入点的非药物干预如何设计随机对照试验，为痴呆患者居家照护与照护者支持方案提供可借鉴的评估框架和随访安排。",
+    "lead": "一项前瞻性、双臂、评估者盲法的随机对照试验将纳入152对居家痴呆患者及其照护者，按1:1随机分配至Empower-ICE_Fit干预组或主动对照组，评估赋能式居家环境适配项目的效果。干预组接受为期8周的赋能式居家改造项目，包括1次约90分钟的家访、3次各约30-45分钟的线上一对一咨询、3次电话或微信随访及1次线上强化课程，内容涵盖内在能力与居家环境评估、协作式目标设定、赋能辅导和个体化居家改造建议；对照组维持常规照护，并在基线获得标准化居家安全宣教手册，不接受上述个体化评估、赋能辅导、居家改造咨询和随访。结局在基线、8周干预结束时及第12周随访时评估，另从干预组目的性选取约10对患者-照护者进行半结构化访谈，了解其体验、参与度和对项目的看法。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项在中国开展的评估者盲法、双臂随机对照试验，将152对居家痴呆患者与照护者按1:1随机分入Empower-ICE_Fit干预组或主动对照组，评估为期8周的赋权式家庭改造项目。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "前瞻性、双臂、评估者盲法随机对照试验，按1:1随机分组，并包含嵌入式定性研究部分。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "纳入居家痴呆症患者及其照护者配对，共152对。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "干预组接受为期8周的Empower-ICE_Fit家庭改造项目；对照组接受常规照护，并在基线获得标准化家庭安全健康教育手册。"
+      },
+      {
+       "key": "endpoint",
+       "label": "主要终点",
+       "text": "结局在基线、8周干预结束后即刻及第12周随访时评估。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "另从干预组中有目的性地选取约10对配对进行半结构化访谈。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 326,
+     "leadLimit": 345,
+     "leadOverLimit": false,
+     "summaryChars": 169,
+     "reasonChars": 69,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 24,
+     "numbersMissing": [
+      "summary:304"
+     ],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 326,
+      "sentences": 3,
+      "sentenceChars": 326,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 566,
+      "sentences": 6,
+      "sentenceChars": 564,
+      "over80": 4,
+      "over120": 1,
+      "numbers4": 3,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 26,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 88,
+     "leadLimit": 345,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 11,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 5,
+     "briefCoverage": 0.71,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 88,
+      "sentences": 1,
+      "sentenceChars": 88,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 274,
+      "sentences": 6,
+      "sentenceChars": 268,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-d7915a0d7bde1cb8",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 1936,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "杜克大学登记了 Elimisha HPV 研究的结果。该研究在政府支持的卫生机构下辖的社区健康单元开展集群随机试验，共入组 963 人，比较标准 HPV 自采样筛查与加入去污名化教育、同伴支持的多层次干预模式对宫颈癌筛查参与和治疗随访的影响。",
+    "reason": "可了解在社区筛查中嵌入去污名化教育和同伴支持的具体设计，为宫颈癌筛查依从性干预研究提供可借鉴的集群随机实施框架。",
+    "lead": "肯尼亚一项整群随机对照试验（Elimisha HPV）在12家政府支持的卫生机构下辖社区卫生单元中，比较标准HPV自采样筛查模式与多层面、去污名化的Elimisha HPV干预模式对宫颈癌筛查参与率和治疗衔接的影响。干预组由接受以患者为中心培训的社区卫生志愿者使用经审核不含污名化内容的标准化脚本开展教育，对暂不愿筛查者播放同伴经历视频并提供自采样图示，拒绝筛查者可联系同伴支持者，随访延迟者由同伴支持者电话沟通。研究在9至12个月时招募30至65岁女性，用约55个条目的量表测量HPV、HIV和宫颈癌相关污名，量表已译为Dholuo语并口头施测。结果已登记，摘要未给出具体效应数据。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "肯尼亚12家政府卫生机构下辖社区健康单元开展的Elimisha HPV整群随机试验已登记结果，共纳入963人，比较在常规家访中提供HPV自采样筛查与热凝治疗的标准诊疗，和在此基础上增加去污名化培训、标准化教育话术、同伴支持视频及同伴联络的强化干预。主要看干预对宫颈癌筛查接受度和治疗随访的影响。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "整群随机对照试验（cluster-RCT），在12家政府支持的卫生机构下辖的社区健康单元（CU）中开展，分为标准诊疗对照组和Elimisha强化干预组。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "纳入社区健康单元辖区内的女性；污名化测量部分纳入30-65岁、在两个研究组卫生机构就诊的女性。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "对照组CU提供自采样HPV检测及标准诊疗转诊流程；干预组在此基础上增加Elimisha HPV多层级去污名化服务，包括标准化教育脚本、同伴教育视频、自采样图示及同伴支持者联系。"
+      },
+      {
+       "key": "endpoint",
+       "label": "主要终点",
+       "text": "主要终点为干预措施对宫颈癌筛查接受度和治疗的影响；第9-12个月用约55条目工具测量与HPV、HIV和宫颈癌相关的污名化。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "status",
+      "reason": "language"
+     }
+    ],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 292,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 121,
+     "reasonChars": 56,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [
+      "未给出"
+     ],
+     "numbersChecked": 7,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 292,
+      "sentences": 4,
+      "sentenceChars": 292,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 471,
+      "sentences": 7,
+      "sentenceChars": 469,
+      "over80": 3,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 31,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": true,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 147,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 9,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 4,
+     "briefCoverage": 0.57,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 147,
+      "sentences": 2,
+      "sentenceChars": 147,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 424,
+      "sentences": 6,
+      "sentenceChars": 419,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-a5210cba4f596ca1",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 1459,
+   "textSource": "abstract",
+   "before": {
+    "summary": "一项前瞻性队列研究纳入122例60岁及以上接受大手术的患者，术后C反应蛋白（CRP）与术后谵妄的发生率（预测概率99.9%）及峰值严重程度（预测概率94.7%）独立相关；术后谵妄发生率为16.4%（20/122），平均峰值严重程度为2.1（SD 2.1）。止吐剂量的地塞米松使CRP降低41%（95% CrI 8-62%，预测概率99.1%）。",
+    "reason": "术后可常规监测CRP以识别谵妄高风险患者，并为围术期抗炎预防谵妄的试验设计提供依据。",
+    "lead": "一项前瞻性队列研究纳入122例60岁及以上接受大手术的患者，发现术后C反应蛋白（CRP）与术后谵妄（POD）的发生和严重程度独立相关，而止吐剂量的地塞米松可使CRP降低41%。患者术前及术后第1天检测CRP，术后第1至3天每日2次用3D-CAM评估谵妄；POD发生率为16.4%（20/122），3D-CAM峰值评分均值2.1（SD 2.1）。术后CRP与POD严重程度（预测概率94.7%）及发生率（预测概率99.9%）相关；地塞米松降低CRP的效应量为41%（95% CrI 8-62%，预测概率99.1%）。作者认为，常规术后CRP与POD发生和严重程度独立相关，止吐剂量地塞米松可显著降低CRP，这为通过调节炎症预防谵妄的试验提供了支持。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本提示，≥60岁接受大手术的患者术后第1天C反应蛋白（CRP）水平与术后谵妄的发生和严重程度相关。研究为前瞻性队列，纳入122例患者，术前及术后第1天测CRP，术后1-3天每日2次用3D-CAM评估谵妄，20例（16.4%）发生谵妄，峰值严重程度均值为2.1（SD 2.1）。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "C反应蛋白（CRP）能否预测术后谵妄（POD）的严重程度或发生率；抗呕吐剂量的地塞米松是否改变该年龄组的炎症反应。"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "前瞻性队列研究，纳入122例60岁及以上接受大手术的患者，术前和术后第1天测CRP，第1-3天每日2次用3D-CAM评估谵妄。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "POD发生20/122（16.4%），平均峰值严重程度2.1（SD 2.1）。",
+        "术后CRP与POD严重程度相关，预测概率94.7%；与POD发生率相关，预测概率99.9%。",
+        "地塞米松使CRP降低41%（95% CrI 8-62%），预测概率99.1%。"
+       ]
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Routine postoperative CRP was independently associated with POD incidence and severity. Dexamethasone, at anti-emetic doses, was associated with a substantial reduction in CRP levels, supporting trials focussed on modulating inflammation to prevent delirium.",
+      "zh": "常规术后CRP与POD的发生率和严重程度独立相关。抗呕吐剂量的地塞米松与CRP水平大幅降低相关，支持开展以调节炎症预防谵妄为重点的试验。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 323,
+     "leadLimit": 377,
+     "leadOverLimit": false,
+     "summaryChars": 172,
+     "reasonChars": 42,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 33,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 323,
+      "sentences": 4,
+      "sentenceChars": 323,
+      "over80": 3,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 539,
+      "sentences": 7,
+      "sentenceChars": 537,
+      "over80": 4,
+      "over120": 1,
+      "numbers4": 4,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 16,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": true,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 150,
+     "leadLimit": 377,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 30,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 4,
+     "briefCoverage": 0.67,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 150,
+      "sentences": 2,
+      "sentenceChars": 150,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 469,
+      "sentences": 9,
+      "sentenceChars": 462,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 4,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-1db7d59d3a0314d2",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 2298,
+   "textSource": "abstract",
+   "before": {
+    "summary": "该预印本系统评价纳入2009至2024年发表的13项英国研究，评估促进残障人士就业的干预措施。一项关键试验中，临床场景下高保真个体支持就业（IPS）使严重精神疾病患者竞争性就业率从11%升至22%；局部整群随机对照试验中，联合动机性访谈与就业几率增加相关（OR=4.3，95% CI 1.5–16.6）。常见精神健康问题人群中，将就业顾问嵌入心理治疗与求职者48%的就业率相关（单纯治疗为29%）。",
+    "reason": "对精神科和全科医生而言，可据此了解将就业支持嵌入临床路径（如IPS、IAPT共址）的量化证据，为严重精神疾病患者的职业康复转介与沟通提供参考。",
+    "lead": "一项系统评价汇总2009至2024年英国13项研究（14篇文章，初筛8088条记录）后发现，高保真度的个体就业支持（IPS）在临床环境中可能使严重精神疾病患者的竞争性就业率翻倍（一项关键试验中为22%对11%），在此基础上加入动机性访谈的局部整群随机对照试验中就业几率增加4倍以上（OR=4.3，95% CI 1.5至16.6）。对常见精神健康问题，将就业顾问嵌入心理治疗（IAPT）与更高的就业率相关，在求职者中为48%（单纯治疗为29%）；强制性的就业中心项目未见显著就业获益，而Want2Work等自愿项目与就业概率提高7至8个百分点相关。评价的干预多针对个人就业能力而非工作环境，参与者受教育程度和劳动力市场附着度高于英国因残障经济不活跃人群的平均水平，提示雇主侧调整和弱势群体干预存在明显证据缺口。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本系统评价显示，英国针对残障人士的就业干预中，自愿参与且与临床服务整合的路径与更高的就业率相关，而强制性的就业中心项目未见显著就业获益。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "评价2009至2024年间英国针对残障人士的微观与中观层面就业干预措施是否有效。"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "系统评价，汇总2009至2024年发表的英国定量实验与准实验评估，来源为学术文献和灰色文献；从8088条记录中纳入13项研究（14篇文章）。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "高保真度IPS用于临床环境可能使严重精神疾病的竞争性就业率翻倍，一项关键试验中为22%对11%。",
+        "在局部整群随机对照试验中，加入动机性访谈与就业几率增加4倍以上相关（OR=4.3；95% CI: 1.5, 16.6）。",
+        "在常见精神健康问题中，将就业顾问与心理治疗（IAPT）同址设置，与求职客户48%的就业率相关，而仅接受治疗者为29%。",
+        "强制性的Jobcentre项目未见显著就业获益；Want2Work等自愿项目与就业概率提高7至8个百分点相关。"
+       ]
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "纳入干预多针对个人就业能力而非工作环境；研究对象受教育程度和劳动力市场依附程度高于英国因残障经济不活跃人群的平均水平，雇主侧调整和弱势群体干预证据缺口大。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "While voluntary, clinically integrated pathways show promise, drawing firm conclusions about 'what works' requires caution; these localised findings may need replication across diverse local labour markets.",
+      "zh": "虽然自愿的、临床整合的路径显示出前景，但就“什么有效”得出确切结论仍需谨慎；这些局部发现可能需要在多样的地方劳动力市场中重复验证。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 354,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 199,
+     "reasonChars": 71,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 28,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 354,
+      "sentences": 3,
+      "sentenceChars": 354,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 626,
+      "sentences": 7,
+      "sentenceChars": 624,
+      "over80": 4,
+      "over120": 1,
+      "numbers4": 3,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 17,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 80,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 19,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 80,
+      "sentences": 1,
+      "sentenceChars": 80,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 563,
+      "sentences": 9,
+      "sentenceChars": 554,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 1
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-f35898cb5472bcfd",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 6000,
+   "textSource": "body",
+   "before": {
+    "summary": "葡萄牙多中心随机对照试验纳入107例新处方PAP的阻塞性睡眠呼吸暂停患者，个性化支持方案组与标准随访组前3个月平均每日PAP使用时长无显著差异（4.61±2.24 vs 3.85±2.62 h/天，p=0.059）。6个月和12个月时，使用天数比例及每日使用≥4 h、<2 h的人数比例差异显著有利于个性化支持方案；经济模型估算该方案每年每人可节省直接费用255欧元、间接费用220欧元。",
+    "reason": "可了解由家庭支持服务商主导的PAP随访模式在依从性管理中的实际效果与成本测算思路，为睡眠呼吸治疗随访资源配置和依从性干预设计提供参考。",
+    "lead": "在葡萄牙5家中心开展的随机对照试验中，由家庭支持服务商实施的个性化支持方案（VitalCare）未能显著提高OSA患者开始PAP治疗后前3个月的平均每日使用时长，意向性分析107例（男性65例，平均年龄57.1岁，平均AHI 30.4次/h）显示，个性化方案组为4.61±2.24 h/天，标准随访组为3.85±2.62 h/天（p=0.059）。但在6个月和12个月时，两组在PAP使用天数占比、每日使用≥4 h及<2 h的人数比例上的差异显著有利于个性化方案组。1年内，个性化方案组患者比标准随访组多接受约0.4次医疗咨询和约1次服务商上门访视，另有2.4次其他干预；且依从性越低，干预次数越多。经济模型估算，依从人数增加可使每人每年直接和间接费用分别节省255欧元和220欧元。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本显示，由家庭支持服务商实施的个性化支持方案未能显著改善OSA患者开始PAP治疗后前3个月的平均依从性，干预组与标准随访组分别为4.61±2.24和3.85±2.62小时/天（p=0.059）。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "在葡萄牙，由家庭支持服务商实施的个性化支持方案能否改善新处方PAP治疗的OSA患者的依从性，并带来临床和经济收益？"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "多中心、前瞻性、开放标签随机对照试验（NCT05246449），2021年11月至2023年12月在葡萄牙5个中心开展，新处方PAP的OSA成人按1:1随机分为个性化支持方案组或标准随访组，分析107例。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "3个月平均每日PAP使用时长两组无显著差异：个性化方案组4.61±2.24 h/day，标准随访组3.85±2.62 h/day，p=0.059。",
+        "6个月和12个月时，PAP使用天数比例、每日使用≥4 h人数比例和<2 h人数比例的组间差异显著 favoring 个性化支持方案。",
+        "1年内个性化支持组比标准随访组多约0.4次医疗咨询、约1次服务商上门访视和2.4次其他干预。",
+        "个性化支持组PAP依从性越低，干预次数越多；经济模型估计依从人数增加可带来每人每年直接节省255欧元、间接节省220欧元。"
+       ]
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "原文未写明局限。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "A personalized support plan has the potential to improve adherence to PAP therapy in individuals with OSA managed by HSPs, and modelling suggested that it could contribute to cost savings for the health system.",
+      "zh": "个性化支持方案有潜力改善由家庭支持服务商管理的OSA患者的PAP治疗依从性，模型分析提示它可能有助于为卫生系统节省成本。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 342,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 194,
+     "reasonChars": 67,
+     "reasonFormula": "可了解",
+     "reasonEmpty": false,
+     "absences": [],
+     "numbersChecked": 35,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 342,
+      "sentences": 4,
+      "sentenceChars": 342,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 3,
+      "commas4": 1,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 605,
+      "sentences": 7,
+      "sentenceChars": 603,
+      "over80": 3,
+      "over120": 1,
+      "numbers4": 5,
+      "commas4": 1,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 23,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": true,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 109,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [
+      "未写明"
+     ],
+     "numbersChecked": 31,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 109,
+      "sentences": 1,
+      "sentenceChars": 109,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 591,
+      "sentences": 9,
+      "sentenceChars": 582,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 5,
+      "commas4": 0,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": false,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-29c3e71b431f1904",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 6000,
+   "textSource": "body",
+   "before": {
+    "summary": "研究分析31例患者TEVAR术后24小时血压与心率时间序列，结合术前主动脉几何指标建立预测模型。舒张压变异性较大、收缩压严格平稳与手术成功相关，联合模型5折交叉验证准确率达96.67%。提示术后血流动力学波动特征或可用于评估TEVAR预后。",
+    "reason": null,
+    "lead": "31例接受TEVAR的患者中，术后24小时内收缩压呈严格平稳、舒张压变异度更大者，手术结局更有利。该回顾性单中心研究分析了560条血压和680条心率时序记录，以术后30天以上是否需要再次手术将患者分为成功17例与失败14例，并将血压、心率统计量与术前CT主动脉几何特征共同纳入logistic回归模型，5折交叉验证预测准确率达96.67%。作者据此提出，术后血流动力学变量的变异度与平稳性可作为TEVAR结局的预测指标，但样本量仅31例且为预印本，尚待同行评议验证。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本提示，TEVAR术后24小时内的血压与心率时间序列特征可能与手术结局相关：结局良好者舒张压变异性更大、收缩压呈严格平稳。研究分析了31例患者的560条血压和680条心率时间序列，并结合术前主动脉几何指标建立logistic回归模型，5折交叉验证准确率为96.67%。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "TEVAR术后24小时内的血压与心率时间序列指标能否预测手术结局？"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "分析31例患者的血压（n=560）和心率（n=680）时间序列数据，并结合术前主动脉几何指标；采用平稳性检验和逻辑回归模型预测TEVAR结局。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "手术成功与更大的舒张压变异性和严格平稳的收缩压相关。",
+        "结合上述指标、心率标准差和术前主动脉几何的logistic回归模型，5折交叉验证预测准确率为96.67%。"
+       ]
+      },
+      {
+       "key": "funding",
+       "label": "资助与利益冲突",
+       "text": "NIH NHLBI R01HL159205资助LP；芝加哥大学临床与转化科学奖（CTSA）UL1TR000430资助研究信息中心；资助方未参与研究设计、数据收集与分析、发表决定或稿件准备。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Post-TEVAR behaviors of hemodynamic variables are critical predictors of TEVAR success, with higher DBP standard deviation and strict stationarity of SBP significantly associated with favorable outcomes.",
+      "zh": "TEVAR术后血流动力学变量的变化行为是TEVAR成功的关键预测因素，较高的舒张压标准差和收缩压的严格平稳性与良好结局显著相关。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 233,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 120,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 14,
+     "numbersMissing": [
+      "lead:17",
+      "lead:14"
+     ],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 233,
+      "sentences": 3,
+      "sentenceChars": 233,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 354,
+      "sentences": 6,
+      "sentenceChars": 353,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 22,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": true,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 146,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 5,
+     "briefCoverage": 0.83,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 146,
+      "sentences": 2,
+      "sentenceChars": 146,
+      "over80": 0,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 494,
+      "sentences": 8,
+      "sentenceChars": 487,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": false,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "preprint-ea5bbc21b462154a",
+   "expectGenre": "preprint",
+   "genreAccepted": true,
+   "textChars": 1996,
+   "textSource": "abstract",
+   "before": {
+    "summary": "泰国某精神病院将94例中重度抑郁住院患者按1:1随机分配至正念认知疗法联合常规护理组或单纯常规护理组，干预为3周内6次团体课程。3个月时正念认知疗法组抑郁症状与反刍更低、正念水平更高，再入院差异无统计学意义；研究针对再入院把握度不足。",
+    "reason": null,
+    "lead": "在泰国一家精神病院，94 例中度至重度 ICD-10 抑郁障碍住院患者按 1:1 随机接受护士主导的团体正念认知疗法（MBCT）联合常规护理，或仅接受常规护理；MBCT 为 3 周内 6 次、每次 60–90 分钟的团体课程。3 个月时，MBCT 组抑郁症状（9Q）降幅大于对照组（均差 3.49，95% CI 2.75–4.23，d=1.93），反刍（d=3.34）更低、正念（d=2.16）更高，三项结局的时间×组别交互均 p<.001。达到轻微症状状态的比例为 51.1% 对 2.1%（p<.001），需治疗人数为 2.0；出院后反刍改善完全维持，而对照组恶化，正念获益在两组均有部分消退。出院 3 个月内再入院为 2/47 对 7/47，差异无统计学意义（Fisher 精确检验 p=.158），作者指出该试验对再入院终点把握度不足。"
+   },
+   "after": {
+    "genre": "preprint",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项尚未经同行评议的预印本显示，泰国一所精神病院的94例中重度抑郁住院患者随机接受护士主导、经文化适配的6次团体正念认知疗法（MBCT）联合常规护理或单纯常规护理后，3个月时MBCT组抑郁症状评分比对照组低3.49分（95% CI 2.75-4.23），达到轻微症状状态者占51.1%，对照组为2.1%，需治疗人数为2.0。两组3个月内再入院分别为2例和7例，差异无统计学意义（Fisher精确检验 P=0.158），作者说明该试验对再入院这一终点把握度不足。作者还指出，正念获益在两组均出现部分消退，提示可能需要加强随访。",
+    "brief": {
+     "genre": "preprint",
+     "points": [
+      {
+       "key": "question",
+       "label": "研究问题",
+       "text": "护士主导、经文化适配的团体正念认知疗法（MBCT）能否在泰国住院抑郁患者中预防复发并改善症状。"
+      },
+      {
+       "key": "design",
+       "label": "设计与样本",
+       "text": "在泰国一家精神病院开展随机对照试验，94 例中度至重度 ICD-10 抑郁障碍住院患者按 1:1 分为 MBCT 联合常规护理组和单纯常规护理组；干预为 3 周内 6 次 60–90 分钟团体课程。"
+      },
+      {
+       "key": "results",
+       "label": "主要发现",
+       "items": [
+        "干预后及 3 个月随访时，时间×组别交互作用在抑郁症状、反刍和正念三项结局上均支持 MBCT（均 p < .001；partial η² = .13–.40）。",
+        "3 个月时 MBCT 组抑郁症状低于对照组（均数差 3.49，95% CI [2.75, 4.23]，d = 1.93）。",
+        "3 个月时 MBCT 组反刍更低（d = 3.34），正念更高（d = 2.16）。",
+        "达到轻微症状状态者 MBCT 组为 51.1%，对照组为 2.1%（p < .001），需治疗人数为 2.0。"
+       ]
+      },
+      {
+       "key": "funding",
+       "label": "资助与利益冲突",
+       "text": "无"
+      },
+      {
+       "key": "limits",
+       "label": "局限",
+       "text": "该试验对再入院结局的检验效能不足；正念获益在两组中均部分消退，提示可能需要加强随访接触。"
+      }
+     ],
+     "quote": {
+      "key": "conclusion",
+      "label": "作者结论",
+      "text": "Brief, nurse-led, culturally adapted MBCT added clinically meaningful benefit to routine inpatient care, sustained to three months.",
+      "zh": "简短、护士主导、经文化适配的 MBCT 为常规住院护理带来了有临床意义的额外获益，并持续至 3 个月。"
+     }
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [
+     {
+      "key": "results",
+      "reason": "length"
+     }
+    ],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 372,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 117,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 32,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 372,
+      "sentences": 4,
+      "sentenceChars": 372,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 4,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 490,
+      "sentences": 6,
+      "sentenceChars": 489,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 5,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 17,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 262,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 43,
+     "numbersMissing": [],
+     "briefFields": 6,
+     "briefPresent": 6,
+     "briefCoverage": 1,
+     "quoteVerbatim": true,
+     "leadStyle": {
+      "chars": 262,
+      "sentences": 3,
+      "sentenceChars": 262,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 2,
+      "commas4": 1,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 752,
+      "sentences": 11,
+      "sentenceChars": 741,
+      "over80": 2,
+      "over120": 1,
+      "numbers4": 6,
+      "commas4": 1,
+      "fenbie": 1,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": {
+      "absoluteGiven": true,
+      "absoluteUsed": true,
+      "harmGiven": false,
+      "harmUsed": false
+     },
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-47c6cedd94a58123",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 1482,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "挪威 Haukeland University Hospital 公布了输尿管镜铥光纤激光碎石高功率与低功率设置随机试验的结果，入组 150 例。研究主要比较两种功率设置下的手术时间，次要比较结石清除率、激光时间、激光激活模式及术中术后并发症，患者为 8-25 mm 肾结石。",
+    "reason": null,
+    "lead": "挪威Haukeland大学医院的研究者公布了一项前瞻性随机试验结果，比较输尿管镜碎石术中铥光纤激光（TFL）高功率与低功率设置的效果。研究纳入≥18岁、肾结石8-25 mm、拟行日间手术输尿管镜碎石的患者，随机分为低功率组（4-6W，0.4-0.6 J、10 Hz）和高功率组（16-18W，0.4 J/40 Hz、0.6 J/30 Hz、0.8 J/20 Hz），主要终点为手术时间，次要终点包括结石清除率、激光时间、激光激活模式及围手术期和术后并发症。术后3个月行CT评估结石清除状态并排除输尿管狭窄。研究经挪威国家科研伦理委员会批准（REK: 550740）。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项在挪威Haukeland大学医院开展的前瞻性随机试验，纳入≥18岁、拟行输尿管镜碎石术的8-25 mm肾结石患者，比较铥光纤激光（TFL）低功率（4-6 W）与高功率（16-18 W）设置，主要终点为手术时间。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "前瞻性随机试验，比较输尿管镜碎石术中铥光纤激光（TFL）低功率与高功率设置，设2个组。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "纳入≥18岁、计划在Haukeland大学医院日间手术单元接受8-25 mm肾结石URS碎石术的患者。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "第1组低功率4-6W短脉冲，标准启动0.4J/10Hz（4W）；第2组高功率16-18W短脉冲，标准启动0.4J/40Hz（16W）。"
+      },
+      {
+       "key": "endpoint",
+       "label": "主要终点",
+       "text": "主要终点为手术时间；次要终点包括无石率、激光时间、激光激活模式及术中术后并发症。"
+      },
+      {
+       "key": "sponsor",
+       "label": "申办方与地点",
+       "text": "研究在挪威Haukeland大学医院（HUH）开展，已获挪威国家研究伦理委员会批准（REK：550740）。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "术后3个月行CT随访评估无结石状态并排除输尿管狭窄。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 283,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 138,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 22,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 283,
+      "sentences": 4,
+      "sentenceChars": 283,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 422,
+      "sentences": 6,
+      "sentenceChars": 421,
+      "over80": 1,
+      "over120": 1,
+      "numbers4": 1,
+      "commas4": 1,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 21,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 107,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 23,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 6,
+     "briefCoverage": 0.86,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 107,
+      "sentences": 1,
+      "sentenceChars": 107,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 395,
+      "sentences": 7,
+      "sentenceChars": 388,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  },
+  {
+   "id": "trial-34b64f65752c0d0d",
+   "expectGenre": "trial",
+   "genreAccepted": true,
+   "textChars": 2134,
+   "textSource": "excerpt",
+   "before": {
+    "summary": "美国 Dartmouth College 申办的 MOms in REcovery（MORE）观察性研究已完成并登记结果，入组 2,510 人，比较在产科照护中整合药物辅助治疗与转诊至专科项目两种模式对母婴结局的影响。研究同时关注心理健康、照护协调与育儿教育等现场服务的作用，以及产后治疗留存问题。",
+    "reason": "研究比较孕期阿片使用障碍两种药物辅助治疗照护模式及现场支持服务的作用，可供开展孕产妇成瘾整合照护的机构在设计服务流程与随访方案时参考。",
+    "lead": "美国北新英格兰地区26家产科诊所登记了一项观察性研究结果，比较阿片使用障碍（OUD）孕妇接受整合式给药（在产科诊所内提供药物辅助治疗MAT及心理社会服务）与转诊式给药（MAT与产科服务分设）两种模式的真实世界效果。研究采用整群观察性混合方法设计：回顾性病历数据纳入2000例OUD孕妇，评估母婴临床结局；另招募532例孕妇，于孕晚期入组并随访至产后6个月，通过在线自报问卷评估以患者为中心的结局。原文未给出具体结果数据。该研究针对的是孕期MAT最优照护模式这一尚未解决的问题，其结果可为产科诊所如何配置MAT服务、以及Medicaid等支付方如何投入资源提供依据。"
+   },
+   "after": {
+    "genre": "trial",
+    "genreBasis": "code",
+    "modelGenre": null,
+    "title": null,
+    "scores": null,
+    "scoresRaw": null,
+    "summary": null,
+    "reason": null,
+    "lead": "这项在缅因州、新罕布什尔州和佛蒙特州26家产科诊所开展的基于整群的观察性混合方法研究，比较整合式与转诊式药物辅助治疗（MAT）照护模式对阿片类药物使用障碍孕妇的结局。回顾性部分利用2000例临床记录评估母婴临床结局，前瞻性部分在妊娠第3个孕期招募532例患者报告子样本，随访至产后6个月，评估以患者为中心的结局。",
+    "brief": {
+     "genre": "trial",
+     "points": [
+      {
+       "key": "design",
+       "label": "设计",
+       "text": "基于整群的观察性混合方法设计，比较整合式与转诊式MAT照护模式。"
+      },
+      {
+       "key": "population",
+       "label": "人群与样本量",
+       "text": "在缅因州、新罕布什尔州和佛蒙特州26家提供产科照护的诊所接受产前保健、符合DSM-5阿片类药物使用障碍诊断标准的孕妇；回顾性临床记录数据n=2000，患者报告子样本队列n=532。"
+      },
+      {
+       "key": "arms",
+       "label": "干预与对照",
+       "text": "整合式照护：MAT及相关心理社会服务与产科照护在同一地点提供；转诊式照护：女性在分开的专门地点接受MAT和产科照护。"
+      },
+      {
+       "key": "endpoint",
+       "label": "主要终点",
+       "text": "比较两种MAT模式在患者照护体验及围产期、新生儿和较长期物质使用治疗结局方面的真实世界有效性；子样本队列于妊娠第3个孕期招募，随访至产后6个月。"
+      },
+      {
+       "key": "sponsor",
+       "label": "申办方与地点",
+       "text": "与北新英格兰地区提供产科照护的26家诊所协作，涉及缅因州、新罕布什尔州和佛蒙特州。"
+      },
+      {
+       "key": "status",
+       "label": "状态与时间",
+       "text": "已登记结果。"
+      }
+     ]
+    },
+    "editVerification": null,
+    "leadVerification": "passed",
+    "briefDropped": [],
+    "briefError": null,
+    "faith": {
+     "facts": true,
+     "lead": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     },
+     "brief": {
+      "outcome": "clean",
+      "before": 0,
+      "remaining": 0,
+      "rules": []
+     }
+    }
+   },
+   "metrics": {
+    "before": {
+     "leadChars": 282,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 149,
+     "reasonChars": 67,
+     "reasonFormula": null,
+     "reasonEmpty": false,
+     "absences": [
+      "未给出"
+     ],
+     "numbersChecked": 8,
+     "numbersMissing": [
+      "summary:2,510"
+     ],
+     "briefFields": 7,
+     "briefPresent": 0,
+     "briefCoverage": 0,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 282,
+      "sentences": 4,
+      "sentenceChars": 282,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 500,
+      "sentences": 7,
+      "sentenceChars": 498,
+      "over80": 3,
+      "over120": 0,
+      "numbers4": 0,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "title": {
+      "chars": 19,
+      "question": false,
+      "exclamation": false,
+      "hype": false,
+      "columnTag": false,
+      "siteSuffix": false,
+      "named": false,
+      "resultVerb": false,
+      "numeral": false,
+      "chinese": false,
+      "kept": null,
+      "numbersMissing": []
+     },
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    },
+    "after": {
+     "leadChars": 156,
+     "leadLimit": 380,
+     "leadOverLimit": false,
+     "summaryChars": 0,
+     "reasonChars": 0,
+     "reasonFormula": null,
+     "reasonEmpty": true,
+     "absences": [],
+     "numbersChecked": 12,
+     "numbersMissing": [],
+     "briefFields": 7,
+     "briefPresent": 6,
+     "briefCoverage": 0.86,
+     "quoteVerbatim": null,
+     "leadStyle": {
+      "chars": 156,
+      "sentences": 2,
+      "sentenceChars": 156,
+      "over80": 1,
+      "over120": 0,
+      "numbers4": 1,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 0
+     },
+     "proseStyle": {
+      "chars": 462,
+      "sentences": 8,
+      "sentenceChars": 455,
+      "over80": 2,
+      "over120": 0,
+      "numbers4": 2,
+      "commas4": 0,
+      "fenbie": 0,
+      "dash": 0,
+      "reversal": 0,
+      "colonSetup": 2
+     },
+     "title": null,
+     "givenUsed": null,
+     "leakage": [],
+     "advice": null
+    }
+   }
+  }
+ ]
+}

@@ -70,6 +70,37 @@ describe("the list of follows", () => {
   });
 });
 
+describe("the typed follows in the list (c3-watch)", () => {
+  const href = (choice: FollowChoice) => `/app/frontier?view=following&follow=${followChoiceParam(choice)}`;
+  const typed = { id: "21", kind: "query", key: "glp-1 和胰腺炎", label: "GLP-1 和胰腺炎", muted: false, newItems: 4 } as const;
+
+  it("puts what the reader typed first, under 「关注词」, with its new count, and 99 or more as 「99+」", () => {
+    render(<MemoryRouter><FollowList state={state({ topics: [topic, typed, { ...typed, id: "22", key: "x", label: "司美格鲁肽", newItems: 99 }] })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} /></MemoryRouter>);
+    const nav = screen.getByRole("navigation", { name: "我的关注" });
+    expect(within(nav).getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["关注词", "主题"]);
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["与我相关", "全部关注", "GLP-1 和胰腺炎4", "司美格鲁肽99+", "肥胖研究"]);
+    expect(within(nav).getByLabelText("4 条新动态")).toBeInTheDocument();
+    expect(within(nav).getByLabelText("至少 99 条新动态")).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /GLP-1 和胰腺炎/ })).toHaveAttribute("href", "/app/frontier?view=following&follow=21");
+  });
+
+  it("puts the one input under the two fixed entries when the page can open what is added, adds the words as a typed follow, and opens it", async () => {
+    const onAdded = vi.fn();
+    client.addFrontierFollow.mockResolvedValue({ id: "30", kind: "query", key: "long covid", label: "long covid", muted: false });
+    render(<MemoryRouter><FollowList state={state({ topics: [topic] })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} onAdded={onAdded} /></MemoryRouter>);
+    const input = screen.getByRole("textbox", { name: "关注一个药物、试验或问题" });
+    await userEvent.type(input, "Long  COVID{Enter}");
+    await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "query", key: "Long COVID", label: "Long COVID" }));
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(expect.objectContaining({ id: "30" })));
+    expect(input).toHaveValue("");
+  });
+
+  it("has no input where the page opens nothing", () => {
+    render(<MemoryRouter><FollowList state={state({ topics: [topic] })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} /></MemoryRouter>);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+});
+
 describe("the view", () => {
   const show = (current: FollowingState, choice: FollowChoice = { kind: "all" }, { onAdd = vi.fn(), onAnswered = vi.fn(), list = null as ReactNode } = {}) => render(
     <MemoryRouter>

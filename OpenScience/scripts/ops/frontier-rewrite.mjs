@@ -7,18 +7,35 @@
  *   node scripts/ops/frontier-rewrite.mjs                   report: what each step would do, by genre, and what asking would cost
  *   node scripts/ops/frontier-rewrite.mjs --apply           do it, within the module's day budget
  *   options: --days N (1–30, default 30), --since ISO (instead of --days: where a stopped run resumes),
- *            --steps genre,lead,brief,reason (default all four, in that order), --concurrency N (1–8, default 4), --limit N
+ *            --steps genre,score,lead,brief,reason,facts,faith (default genre,lead,brief,reason,facts,faith; `score` only by name, and
+ *            first of the steps it shares a run with), --min-old-total N (score: skip items under this old total, default 50),
+ *            --concurrency N (1–8, default 4), --limit N
  *
  * The steps:
  * - `genre`: an item with no stored genre takes code's answer (`frontierGenreFallback`) where code is sure of it or its fields say
  *   it (a journal's paper, a registry's trial, a safety feed's notice …); where code fell back on the channel alone
  *   (`FRONTIER_REWRITE_UNSURE`: news, commentary, industry, policy) the model names it, `FRONTIER_GENRE_BATCH` items to a call, and
  *   `frontierGenreDecision` stores the answer. No call is needed for most items.
+ * - `score` (c3-select, 2026-10-25): a published, verified item whose parts an older scoring wrote (`editor_diagnostics.scoreVersion`
+ *   is not `FRONTIER_SCORE_VERSION`) and whose old total reached `--min-old-total` is scored again from its source text by the
+ *   standalone score call (`FrontierEditor#scoreItem`: about ¥0.0012 an item, the rubric and the 「可能改变实践」 proposal of the edit),
+ *   under the same ceilings as a new item's (`frontierFinalScore`). It writes the parts, the total, the proposal and the version, and
+ *   never touches `selected`: selection is sticky, and the day's labels are admitted afterwards from what the day has selected. A failed
+ *   or unreadable answer keeps the score there was. After a release that moved the line, run it over the days the genre floors read
+ *   (30) before anything else: `--steps score,reason,lead,brief --days 7 --apply` for a week.
  * - `lead`: a reader-worthy item whose 导读 an older prompt wrote (`lead_version`) is written again from its settled reader text, by its
  *   genre and, where it has 要点, held shorter (`frontierWriteLead`). An answer the checks refused keeps the 导读 there was.
  * - `brief`: a reader-worthy item whose 要点 are missing or older (`brief_version`, `brief_basis`) gets them (`frontierWriteBrief`).
  * - `reason`: a reader-worthy item whose 推荐理由 an older prompt wrote (`reason_version`) gets one through its genre's lens without
  *   being edited again (`FrontierEditor#writeReason`) — an edit would score and select it again. A refused answer keeps the old one.
+ * - `facts` (c3-faith): a reader-worthy item of a study genre (paper, preprint, trial, conference) whose study facts were not made from
+ *   its settled reader text gets them (`frontierEnsureStudyFacts`: each field anchored to a quotation code found, or an empty record).
+ * - `faith` (c3-faith): a reader-worthy study item whose 导读, 要点 or card summary was written after its last check, or never checked
+ *   by these instructions, or whose check could not be made, is read against its study facts (made now when missing) the way the
+ *   pipeline reads a new one (`frontierFaithCheckLead` / `frontierFaithCheckBrief` / `frontierFaithCheckSummary`): a mismatch in a
+ *   导读 or 要点 goes back to the writer once, a sentence or point that still mismatches is left out, and a text with nothing left is
+ *   cleared (the reader shows the card's summary; a card with no summary shows its title); a card summary is only trimmed. The record
+ *   is `editor_diagnostics.faith`, never a note on the page. An item whose text has an empty facts record is not asked about again.
  *
  * Hidden knowledge:
  *
@@ -36,17 +53,32 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { FRONTIER_GENRES, agendaLocalDate, frontierGenreDecision, frontierGenreFallback, frontierSourceDisplayName, isFrontierGenre }
+import { FRONTIER_GENRES, FRONTIER_SOURCE_TYPE_LABELS_ZH, agendaLocalDate, frontierGenreDecision, frontierGenreFallback, frontierPracticeAdmit, frontierPracticeReason, frontierSourceDisplayName,
+  isFrontierGenre }
   from "@evimed/domain";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "../../apps/server/src/frontierBrief.mjs";
+import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief,
+  frontierFaithCheckLead, frontierFaithCheckSummary, frontierStudyFactsWanted, frontierWriteFaith } from "../../apps/server/src/frontierFaithStep.mjs";
 import { FRONTIER_GENRE_BATCH, FRONTIER_REASON_VERSION } from "../../apps/server/src/frontierEditor.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "../../apps/server/src/frontierSourceColumns.mjs";
 import { bumpFrontierVersion } from "../../apps/server/src/frontierPersistence.mjs";
-import { FRONTIER_READER_MARGIN, frontierReaderText } from "../../apps/server/src/frontierPipeline.mjs";
+import { FRONTIER_SCORE_VERSION, isChineseTitle } from "../../apps/server/src/frontierEditor.mjs";
+import { FRONTIER_READER_MARGIN, frontierDayWindow, frontierFinalScore, frontierLexemeText, frontierPracticeCandidates, frontierReaderText }
+  from "../../apps/server/src/frontierPipeline.mjs";
+import { tsvectorLiteral } from "../../apps/server/src/kbChunker.mjs";
 
 const DAY_MS = 24 * 3_600_000;
 const REWRITE_LOCK = "evimed-frontier-rewrite";
-export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "lead", "brief", "reason"]);
+export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "score", "lead", "brief", "reason", "facts", "faith"]);
+/**
+ * What a run does without `--steps`: the four writing steps and the two c3-faith steps that check what they wrote. `score` is asked
+ * for by name - it is the one step that moves which items are selected and reader-worthy, so a run that rewrites prose never re-scores
+ * by accident (c3-select S9).
+ */
+export const FRONTIER_REWRITE_DEFAULT_STEPS = Object.freeze(["genre", "lead", "brief", "reason", "facts", "faith"]);
+/** Items under this old total are not asked about by `score`: 54% of a week sits under 50 on the old scale and none of them reaches a floor. */
+export const FRONTIER_REWRITE_SCORE_MIN_OLD_TOTAL = 50;
 /** Genres code reached from the channel alone: the model names these (the rest are code's answer, from what the fields say). */
 export const FRONTIER_REWRITE_UNSURE = Object.freeze(["news", "commentary", "industry", "policy"]);
 /**
@@ -59,11 +91,18 @@ export const REWRITE_CALL_TOKENS = Object.freeze({
   lead: { cached: 1_000, prompt: 2_600, output: 260 },
   brief: { cached: 1_000, prompt: 2_800, output: 520 },
   reason: { cached: 700, prompt: 1_900, output: 120 },
+  // c3-faith's eval (2026-10-25) measured CNY 0.0031 a facts call and 0.0011–0.0017 a check, with the provider's cache warm on repeated
+  // items; these sizes assume the text itself is not cached, so the report errs high. A `faith` call is one text checked.
+  facts: { cached: 900, prompt: 2_600, output: 290 },
+  faith: { cached: 800, prompt: 600, output: 150 },
+  // c3-select, the gold set's 124 standalone score calls on 2026-10-25: 158 k prompt tokens from the cache, 55 k not, 4 k output.
+  score: { cached: 1_275, prompt: 443, output: 34 },
 });
 
 /** @param {string[]} argv */
 export function parseArguments(argv) {
-  const options = { apply: false, days: 30, since: /** @type {Date | null} */ (null), steps: [...FRONTIER_REWRITE_STEPS], concurrency: 4, limit: 100_000 };
+  const options = { apply: false, days: 30, since: /** @type {Date | null} */ (null), steps: [...FRONTIER_REWRITE_DEFAULT_STEPS], concurrency: 4, limit: 100_000,
+    minOldTotal: FRONTIER_REWRITE_SCORE_MIN_OLD_TOTAL };
   const number = (/** @type {string} */ name, /** @type {string | undefined} */ value, /** @type {number} */ min, /** @type {number} */ max) => {
     const parsed = Number(value);
     if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) throw new Error(`${name} must be an integer from ${min} to ${max}`);
@@ -75,6 +114,7 @@ export function parseArguments(argv) {
     else if (argument === "--days") options.days = number("--days", argv[++index], 1, 30);
     else if (argument === "--concurrency") options.concurrency = number("--concurrency", argv[++index], 1, 8);
     else if (argument === "--limit") options.limit = number("--limit", argv[++index], 1, 1_000_000);
+    else if (argument === "--min-old-total") options.minOldTotal = number("--min-old-total", argv[++index], 0, 100);
     else if (argument === "--steps") {
       const steps = String(argv[++index] ?? "").split(",").map((step) => step.trim()).filter(Boolean);
       if (!steps.length || steps.some((step) => !FRONTIER_REWRITE_STEPS.includes(step))) throw new Error(`--steps takes ${FRONTIER_REWRITE_STEPS.join(",")}`);
@@ -83,7 +123,7 @@ export function parseArguments(argv) {
       const since = new Date(String(argv[++index] ?? ""));
       if (!Number.isFinite(since.getTime())) throw new Error("--since must be an ISO time");
       options.since = since;
-    } else throw new Error(`unknown argument ${argument}; the options are --apply, --days N, --since ISO, --steps a,b, --concurrency N, --limit N`);
+    } else throw new Error(`unknown argument ${argument}; the options are --apply, --days N, --since ISO, --steps a,b, --min-old-total N, --concurrency N, --limit N`);
   }
   return options;
 }
@@ -106,20 +146,22 @@ export function estimateRewriteCost(calls, price) {
 const genreOf = (row) => (isFrontierGenre(row.genre) ? row.genre : frontierGenreFallback(row));
 
 const ITEM_FIELDS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.platform, i.channel, i.source_type, i.evidence_type, i.flags,
-  i.safety_alert, i.lane, i.genre, i.genre_basis, i.selected, i.score_total, i.published_at, i.visible_at, i.primary_source_id,
-  s.name AS source_name, s.owner_entity AS source_owner`;
+  i.safety_alert, i.lane, i.genre, i.genre_basis, i.selected, i.score_total, i.evidence_basis, i.published_at, i.visible_at, i.primary_source_id,
+  s.authority AS src_authority, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}`;
 
 /**
  * Report, and with `apply` make, the steps over the published items of `[since, until)`, oldest first.
  * @param {{ database: any, editor?: any, budget?: (() => Promise<{ state: string }>) | null, threshold: number, since: Date, until?: Date,
- *   steps?: string[], apply?: boolean, limit?: number, concurrency?: number, timeZone?: string, onProgress?: (line: string) => void }} input
+ *   steps?: string[], apply?: boolean, limit?: number, concurrency?: number, timeZone?: string, minOldTotal?: number,
+ *   onProgress?: (line: string) => void }} input
  */
-export async function frontierRewrite({ database, editor = null, budget = null, threshold, since, until = new Date(), steps = [...FRONTIER_REWRITE_STEPS],
-  apply = false, limit = 100_000, concurrency = 4, timeZone = "Asia/Shanghai", onProgress = () => {} }) {
+export async function frontierRewrite({ database, editor = null, budget = null, threshold, since, until = new Date(), steps = [...FRONTIER_REWRITE_DEFAULT_STEPS],
+  apply = false, limit = 100_000, concurrency = 4, timeZone = "Asia/Shanghai", minOldTotal = FRONTIER_REWRITE_SCORE_MIN_OLD_TOTAL, onProgress = () => {} }) {
   const worthy = threshold - FRONTIER_READER_MARGIN;
   /** @type {Record<string, any>} */
   const summary = { applied: apply, since: since.toISOString(), until: until.toISOString(), steps, versions: { lead: FRONTIER_LEAD_VERSION,
-    brief: FRONTIER_BRIEF_VERSION, reason: FRONTIER_REASON_VERSION }, stopped: null, resumeFrom: null, failed: 0 };
+    brief: FRONTIER_BRIEF_VERSION, reason: FRONTIER_REASON_VERSION, facts: FRONTIER_STUDY_FACTS_VERSION, faith: FRONTIER_FAITH_VERSION },
+    stopped: null, resumeFrom: null, failed: 0 };
   /** @type {Record<string, number>} */
   const calls = {};
   let stopped = false;
@@ -143,7 +185,7 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       }
     }));
   };
-  const sourceName = (/** @type {any} */ row) => frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name ?? row.primary_source_id, ownerEntity: row.source_owner });
+  const sourceName = (/** @type {any} */ row) => frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name ?? row.primary_source_id, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal });
   const day = (/** @type {any} */ row) => (row.published_at ? agendaLocalDate(timeZone, new Date(row.published_at)) : null);
   const textsOf = async (/** @type {any} */ row) => (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [row.id])).rows[0] ?? null;
 
@@ -175,6 +217,77 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
           if (decided.basis === "model") summary.genre.model += 1;
         }
       });
+    }
+  }
+
+  if (steps.includes("score")) {
+    const rows = (await database.query(`SELECT ${ITEM_FIELDS}, i.editor_diagnostics, i.study_facts, i.date_precision, i.timeline_at, t.abstract_raw, t.body_excerpt, t.body_text,
+        t.reader_summary, t.journal, t.publication_types
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+      WHERE i.state = 'published' AND i.visible_at >= $1 AND i.visible_at < $2 AND NOT i.safety_alert AND i.verification IN ('passed', 'repaired')
+        AND i.score_total >= $4 AND i.editor_diagnostics->>'scoreVersion' IS DISTINCT FROM $5
+      ORDER BY i.visible_at, i.id LIMIT $3`, [since, until, limit, minOldTotal, FRONTIER_SCORE_VERSION])).rows;
+    summary.score = { items: rows.length, minOldTotal, scoreVersion: FRONTIER_SCORE_VERSION, written: 0, kept: 0, capped: 0, practiceProposed: 0, labelled: 0,
+      moved: { up: 0, down: 0, same: 0 } };
+    calls.score = rows.length;
+    /** @type {Set<string>} */
+    const days = new Set();
+    if (apply) await each(rows, async (row) => {
+      // What code decided about the evidence type stays said as decided; the model's own guess is not handed back to it.
+      const fixed = ["pubmed-types", "registry"].includes(row.evidence_basis) && row.evidence_type ? { type: row.evidence_type, basis: row.evidence_basis } : null;
+      const body = row.body_excerpt ?? (typeof row.body_text === "string" && row.body_text.trim() ? row.body_text.slice(0, 12_000) : null);
+      const answer = await editor.scoreItem({
+        titleRaw: row.title_raw, sourceName: sourceName(row), sourceTypeLabel: FRONTIER_SOURCE_TYPE_LABELS_ZH[row.source_type] ?? null,
+        publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null, datePrecision: row.date_precision, isChinese: isChineseTitle(row.title_raw),
+        allowedLanes: [], evidenceFixed: fixed, abstract: row.abstract_raw ?? null, summary: row.abstract_raw ? null : row.reader_summary ?? null,
+        bodyExcerpt: body, journal: row.journal ?? null, publicationTypes: row.publication_types ?? [],
+      }, { genre: genreOf(row) });
+      // An unreadable answer keeps the score there was (principle 19); a budget that ended the run is not a failure of the item.
+      if (!answer.scores) {
+        if (answer.error === "usage_budget_exceeded") return;
+        summary.score.kept += 1;
+        return;
+      }
+      const source = { id: row.primary_source_id, authority: row.src_authority, source_type: row.source_type };
+      const final = frontierFinalScore({ scores: answer.scores, source, itemSourceId: row.primary_source_id, evidenceType: row.evidence_type,
+        evidenceFixed: ["pubmed-types", "registry"].includes(row.evidence_basis), genre: genreOf(row), studyFacts: row.study_facts });
+      const total = final.parts.authority + final.parts.impact + final.parts.novelty + final.parts.relevance;
+      const reason = answer.practice ? frontierPracticeReason(answer.practice.reasonZh) : null;
+      await database.transaction(async (/** @type {any} */ client) => {
+        await client.query(`UPDATE evimed_frontier.items SET score_authority = $2, score_impact = $3, score_novelty = $4, score_relevance = $5, score_total = $6,
+            practice_changing = CASE WHEN $7::text IS NULL THEN false ELSE practice_changing END, practice_zh = $7::text,
+            editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb) - 'capped' || $8::jsonb, rescored_at = clock_timestamp(), updated_at = clock_timestamp()
+          WHERE id = $1`, [row.id, final.parts.authority, final.parts.impact, final.parts.novelty, final.parts.relevance, total, reason,
+          JSON.stringify({ scoreVersion: FRONTIER_SCORE_VERSION, scoresRaw: answer.scoresRaw, ...(final.reasons.length ? { capped: final.reasons } : {}) })]);
+        await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'rescored')", [row.id]);
+        await bumpFrontierVersion(client);
+      });
+      summary.score.written += 1;
+      if (final.reasons.length) summary.score.capped += 1;
+      if (reason) summary.score.practiceProposed += 1;
+      const old = Number(row.score_total);
+      summary.score.moved[total > old ? "up" : total < old ? "down" : "same"] += 1;
+      if (row.timeline_at) days.add(frontierDayWindow(new Date(row.timeline_at), timeZone).day);
+    });
+    // The label is admitted per day, from what the day has selected (the pipeline does the same at the end of a round): the best
+    // scored proposals up to the day's cap, an admitted one staying.
+    if (apply) for (const dayKey of [...days].sort()) {
+      const { start, end } = frontierDayWindow(new Date(`${dayKey}T12:00:00Z`), timeZone);
+      const dayRows = (await database.query(`SELECT i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.selected,
+          i.score_total, i.practice_changing, i.practice_zh, s.authority AS source_authority, s.source_type AS source_source_type
+        FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+        WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2`, [start, end])).rows;
+      const candidates = frontierPracticeCandidates(dayRows);
+      for (const id of frontierPracticeAdmit(candidates, { selectedCount: candidates.length }).admit) {
+        await database.transaction(async (/** @type {any} */ client) => {
+          const updated = await client.query(`UPDATE evimed_frontier.items SET practice_changing = true, updated_at = clock_timestamp()
+            WHERE id = $1 AND state = 'published' AND NOT practice_changing AND practice_zh IS NOT NULL`, [id]);
+          if (!updated.rowCount) return;
+          await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'practice')", [id]);
+          await bumpFrontierVersion(client);
+          summary.score.labelled += 1;
+        });
+      }
     }
   }
 
@@ -213,8 +326,9 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
   }
 
   if (steps.includes("brief")) {
+    // No 要点 from the reports of a paper (c3-primary), as the pipeline: the 导读 alone says whose reports it rests on.
     const rows = (await owing(`(i.brief_version IS DISTINCT FROM $5 OR i.brief_basis IS NULL
-      OR i.brief_basis NOT LIKE (t.reader_tidy->>'sha') || ':%')`, FRONTIER_BRIEF_VERSION)).filter((row) => frontierBriefWanted(genreOf(row)));
+      OR i.brief_basis NOT LIKE (t.reader_tidy->>'sha') || ':%') AND t.reader_tidy->>'source' <> 'reports'`, FRONTIER_BRIEF_VERSION)).filter((row) => frontierBriefWanted(genreOf(row)));
     summary.brief = { items: rows.length, byGenre: genres(rows), written: 0, empty: 0 };
     calls.brief = rows.length;
     if (apply) await each(rows, async (row) => {
@@ -257,6 +371,140 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       else summary.reason.emptied += 1;
     });
   }
+  /**
+   * The reader-worthy items of a study genre one of the c3-faith steps still owes, oldest first: `owed` a predicate over `i` and `t`
+   * with the version, when given, as `$5`; `extra` more columns. @param {string} owed @param {string | null} version @param {string} [extra]
+   */
+  const studyOwing = async (owed, version = null, extra = "") => (await database.query(`SELECT ${ITEM_FIELDS}, i.lead_zh, i.brief, i.study_facts${extra}
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+      WHERE i.state = 'published' AND i.visible_at >= $1 AND i.visible_at < $2 AND t.reader_tidy IS NOT NULL
+        AND t.reader_tidy->>'source' <> 'reports' AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND ${owed}
+      ORDER BY i.visible_at, i.id LIMIT $4`, [since, until, worthy, limit, ...(version === null ? [] : [version])])).rows
+    .filter((row) => frontierStudyFactsWanted(genreOf(row)));
+  /** What the facts call reads. @param {any} row @param {{ text: string, source: any }} reader */
+  const factsInput = (row, reader) => ({ sourceName: sourceName(row), date: day(row), titleRaw: row.title_raw, text: reader.text, kind: reader.source });
+  /** A coded error out of a step's work (counted as failed by `each`). @param {string} code */
+  const coded = (code) => Object.assign(new Error(code), { code });
+
+  // The version is a hash of the instructions (letters, digits, dots and dashes): written into the predicate, which both steps share.
+  if (!/^[a-z0-9.-]+$/.test(FRONTIER_STUDY_FACTS_VERSION)) throw new Error("the study facts version is not a plain word");
+  const factsOwed = `(i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha'
+    OR i.study_facts_version IS DISTINCT FROM '${FRONTIER_STUDY_FACTS_VERSION}')`;
+  if (steps.includes("facts")) {
+    const rows = await studyOwing(factsOwed);
+    summary.facts = { items: rows.length, byGenre: genres(rows), written: 0, empty: 0 };
+    calls.facts = rows.length;
+    if (apply) await each(rows, async (row) => {
+      const texts = await textsOf(row);
+      const reader = frontierReaderText(texts);
+      const sha = texts?.reader_tidy?.sha;
+      if (!reader || !sha) return;
+      const ensured = await frontierEnsureStudyFacts(editor, { stored: row.study_facts, sha, input: factsInput(row, reader) });
+      if (ensured.error) throw coded(ensured.error);
+      if (!ensured.fresh) return;
+      await frontierWriteFaith(database, row.id, { facts: ensured.record, diagnostic: null }, new Date());
+      if (ensured.record.empty) summary.facts.empty += 1;
+      else summary.facts.written += 1;
+    });
+  }
+
+  if (steps.includes("faith")) {
+    // A text is owed a check when it was never checked by these instructions, its check could not be made, or it was written after it.
+    const owedText = (/** @type {"lead" | "brief"} */ kind) => `(i.${kind === "lead" ? "lead_zh" : "brief"} IS NOT NULL
+      AND (i.editor_diagnostics->'faith'->'${kind}'->>'version' IS DISTINCT FROM $5 OR i.editor_diagnostics->'faith'->'${kind}'->>'outcome' = 'unchecked'
+        OR coalesce((i.editor_diagnostics->'faith'->'${kind}'->>'at')::timestamptz < i.${kind}_at, true)))`;
+    // A card summary has no write time of its own: its record names the text it was made on (`md5(summary_zh)`).
+    const owedSummary = `(coalesce(i.summary_zh, '') <> '' AND (i.editor_diagnostics->'faith'->'summary'->>'version' IS DISTINCT FROM $5
+      OR i.editor_diagnostics->'faith'->'summary'->>'outcome' = 'unchecked' OR i.editor_diagnostics->'faith'->'summary'->>'basis' IS DISTINCT FROM md5(i.summary_zh)))`;
+    const rows = await studyOwing(`(${owedText("lead")} OR ${owedText("brief")} OR ${owedSummary})
+        AND NOT coalesce(i.study_facts->>'basis' = t.reader_tidy->>'sha' AND (i.study_facts->>'empty')::boolean, false)`,
+    FRONTIER_FAITH_VERSION, `, i.entities, i.tags, ${owedText("lead")} AS lead_owed, ${owedText("brief")} AS brief_owed, ${owedSummary} AS summary_owed,
+      ${factsOwed} AS facts_owed`);
+    /** @type {Record<string, number>} */
+    const outcomes = {};
+    summary.faith = { items: rows.length, byGenre: genres(rows), texts: 0, outcomes, changed: 0, facts: 0, noFacts: 0, raced: 0 };
+    calls.faith = rows.reduce((total, row) => total + (row.lead_owed ? 1 : 0) + (row.brief_owed ? 1 : 0) + (row.summary_owed ? 1 : 0), 0);
+    // Facts the faith step makes itself (in a report with the facts step, that step has counted them).
+    if (!steps.includes("facts")) calls.facts = rows.filter((row) => row.facts_owed).length;
+    if (apply) await each(rows, async (row) => {
+      const texts = await textsOf(row);
+      const reader = frontierReaderText(texts);
+      const sha = texts?.reader_tidy?.sha;
+      if (!reader || !sha) return;
+      // The texts as they are now: the step's list was read when it began, and the pipeline may have written since.
+      const now = (await database.query("SELECT lead_zh, brief, summary_zh, study_facts FROM evimed_frontier.items WHERE id = $1", [row.id])).rows[0];
+      if (!now) return;
+      const input = factsInput(row, reader);
+      const ensured = await frontierEnsureStudyFacts(editor, { stored: now.study_facts, sha, input });
+      if (ensured.error) throw coded(ensured.error);
+      const facts = ensured.fresh ? ensured.record : null;
+      if (facts) summary.faith.facts += 1;
+      if (!ensured.view) {
+        // No facts the source states: nothing to read a text against, and the empty record keeps the item from being asked again.
+        if (facts) await frontierWriteFaith(database, row.id, { facts, diagnostic: null }, new Date());
+        summary.faith.noFacts += 1;
+        return;
+      }
+      const genre = genreOf(row);
+      const writing = { sourceName: input.sourceName, date: input.date, titleRaw: row.title_raw, titleZh: row.title_zh, text: reader.text,
+        kind: reader.source, post: row.platform === "x", genre };
+      const source = faithSource(input);
+      /** @type {Record<string, any>} */
+      const diagnostic = {};
+      const checked = { lead: now.lead_zh, brief: now.brief, card: now.summary_zh };
+      let { lead, brief, card } = checked;
+      const tally = (/** @type {"lead" | "brief" | "summary"} */ kind, /** @type {any} */ result, record = faithDiagnostic(result)) => {
+        diagnostic[kind] = record;
+        outcomes[result.outcome] = (outcomes[result.outcome] ?? 0) + 1;
+        summary.faith.texts += 1;
+        if (result.error) throw coded(result.error);
+      };
+      let failure = null;
+      try {
+        if (row.lead_owed && lead) {
+          const run = await frontierFaithCheckLead(editor, { facts: ensured.view, lead, previous: null, source,
+            input: { ...writing, briefed: frontierBriefWanted(genre) } });
+          lead = run.lead;
+          tally("lead", run.result);
+        }
+        if (row.brief_owed && brief) {
+          const run = await frontierFaithCheckBrief(editor, { facts: ensured.view, brief, previous: null, source, input: writing });
+          brief = run.brief;
+          tally("brief", run.result);
+        }
+        if (row.summary_owed && card) {
+          const run = await frontierFaithCheckSummary(editor, { facts: ensured.view, summary: card, source });
+          card = run.summary;
+          tally("summary", run.result, run.diagnostic);
+        }
+      } catch (error) {
+        // The outcome of what was checked is still kept (an unchecked text is asked about again next run); the item counts as failed.
+        failure = error;
+      }
+      const changed = lead !== checked.lead || JSON.stringify(brief) !== JSON.stringify(checked.brief) || card !== checked.card;
+      const written = await database.transaction(async (/** @type {any} */ client) => {
+        // Nothing written over a text the pipeline wrote while this one was read: the check is of the text it read.
+        const current = (await client.query("SELECT lead_zh, brief, summary_zh FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [row.id])).rows[0];
+        if (!current || current.lead_zh !== checked.lead || JSON.stringify(current.brief) !== JSON.stringify(checked.brief) || current.summary_zh !== checked.card) return false;
+        if (card !== checked.card) {
+          await client.query("UPDATE evimed_frontier.items SET summary_zh = $2, lexemes = $3::tsvector WHERE id = $1",
+            [row.id, card, tsvectorLiteral(frontierLexemeText({ ...row, summary_zh: card }))]);
+          await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'faith')", [row.id]);
+        }
+        if (lead !== checked.lead) await client.query("UPDATE evimed_frontier.items SET lead_zh = $2 WHERE id = $1", [row.id, lead]);
+        if (JSON.stringify(brief) !== JSON.stringify(checked.brief)) {
+          await client.query("UPDATE evimed_frontier.items SET brief = $2::jsonb WHERE id = $1", [row.id, brief ? JSON.stringify(brief) : null]);
+        }
+        await frontierWriteFaith(client, row.id, { facts, diagnostic }, new Date());
+        if (changed) await bumpFrontierVersion(client);
+        return true;
+      });
+      if (!written) { summary.faith.raced += 1; return; }
+      if (changed) summary.faith.changed += 1;
+      if (failure) throw failure;
+    });
+  }
+
   summary.calls = calls;
   onProgress(`frontier-rewrite: done${summary.stopped ? ` (stopped: ${summary.stopped})` : ""}`);
   return summary;
@@ -304,7 +552,7 @@ async function main() {
       try {
         const started = Date.now();
         const summary = await frontierRewrite({ database, editor, budget: () => pipeline.budget(new Date()), threshold: frontierSelectThreshold(config),
-          since, until, steps: options.steps, apply: options.apply, limit: options.limit, concurrency: options.concurrency,
+          since, until, steps: options.steps, apply: options.apply, limit: options.limit, concurrency: options.concurrency, minOldTotal: options.minOldTotal,
           timeZone: String(config.frontierTimeZone || "Asia/Shanghai"), onProgress: (line) => process.stderr.write(`${line}\n`) });
         const estimate = options.apply ? null : estimateRewriteCost(summary.calls, REFERENCE_PRICE_LIST.model["deepseek-flash"]);
         report({ ok: summary.failed === 0 && summary.stopped === null, ...summary, ...(estimate ? { estimate } : {}),

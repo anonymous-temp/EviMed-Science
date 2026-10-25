@@ -1,5 +1,5 @@
 {
-  "$comment": "What a reader of 「前沿动态」 calls a source: the institution (FDA, 国家药监局, 英国 MHRA), never the feed or the interface the knowledge-source plugin reads it through (「openFDA 药品召回（enforcement）API」). Read whole by packages/domain/src/frontierSourceNames.mjs. `sources` (by registry source id) is consulted first, for the few owners that run two public faces (the NLM runs PubMed and ClinicalTrials.gov); then `ownerEntities` (by the registry's `owner_entity`, exactly as the plugin writes it); a source in neither keeps the registry's own name. Publishers of several journals (Elsevier, Springer Nature, the AMA …) are deliberately absent: a journal is named by its own title, which the registry already carries. Edit this file to name a new institution; the plugin is not touched (plan 2026-09-23 §6.5 #5).",
+  "$comment": "What a reader of 「前沿动态」 calls a source: the institution (FDA, 国家药监局, 英国 MHRA), never the feed or the interface the knowledge-source plugin reads it through (「openFDA 药品召回（enforcement）API」). Read whole by packages/domain/src/frontierSourceNames.mjs. `sources` (by registry source id) is consulted first, for the few owners that run two public faces (the NLM runs PubMed and ClinicalTrials.gov); then `ownerEntities` (by the registry's `owner_entity`, exactly as the plugin writes it); a source in neither keeps the registry's own name. Publishers of several journals (Elsevier, Springer Nature, the AMA …) are deliberately absent: a journal is named by its own title, which the registry already carries. Edit this file to name a new institution; the plugin is not touched (plan 2026-09-23 §6.5 #5). `streams` (c3-select, 2026-10-25): sources that are a search or a query stream over many journals (a PubMed query, an OpenAlex list, a Europe PMC feed) - identified by the registry's `access` or by an id prefix - are named for each item by its journal (`item_texts.journal`), never by the stream; with no journal they fall back to the rules above.",
   "ownerEntities": {
     "U.S. Food and Drug Administration": "FDA",
     "U.S. Centers for Disease Control and Prevention": "美国 CDC",
@@ -134,5 +134,16 @@
     "dailymed-label-updates": "DailyMed",
     "cdc-eid-journal": "新发传染病杂志",
     "zhongguokexuebao": "中国科学报"
+  },
+  "streams": {
+    "accesses": [
+      "eutils-query",
+      "europepmc"
+    ],
+    "idPrefixes": [
+      "openalex-",
+      "pubmed-",
+      "europepmc-"
+    ]
   }
 }

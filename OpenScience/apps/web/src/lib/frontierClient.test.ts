@@ -335,6 +335,20 @@ describe("the routes of the second wave", () => {
     expect(await fetchFrontierEvent("ev2")).toMatchObject({ heat: null, hasPrimary: false, primary: null, institutions72h: { total: 0, byType: [] }, trend: null });
   });
 
+  it("reads the questions of an item and of an event's first-hand report: three at most, short, each once; none is an empty list", async () => {
+    const item = parseFrontierItemDetail(rawItem({ ask: ["这个结果适用于中国患者吗？", " 和标准治疗比差别在哪？ ", "这个结果适用于中国患者吗？", 7, "", "安全性数据有哪些？", "第四个问题？", "字".repeat(61)] }))!;
+    expect(item.ask).toEqual(["这个结果适用于中国患者吗？", "和标准治疗比差别在哪？", "安全性数据有哪些？"]);
+    expect(parseFrontierItemDetail(rawItem({}))!.ask).toEqual([]);
+    expect(parseFrontierItemDetail(rawItem({ ask: "一个问题？" }))!.ask).toEqual([]);
+    fetchMock.mockResolvedValue(reply(200, { data: { event: { id: "ev1", title: "事件", items: [], related: [],
+      ask: { itemId: "a1b2c3d4e5f60718", title: "一手报告", questions: ["问题一？", "问题二？"], extra: 1 } } } }));
+    expect((await fetchFrontierEvent("ev1")).ask).toEqual({ itemId: "a1b2c3d4e5f60718", title: "一手报告", questions: ["问题一？", "问题二？"] });
+    for (const ask of [null, undefined, { itemId: "a1b2c3d4e5f60718", title: "T", questions: [] }, { title: "T", questions: ["问题？"] }, "text"]) {
+      fetchMock.mockResolvedValue(reply(200, { data: { event: { id: "ev1", title: "事件", items: [], related: [], ask } } }));
+      expect((await fetchFrontierEvent("ev1")).ask).toBeNull();
+    }
+  });
+
   it("reads the daily's header and footer: the items it shows, the minutes to read them, the issues on either side", async () => {
     fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-23", sections: [], safety: [], markdown: "# 日报", itemCount: 52,
       readingMinutes: 9, previousDay: "2026-09-22", nextDay: null } } }));
@@ -654,6 +668,12 @@ describe("an item's specialties, tags and score parts (2026-10-23)", () => {
     expect(parseFrontierItem(rawItem({ score: 86, scoreParts: { authority: 30, impact: 25, novelty: 18 } }))!.scoreParts).toBeNull();
     // A safety alert carries no score, and so no parts.
     expect(parseFrontierItem(rawItem({ safetyAlert: true, score: 90, scoreParts: { authority: 30, impact: 30, novelty: 15, relevance: 15 } }))).toMatchObject({ score: null, scoreParts: null, scoreBand: null });
+  });
+
+  it("reads 「可能改变实践」 as a reason or as nothing", () => {
+    expect(parseFrontierItem(rawItem())!.practice).toBeNull();
+    expect(parseFrontierItem(rawItem({ practice: { reason: " 国内首个获批 " } }))!.practice).toEqual({ reason: "国内首个获批" });
+    for (const bad of [{ reason: "" }, { reason: "   " }, { reason: 7 }, {}, "yes", null, []]) expect(parseFrontierItem(rawItem({ practice: bad }))!.practice).toBeNull();
   });
 });
 

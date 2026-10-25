@@ -34,7 +34,7 @@ import {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "frontier-congress", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -1508,14 +1508,17 @@ test("the studies and ids the walk opens are read from the lists, and a missing 
   assert.equal(geoAnswerSnapshot(null), null);
 
   const zones = { items: [{ id: "z1", kind: "user" }, { id: "z2", kind: "official" }] };
-  assert.deepEqual(frontierTargets({ zones, hot: { events: [{ id: "e1" }] } }), { zoneId: "z1", official: "z2", cardId: null, authorId: null, eventId: "e1", topicId: null });
-  assert.deepEqual(frontierTargets({ cards: { items: [{ id: "c1" }] }, links: { author: { id: "a1" } } }), { zoneId: null, official: null, cardId: "c1", authorId: "a1", eventId: null, topicId: null });
-  assert.deepEqual(frontierTargets({}), { zoneId: null, official: null, cardId: null, authorId: null, eventId: null, topicId: null });
+  assert.deepEqual(frontierTargets({ zones, hot: { events: [{ id: "e1" }] } }), { zoneId: "z1", official: "z2", cardId: null, authorId: null, eventId: "e1", topicId: null, congressId: null });
+  assert.deepEqual(frontierTargets({ cards: { items: [{ id: "c1" }] }, links: { author: { id: "a1" } } }), { zoneId: null, official: null, cardId: "c1", authorId: "a1", eventId: null, topicId: null, congressId: null });
+  assert.deepEqual(frontierTargets({}), { zoneId: null, official: null, cardId: null, authorId: null, eventId: null, topicId: null, congressId: null });
   // An official zone made empty at start (「热点求证」, c2 2026-10-25) does not hide the one that holds cards; a topic is walked when one exists.
   const officials = { items: [{ id: "hot", kind: "official", evidenceCount: 0 }, { id: "af", kind: "official", evidenceCount: 4 }] };
   assert.equal(frontierTargets({ zones: officials }).official, "af");
   assert.equal(frontierTargets({ zones: { items: [{ id: "hot", kind: "official", evidenceCount: 0 }] } }).official, "hot");
   assert.equal(frontierTargets({ topics: { topics: [{ id: "t1" }] } }).topicId, "t1");
+  // 追踪's congress hub (c3-track): the first congress with items, else the first listed.
+  assert.equal(frontierTargets({ congresses: { congresses: [{ id: "esmo-2026", itemCount: 0 }, { id: "aha-2026", itemCount: 12 }] } }).congressId, "aha-2026");
+  assert.equal(frontierTargets({ congresses: { congresses: [{ id: "ash-2026", itemCount: 0 }] } }).congressId, "ash-2026");
 
   const runs = [
     { id: "run_old", deliverables: [{ id: "x", capability: "drug-evidence", status: "delivered" }] },

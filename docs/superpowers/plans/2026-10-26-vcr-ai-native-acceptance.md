@@ -85,3 +85,9 @@ On the final frozen numerical code, root run `run_56d7769877fb4237fbb66250400811
 Automated continuation `run_01ed6f750d86994a533b7355bdd8d591` then succeeded in the **same** originating session and remained `open-domain-answer`. The test waited for continuation settlement before stopping its kernel. No `invalid_id` loop occurred. This verifies actual tool execution, persisted results and same-conversation return for the tested synthetic calculation; it is not a clinical-accuracy benchmark or full production-image acceptance.
 
 The final two review addenda (strict equal-allocation alias and response field order) were approved independently. There are no unresolved review findings in the delivered scope. The GitHub branch is for review and has no deployment marker or production migration.
+
+## Integration with concurrent main changes
+
+Before final handoff, main advanced to `1a799c2db` with the separately developed Frontier round 3. That revision was merged into the VCR branch. Only the progress record and a generated tool graph conflicted; both product histories were retained and the graph was regenerated. Shared server/MCP/native-frame/domain bindings passed independent review with no findings. Incoming byte-preserved XML fixtures were not reformatted.
+
+The merged tree passed 5,284 web tests (422 files), 1,311 domain tests, 377 port tests (nine optional skips), 299 socket tests, 649 shared-server checks (eight explicit environment skips), 999 research MCP tests (two skips), 29 PostgreSQL checks, all five typechecks and lint. Actual Chromium checks ran in the shared-server selection. These passes do not erase the separately documented broad-platform diagnostic failures or establish production acceptance. The handoff remains draft PR #17, not a merge to main or a deployment.

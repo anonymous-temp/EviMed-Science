@@ -140,14 +140,16 @@ class FrontierSearchTests(_GatewayCase):
         [definition] = frontier_search.tool_definitions()
         self.assertEqual(definition["name"], "frontier_search")
         description = definition["description"]
-        self.assertLess(len(description), 450, "the description rides every request; details belong in the answer")
+        self.assertLess(len(description), 500, "the description rides every request; details belong in the answer")
         self.assertEqual(description.count(". "), 2, "what it searches, when to use it, and that results are leads")
         self.assertIn("leads, not evidence", description)
         self.assertIn("cite", description)
         schema = definition["inputSchema"]
         self.assertNotIn("required", schema, "no field is required: without q it lists the newest items")
         self.assertFalse(schema["additionalProperties"])
-        self.assertEqual(set(schema["properties"]), {"q", "lane", "specialty", "window", "mode", "limit"})
+        self.assertEqual(set(schema["properties"]), {"q", "lane", "specialty", "window", "mode", "limit", "id"})
+        self.assertIn("frontier:<id>", description, "a conversation opened from an item is told how its id reads")
+        self.assertEqual(schema["properties"]["id"]["pattern"], "^[a-z0-9]{12,32}$")
         self.assertEqual(schema["properties"]["q"]["maxLength"], 200)
         self.assertEqual(schema["properties"]["limit"]["maximum"], 20)
         self.assertEqual(schema["properties"]["window"]["enum"], ["24h", "3d", "7d", "30d"])
@@ -293,6 +295,11 @@ class FrontierSearchTests(_GatewayCase):
             ({"limit": 0}, "frontier_search_limit_invalid"),
             ({"limit": 21}, "frontier_search_limit_invalid"),
             ({"limit": True}, "frontier_search_limit_invalid"),
+            ({"id": "short"}, "frontier_search_id_invalid"),
+            ({"id": "K7Q2M9X4T1B8"}, "frontier_search_id_invalid"),
+            ({"id": 12345678901234}, "frontier_search_id_invalid"),
+            ({"id": "k7q2m9x4t1b8", "q": "x"}, "frontier_search_request_invalid"),
+            ({"id": "k7q2m9x4t1b8", "limit": 3}, "frontier_search_request_invalid"),
         ):
             with self.subTest(arguments=arguments):
                 with self.assertRaises(frontier_search.FrontierSearchError) as raised:
@@ -406,6 +413,88 @@ class FrontierSearchTests(_GatewayCase):
         self.assertFalse(any("card" in action.lower() for action in result["next_actions"]))
         self.assertNotIn("evidence card", result["summary"])
 
+    def test_an_id_reads_one_item_with_its_text_lead_and_points_and_still_sends_the_run_to_the_original(self):
+        _Gateway.answer = (200, {"data": {"query": {"id": "k7q2m9x4t1b8"}, "asOf": "2026-10-25T10:00:31.000Z", "item": gateway_item(
+            lead="司美格鲁肽使心衰事件从 8.8% 降至 7.2%。",
+            points={"points": [{"label": "设计与对象", "text": "随机对照试验。"}, {"label": "主要结果", "items": ["事件 7.2% 对 8.8%。"]},
+                               {"label": "空"}], "quote": {"label": "作者结论", "text": "Semaglutide reduced events."}},
+            text="Background: HFpEF.\n\nResults: events fell to 7.2% from 8.8%.", textKind="abstract", textTruncated=False,
+            textLength=62, textLanguage="en")}})
+        result = frontier_search.search({"id": "k7q2m9x4t1b8"})
+        [request] = _Gateway.seen
+        self.assertEqual(request["path"], "/internal/frontier/v1/search")
+        self.assertEqual(request["body"], {"id": "k7q2m9x4t1b8"}, "an id is sent alone")
+        self.assertEqual(request["authorization"], "Bearer runtime-token-for-tests")
+        self.assertEqual(result["status"], "success")
+        item = result["data"]["item"]
+        self.assertEqual(item["lead"], "司美格鲁肽使心衰事件从 8.8% 降至 7.2%。")
+        self.assertEqual(item["points"], [{"label": "设计与对象", "text": "随机对照试验。"}, {"label": "主要结果", "items": ["事件 7.2% 对 8.8%。"]}],
+                         "a field with nothing in it is left out")
+        self.assertEqual(item["authorsConclusion"], "Semaglutide reduced events.")
+        self.assertEqual(item["text"], "Background: HFpEF.\n\nResults: events fell to 7.2% from 8.8%.")
+        self.assertEqual(item["textKind"], "abstract")
+        self.assertEqual(item["textLanguage"], "en")
+        self.assertNotIn("textTruncated", item)
+        self.assertEqual(item["url"], "https://www.nejm.org/doi/full/10.1056/NEJMoa2600001")
+        self.assertEqual(item["doi"], "10.1056/NEJMoa2600001")
+        self.assertEqual(result["data"]["asOf"], "2026-10-25T10:00Z")
+        self.assertNotIn("items", result["data"])
+        self.assertIn("abstract", result["summary"])
+        self.assertTrue(any("only the abstract" in warning for warning in result["warnings"]),
+                        "an abstract is not the full text and the answer says so")
+        self.assertIn("cite that original", " ".join(result["next_actions"]))
+        self.assertNotIn("sources", result)
+
+    def test_a_full_text_cut_short_says_how_much_of_it_was_read(self):
+        _Gateway.answer = (200, {"data": {"query": {"id": "k7q2m9x4t1b8"}, "asOf": "2026-10-25T10:00:31.000Z", "item": gateway_item(
+            text="全文第一段。", textKind="body", textTruncated=True, textLength=14000, flags=[{"key": "preprint", "label": "未经同行评议"}])}})
+        result = frontier_search.search({"id": "k7q2m9x4t1b8"})
+        item = result["data"]["item"]
+        self.assertEqual(item["textKind"], "full text")
+        self.assertEqual(item["textTruncated"], "the first 6 of 14000 characters")
+        self.assertTrue(any("cut at 6 of 14000" in warning for warning in result["warnings"]))
+        self.assertFalse(any("only the" in warning for warning in result["warnings"]), "a full text needs no apology")
+        self.assertIn("尚未经同行评议", " ".join(result["next_actions"]))
+
+    def test_an_item_with_no_text_is_still_a_lead_to_its_original(self):
+        _Gateway.answer = (200, {"data": {"query": {"id": "k7q2m9x4t1b8"}, "asOf": "2026-10-25T10:00:31.000Z", "item": gateway_item()}})
+        result = frontier_search.search({"id": "k7q2m9x4t1b8"})
+        self.assertEqual(result["status"], "success")
+        self.assertNotIn("text", result["data"]["item"])
+        self.assertIn("holds no text", result["summary"])
+        self.assertTrue(any("url, doi or pmid" in warning for warning in result["warnings"]))
+
+    def test_an_answer_with_no_item_is_an_item_that_is_not_there(self):
+        _Gateway.answer = (200, {"data": {"query": {"id": "k7q2m9x4t1b8"}, "asOf": "2026-10-25T10:00:31.000Z"}})
+        with self.assertRaises(frontier_search.FrontierSearchError) as raised:
+            frontier_search.search({"id": "k7q2m9x4t1b8"})
+        self.assertEqual(raised.exception.code, "frontier_search_item_not_found")
+        _Gateway.answer = (404, {"error": "That item is no longer in 前沿动态.", "code": "frontier_search_item_not_found"})
+        with self.assertRaises(frontier_search.FrontierSearchError) as raised:
+            frontier_search.search({"id": "k7q2m9x4t1b8"})
+        self.assertEqual(raised.exception.code, "frontier_search_item_not_found")
+        self.assertFalse(raised.exception.retryable)
+
+    def test_an_item_read_stays_near_the_tool_result_size_the_kernel_keeps_whole(self):
+        # The gateway cuts the text at 6,000 characters. Typical lengths of the rest (a 28-character title, a 110-character digest,
+        # a 220-character lead, three short points) keep the whole answer under the 8,192-character threshold the search keeps
+        # under; with every field at the editor's own ceiling it is still under 9,000.
+        sizes = {}
+        for name, item in (
+            ("typical", gateway_item(title="心" * 28, titleRaw="Semaglutide " * 8 + "HFpEF", summary="证" * 110, reason="因" * 35, lead="导" * 220,
+                                     points={"points": [{"label": "设计与对象", "text": "设" * 40}, {"label": "主要结果", "items": ["结" * 50] * 2}]},
+                                     text="文" * 6000, textKind="body", textTruncated=True, textLength=9000)),
+            ("ceiling", gateway_item(title="心" * 40, titleRaw="Semaglutide " * 13 + "HFpEF", summary="证" * 140, reason="因" * 50, lead="导" * 300,
+                                     points={"points": [{"label": "主要结果", "items": ["结" * 90] * 4}, {"label": "设计与对象", "text": "设" * 90}],
+                                             "quote": {"label": "作者结论", "text": "c" * 300}},
+                                     text="文" * 6000, textKind="body", textTruncated=True, textLength=9000)),
+        ):
+            _Gateway.answer = (200, {"data": {"query": {"id": "k7q2m9x4t1b8"}, "asOf": "2026-10-25T10:00:31.000Z", "item": item}})
+            rendered = json.dumps(frontier_search.search({"id": "k7q2m9x4t1b8"}), ensure_ascii=False, separators=(",", ":"))
+            sizes[name] = len(rendered)
+        self.assertLess(sizes["typical"], 8_192, sizes)
+        self.assertLess(sizes["ceiling"], 9_000, sizes)
+
 
 class FrontierSearchThroughTheServerTests(_GatewayCase):
     """What a run actually receives: the tool as `call_tool` dispatches it."""
@@ -445,6 +534,22 @@ class FrontierSearchThroughTheServerTests(_GatewayCase):
         result = self.mcp.call_tool("frontier_search", {"q": "q", "view": "all"})
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertEqual(_Gateway.seen, [])
+
+    def test_an_id_reaches_the_run_as_one_item_with_provenance_and_a_gone_item_points_to_the_link(self):
+        _Gateway.answer = (200, {"data": {"query": {"id": "k7q2m9x4t1b8"}, "asOf": "2026-10-25T10:00:31.000Z",
+                                          "item": gateway_item(text="Abstract.", textKind="abstract", textTruncated=False, textLength=9)}})
+        result = self.mcp.call_tool("frontier_search", {"id": "k7q2m9x4t1b8"})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["provenance"]["tool"], "frontier_search")
+        self.assertEqual(result["data"]["item"]["text"], "Abstract.")
+        self.assertNotIn("sources", result)
+        _Gateway.answer = (404, {"error": "That item is no longer in 前沿动态.", "code": "frontier_search_item_not_found"})
+        gone = self.mcp.call_tool("frontier_search", {"id": "k7q2m9x4t1b8"})
+        self.assertEqual(gone["status"], "error")
+        self.assertEqual(gone["error"]["code"], "frontier_search_item_not_found")
+        self.assertIn("link the conversation has", gone["next_actions"][0])
+        bad = self.mcp.call_tool("frontier_search", {"id": "NOT-AN-ID"})
+        self.assertEqual(bad["error"]["code"], "invalid_input", "the schema's pattern refuses it before any request")
 
     def test_a_retryable_outage_says_retry_once(self):
         _Gateway.answer = (503, {"error": "Frontier search is unavailable.", "code": "frontier_search_unavailable"})

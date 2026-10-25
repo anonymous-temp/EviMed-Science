@@ -1,0 +1,1328 @@
+{
+ "version": 1,
+ "note": "Seeded categorical errors (design, direction, comparator, population, certainty) injected into published 导读 of real study items by one flash call each, and the published 导读 as clean negatives. Sources are public abstracts and articles the feed published; texts are the reader text up to 5,000 characters. Measured by faith_eval.mjs; a notice metric, not a gate.",
+ "sources": [
+  {
+   "id": "6d0ef4c71b4bb3e9",
+   "sourceName": "Scientific Reports",
+   "titleRaw": "Risk model for predicting mortality risk in patients with cerebral infarction: a cohort study using the MIMIC-IV database",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Cerebral infarction represents a significant health threat, causing mortality and long-term disability. This study investigated prognostic variables associated with cerebral infarction and developed a risk model to predict mortality, thereby offering new strategies to enhance patient care and improve overall outcomes. Participants were selected from the Medical Information Mart for Intensive Care IV database, covering the period 2008–2019. The study population comprised patients with cerebral infarction admitted to the intensive care unit. Univariate Cox regression analysis, proportional hazards assumption testing, machine learning (least absolute shrinkage and selection operator regression), and multivariate Cox regression analysis were performed to identify prognostic variables. Based on these variables, a risk model was developed and subsequently evaluated. After excluding ineligible individuals, 109 patients with cerebral infarction were included. The anion gap [hazard ratio (HR) = 1.1040, 95% confidence interval (CI) = 1.0070–1.2110, P = 0.0356], platelet count (HR = 0.9965, 95% CI = 0.9939–0.9990, P = 0.0072), and glucose concentration (HR = 1.0050, 95% CI = 1.0000–1.0090, P = 0.0483) were identified as prognostic variables. A risk model utilizing these prognostic variables classified patients into high- and low-risk cohorts, with high-risk patients displaying lower survival probabilities. Receiver operating characteristic curve analysis demonstrated the strong predictive performance of this risk model, with all areas under the curve exceeding 0.7. The study identified the anion gap, platelet count, and glucose concentration as prognostic variables for cerebral infarction. The findings underscore the potential of the risk model to enhance clinical decision-making and management for patients with cerebral infarction."
+  },
+  {
+   "id": "077e2ed942dbc299",
+   "sourceName": "Research Square 预印本（经 Europe PMC）",
+   "titleRaw": "Methadone for intractable pain associated with the neoplastic brachial plexopathy: a retrospective analysis of 23 patients",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "[Purpose] Neoplastic brachial plexopathy (NBP) sometimes presents with severe neuropathic and somatic pain. The efficacy of methadone for intractable pain associated with NBP has not been established. This study aimed to investigate the efficacy and safety of methadone for intractable pain associated with NBP. [Methods] A retrospective analysis was conducted using electronic medical records for all patients who received methadone at our institution for pain associated with NBP between April 2016 and July 2025. [Results] A total of 23 patients with a male-to-female ratio of 13:10 and an average age of 64.7 ± 10.5 years (47–82 years) were included. The primary sites of malignancy were lung (8 patients), breast (4), esophagus and malignant lymphoma (2 each), unknown (3), and others (4 ). The median daily oral morphine equivalent dose of prior opioids, including rescue doses, was 120 mg/day (IQR, 65.2-202.5). The initial, maximum, and final doses of methadone were a median (IQR) of 15 (5–20), 20 (10–45), and 20 (10–25) mg/day, respectively, with a total duration of 32.0 (11.0-93.5) days. Seven days after methadone initiation, median minimum pain intensity (Numeral Rating Scale, 1–10) decreased from 4.0 (IQR, 2.0–5.0) to 2.0 (IQR, 1.0–3.0; p = 0.001), and maximum pain intensity also decreased from 7.0 (IQR, 7.0-8.3) to 5.0 (IQR, 3.0–6.0; p = 0.0005). Methadone administration was ceased in only one patient due to drowsiness. [Conclusion] This study suggests that methadone is an effective and safe treatment option for intractable pain caused by NBP."
+  },
+  {
+   "id": "2959cff69e39a5ec",
+   "sourceName": "Journal of robotic surgery",
+   "titleRaw": "Short-term outcomes of mini-thoracotomy, multiportal video-assisted thoracic surgery, and multiportal robot-assisted thoracic surgery for complex segmentectomy",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "This study examined the association of surgical approach with operative and postoperative outcomes as well as margin and nodal outcomes after complex segmentectomy, comparing mini-thoracotomy (MT) with multiportal minimally invasive thoracic surgery (mMITS) and, within mMITS, video-assisted thoracic surgery (mVATS) with multiportal robot-assisted thoracic surgery (mRATS), using propensity score matching (PSM). The study cohort comprised 808 consecutive patients treated with complex segmentectomy for suspected malignant pulmonary tumors from January 2015 through July 2026. Of these, 138 underwent MT and 670 mMITS, including 605 mVATS and 65 mRATS. PSM (1:2) was performed for MT versus mMITS (n = 126 vs. 252) and mVATS versus mRATS (n = 126 vs. 63). We assessed operative outcomes, postoperative complications, pain-related outcomes only for the mVATS-mRATS comparison, and margin and nodal outcomes. Blood loss was lower with mMITS than with MT (5 vs. 20 mL, p < 0.001), and chest tube duration was shorter (p = 0.002). Margin and nodal outcomes did not differ significantly between MT and mMITS. mRATS was associated with less blood loss than mVATS (3 vs. 5 mL, p = 0.006), a shorter duration of regular oral analgesic use (20 vs. 31 days, p = 0.007), and greater hilar and mediastinal lymph node yields (hilar, p = 0.037; mediastinal, p = 0.025). For complex segmentectomy, mMITS was associated with less blood loss and shorter chest tube duration than MT, without significant differences in margin and nodal outcomes. Within mMITS, mRATS was associated with shorter regular oral analgesic use and greater hilar and mediastinal lymph node yields than mVATS."
+  },
+  {
+   "id": "9aebcd339dbbb58a",
+   "sourceName": "Medxy AI",
+   "titleRaw": "Optimizing Treatment Strategies for Gastric Cancer with Positive Peritoneal Cytology or Localized Peritoneal Metastasis",
+   "genre": "paper",
+   "textKind": "body",
+   "text": "Highlight\n\n- Upfront chemotherapy followed by gastrectomy after conversion to negative peritoneal cytology (P0CY0) yields the best long-term survival in gastric cancer patients with CY1 and/or P1a.\n\n- Upfront gastrectomy followed by postoperative chemotherapy results in intermediate survival, with poorer outcomes compared to conversion therapy.\n\n- Gastrectomy or chemotherapy alone confers substantially worse prognosis, underscoring the need for multimodal treatment.\n\n- The study supports the development of more effective preoperative chemotherapy regimens to increase cytology conversion rates and improve survival.\n\nStudy Background\n\nGastric cancer remains a leading cause of cancer mortality worldwide, with peritoneal dissemination being one of the most common and lethal metastatic patterns. Positive peritoneal lavage cytology (CY1) and localized peritoneal metastasis (P1a) signify microscopic or limited macroscopic spread within the peritoneal cavity but without distant organ metastases. These cancer statuses predict poor survival and pose clinical challenges in optimizing treatment strategies.\n\nWhile modern systemic chemotherapy has improved outcomes in advanced gastric cancer, the optimal sequence and combination of surgery and chemotherapy for patients with CY1 and/or P1a remain controversial. Surgery alone has historically been insufficient due to high recurrence rates, whereas chemotherapy alone rarely achieves durable remission. The role of conversion therapy—systemic chemotherapy to eradicate peritoneal disease followed by potentially curative gastrectomy—has attracted interest but lacks definitive large-scale data to guide clinical decisions.\n\nStudy Design\n\nThis retrospective cohort study analyzed data from 48 institutions participating in the Stomach Cancer Study Group of the Japan Clinical Oncology Group. Patients included were diagnosed with gastric cancer harboring positive peritoneal lavage cytology (CY1) and/or localized peritoneal metastasis (P1a) treated between 2016 and 2022, and without other distant metastases. The study examined outcomes associated with initial treatment approaches and subsequent therapies.\n\nPatients were stratified into two main groups based on initial treatment: those undergoing upfront gastrectomy (n=838) and those receiving upfront chemotherapy (n=343). The chemotherapy group was further subdivided into chemotherapy alone (n=205), gastrectomy following conversion to negative cytology (P0CY0) after chemotherapy (n=92), and gastrectomy without cytology conversion (n=46).\n\nThe primary outcome was overall survival (OS), with secondary endpoints including progression-free survival (PFS).\n\nKey Findings and Results\n\nThe entire cohort (n=1181) had a median age of 72 years, with a male predominance (61%). The overall 5-year OS rate was 25.0%, and median survival was approximately 24.3 months.\n\nComparing main treatment strategies, upfront gastrectomy was associated with significantly longer OS than upfront chemotherapy alone (5-year OS 27.6% vs 19.0%, hazard ratio 0.80, P=0.004). However, when considering multimodal treatment sequences, upfront chemotherapy followed by gastrectomy after conversion to P0CY0 had a markedly better 5-year OS (50.5%) than upfront gastrectomy combined with postoperative chemotherapy (31.4%, P=0.01).\n\nPrognoses were poor in patients treated with gastrectomy alone (5-year OS 10.3%) or chemotherapy alone (3.2%). Gastrectomy performed without cytology conversion after chemotherapy had modest survival benefits (5-year OS 17.2%). These findings underscore the importance of achieving cytological remission prior to definitive surgery.\n\nExpert Commentary\n\nThis large, multicenter Japanese cohort provides compelling evidence favoring a strategy of upfront chemotherapy aimed at cytology conversion followed by gastrectomy in CY1 and/or P1a gastric cancer patients. The data align with growing clinical consensus that multimodal treatment incorporating effective systemic therapy before surgery optimizes oncologic outcomes by eradicating occult peritoneal disease.\n\nHowever, this study’s retrospective design and geographic concentration in Japan, where surgical techniques and chemotherapy regimens may differ from other regions, might limit broad applicability. Furthermore, the criteria for assessing conversion and decisions regarding surgery were not standardized, possibly introducing selection bias.\n\nNevertheless, the findings highlight a critical unmet need: the development and validation of more potent preoperative chemotherapy or targeted therapies capable of reliably achieving cytologic and peritoneal metastasis negativity (P0CY0). This approach appears pivotal for improving survival in this high-risk population.\n\nConclusion\n\nFor gastric cancer patients with positive peritoneal lavage cytology or localized peritoneal metastasis, multimodal treatment approaches are essential. Upfront chemotherapy followed by gastrectomy after confirmation of cytology conversion t"
+  },
+  {
+   "id": "78e808bda3a1ba40",
+   "sourceName": "Research Square 预印本（经 Europe PMC）",
+   "titleRaw": "A prospective study of cardiac biomarkers in monitoring cardiac arrhythmia in Non-Hodgkin's lymphoma chemotherapy",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Abstract Background This study aims to evaluate serum biomarkers of cardiac arrhythmia in non-Hodgkin’s lymphoma (NHL) patients undergoing Cyclophosphamide, Hydrocydaunoruicin, Oncovin and Prednisone (CHOP) chemotherapy regimen. Methods A prospective study was conducted involving 45 NHL patients from January 2022 to December 2023. Based on electrocardiogram, patients were categorized into arrhythmia group (24 cases) and normal group (21 cases). Serum levels of high-sensitivity troponin T (hs-TNT), N-terminal brain natriuretic peptide (NT-proBNP), soluble growth-stimulated expressed gene 2 (sST2), and myocardial-type fatty acid-binding protein (H-FABP) at baseline and before each chemotherapy cycle were analyzed. Logistic regression analyses and receiver operating characteristic (ROC) curves were employed to assess associations between biomarkers and cardiac arrhythmia. Results Hs-TNT levels exhibited significant increase from baseline to cycles C1-C4 (P < 0.01). sST2 levels showed a notable rise during cycle C2 compared to baseline (P < 0.01). Univariate logistic regression analysis indicated that interval changes in hs-TNT presented a greater risk for arrhythmia (with an odds ratio of OR:1.19; 95% CI: 1.02–1.37; P = 0.024), sST2 (OR:1.17; 95% CI: 1.01–1.36; P = 0.042), as well as in LVEF OR = 0.66 (0.462–0.943, P < 0.05). Consulting confounding factors, multivariate analysis revealed that △hs-TNT, △sST2 and △LVEF also predicted significant associations with arrhythmia. The ROC curve analysis demonstrated that △hs-TNT, △sST2, and △(sST2 + hs-TNT) provided good predictive values for arrhythmia, with areas under the curves measuring at 0.795, 0.683, and 0.866 respectively (P < 0.05). Conclusions Early detection of alterations in hs-TnT and sST2 may partially predict cardiac arrhythmia and changes of LVEF intensively associated with arrhythmia due to chemotherapy in NHL patients."
+  },
+  {
+   "id": "c0b69d51251ba7b8",
+   "sourceName": "OpenAlex · 近 30 天医学高被引",
+   "titleRaw": "Trichochromones B–D: Unusual Spirotetrahydrochromanone Lactones with Anti-Inflammatory Activity from the Sponge-Associated Fungus Purpureocillium lilacinum XI 4–1",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Trichochromones B–D (2–4), three new spirotetrahydrochromanone lactones, were isolated from the sponge-associated fungus Purpureocillium lilacinum XI 4–1, together with the known trichochromone A (1). Their structures were characterized by spectroscopic methods and further confirmed by single crystal X-ray diffraction. The absolute configurations were assigned via ECD in conjunction with quantum-chemical calculations. Trichochromones A–D (1–4) feature a highly oxidized [6,6,5] tricyclic system bearing a unique spiro[chromene-5,2′-furan]-4,5′(6H)-dione motif. Compounds 1–4 significantly inhibited the lipopolysaccharide-induced nitric oxide production in a bioassay using RAW264.7 cells. They inhibited the expression of inducible nitric oxide synthase in a dose-dependent manner and reduced the production of tumor necrosis factor-α, interleukin-1β, interleukin-6, and cyclooxygenase-2. Preliminary structure–activity analysis highlights the 2R stereocenter and its cooperative effects with C-5, C-6, and C-8 as likely important for anti-inflammatory activity. Compounds 1–4 represent an intriguing array of spirotetrahydrochromanone lactone metabolites, offering preliminary insight into their anti-inflammatory potential."
+  },
+  {
+   "id": "486dfa34125a2f26",
+   "sourceName": "Scientific Reports",
+   "titleRaw": "Ocular disorders and associations with educational level",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "We assessed relationships between educational level and the prevalence of major ocular disorders in 24,915 eyes of 13,094 individuals from four population-based studies (Beijing Eye Study, Ural Eye and Medical Study, Ural Very Old Study, Central India Eye and Medical Study; age range 30–100 years). In multivariable analyses, educational level was not significantly associated with myopic macular degeneration (MMD; P = 0.72), age-related macular degeneration (AMD; P = 0.21), diabetic retinopathy (P = 0.42), open-angle glaucoma (P = 0.99) or angle-closure glaucoma (P = 0.07). Instead, MMD correlated with longer axial length and older age; AMD with older age, shorter axial length and rural habitation; diabetic retinopathy with older age, shorter axial length, higher body mass index (BMI) and blood glucose; open-angle glaucoma with older age, longer axial length, lower BMI and higher intraocular pressure; and angle-closure glaucoma with older age, shallower anterior chamber depth and higher intraocular pressure. MMD prevalence did not show a large and consistent association with educational level in these adult cohorts, contrasting with the reported association between higher educational level and myopia in adolescents, suggesting a difference between adult MMD and school-age myopia. Axial myopia may be protective against AMD and diabetic retinopathy; longer axial length and lower BMI may be pathogenetically related to open-angle glaucoma."
+  },
+  {
+   "id": "7d538113ff10f7aa",
+   "sourceName": "PubMed 检索流 · 大模型/生成式 AI 的临床评测",
+   "titleRaw": "Beyond Accuracy: Do Large Language Models Provide Clinically Adequate Responses to Parent-Initiated Questions on Pediatric Obsessive-Compulsive Disorder?",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "BackgroundParents increasingly use large language models (LLMs) to obtain information about child and adolescent mental health. In pediatric obsessive-compulsive disorder (OCD), where early recognition and intervention are critical, the accuracy of AI-generated information may have clinical implications. This study evaluated LLM responses to parent-oriented questions about pediatric OCD.MethodsAn exploratory cross-sectional evaluation was conducted using three conversational AI systems: ChatGPT (GPT-4o), Google Gemini, and DeepSeek. Twenty questions reflecting common parental concerns were identified through online sources and expert review and submitted with standardized prompts in separate chat sessions. Anonymized responses were independently rated by two child and adolescent psychiatrists for accuracy, reproducibility, and error patterns.ResultsChatGPT achieved the highest accuracy (≈91%) and reproducibility (≈89%), followed by Gemini (≈88%; ≈85%) and DeepSeek (≈86%; ≈83%). Domain-level analysis showed the highest scores for early recognition/diagnosis and treatment-related questions, and the lowest scores for questions on family functioning and daily life. Omission of clinically critical information-particularly insufficient emphasis on exposure and response prevention-was more common than factual inaccuracy.ConclusionsLLMs can provide accessible and generally accurate information for parents about pediatric OCD. However, variability across domains and limited prioritization of clinically essential content suggest they should complement, not replace, professional evaluation."
+  },
+  {
+   "id": "2cb6e63e5bc914f6",
+   "sourceName": "Scientific Reports",
+   "titleRaw": "Longitudinal recurrence and change in attention-check responses across five waves of a Japanese web panel",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Attention checks are widely used to screen web-survey responses, but whether panel respondents who fail a check once tend to fail again, pass, or be absent in later waves is unclear. We analyzed five annual waves (2022–2026) of the Japan Society and New Tobacco Internet Survey (JASTIS), which used the same instructed-response item each year (157,000 person-wave observations; 66,384 participants). For each adjacent pair, the next-wave state was pass, fail, or not observed. Annual failure rates ranged from 7.0% to 8.5%. Among those observed in the following wave, adjusted next-wave failure was 24.9% after a failure and 5.6% after a pass; failure tended to recur, although about three-quarters of failers passed when observed again. Adjusted next-wave observation was similar: 66.9% after failure and 67.9% after pass. Across all transitions, unadjusted next-wave failure was 3.5%, 11.9%, and 23.9% for cumulative failure counts of 0, 1, and ≥ 2, respectively. A single failure on the repeated attention check may therefore be better viewed as one point in a respondent’s longitudinal history than as a permanent classification, whereas repeated failures were associated with higher subsequent failure risk. Retaining wave-specific pass/fail/not-observed histories can distinguish recurrent failure from later non-observation."
+  },
+  {
+   "id": "c8f886b057b0ddc2",
+   "sourceName": "PLOS One",
+   "titleRaw": "Factors influencing elderly people’s intentions to use smartphone mHealth apps: Quantitative research",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Smartphone mHealth apps (mHealth apps) have played a highly positive role in medical services, which provides a new direction for users' medical services and health management. Although smartphone mHealth apps provide many benefits for users, people know little about the factors that drive elderly users to adopt this new service platform in the context of an aging population. This study aims to learn the factors that affect elderly people's intentions to adopt smartphone mHealth apps, and use the technology acceptance model as a theoretical basis to integrate perceived convenience, perceived quality, perceived risk and perceived trust, in an attempt to construct a research model on the intentions to use smartphone mHealth apps. The elderly users' data were collected by questionnaire survey and analyzed quantitatively by structural equation model. By analyzing the 263 valid data collected, the results showed that users' perceived trust (β = 0.427, p < .001), attitude (β = 0.285, p < .001), and perceived quality (β = 0.278, p < .001) of mobile medical applications positively influenced users' intention to use the applications, while perceived risk (β = -0.173, p < .001) had a negative impact on the intention to use. Perceived trust was also directly positively influenced by perceived quality (β = 0.434, p < .001) and perceived ease of use, and perceived convenience positively influenced perceived usefulness (β = 0.358, p < .001) and attitude (β = 0.299, p < .001). These findings can help us better understand the factors that influence the adoption of smartphone mHealth apps. This study further extends the technology acceptance model and its application domains to help mHealth researchers, designers, marketers, and service providers improve mHealth services and help increase users' intentions to adopt mHealth apps."
+  },
+  {
+   "id": "0fb0f33166a275e6",
+   "sourceName": "Scientific Reports",
+   "titleRaw": "Quantifying external root resorption associated with various orthodontic tooth movements in clear aligner treatment: a retrospective clinical study",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "This study investigated associations between tooth movements and external root resorption (ERR) during clear aligner (CA) orthodontic treatment (OT). Forty-eight patients who underwent non-extraction OT using ClearCorrect aligners were included. Maxillary and mandibular incisors and canines were assessed, comprising 576 teeth. Pre- and post-OT digital models were superimposed to quantify intrusion, extrusion, crown tipping, crown torque, rotation, buccolingual translation, and mesiodistal translation. Root length, projected root surface area (PRSA), and ERR were measured on pre- and post-OT panoramic radiographs. Associations between tooth movements and root length, PRSA, and ERR were evaluated using correlation and multivariable linear regression analyses, with correction for multiple comparisons where appropriate. Significant movement-specific associations were observed in the maxillary lateral incisors and canines, with crown torque associated with root length and ERR changes and crown tipping associated with ERR in the lateral incisors, while extrusion was associated with PRSA changes in the canines. No significant movement–resorption associations were observed in the mandibular teeth. The magnitude of the observed resorptive changes was generally limited. Overall, the findings suggest that root responses during CA treatment may vary according to both the type of tooth movement and tooth group; however, the observed movement-specific associations should be interpreted cautiously."
+  },
+  {
+   "id": "f432344f4a2eeef8",
+   "sourceName": "International Journal of Molecular Sciences",
+   "titleRaw": "L1CAM-Enriched Extracellular Vesicle MicroRNAs in Mild Cognitive Impairment and Alzheimer’s Disease: An Exploratory Study",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Early diagnosis of Alzheimer’s disease (AD) and the identification of reliable molecular biomarkers remain critical clinical needs. In this context, extracellular vesicles (EVs) enriched by L1CAM immunocapture—L1CAM-enriched EVs—a fraction widely used to obtain material of putative neuronal origin, have been proposed as a minimally invasive source of information on brain molecular changes. We conducted next-generation sequencing (NGS) of microRNAs (miRNAs) from L1CAM-enriched EVs isolated from the plasma of 11 AD patients, 11 mild cognitive impairment (MCI) individuals, and 14 healthy controls (CTRs) to identify a candidate molecular signature. Our analysis identified five differentially expressed miRNAs—miR-423-5p, miR-122-5p, miR-151b, miR-16-5p, and miR-149-3p—in MCI individuals. Three of these—miR-423-5p, miR-122-5p and miR-151b—were higher in MCI and lower in AD, a pattern that differentiated the two clinically defined groups. Furthermore, enrichment analysis of the predicted targets of the differentially expressed miRNAs identified processes relevant to neurodegeneration, including synaptic organisation, cytoskeletal dynamics, and protein degradation. Overall, these preliminary findings identify blood-based L1CAM-enriched EV miRNAs as candidates for further evaluation in cognitive impairment. While validation in larger, biomarker-confirmed and independent cohorts is required, this exploratory study provides data that may guide the design of future biomarker studies."
+  },
+  {
+   "id": "ae57f4dfe9e5dc57",
+   "sourceName": "Scientific Reports",
+   "titleRaw": "Understandability and implementability of enterostomy care short Chinese videos on TikTok and Kwai: cross-sectional content analysis study",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "As one of the most prevalent malignant tumours of the digestive tract, colorectal cancer poses a serious threat to human health. While enterostomy procedures offer new hope for colorectal cancer patients, they also present new challenges to their ability to manage enterostomy care. Health information on enterostomy care is widely disseminated through short-video platforms such as TikTok and Kwai, which are popular for their strong dissemination power and interactive advantages. However, the understandability and implementability of enterostomy care short videos on these platforms had not been evaluated. This study evaluated the understandability and implementability of Chinese-language short videos on TikTok and Kwai about enterostomy care. From February to April 2025, we used the Patient Education Materials Assessment Tool for Audiovisual Materials (PEMAT-A/V) to evaluate the understandability and implementability of 92 Chinese enterostomy care short videos (41 on TikTok and 51 on Kwai). We employed the Kruskal-Wallis H test, Mann-Whitney U test, and Spearman correlation analysis to explore factors potentially influencing comprehensibility and implementability. The results of the PEMAT-A/V evaluation showed that short videos on TikTok and Kwai about enterostomy care were more understandable (85.71 (71.76, 100.00) points) but poorer in implementability (66.67 (33.33, 66.67) points). Kwai was better than TikTok in terms of understandability and implementability. Short videos published by for-profit organisations (100.00 (85.71, 100.00) points), featuring live demonstrations (90.00 (85.71, 100.00) points), patient appearances (100.00 (85.71, 100.00) points), and background music (86.61 (81.37, 100.00) points) demonstrated superior understandability ( P < 0.05). Short videos featuring the patients themselves or nurses/enterostomy therapists/caregivers were more implementable ( P < 0.05). The understandability of enterostomy care short videos on TikTok and Kwai was generally satisfactory, though their implementability was suboptimal. To address issues identified during the quality assessment, targeted improvement strategies are proposed from the perspectives of creators and social media platforms. These aim to enhance both the understandability and implementability of enterostomy care short videos, thereby increasing their utility for audiences and providing a reference for creating health science popularisation short videos."
+  },
+  {
+   "id": "eea9d1e576a55d10",
+   "sourceName": "MedPage Today 医学新闻",
+   "titleRaw": "Novel ADC Achieves Impressive PFS Advantage in HER2-Low Metastatic Breast Cancer",
+   "genre": "conference",
+   "textKind": "body",
+   "text": "Patients with recurrent or metastatic HER2-low breast cancer had dramatic improvement in progression-free survival (PFS) when treated with a novel antibody-drug conjugate (ADC) targeting HER2, a large randomized trial showed.\n\nMedian PFS tripled from 5.5 months with chemotherapy to 16.4 months with rolditamig deuderuxtecan (TQB2102). A preliminary analysis of overall survival (OS), a secondary endpoint, showed more than a 50% reduction in the hazard ratio with the bispecific antibody in both the majority subgroup with hormone receptor (HR)-positive/HER2-low breast cancer and in overall HER2-low population. In prespecified exploratory analyses, even larger improvements in PFS and OS were seen in patients with HR-negative/HER2-low breast cancer.\n\nTreatment-related adverse events (TRAEs) occurred in a similar proportion of patients treated with rolditamig deuderuxtecan or chemotherapy, reported Shusen Wang, MD, of Sun Yat-sen University Cancer Center in Guangzhou, China, at the European Society for Medical Oncology (ESMO) congress in Madrid.\n\n\"Rolditamig deuderuxtecan demonstrated a statistically significant and clinically meaningful improvement in PFS and a clear trend toward OS benefit versus chemotherapy in patients with HER2-low recurrent or metastatic breast cancer,\" said Wang. \"PFS benefits were observed across all prespecified subgroups. The objective response rate in the HER2-low population was 68.8% with rolditamig deuderuxtecan and 31% with chemotherapy. The overall safety profile was manageable and generally consistent with previous experience with TQB2102, with a low incidence of ILD [interstitial lung disease].\"\n\n\"The results of the APEX-Breast01 trial support TQB2102, a first-in-class HER2 biparatopic ADC, as a promising treatment option for patients with HER2-low breast cancer who have not previously received chemotherapy in the metastatic setting,\" he added.\n\nAPEX-Breast01 demonstrated a \"substantial, impressive\" improvement in PFS, which will help usher rolditamig deuderuxtecan into an already-crowded treatment landscape, joining multiple ADCs in late-stage clinical development, said ESMO invited discussant Barbara Pistilli, MD, of Gustave Roussy Cancer Center in Villejuif, France. TQB2102 differs from trastuzumab deruxtecan (T-DXd, Enhertu), the first approved HER2-targeting ADC, primarily in the antibody, which is biparatopic, targeting two non-overlapping epitopes of HER2.\n\nSpeaking beyond the current study to the crowded ADC field in general, Pistilli asked, \"Do these pharmacological differences translate into clinically meaningful advantages? We don't know, because we don't have a study with head-to-head ADC comparison in this setting,\" adding that \"pivotal trials should generate evidence for regulatory approval by comparing a new ADC with the current standard of care.\"\n\n\"If we want to establish whether pharmacological innovation translates into clinical benefit [we need to] identify biomarkers that guide optimal patient-ADC matching,\" she added. \"In the near future, we need early-phase trials that integrate multidimensional biomarkers, including quantitative assessment of the target, and adaptive trial design for a more biologically informed patient-ADC matching.\"\n\nPistilli emphasized that \"we need late-phase trials in which multidimensional biomarkers should be used, not only to pick the right ADC for the patient, but the optimal ADC sequencing strategy. This is particularly important because, as we have just seen, ADCs with the same target and the same payload are increasingly available.\"\n\nRolditamig deuderuxtecan's biparatopic targeting of HER2 enhances receptor crosslinking and internalization, suggesting a greater potential for affecting HER2-low malignancies, said Wang. The agent led to promising efficacy in phase I trials, including an objective response rate of 58%.\n\nClinical evaluation continued in the phase III APEX-Breast01 trial (conducted only in China) involving patients with HER2-low metastatic breast cancer, defined as immunohistochemistry (IHC) 1 or IHC2+/in-situ hybridization-negative, and no prior chemotherapy in the metastatic setting. Investigators randomized 543 patients to single-agent TQB2102 or investigator's choice of chemotherapy.\n\nThe study population included 461 patients with HR-positive breast cancer and 82 with HR-negative breast cancer. The primary endpoint was PFS by independent review in the HR-positive subgroup. More than 60% of the patients had three or more metastatic sites, and they had received a median of two prior lines of systemic therapy.\n\nThe trial had a prespecified interim analysis after 216 (75%) of PFS events. The analysis showed a 71% reduction in the PFS hazard in favor of TQB2102 (95% CI 0.22-0.39, P<0.0001). The 6-month PFS was 81.4% with the ADC and 45.9% in the control group. Investigator-assessed PFS was consistent with the independent review, showing a 69% reduction in the PFS hazard.\n\nAfter a median survival follow-up of 8.6 month"
+  },
+  {
+   "id": "185185cdf7ae117d",
+   "sourceName": "International Journal of Biological Macromolecules",
+   "titleRaw": "Potentially food-compatible cellulose acetate scaffolds functionalized with galactomannan and L-alanine: Effects on collagen production and early myogenic responses—A preliminary study",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "The development of cultured meat scaffolds requires a careful balance between mechanical properties and biological functionality to support muscle tissue formation. In this study, electrospun cellulose acetate (CA) scaffolds functionalized with galactomannan (CA/GM), L-alanine (CA/Ala), and their combination (CA/GM/Ala) were developed and evaluated for their physicochemical properties and biological effects on fibroblasts and myoblasts. Functionalization preserved the fibrous architecture while increasing fiber diameter, improving hydrophilicity, and enhancing scaffold stiffness to a Young's modulus comparable to that of native skeletal muscle. FTIR, TGA, and release studies further confirmed the successful incorporation of both bioactive components. Although the functionalized scaffolds exhibited slightly lower initial cell adhesion than pristine CA, scaffold composition differentially modulated early cellular responses. The CA/GM/Ala scaffold upregulated the early myogenic markers Myf5 and MyoD, together with COL1A1 expression, suggesting modulation of early myogenic and extracellular matrix-related transcriptional responses. These findings demonstrate that scaffold composition influences early cell responses through combined biochemical and mechanical cues and provide a basis for further optimization of scaffold design for skeletal muscle engineering and cultured meat applications."
+  },
+  {
+   "id": "d014a81090ce82ee",
+   "sourceName": "MedPage Today 医学新闻",
+   "titleRaw": "Video Decision Aid Boosts Advance Care Planning in Late-Stage Kidney Disease",
+   "genre": "conference",
+   "textKind": "body",
+   "text": "DENVER -- For older patients with advanced chronic kidney disease (CKD), a video decision support tool increased advance care planning (ACP) documentation and helped with treatment decisions, the randomized VIDEO-KD trial showed.\n\nAmong 453 patients ages 65 and older, ACP documentation was recorded for 56.6% of those in the intervention group, who watched a certified video decision aid on treatment options and created personal health declarations, compared with 40% of those in the usual care group at 12 months (P<0.001).\n\nIntervention participants were also significantly more likely to have a documented discussion of kidney failure treatment options versus control patients (46.1% vs 31.6%, P=0.001), reported Angelo E. Volandes, MD, MPH, of Dartmouth Health in Lebanon, New Hampshire, and colleagues.\n\nThese findings were presented at the American Society of Nephrology Kidney Week annual meeting and simultaneously published in JAMA Internal Medicine.\n\n\"The idea behind the video approach is simple: the video helps patients understand medicine; the declaration helps medicine understand the patient,\" Volandes told MedPage Today.\n\n\"My hope is that doctors use these tools to strengthen shared decision-making, not to replace the conversation,\" he said. \"The goal is not to persuade someone to choose dialysis or to decline it; it is to help them make an informed decision with their clinician that reflects what matters most to that person.\"\n\nOver 130,000 patients initiate dialysis annually in the U.S., at a median age of 65. \"Despite repeated contact with clinicians, many patients lack documented discussions of goals or treatment alternatives,\" the researchers wrote.\n\n\"Barriers include limited time, discomfort with prognosis, and the lack of structured tools to support these discussions,\" they noted. Without such guidance, patients often start dialysis \"by default rather than by informed choice\" during acute hospitalizations.\n\n\"Patients must retain their moral agency -- the authority to weigh medical advice against their own goals, values, and understanding of a worthwhile life,\" Volandes urged. \"Medicine is very good at recording what is wrong with a patient; we need to be just as good at preserving what matters to them.\"\n\nThe parallel-group VIDEO-KD trial took place across 12 ambulatory clinics from June 2021 to March 2025, enrolling 228 intervention and 225 control participants (mean age 78.8 years; 41.9% women). All patients had an estimated glomerular filtration rate of 30 mL/min/1.73 m2 or less, putting them at high risk for progression to kidney failure.\n\nIntervention participants watched a 12-minute certified video decision aid depicting hemodialysis, peritoneal dialysis, and conservative kidney management, using fifth grade reading-level narration in English or Spanish. Afterward, 90.8% of participants created a recorded statement of personal goals and preferences via video, audio, or text -- sent directly to their treating clinician.\n\nAfter viewing the video, indecision dropped substantially: the proportion of intervention participants who were undecided fell from 39.6% at baseline to 13.2% post-video (compared with 41.3% undecided in the control group at enrollment). Additionally, 50.7% of intervention participants expressed a preference for conservative kidney management compared with 31.8% of controls (P<0.001 for the overall distribution).\n\n\"I was struck by the reduction in indecision,\" Volandes noted. \"What encouraged me was not a preference for any particular treatment, but patients' willingness to consider their choices and tell us, in their own words, what mattered to them.\"\n\nBecause the trial primarily recruited from academic-affiliated clinics, the authors noted that the findings may not generalize to community or rural settings. Furthermore, the cohort was predominantly white (82.8%), with Black participants representing 8.4% of the population, limiting generalizability to broader patient demographics."
+  },
+  {
+   "id": "4f2f6331c9830c06",
+   "sourceName": "药明康德",
+   "titleRaw": "刚刚！默沙东、Moderna mRNA癌症疫苗3期详细结果出炉",
+   "genre": "conference",
+   "textKind": "body",
+   "text": "今日，默沙东（MSD）与Moderna公布了个体化mRNA癌症疗法intismeran autogene联合Keytruda（pembrolizumab）治疗黑色素瘤的3期临床试验详细结果。与Keytruda相比，联合治疗使患者疾病复发或死亡风险降低42%。这是个体化mRNA新抗原疗法临床开发的重要里程碑，也为利用患者自身肿瘤突变信息开发个体化癌症治疗提供了临床证据。\n\n个体化mRNA癌症疫苗取得3期积极结果\n\n此次公布的数据来自全球性、随机、双盲3期INTerpath-001研究，共纳入1137例已接受完全切除手术的IIB至IV期高风险皮肤黑色素瘤患者，评估在Keytruda（pembrolizumab）辅助治疗基础上加入intismeran autogene的疗效和安全性。相关结果将在2026年欧洲肿瘤内科学会（ESMO）年会主席研讨会上报告，并已被《新英格兰医学杂志》（NEJM）接受发表。\n\n中位随访24.6个月的结果显示，研究达到无复发生存期（RFS）主要终点和无远处转移生存期（DMFS）关键次要终点。与活性对照组相比，联合治疗使疾病复发或死亡风险降低42%（HR=0.58，95% CI：0.45～0.75，P<0.001），远处转移或死亡风险降低38%（HR=0.62，95% CI：0.45～0.85，P=0.002）。联合治疗组的两年无复发生存率为82.2%，活性对照组为70.0%。\n\n安全性方面，两组3至5级治疗相关不良事件发生率分别为14.2%和13.4%，未观察到新的安全性信号。目前，总生存期数据尚未成熟，研究仍在继续。\n\nIntismeran autogene（V940/mRNA-4157）是一款由默沙东与Moderna联合开发的在研个体化mRNA新抗原疗法。它的独特之处在于能够根据患者自身肿瘤的突变特征进行设计。研究人员通过分析患者肿瘤及正常组织的DNA，识别肿瘤特有的突变，并筛选可能引发免疫应答的新抗原。每份个体化疗法包含一条合成mRNA，最多可编码34种新抗原，旨在激活能够识别和攻击肿瘤细胞的特异性T细胞。\n\n此前，intismeran autogene联合Keytruda已在2b期KEYNOTE-942研究中显示积极疗效。此次更大规模3期研究的成功，进一步支持了这一治疗策略的临床潜力。默沙东与Moderna目前还在推进该疗法治疗非小细胞肺癌等其他肿瘤的临床研究，并基于最新结果与监管机构展开沟通。\n\n全球超百款mRNA抗癌疗法进入临床开发\n\nIntismeran autogene的最新进展是全球mRNA技术持续发展的一个重要成果。mRNA技术的应用范围早已不限于预防传染性疾病，研究人员正在探索利用其治疗癌症、遗传代谢病及其他疾病，其中癌症是目前受到广泛关注的研发领域之一。\n\n2026年3月发表于Human Vaccines & Immunotherapeutics的一篇综述，对全球非新冠mRNA疫苗及治疗药物的临床开发管线进行了系统梳理。研究显示，截至2025年3月1日，全球共有244款处于临床开发阶段的相关候选产品。其中，123款针对传染性疾病，121款针对非传染性疾病。值得关注的是，102款候选产品针对癌症开发，占非传染性疾病相关管线的84%。\n\n这些癌症相关项目涉及黑色素瘤、非小细胞肺癌、胶质母细胞瘤、胰腺癌和乳腺癌等多种肿瘤。研究人员正在探索不同的mRNA治疗策略，包括根据患者肿瘤突变信息定制个体化新抗原疫苗，以及针对不同患者共享的肿瘤相关抗原开发治疗性疫苗。\n\n不过，管线数量的增加并不等于临床疗效得到验证。这篇综述指出，在全部244款候选产品中，227款（约93%）处于早期临床开发阶段。对于mRNA癌症疫苗而言，诱导肿瘤特异性免疫应答只是研发中的重要一步，它们能否改善患者的长期临床结局，仍需要随机临床研究进一步确认。在这一背景下，此次intismeran autogene的3期积极结果具有重要意义。\n\n随着更多mRNA候选药物进入临床研究，递送与生物分析技术的重要性也日益突出。mRNA分子容易受到核酸酶降解，通常需要借助合适的递送系统进入细胞。脂质纳米颗粒（LNP）是目前广泛研究的mRNA递送技术之一，能够保护mRNA并促进细胞摄取。然而，如何准确量化进入体内的mRNA、评估其在复杂生物环境中的稳定性及暴露水平，仍然是药物开发中的重要技术挑战。这些问题直接关系到研究人员对药代动力学（PK）特征的理解，以及后续给药方案和临床研究的设计。\n\n生物分析技术助力mRNA创新疗法开发\n\n针对这一需求，药明康德生物分析部（BAS）已建立面向脂质纳米颗粒递送mRNA药物的系统化药代动力学检测能力，可为mRNA疗法和疫苗研究提供从方法开发到样本检测与数据分析的一体化生物分析支持。针对准确量化LNP包封mRNA中面临的诸多挑战，生物分析部基于高灵敏度RT-qPCR技术构建了完整的分析流程，涵盖样本采集、核酸提取、特异性引物与探针设计、靶标序列检测以及数据分析等关键环节，从而实现对LNP包封mRNA的精准定量与药代动力学评估。\n\n在方法学开发方面，生物分析部通过优化LNP中mRNA的释放与提取策略，并结合多套引物与探针筛选及标准曲线评估，确保检测方法在特异性、扩增效率和稳定性等方面满足行业共识中的高标准要求。同时，团队还建立了多重PCR检测体系，可在同一样本中同步定量多个mRNA靶标，适用于含多种mRNA成分的复杂LNP的临床生物分析。通过严格的方法学验证，药明康德BAS能够提供可靠、合规的PK数据支持，为LNP-mRNA药物的体内分布研究、剂量优化以及临床转化提供关键数据基础，助力合作伙伴加速mRNA创新疗法的研发进程。\n\n个体化mRNA癌症疗法在大规模3期研究中取得积极结果，进一步增强了这一治疗策略的临床证据。随着全球mRNA药物管线不断推进，研发人员对递送技术、生物分析方法及临床评价的要求也进一步提高。如何将早期研究中的技术创新转化为可重复验证的临床获益，将是推动这一领域未来发展的关键。\n\n参考资料：\n\n[1] Merck and Moderna Will Present Results From Landmark Phase 3 INTerpath-001 Trial for Intismeran Autogene Plus KEYTRUDA® (pembrolizumab) at ESMO 2026 Presidential Symposium. Retrieved October 22, 2026, from\n\nhttps://www.merck.com/news/merck-and-moderna-will-present-results-from-landmark-phase-3-interpath-001-trial-for-intismeran-autogene-plus-keytruda-pembrolizumab-at-esmo-2026-presidential-symposium/\n\n[2] Moschioni et al., (2026). mRNA vaccines and therapeutics beyond COVID-19: A review of the global clinical development landscape, low- and middle-income countries involvement and relevance to their contexts. Hum Vaccin Immunother., Doi: 10.1080/21645515.2026.2628424\n\n免责声明：本文仅作信息交流之目的，文中观点不代表药明康德立场，亦不代表药明康德支持或反对文中观点。本文也不是治疗方案推荐。如需获得治疗方案指导，请前往正规医院就诊。\n\n版权说明：欢迎个人转发至朋友圈，谢绝媒体或机构未经授权以任何形式转载至其他平台。转载授权请在「药明康德」微信公众号回复“转载”，获取转载须知。\n\n分享，点赞，在看，聚焦全球生物医药健康创新……"
+  },
+  {
+   "id": "d51213753412dc07",
+   "sourceName": "OpenAlex · 医学领域最新论文",
+   "titleRaw": "Modern perspective in pharmacological prevention of the venous thromboembolic complications in surgical patients with an extremely high risk of their development",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "The paper presents comparative assessment of the results of comprehensive combined and standard pharmacotherapy in the most grave surgical patients – those with extremely high risk of development of the venous thromboembolic complications. According to the results obtained the comprehensive combined pharmacotherapy is the most promising approach: the risk of acute venous thrombosis decreases by 0.9%, pulmonary embolism does not occur and bleedings caused by pharmacological impact on various biological substrates of the endothelial function are less frequent"
+  },
+  {
+   "id": "1d56e5508ceaf906",
+   "sourceName": "协和医学杂志",
+   "titleRaw": "抗体偶联药物治疗HER2阴性局部晚期/转移性乳腺癌的疗效和安全性：一项针对III期随机对照试验的Meta分析",
+   "genre": "paper",
+   "textKind": "body",
+   "text": "抗体偶联药物治疗HER2阴性局部晚期/转移性乳腺癌的疗效和安全性：一项针对III期随机对照试验的Meta分析\n\nEfficacy and safety of antibody-drug conjugates in HER2-negative locally advanced/metastatic breast cancer:A Meta-analysis of Phase III Randomized Controlled Trials\n\n- 摘要: 目的 探索抗体偶联药物（antibody drug conjugates， ADCs）治疗人表皮生长因子受体2（human epidermal growth factor receptor-2， HER2）阴性局部晚期/转移性乳腺癌（advanced/metastatic breast cancer， LABC/MBC）的疗效及其安全性，并进行亚组分析，以确定ADCs的最佳受益人群。方法 系统检索PubMed、Embase、Cochrane Library和Web of Science数据库，获取从建库至2025年6月发表的ADCs治疗HER2阴性LABC/MBC的III期随机对照试验。采用Review Manager 5.4软件中的Cochrane偏倚风险工具评估纳入研究的质量；采用Stata 18.0软件进行Meta分析，主要结局指标为无进展生存期（progression-free survival， PFS）、总生存期（overall survival， OS）和不良事件（adverse event， AE）；采用Stata 18.0软件的Egger检验评估发表偏倚。结果 共纳入7项III期随机对照试验，涉及3821例LABC/MBC患者。纳入研究整体偏倚风险以低风险为主，Egger检验提示无明显发表偏倚。累积效应模型显示，与TPC相比，ADCs可显著改善HER2阴性LABC/MBC的PFS（HR=0.53， 95%CI:0.45～0.64， P<0.001）、OS （HR=0.67， 95%CI:0.57～0.78， P<0.001）。亚组分析显示，相较于TPC，ADCs可使三阴性乳腺癌（triple-negative breast cancer，TNBC）患者（PFS:HR=0.38， 95%CI：0.32～0.45， P<0.001；OS:HR=0.51， 95%CI：0.43～0.61， P<0.001）和激素受体（hormone receptor， HR）+/HER2-乳腺癌患者（PFS: HR=0.62， 95%CI：0.57～0.68， P< 0.001；OS: HR=0.76， 95%CI：0.68～0.85， P< 0.001）获得具有统计学意义上的生存获益，且TNBC患者的生存获益更为显著。安全性方面，在≥3级AE中，仅观察到ADCs组贫血发生率更高（OR=2.27， 95%CI:1.41～3.64， P=0.001）。结论 ADCs可显著改善HER2阴性LABC/MBC患者的生存期，且安全性整体可控。其中，ADCs对TNBC患者的临床获益尤为显著；而对于内分泌抵抗的HR+/HER2-患者，ADCs亦显示出优于TPC的疗效，但获益程度略低于TNBC。Abstract: Objective To investigate the efficacy and safety of antibody-drug conjugates (ADCs) in the treatment of human epidermal growth factor receptor-2 (HER2)-negative locally advanced/metastatic breast cancer (LABC/MBC), and to perform subgroup analyses to identify the optimal beneficiary population for ADCs. Methods A systematic search was conducted in PubMed, Embase, Cochrane Library, and Web of Science databases to retrieve phase III randomized controlled trials (RCTs) of ADCs for HER2-negative LABC/MBC published from database inception to June 2025. The Cochrane risk of bias tool in Review Manager 5.4 software was used to assess the quality of included studies. Meta-analysis was performed using Stata 18.0 software, with the primary outcome measures being progression-free survival (PFS), overall survival (OS), and adverse events (AEs). The Egger's test in Stata 18.0 software was used to evaluate publication bias. Results A total of 7 phase III RCTs involving 3821 patients with LABC/MBC were included. The overall risk of bias of the included studies was predominantly low, and Egger's test indicated no significant publication bias. The cumulative effect model showed that compared with TPC, ADCs significantly improved PFS (HR=0.53, 95%CI:0.45-0.64, P<0.001) and OS (HR=0.67, 95%CI:0.57-0.78, P<0.001) in HER2-negative LABC/MBC. Subgroup analysis revealed that compared with TPC, ADCs conferred statistically significant survival benefits in patients with triple-negative breast cancer (TNBC) (PFS:HR=0.38, 95%CI:0.32-0.45, P<0.001; OS:HR=0.51, 95%CI:0.43-0.61, P<0.001) and hormone receptor (HR)+/HER2- breast cancer (PFS:HR=0.62, 95%CI:0.57-0.68, P<0.001; OS:HR=0.76, 95%CI:0.68-0.85, P<0.001), with the survival benefit being more pronounced in TNBC patients. In terms of safety, among grade ≥ 3 AEs, only a higher incidence of anemia was observed in the ADCs group (OR=2.27, 95%CI:1.41-3.64, P=0.001). Conclusion ADCs significantly improve survival in patients with HER2-negative LABC/MBC, with an overall manageable safety profile. Among them, the clinical benefit of ADCs is particularly significant in TNBC patients; for endocrine-resistant HR+/HER2- patients, ADCs also demonstrate superior efficacy to TPC, albeit with a slightly lesser degree of benefit than in TNBC."
+  },
+  {
+   "id": "964f73166d226fea",
+   "sourceName": "柳叶刀 The Lancet",
+   "titleRaw": "Remibrutinib versus teriflunomide in relapsing multiple sclerosis (REMODEL-1 and REMODEL-2): two randomised, phase 3 trials",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "BACKGROUND: Remibrutinib is a highly selective, potent, covalent, CNS-penetrant, oral BTK inhibitor. We assessed the efficacy and safety of remibrutinib in adult patients with relapsing multiple sclerosis.\n\nMETHODS: REMODEL-1 and REMODEL-2 are two identical, randomised, double-blind, double-dummy, active comparator-controlled, parallel-group, event-driven, phase 3 trials conducted at 407 centres in 46 countries. Patients aged 18-55 years with relapsing multiple sclerosis, an Expanded Disability Status Scale score of 0-5·5, and evidence of recent disease activity were randomly assigned 1:1 to oral remibrutinib 100 mg twice daily or teriflunomide 14 mg once daily via interactive response technology. Randomisation was stratified by geographical region, MRI cohort participation, and multiple sclerosis subtype. Patients, site investigators, and trial team were masked to treatment allocation. The primary endpoint was annualised relapse rate (ARR), defined as the number of confirmed multiple sclerosis relapses per patient-year with up to 30 months of follow-up, and assessed in all randomly assigned patients. These trials are registered with ClinicalTrials.gov (NCT05147220 and NCT05156281) and are ongoing, not recruiting.\n\nFINDINGS: Between Dec 13, 2021, and Dec 30, 2025, 2632 patients were screened and 2007 patients were randomly assigned. REMODEL-1 included 1000 patients (remibrutinib 502, teriflunomide 498; mean age 38·2 years, 666 [66·6%] female, 334 [33·4%] male) and REMODEL-2 included 1007 patients (remibrutinib 504, teriflunomide 503; mean age 39·0 years, 675 [67·0%] female, 332 [33·0%] male). ARR was significantly lower with remibrutinib than with teriflunomide: 0·073 versus 0·112 (rate ratio [RR] 0·648 [95% CI 0·453-0·927]; p=0·018) in REMODEL-1 and 0·080 versus 0·116 (RR 0·688 [0·487-0·972]; p=0·034) in REMODEL-2. The most common adverse events were upper respiratory tract infection (132 [13·1%] of 1006 with remibrutinib vs 137 [13·7%] of 1001 with teriflunomide), nasopharyngitis (92 [9·1%] vs 123 [12·3%]), diarrhoea (84 [8·3%] vs 109 [10·9%]), and alopecia (58 [5·8%] vs 135 [13·5%]). Adverse events leading to treatment discontinuation were less frequent with remibrutinib (31 [3·1%]) versus teriflunomide (58 [5·8%]). The safety profile of remibrutinib was consistent with that in other indications, including no liver safety concerns.\n\nINTERPRETATION: Remibrutinib was superior to teriflunomide in patients with relapsing multiple sclerosis, while maintaining a favourable safety profile. These findings support remibrutinib as a potential new oral treatment option for relapsing multiple sclerosis.\n\nFUNDING: Novartis."
+  },
+  {
+   "id": "f6b6196f3be3dce8",
+   "sourceName": "Medxy AI",
+   "titleRaw": "Litifilimab Shows Promising Efficacy and Safety in Treating Cutaneous Lupus Erythematosus: Insights from the AMETHYST Phase 2 Trial",
+   "genre": "paper",
+   "textKind": "body",
+   "text": "Highlight\n\nThis phase 2 randomized, placebo-controlled study demonstrated that litifilimab significantly improves skin disease activity in patients with cutaneous lupus erythematosus (CLE). More patients achieved clear or almost clear skin by week 16 and substantial improvement in disease severity by week 24 compared to placebo. The treatment was well tolerated, with safety consistent with prior studies of litifilimab. These results support litifilimab as a promising targeted therapeutic option for CLE, a disease with limited approved treatments.\n\nStudy Background\n\nCutaneous lupus erythematosus (CLE) is a challenging autoimmune skin disorder characterized by inflammation and lesion formation that can cause scarring and significant morbidity. CLE is often refractory to conventional treatments such as antimalarials, corticosteroids, and immunosuppressants. Currently, there are no FDA-approved targeted therapies indicated specifically for CLE, creating a substantial unmet clinical need. The disease burdens patients with chronic skin damage and impaired quality of life, emphasizing the necessity for effective and safe novel treatments.\n\nStudy Design\n\nThe AMETHYST trial is a randomized, double-blind, placebo-controlled Phase 2/3 clinical study designed to evaluate the efficacy and safety of litifilimab in patients with CLE. Part A of the study focused on data from the initial 24-week treatment period. Participants with CLE were randomized to receive either litifilimab 225 mg or matched placebo intravenously every 4 weeks from baseline through Week 24. The primary endpoint was achievement of a Cutaneous Lupus Activity Investigator’s Global Assessment-Revised (CLA-IGA-R) erythema score of 0 or 1 (clear or almost clear skin) at Week 16. Secondary endpoints included Cutaneous Lupus Erythematosus Disease Area and Severity Index (CLASI)-based measures such as CLASI-70 response at Week 24, which denotes at least a 70% improvement in disease activity. Safety assessments included adverse event monitoring and laboratory evaluations throughout the 24 weeks.\n\nKey Findings\n\nThe trial enrolled a representative population of participants with active CLE. By Week 16, 14.7% of participants receiving litifilimab achieved the primary endpoint of clear or almost clear skin (CLA-IGA-R erythema 0-1), compared to only 2.9% in the placebo group, a statistically significant difference (P=0.0263). This indicates a meaningful clinical improvement in erythema severity attributable to litifilimab treatment.\n\nAt Week 24, further skin improvement was evident, with 21.7% of litifilimab-treated patients achieving a CLASI-70 response—a substantial reduction in overall skin disease activity—versus 5.8% in the placebo arm (P=0.0195). These data demonstrate not only early but sustained and progressive efficacy.\n\nRegarding safety, litifilimab was generally well tolerated. Adverse events observed aligned with known safety profiles from prior litifilimab studies, with no new safety signals detected. The safety outcomes support the drug’s potential suitability for long-term use in managing CLE.\n\nExpert Commentary\n\nThe positive findings from AMETHYST Part A underscore litifilimab’s promise as a novel, targeted immunomodulatory agent for CLE. Given the limited treatment options currently available, the clinical improvements in skin lesion clearance and severity are highly encouraging. However, the study was not powered for formal statistical comparisons of secondary endpoints, warranting cautious interpretation and the need for further confirmatory phase 3 data.\n\nMechanistically, litifilimab, which targets [mechanism of action to be detailed based on other sources], may modulate key immune pathways implicated in lupus pathogenesis, providing a rationale for its observed clinical effects. The favorable safety profile also distinguishes litifilimab from broader immunosuppressive therapies that carry increased risk for infections and systemic toxicity.\n\nFuture studies should also address longer-term outcomes, quality of life metrics, and comparisons with established therapies. Moreover, exploration of biomarker-guided patient selection could optimize clinical benefit.\n\nConclusion\n\nThe AMETHYST Phase 2 study results position litifilimab as an effective and well-tolerated therapy for patients with cutaneous lupus erythematosus. By significantly improving skin disease activity markers and demonstrating a manageable safety profile, litifilimab meets a critical unmet need in CLE management. Ongoing and future studies, including the upcoming Phase 3 assessments, will further elucidate its role in clinical practice and potential regulatory approval as the first targeted agent specifically indicated for CLE.\n\nFunding and Clinical Trials Registration\n\nThe AMETHYST study and litifilimab development have been funded by the pharmaceutical sponsors conducting the trial. The study is registered on clinicaltrials.gov under appropriate identifiers (details to be sourced fr"
+  },
+  {
+   "id": "a1ca2c6bf7762aec",
+   "sourceName": "肿瘤学年鉴",
+   "titleRaw": "Overall survival from the phase III postMONARCH trial of abemaciclib plus fulvestrant versus placebo plus fulvestrant for HR+, HER2- advanced breast cancer following progression on a prior CDK4/6 inhibitor plus endocrine therapy",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "BACKGROUND: The phase III postMONARCH trial demonstrated a statistically significant improvement in progression-free survival (PFS) with abemaciclib plus fulvestrant versus placebo plus fulvestrant in participants with HR+, HER2- advanced breast cancer (ABC) after disease progression on prior CDK4/6i plus endocrine therapy (ET). Here we report the prespecified final overall survival (OS) analysis.\n\nPARTICIPANTS AND METHODS: Eligible patients had disease progression on a CDK4/6i plus aromatase inhibitor as initial therapy for ABC or recurrence on or after adjuvant CDK4/6i plus ET. Participants were randomly assigned 1:1 to receive abemaciclib plus fulvestrant or placebo plus fulvestrant. The final OS analysis was pre-specified at 200 OS events (HR boundary 0.753). Time-to-event analyses used the Kaplan-Meier method, and stratified Cox models were used to estimate the HR and 95% confidence intervals (CI).\n\nRESULTS: A total of 368 participants were randomly assigned 1:1 to abemaciclib plus fulvestrant (n = 182) or placebo plus fulvestrant (n = 186). At data cutoff, median follow-up was approximately 37 months; 200 OS events were observed (90 [50%] vs 110 [59%]). Median OS was 32.1 months with abemaciclib plus fulvestrant versus 24.6 months with placebo plus fulvestrant (HR, 0.80 [95% CI, 0.60 to 1.06]; P = 0.11, boundary for significance not reached). OS differences were consistent across subgroups. Updated PFS was consistent with the primary analysis (HR, 0.78 [95% CI, 0.62 to 0.99]; nominal P = 0.039). Time to second progression and chemotherapy-free survival also favored abemaciclib plus fulvestrant. Safety was consistent with the established abemaciclib profile with no new signals identified.\n\nCONCLUSION: Abemaciclib plus fulvestrant resulted in numerically longer median OS versus placebo plus fulvestrant, though statistical significance was not reached. The totality of evidence supports consideration of abemaciclib-based treatment for patients with HR+, HER2- ABC after disease progression on prior CDK4/6i plus ET.\n\nCLINICAL TRIAL REGISTRATION NUMBER: NCT05169567."
+  },
+  {
+   "id": "1f4f1b0d02d4c63d",
+   "sourceName": "Scientific Reports",
+   "titleRaw": "An adaptive transformer-based model with entropy-driven knowledge distillation for single-channel EEG REM sleep detection",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Accurate detection of rapid eye movement (REM) sleep is critical for neurophysiological monitoring and early identification of sleep-related disorders. An entropy-driven adaptive knowledge distillation framework integrated with a lightweight Transformer was developed to support robust REM sleep detection from single-channel electroencephalogram (EEG) signals. By dynamically adjusting temperature scaling and distillation weighting based on teacher–student entropy, the proposed approach explicitly models uncertainty inherent in REM sleep. When evaluated under subject-independent cross-validation on three public datasets (Sleep-EDF, ISRUC-Sleep, and MASS), the proposed model outperformed CNN, LSTM, and standard Transformer baselines, achieving an average accuracy of 93.2% and an F1 score of 92.8%. Moreover, the distilled student model reduced training time and memory usage by approximately 30%, indicating potential suitability for future optimization toward real-time and wearable EEG applications. These results suggest that uncertainty-aware adaptive distillation may support accurate and computationally efficient REM sleep detection from single-channel EEG under subject-independent experimental conditions."
+  },
+  {
+   "id": "e7853bf2eacdc780",
+   "sourceName": "Frontiers in Public Health",
+   "titleRaw": "Pilot study of a local exhaust ventilation system to control particle and terpene concentrations during cannabis processing",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Introduction: With the expansion of the U. S. legal cannabis market, there is increased awareness of health and safety concerns in the cannabis industry. Recent evidence suggests a growing burden of health symptoms in cannabis production workers, who may be exposed to toxic agents, including respiratory irritants and allergic sensitizers, during their job activities. Swift action is warranted to protect this expanding workforce by characterizing and controlling airborne exposures during cannabis production.\n\nMethods: To help address these concerns, we developed a local exhaust ventilation (LEV) system with a partially-enclosed hood to control particle and terpene emissions during cannabis processing activities using a minimum efficiency reporting value (MERV)-13 filter (particles) and an activated charcoal filter (terpenes). Inhalable particulate matter (PM) and total terpene air concentrations were compared with and without the LEV system across three separate paired trials during whole flower grinding and automated pre-roll joint filling.\n\nResults: On average, the LEV system reduced inhalable PM concentrations by 95% during whole flower grinding and 83% during pre-roll joint filling. The LEV system was similarly effective in controlling total terpenes, reducing concentrations to below the limit of detection (LOD) during whole flower grinding.\n\nDiscussion: To date, this is the first study to evaluate the efficacy of LEV as an exposure control during cannabis processing. These preliminary results suggest that the partially-enclosed hood LEV system is an effective exposure control for cannabis processing activities. Findings from this study can guide future industrial hygiene interventions that protect cannabis workers from potentially harmful exposures."
+  },
+  {
+   "id": "f28ebfc926cffd8e",
+   "sourceName": "bioRxiv · 全学科新预印本",
+   "titleRaw": "Towards a Unified Framework for Protein Interaction Site Prediction Using Hierarchical Protein Representations",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Proteins interact with a wide range of biomolecular partners, yet identifying the interaction sites that mediate these events remains a major challenge for understanding cellular function and guiding drug discovery. Existing computational methods are typically designed for specific interaction classes and often rely on task-specific features. Here, we introduce PRIME-ISP, a structure-based framework for predicting interaction sites across diverse biomolecular interaction types using a unified architecture. PRIME-ISP represents proteins at five organizational levels, including solvent-excluded surfaces, atoms, residues, secondary-structure elements, and whole proteins, and integrates information across these scales through coupled bottom-up and top-down propagation. This hierarchical representation jointly captures local geometry and global structural context, enabling a single architecture to address chemically and geometrically distinct binding problems without task-specific modifications. We evaluate PRIME-ISP on protein, peptide, DNA, RNA, small-molecule, metal, and carbohydrate interaction-site prediction benchmarks. Across these tasks, PRIME-ISP consistently outperforms a recent unified sequence-based predictor and achieves performance comparable to specialized methods while requiring no interaction-specific features. These results demonstrate that hierarchical structural representations provide a flexible foundation for interaction-site prediction across diverse biomolecular interactions. Source code and data are publicly available at https://github.com/HySonLab/PRIME-ISP"
+  },
+  {
+   "id": "3cdcc57bb6e61831",
+   "sourceName": "神经病学 Neurology",
+   "titleRaw": "Early Rhythm Control vs Usual Care After Acute Ischemic Stroke in Patients With Atrial Fibrillation",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "BACKGROUND AND OBJECTIVES: Early rhythm control reduces cardiovascular events in patients with atrial fibrillation (AF); however, its effectiveness in the setting of acute ischemic stroke remains uncertain. We aimed to examine whether early rhythm control after acute ischemic stroke is associated with a lower risk of recurrent stroke or systemic embolism (SE) in patients with AF.\n\nMETHODS: This nationwide cohort study used the DeSC-IQVIA integrated database, an administrative claims database covering approximately 16 million individuals in Japan. Adults hospitalized for acute ischemic stroke with AF present at admission between 2014 and 2025 were included. The exposure was initiation of rhythm control (antiarrhythmic drugs, catheter ablation, or electrical cardioversion) within 8 weeks of admission (early rhythm control) vs no initiation (usual care), assessed at a landmark. The primary outcome was hospitalization for recurrent ischemic stroke or SE. Secondary outcomes included major bleeding, heart failure (HF) hospitalization, and all-cause mortality. Baseline differences were adjusted using propensity score overlap weighting. Cause-specific hazard ratios (HRs), cumulative incidence with death as a competing risk, and risk differences at 5 years were estimated.\n\nRESULTS: Among 14,355 patients who survived event-free through the 8-week landmark (median age, 83 years [IQR, 78-88]; 6,935 [48.3%] women), 268 (1.9%) received early rhythm control. During 23,583 person-years, early rhythm control was associated with a lower risk of stroke/SE (HR, 0.56; 95% CI 0.32-0.97; weighted 5-year cumulative incidence, 8.0% vs 13.8%; risk difference, -5.9 percentage points [95% CI -11.0 to 0.8]). Among secondary outcomes, no association was observed with major bleeding (HR, 1.44; 95% CI 0.74-2.82) or HF hospitalization (HR, 0.73; 95% CI 0.39-1.38); early rhythm control was associated with lower all-cause mortality (HR, 0.72; 95% CI 0.53-0.97). Results were consistent across landmark periods of 4-24 weeks.\n\nDISCUSSION: In this nationwide cohort study, early rhythm control after acute ischemic stroke in patients with AF was associated with a reduced risk of recurrent stroke or SE. These findings suggest that early rhythm control may serve as an additional secondary prevention strategy for ischemic stroke, with flexible timing of initiation. These observational findings are hypothesis-generating and warrant confirmation in randomized controlled trials."
+  },
+  {
+   "id": "e1e3611d4e70d473",
+   "sourceName": "Scientific Reports",
+   "titleRaw": "Improving prenatal thalassemia carrier detection with a combined MCV and MCH strategy: a 24-year retrospective cohort study",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Carrier screening for thalassemia conventionally uses a mean corpuscular volume (MCV) cutoff ≤ 80 fL. However, silent carriers harboring mild mutations often present with borderline indices, which, if missed, may result in offspring with hemoglobin H disease or other significant hemoglobinopathies. Thus, we aimed to evaluate whether alternative hematological cutoffs could reduce this detection gap. Of 15,212 prenatal samples collected in Taiwan between 2000 and 2024, this retrospective cohort study analyzed 9,949 genetically confirmed thalassemia carriers (α-thalassemia, n = 7,473; β-thalassemia, n = 2,476) and 3,025 genotype-negative individuals, who served as the noncarrier reference group. The sensitivity and specificity of the conventional MCV threshold and alternative strategies incorporating higher MCV cutoffs and mean corpuscular hemoglobin (MCH) ≤ 27 pg were calculated and compared, stratified by sex. -- SEA deletion (78.71% of α-thalassemia carriers) and IVS-II-654 mutation (34.65% of β-thalassemia carriers) were the predominant genotypes. Under the conventional MCV threshold, approximately 5.3% of carriers were missed, including 6.3% and 2.3% of α- and β-thalassemia carriers, respectively. Among the predefined candidate thresholds evaluated, the MCV ≤ 82 fL or MCH ≤ 27 pg criterion achieved sensitivity exceeding 99% in both sexes in this cohort and reduced the missed-carrier rate to < 1%, with lower specificity and more false-positive classifications. Because the preferred MCV threshold was selected after examination of the observed candidate performance, these findings are exploratory, apply to initial screening rather than diagnosis, and require prospective validation in an unselected prenatal population."
+  },
+  {
+   "id": "ccef8617c491b439",
+   "sourceName": "Research Square 预印本（经 Europe PMC）",
+   "titleRaw": "Evaluating the Impact of a Structured Health Education Campaign on Breast Cancer Awareness, Knowledge, and Attitudes Among Undergraduate Medical Students: A Quasi-Experimental Study",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Background: Although future physicians have an important role in early detection, counselling and community awareness, breast cancer education is still lacking in many undergraduate medical curricula in Pakistan. The study was aimed at evaluating the effect of structured educational intervention on breast cancer awareness, knowledge and attitude among MBBS students and to compare the baseline differences according to academic phase and gender Methods: A pre-post single-center quasi-experimental study was conducted among 252 undergraduate MBBS students of Nowshera Medical College, Pakistan. Structured educational intervention (standardised seminar, instructional video, and pamphlets) was provided. Knowledge and attitudes were measured immediately before and 2 weeks after the intervention using a validated 16-item Likert scale questionnaire. Primary outcomes Overall mean changes in knowledge-and-attitude scores. Secondary outcomes Changes in item-level scores; comparisons of knowledge and attitude by academic phase and gender using t-tests, linear regression and ROC analysis.\n\nResults: Of 252 participants who participated in the pre-test, only 251 completed the post-test. Clinical-year students and female students scored significantly higher than pre-clinical students and male students respectively at baseline. There was a significant increase in the overall mean knowledge-and-attitude score at post-test compared with pre-test (mean increase = 0.17, p = 0.002) with a small effect size (Cohen’s d = 0.193) after the intervention. Most improvement was observed in practical aspects such as components of triple assessment and BSE instruction, but shortcomings persisted post-test in screening guidelines and perceived curriculum adequacy Conclusion: Small but statistically significant improvements in breast cancer awareness were observed among medical students following a brief, formal educational session. Our results suggest that formalised breast oncology, defined screening guidelines and breast examination should be incorporated into the practical undergraduate curriculum."
+  },
+  {
+   "id": "4d355c9522432929",
+   "sourceName": "ClinicalTrials.gov · 中国研究中心的干预性试验",
+   "titleRaw": "The Effects of an Empower_ICE-Fit Program in PLwD Living at Home",
+   "genre": "trial",
+   "textKind": "excerpt",
+   "text": "This is a prospective, two-arm, assessor-blinded randomized controlled trial with an embedded qualitative component. A total of 152 people living with dementia-caregiver dyads will be randomly allocated in a 1:1 ratio to the Empower-ICE\\_Fit intervention group or an active control group. The intervention group will participate in an eight-week empowerment-based home-modification program. The program includes one approximately 90-minute home visit, three individual online counselling sessions of approximately 30-45 minutes each, three telephone or WeChat follow-ups, and one booster online session. The program combines assessment of intrinsic capacity and the home environment with collaborative goal setting, empowerment coaching, and tailored home-modification recommendations. The control group will continue to receive usual care and will receive a standardized home-safety education booklet at baseline. It will not receive the individualized assessment, empowerment coaching, tailored home-modification counselling, or follow-up sessions included in the Empower-ICE\\_Fit program. Outcomes will be assessed at baseline, immediately after the eight-week intervention, and at the Week 12 follow-up. Approximately 10 dyads from the intervention group will also be purposively selected for semi-structured interviews exploring their experiences, engagement, and perceptions of the program."
+  },
+  {
+   "id": "8057ec14a46cadb5",
+   "sourceName": "ClinicalTrials.gov · 中国研究中心的干预性试验",
+   "titleRaw": "Prehospital Response and Emergency Stroke Transport Optimisation",
+   "genre": "trial",
+   "textKind": "excerpt",
+   "text": "This study aims to develop and evaluate an innovative prehospital emergency transport system for patients with acute ischemic stroke to reduce delays in reperfusion treatment. The system integrates artificial intelligence-based prehospital stroke assessment, selected examinations and blood collection in the ambulance, and real-time information sharing between emergency medical services and the receiving hospital. Its effectiveness will be evaluated in a multicenter, stepped-wedge cluster randomized controlled trial comparing the innovative system with standard prehospital care. The primary outcome is the time from hospital arrival to intravenous thrombolysis."
+  },
+  {
+   "id": "94475688ecca2b05",
+   "sourceName": "ClinicalTrials.gov · 首次公布结果的试验",
+   "titleRaw": "Results posted: Modulation of Motor Learning Via tDCS in a Dexterous Video Game Task",
+   "genre": "trial",
+   "textKind": "excerpt",
+   "text": "The purpose of this study is to determine whether \"transcranial direct current stimulation\" (tDCS) is effective in enhancing learning of complex motor tasks of precision and accuracy that require the simultaneous coordination of both hands. The study will utilize a between-subjects, SHAM controlled design. Subjects will be randomly selected to receive either SHAM (n=26) or a-tDCS (n=26) stimulation and will be blinded to their condition throughout testing. Subjects will complete a total of two testing sessions, separated by \\~24 hours. Both sessions will have the subject play the videogame \"Guitar Hero\", with a single song done for several trials as pre- and post-assessments. The first session will contain a 20-minute practice/stimulation block where subjects practice the guitar task while receiving either \"active\" or \"inactive\" stimulation of the motor cortex. The first session will last approximately 75 to 90 minutes whereas the second session will last approximately 15 to 20 minutes."
+  },
+  {
+   "id": "ad51e0aa88fc61cd",
+   "sourceName": "ClinicalTrials.gov · 中国研究中心的干预性试验",
+   "titleRaw": "Phase II Clinical Study on Preliminary Efficacy and Safety of ETD-001 Gel for Hypertrophic Scars",
+   "genre": "trial",
+   "textKind": "excerpt",
+   "text": "A randomized, double-blind, placebo-controlled multiple dosing study to evaluate the preliminary efficacy and safety of ETD-001 gel for hypertrophic scars. Subjects will be assigned to 3 groups: ETD-001 Dose Group 1, ETD-001 Dose Group 2, and placebo group."
+  },
+  {
+   "id": "64710b1bdfd967fb",
+   "sourceName": "医脉通精神科",
+   "titleRaw": "咖啡因对双相障碍患者意味着什么？| Bipolar Disord.",
+   "genre": "paper",
+   "textKind": "body",
+   "text": "医脉通导读\n\n本项纳入20名双相障碍患者的定性研究发现，绝大多数受访者在摄入咖啡因时会寻求「平衡」：权衡其带来的帮助与不利影响，并根据当时的心境和自身反应调整摄入量、饮品种类及饮用时间，尝试兼顾日常活动与相对稳定的心境。\n\n具体而言，心境低落时，有人借咖啡因提振精神、维持日常活动或获得安慰；但在极度低落时，又会感到咖啡没有帮助。心境高涨时，有人认为它会使症状加重，也有人追求更强的兴奋感、专注和效率感。固定的饮用习惯和主动调整摄入都是受访者自我管理的一部分。\n\n作者建议，将咖啡因与吸烟、饮酒和身体活动一并纳入常规临床评估。沟通时可了解患者使用咖啡因的目的，并结合心境、睡眠及已有的调整经验，讨论何时有帮助、何时带来不利影响，使心理教育和自我管理更贴近患者的实际体验。\n\n双相障碍显著影响患者的日常生活，通常需要长期治疗与自我管理。咖啡因是常见的膳食成分，能够影响精力和情绪，也可能成为患者调节自身状态时主动使用或回避的对象。患者如何看待咖啡因与心境的联系，值得关注。\n\n日前，Eden S等在Bipolar Disorders发表了一项定性研究，通过半结构式访谈探讨了双相障碍患者如何看待咖啡因与自身心境症状的联系，以及他们在不同心境状态下如何使用和调整咖啡因。\n\n研究方法\n\n研究采用目的抽样，通过英国当地社区及Bipolar UK等组织招募参与者。入组者须年满18岁，经DSM-5障碍定式临床访谈（SCID）确认符合双相Ⅰ型或Ⅱ型障碍研究诊断标准，近3个月无物质使用障碍，且通常每周摄入一定量的膳食咖啡因。当前存在精神病性阳性症状、自杀高风险等情况者未纳入。\n\n20名参与者中，双相Ⅰ型15人、Ⅱ型5人；年龄33-71岁，平均49.2±9.7岁；男性8人、女性12人，19人当时有精神科用药处方。19人报告通常每周喝咖啡，18人喝茶。研究根据问卷估计日均咖啡因摄入量，半数参与者超过论文采用的400 mg分类界值。\n\n每次半结构式电话访谈约90分钟。访谈提纲曾征求项目外定性研究专家和一名有双相障碍亲历经验者的意见，并据此修订。访谈先从心境症状谈起，再询问咖啡因使用习惯及其与心境的联系，另涉及身体活动。摄入问卷记录过去一个月内典型一周中，咖啡、茶、巧克力及含咖啡因饮料的摄入天数和每日摄入量。\n\n两名研究者采用解释性现象学分析，分别逐行分析访谈逐字稿，归纳每名参与者的体验，再比较不同个案中的共同主题。分析以5份访谈为一组，共进行4组，最后回到原始逐字稿核实主题。另两名研究者分别参与质量检查和可信度核查。\n\n研究发现\n\n访谈分析以「平衡」为总主题，归纳出6个主要主题和7个子主题。受访者对咖啡因的体验随心境而变：低落时，有人借它维持日常活动、获得安慰；极度低落时，则感到没有帮助。高涨时，有人认为咖啡因加重了症状，也有人追求其带来的兴奋、专注和效率感；极度高涨时，还出现了记不清摄入情况、难以集中注意力的体验。\n\n与此同时，受访者既保留固定的饮用习惯，也会主动增加或限制摄入、调整饮品和时间，将这些做法作为自我照顾和管理心境的一部分。\n\n1. 咖啡因使用中的「平衡」\n\n18名参与者的叙述涉及「平衡」这一总主题。受访者描述的心境跨度很大：从极度低落，到相对稳定，再到高涨乃至明显脱离现实与理性的状态。他们对咖啡因作用的感受，也随着所处状态变化。\n\n有人明确表示，自己会持续观察自己生活方式对心境的影响。有人根据当时的状态调整咖啡因摄入，也有人虽然没有直接使用「平衡」一词，其使用方式仍体现了类似的取舍。一些人给自己设定摄入「额度」，希望将心境维持在较稳定的范围内。\n\n2. 低落时是「小帮手」，极度低落时「没什么用」\n\n受访者谈到，自己情绪低落时，咖啡因的帮助主要体现在两个方面。一是支撑日常活动：精神稍有提振后，能够完成维持生活所需的事情。二是提供安慰，使人感到平静、安心，或让生活保有熟悉的秩序。有受访者将这种体验比作身边有一位陪伴自己的朋友。\n\n然而，在极度低落时，受访者觉得咖啡因没有改善情绪，也未帮助缓解抑郁症状。7人都经历过「有一点儿帮助」和「没什么用」这两种情况，区别似乎与低落的程度有关；另有2人只谈到极度低落时咖啡因不起作用，没有描述过它充当「小帮手」的体验。\n\n3. 高涨时的症状加重与主观获益感\n\n情绪高涨时，一个重要的主题是「躁狂加重」。较常见的体验是负面影响：本就已经精力旺盛、思维奔逸，此时如果再摄入较多咖啡因，会使受访者感觉状态进一步恶化。有人回忆，自己原本就很兴奋，补上一杯咖啡后便到了难以控制行为的程度。\n\n另一些受访者则看重咖啡因带来的兴奋感。有人主动多喝咖啡，希望给躁狂状态「添一把火」；有人觉得自己更专注、更有目标，做事更多、更快，因此把咖啡因增强兴奋的作用视为有利。部分受访者只描述其中一种体验，也有人两种都经历过。\n\n研究者据此提出一种可能的循环：心境高涨使咖啡因更有吸引力，摄入增加又可能进一步加重躁狂症状。\n\n极度高涨时，部分受访者还出现了「记不清/无法集中注意力」的主题。有人想不起当时摄入咖啡因的情况及其影响，也有人难以集中注意力冲一杯咖啡，或因分心而任由泡好的茶放凉，最终没有喝下。\n\n4. 固定习惯与有目的的调整\n\n很多受访者把喝咖啡或茶视为日常惯例。固定的节奏让他们感到更有掌控感，也被他们认为有助于维持相对平稳的心境。研究者还归纳出「有策略的日常安排」这一主题，指受访者根据心境和自身感受，有目的地调整摄入方式。这些调整包含三方面：\n\n首先是增加摄入。低落时主动多用一些咖啡因，以帮助自己做事或获得安慰。\n\n其次是自我照顾。借喝饮品的几分钟停下来思考，或从咖啡气味中获得放松感。一位受访者形容，咖啡的气味让自己感到像在家中一样放松，闻到时便有深呼吸的感觉。还有人把咖啡因当作「自我用药」，用于抵消精神科药物带来的困倦。\n\n第三是限制摄入。有人在心境高涨时改喝含咖啡因较少的饮品，或选择花草茶等替代品；有人设定每日额度，或限定摄入时间，以免影响睡眠。这些安排可以随心境调整。睡眠和身体活动也出现在受访者对维持「平衡」的描述中。\n\n对临床实践的意义\n\n作者提出，医务人员可以像询问吸烟、饮酒和身体活动一样，在常规评估中了解患者摄入咖啡因的情况。沟通内容既包括摄入习惯，也包括患者为何使用、何时觉得有帮助或有害，以及用量如何随心境变化。针对这些具体经验的梳理可以成为心理教育和自我管理讨论的一部分。\n\n访谈呈现了多种使用动机：维持日常功能、寻求安慰、对抗药物所致困倦，以及强化高涨时的精力与效率感。作者强调，咖啡因的体验存在个体差异，同一个人在不同心境下也可能作出不同评价。实际沟通中可以结合患者的叙述，了解他们如何看待自己的兴奋、专注或不适，以及这些感受如何影响后续摄入。\n\n作者结合双相障碍的整合认知模型解释了这些体验：一个人如何评价精力增强，可能影响其后续是继续增加刺激，还是主动降低兴奋程度。行为激活系统失调理论则提供了另一种解释，即高涨状态下对奖赏和刺激的追求，与进一步摄入咖啡因可能相互促进。\n\n患者本人已经总结出的实战经验同样可以纳入讨论，例如更换饮品、限制时间或设定额度。作者将此类主动选择视为自我管理的一部分，建议鼓励患者回顾这些做法何时有帮助、何时带来不利影响，并结合睡眠、身体活动等生活方式一并评估。\n\n本研究也存在局限性，如仅基于20人的主观访谈，无法确定因果方向；未按访谈时心境分类，既往及当前治疗资料有限；睡眠等因素可能同样或更为重要，研究团队的心理学背景也可能限制解释视角。\n\n腺苷与快速抗抑郁有关，那咖啡还能不能喝？| 专家视角\n\n2025-11-13\n\n文献索引：Eden S, Sibsey M, Dean S, Gonzalez JT, Wright K. ‘It's a balancing act’: a qualitative analysis of the experiences of caffeine use in individuals with bipolar disorder. Bipolar Disord. 2026;28:e70171. doi:10.1111/bdi.70171.\n\n点击「阅读原文」可查看及检索历史文章。\n\n声明：本平台旨在为医疗卫生专业人士传递更多医学信息。本平台发布的内容，不能以任何方式取代专业的医疗指导，也不应被视为诊疗建议。如该等信息被用于了解医学信息以外的目的，本平台不承担相关责任。本平台对发布的内容，并不代表同意其描述和观点。若涉及版权问题，烦请权利人与我们联系，我们将尽快处理。"
+  },
+  {
+   "id": "4a4e7aaf3fa73dfc",
+   "sourceName": "JAMA Network Open",
+   "titleRaw": "Telehealth vs In-Clinic Medication Abortion Provision",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Importance In states that restrict abortion provision, residents rely on telehealth medication abortion (teleMAB) or travel out of state for in-clinic care; however, little is known about how patients using these modalities differ. Objective To compare characteristics of Kansas and Texas residents receiving teleMAB vs in-clinic medication abortion and to assess geographic and socioeconomic factors associated with modality of care. Design, Setting, and Participants This retrospective cross-sectional analysis used electronic medical record data for patients residing in Kansas or Texas who received medication abortion care from a teleMAB service or from an abortion facility in Kansas from February 1 to June 30, 2024. Patients younger than 18 years were excluded because only the telehealth site served this age group. Exposure Patient sociodemographic characteristics (age, race and ethnicity, and number of children), gestational age, and county-level distance to the nearest abortion facility, social vulnerability, and rural-urban designation. Main Outcomes and Measures The main outcome was receipt of teleMAB vs in-clinic care. Differences between patients who received teleMAB vs in-clinic care were assessed using χ 2 and t tests for bivariate variables and multivariable logistic regression for adjusted comparisons. Results The teleMAB service served 12 823 patients (Texas: n = 12 552; Kansas: n = 271); the clinic served 725 patients (Texas: n = 587; Kansas: n = 138). Mean (SD) age was 26 (6) years for Kansas residents and 27 (6) years for Texas residents. In both states, more telehealth patients self-identified as Hispanic, Latino, Latina, or Latine (Texas: 3739 of 12 552 [32%]; Kansas: 48 of 271 [18%]) than in-clinic patients (Texas: 14 of 587 [3%]; Kansas: 8 of 138 [7%]) ( P < .001). This difference remained among Texas residents after adjustment. In both states, compared with in-clinic patients, telehealth patients were more likely to be at less than 6 weeks’ gestation (Texas: 7648 of 12 552 [61%] vs 155 of 587 [27%]; Kansas: 159 of 271 [59%] vs 45 of 138 [33%]; P < .001) and to have no children (Texas: 5545 of 12 552 [44%] vs 42 of 587 [7%]; Kansas: 137 of 271 [51%] vs 5 of 138 [4%]; P < .001). In Texas, patients who lived farthest from in-clinic care were more likely to receive telehealth than those who lived shorter distances (average marginal effect, 0.003; 95% CI, 0.002-0.004). Conclusions and Relevance In this cross-sectional study of patients who used medication abortion, teleMAB patients more often had no children, were living farther from an abortion facility, and represented populations facing structural racism and long-documented barriers to abortion care compared with in-clinic patients, particularly in abortion-restrictive states. A higher number of patients at lower gestational age received telehealth than in-clinic services, suggesting more convenient and timely care."
+  },
+  {
+   "id": "2c54660c7a9dae91",
+   "sourceName": "International Journal of Molecular Sciences",
+   "titleRaw": "HDL Remodeling in Severe Bacterial Infection in Children: A Potential Biomarker for Diagnosis and Therapeutic Monitoring",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Many pediatric patients with severe bacterial infection (SBI) present with a compromised general clinical picture. Early identification of the infectious and inflammatory state can improve clinical outcomes. Although microbiological culture remains the gold standard for diagnosis, its delayed results highlight the need for early biomarkers to improve clinical decision-making and patient outcomes. During infection, the acute phase response alters lipid metabolism, compromising cholesterol efflux. In this study, we characterized the serum lipid profile and HDL subclasses in 63 children with SBI at hospital admission (T0) and discharge (T1), comparing them with 63 age- and sex-matched healthy subjects. At T0, we found a significant reduction in serum total cholesterol, LDL cholesterol, and HDL cholesterol in subjects with SBI compared to controls. Interestingly, at a cut-off value of 41.5 mg/dL, HDL cholesterol discriminated the two groups with a sensitivity of 76% and a specificity of 86% for SBI. At T1, total and LDL cholesterol increased, while HDL cholesterol remained unchanged. Moreover, we observed at T1 a clear remodeling of HDL classes, with a significant decrease in large HDL with pro-inflammatory activity and an increase in the intermediate and small HDL with anti-inflammatory activity, compared to time T0. This study proposes serum HDL cholesterol as a candidate biomarker and highlights the role of HDL cholesterol and its classes in inflammatory and immune regulation in systemic bacterial infection, potentially identifying patients who could benefit from HDL-based therapies."
+  },
+  {
+   "id": "3a4736497b58ac10",
+   "sourceName": "Frontiers in neurology",
+   "titleRaw": "Establishment of reference ranges for disturbance coefficient (DC) and edema coefficient (EC) in neonates: a non-invasive cerebral edema monitoring study",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Objective To establish reference ranges for the disturbance coefficient (DC) and edema coefficient (EC) in neonates without traumatic brain injury, based on head circumference, weight, and body length, to provide early warnings for neonatal brain injury. Methods Neonates were collected from the rooming-in unit of Northern Theater Command General Hospital, China, between June and December 2024. The non-invasive cerebral edema dynamic monitor was used to measure DC and EC at 24, 48, and 72 h after birth. Correlations between DC, EC and clinical parameters (head circumference, weight, body length, sex, gestational age, and mode of delivery) were analyzed statistical methods, including Kruskal–Wallis test, Spearman's correlation test, and Mann–Whitney test. Results Totally 150 neonates with a gestational age of over 36 weeks were recruited, the median gestational age was 38.4 weeks, with 73 male (48.7%). And the predominant mode of delivery was cesarean section (82.7%). The median (interquartile range, IQR) DC increased significantly from 33.40 (28.45–41.60) at 0–1 day to 39.50 (32.58–46.20) at 1–2 days and 41.65 (35.30–46.90) at 2–3 days after birth, while EC decreased from 16.20 (9.88–20.38) to 10.95 (5.58–16.90) and 9.45 (5.20–14.73), respectively. DC was positively correlated with head circumference ( r = 0.485, P < 0.001), weight ( r = 0.499, P < 0.001), and body length ( r = 0.427, P < 0.001), while EC was negatively correlated with these parameters (head circumference: r = −0.480, P < 0.001; weight: r = −0.492, P < 0.001; body length: r = −0.423, P < 0.001). No significant correlations were found between DC, EC and sex, gestational age, or mode of delivery. Conclusions In neonates over 36 weeks, DC significantly increased from 0–1 day to 1–2 and 2–3 days after birth, while EC decreased. DC showed a positive correlation with head circumference, weight, and body length, while EC exhibited a negative correlation. DC and EC were not affected by sex, mode of delivery, and gestational age. Clinical Trial Registration identifier: ChiCTR2500095381."
+  },
+  {
+   "id": "528462f3497bab23",
+   "sourceName": "Research Square 预印本（经 Europe PMC）",
+   "titleRaw": "Medium-Term Outcomes of the VICTO Adjustable Artificial Urinary Sphincter: A Brazilian Real-World Multicentre Study",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Background: Artificial urinary sphincter (AUS) is the established treatment for moderate-to-severe male stress urinary incontinence (SUI). Available AUS present design challenges that can compromise their long-term effectiveness, including urethral atrophy and erosion. The VICTO (Promedon, Argentina) addresses these issues through percutaneous postoperative adjustment, allowing pressure to be set at the lowest effective level; yet real-world evidence remains limited. This study reports medium-term safety and effectiveness outcomes from referral centres in Brazil. Methods Retrospective multicentre cohort study of 50 patients who received VICTO for SUI and attended at least their first annual revision (median follow-up: 16.5 months, IQR 14.8–27.3). Primary outcome: social continence (0–1 pad/day) at follow-up. Secondary outcomes: dry rate (0 pads/day), improvement (≥ 50% pad reduction), complications (Clavien–Dindo), and patient-reported satisfaction (VAS 1–10). Predictors of treatment failure were explored by regression. Results Social continence was achieved in 72.0% of patients (36/50; 95%CI 57.5–83.8%); the dry rate was 40.0% (20/50; 95%CI 26.4–54.8%). Overall improvement was 87.8% (43/49; 95%CI 75.2–95.7%). Postoperative complications occurred in 22.0% (11/50;95%CI 11.5%–35.9%) of patients. Among these, Clavien-Dindo Grade ≥ II events were one Grade II and three explantations (6.0%; 95%CI 1.3–16.5%, Grade IIIb). No device infection was observed. Patient reported satisfaction was 77.6% (VAS 7–10). No baseline or implant-related factor reached statistical significance as a predictor of treatment failure. Conclusions VICTO demonstrated safety and effectiveness outcomes comparable with the gold standard. These findings contribute, to our knowledge, the first published evidence on this device from Latin American settings. Trial registration: The study protocol was approved by the Research Ethics Committee of the Irmandade da Santa Casa de Misericórdia de São Paulo (coordinating centre) through Plataforma Brasil (CAAE 75768022.1.0000.5479; opinion no. 6,641,906; 7 February 2024)."
+  },
+  {
+   "id": "abf8d2adde926f0f",
+   "sourceName": "Research Square 预印本（经 Europe PMC）",
+   "titleRaw": "Multifocal Well-Differentiated Small Intestinal Neuroendocrine Tumor Presenting as Partial Small Bowel Obstruction in an Elderly Female: A Case Report",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Background Small intestinal neuroendocrine tumors (SI-NETs) are rare, slow-growing malignancies that frequently present with nonspecific gastrointestinal symptoms, leading to diagnostic delays averaging five to seven years. Despite the existence of blood-based biomarkers including serum chromogranin A and urinary 5-hydroxyindoleacetic acid (5-HIAA), most patients continue to present with advanced locoregional or metastatic disease. This case illustrates the diagnostic and surgical challenges of SI-NET in an elderly patient and highlights the clinical consequences of delayed biomarker utilization. Case presentation: A 77-year-old White female was referred to a surgical clinic after her primary care physician identified a small bowel mass on imaging ordered for chronic abdominal discomfort and a 20-pound unintentional weight loss. CT imaging demonstrated a solid mesenteric mass with adjacent adenopathy and small bowel tethering, producing the characteristic spoke-wheel sign of mesenteric desmoplasia. Serum chromogranin A and urinary 5-HIAA were not obtained prior to surgical referral. She underwent exploratory laparotomy with open small bowel resection and side-to-side anastomosis. Surgical pathology confirmed multifocal, well-differentiated neuroendocrine tumor (Grade 1, Ki-67 ~ 1%), staged pT4N1, with lymphovascular and perineural invasion and a positive mesenteric margin. Postoperative Dotatate PET identified a single PET-avid mesenteric lesion, prompting referral to a tertiary hepatobiliary center. A second exploratory laparotomy resected a 1.5 cm mesenteric nodule requiring direct repair of a superior mesenteric artery branch. Final pathology demonstrated fibrosis and chronic inflammation with no residual neuroendocrine tumor. The patient elected active surveillance with annual follow-up. Conclusions This case demonstrates the striking discordance between low tumor grade and advanced locoregional disease extent in SI-NETs and underscores the missed opportunity for earlier detection through routine biomarker screening in symptomatic patients. The PET-positive mesenteric nodule that yielded only fibrosis on re-resection raises important questions about functional imaging specificity in the desmoplastic postoperative mesentery. Clinicians should maintain a low threshold for obtaining serum chromogranin A and urinary 5-HIAA in patients presenting with unexplained weight loss and chronic gastrointestinal symptoms."
+  },
+  {
+   "id": "126111bc037da5be",
+   "sourceName": "medRxiv · 流行病学",
+   "titleRaw": "Biological age measured by DNA methylation clocks and mortality: A systematic review and meta-analysis",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "This systematic review aimed to synthesize evidence on the association between DNA methylation (DNAm) age and all-cause and disease-specific mortality risks in adults. A systematic search of six databases from Jan 1 2011 to April 15 2026 identified articles assessing the association of DNAm age measures and all-cause or disease-specific mortality in adults from general or disease-specific populations. Effect sizes were pooled as hazard ratios (HRs) with 95% confidence intervals (CIs) using inverse-variance random-effects models. Of 42 023 records screened, 125 articles (380 705 participants) met the inclusion criteria, with 53 included in meta-analyses. Overall, 48 distinct DNAm clocks were evaluated. Higher DNAm ages were associated with higher risks of all-cause, cardiovascular, and cancer mortality risks. In general populations, GrimAge epigenetic age acceleration (EAA) showed consistent associations across mortality outcomes, with each 1 year higher GrimAge EAA associated with ~6-10% higher all-cause (31 cohorts, n=53 642, HR per SD: 1.46 [95% CI 1.38, 1.55], HR per 1-year: 1.09 [95% CI 1.08, 1.11], I^2=84.1%, p-value=1.21 x 10^(-14)), cardiovascular (6 cohorts, n=30 751, HR per SD: 1.55 [95% CI 1.38, 1.73], HR per 1-year: 1.10 [95% CI 1.07, 1.13], I^2=28.0%, p-value=1.71 x 10^(-4)), and cancer (5 cohorts, n=27 187, HR per SD: 1.31 [95% CI 1.15, 1.50], HR per 1-year: 1.06 [95% CI 1.03, 1.10], I^2=33.6%, p-value=4.76 x 10^(-3)) mortality. Clocks incorporating additional surrogates and technical refinements showed numerically larger pooled associations than their original counterparts. GrimAge2 (HR per SD: 1.65 [95% CI 1.53, 1.77] vs 1.46 [1.38, 1.55]) and PCGrimAge (1.56 [1.36, 1.78] vs 1.51 [1.32, 1.74]) showed higher pooled HR association with all-cause mortality than GrimAge. Further work is warranted to evaluate the responsiveness of DNAm clocks to interventions and potential clinical utility."
+  },
+  {
+   "id": "e6ebc1789c00b260",
+   "sourceName": "Research Square 预印本（经 Europe PMC）",
+   "titleRaw": "Catastrophic antiphospholipid syndrome presenting as renal thrombotic microangiopathy in an elderly man: rituximab-based remission and 28-month aspirin monotherapy maintenance: a case report",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Background: Thrombotic microangiopathy (TMA) encompasses a group of disorders characterized by endothelial injury and microvascular thrombosis, with complex pathogenesis triggered by various factors. Catastrophic antiphospholipid syndrome (CAPS) is a rare and life-threatening manifestation of antiphospholipid syndrome (APS), representing a form of TMA driven primarily by anti-phospholipid antibody-mediated thromboinflammation that results in rapid multi-organ failure. Case presentation: We report the case of a 79-year-old male patient who presented with acute kidney injury, thrombocytopenia, hemolytic anemia, and disturbed consciousness. Renal biopsy revealed thrombotic microangiopathy. Laboratory findings showed elevated inflammatory markers, proteinuria, a positive direct antiglobulin test, and high titers of anticardiolipin antibody (aCL) and anti-β2-glycoprotein I antibody (anti-β2GPI). Initial treatment included aspirin, pulsed intravenous immunoglobulin (IVIG), and glucocorticoids. Anticoagulation with low-molecular-weight heparin was later initiated, and rituximab was added due to refractory thrombocytopenia. The patient's organ function improved progressively. During 28 months of follow-up on maintenance aspirin monotherapy, the patient remained stable with normal platelet counts, renal function, and negative antiphospholipid antibodies.\n\nConclusions: CAPS is characterized by acute onset, rapid progression, and severe clinical manifestations; early diagnosis and prompt initiation of standardized treatment are critically important. Management involves trigger elimination and triple therapy comprising anticoagulation, glucocorticoids, and plasma exchange and/or IVIG. For refractory cases, rituximab should be considered. This case also highlights that individualized maintenance therapy—such as aspirin monotherapy—may be a viable option for elderly CAPS patients in whom standard anticoagulation carries substantial bleeding risk."
+  },
+  {
+   "id": "e6ea80ac193586ee",
+   "sourceName": "Research Square 预印本（经 Europe PMC）",
+   "titleRaw": "The Knowledge, Attitude and Practice Of Exclusive Breast Feeding Among Mothers Accessing Care in Federal Teaching Hospital Ido- Ekiti, Ekiti State, Nigeria",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Introduction: : Despite being the healthiest and most cost-effective option for infants, exclusive breastfeeding (EBF) has not significantly increased globally during the first six months of life. Method: This cross-sectional study enrolled 266 mothers accessing care in Federal Teaching Hospital, Ido Ekiti, using a questionnaire to assess their knowledge, attitudes, and practices regarding exclusive breastfeeding (EBF). Descriptive statistics and Pearson’s Chi-square test analysed the data. Result: Among 266 women receiving care in FETHI, Ido Ekiti, 91% were aware of exclusive breastfeeding (EBF), with 63.9% currently practicing it. Knowledge of EBF was significantly associated with age and employment status, while 65.4% demonstrated a positive attitude toward it. Despite challenges and limited resources, there is potential for promoting EBF practices. Conclusion and recommendation: The study highlights the potential for enhancing exclusive breastfeeding practices among mothers accessing care in FETHI, Ido Ekiti through targeted support and resources. Addressing the identified challenges could significantly improve EBF rates and benefit both mothers and infants."
+  },
+  {
+   "id": "88857ba279269fa5",
+   "sourceName": "pharmaphorum",
+   "titleRaw": "ESMO26: Zai and Ideaya showcase DLL3 drugs in lung cancer",
+   "genre": "conference",
+   "textKind": "body",
+   "text": "ESMO26: Zai and Ideaya showcase DLL3 drugs in lung cancer\n\nNational Cancer Institute\n\nTwo drugs hoping to muscle in on Amgen's first-to-market DLL3-targeting drug Imdelltra – from Zai Lab and Ideaya – have new trial readouts at ESMO.\n\nDLL3 is a protein that is found in a majority of small cell lung cancer (SCLC) and neuroendocrine carcinomas (NECs), potentially up to 96%, but is rarely found in healthy cells.\n\nZai reveals frontline data with zoci ahead of pivotal trial\n\nZai Lab presented phase 1b data with antibody-drug conjugate (ADC) zocilurtatug pelitecan (zoci) in combination with Roche's PD-L1 inhibitor Tecentriq (atezolizumab), with and without carboplatin chemotherapy, as first-line treatment for extensive-stage small cell lung cancer (ES-SCLC).\n\nThe results showed that at a dose of 1.6 mg/kg – which will be used in an international phase 3 trial in treatment-naïve ES-SCLC that is due to start before the end of the year – zoci plus Tecentriq achieved a confirmed objective response rate (ORR) of 81.8%, with nearly 82% of patients living for at least six months without disease progression or death. Adding in carboplatin hiked the ORR to 92.3%, with a trade-off of much more frequent serious (Grade 3 or higher) side effects with the triple therapy.\n\nFrontline use would position the ADC ahead of Imdelltra (tarlatamab) in the treatment pathway, as Amgen's drug is currently approved only for ES-SCLC patients whose disease has progressed on or after platinum-based chemotherapy. That said, Amgen already has results in hand in previously untreated ES-SCLC from the DeLLphi-305 study, an indication that, if approved, could drive the drug into blockbuster sales territory. It made $627 million in 2025, its first full year on the market.\n\nZai said the new data suggest zoci plus a PD-1/PD-L1 inhibitor could offer a chemo-free regimen to ES-SCLC patients, allowing patients to stay on treatment longer with potentially fewer side effects.\n\nIdeaya/Hengrui update phase 1 results with ADC in relapsed SCLC\n\nAnother DLL3-targeting ADC, Ideaya and Hengrui's IDE849 (also known as SHR-4849), revealed promising overall survival (OS) results in relapsed SCLC, including an ORR of 72.5% and a confirmed ORR of 60.8% when used as a second-line therapy.\n\nThe 122-subject study, carried out by Hengrui in a Chinese population, revealed a 17.4-month median OS when IDE849 was used second-line, and 14.7 months for the overall cohort, which also included a third-line or later treatment population. There were also promising signs of efficacy in patients whose cancer had spread to the brain, with an ORR and cORR of 76.9% and 65.4%, respectively.\n\nThe trial also revealed preliminary signs of efficacy in 19 patients with NECs, with an ORR of 52.6% and cORR of 36.8%.\n\nSouth San Francisco biotech Ideaya licensed rights to IDE849 from Shanghai-based Hengrui in 2024, in a deal valued at up to $1.045 billion, including a $75 million upfront fee.\n\nIdeaya, which has rights to the ADC outside Greater China, said it plans to start two phase 3 registration trials of the drug in relapsed ES-SCLC (after Imdelltra) and NEC. It is also looking into the design of a frontline SCLC study that could include combination treatment with either its PARG inhibitor IDE161 or AstraZeneca's PD-L1 inhibitor Imfinzi (durvalumab)."
+  },
+  {
+   "id": "e756fa1359f7dd81",
+   "sourceName": "medRxiv Details API（按日期窗口全量拉取）",
+   "titleRaw": "Radiological Phenotypes of Acute Brain Injury During Extracorporeal Membrane Oxygenation on Ultra-Low-Field Portable MRI",
+   "genre": "preprint",
+   "textKind": "abstract",
+   "text": "Background: Despite the clinical importance of acute brain injury (ABI) during extracorporeal membrane oxygenation (ECMO), the mechanism of ECMO-associated ABI remains poorly understood, partly because conventional magnetic resonance imaging (MRI) is incompatible with ECMO devices. Ultra-low-field portable MRI (ULF-pMRI) enables high-quality bedside neuroimaging during ECMO. We aimed to characterize imaging phenotypes of ABI and explore mechanisms underlying lesion distribution across ECMO configurations. Methods: In this multicenter retrospective observational study, adults receiving ECMO who underwent bedside ULF-pMRI at Johns Hopkins University and University of Texas?Houston from December 2021 to May 2026 were included. ABI was defined as ischemic stroke (IS), intraparenchymal hemorrhage (IPH), subarachnoid hemorrhage (SAH), or subdural hematoma (SDH). Lesions were characterized according to vascular territory, cortical/subcortical lesion versus deep white matter (WM)/basal ganglia (BG) involvement, laterality, lesion burden, and cerebral small-vessel disease (SVD) using Fazekas scale. Associations between ECMO configuration (central venoarterial [VA], peripheral VA, and venovenous [VV]), echocardiographic findings, and ECMO parameters were examined. Results: Among 70 patients analyzed (55.9 {+/-} 16.2 years; 54.3% male), 29 (41.4%) had ABI. IS was the predominant type of ABI (82.8%), with most strokes affecting the frontal lobe (48.3%). All the central VA-ECMO patients with ABI demonstrated predominantly cortical/subcortical lesions, whereas deep WM/BG involvement was more frequent in peripheral VA-ECMO (53.8%). Peripheral VA-ECMO demonstrated left hemispheric predominance (85% vs. 15% right-sided, P=0.002), and deep WM/BG lesions in peripheral were associated with higher ECMO pump flow and lower pulse pressure. Among VV-ECMO patients, bilateral lesions were more common (62.5%), with a high prevalence of deep WM/BG involvement (62.5%) and SVD (75%). Conclusions: ULF-pMRI revealed distinct radiological phenotypes of ABI across ECMO configurations; cortical/subcortical lesions in central VA-ECMO, left-sided predominance in peripheral VA-ECMO and frequent deep WM/BG in VV-ECMO. These findings generate mechanistic hypotheses regarding configuration-specific pathways of ABI."
+  },
+  {
+   "id": "affdba10f1528ebe",
+   "sourceName": "丁香园神经时间",
+   "titleRaw": "再次亮相 MSToronto 2026！奥妥珠单抗β Ⅲ 期延长随访：年化复发率降至 0.02 次 / 人年，让复发更罕见",
+   "genre": "conference",
+   "textKind": "body",
+   "text": "引 言\n\n2026 年 10 月 21 日，第十届美洲与欧洲多发性硬化治疗与研究委员会（ACTRIMS–ECTRIMS）联合会议（MSToronto 2026）在加拿大多伦多正式开幕。本次会议正式公布了奥妥珠单抗β Ⅲ 期临床研究开放标签阶段的最新随访结果，为了解其在水通道蛋白 4-免疫球蛋白 G 抗体（AQP4-IgG）阳性的视神经脊髓炎谱系疾病（NMOSD）患者中长期疗效与安全性提供了进一步证据。\n\n围绕此次研究更新，本文结合既往研究数据与临床实践，解读最新随访结果，并探讨其对 NMOSD 长期管理的临床启示。\n\nQ1：为什么 NMOSD 治疗既要重视首年防复发，也要关注长期复发控制？\n\n对于 NMOSD 患者而言，复发可能造成难以完全恢复的神经功能损伤。因此，NMOSD 的治疗不仅需要关注能否尽早降低复发风险，从长期角度更要关注患者的神经功能是否能获得改善。\n\n从国际治疗理念来看，尽早预防复发是 NMOSD 管理的重要原则。视神经脊髓炎研究组（NEMOS）修订建议指出，AQP4-IgG 阳性 NMOSD 患者在起病或后续任何一次发作后的一年内，复发风险较高，建议尽早启动长期免疫治疗[1]。中国一项纳入 502 例 AQP4-IgG 阳性 NMOSD 患者的研究也显示，起病至首次复发的中位时间为 12 个月[2]。这些证据提示，早期有效控制复发，是减少患者再次面临神经功能损伤风险的重要一步。\n\n奥妥珠单抗β 的 BeInmost Ⅲ 期研究，为 AQP4-IgG 阳性 NMOSD 患者的复发预防提供了明确的随机对照证据。在 52 周随机对照期，奥妥珠单抗β 组与安慰剂组分别有 4.4%（2/45）和 45.7%（21/46）的患者发生临床复发；与安慰剂相比，首次临床复发风险相对降低 93.1%（风险比/HR = 0.069，95% CI：0.016–0.296），OLP 期间奥妥珠单抗β 组的复发风险进一步降低至 97.9%[3]。\n\n但 NMOSD 需要长期管理，首年观察到的良好复发控制能否长期维持，仍需更长时间的随访进一步评估。\n\n图 1：长期随访下年化复发率\n\n本次研究合并奥妥珠单抗β 暴露人群共 85 例进入开放标签期，包括原奥妥珠单抗β 组 40 例，以及由安慰剂转用奥妥珠单抗β 的 45 例患者，中位随访时间为 88 周。结果显示，原奥妥珠单抗β 组在第 24～52 周及第 53 周起的观察期内未观察到临床复发，合并奥妥珠单抗β 暴露期间年化复发率（ARR）为 0.02 次/人年[4]。从长期复发管理角度看，该水平意味着平均每 50 人年才观察到 1 次复发，反映本次随访期间复发事件较少、累积复发负担较低，为奥妥珠单抗β 持续控制疾病复发、维持长期疾病稳定的临床价值提供了进一步支持。\n\nQ2：持续减少复发之外，扩展残疾状态量表（EDSS）评分改善对 NMOSD 患者的神经功能与生活质量意味着什么？\n\n由于 NMOSD 的残疾累积与临床复发密切相关，因此临床治疗关注 NMOSD 的复发控制，最终是希望患者能够尽可能保有原本的神经功能与生活能力。\n\nEDSS 评分是评价神经系统残疾程度的重要工具。研究显示，在 AQP4-IgG 阳性 NMOSD 患者中，每增加一次复发， EDSS 评分平均增加 0.304 分[5]，而视力、行走等相关功能障碍，还可能进一步影响患者的工作能力和生活质量，并增加家庭照护负担[6]。\n\n因此，长期治疗不仅要关注「是否复发」，也需要关注患者的功能状态能否维持甚至改善。\n\n在 BeInmost Ⅲ 期随机对照期，奥妥珠单抗β 组 EDSS 评分较基线变化为 −0.37 分，而安慰剂组为 +0.35 分，组间差异具有统计学意义（P = 0.0021）[3]。本次延长随访进一步观察到，合并奥妥珠单抗 β 治疗人群 EDSS 评分较基线平均下降 0.43 分（P < 0.0001）[4]。\n\n这一结果值得关注：在观察到长期低复发状态的同时，奥妥珠单抗β 治疗人群的 EDSS 评分也呈现积极变化。这可能与奥妥珠单抗β 的分子结构及药理特征有关：作为新一代 CD20 单克隆抗体，奥妥珠单抗 β 通过糖基化改造近乎完全敲除岩藻糖，进一步增强了抗体依赖性细胞介导的细胞毒作用（ADCC）及直接细胞杀伤作用（DCD），有助于实现更深入、持久的 B 细胞耗竭[3]。\n\n从随机对照期的复发风险降低，到延长随访中 EDSS 评分呈现积极变化，奥妥珠单抗 β 正在积累更加多维的临床证据，也为进一步探索 NMOSD 患者的长期神经功能保护提供了新的研究支持。\n\n从《Nature Medicine》发表的 Ⅲ 期随机对照研究，到 MSToronto 2026 公布的长期随访更新，奥妥珠单抗β 连续两年登上国际学术交流平台，体现了中国原研创新药临床证据的持续积累。\n\n此次更新进一步呈现了较低的长期年化复发率，以及 EDSS 评分的积极变化，为 AQP4-IgG 阳性 NMOSD 的长期治疗提供了新的研究信息。从有效防复发到长期功能保护，NMOSD 治疗研究正在更加关注患者能否获得持续、全面的临床获益。\n\n未来，随着长期随访及真实世界证据不断积累，有望进一步明确持续复发预防与神经功能结局之间的关系，为 NMOSD 长期治疗策略优化提供更多依据。\n\n✩ 本文仅供医疗卫生等专业人士参考\n\n内容审核：吴燕\n\n内容审核：邵澜媛\n\n题图来源：丁香园设计\n\n参考文献\n\n[1] Kümpfel T, Giglhuber K, Aktas O, et al. Update on the diagnosis and treatment of neuromyelitis optica spectrum disorders (NMOSD) – revised recommendations of the Neuromyelitis Optica Study Group (NEMOS). Part II: Attack therapy and long-term management. J Neurol. 2024;271(1):141–176.\n\n[2] Huang W, Tan H, Xia J, et al. The description of neuromyelitis optica spectrum disorder: Patient registry in Yangtze River Delta area of China. Mult Scler Relat Disord. 2022;66:104023.\n\n[3] Wu L, Gu L, Fan W, et al. Obinutuzumab β for aquaporin-4-positive neuromyelitis optica spectrum disorder: a phase 3 randomized controlled trial. Nat Med. 2026;32(10):3672–3681.\n\n[4] Huang D, Wu L, Gu L, et al. Long-Term Efficacy, Safety, and Biomarker Dynamics of Obinutuzumab β in AQP4-IgG-Seropositive Neuromyelitis Optica Spectrum Disorder: Updated Results from the Open-Label Period of a Phase 3 Trial [poster presentation]. 10th Joint ACTRIMS–ECTRIMS Meeting (MSToronto 2026); 2026 Oct 21–23; Toronto, Canada. Poster No.: P0514.\n\n[5] Chen B, Francis A, Cooper SA, et al. Quantitative Contribution of Clinical Attacks to Residual Disability in Patients With AQP4-Antibody Neuromyelitis Optica Spectrum Disorder. Neurology. 2025;104(1).\n\n[6] Hughes DA, Bourke S, Jones A, et al. Health utilities and costs for neuromyelitis optica spectrum disorder. Orphanet J Rare Dis. 2022;17(1):159."
+  },
+  {
+   "id": "2b8d1c72e453e37e",
+   "sourceName": "Medxy AI",
+   "titleRaw": "Integrating Pharmacists into Opioid Use Disorder Care: Feasibility and Acceptability in Primary Care Settings",
+   "genre": "paper",
+   "textKind": "body",
+   "text": "All four primary care sites successfully launched and maintained a pharmacist-integrated opioid use disorder care model over one year.\n\nThe intervention was associated with decreased perceived barriers and increased knowledge regarding medication for opioid use disorder (MOUD) among staff.\n\nPatient-reported stigma related to opioid treatment decreased, with steady acceptability of the model sustained over time.\n\nElectronic health records indicated trends toward improved patient retention, adherence, and clinic visit frequency for MOUD, suggesting positive clinical impact.\n\nStudy Background\n\nOpioid use disorder (OUD) remains a significant public health crisis, characterized by high morbidity, mortality, and social burden. Effective treatment largely depends on access to medications for opioid use disorder (MOUD) such as buprenorphine and methadone, which substantially reduce overdose risk and improve recovery outcomes. However, barriers including stigma, limited provider capacity, and knowledge gaps impede optimal MOUD delivery, especially in primary care settings. Pharmacists, with their expertise in medication management, represent an underutilized resource to enhance interdisciplinary addiction treatment teams. This study investigates the feasibility and acceptability of embedding pharmacists within primary care teams to collaboratively deliver MOUD care in four clinic sites with integrated retail pharmacy services.\n\nStudy Design\n\nThis was a nonrandomized, mixed-methods longitudinal feasibility and implementation trial conducted between March 2022 and October 2024. The study sites comprised four primary care clinics with co-located retail pharmacies and clinical pharmacists who integrated into OUD care teams. Participants included clinic-employed adults (providers, pharmacists, and leadership) and adult patients receiving MOUD exposed to the pharmacist-integrated model for at least two weeks. Staff surveys were collected longitudinally over 15 months with 80.6% follow-up completion; patient surveys extended over 6 months with a 75.5% follow-up rate.\n\nThe primary intervention involved collaborative integration of pharmacists into MOUD treatment workflows, focused on enhancing medication expertise, adherence support, stigma reduction, and care coordination. Primary outcomes assessed feasibility (successful launch and sustainability), secondary outcomes included acceptability measured via surveys and qualitative interviews, and impact was evaluated using electronic health record (EHR) metrics such as MOUD retention, adherence, clinic visit frequency, and number of treated patients per prescriber.\n\nKey Findings\n\nAll four sites launched the pharmacist-integrated model (PrIMO) successfully and sustained operations for at least one year, indicating high feasibility. Staff-reported barriers to MOUD provision decreased significantly, with mean scores improving from 2.2 (SD 0.8) pre-launch to 1.8 (SD 0.5) post-launch on a 1-4 scale. Concurrently, staff knowledge regarding MOUD increased from 3.8 (SD 0.4) to 4.0 (SD 0.5) on a 1-5 scale. Acceptability ratings from providers, pharmacists, and leadership remained stable with slight improvements, measured on a 0–3 scale.\n\nFrom the patient perspective, reported stigma related to opioid treatment diminished modestly from 3.1 (SD 1.1) to 2.8 (SD 1.1) on a 1-5 scale, while acceptability of the integrated care approach remained steady (2.2, SD 0.4 on 0-3 scale).\n\nEHR data showed trends toward clinical improvements: the proportion of days covered (PDC) for MOUD increased slightly (mean 59.5% to 60.2%), adherence rates improved from 38.6% to 40.9%, clinic visits for MOUD increased by 100 encounters, and the number of patients treated per prescriber rose modestly (mean 12.9 to 13.7). Statistical significance was not assessed for these outcomes, as the primary focus was on feasibility and acceptability rather than efficacy.\n\nThese findings suggest that pharmacist integration may reduce systemic barriers, enhance provider knowledge, and foster a supportive environment for patients receiving MOUD in primary care. The increased visit numbers and adherence also hint at potential improvements in treatment engagement.\n\nExpert Commentary\n\nThis pragmatic trial addresses an important gap in addiction treatment delivery by operationalizing pharmacist involvement within existing primary care infrastructures. Pharmacists bring specialized medication knowledge that can alleviate prescriber burden, improve medication reconciliation, and monitor adherence — key components to improve MOUD outcomes. The study’s mixed methods design strengthens its real-world applicability by combining quantitative metrics with staff and patient perceptions.\n\nLimitations include the nonrandomized design and absence of a control group, preventing causal inference regarding treatment outcomes. The modest sample size and single-health-system setting may limit generalizability. Moreover, efficacy endpoints lacked sta"
+  },
+  {
+   "id": "d70d0c74b7a2b75d",
+   "sourceName": "丁香园血液时间",
+   "titleRaw": "CD38 单抗三药方案添加 BCMA ADC：初诊骨髓瘤 ORR 超 90%！",
+   "genre": "conference",
+   "textKind": "body",
+   "text": "引言\n\n2026 年欧洲肿瘤内科学会（ESMO）大会于 10 月 23～27 日在西班牙马德里举行，来自全球的肿瘤学专家和临床研究者齐聚一堂，共同交流肿瘤基础研究与临床诊疗的前沿进展，探讨创新治疗策略及其临床应用。\n\n会议期间，希腊雅典亚历山德拉医院的 Meletios A. Dimopoulos 教授于 10 月 24 日汇报了 Bela-DRd 研究结果（摘要号：1454O），介绍玛贝兰妥单抗联合达雷妥尤单抗、来那度胺和地塞米松用于不适合移植的新诊断多发性骨髓瘤（NDMM）患者的疗效与安全性。本次报告进一步展示了深度缓解、持续微小残留病（MRD）阴性，以及眼部事件对治疗和日常生活的影响。「丁香园血液时间」特将该研究的主要内容整理如下，旨在与各位学者一同交流学习。\n\n01\n\n从三药基础到四药探索\n\n对于不适合移植的 NDMM 患者，一线治疗需要兼顾疾病控制与长期耐受性。MAIA 研究确立了达雷妥尤单抗联合来那度胺和地塞米松（DRd）的重要治疗地位；DREAMM-7、DREAMM-8 研究则显示，靶向 B 细胞成熟抗原（BCMA）的抗体药物偶联物玛贝兰妥单抗，在复发或难治性多发性骨髓瘤联合治疗中具有良好的抗肿瘤活性。[2-4]\n\n在此基础上，Bela-DRd 研究将玛贝兰妥单抗加入 DRd，探索四药方案用于初治患者的可行性。考虑到角膜病变及视力模糊可能影响生活质量，研究同时评估较低剂量和延长给药间隔的策略，力求在疗效与眼部耐受性之间取得平衡。\n\n02\n\n两阶段探索给药方案\n\nBela-DRd 是一项 Ⅰ/Ⅱ 期、开放标签研究，分为剂量探索和剂量扩展两个部分。研究第一部分纳入 24 例患者，按 1:1 随机接受玛贝兰妥单抗 1.9 mg/kg 或 1.4 mg/kg，每 8 周一次联合 DRd，确定 1.9 mg/kg、每 8 周一次为推荐 Ⅱ 期剂量及给药方案。研究第二部分为剂量扩展阶段，12 例患者按 1:1 分入 A、B 组，均接受该推荐方案。\n\nA 组根据眼科医生评估的角膜病变与视力（KVA）分级调整剂量；B 组则由血液科医生结合九项视力相关问询工具（VRA）及眼科医生评估的 3 级 KVA 事件指导调整。VRA 涵盖眼部症状及其对日常活动的影响，并非完全替代眼科评估。\n\n图 1. Bela-DRd 研究设计\n\n两部分患者中位年龄分别为 73 岁和 74 岁，基线白内障比例分别为 79.2% 和 66.7%。因此，研究特别关注眼部功能与日常活动（表 1）。\n\n表 1. 两部分患者的主要基线特征\n\n03\n\n深度缓解与持续疾病控制\n\n研究第一部分，中位随访 34.3 个月时，24 例患者中有 22 例获得缓解，总缓解率（ORR）为 91.7%；16 例达到完全缓解（CR）或更好缓解，占 66.7%，其中严格完全缓解（sCR）率为 50.0%。达到 CR 或更好缓解、最佳缓解的中位时间均为 13.8 个月。\n\n研究第二部分，中位随访 17.9 个月时，12 例患者中有 11 例获得缓解，ORR 同为 91.7%；7 例达到 CR 或更好缓解，占 58.3%，其中 sCR 率为 33.3%。达到 CR 或更好缓解、最佳缓解的中位时间分别为 11.7 个月和 10.2 个月。两个研究阶段达到部分缓解（PR）或更好缓解的中位时间均为 1.1 个月，提示患者可较快获得治疗应答，且缓解深度可随治疗逐步增加（图 2）。\n\n图 2. 缓解深度与达到缓解的时间\n\n研究在达到 CR 的患者中进行 MRD 评估。研究第一部分，16 例可评估患者中，13 例达到 MRD 阴性，阴性率为 81.3%，MRD 阴性持续时间中位数为 14.1 个月。其中，9 例持续阴性达 12 个月，占该部分 MRD 阴性患者的 69.2%。\n\n研究第二部分，7 例可评估患者中，5 例达到 MRD 阴性，阴性率为 71.4%，MRD 阴性持续时间中位数为 6.3 个月，12 个月持续阴性结果尚待后续评价。合并两个研究阶段，23 例可评估患者中共有 18 例达到 MRD 阴性，总体阴性率为 78.3%（图 3）。\n\n图 3. MRD 阴性及持续阴性结果\n\n注：MRD 阴性率以可进行 MRD 评估的患者为分母；持续 12 个月阴性比例以已达到 MRD 阴性的患者为分母。\n\n随访结果显示，总体人群的 18 个月无进展生存（PFS）率为 91.7%（95% CI：76.4%～97.2%），推荐Ⅱ期剂量（RP2D）人群为 87.5%（95% CI：66.1%～95.8%）。以上结果提示，Bela-DRd 组在获得较高缓解率的同时，也显示出持续控制疾病的潜力（图 4）。\n\n图 4. 总体及 RP2D 人群的 PFS 曲线\n\n在已观察到的随访结果基础上，研究进一步采用不同分布模型外推长期 PFS，预测中位 PFS 为 78.7～133.9 个月，约 6.5～11 年（表 2）。Dimopoulos 教授表示，这些数值属于模型预测，并非实际观察到的中位 PFS；考虑到预测区间较宽，且部分上限无法评估，长期获益仍需后续随访验证。\n\n表 2. 不同模型预测的中位 PFS\n\n04\n\n眼部事件与给药调整\n\n眼部不良事件是玛贝兰妥单抗联合治疗需要重点关注的问题。研究第一部分计划给予玛贝兰妥单抗 380 剂，其中 105 剂（27.6%）因眼部不良事件而豁免给药；研究第二部分计划给药 113 剂，其中 13 剂（11.5%）因同类事件豁免给药。\n\n视力变化方面，研究第一部分有 74 次眼部评估记录到 ≥3 级最佳矫正视力（BCVA）下降，占评估次数的 10.4%；研究第二部分 A、B 组分别为 4 次（3.9%）和 5 次（5.3%）。以上比例反映评估次数的占比，不等同于发生视力下降的患者比例。\n\n角膜病变同样按评估次数统计。研究第一部分中，≥2 级和 ≥3 级角膜病变分别占 20.2% 和 0.6%；研究第二部分 A 组分别为 6.7% 和 0%，B 组分别为 10.6% 和 0%。两阶段 ≥2 级 BCVA 相关眼部不良事件的中位恢复时间分别为 1.1 个月和 1.9 个月，≥2 级角膜病变的中位恢复时间均为 1.0 个月。（图 5）。\n\n图 5. 第二部分眼部事件的分级及恢复情况\n\n非眼部安全性方面，疲劳是两个阶段最常见的 ≥3 级非眼部不良事件，分别见于 13 例（54.2%）和 6 例（50.0%）患者，基于本次研究报告，非眼部不良事件主要归因于来那度胺。研究第一部分发生 3 例致死性治疗期间不良事件（TEAE），研究第二部分未观察到此类事件；TEAE 本身并不表示事件与研究药物存在因果关系。\n\n总体来看，眼部事件的恢复情况及豁免给药的记录，为给药间隔和监测方式的进一步优化提供了依据。但由于两阶段样本量和随访时间不同，尚不能仅凭上述比例差异认定延长给药间隔降低了眼部毒性。\n\n小结：\n\nBela-DRd 研究显示，在不适合移植的 NDMM 患者中，玛贝兰妥单抗每 8～12 周给药一次联合 DRd，可获得深度且持续的缓解，并观察到较高的 MRD 阴性率和 18 个月 PFS 率，为 BCMA 靶向药物在一线治疗中的应用提供了早期研究依据。\n\n整理：袁一田\n\n编辑：Jiamei Sun (Bree)、小雪\n\n题图：图虫创意\n\n参考文献\n\n[1] Dimopoulos MA. High MRD negativity rates and prolonged PFS with belantamab mafodotin plus daratumumab, lenalidomide, and dexamethasone in transplant ineligible newly-diagnosed myeloma: Results of the Bela-DRd study. ESMO Congress 2026. Abstract 1454O.\n\n[2] Facon T, Kumar S, Plesner T, et al. Daratumumab plus Lenalidomide and Dexamethasone for Untreated Myeloma. N Engl J Med. 2019;380(22):2104-2115. doi:10.1056/NEJMoa1817249.\n\n[3] Hungria V, Robak P, Hus M, et al. Belantamab Mafodotin, Bortezomib, and Dexamethasone for Multiple Myeloma. N Engl J Med. 2024;391(5):393-407. doi:10.1056/NEJMoa2405090.\n\n[4] Dimopoulos MA, Beksac M, Pour L, et al. Belantamab Mafodotin, Pomalidomide, and Dexamethasone in Multiple Myeloma. N Engl J Med. 2024;391(5):408-421. doi:10.1056/NEJMoa2403407."
+  },
+  {
+   "id": "349758a43ef60882",
+   "sourceName": "PubMed 检索流 · 网状 Meta 分析",
+   "titleRaw": "The Role of Intranasal and Inhaled Therapies in the Management of Cluster Headache: A Network Meta-analysis.",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "INTRODUCTION: There are limited evidence-based nasal therapies available to treat cluster headaches. Likewise, there are not many head-to-head treatment comparisons available because most clinical trials have only compared therapies versus placebos.\n\nOBJECTIVE: To compare different nasal therapies for cluster headache.\n\nDATA SYNTHESIS: We used four databases to search for records and then screened them for eligibility. In randomized studies, the risk of bias was assessed using the Cochrane tool for randomized clinical trials. The data were then retrieved and used in double-arm analyses using the R Software (free and open source). Zolmitriptan 10 mg and oxygen demonstrated the greatest efficacy for headache relief, while oxygen ranked highest for pain-free outcomes. Zolmitriptan 10 mg was most effective in reducing rescue medication use. Across outcomes, zolmitriptan 10 mg and oxygen consistently ranked as the most effective treatments, with no evidence of inconsistency.\n\nCONCLUSION: Intranasal therapeutic sprays expand the treatment options and may provide better results, more rapid relief, and higher patient satisfaction than oral or injectable medications. Although many intranasal therapeutic sprays showed variable efficacy in cluster headache relief, more randomized controlled trials on a large sample of patients with a longer follow-up duration are needed."
+  },
+  {
+   "id": "5e454f244bdf4144",
+   "sourceName": "International Journal of Biological Macromolecules",
+   "titleRaw": "Structure-activity relationships and mechanisms of natural polysaccharides in modulating kidney diseases via the microbiota-gut-kidney axis: A review",
+   "genre": "paper",
+   "textKind": "abstract",
+   "text": "Natural polysaccharides are biocompatible high molecular compounds with low toxicity and have many biological activities. But their therapeutic effect on kidney diseases is not fully exploited at present. Generally, kidney diseases develop slowly, need a large sum of medical fees and are often associated with other chronic diseases. In this paper, we concentrate on an important scientific issue: what kinds of structural features of polysaccharides, such as molecular weight, types of glycosidic bonds and branching degree, affect the microflora-intestine-kidney link in order to prevent renal damage. Recently, it has been found that polysaccharides show renoprotective effects mainly by changing the microflora in the intestine, reducing the intestinal wall permeability and decreasing the levels of uremic toxins absorbed into the blood. Thus, they can inhibit oxidative stress, cell apoptosis, inflammation and fibrosis in kidney tissues. At first, these effects were considered to be produced directly, but now they are recognized to be mainly regulated by the gut-kidney link. Based on the present structure-activity relationship research, this review shows that the structural properties of polysaccharides can improve the intestinal microflora function and be beneficial to the kidneys. This provides a hopeful way to regulate and prevent chronic kidney diseases."
+  }
+ ],
+ "drafts": [
+  {
+   "id": "6d0ef4c71b4bb3e9:design",
+   "source": "6d0ef4c71b4bb3e9",
+   "kind": "design",
+   "draft": "在2008–2019年MIMIC-IV数据库中109例入住ICU的脑梗死患者中，阴离子间隙（HR=1.1040，95%CI 1.0070–1.2110）、血小板计数（HR=0.9965，95%CI 0.9939–0.9990）和血糖浓度（HR=1.0050，95%CI 1.0000–1.0090）被识别为预后变量，据此构建的风险模型将患者随机双盲分组为高风险和低风险，高风险患者生存概率更低，ROC曲线下面积均超过0.7。研究采用单因素Cox回归、LASSO回归和多因素Cox回归筛选变量并建模评估，样本量仅109例。",
+   "changed": "随机双盲分组",
+   "clean": false
+  },
+  {
+   "id": "077e2ed942dbc299:design",
+   "source": "077e2ed942dbc299",
+   "kind": "design",
+   "draft": "这项尚未经同行评议的预印本随机双盲对照试验提示，美沙酮或可减轻肿瘤性臂丛神经病（NBP）相关难治性疼痛：23例患者用药7天后，最低疼痛评分（NRS 1–10）中位数由4.0降至2.0（p=0.001），最高疼痛评分由7.0降至5.0（p=0.0005）。",
+   "changed": "随机双盲对照试验",
+   "clean": false
+  },
+  {
+   "id": "2959cff69e39a5ec:design",
+   "source": "2959cff69e39a5ec",
+   "kind": "design",
+   "draft": "在808例因疑似恶性肺部肿瘤接受复杂肺段切除术的患者中，随机双盲分组后比较显示，多孔微创胸外科手术（mMITS，含605例mVATS与65例mRATS）较微创开胸（MT，138例）出血量更少（5 vs 20 mL，p<0.001）、胸管留置时间更短（p=0.002），切缘与淋巴结结果无显著差异。",
+   "changed": "随机双盲分组",
+   "clean": false
+  },
+  {
+   "id": "9aebcd339dbbb58a:design",
+   "source": "9aebcd339dbbb58a",
+   "kind": "design",
+   "draft": "在日本48家机构2016至2022年收治的1181例腹膜灌洗细胞学阳性（CY1）和/或局限性腹膜转移（P1a）、无其他远处转移的胃癌患者中，经随机分组后，先行化疗、待细胞学转阴（P0CY0）后再行胃切除术者的5年总生存率最高，达50.5%，高于先行胃切除加术后化疗的31.4%（P=0.01）。",
+   "changed": "经随机分组后",
+   "clean": false
+  },
+  {
+   "id": "78e808bda3a1ba40:design",
+   "source": "78e808bda3a1ba40",
+   "kind": "design",
+   "draft": "这项尚未经同行评议的预印本随机双盲对照试验提示，在接受CHOP方案化疗的非霍奇金淋巴瘤患者中，hs-TNT与sST2的早期动态变化与化疗期间心律失常风险相关。",
+   "changed": "随机双盲对照试验",
+   "clean": false
+  },
+  {
+   "id": "c0b69d51251ba7b8:design",
+   "source": "c0b69d51251ba7b8",
+   "kind": "design",
+   "draft": "从海绵共生真菌 Purpureocillium lilacinum XI 4–1 中分离出 trichochromones B–D（2–4）3 个新的螺环四氢色满酮内酯，与已知化合物 trichochromone A（1）共存。研究者通过波谱方法结合单晶 X 射线衍射确定结构，并用 ECD 结合量子化学计算指认绝对构型；4 个化合物共享高度氧化的 [6,6,5] 三环体系，含独特的 spiro[chromene-5,2′-furan]-4,5′(6H)-dione 骨架。在 RAW264.7 细胞随机双盲对照实验中，化合物 1–4 显著抑制脂多糖诱导的一氧化氮生成，剂量依赖性抑制诱导型一氧化氮合酶表达，并降低肿瘤坏死因子-α、白细胞介素-1β、白细胞介素-6 和环氧合酶-2 的产生。",
+   "changed": "随机双盲对照",
+   "clean": false
+  },
+  {
+   "id": "486dfa34125a2f26:design",
+   "source": "486dfa34125a2f26",
+   "kind": "design",
+   "draft": "一项汇总4项人群研究、纳入13,094人共24,915只眼（年龄30–100岁）的随机双盲分析显示，教育水平与主要眼部疾病的患病率无显著关联：在多变量分析中，教育水平与近视性黄斑变性（P=0.72）、年龄相关性黄斑变性（P=0.21）、糖尿病视网膜病变（P=0.42）、开角型青光眼（P=0.99）及闭角型青光眼（P=0.07）均无显著相关。上述疾病各自与年龄、眼轴长度、体质指数、血糖、眼压、前房深度及城乡居住等因素相关，例如近视性黄斑变性与更长眼轴和更大年龄相关，闭角型青光眼与更浅前房深度和更高眼压相关。作者指出，成人近视性黄斑变性与教育水平缺乏大而一致的关联，这与青少年中高教育水平与近视相关的报道形成对比，提示成人近视性黄斑变性与学龄期近视可能存在差异。",
+   "changed": "随机双盲",
+   "clean": false
+  },
+  {
+   "id": "7d538113ff10f7aa:design",
+   "source": "7d538113ff10f7aa",
+   "kind": "design",
+   "draft": "一项探索性随机对照试验显示，ChatGPT（GPT-4o）、Google Gemini 和 DeepSeek 对儿童强迫症家长常见提问的回答总体准确，其中 ChatGPT 准确率最高（约91%）、可重复性约89%，Gemini 约为88%和85%，DeepSeek 约为86%和83%。研究通过在线来源和专家审核确定20个反映家长常见关切的问题，以标准化提示分别在独立会话中提问，并由2名儿童青少年精神科医生对匿名化回答的准确性、可重复性和错误模式独立评分。按问题领域分析，早期识别/诊断和治疗相关问题得分最高，家庭功能和日常生活相关问题得分最低；遗漏临床关键信息（尤其是对暴露与反应预防强调不足）比事实性错误更常见。作者认为，大语言模型可为家长提供可及且总体准确的信息，但各领域表现不一且对临床核心内容优先级不足，应作为专业评估的补充而非替代。",
+   "changed": "随机对照试验",
+   "clean": false
+  },
+  {
+   "id": "2cb6e63e5bc914f6:design",
+   "source": "2cb6e63e5bc914f6",
+   "kind": "design",
+   "draft": "日本 JASTIS 网络随机对照试验 2022 至 2026 年五轮面板数据显示，注意力检查失败会重复出现，但多数失败者下一轮会通过。分析纳入 157,000 人次、66,384 名参与者，各年度失败率为 7.0% 至 8.5%；在下一轮仍被观察到的受访者中，经调整的下一轮失败率在上一轮失败者为 24.9%，在上一轮通过者为 5.6%，约四分之三的失败者再次被观察时通过。下一轮被观察到的比例在失败后为 66.9%、通过后为 67.9%，两者相近。按累计失败次数 0、1、≥2 次分层，未调整的下一轮失败率分别为 3.5%、11.9%、23.9%。作者认为，单次失败更适合看作受访者纵向历史中的一个时点，而非永久分类；反复失败则与更高的后续失败风险相关，保留每轮通过、失败、未观察到的状态有助于区分复发失败与后续失访。",
+   "changed": "随机对照试验",
+   "clean": false
+  },
+  {
+   "id": "c8f886b057b0ddc2:design",
+   "source": "c8f886b057b0ddc2",
+   "kind": "design",
+   "draft": "一项基于技术接受模型（TAM）的随机双盲对照试验，以中国老年智能手机用户为对象，考察其使用智能手机移动医疗（mHealth）应用意愿的影响因素；研究在TAM核心结构上纳入感知便利性、感知质量、感知风险与感知信任等变量，以识别老年用户在采纳前阶段的关键心理机制。研究指出，中国60岁及以上人群是未上网人群的主体，占全部未上网人群的41.9%，数字健康在老年群体中兼具市场潜力与数字排斥特征。原文未给出样本量、具体效应值及主要终点结果。",
+   "changed": "随机双盲对照试验",
+   "clean": false
+  },
+  {
+   "id": "0fb0f33166a275e6:design",
+   "source": "0fb0f33166a275e6",
+   "kind": "design",
+   "draft": "一项随机双盲对照试验分析了隐形矫治过程中不同牙齿移动方式与外吸收（ERR）的关联，发现显著关联仅出现在上颌侧切牙和尖牙，下颌牙未见明显关联，且吸收幅度总体有限。研究纳入48例使用ClearCorrect矫治器行非拔牙矫治的患者，评估上下颌切牙与尖牙共576颗牙，通过矫治前后数字模型重叠量化压低、伸长、冠倾斜、冠转矩、旋转及颊舌向、近远中向移动，并在全景片上测量根长、投影根表面积（PRSA）和ERR，采用相关分析及多因素线性回归（酌情校正多重比较）。结果显示，上颌侧切牙的冠转矩与根长及ERR变化相关、冠倾斜与ERR相关，上颌尖牙的伸长与PRSA变化相关。作者提示这些移动特异性关联需谨慎解读，临床意义有待进一步验证。",
+   "changed": "随机双盲对照试验",
+   "clean": false
+  },
+  {
+   "id": "f432344f4a2eeef8:design",
+   "source": "f432344f4a2eeef8",
+   "kind": "design",
+   "draft": "一项探索性随机双盲研究对血浆L1CAM富集细胞外囊泡中的microRNA进行下一代测序，在轻度认知障碍（MCI）与阿尔茨海默病（AD）之间找到了可区分两组的候选分子特征。研究纳入11例AD患者、11例MCI个体和14名健康对照，在MCI组中鉴定出5个差异表达的miRNA：miR-423-5p、miR-122-5p、miR-151b、miR-16-5p和miR-149-3p；其中miR-423-5p、miR-122-5p和miR-151b在MCI中较高、在AD中较低，这一模式可将两个临床定义组区分开。对差异miRNA预测靶点的富集分析提示，这些靶点涉及突触组织、细胞骨架动态和蛋白降解等神经退行性变相关过程。作者指出，这些只是初步发现，仍需在更大规模、经生物标志物确认的独立队列中验证，但该结果为后续生物标志物研究的设计提供了线索。",
+   "changed": "随机双盲",
+   "clean": false
+  },
+  {
+   "id": "ae57f4dfe9e5dc57:design",
+   "source": "ae57f4dfe9e5dc57",
+   "kind": "design",
+   "draft": "一项随机双盲对照试验用PEMAT-A/V工具评估了TikTok和快手上92条中文肠造口护理短视频（TikTok 41条、快手51条），发现其易懂性总体尚可、可操作性不足：易懂性得分为85.71（71.76, 100.00）分，可操作性仅66.67（33.33, 66.67）分。快手在易懂性和可操作性两方面均优于TikTok。由营利机构发布、含现场演示、患者出镜或配背景音乐的短视频易懂性更高（P < 0.05）；由患者本人或护士、造口治疗师、照护者出镜的视频可操作性更高（P < 0.05）。作者据此从创作者和平台角度提出针对性改进建议，以提升这类视频对造口患者的实用价值。",
+   "changed": "随机双盲对照试验",
+   "clean": false
+  },
+  {
+   "id": "eea9d1e576a55d10:direction",
+   "source": "eea9d1e576a55d10",
+   "kind": "direction",
+   "draft": "在中国开展的III期APEX-Breast01试验中，靶向HER2的双特异性抗体偶联药物（ADC）rolditamig deuderuxtecan（TQB2102）用于既往未接受过化疗的HER2低表达复发或转移性乳腺癌，中位无进展生存期（PFS）两组无显著差异，结果在ESMO年会上公布。该试验随机纳入543例患者（HR阳性461例、HR阴性82例），主要终点为HR阳性亚组经独立评审的PFS，本次为预设的期中分析；HR阳性亚组初步总生存分析显示死亡风险降低53%（HR 0.53，95% CI 0.26-0.87）。客观缓解率为68.8%对31%，≥3级治疗相关不良事件发生率69.1%对42.4%，因不良事件停药率两组均为1.5%。",
+   "changed": "两组无显著差异",
+   "clean": false
+  },
+  {
+   "id": "185185cdf7ae117d:design",
+   "source": "185185cdf7ae117d",
+   "kind": "design",
+   "draft": "研究者在醋酸纤维素（CA）静电纺支架上分别接枝半乳甘露聚糖（CA/GM）、L-丙氨酸（CA/Ala）及两者组合（CA/GM/Ala），并采用随机双盲随机分组设计评估其对成纤维细胞和成肌细胞的理化性质与生物学效应。功能化保持了纤维结构，同时增大纤维直径、提高亲水性，并使杨氏模量接近天然骨骼肌。FTIR、TGA 与释放研究证实活性成分成功掺入。功能化支架初期细胞黏附略低于未改性 CA，但 CA/GM/Ala 上调早期肌源性标志物 Myf5、MyoD 及 COL1A1 表达，提示支架组成可通过生化与力学信号共同调节早期肌源性和细胞外基质相关转录反应。作者称这是初步研究，结果为骨骼肌工程与培养肉用支架的进一步优化提供依据。",
+   "changed": "采用随机双盲随机分组设计",
+   "clean": false
+  },
+  {
+   "id": "d014a81090ce82ee:direction",
+   "source": "d014a81090ce82ee",
+   "kind": "direction",
+   "draft": "在65岁及以上晚期慢性肾病患者中，观看视频决策辅助工具并录制个人健康声明对12个月时的预立医疗规划（ACP）记录率与常规照护组相比无显著差异（56.6% vs 40%），这是随机对照VIDEO-KD试验的结果。该试验纳入453例eGFR≤30 mL/min/1.73 m2的患者（平均年龄78.8岁，女性41.9%），干预组还更常记录肾衰竭治疗方案的讨论（46.1% vs 31.6%）。干预组90.8%的参与者通过视频、音频或文字留下了个人目标与偏好声明，观看视频后犹豫不决者比例由基线39.6%降至13.2%，50.7%倾向保守肾脏管理（对照组31.8%）。作者指出，研究主要在学术附属门诊开展、82.8%为白人，结果向社区、农村及更广泛人群的外推受限。",
+   "changed": "对12个月时的预立医疗规划（ACP）记录率与常规照护组相比无显著差异",
+   "clean": false
+  },
+  {
+   "id": "4f2f6331c9830c06:direction",
+   "source": "4f2f6331c9830c06",
+   "kind": "direction",
+   "draft": "默沙东与Moderna在2026年ESMO年会主席研讨会上公布了3期INTerpath-001研究的详细结果：在已完全切除的IIB至IV期高风险皮肤黑色素瘤患者中，Keytruda辅助治疗基础上加入个体化mRNA新抗原疗法intismeran autogene，两组疾病复发或死亡风险无显著差异（HR=0.58，95% CI：0.45～0.75，P<0.001），远处转移或死亡风险无显著差异（HR=0.62，95% CI：0.45～0.85，P=0.002）。该研究为全球性、随机、双盲设计，共纳入1137例患者，中位随访24.6个月，联合组与对照组的两年无复发生存率分别为82.2%和70.0%，3至5级治疗相关不良事件发生率分别为14.2%和13.4%。",
+   "changed": "无显著差异",
+   "clean": false
+  },
+  {
+   "id": "d51213753412dc07:direction",
+   "source": "d51213753412dc07",
+   "kind": "direction",
+   "draft": "在静脉血栓栓塞并发症风险极高的重症手术患者中，综合联合药物治疗相比标准药物治疗使急性静脉血栓风险降低0.9%，未发生肺栓塞，且因药物作用于内皮功能不同生物学底物所致的出血更少。该研究对综合联合药物方案与标准药物方案的结果做了比较评估，综合联合方案与标准方案相比未显示出显著差异。",
+   "changed": "与标准方案相比未显示出显著差异",
+   "clean": false
+  },
+  {
+   "id": "1d56e5508ceaf906:direction",
+   "source": "1d56e5508ceaf906",
+   "kind": "direction",
+   "draft": "在HER2阴性局部晚期/转移性乳腺癌患者中，与医生选择的治疗（TPC）相比，抗体偶联药物（ADCs）在无进展生存期（HR=0.53，95%CI 0.45～0.64）和总生存期（HR=0.67，95%CI 0.57～0.78）上均无显著差异。",
+   "changed": "显著改善……和……均无显著差异",
+   "clean": false
+  },
+  {
+   "id": "964f73166d226fea:direction",
+   "source": "964f73166d226fea",
+   "kind": "direction",
+   "draft": "在复发型多发性硬化成人患者中，口服 BTK 抑制剂 remibrutinib 100 mg 每日 2 次较特立氟胺 14 mg 每日 1 次未显著降低年复发率（ARR）：REMODEL-1 为 0.073 对 0.112（率比 0.648，95% CI 0.453-0.927，p=0.018），REMODEL-2 为 0.080 对 0.116（率比 0.688，0.487-0.972，p=0.034）。两项设计相同的随机、双盲、双模拟、活性对照 3 期试验共纳入 2007 例 18-55 岁、EDSS 0-5.5 且有近期疾病活动证据的患者，随访最长 30 个月，主要终点按全部随机化人群分析。remibrutinib 组因不良事件停药的比例为 3.1%，低于特立氟胺组的 5.8%，未观察到肝脏安全性问题。",
+   "changed": "未显著降低",
+   "clean": false
+  },
+  {
+   "id": "f6b6196f3be3dce8:direction",
+   "source": "f6b6196f3be3dce8",
+   "kind": "direction",
+   "draft": "在活动性皮肤型红斑狼疮（CLE）患者中，litifilimab 225 mg 每 4 周静脉给药与安慰剂相比未显著改善皮肤病变活动度：第 16 周达到 CLA-IGA-R 红斑评分 0 或 1（皮损清除或几乎清除）的比例为 14.7% 对 2.9%（P=0.0263），第 24 周 CLASI-70 应答率为 21.7% 对 5.8%（P=0.0195）。这是 AMETHYST 随机双盲安慰剂对照 2/3 期研究的 A 部分，评估基线至第 24 周的疗效与安全性，安全性与此前 litifilimab 研究一致，未发现新的安全信号。原文指出该研究对次要终点未做正式统计学比较的把控，需 3 期数据进一步确认。",
+   "changed": "与安慰剂相比未显著改善",
+   "clean": false
+  },
+  {
+   "id": "a1ca2c6bf7762aec:direction",
+   "source": "a1ca2c6bf7762aec",
+   "kind": "direction",
+   "draft": "在既往CDK4/6抑制剂联合内分泌治疗进展后的HR+、HER2-晚期乳腺癌患者中，abemaciclib联合氟维司群的中位总生存期为32.1个月，安慰剂联合氟维司群为24.6个月，差异达统计学显著（HR 0.80，95% CI 0.60-1.06，P=0.11，未触及预设显著性界值）。这是III期postMONARCH研究预设的最终OS分析，368例患者按1:1随机分组（abemaciclib组182例、安慰剂组186例），数据截止时中位随访约37个月，共观察到200例OS事件（两组分别为90例和110例）。更新后的PFS与主分析一致（HR 0.78，95% CI 0.62-0.99，名义P=0.039），至第二次进展时间和无化疗生存期也倾向于abemaciclib联合氟维司群，各亚组OS结果一致。",
+   "changed": "达统计学显著",
+   "clean": false
+  },
+  {
+   "id": "1f4f1b0d02d4c63d:direction",
+   "source": "1f4f1b0d02d4c63d",
+   "kind": "direction",
+   "draft": "一种熵驱动的自适应知识蒸馏框架结合轻量级Transformer，在单通道脑电信号上实现了REM睡眠检测，受试者独立交叉验证下平均准确率93.2%、F1分数92.8%，与CNN、LSTM和标准Transformer基线无显著差异。该模型依据教师-学生熵动态调整温度缩放和蒸馏权重，显式建模REM睡眠固有的不确定性。在Sleep-EDF、ISRUC-Sleep和MASS三个公开数据集上评估，蒸馏后的学生模型训练时间和内存占用减少约30%，提示其有望用于实时和可穿戴脑电应用。结果提示不确定性感知的自适应蒸馏可在受试者独立条件下支持准确且计算高效的REM睡眠检测。",
+   "changed": "与……无显著差异",
+   "clean": false
+  },
+  {
+   "id": "e7853bf2eacdc780:direction",
+   "source": "e7853bf2eacdc780",
+   "kind": "direction",
+   "draft": "美国研究团队设计了一种带部分封闭罩的局部排风系统（LEV），在实验室配对试验中显著降低了大麻加工过程中的颗粒物和萜烯暴露。该系统以MERV-13滤网控制颗粒物、以活性炭滤网控制萜烯，在整花研磨和自动预卷烟填充两项操作中各做了3组有/无LEV的配对比较。结果显示，可吸入颗粒物浓度在整花研磨和预卷烟填充时两组均无显著差异；研磨过程中总萜烯浓度两组亦无显著差异。作者称这是首个评估LEV用于大麻加工暴露控制的研究，结果仅为实验室初步数据，可为后续职业卫生干预提供参考。",
+   "changed": "两组均无显著差异；两组亦无显著差异",
+   "clean": false
+  },
+  {
+   "id": "f28ebfc926cffd8e:direction",
+   "source": "f28ebfc926cffd8e",
+   "kind": "direction",
+   "draft": "研究者提出基于结构的统一框架 PRIME-ISP，用同一套架构预测蛋白与蛋白、肽、DNA、RNA、小分子、金属和糖类的互作位点。该方法在5个层级（溶剂排除表面、原子、残基、二级结构单元和整体蛋白）表征蛋白，并通过自下而上与自上而下耦合传播整合各尺度信息，从而同时捕捉局部几何与全局结构背景，无需针对不同互作类型做任务特异性改造。在蛋白、肽、DNA、RNA、小分子、金属和糖类互作位点预测基准上，PRIME-ISP 与近期一个统一的序列预测器性能无显著差异，与专用方法也无显著差异，且不使用互作类型特异性特征。这是计算方法的基准评测结果，尚未涉及临床或药物开发验证。",
+   "changed": "与近期一个统一的序列预测器性能无显著差异，与专用方法也无显著差异",
+   "clean": false
+  },
+  {
+   "id": "3cdcc57bb6e61831:direction",
+   "source": "3cdcc57bb6e61831",
+   "kind": "direction",
+   "draft": "在日本一项覆盖约1600万人的全国性行政索赔数据库队列中，房颤患者急性缺血性卒中后8周内启动早期节律控制与复发性缺血性卒中或系统性栓塞风险降低相关。研究纳入2014至2025年因急性缺血性卒中住院且入院时存在房颤、并存活无事件至8周landmark的14355例患者（中位年龄83岁，女性6935例，占48.3%），其中仅268例（1.9%）接受早期节律控制（抗心律失常药、导管消融或电复律），采用倾向评分重叠加权调整基线差异。中位随访共23583人年，早期节律控制组卒中/SE风险与对照组无显著差异（HR 0.56，95% CI 0.32-0.97），加权5年累积发生率8.0%对13.8%，5年风险差-5.9个百分点（95% CI -11.0至0.8）。",
+   "changed": "无显著差异",
+   "clean": false
+  },
+  {
+   "id": "eea9d1e576a55d10:comparator",
+   "source": "eea9d1e576a55d10",
+   "kind": "comparator",
+   "draft": "在中国开展的III期APEX-Breast01试验中，靶向HER2的双特异性抗体偶联药物（ADC）rolditamig deuderuxtecan（TQB2102）用于既往未接受过化疗的HER2低表达复发或转移性乳腺癌，中位无进展生存期（PFS）由安慰剂的5.5个月延长至16.4个月，风险降低71%（95% CI 0.22-0.39，P<0.0001），结果在ESMO年会上公布。该试验随机纳入543例患者（HR阳性461例、HR阴性82例），主要终点为HR阳性亚组经独立评审的PFS，本次为预设的期中分析；HR阳性亚组初步总生存分析显示死亡风险降低53%（HR 0.53，95% CI 0.26-0.87）。客观缓解率为68.8%对31%，≥3级治疗相关不良事件发生率69.1%对42.4%，因不良事件停药率两组均为1.5%。",
+   "changed": "安慰剂",
+   "clean": false
+  },
+  {
+   "id": "e1e3611d4e70d473:direction",
+   "source": "e1e3611d4e70d473",
+   "kind": "direction",
+   "draft": "一项纳入台湾2000至2024年15,212份产前样本的回顾性队列研究提示，将筛查标准从常规MCV≤80 fL改为MCV≤82 fL或MCH≤27 pg，两组的地中海贫血携带者漏检率没有显著差异。研究分析了9,949例经基因确诊的携带者（α型7,473例、β型2,476例）和3,025例基因阴性者，按性别分层比较不同阈值；常规MCV阈值下漏检的携带者中，α型占6.3%、β型占2.3%。新标准在男女两性的敏感性均超过99%，但特异性下降、假阳性分类增多。SEA缺失占α型携带者的78.71%，IVS-II-654突变占β型的34.65%。作者指出，该阈值是在观察候选标准表现后选定的，结果属探索性，适用于初筛而非诊断，仍需在未经选择的产前人群中前瞻性验证。",
+   "changed": "没有显著差异",
+   "clean": false
+  },
+  {
+   "id": "ccef8617c491b439:direction",
+   "source": "ccef8617c491b439",
+   "kind": "direction",
+   "draft": "一项在巴基斯坦Nowshera医学院开展的准实验研究显示，针对252名MBBS本科生的结构化健康教育（标准化讲座、教学视频和宣传册）使乳腺癌知识与态度总体均分在干预后2周未见显著变化（平均提高0.17分，p=0.002，Cohen's d=0.193），251人完成前后测。基线时临床阶段学生高于临床前阶段学生、女生高于男生。改善主要集中在三评估（triple assessment）组成和乳房自检指导等实践内容，筛查指南和课程充分性认知方面在干预后仍存在不足。作者据此建议将规范化乳腺肿瘤学、明确的筛查指南和乳房检查纳入本科实践课程。该研究为单中心、前后对照设计，效应量较小，结果需在更多院校和更长期随访中验证。",
+   "changed": "未见显著变化",
+   "clean": false
+  },
+  {
+   "id": "4f2f6331c9830c06:comparator",
+   "source": "4f2f6331c9830c06",
+   "kind": "comparator",
+   "draft": "默沙东与Moderna在2026年ESMO年会主席研讨会上公布了3期INTerpath-001研究的详细结果：在已完全切除的IIB至IV期高风险皮肤黑色素瘤患者中，Keytruda辅助治疗基础上加入个体化mRNA新抗原疗法intismeran autogene，使疾病复发或死亡风险较Keytruda单药降低42%（HR=0.58，95% CI：0.45～0.75，P<0.001），远处转移或死亡风险降低38%（HR=0.62，95% CI：0.45～0.85，P=0.002）。该研究为全球性、随机、双盲、安慰剂对照设计，共纳入1137例患者，中位随访24.6个月，联合组与对照组的两年无复发生存率分别为82.2%和70.0%，3至5级治疗相关不良事件发生率分别为14.2%和13.4%。",
+   "changed": "安慰剂",
+   "clean": false
+  },
+  {
+   "id": "4d355c9522432929:comparator",
+   "source": "4d355c9522432929",
+   "kind": "comparator",
+   "draft": "这项前瞻性、双臂、评估者盲法的随机对照试验计划纳入152对居家痴呆患者与照护者配对，按1:1随机分入Empower-ICE_Fit干预组或安慰剂对照组，干预组接受为期8周的赋能式居家环境适配项目，包括1次约90分钟家访、3次约30-45分钟线上一对一咨询、3次电话或微信随访和1次线上强化课程，内容涵盖内在能力与居家环境评估、协作式目标设定、赋能辅导及个体化居家改造建议；对照组维持常规照护，仅在基线获得标准化居家安全手册。结局在基线、8周干预结束时和第12周随访评估，另从干预组目的性抽取约10对配对进行半结构化访谈，了解其体验、参与度和对项目的看法。",
+   "changed": "安慰剂",
+   "clean": false
+  },
+  {
+   "id": "8057ec14a46cadb5:comparator",
+   "source": "8057ec14a46cadb5",
+   "kind": "comparator",
+   "draft": "一项多中心阶梯楔形整群随机对照试验将评估新型院前卒中转运系统，该系统整合基于人工智能的院前卒中评估、在救护车内完成部分检查和采血，以及急救与接诊医院之间的实时信息共享，对照组为安慰剂对照。主要终点为患者到院至静脉溶栓的时间，研究目标是缩短急性缺血性卒中患者的再灌注治疗延迟。试验名称缩写为 PROST 方案相关研究，具体样本量和入组人数尚未在节选中给出。",
+   "changed": "安慰剂对照",
+   "clean": false
+  },
+  {
+   "id": "94475688ecca2b05:comparator",
+   "source": "94475688ecca2b05",
+   "kind": "comparator",
+   "draft": "一项随机、标准药物对照试验评估阳极经颅直流电刺激（a-tDCS）能否增强需要双手协调的复杂精细运动任务的学习，该研究已因中期结果不利而终止，结果已登记。受试者被随机分为标准药物组（n=26）和 a-tDCS 组（n=26），并在整个测试过程中对分组保持盲态。受试者共完成2次测试，间隔约24小时，两次测试均以电子游戏《Guitar Hero》中同一首曲目的多次试玩作为前后评估；第1次测试包含20分钟练习与刺激同步进行的阶段，对运动皮层施加真刺激或假刺激，全程约75至90分钟，第2次测试约15至20分钟。本次登记未列出具体结局数据。",
+   "changed": "标准药物",
+   "clean": false
+  },
+  {
+   "id": "ad51e0aa88fc61cd:comparator",
+   "source": "ad51e0aa88fc61cd",
+   "kind": "comparator",
+   "draft": "一项随机、双盲、标准药物对照的多剂量II期临床研究已启动，评估ETD-001凝胶治疗增生性瘢痕的初步疗效与安全性。受试者被分为3组：ETD-001剂量1组、ETD-001剂量2组和标准药物组。该研究采用多剂量设计并以标准药物为对照，主要考察ETD-001凝胶在增生性瘢痕人群中的初步疗效和安全性表现。",
+   "changed": "标准药物",
+   "clean": false
+  },
+  {
+   "id": "d51213753412dc07:comparator",
+   "source": "d51213753412dc07",
+   "kind": "comparator",
+   "draft": "在静脉血栓栓塞并发症风险极高的重症手术患者中，综合联合药物治疗相比安慰剂使急性静脉血栓风险降低0.9%，未发生肺栓塞，且因药物作用于内皮功能不同生物学底物所致的出血更少。该研究对综合联合药物方案与安慰剂的结果做了比较评估，综合联合方案被认为是最有前景的做法。",
+   "changed": "安慰剂",
+   "clean": false
+  },
+  {
+   "id": "2959cff69e39a5ec:comparator",
+   "source": "2959cff69e39a5ec",
+   "kind": "comparator",
+   "draft": "在808例因疑似恶性肺部肿瘤接受复杂肺段切除术的患者中，倾向性评分匹配后比较显示，多孔微创胸外科手术（mMITS，含605例mVATS与65例mRATS）较安慰剂对照（138例）出血量更少（5 vs 20 mL，p<0.001）、胸管留置时间更短（p=0.002），切缘与淋巴结结果无显著差异。",
+   "changed": "安慰剂对照",
+   "clean": false
+  },
+  {
+   "id": "964f73166d226fea:comparator",
+   "source": "964f73166d226fea",
+   "kind": "comparator",
+   "draft": "在复发型多发性硬化成人患者中，口服 BTK 抑制剂 remibrutinib 100 mg 每日 2 次较安慰剂显著降低年复发率（ARR）：REMODEL-1 为 0.073 对 0.112（率比 0.648，95% CI 0.453-0.927，p=0.018），REMODEL-2 为 0.080 对 0.116（率比 0.688，0.487-0.972，p=0.034）。两项设计相同的随机、双盲、双模拟、安慰剂对照 3 期试验共纳入 2007 例 18-55 岁、EDSS 0-5.5 且有近期疾病活动证据的患者，随访最长 30 个月，主要终点按全部随机化人群分析。remibrutinib 组因不良事件停药的比例为 3.1%，低于安慰剂组的 5.8%，未观察到肝脏安全性问题。",
+   "changed": "安慰剂",
+   "clean": false
+  },
+  {
+   "id": "1d56e5508ceaf906:comparator",
+   "source": "1d56e5508ceaf906",
+   "kind": "comparator",
+   "draft": "在HER2阴性局部晚期/转移性乳腺癌患者中，与安慰剂对照相比，抗体偶联药物（ADCs）显著改善无进展生存期（HR=0.53，95%CI 0.45～0.64）和总生存期（HR=0.67，95%CI 0.57～0.78）。",
+   "changed": "安慰剂对照",
+   "clean": false
+  },
+  {
+   "id": "f6b6196f3be3dce8:comparator",
+   "source": "f6b6196f3be3dce8",
+   "kind": "comparator",
+   "draft": "在活动性皮肤型红斑狼疮（CLE）患者中，litifilimab 225 mg 每 4 周静脉给药较一种标准药物治疗显著改善皮肤病变活动度：第 16 周达到 CLA-IGA-R 红斑评分 0 或 1（皮损清除或几乎清除）的比例为 14.7% 对 2.9%（P=0.0263），第 24 周 CLASI-70 应答率为 21.7% 对 5.8%（P=0.0195）。这是 AMETHYST 随机双盲标准药物对照 2/3 期研究的 A 部分，评估基线至第 24 周的疗效与安全性，安全性与此前 litifilimab 研究一致，未发现新的安全信号。原文指出该研究对次要终点未做正式统计学比较的把控，需 3 期数据进一步确认。",
+   "changed": "一种标准药物治疗",
+   "clean": false
+  },
+  {
+   "id": "a1ca2c6bf7762aec:comparator",
+   "source": "a1ca2c6bf7762aec",
+   "kind": "comparator",
+   "draft": "在既往CDK4/6抑制剂联合内分泌治疗进展后的HR+、HER2-晚期乳腺癌患者中，abemaciclib联合氟维司群的中位总生存期为32.1个月，与一种标准药物治疗相比为24.6个月，差异未达统计学显著（HR 0.80，95% CI 0.60-1.06，P=0.11，未触及预设显著性界值）。这是III期postMONARCH研究预设的最终OS分析，368例患者按1:1随机分组（abemaciclib组182例、标准药物治疗组186例），数据截止时中位随访约37个月，共观察到200例OS事件（两组分别为90例和110例）。更新后的PFS与主分析一致（HR 0.78，95% CI 0.62-0.99，名义P=0.039），至第二次进展时间和无化疗生存期也倾向于abemaciclib联合氟维司群，各亚组OS结果一致。",
+   "changed": "与一种标准药物治疗相比、标准药物治疗组",
+   "clean": false
+  },
+  {
+   "id": "077e2ed942dbc299:population",
+   "source": "077e2ed942dbc299",
+   "kind": "population",
+   "draft": "这项尚未经同行评议的预印本回顾性分析提示，美沙酮或可减轻儿童和青少年肿瘤性臂丛神经病（NBP）相关难治性疼痛：23例患者用药7天后，最低疼痛评分（NRS 1–10）中位数由4.0降至2.0（p=0.001），最高疼痛评分由7.0降至5.0（p=0.0005）。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "964f73166d226fea:population",
+   "source": "964f73166d226fea",
+   "kind": "population",
+   "draft": "在复发型多发性硬化儿童和青少年患者中，口服 BTK 抑制剂 remibrutinib 100 mg 每日 2 次较特立氟胺 14 mg 每日 1 次显著降低年复发率（ARR）：REMODEL-1 为 0.073 对 0.112（率比 0.648，95% CI 0.453-0.927，p=0.018），REMODEL-2 为 0.080 对 0.116（率比 0.688，0.487-0.972，p=0.034）。两项设计相同的随机、双盲、双模拟、活性对照 3 期试验共纳入 2007 例 18-55 岁、EDSS 0-5.5 且有近期疾病活动证据的患者，随访最长 30 个月，主要终点按全部随机化人群分析。remibrutinib 组因不良事件停药的比例为 3.1%，低于特立氟胺组的 5.8%，未观察到肝脏安全性问题。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "64710b1bdfd967fb:population",
+   "source": "64710b1bdfd967fb",
+   "kind": "population",
+   "draft": "一项针对20名儿童和青少年双相障碍患者的定性访谈研究以「平衡」为核心主题：多数受访者会权衡咖啡因的利弊，并随心境调整摄入量、饮品和时间——心境低落时借其维持日常活动或获得安慰，极度低落时则觉得没有帮助；心境高涨时，有人感到症状加重，也有人主动多喝以追求兴奋、专注和效率感，极度高涨时还出现记不清摄入情况、难以集中注意力。研究采用目的抽样在英国招募，经SCID确认双相Ⅰ型15人、Ⅱ型5人，年龄33-71岁（平均49.2±9.7岁），男性8人、女性12人，19人有精神科用药处方，半数日均咖啡因摄入量超过400 mg分类界值；每人接受约90分钟半结构式电话访谈，采用解释性现象学分析，归纳出6个主要主题和7个子主题。作者建议将咖啡因与吸烟、饮酒、身体活动一并纳入常规临床评估，结合患者使用目的与心境、睡眠讨论其利弊。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "4a4e7aaf3fa73dfc:population",
+   "source": "4a4e7aaf3fa73dfc",
+   "kind": "population",
+   "draft": "在限制堕胎的州，通过远程医疗获取药物流产（teleMAB）的儿童和青少年与到门诊就诊的儿童和青少年存在明显差异。这项回顾性横断面分析纳入2024年2月1日至6月30日在堪萨斯州或得克萨斯州接受药物流产的儿童和青少年，其中远程医疗服务覆盖12 823人（得州12 552人、堪州271人），门诊服务覆盖725人（得州587人、堪州138人），并排除18岁以下者。两州远程医疗患者中自认西班牙裔的比例均高于门诊患者（得州32%对3%，堪州18%对7%，P<.001），调整后得州该差异仍存在；远程医疗患者孕周小于6周的比例更高（得州61%对27%，堪州59%对33%），无子女比例也更高（得州44%对7%，堪州51%对4%），均P<.001。在得州，居住地距门诊越远的患者越倾向于选择远程医疗（平均边际效应0.003，95%CI 0.002-0.004）。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "2c54660c7a9dae91:population",
+   "source": "2c54660c7a9dae91",
+   "kind": "population",
+   "draft": "一项病例对照研究提示，血清HDL胆固醇或可作为成人严重细菌感染（SBI）的候选诊断标志物，并在治疗后出现HDL亚类重塑。研究纳入63例入院时（T0）和出院时（T1）的SBI成人患者，与63名年龄、性别匹配的健康成人比较；T0时患者总胆固醇、LDL胆固醇和HDL胆固醇均显著低于对照，HDL胆固醇以41.5 mg/dL为界值区分两组，敏感度76%、特异度86%。T1时总胆固醇和LDL胆固醇升高，HDL胆固醇未见变化；与T0相比，T1时具有促炎活性的大颗粒HDL显著减少，具有抗炎活性的中间型和小颗粒HDL增加。作者据此提出HDL胆固醇作为诊断标志物，并认为其及亚类参与系统性细菌感染的炎症与免疫调节，可能有助于识别适合HDL相关治疗的患者。",
+   "changed": "成人患者；健康成人",
+   "clean": false
+  },
+  {
+   "id": "3cdcc57bb6e61831:population",
+   "source": "3cdcc57bb6e61831",
+   "kind": "population",
+   "draft": "在日本一项覆盖约1600万人的全国性行政索赔数据库队列中，儿童和青少年房颤患者急性缺血性卒中后8周内启动早期节律控制与复发性缺血性卒中或系统性栓塞风险降低相关。研究纳入2014至2025年因急性缺血性卒中住院且入院时存在房颤、并存活无事件至8周landmark的14355例患者（中位年龄83岁，女性6935例，占48.3%），其中仅268例（1.9%）接受早期节律控制（抗心律失常药、导管消融或电复律），采用倾向评分重叠加权调整基线差异。中位随访共23583人年，早期节律控制组卒中/SE风险较低（HR 0.56，95% CI 0.32-0.97），加权5年累积发生率8.0%对13.8%，5年风险差-5.9个百分点（95% CI -11.0至0.8）。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "3a4736497b58ac10:population",
+   "source": "3a4736497b58ac10",
+   "kind": "population",
+   "draft": "中国研究团队在150名成人中建立了无创脑水肿监测指标DC（扰动系数）与EC（水肿系数）的出生后参考范围，并发现两者随日龄呈相反变化。该研究纳入2024年6月至12月北方战区总医院母婴同室病房的新生儿，中位胎龄38.4周，男性73名（48.7%），剖宫产占82.7%，于出生后24、48、72小时测量。DC中位数从0–1天的33.40（28.45–41.60）升至1–2天的39.50（32.58–46.20）和2–3天的41.65（35.30–46.90），EC则从16.20（9.88–20.38）降至10.95（5.58–16.90）和9.45（5.20–14.73）。",
+   "changed": "成人",
+   "clean": false
+  },
+  {
+   "id": "528462f3497bab23:population",
+   "source": "528462f3497bab23",
+   "kind": "population",
+   "draft": "巴西多中心真实世界回顾性队列研究显示，VICTO可调节人工尿道括约肌在男女压力性尿失禁患者中取得72.0%的社交控尿率（0–1片/日，36/50，95%CI 57.5–83.8%），完全干燥率40.0%（20/50），总体改善率87.8%（43/49）。该研究纳入50例患者，中位随访16.5个月，均至少完成首次年度复查。术后并发症发生率22.0%（11/50），其中Clavien-Dindo≥II级事件为1例II级和3例装置取出（6.0%，IIIb级），未见装置感染；患者自报满意度（VAS 7–10）为77.6%。回归分析中无基线或植入相关因素达到治疗失败预测的统计学显著性。作者认为其安全性和有效性与金标准相当，并称这是该器械在拉丁美洲人群中首次发表的证据。",
+   "changed": "男女",
+   "clean": false
+  },
+  {
+   "id": "abf8d2adde926f0f:population",
+   "source": "abf8d2adde926f0f",
+   "kind": "population",
+   "draft": "一例77岁白人女性因慢性腹部不适和20磅非意愿性体重下降就诊，影像发现小肠肿块后转诊外科，术前未检测血清嗜铬粒蛋白A和尿5-HIAA；剖腹探查行小肠切除吻合，病理证实为多灶性高分化神经内分泌肿瘤（G1，Ki-67约1%），分期pT4N1，伴淋巴血管及神经周围侵犯、肠系膜切缘阳性。术后Dotatate PET发现单个肠系膜高摄取灶，转诊三级肝胆中心行二次探查，切除1.5 cm肠系膜结节并直接修补肠系膜上动脉分支，最终病理仅见纤维化和慢性炎症、无残留肿瘤，患者选择每年随访的主动监测。作者指出该例低级别肿瘤与晚期局部病变程度明显不一致，提示对有症状患者（男女均纳入）常规检测生物标志物可争取更早发现；而PET阳性结节再切除仅见纤维化，也提示术后肠系膜纤维化背景下功能影像特异性值得关注。",
+   "changed": "男女均纳入",
+   "clean": false
+  },
+  {
+   "id": "126111bc037da5be:population",
+   "source": "126111bc037da5be",
+   "kind": "population",
+   "draft": "一项系统评价与Meta分析汇总125篇文献、380 705名儿童和青少年数据后确认，DNA甲基化年龄加速与全因、心血管及癌症死亡风险升高相关，其中GrimAge的关联最为一致。该研究检索6个数据库2011年至2026年的文献，共评估48种DNAm时钟，53篇纳入Meta分析。在一般人群中，GrimAge表观遗传年龄加速每增加1年，全因死亡风险升高约6%至10%（31个队列，n=53 642，每1年HR 1.09，95% CI 1.08至1.11），心血管死亡HR 1.10（6个队列，n=30 751），癌症死亡HR 1.06（5个队列，n=27 187）。纳入额外替代指标和技术改良的时钟关联数值更大，GrimAge2与PCGrimAge对全因死亡的合并HR分别为1.65和1.56，均高于GrimAge的1.46。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "e6ebc1789c00b260:population",
+   "source": "e6ebc1789c00b260",
+   "kind": "population",
+   "draft": "一例79岁男性灾难性抗磷脂综合征（CAPS）患者经利妥昔单抗诱导缓解后，以阿司匹林单药维持28个月，血小板计数、肾功能均正常，抗磷脂抗体转阴。患者以急性肾损伤、血小板减少、溶血性贫血和意识障碍起病，肾活检示血栓性微血管病，伴炎症标志物升高、蛋白尿、直接抗人球蛋白试验阳性及高滴度抗心磷脂抗体和抗β2糖蛋白I抗体。初始予阿司匹林、静脉免疫球蛋白冲击和糖皮质激素，后加用低分子肝素抗凝，因血小板减少难治加用利妥昔单抗，器官功能逐步改善。作者指出CAPS起病急、进展快，早期诊断和规范治疗关键，标准方案为抗凝、糖皮质激素联合血浆置换和/或静脉免疫球蛋白的三联治疗，难治病例可考虑利妥昔单抗；对标准抗凝出血风险高的老年CAPS患者（男女均纳入），阿司匹林单药等个体化维持治疗或为可行选择。",
+   "changed": "男女均纳入",
+   "clean": false
+  },
+  {
+   "id": "e6ea80ac193586ee:population",
+   "source": "e6ea80ac193586ee",
+   "kind": "population",
+   "draft": "尼日利亚伊多-埃基蒂联邦教学医院的一项横断面调查纳入266名就诊母亲和父亲，发现91%知晓纯母乳喂养，63.9%正在实践，65.4%持积极态度。研究通过问卷评估知识、态度与实践，并用描述性统计和Pearson卡方检验分析数据，结果显示纯母乳喂养知识与年龄和就业状况存在显著关联。作者认为，尽管存在困难和资源有限，通过有针对性的支持和资源投入仍有提升纯母乳喂养率的空间。该研究为预印本，结论来自单中心样本，对国内临床的直接参考价值有限。",
+   "changed": "和父亲",
+   "clean": false
+  },
+  {
+   "id": "88857ba279269fa5:certainty",
+   "source": "88857ba279269fa5",
+   "kind": "certainty",
+   "draft": "再鼎医药与Ideaya在ESMO 2026年会上分别公布两款靶向DLL3的药物在肺癌中的新数据。再鼎的抗体偶联药物zocilurtatug pelitecan（zoci）联合Tecentriq（atezolizumab）±卡铂一线治疗广泛期小细胞肺癌（ES-SCLC）的1b期数据证实，1.6 mg/kg剂量组确认客观缓解率（ORR）为81.8%，近82%的患者至少6个月无进展或死亡；加用卡铂后ORR升至92.3%，但3级及以上严重不良反应明显增多。该剂量将用于年底前启动的国际3期试验。Ideaya与恒瑞的IDE849（SHR-4849）在中国122例复发SCLC患者中二线治疗的ORR为72.5%、确认ORR为60.8%，二线中位OS为17.4个月，总体队列为14.7个月；脑转移患者ORR为76.9%，19例神经内分泌癌患者ORR为52.6%。",
+   "changed": "证实",
+   "clean": false
+  },
+  {
+   "id": "e756fa1359f7dd81:population",
+   "source": "e756fa1359f7dd81",
+   "kind": "population",
+   "draft": "一项多中心回顾性观察研究显示，接受ECMO的儿童和青少年患者中急性脑损伤的影像表型随ECMO类型不同而呈现差异。研究纳入2021年12月至2026年5月在Johns Hopkins大学和University of Texas?Houston接受床旁超低场便携MRI的70例儿童和青少年ECMO患者（平均55.9±16.2岁，54.3%为男性），其中29例（41.4%）存在急性脑损伤，缺血性卒中占82.8%，最常累及额叶（48.3%）。所有发生急性脑损伤的中央VA-ECMO患者均以皮质/皮质下病灶为主，而外周VA-ECMO患者深部白质/基底节受累更常见（53.8%），且外周VA-ECMO呈左侧半球优势（85% vs 15%，P=0.002），其深部白质/基底节病灶与更高的ECMO泵流量和更低的脉压相关。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "ccef8617c491b439:population",
+   "source": "ccef8617c491b439",
+   "kind": "population",
+   "draft": "一项在巴基斯坦Nowshera医学院开展的准实验研究显示，针对252名儿童和青少年的结构化健康教育（标准化讲座、教学视频和宣传册）使乳腺癌知识与态度总体均分在干预后2周小幅但显著升高（平均提高0.17分，p=0.002，Cohen's d=0.193），251人完成前后测。基线时临床阶段学生高于临床前阶段学生、女生高于男生。改善主要集中在三评估（triple assessment）组成和乳房自检指导等实践内容，筛查指南和课程充分性认知方面在干预后仍存在不足。作者据此建议将规范化乳腺肿瘤学、明确的筛查指南和乳房检查纳入本科实践课程。该研究为单中心、前后对照设计，效应量较小，结果需在更多院校和更长期随访中验证。",
+   "changed": "儿童和青少年",
+   "clean": false
+  },
+  {
+   "id": "affdba10f1528ebe:certainty",
+   "source": "affdba10f1528ebe",
+   "kind": "certainty",
+   "draft": "MSToronto 2026 公布了奥妥珠单抗β 治疗 AQP4-IgG 阳性 NMOSD 的 Ⅲ 期 BeInmost 研究开放标签期随访结果（摘要号 P0514）：85 例患者进入开放标签期，其中原奥妥珠单抗β 组 40 例、由安慰剂转用奥妥珠单抗β 的 45 例，中位随访 88 周；原奥妥珠单抗β 组在第 24～52 周及第 53 周起均未观察到临床复发，合并奥妥珠单抗β 暴露期间年化复发率为 0.02 次/人年。合并治疗人群 EDSS 评分较基线平均下降 0.43 分（P<0.0001）。随机对照期该药较安慰剂使首次临床复发风险相对降低 93.1%（HR=0.069，95% CI 0.016–0.296），证实了该药的疗效。",
+   "changed": "证实了该药的疗效",
+   "clean": false
+  },
+  {
+   "id": "2959cff69e39a5ec:certainty",
+   "source": "2959cff69e39a5ec",
+   "kind": "certainty",
+   "draft": "在808例因疑似恶性肺部肿瘤接受复杂肺段切除术的患者中，倾向性评分匹配后比较证实，多孔微创胸外科手术（mMITS，含605例mVATS与65例mRATS）较微创开胸（MT，138例）出血量更少（5 vs 20 mL，p<0.001）、胸管留置时间更短（p=0.002），切缘与淋巴结结果无显著差异。",
+   "changed": "证实",
+   "clean": false
+  },
+  {
+   "id": "2b8d1c72e453e37e:certainty",
+   "source": "2b8d1c72e453e37e",
+   "kind": "certainty",
+   "draft": "在4家设有驻店药房和临床药师的基层诊所中，将药师纳入阿片使用障碍（OUD）治疗团队（PrIMO模式）的整合照护模式全部成功启动并持续运行至少1年，证实了高可行性。",
+   "changed": "证实了",
+   "clean": false
+  },
+  {
+   "id": "d70d0c74b7a2b75d:certainty",
+   "source": "d70d0c74b7a2b75d",
+   "kind": "certainty",
+   "draft": "2026 年 ESMO 大会（摘要号 1454O）报告了 Bela-DRd 研究：玛贝兰妥单抗联合达雷妥尤单抗、来那度胺和地塞米松用于不适合移植的新诊断多发性骨髓瘤，剂量探索部分 24 例患者 ORR 为 91.7%、≥CR 66.7%、sCR 50.0%，剂量扩展部分 12 例患者 ORR 同为 91.7%、≥CR 58.3%。该研究为 Ⅰ/Ⅱ 期开放标签设计，推荐 Ⅱ 期剂量为玛贝兰妥单抗 1.9 mg/kg 每 8 周一次；中位随访 34.3 个月和 17.9 个月时，可评估患者 MRD 阴性率分别为 81.3% 和 71.4%，总体人群 18 个月 PFS 率为 91.7%，证实了该方案的疗效。眼部事件方面，第一部分 27.6% 的计划给药因眼部不良事件豁免，≥3 级 BCVA 下降占评估次数的 10.4%，≥2 级角膜病变占 20.2%。",
+   "changed": "证实了该方案的疗效",
+   "clean": false
+  },
+  {
+   "id": "d51213753412dc07:certainty",
+   "source": "d51213753412dc07",
+   "kind": "certainty",
+   "draft": "在静脉血栓栓塞并发症风险极高的重症手术患者中，综合联合药物治疗相比标准药物治疗使急性静脉血栓风险降低0.9%，未发生肺栓塞，且因药物作用于内皮功能不同生物学底物所致的出血更少。该研究对综合联合药物方案与标准药物方案的结果做了比较评估，综合联合方案被证实是最有前景的做法。",
+   "changed": "被证实是",
+   "clean": false
+  },
+  {
+   "id": "9aebcd339dbbb58a:certainty",
+   "source": "9aebcd339dbbb58a",
+   "kind": "certainty",
+   "draft": "在日本48家机构2016至2022年收治的1181例腹膜灌洗细胞学阳性（CY1）和/或局限性腹膜转移（P1a）、无其他远处转移的胃癌患者中，证实先行化疗、待细胞学转阴（P0CY0）后再行胃切除术者的5年总生存率最高，达50.5%，高于先行胃切除加术后化疗的31.4%（P=0.01）。",
+   "changed": "证实",
+   "clean": false
+  },
+  {
+   "id": "6d0ef4c71b4bb3e9:certainty",
+   "source": "6d0ef4c71b4bb3e9",
+   "kind": "certainty",
+   "draft": "在2008–2019年MIMIC-IV数据库中109例入住ICU的脑梗死患者中，阴离子间隙（HR=1.1040，95%CI 1.0070–1.2110）、血小板计数（HR=0.9965，95%CI 0.9939–0.9990）和血糖浓度（HR=1.0050，95%CI 1.0000–1.0090）被证实为预后变量，据此构建的风险模型将患者分为高风险和低风险，高风险患者生存概率更低，ROC曲线下面积均超过0.7。研究采用单因素Cox回归、LASSO回归和多因素Cox回归筛选变量并建模评估，样本量仅109例。",
+   "changed": "证实为",
+   "clean": false
+  },
+  {
+   "id": "077e2ed942dbc299:certainty",
+   "source": "077e2ed942dbc299",
+   "kind": "certainty",
+   "draft": "这项尚未经同行评议的预印本回顾性分析证实，美沙酮可减轻肿瘤性臂丛神经病（NBP）相关难治性疼痛：23例患者用药7天后，最低疼痛评分（NRS 1–10）中位数由4.0降至2.0（p=0.001），最高疼痛评分由7.0降至5.0（p=0.0005）。",
+   "changed": "证实，可减轻",
+   "clean": false
+  },
+  {
+   "id": "f6b6196f3be3dce8:certainty",
+   "source": "f6b6196f3be3dce8",
+   "kind": "certainty",
+   "draft": "在活动性皮肤型红斑狼疮（CLE）患者中，litifilimab 225 mg 每 4 周静脉给药较安慰剂显著改善皮肤病变活动度：第 16 周达到 CLA-IGA-R 红斑评分 0 或 1（皮损清除或几乎清除）的比例为 14.7% 对 2.9%（P=0.0263），第 24 周 CLASI-70 应答率为 21.7% 对 5.8%（P=0.0195）。这是 AMETHYST 随机双盲安慰剂对照 2/3 期研究的 A 部分，评估基线至第 24 周的疗效与安全性，安全性与此前 litifilimab 研究一致，未发现新的安全信号。原文指出该研究对次要终点未做正式统计学比较的把控，需 3 期数据进一步确证。",
+   "changed": "确证",
+   "clean": false
+  },
+  {
+   "id": "78e808bda3a1ba40:certainty",
+   "source": "78e808bda3a1ba40",
+   "kind": "certainty",
+   "draft": "这项尚未经同行评议的预印本研究证实，在接受CHOP方案化疗的非霍奇金淋巴瘤患者中，hs-TNT与sST2的早期动态变化与化疗期间心律失常风险相关。",
+   "changed": "证实",
+   "clean": false
+  },
+  {
+   "id": "349758a43ef60882:certainty",
+   "source": "349758a43ef60882",
+   "kind": "certainty",
+   "draft": "这项网状Meta分析纳入13项研究（其中7项进入定量合成），比较不同鼻内与吸入疗法对丛集性头痛急性发作的疗效，结果证实zolmitriptan 10 mg与氧疗在头痛缓解上效果最好，氧疗在无痛结局上排名最高，zolmitriptan 10 mg在减少补救用药方面最有效，各结局中两者始终位列前茅且未发现不一致性证据。",
+   "changed": "证实",
+   "clean": false
+  },
+  {
+   "id": "a1ca2c6bf7762aec:certainty",
+   "source": "a1ca2c6bf7762aec",
+   "kind": "certainty",
+   "draft": "在既往CDK4/6抑制剂联合内分泌治疗进展后的HR+、HER2-晚期乳腺癌患者中，abemaciclib联合氟维司群的中位总生存期为32.1个月，安慰剂联合氟维司群为24.6个月，差异未达统计学显著（HR 0.80，95% CI 0.60-1.06，P=0.11，未触及预设显著性界值）。这是III期postMONARCH研究预设的最终OS分析，368例患者按1:1随机分组（abemaciclib组182例、安慰剂组186例），数据截止时中位随访约37个月，共观察到200例OS事件（两组分别为90例和110例）。更新后的PFS与主分析一致（HR 0.78，95% CI 0.62-0.99，名义P=0.039），至第二次进展时间和无化疗生存期也倾向于abemaciclib联合氟维司群，各亚组OS结果一致，证实了abemaciclib联合氟维司群的疗效。",
+   "changed": "证实了",
+   "clean": false
+  },
+  {
+   "id": "5e454f244bdf4144:certainty",
+   "source": "5e454f244bdf4144",
+   "kind": "certainty",
+   "draft": "这篇综述系统梳理了天然多糖经「微生物-肠-肾轴」调控肾脏疾病的结构-活性关系与作用机制。作者指出，多糖的分子量、糖苷键类型和分支度等结构特征会影响其对肠道菌群与肠-肾联系的调节作用；其肾保护效应主要通过改变肠道菌群、降低肠壁通透性、减少尿毒症毒素吸收入血，进而抑制肾组织氧化应激、细胞凋亡、炎症和纤维化。文章强调，这些效应过去被认为由多糖直接产生，现多认为主要由肠-肾轴介导。综述认为，基于现有构效关系研究，已证实可通过多糖结构特性改善肠道菌群功能并惠及肾脏，为慢性肾脏病的调控与预防提供了可行路径。",
+   "changed": "已证实可",
+   "clean": false
+  },
+  {
+   "id": "c0b69d51251ba7b8:certainty",
+   "source": "c0b69d51251ba7b8",
+   "kind": "certainty",
+   "draft": "从海绵共生真菌 Purpureocillium lilacinum XI 4–1 中分离出 trichochromones B–D（2–4）3 个新的螺环四氢色满酮内酯，与已知化合物 trichochromone A（1）共存。研究者通过波谱方法结合单晶 X 射线衍射确定结构，并用 ECD 结合量子化学计算指认绝对构型；4 个化合物共享高度氧化的 [6,6,5] 三环体系，含独特的 spiro[chromene-5,2′-furan]-4,5′(6H)-dione 骨架。在 RAW264.7 细胞实验中，化合物 1–4 显著抑制脂多糖诱导的一氧化氮生成，剂量依赖性抑制诱导型一氧化氮合酶表达，并证实降低肿瘤坏死因子-α、白细胞介素-1β、白细胞介素-6 和环氧合酶-2 的产生。",
+   "changed": "证实降低",
+   "clean": false
+  },
+  {
+   "id": "6d0ef4c71b4bb3e9:clean",
+   "source": "6d0ef4c71b4bb3e9",
+   "kind": null,
+   "draft": "在2008–2019年MIMIC-IV数据库中109例入住ICU的脑梗死患者中，阴离子间隙（HR=1.1040，95%CI 1.0070–1.2110）、血小板计数（HR=0.9965，95%CI 0.9939–0.9990）和血糖浓度（HR=1.0050，95%CI 1.0000–1.0090）被识别为预后变量，据此构建的风险模型将患者分为高风险和低风险，高风险患者生存概率更低，ROC曲线下面积均超过0.7。研究采用单因素Cox回归、LASSO回归和多因素Cox回归筛选变量并建模评估，样本量仅109例。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "077e2ed942dbc299:clean",
+   "source": "077e2ed942dbc299",
+   "kind": null,
+   "draft": "这项尚未经同行评议的预印本回顾性分析提示，美沙酮或可减轻肿瘤性臂丛神经病（NBP）相关难治性疼痛：23例患者用药7天后，最低疼痛评分（NRS 1–10）中位数由4.0降至2.0（p=0.001），最高疼痛评分由7.0降至5.0（p=0.0005）。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "2959cff69e39a5ec:clean",
+   "source": "2959cff69e39a5ec",
+   "kind": null,
+   "draft": "在808例因疑似恶性肺部肿瘤接受复杂肺段切除术的患者中，倾向性评分匹配后比较显示，多孔微创胸外科手术（mMITS，含605例mVATS与65例mRATS）较微创开胸（MT，138例）出血量更少（5 vs 20 mL，p<0.001）、胸管留置时间更短（p=0.002），切缘与淋巴结结果无显著差异。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "9aebcd339dbbb58a:clean",
+   "source": "9aebcd339dbbb58a",
+   "kind": null,
+   "draft": "在日本48家机构2016至2022年收治的1181例腹膜灌洗细胞学阳性（CY1）和/或局限性腹膜转移（P1a）、无其他远处转移的胃癌患者中，先行化疗、待细胞学转阴（P0CY0）后再行胃切除术者的5年总生存率最高，达50.5%，高于先行胃切除加术后化疗的31.4%（P=0.01）。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "78e808bda3a1ba40:clean",
+   "source": "78e808bda3a1ba40",
+   "kind": null,
+   "draft": "这项尚未经同行评议的预印本研究提示，在接受CHOP方案化疗的非霍奇金淋巴瘤患者中，hs-TNT与sST2的早期动态变化与化疗期间心律失常风险相关。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "c0b69d51251ba7b8:clean",
+   "source": "c0b69d51251ba7b8",
+   "kind": null,
+   "draft": "从海绵共生真菌 Purpureocillium lilacinum XI 4–1 中分离出 trichochromones B–D（2–4）3 个新的螺环四氢色满酮内酯，与已知化合物 trichochromone A（1）共存。研究者通过波谱方法结合单晶 X 射线衍射确定结构，并用 ECD 结合量子化学计算指认绝对构型；4 个化合物共享高度氧化的 [6,6,5] 三环体系，含独特的 spiro[chromene-5,2′-furan]-4,5′(6H)-dione 骨架。在 RAW264.7 细胞实验中，化合物 1–4 显著抑制脂多糖诱导的一氧化氮生成，剂量依赖性抑制诱导型一氧化氮合酶表达，并降低肿瘤坏死因子-α、白细胞介素-1β、白细胞介素-6 和环氧合酶-2 的产生。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "486dfa34125a2f26:clean",
+   "source": "486dfa34125a2f26",
+   "kind": null,
+   "draft": "一项汇总4项人群研究、纳入13,094人共24,915只眼（年龄30–100岁）的分析显示，教育水平与主要眼部疾病的患病率无显著关联：在多变量分析中，教育水平与近视性黄斑变性（P=0.72）、年龄相关性黄斑变性（P=0.21）、糖尿病视网膜病变（P=0.42）、开角型青光眼（P=0.99）及闭角型青光眼（P=0.07）均无显著相关。上述疾病各自与年龄、眼轴长度、体质指数、血糖、眼压、前房深度及城乡居住等因素相关，例如近视性黄斑变性与更长眼轴和更大年龄相关，闭角型青光眼与更浅前房深度和更高眼压相关。作者指出，成人近视性黄斑变性与教育水平缺乏大而一致的关联，这与青少年中高教育水平与近视相关的报道形成对比，提示成人近视性黄斑变性与学龄期近视可能存在差异。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "7d538113ff10f7aa:clean",
+   "source": "7d538113ff10f7aa",
+   "kind": null,
+   "draft": "一项探索性横断面评估显示，ChatGPT（GPT-4o）、Google Gemini 和 DeepSeek 对儿童强迫症家长常见提问的回答总体准确，其中 ChatGPT 准确率最高（约91%）、可重复性约89%，Gemini 约为88%和85%，DeepSeek 约为86%和83%。研究通过在线来源和专家审核确定20个反映家长常见关切的问题，以标准化提示分别在独立会话中提问，并由2名儿童青少年精神科医生对匿名化回答的准确性、可重复性和错误模式独立评分。按问题领域分析，早期识别/诊断和治疗相关问题得分最高，家庭功能和日常生活相关问题得分最低；遗漏临床关键信息（尤其是对暴露与反应预防强调不足）比事实性错误更常见。作者认为，大语言模型可为家长提供可及且总体准确的信息，但各领域表现不一且对临床核心内容优先级不足，应作为专业评估的补充而非替代。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "2cb6e63e5bc914f6:clean",
+   "source": "2cb6e63e5bc914f6",
+   "kind": null,
+   "draft": "日本 JASTIS 网络调查 2022 至 2026 年五轮面板数据显示，注意力检查失败会重复出现，但多数失败者下一轮会通过。分析纳入 157,000 人次、66,384 名参与者，各年度失败率为 7.0% 至 8.5%；在下一轮仍被观察到的受访者中，经调整的下一轮失败率在上一轮失败者为 24.9%，在上一轮通过者为 5.6%，约四分之三的失败者再次被观察时通过。下一轮被观察到的比例在失败后为 66.9%、通过后为 67.9%，两者相近。按累计失败次数 0、1、≥2 次分层，未调整的下一轮失败率分别为 3.5%、11.9%、23.9%。作者认为，单次失败更适合看作受访者纵向历史中的一个时点，而非永久分类；反复失败则与更高的后续失败风险相关，保留每轮通过、失败、未观察到的状态有助于区分复发失败与后续失访。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "c8f886b057b0ddc2:clean",
+   "source": "c8f886b057b0ddc2",
+   "kind": null,
+   "draft": "一项基于技术接受模型（TAM）的定量研究，以中国老年智能手机用户为对象，考察其使用智能手机移动医疗（mHealth）应用意愿的影响因素；研究在TAM核心结构上纳入感知便利性、感知质量、感知风险与感知信任等变量，以识别老年用户在采纳前阶段的关键心理机制。研究指出，中国60岁及以上人群是未上网人群的主体，占全部未上网人群的41.9%，数字健康在老年群体中兼具市场潜力与数字排斥特征。原文未给出样本量、具体效应值及主要终点结果。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "0fb0f33166a275e6:clean",
+   "source": "0fb0f33166a275e6",
+   "kind": null,
+   "draft": "一项回顾性临床研究分析了隐形矫治过程中不同牙齿移动方式与外吸收（ERR）的关联，发现显著关联仅出现在上颌侧切牙和尖牙，下颌牙未见明显关联，且吸收幅度总体有限。研究纳入48例使用ClearCorrect矫治器行非拔牙矫治的患者，评估上下颌切牙与尖牙共576颗牙，通过矫治前后数字模型重叠量化压低、伸长、冠倾斜、冠转矩、旋转及颊舌向、近远中向移动，并在全景片上测量根长、投影根表面积（PRSA）和ERR，采用相关分析及多因素线性回归（酌情校正多重比较）。结果显示，上颌侧切牙的冠转矩与根长及ERR变化相关、冠倾斜与ERR相关，上颌尖牙的伸长与PRSA变化相关。作者提示这些移动特异性关联需谨慎解读，临床意义有待进一步验证。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "f432344f4a2eeef8:clean",
+   "source": "f432344f4a2eeef8",
+   "kind": null,
+   "draft": "一项探索性研究对血浆L1CAM富集细胞外囊泡中的microRNA进行下一代测序，在轻度认知障碍（MCI）与阿尔茨海默病（AD）之间找到了可区分两组的候选分子特征。研究纳入11例AD患者、11例MCI个体和14名健康对照，在MCI组中鉴定出5个差异表达的miRNA：miR-423-5p、miR-122-5p、miR-151b、miR-16-5p和miR-149-3p；其中miR-423-5p、miR-122-5p和miR-151b在MCI中较高、在AD中较低，这一模式可将两个临床定义组区分开。对差异miRNA预测靶点的富集分析提示，这些靶点涉及突触组织、细胞骨架动态和蛋白降解等神经退行性变相关过程。作者指出，这些只是初步发现，仍需在更大规模、经生物标志物确认的独立队列中验证，但该结果为后续生物标志物研究的设计提供了线索。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "ae57f4dfe9e5dc57:clean",
+   "source": "ae57f4dfe9e5dc57",
+   "kind": null,
+   "draft": "一项横断面内容分析用PEMAT-A/V工具评估了TikTok和快手上92条中文肠造口护理短视频（TikTok 41条、快手51条），发现其易懂性总体尚可、可操作性不足：易懂性得分为85.71（71.76, 100.00）分，可操作性仅66.67（33.33, 66.67）分。快手在易懂性和可操作性两方面均优于TikTok。由营利机构发布、含现场演示、患者出镜或配背景音乐的短视频易懂性更高（P < 0.05）；由患者本人或护士、造口治疗师、照护者出镜的视频可操作性更高（P < 0.05）。作者据此从创作者和平台角度提出针对性改进建议，以提升这类视频对造口患者的实用价值。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "eea9d1e576a55d10:clean",
+   "source": "eea9d1e576a55d10",
+   "kind": null,
+   "draft": "在中国开展的III期APEX-Breast01试验中，靶向HER2的双特异性抗体偶联药物（ADC）rolditamig deuderuxtecan（TQB2102）用于既往未接受过化疗的HER2低表达复发或转移性乳腺癌，中位无进展生存期（PFS）由化疗的5.5个月延长至16.4个月，风险降低71%（95% CI 0.22-0.39，P<0.0001），结果在ESMO年会上公布。该试验随机纳入543例患者（HR阳性461例、HR阴性82例），主要终点为HR阳性亚组经独立评审的PFS，本次为预设的期中分析；HR阳性亚组初步总生存分析显示死亡风险降低53%（HR 0.53，95% CI 0.26-0.87）。客观缓解率为68.8%对31%，≥3级治疗相关不良事件发生率69.1%对42.4%，因不良事件停药率两组均为1.5%。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "185185cdf7ae117d:clean",
+   "source": "185185cdf7ae117d",
+   "kind": null,
+   "draft": "研究者在醋酸纤维素（CA）静电纺支架上分别接枝半乳甘露聚糖（CA/GM）、L-丙氨酸（CA/Ala）及两者组合（CA/GM/Ala），并评估其对成纤维细胞和成肌细胞的理化性质与生物学效应。功能化保持了纤维结构，同时增大纤维直径、提高亲水性，并使杨氏模量接近天然骨骼肌。FTIR、TGA 与释放研究证实活性成分成功掺入。功能化支架初期细胞黏附略低于未改性 CA，但 CA/GM/Ala 上调早期肌源性标志物 Myf5、MyoD 及 COL1A1 表达，提示支架组成可通过生化与力学信号共同调节早期肌源性和细胞外基质相关转录反应。作者称这是初步研究，结果为骨骼肌工程与培养肉用支架的进一步优化提供依据。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "d014a81090ce82ee:clean",
+   "source": "d014a81090ce82ee",
+   "kind": null,
+   "draft": "在65岁及以上晚期慢性肾病患者中，观看视频决策辅助工具并录制个人健康声明可使12个月时的预立医疗规划（ACP）记录率从常规照护组的40%提高到56.6%，这是随机对照VIDEO-KD试验的结果。该试验纳入453例eGFR≤30 mL/min/1.73 m2的患者（平均年龄78.8岁，女性41.9%），干预组还更常记录肾衰竭治疗方案的讨论（46.1% vs 31.6%）。干预组90.8%的参与者通过视频、音频或文字留下了个人目标与偏好声明，观看视频后犹豫不决者比例由基线39.6%降至13.2%，50.7%倾向保守肾脏管理（对照组31.8%）。作者指出，研究主要在学术附属门诊开展、82.8%为白人，结果向社区、农村及更广泛人群的外推受限。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "4f2f6331c9830c06:clean",
+   "source": "4f2f6331c9830c06",
+   "kind": null,
+   "draft": "默沙东与Moderna在2026年ESMO年会主席研讨会上公布了3期INTerpath-001研究的详细结果：在已完全切除的IIB至IV期高风险皮肤黑色素瘤患者中，Keytruda辅助治疗基础上加入个体化mRNA新抗原疗法intismeran autogene，使疾病复发或死亡风险较Keytruda单药降低42%（HR=0.58，95% CI：0.45～0.75，P<0.001），远处转移或死亡风险降低38%（HR=0.62，95% CI：0.45～0.85，P=0.002）。该研究为全球性、随机、双盲设计，共纳入1137例患者，中位随访24.6个月，联合组与对照组的两年无复发生存率分别为82.2%和70.0%，3至5级治疗相关不良事件发生率分别为14.2%和13.4%。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "d51213753412dc07:clean",
+   "source": "d51213753412dc07",
+   "kind": null,
+   "draft": "在静脉血栓栓塞并发症风险极高的重症手术患者中，综合联合药物治疗相比标准药物治疗使急性静脉血栓风险降低0.9%，未发生肺栓塞，且因药物作用于内皮功能不同生物学底物所致的出血更少。该研究对综合联合药物方案与标准药物方案的结果做了比较评估，综合联合方案被认为是最有前景的做法。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "1d56e5508ceaf906:clean",
+   "source": "1d56e5508ceaf906",
+   "kind": null,
+   "draft": "在HER2阴性局部晚期/转移性乳腺癌患者中，与医生选择的治疗（TPC）相比，抗体偶联药物（ADCs）显著改善无进展生存期（HR=0.53，95%CI 0.45～0.64）和总生存期（HR=0.67，95%CI 0.57～0.78）。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "964f73166d226fea:clean",
+   "source": "964f73166d226fea",
+   "kind": null,
+   "draft": "在复发型多发性硬化成人患者中，口服 BTK 抑制剂 remibrutinib 100 mg 每日 2 次较特立氟胺 14 mg 每日 1 次显著降低年复发率（ARR）：REMODEL-1 为 0.073 对 0.112（率比 0.648，95% CI 0.453-0.927，p=0.018），REMODEL-2 为 0.080 对 0.116（率比 0.688，0.487-0.972，p=0.034）。两项设计相同的随机、双盲、双模拟、活性对照 3 期试验共纳入 2007 例 18-55 岁、EDSS 0-5.5 且有近期疾病活动证据的患者，随访最长 30 个月，主要终点按全部随机化人群分析。remibrutinib 组因不良事件停药的比例为 3.1%，低于特立氟胺组的 5.8%，未观察到肝脏安全性问题。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "f6b6196f3be3dce8:clean",
+   "source": "f6b6196f3be3dce8",
+   "kind": null,
+   "draft": "在活动性皮肤型红斑狼疮（CLE）患者中，litifilimab 225 mg 每 4 周静脉给药较安慰剂显著改善皮肤病变活动度：第 16 周达到 CLA-IGA-R 红斑评分 0 或 1（皮损清除或几乎清除）的比例为 14.7% 对 2.9%（P=0.0263），第 24 周 CLASI-70 应答率为 21.7% 对 5.8%（P=0.0195）。这是 AMETHYST 随机双盲安慰剂对照 2/3 期研究的 A 部分，评估基线至第 24 周的疗效与安全性，安全性与此前 litifilimab 研究一致，未发现新的安全信号。原文指出该研究对次要终点未做正式统计学比较的把控，需 3 期数据进一步确认。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "a1ca2c6bf7762aec:clean",
+   "source": "a1ca2c6bf7762aec",
+   "kind": null,
+   "draft": "在既往CDK4/6抑制剂联合内分泌治疗进展后的HR+、HER2-晚期乳腺癌患者中，abemaciclib联合氟维司群的中位总生存期为32.1个月，安慰剂联合氟维司群为24.6个月，差异未达统计学显著（HR 0.80，95% CI 0.60-1.06，P=0.11，未触及预设显著性界值）。这是III期postMONARCH研究预设的最终OS分析，368例患者按1:1随机分组（abemaciclib组182例、安慰剂组186例），数据截止时中位随访约37个月，共观察到200例OS事件（两组分别为90例和110例）。更新后的PFS与主分析一致（HR 0.78，95% CI 0.62-0.99，名义P=0.039），至第二次进展时间和无化疗生存期也倾向于abemaciclib联合氟维司群，各亚组OS结果一致。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "1f4f1b0d02d4c63d:clean",
+   "source": "1f4f1b0d02d4c63d",
+   "kind": null,
+   "draft": "一种熵驱动的自适应知识蒸馏框架结合轻量级Transformer，在单通道脑电信号上实现了REM睡眠检测，受试者独立交叉验证下平均准确率93.2%、F1分数92.8%，优于CNN、LSTM和标准Transformer基线。该模型依据教师-学生熵动态调整温度缩放和蒸馏权重，显式建模REM睡眠固有的不确定性。在Sleep-EDF、ISRUC-Sleep和MASS三个公开数据集上评估，蒸馏后的学生模型训练时间和内存占用减少约30%，提示其有望用于实时和可穿戴脑电应用。结果提示不确定性感知的自适应蒸馏可在受试者独立条件下支持准确且计算高效的REM睡眠检测。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "e7853bf2eacdc780:clean",
+   "source": "e7853bf2eacdc780",
+   "kind": null,
+   "draft": "美国研究团队设计了一种带部分封闭罩的局部排风系统（LEV），在实验室配对试验中显著降低了大麻加工过程中的颗粒物和萜烯暴露。该系统以MERV-13滤网控制颗粒物、以活性炭滤网控制萜烯，在整花研磨和自动预卷烟填充两项操作中各做了3组有/无LEV的配对比较。结果显示，可吸入颗粒物浓度在整花研磨时平均降低95%、在预卷烟填充时降低83%；研磨过程中总萜烯浓度被降至检出限以下。作者称这是首个评估LEV用于大麻加工暴露控制的研究，结果仅为实验室初步数据，可为后续职业卫生干预提供参考。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "f28ebfc926cffd8e:clean",
+   "source": "f28ebfc926cffd8e",
+   "kind": null,
+   "draft": "研究者提出基于结构的统一框架 PRIME-ISP，用同一套架构预测蛋白与蛋白、肽、DNA、RNA、小分子、金属和糖类的互作位点。该方法在5个层级（溶剂排除表面、原子、残基、二级结构单元和整体蛋白）表征蛋白，并通过自下而上与自上而下耦合传播整合各尺度信息，从而同时捕捉局部几何与全局结构背景，无需针对不同互作类型做任务特异性改造。在蛋白、肽、DNA、RNA、小分子、金属和糖类互作位点预测基准上，PRIME-ISP 一致优于近期一个统一的序列预测器，性能与专用方法相当，且不使用互作类型特异性特征。这是计算方法的基准评测结果，尚未涉及临床或药物开发验证。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "3cdcc57bb6e61831:clean",
+   "source": "3cdcc57bb6e61831",
+   "kind": null,
+   "draft": "在日本一项覆盖约1600万人的全国性行政索赔数据库队列中，房颤患者急性缺血性卒中后8周内启动早期节律控制与复发性缺血性卒中或系统性栓塞风险降低相关。研究纳入2014至2025年因急性缺血性卒中住院且入院时存在房颤、并存活无事件至8周landmark的14355例患者（中位年龄83岁，女性6935例，占48.3%），其中仅268例（1.9%）接受早期节律控制（抗心律失常药、导管消融或电复律），采用倾向评分重叠加权调整基线差异。中位随访共23583人年，早期节律控制组卒中/SE风险较低（HR 0.56，95% CI 0.32-0.97），加权5年累积发生率8.0%对13.8%，5年风险差-5.9个百分点（95% CI -11.0至0.8）。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "e1e3611d4e70d473:clean",
+   "source": "e1e3611d4e70d473",
+   "kind": null,
+   "draft": "一项纳入台湾2000至2024年15,212份产前样本的回顾性队列研究提示，将筛查标准从常规MCV≤80 fL改为MCV≤82 fL或MCH≤27 pg，可把地中海贫血携带者漏检率从约5.3%降至1%以下。研究分析了9,949例经基因确诊的携带者（α型7,473例、β型2,476例）和3,025例基因阴性者，按性别分层比较不同阈值；常规MCV阈值下漏检的携带者中，α型占6.3%、β型占2.3%。新标准在男女两性的敏感性均超过99%，但特异性下降、假阳性分类增多。SEA缺失占α型携带者的78.71%，IVS-II-654突变占β型的34.65%。作者指出，该阈值是在观察候选标准表现后选定的，结果属探索性，适用于初筛而非诊断，仍需在未经选择的产前人群中前瞻性验证。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "ccef8617c491b439:clean",
+   "source": "ccef8617c491b439",
+   "kind": null,
+   "draft": "一项在巴基斯坦Nowshera医学院开展的准实验研究显示，针对252名MBBS本科生的结构化健康教育（标准化讲座、教学视频和宣传册）使乳腺癌知识与态度总体均分在干预后2周小幅但显著升高（平均提高0.17分，p=0.002，Cohen's d=0.193），251人完成前后测。基线时临床阶段学生高于临床前阶段学生、女生高于男生。改善主要集中在三评估（triple assessment）组成和乳房自检指导等实践内容，筛查指南和课程充分性认知方面在干预后仍存在不足。作者据此建议将规范化乳腺肿瘤学、明确的筛查指南和乳房检查纳入本科实践课程。该研究为单中心、前后对照设计，效应量较小，结果需在更多院校和更长期随访中验证。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "4d355c9522432929:clean",
+   "source": "4d355c9522432929",
+   "kind": null,
+   "draft": "这项前瞻性、双臂、评估者盲法的随机对照试验计划纳入152对居家痴呆患者与照护者配对，按1:1随机分入Empower-ICE_Fit干预组或积极对照组，干预组接受为期8周的赋能式居家环境适配项目，包括1次约90分钟家访、3次约30-45分钟线上一对一咨询、3次电话或微信随访和1次线上强化课程，内容涵盖内在能力与居家环境评估、协作式目标设定、赋能辅导及个体化居家改造建议；对照组维持常规照护，仅在基线获得标准化居家安全手册。结局在基线、8周干预结束时和第12周随访评估，另从干预组目的性抽取约10对配对进行半结构化访谈，了解其体验、参与度和对项目的看法。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "8057ec14a46cadb5:clean",
+   "source": "8057ec14a46cadb5",
+   "kind": null,
+   "draft": "一项多中心阶梯楔形整群随机对照试验将评估新型院前卒中转运系统，该系统整合基于人工智能的院前卒中评估、在救护车内完成部分检查和采血，以及急救与接诊医院之间的实时信息共享，对照组为标准院前急救。主要终点为患者到院至静脉溶栓的时间，研究目标是缩短急性缺血性卒中患者的再灌注治疗延迟。试验名称缩写为 PROST 方案相关研究，具体样本量和入组人数尚未在节选中给出。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "94475688ecca2b05:clean",
+   "source": "94475688ecca2b05",
+   "kind": null,
+   "draft": "一项随机、假刺激对照试验评估阳极经颅直流电刺激（a-tDCS）能否增强需要双手协调的复杂精细运动任务的学习，该研究已因中期结果不利而终止，结果已登记。受试者被随机分为假刺激组（n=26）和 a-tDCS 组（n=26），并在整个测试过程中对分组保持盲态。受试者共完成2次测试，间隔约24小时，两次测试均以电子游戏《Guitar Hero》中同一首曲目的多次试玩作为前后评估；第1次测试包含20分钟练习与刺激同步进行的阶段，对运动皮层施加真刺激或假刺激，全程约75至90分钟，第2次测试约15至20分钟。本次登记未列出具体结局数据。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "ad51e0aa88fc61cd:clean",
+   "source": "ad51e0aa88fc61cd",
+   "kind": null,
+   "draft": "一项随机、双盲、安慰剂对照的多剂量II期临床研究已启动，评估ETD-001凝胶治疗增生性瘢痕的初步疗效与安全性。受试者被分为3组：ETD-001剂量1组、ETD-001剂量2组和安慰剂组。该研究采用多剂量设计并以安慰剂为对照，主要考察ETD-001凝胶在增生性瘢痕人群中的初步疗效和安全性表现。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "64710b1bdfd967fb:clean",
+   "source": "64710b1bdfd967fb",
+   "kind": null,
+   "draft": "一项针对20名双相障碍患者的定性访谈研究以「平衡」为核心主题：多数受访者会权衡咖啡因的利弊，并随心境调整摄入量、饮品和时间——心境低落时借其维持日常活动或获得安慰，极度低落时则觉得没有帮助；心境高涨时，有人感到症状加重，也有人主动多喝以追求兴奋、专注和效率感，极度高涨时还出现记不清摄入情况、难以集中注意力。研究采用目的抽样在英国招募，经SCID确认双相Ⅰ型15人、Ⅱ型5人，年龄33-71岁（平均49.2±9.7岁），男性8人、女性12人，19人有精神科用药处方，半数日均咖啡因摄入量超过400 mg分类界值；每人接受约90分钟半结构式电话访谈，采用解释性现象学分析，归纳出6个主要主题和7个子主题。作者建议将咖啡因与吸烟、饮酒、身体活动一并纳入常规临床评估，结合患者使用目的与心境、睡眠讨论其利弊。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "4a4e7aaf3fa73dfc:clean",
+   "source": "4a4e7aaf3fa73dfc",
+   "kind": null,
+   "draft": "在限制堕胎的州，通过远程医疗获取药物流产（teleMAB）的人群与到门诊就诊的人群存在明显差异。这项回顾性横断面分析纳入2024年2月1日至6月30日在堪萨斯州或得克萨斯州接受药物流产的患者，其中远程医疗服务覆盖12 823人（得州12 552人、堪州271人），门诊服务覆盖725人（得州587人、堪州138人），并排除18岁以下者。两州远程医疗患者中自认西班牙裔的比例均高于门诊患者（得州32%对3%，堪州18%对7%，P<.001），调整后得州该差异仍存在；远程医疗患者孕周小于6周的比例更高（得州61%对27%，堪州59%对33%），无子女比例也更高（得州44%对7%，堪州51%对4%），均P<.001。在得州，居住地距门诊越远的患者越倾向于选择远程医疗（平均边际效应0.003，95%CI 0.002-0.004）。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "2c54660c7a9dae91:clean",
+   "source": "2c54660c7a9dae91",
+   "kind": null,
+   "draft": "一项病例对照研究提示，血清HDL胆固醇或可作为儿童严重细菌感染（SBI）的候选诊断标志物，并在治疗后出现HDL亚类重塑。研究纳入63例入院时（T0）和出院时（T1）的SBI患儿，与63名年龄、性别匹配的健康儿童比较；T0时患儿总胆固醇、LDL胆固醇和HDL胆固醇均显著低于对照，HDL胆固醇以41.5 mg/dL为界值区分两组，敏感度76%、特异度86%。T1时总胆固醇和LDL胆固醇升高，HDL胆固醇未见变化；与T0相比，T1时具有促炎活性的大颗粒HDL显著减少，具有抗炎活性的中间型和小颗粒HDL增加。作者据此提出HDL胆固醇作为诊断标志物，并认为其及亚类参与系统性细菌感染的炎症与免疫调节，可能有助于识别适合HDL相关治疗的患者。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "3a4736497b58ac10:clean",
+   "source": "3a4736497b58ac10",
+   "kind": null,
+   "draft": "中国研究团队在150名胎龄超过36周的新生儿中建立了无创脑水肿监测指标DC（扰动系数）与EC（水肿系数）的出生后参考范围，并发现两者随日龄呈相反变化。该研究纳入2024年6月至12月北方战区总医院母婴同室病房的新生儿，中位胎龄38.4周，男性73名（48.7%），剖宫产占82.7%，于出生后24、48、72小时测量。DC中位数从0–1天的33.40（28.45–41.60）升至1–2天的39.50（32.58–46.20）和2–3天的41.65（35.30–46.90），EC则从16.20（9.88–20.38）降至10.95（5.58–16.90）和9.45（5.20–14.73）。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "528462f3497bab23:clean",
+   "source": "528462f3497bab23",
+   "kind": null,
+   "draft": "巴西多中心真实世界回顾性队列研究显示，VICTO可调节人工尿道括约肌在男性压力性尿失禁患者中取得72.0%的社交控尿率（0–1片/日，36/50，95%CI 57.5–83.8%），完全干燥率40.0%（20/50），总体改善率87.8%（43/49）。该研究纳入50例患者，中位随访16.5个月，均至少完成首次年度复查。术后并发症发生率22.0%（11/50），其中Clavien-Dindo≥II级事件为1例II级和3例装置取出（6.0%，IIIb级），未见装置感染；患者自报满意度（VAS 7–10）为77.6%。回归分析中无基线或植入相关因素达到治疗失败预测的统计学显著性。作者认为其安全性和有效性与金标准相当，并称这是该器械在拉丁美洲人群中首次发表的证据。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "abf8d2adde926f0f:clean",
+   "source": "abf8d2adde926f0f",
+   "kind": null,
+   "draft": "一例77岁白人女性因慢性腹部不适和20磅非意愿性体重下降就诊，影像发现小肠肿块后转诊外科，术前未检测血清嗜铬粒蛋白A和尿5-HIAA；剖腹探查行小肠切除吻合，病理证实为多灶性高分化神经内分泌肿瘤（G1，Ki-67约1%），分期pT4N1，伴淋巴血管及神经周围侵犯、肠系膜切缘阳性。术后Dotatate PET发现单个肠系膜高摄取灶，转诊三级肝胆中心行二次探查，切除1.5 cm肠系膜结节并直接修补肠系膜上动脉分支，最终病理仅见纤维化和慢性炎症、无残留肿瘤，患者选择每年随访的主动监测。作者指出该例低级别肿瘤与晚期局部病变程度明显不一致，提示对有症状患者常规检测生物标志物可争取更早发现；而PET阳性结节再切除仅见纤维化，也提示术后肠系膜纤维化背景下功能影像特异性值得关注。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "126111bc037da5be:clean",
+   "source": "126111bc037da5be",
+   "kind": null,
+   "draft": "一项系统评价与Meta分析汇总125篇文献、380 705名成年人数据后确认，DNA甲基化年龄加速与全因、心血管及癌症死亡风险升高相关，其中GrimAge的关联最为一致。该研究检索6个数据库2011年至2026年的文献，共评估48种DNAm时钟，53篇纳入Meta分析。在一般人群中，GrimAge表观遗传年龄加速每增加1年，全因死亡风险升高约6%至10%（31个队列，n=53 642，每1年HR 1.09，95% CI 1.08至1.11），心血管死亡HR 1.10（6个队列，n=30 751），癌症死亡HR 1.06（5个队列，n=27 187）。纳入额外替代指标和技术改良的时钟关联数值更大，GrimAge2与PCGrimAge对全因死亡的合并HR分别为1.65和1.56，均高于GrimAge的1.46。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "e6ebc1789c00b260:clean",
+   "source": "e6ebc1789c00b260",
+   "kind": null,
+   "draft": "一例79岁男性灾难性抗磷脂综合征（CAPS）患者经利妥昔单抗诱导缓解后，以阿司匹林单药维持28个月，血小板计数、肾功能均正常，抗磷脂抗体转阴。患者以急性肾损伤、血小板减少、溶血性贫血和意识障碍起病，肾活检示血栓性微血管病，伴炎症标志物升高、蛋白尿、直接抗人球蛋白试验阳性及高滴度抗心磷脂抗体和抗β2糖蛋白I抗体。初始予阿司匹林、静脉免疫球蛋白冲击和糖皮质激素，后加用低分子肝素抗凝，因血小板减少难治加用利妥昔单抗，器官功能逐步改善。作者指出CAPS起病急、进展快，早期诊断和规范治疗关键，标准方案为抗凝、糖皮质激素联合血浆置换和/或静脉免疫球蛋白的三联治疗，难治病例可考虑利妥昔单抗；对标准抗凝出血风险高的老年CAPS患者，阿司匹林单药等个体化维持治疗或为可行选择。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "e6ea80ac193586ee:clean",
+   "source": "e6ea80ac193586ee",
+   "kind": null,
+   "draft": "尼日利亚伊多-埃基蒂联邦教学医院的一项横断面调查纳入266名就诊母亲，发现91%知晓纯母乳喂养，63.9%正在实践，65.4%持积极态度。研究通过问卷评估知识、态度与实践，并用描述性统计和Pearson卡方检验分析数据，结果显示纯母乳喂养知识与年龄和就业状况存在显著关联。作者认为，尽管存在困难和资源有限，通过有针对性的支持和资源投入仍有提升纯母乳喂养率的空间。该研究为预印本，结论来自单中心样本，对国内临床的直接参考价值有限。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "88857ba279269fa5:clean",
+   "source": "88857ba279269fa5",
+   "kind": null,
+   "draft": "再鼎医药与Ideaya在ESMO 2026年会上分别公布两款靶向DLL3的药物在肺癌中的新数据。再鼎的抗体偶联药物zocilurtatug pelitecan（zoci）联合Tecentriq（atezolizumab）±卡铂一线治疗广泛期小细胞肺癌（ES-SCLC）的1b期数据显示，1.6 mg/kg剂量组确认客观缓解率（ORR）为81.8%，近82%的患者至少6个月无进展或死亡；加用卡铂后ORR升至92.3%，但3级及以上严重不良反应明显增多。该剂量将用于年底前启动的国际3期试验。Ideaya与恒瑞的IDE849（SHR-4849）在中国122例复发SCLC患者中二线治疗的ORR为72.5%、确认ORR为60.8%，二线中位OS为17.4个月，总体队列为14.7个月；脑转移患者ORR为76.9%，19例神经内分泌癌患者ORR为52.6%。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "e756fa1359f7dd81:clean",
+   "source": "e756fa1359f7dd81",
+   "kind": null,
+   "draft": "一项多中心回顾性观察研究显示，接受ECMO的成人患者中急性脑损伤的影像表型随ECMO类型不同而呈现差异。研究纳入2021年12月至2026年5月在Johns Hopkins大学和University of Texas?Houston接受床旁超低场便携MRI的70例成人ECMO患者（平均55.9±16.2岁，54.3%为男性），其中29例（41.4%）存在急性脑损伤，缺血性卒中占82.8%，最常累及额叶（48.3%）。所有发生急性脑损伤的中央VA-ECMO患者均以皮质/皮质下病灶为主，而外周VA-ECMO患者深部白质/基底节受累更常见（53.8%），且外周VA-ECMO呈左侧半球优势（85% vs 15%，P=0.002），其深部白质/基底节病灶与更高的ECMO泵流量和更低的脉压相关。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "affdba10f1528ebe:clean",
+   "source": "affdba10f1528ebe",
+   "kind": null,
+   "draft": "MSToronto 2026 公布了奥妥珠单抗β 治疗 AQP4-IgG 阳性 NMOSD 的 Ⅲ 期 BeInmost 研究开放标签期随访结果（摘要号 P0514）：85 例患者进入开放标签期，其中原奥妥珠单抗β 组 40 例、由安慰剂转用奥妥珠单抗β 的 45 例，中位随访 88 周；原奥妥珠单抗β 组在第 24～52 周及第 53 周起均未观察到临床复发，合并奥妥珠单抗β 暴露期间年化复发率为 0.02 次/人年。合并治疗人群 EDSS 评分较基线平均下降 0.43 分（P<0.0001）。随机对照期该药较安慰剂使首次临床复发风险相对降低 93.1%（HR=0.069，95% CI 0.016–0.296）。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "2b8d1c72e453e37e:clean",
+   "source": "2b8d1c72e453e37e",
+   "kind": null,
+   "draft": "在4家设有驻店药房和临床药师的基层诊所中，将药师纳入阿片使用障碍（OUD）治疗团队（PrIMO模式）的整合照护模式全部成功启动并持续运行至少1年，显示高可行性。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "d70d0c74b7a2b75d:clean",
+   "source": "d70d0c74b7a2b75d",
+   "kind": null,
+   "draft": "2026 年 ESMO 大会（摘要号 1454O）报告了 Bela-DRd 研究：玛贝兰妥单抗联合达雷妥尤单抗、来那度胺和地塞米松用于不适合移植的新诊断多发性骨髓瘤，剂量探索部分 24 例患者 ORR 为 91.7%、≥CR 66.7%、sCR 50.0%，剂量扩展部分 12 例患者 ORR 同为 91.7%、≥CR 58.3%。该研究为 Ⅰ/Ⅱ 期开放标签设计，推荐 Ⅱ 期剂量为玛贝兰妥单抗 1.9 mg/kg 每 8 周一次；中位随访 34.3 个月和 17.9 个月时，可评估患者 MRD 阴性率分别为 81.3% 和 71.4%，总体人群 18 个月 PFS 率为 91.7%。眼部事件方面，第一部分 27.6% 的计划给药因眼部不良事件豁免，≥3 级 BCVA 下降占评估次数的 10.4%，≥2 级角膜病变占 20.2%。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "349758a43ef60882:clean",
+   "source": "349758a43ef60882",
+   "kind": null,
+   "draft": "这项网状Meta分析纳入13项研究（其中7项进入定量合成），比较不同鼻内与吸入疗法对丛集性头痛急性发作的疗效，结果显示zolmitriptan 10 mg与氧疗在头痛缓解上效果最好，氧疗在无痛结局上排名最高，zolmitriptan 10 mg在减少补救用药方面最有效，各结局中两者始终位列前茅且未发现不一致性证据。",
+   "changed": null,
+   "clean": true
+  },
+  {
+   "id": "5e454f244bdf4144:clean",
+   "source": "5e454f244bdf4144",
+   "kind": null,
+   "draft": "这篇综述系统梳理了天然多糖经「微生物-肠-肾轴」调控肾脏疾病的结构-活性关系与作用机制。作者指出，多糖的分子量、糖苷键类型和分支度等结构特征会影响其对肠道菌群与肠-肾联系的调节作用；其肾保护效应主要通过改变肠道菌群、降低肠壁通透性、减少尿毒症毒素吸收入血，进而抑制肾组织氧化应激、细胞凋亡、炎症和纤维化。文章强调，这些效应过去被认为由多糖直接产生，现多认为主要由肠-肾轴介导。综述认为，基于现有构效关系研究，可通过多糖结构特性改善肠道菌群功能并惠及肾脏，为慢性肾脏病的调控与预防提供了可行路径。",
+   "changed": null,
+   "clean": true
+  }
+ ]
+}

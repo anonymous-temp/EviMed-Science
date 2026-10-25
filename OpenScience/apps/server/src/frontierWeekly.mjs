@@ -1,4 +1,5 @@
 import { frontierSourceDisplayName } from '@evimed/domain';
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from './frontierSourceColumns.mjs';
 import { clockMinutes, zonedClock, zonedInstant, frontierDailyIssue, frontierDailyMarkdown, dayLabel, followedZoneCards } from './frontierDaily.mjs';
 import { frontierEventRole } from './frontierEvents.mjs';
 import { FrontierJobRearm } from './frontierJobRearm.mjs';
@@ -90,14 +91,14 @@ export class FrontierWeekly {
     /** @param {string} weekStart */
     async compose(weekStart) {
         const window = frontierWeekWindow(weekStart, this.timeZone);
-        const rows = (await this.database.query(`SELECT i.*,s.name AS source_name,s.owner_entity AS source_owner,s.source_type AS current_source_type,
+        const rows = (await this.database.query(`SELECT i.*,s.name AS source_name,s.owner_entity AS source_owner,${FRONTIER_SOURCE_STREAM_COLUMNS},s.source_type AS current_source_type,
       coalesce(e.merged_into,i.event_id) AS event_id
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id
       LEFT JOIN evimed_frontier.events e ON e.id=i.event_id
       WHERE i.state='published' AND s.enabled AND i.visible_at >= $1 AND i.visible_at < $2
         AND i.verification IN ('passed','repaired') AND length(trim(i.summary_zh))>0 AND (i.selected OR i.safety_alert)
       ORDER BY i.score_total DESC NULLS LAST,i.visible_at DESC,i.id DESC LIMIT 1000`, [window.start, window.end])).rows.map(row => ({ ...row,
-            source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }),
+            source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }),
             primary: frontierEventRole({ sourceType: row.current_source_type, evidenceType: row.evidence_type }) === 'primary' }));
         const selected = frontierDailyIssue({ rows: frontierWeeklyRows(rows) });
         if (!selected)

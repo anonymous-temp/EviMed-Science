@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import { frontierSourceDisplayName } from '@evimed/domain';
 
 // Reader state is still exportable when the feed is disabled. Both migration
@@ -98,7 +99,7 @@ export async function frontierStoryEventIds(client, eventId) {
 
 /** What a follow-up row reads of a report. */
 const REPORT_COLUMNS = `ei.event_id, ei.role, i.id, i.public_id, i.title_zh, i.title_raw, i.timeline_at, i.selected, i.score_total,
-  i.source_type, s.id AS source_id, s.name AS source_name, s.owner_entity`;
+  i.source_type, s.id AS source_id, s.name AS source_name, s.owner_entity, ${FRONTIER_SOURCE_STREAM_COLUMNS}`;
 
 /**
  * The visible reports of these events, by event.
@@ -123,7 +124,7 @@ export async function frontierEventReports(client, eventIds) {
 function followupRow(row, relation) {
   return {
     itemId: String(row.public_id), title: String(row.title_zh || row.title_raw),
-    sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+    sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity, access: row.source_access, journal: row.item_journal }),
     at: new Date(row.timeline_at).toISOString(), relation,
   };
 }

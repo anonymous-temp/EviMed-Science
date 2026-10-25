@@ -1,0 +1,2588 @@
+{
+ "model": "deepseek-flash",
+ "ranAt": "2026-10-25T13:22:52.962Z",
+ "usage": {
+  "calls": 63,
+  "cacheHit": 70272,
+  "cacheMiss": 123733,
+  "output": 24861,
+  "cny": 0.44916488
+ },
+ "failures": 0,
+ "runs": [
+  {
+   "repeat": 1,
+   "pairs": 62,
+   "truth": {
+    "same": 9,
+    "related": 13,
+    "different": 40
+   },
+   "matrix": {
+    "RELATED→RELATED": 11,
+    "DIFFERENT→DIFFERENT": 40,
+    "SAME→SAME": 8,
+    "SAME→RELATED": 1,
+    "RELATED→SAME": 2
+   },
+   "batch": {
+    "sameCalls": 10,
+    "sameCorrect": 8,
+    "precision": 0.8,
+    "recall": 0.889
+   },
+   "merge": {
+    "confirmedPairs": 7,
+    "confirmedCorrect": 6,
+    "precision": 0.857,
+    "recall": 0.667
+   },
+   "plan": {
+    "groups": 5,
+    "mergedPairs": 7,
+    "mergedPairsCorrect": 5,
+    "vetoed": 1,
+    "precision": 0.714,
+    "recall": 0.556,
+    "groups_": [
+     {
+      "events": [
+       "05eb5848072c9e74",
+       "166b613bd0f5b4a1"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "30ed869f2b91ed62",
+       "dc7b315ae085627e"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "3193cd6a14e4edb9",
+       "f352468fdb43a17a"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "602460b803b87763",
+       "d3e317cfaa1f8f92",
+       "e02d890c66cc8cb1"
+      ],
+      "correct": false
+     },
+     {
+      "events": [
+       "9ad4b8ba63d3dcfb",
+       "342d8984a59d04ed"
+      ],
+      "correct": true
+     }
+    ]
+   },
+   "errors": [
+    {
+     "a": "fd66c355f7f3492d",
+     "b": "9a967f03a22d1d25",
+     "truth": "same",
+     "batch": "RELATED",
+     "second": null,
+     "why": "One TAK-921 / G-HOPE-001 readout: the single-report event is the company announcement the larger event already covers.",
+     "reason": "B 是 A 同一 G-HOPE-001 研究结果之后的监管申报计划，属同一研究的后续进展而非另一次发生"
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "e02d890c66cc8cb1",
+     "truth": "related",
+     "batch": "SAME",
+     "second": "SAME",
+     "why": "WHO situation report and news on the Kenyan and Nigerian imports of the same outbreak (judgement).",
+     "reason": "两者都指向同一轮刚果（金）本迪布焦型埃博拉疫情及同一批肯尼亚、尼日利亚输入病例通报。"
+    },
+    {
+     "a": "166b613bd0f5b4a1",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "batch": "SAME",
+     "second": "RELATED",
+     "why": "Both hold the INTerpath-001 ESMO readout (42% lower recurrence) and the same headline report; the leak is the same release.",
+     "reason": "两者均指同一项INTerpath-001 III期试验在ESMO 2026的同一次结果发布，B的“泄露”只是该次发布的前奏，报道内容重叠。"
+    },
+    {
+     "a": "23252a0df22f4337",
+     "b": "c7ae2de6c4537fa9",
+     "truth": "same",
+     "batch": "SAME",
+     "second": "RELATED",
+     "why": "DRC Ebola resurgence, same outlet and minute; the titles differ in angle only (judgement: no body text in the sample).",
+     "reason": "两篇均为同日关于刚果（金）埃博拉疫情现状的报道，内容高度重叠，很可能为同一通报的不同转述。"
+    }
+   ],
+   "relatedFound": 11,
+   "rows": [
+    {
+     "a": "aae9b73f3bc6a0c6",
+     "b": "f1e802d64febfac4",
+     "truth": "related",
+     "kind": "known-split",
+     "why": "LATE-MT and MILD-MT are two independent trials published together; the joint reports cover both (strict reading: not one occurrence).",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "两项不同的试验（LATE-MT与MILD-MT），但多篇报道同时介绍同日发表的这两项研究，属有直接关联。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "98fd90838ae8b06d",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "Atacicept ORIGIN 3 and a Chinese report that covers it together with the sibeprenlimab paper.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是同时介绍ORIGIN 3等多项IgA肾病研究的综述报道，与A的ORIGIN 3最终分析有直接关联但非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "a58fbf0df34e864c",
+     "truth": "related",
+     "kind": "development",
+     "why": "EMA's recommendation on daraxonrasib and a later RASolute 302 subgroup analysis.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是支持该药获批的RASolute 302试验的亚组分析，与A的监管建议是同一药物的后续证据，但属不同发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "bc2913b7aac2c84e",
+     "b": "036972fb29143a2a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two FDA recalls of tainted supplements: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.9,
+     "reason": "两个不同产品（Green Lumber与Ultimate Forza）的不同监管通报/召回，仅共同涉及他达拉非。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "05eb5848072c9e74",
+     "truth": "related",
+     "kind": "development",
+     "why": "Preview of the INTerpath-001 presentation, then the embargo lift.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "A是数据公布前的预告，B是随后embargo解除与数据公布，属同一事件的后续进展。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "kind": "split",
+     "why": "The embargo lift and the leak carry the same detailed-data report of INTerpath-001.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两者报道的是同一次INTerpath-001数据泄露/ESMO公布事件，报道内容高度重叠。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "4fa7e3fa0f1d4753",
+     "b": "b4a919e78d8c3423",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A bench study of SCLC immunity and a phase 3 result.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A是基础免疫学研究，B是具体3期临床试验DeLLphi-305的结果发布，研究主体与发生均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3dd342c7a09e89ca",
+     "b": "b4fe9f6897b7c922",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Dostarlimab in gastroesophageal and in rectal cancer: one drug, two trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同试验（GONO DEWI vs AZUR-1）、不同瘤种（胃食管腺癌 vs 直肠癌）的独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "65692e8cabe8d92a",
+     "b": "d6f42998164b544d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two child deaths investigated by the same Hong Kong centre: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两起不同病原体、不同患者的独立个案通报。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "06a245773fed1324",
+     "b": "1d2a7ac47ba21bd7",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two systematic reviews of different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "两篇不同药物、不同疾病的独立Meta分析。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3fb79b41a8a7b196",
+     "b": "b4a919e78d8c3423",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "GSK ris-rez and tarlatamab, both extensive-stage SCLC.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "不同药物、不同试验（EMBOLD系列 vs DeLLphi-305）的独立报告，仅同属ESMO小细胞肺癌领域。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "d70f59449841c85b",
+     "b": "42eae0036f2c7b72",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "An ADHD review and an ADHD-drug menopause study.",
+     "relation": "DIFFERENT",
+     "confidence": 0.9,
+     "reason": "A为成人ADHD诊疗综述，B为ADHD药物用于围绝经期脑雾的独立报道，主题与来源均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "79f4e24ae24829cf",
+     "b": "a58fbf0df34e864c",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "RASolute 302 subgroups and Tango's combination.",
+     "relation": "DIFFERENT",
+     "confidence": 0.85,
+     "reason": "A 是 vopimetostat+daraxonrasib 联合疗法的 1/2 期缓解率数据，B 是 daraxonrasib 单药 RASolute 302 的亚组 OS 分析，属不同研究/数据集",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "0b6cdbc7c92f90d0",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "T-DXd + pertuzumab and TQB2102 in HER2-low.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A 是 HER2 阳性乳腺癌的 T-DXd 联合方案综述，B 是 HER2 低表达乳腺癌的 TQB2102 III 期研究，药物、人群和试验均不同",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "af879b27fbe794d6",
+     "b": "e5add0f1b4e3cb04",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two calls of one project series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "同一基金按同一格式发布的第四期与第六期公告，方向不同，是各自独立的项目公告",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "c5cc6f5e9914fb89",
+     "b": "484da39d84dce141",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two first-line NSCLC trials, different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "两项不同的药物、不同试验（OptiTROP-Lung06 对 LOXO-RAS-20001/SUNRAY-01）和不同人群的研究，仅同在 ESMO 2026 报告",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fd66c355f7f3492d",
+     "b": "9a967f03a22d1d25",
+     "truth": "same",
+     "kind": "known-split",
+     "why": "One TAK-921 / G-HOPE-001 readout: the single-report event is the company announcement the larger event already covers.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "B 是 A 同一 G-HOPE-001 研究结果之后的监管申报计划，属同一研究的后续进展而非另一次发生",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "9ad4b8ba63d3dcfb",
+     "b": "342d8984a59d04ed",
+     "truth": "same",
+     "kind": "split",
+     "why": "The twin in-utero tumour transmission paper and the same press report, in both events.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两者均报道同一项关于双胞胎宫内肿瘤传播的胚胎起源研究（同一 Nature 论文及其媒体转述）",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "fa4e835d0f10d1b6",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two phase 3 successes, different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "不同药物、不同疾病、不同试验（VERIFY vs PATH-1/PATH-2）",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "39e59c822accd5f6",
+     "b": "a814d9541131f157",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two NMPA / customs notices for different border ports.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两份不同的公告（第93号 vs 第94号），涉及不同口岸",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "56a926f8bcd3a5f3",
+     "b": "d147fac283d5363a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two bevacizumab combinations in different cancers.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同瘤种、不同研究，仅共同使用贝伐珠单抗并在同一会议报告",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "655b6ef080f40701",
+     "truth": "related",
+     "kind": "development",
+     "why": "Outbreak situation report and the later Kenyan death.",
+     "relation": "RELATED",
+     "confidence": 0.8,
+     "reason": "同一疫情的不同通报：A为多国疫情总体通报，B为肯尼亚境内病例与死亡的新进展",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "98f3dfca71eb5298",
+     "b": "09405a1f0b423fe6",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two ulcerative colitis drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同试验、不同人群（成人 vs 儿童）",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fa9cb46ba8effe54",
+     "b": "b4a919e78d8c3423",
+     "truth": "related",
+     "kind": "development",
+     "why": "DeLLphi-305 preview and the readout.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "A为同一试验（DeLLphi-305）结果公布前的预告，B为该结果的正式发布，属同一研究的先后报道",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e310a7541773f7ea",
+     "b": "b104562be40d82f9",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CMS rural grants to Alaska and to Texas.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两笔不同地区、不同金额的农村医疗转型项目拨款，是两次独立公告。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "e02d890c66cc8cb1",
+     "truth": "related",
+     "kind": "development",
+     "why": "WHO situation report and news on the Kenyan and Nigerian imports of the same outbreak (judgement).",
+     "relation": "SAME",
+     "confidence": 0.85,
+     "reason": "两者都指向同一轮刚果（金）本迪布焦型埃博拉疫情及同一批肯尼亚、尼日利亚输入病例通报。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "166b613bd0f5b4a1",
+     "truth": "same",
+     "kind": "split",
+     "why": "Same detailed-data report of INTerpath-001 in both events, 70 minutes apart.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两者是同一项INTerpath-001试验同一次ESMO 2026结果发布（含embargo解除与数据泄露）的报道。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "aa170b0558e84da4",
+     "b": "fb279d0439b3d800",
+     "truth": "different",
+     "kind": "series",
+     "why": "A consensus and a weight-loss study.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "一个是青少年减重临床试验，一个是重庆市的体重管理专家共识，互不相关。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "7c517b6e1ca9c534",
+     "b": "060135464705a99f",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "FourLight-1 and postMONARCH: two ESMO HR+ breast cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同试验（FourLight-1 vs postMONARCH）、不同药物，虽同在ESMO 2026报告但各是一件事。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "25ed3de5aba0685a",
+     "truth": "different",
+     "kind": "series",
+     "why": "Rusfertide and oral minoxidil.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同药物、不同适应症、不同试验的两项独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "166b613bd0f5b4a1",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "kind": "split",
+     "why": "Both hold the INTerpath-001 ESMO readout (42% lower recurrence) and the same headline report; the leak is the same release.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两者均指同一项INTerpath-001 III期试验在ESMO 2026的同一次结果发布，B的“泄露”只是该次发布的前奏，报道内容重叠。",
+     "second": "RELATED",
+     "confirmed": false
+    },
+    {
+     "a": "99df797295e4e721",
+     "b": "895a76940c31322c",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two systematic review protocols.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两项系统评价针对完全不同的疾病主题（新生儿窒息 vs 口腔衰弱），无共同研究或发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e3a0e92ab9b86fde",
+     "b": "656ea8c146911211",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "NATALEE and TALENT: two early breast cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "分属不同试验（NATALEE vs TALENT）、不同药物（瑞波西利 vs 德曲妥珠单抗）和不同终点，仅同为ESMO 2026乳腺癌报告。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "577290b29aefc879",
+     "truth": "related",
+     "kind": "development",
+     "why": "The announcement that the INTerpath-001 data are coming, then the data itself.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "A是对同一INTerpath-001数据发布的提前预告，B是该数据随后的泄露与正式公布，属同一事件的先后进展而非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3edac0e2e296c894",
+     "b": "b104562be40d82f9",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CMS rural grants to Mississippi and to Texas: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两笔针对不同州、不同金额的独立拨款公告，仅同属CMS农村医疗转型项目系列。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "16185fadc1a5e49c",
+     "b": "03b4fabf39b7b03d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two FDA approvals (bepirovirsen, remibrutinib).",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两种不同药物、不同适应症的独立监管批准。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "5f3b11ff96c4d4da",
+     "b": "8362f13cced54155",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CheckMate 8HW and an irAE study of ipilimumab + nivolumab in oesophageal cancer.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同的研究（食管癌irAEs预后分析 vs CheckMate 8HW结直肠癌疗效试验），癌种、终点和报告均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "c565d55d62a2756b",
+     "b": "98fd90838ae8b06d",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "Sibeprenlimab VISIONARY and the same joint report.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B 是一篇同时介绍包括 VISIONARY 在内的多项 IgA 肾病试验的报道，并非 VISIONARY 结果本身，属于对 A 等研究的综合报道。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e816554dfb281b30",
+     "b": "f19f01ff0d3d158b",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two IgA nephropathy drugs, two interim analyses.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两项不同药物、不同试验（I CAN vs RAINIER AIS-D08）的独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "79f4e24ae24829cf",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Tango's combination data and EMA's daraxonrasib recommendation, both pancreatic RAS.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "一个是监管审评意见，一个是Tango联合疗法的临床试验数据发布，属不同事件。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3193cd6a14e4edb9",
+     "b": "f352468fdb43a17a",
+     "truth": "same",
+     "kind": "split",
+     "why": "Tairex multi-agent clinical system: the same release is a report in both.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "同一家公司同一次产品发布，A 中的报道即该发布的中文及转载版本。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "7616cd3c3d82e4cd",
+     "b": "0b6cdbc7c92f90d0",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "HER2+ gastroesophageal and HER2-low breast trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同药物、不同癌种、不同试验的独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fca851e75080c506",
+     "b": "51efcedb9a23f6b2",
+     "truth": "related",
+     "kind": "development",
+     "why": "Reports that the Treasury would propose a rule, then the proposed rule.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "A为规则出台前的预告报道，B为同一拟议规则发布后的报道，指向同一次监管提案。",
+     "second": "RELATED",
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "bb93d9abcfaddcaa",
+     "truth": "related",
+     "kind": "development",
+     "why": "Outbreak situation report and ECDC's threat assessment of the imported cases.",
+     "relation": "RELATED",
+     "confidence": 0.8,
+     "reason": "两者均为ECDC针对同一疫情的产品，但一份是疫情形势更新、一份是专门的风险威胁评估，属同一疫情的后续评估。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "62f37e6d1f8a8e76",
+     "b": "b4fe9f6897b7c922",
+     "truth": "related",
+     "kind": "development",
+     "why": "FDA accelerated approval of dostarlimab in rectal cancer and the AZUR-1 results it rests on.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "AZUR-1试验数据是支持该加速批准的关键证据，批准与随后会议报告属同一药物的结果与获批关系，但为不同发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "23252a0df22f4337",
+     "b": "c7ae2de6c4537fa9",
+     "truth": "same",
+     "kind": "known-split",
+     "why": "DRC Ebola resurgence, same outlet and minute; the titles differ in angle only (judgement: no body text in the sample).",
+     "relation": "SAME",
+     "confidence": 0.6,
+     "reason": "两篇均为同日关于刚果（金）埃博拉疫情现状的报道，内容高度重叠，很可能为同一通报的不同转述。",
+     "second": "RELATED",
+     "confirmed": false
+    },
+    {
+     "a": "e02d890c66cc8cb1",
+     "b": "d3e317cfaa1f8f92",
+     "truth": "same",
+     "kind": "split",
+     "why": "Nigeria's first Bundibugyo Ebola case: the lone report is one more report of what the larger event holds.",
+     "relation": "SAME",
+     "confidence": 0.85,
+     "reason": "B即A中尼日利亚首例本迪布焦型埃博拉病例的同一通报报道，属同一次发生。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "d70f59449841c85b",
+     "b": "11637ca6ca335e6a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "An ADHD review and an ADHD mortality meta-analysis.",
+     "relation": "DIFFERENT",
+     "confidence": 0.9,
+     "reason": "一篇为成人ADHD诊疗综述，一篇为ADHD死亡风险的Meta分析，是两项不同的研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "90c8edd510d3f460",
+     "b": "e1dbe946aad4dfb0",
+     "truth": "different",
+     "kind": "series",
+     "why": "Merck acquires Silence; AbbVie lutikizumab trial.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "一件是默克收购Silence，另一件是AbbVie的INTREPID试验结果，两者主体、药物和事件类型均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "05eb5848072c9e74",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "A preview of three Merck ESMO trials and the INTerpath-001 readout it names.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是A所预告的ESMO 2026发布中INTerpath-001这一项试验数据在会议上的实际揭晓，属同一研究结果的后续发布。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fc75ff7608248e7b",
+     "b": "354b10a2cb2ee5fa",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two discontinuation notices for different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "两件是不同公司对不同药物（拉米夫定 vs 二甲双胍）的独立停产通报。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "e816554dfb281b30",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Atacicept final analysis and ravulizumab interim analysis.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两者是不同药物、不同试验（ORIGIN 3 vs I CAN）的独立研究结果。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "c565d55d62a2756b",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Atacicept and sibeprenlimab final analyses, same day, same disease.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两者是不同药物、不同试验（ORIGIN 3 vs VISIONARY）的独立研究，仅被同一篇综述并列提及。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "ecf7df48b53fdf4f",
+     "b": "91f1e525bc8d8c05",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A roundup of Chinese drugs at ESMO and a priority-review notice for one of them.",
+     "relation": "DIFFERENT",
+     "confidence": 0.9,
+     "reason": "A是ESMO会议中国创新药整体表现的综述，B是依沃西单抗新适应症优先审评的具体监管事项，并非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "be44d580b829913c",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two EMA items: an approval recommendation and a vaccine EPAR update.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "一个是daraxonrasib的胰腺癌上市建议，另一个是zapomeran新冠疫苗的EPAR修订，药物和事项均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "30ed869f2b91ed62",
+     "b": "dc7b315ae085627e",
+     "truth": "same",
+     "kind": "split",
+     "why": "Zai Lab / Ideaya DLL3 ADC zoci + atezolizumab 1b data at ESMO, announced once.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两者说的是同一项zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期（DLLEVATE）数据发布，B还收录了A中的同一篇报道。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "be44d580b829913c",
+     "b": "2fbed99d2724c3dc",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two EPAR updates of different products.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "同一天发布的两份不同药物的EPAR修订，药物和适应症均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "b46c9309f1ff7667",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A talk on T-DXd + pertuzumab and an anbenitamab phase 3 paper: both HER2+ breast.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A评述的是T-DXd联合帕妥珠单抗（DESTINY-Breast09）方案，B报道的是anbenitamab联合HB1801的HEALER试验，是两项不同的研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "aab4dfe6c2a1d7da",
+     "b": "14f147ce3465e278",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two elinzanetant analyses (sleep relief, daytime sleepiness): one programme, two papers (judgement).",
+     "relation": "DIFFERENT",
+     "confidence": 0.85,
+     "reason": "A是NK受体拮抗剂改善睡眠的荟萃分析，B是elinzanetant睡前服药日间嗜睡的具体分析，是不同研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "555e88cbaae6cc02",
+     "b": "577290b29aefc879",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "BioNTech's HPV16 vaccine trial and the Moderna / Merck melanoma vaccine.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两者是不同公司、不同疫苗、不同瘤种的两项独立试验，仅同属mRNA癌症疫苗话题。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "a560a6c090274fbc",
+     "b": "7b0219f5c18c0ece",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "EU approval of enfortumab + pembrolizumab and the KEYNOTE-866 trial: one drug, different trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A是监管批准（KEYNOTE-B15/EV-304），B是另一项试验KEYNOTE-866的结果发布，试验名与事件性质均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "f6d07690cee8cc80",
+     "b": "a32dcd8a9856a35d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "ENERGIZE and VOLGA: two perioperative bladder cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两者是不同药物、不同试验（ENERGIZE vs VOLGA）的独立研究结果，仅同属ESMO 2026会议。",
+     "second": null,
+     "confirmed": false
+    }
+   ]
+  },
+  {
+   "repeat": 2,
+   "pairs": 62,
+   "truth": {
+    "same": 9,
+    "related": 13,
+    "different": 40
+   },
+   "matrix": {
+    "DIFFERENT→DIFFERENT": 38,
+    "RELATED→RELATED": 12,
+    "RELATED→SAME": 1,
+    "SAME→SAME": 8,
+    "DIFFERENT→RELATED": 2,
+    "SAME→RELATED": 1
+   },
+   "batch": {
+    "sameCalls": 9,
+    "sameCorrect": 8,
+    "precision": 0.889,
+    "recall": 0.889
+   },
+   "merge": {
+    "confirmedPairs": 8,
+    "confirmedCorrect": 7,
+    "precision": 0.875,
+    "recall": 0.778
+   },
+   "plan": {
+    "groups": 6,
+    "mergedPairs": 8,
+    "mergedPairsCorrect": 6,
+    "vetoed": 1,
+    "precision": 0.75,
+    "recall": 0.667,
+    "groups_": [
+     {
+      "events": [
+       "05eb5848072c9e74",
+       "166b613bd0f5b4a1"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "30ed869f2b91ed62",
+       "dc7b315ae085627e"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "3193cd6a14e4edb9",
+       "f352468fdb43a17a"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "602460b803b87763",
+       "d3e317cfaa1f8f92",
+       "e02d890c66cc8cb1"
+      ],
+      "correct": false
+     },
+     {
+      "events": [
+       "9ad4b8ba63d3dcfb",
+       "342d8984a59d04ed"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "fd66c355f7f3492d",
+       "9a967f03a22d1d25"
+      ],
+      "correct": true
+     }
+    ]
+   },
+   "errors": [
+    {
+     "a": "602460b803b87763",
+     "b": "e02d890c66cc8cb1",
+     "truth": "related",
+     "batch": "SAME",
+     "second": "SAME",
+     "why": "WHO situation report and news on the Kenyan and Nigerian imports of the same outbreak (judgement).",
+     "reason": "两者报道的是同一起刚果（金）本迪布焦型埃博拉疫情及其向肯尼亚、尼日利亚的输入病例，只是通报时点和来源不同。"
+    },
+    {
+     "a": "166b613bd0f5b4a1",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "batch": "RELATED",
+     "second": null,
+     "why": "Both hold the INTerpath-001 ESMO readout (42% lower recurrence) and the same headline report; the leak is the same release.",
+     "reason": "B是A同一试验结果提前泄露引发的市场反应与报道，属同一结果的后续事件而非另一次发生。"
+    },
+    {
+     "a": "23252a0df22f4337",
+     "b": "c7ae2de6c4537fa9",
+     "truth": "same",
+     "batch": "SAME",
+     "second": "RELATED",
+     "why": "DRC Ebola resurgence, same outlet and minute; the titles differ in angle only (judgement: no body text in the sample).",
+     "reason": "同日对刚果（金）同一轮埃博拉疫情通报的不同报道，属同一次疫情通报"
+    }
+   ],
+   "relatedFound": 12,
+   "rows": [
+    {
+     "a": "d70f59449841c85b",
+     "b": "11637ca6ca335e6a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "An ADHD review and an ADHD mortality meta-analysis.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A是临床综述，B是死亡风险Meta分析，是两项不同的研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3edac0e2e296c894",
+     "b": "b104562be40d82f9",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CMS rural grants to Mississippi and to Texas: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两笔不同的拨款，分别给不同州、不同金额。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "79f4e24ae24829cf",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Tango's combination data and EMA's daraxonrasib recommendation, both pancreatic RAS.",
+     "relation": "DIFFERENT",
+     "confidence": 0.9,
+     "reason": "一个是监管审批意见，一个是不同的联合疗法试验数据发布。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e310a7541773f7ea",
+     "b": "b104562be40d82f9",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CMS rural grants to Alaska and to Texas.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两笔不同的拨款，分别给不同州、不同金额。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "f6d07690cee8cc80",
+     "b": "a32dcd8a9856a35d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "ENERGIZE and VOLGA: two perioperative bladder cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同的试验（ENERGIZE与VOLGA），药物和方案不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fa9cb46ba8effe54",
+     "b": "b4a919e78d8c3423",
+     "truth": "related",
+     "kind": "development",
+     "why": "DeLLphi-305 preview and the readout.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "A是同一试验结果公布前的预告，B是该结果的正式发布，属于同一研究的先后报道。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "56a926f8bcd3a5f3",
+     "b": "d147fac283d5363a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two bevacizumab combinations in different cancers.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同的试验（MAESTRA-3 vs telisotuzumab adizutecan随机1期）、不同药物和不同瘤种，仅同在ESMO 2026发布。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "a58fbf0df34e864c",
+     "truth": "related",
+     "kind": "development",
+     "why": "EMA's recommendation on daraxonrasib and a later RASolute 302 subgroup analysis.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "同一药物同一试验，但A是监管审评意见、B是后续会议上的亚组分析数据，属同一研究的后续进展而非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "99df797295e4e721",
+     "b": "895a76940c31322c",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two systematic review protocols.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两篇不同的系统评价论文，主题、疾病和人群完全不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "05eb5848072c9e74",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "A preview of three Merck ESMO trials and the INTerpath-001 readout it names.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "A是会议前预告将公布包括INTerpath-001在内的多项3期结果，B是其中INTerpath-001摘要解禁后的具体数据发布，属同一会议发布的前后关联事件。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "90c8edd510d3f460",
+     "b": "e1dbe946aad4dfb0",
+     "truth": "different",
+     "kind": "series",
+     "why": "Merck acquires Silence; AbbVie lutikizumab trial.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "一笔并购交易与一项药物3期试验结果，完全无关的两件事。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4fa7e3fa0f1d4753",
+     "b": "b4a919e78d8c3423",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A bench study of SCLC immunity and a phase 3 result.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "一项基础免疫学研究与一项具体3期临床试验结果，虽同为小细胞肺癌但研究主体和内容不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3fb79b41a8a7b196",
+     "b": "b4a919e78d8c3423",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "GSK ris-rez and tarlatamab, both extensive-stage SCLC.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同的研究（GSK的B7-H3 ADC Ib期数据 vs 安进DeLLphi-305 3期），药物、试验名和申办方均不同，只是同一会议同一疾病。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e816554dfb281b30",
+     "b": "f19f01ff0d3d158b",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two IgA nephropathy drugs, two interim analyses.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同的3期试验（I CAN vs RAINIER AIS-D08），药物不同（ravulizumab vs povetacicept），是各自独立的研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "06a245773fed1324",
+     "b": "1d2a7ac47ba21bd7",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two systematic reviews of different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "两篇不同的系统评价，疾病和药物均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "e02d890c66cc8cb1",
+     "truth": "related",
+     "kind": "development",
+     "why": "WHO situation report and news on the Kenyan and Nigerian imports of the same outbreak (judgement).",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两者报道的是同一起刚果（金）本迪布焦型埃博拉疫情及其向肯尼亚、尼日利亚的输入病例，只是通报时点和来源不同。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "aa170b0558e84da4",
+     "b": "fb279d0439b3d800",
+     "truth": "different",
+     "kind": "series",
+     "why": "A consensus and a weight-loss study.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "一项是青少年减重随机试验，另一份是地方体重管理临床路径共识，性质与内容完全不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "kind": "split",
+     "why": "The embargo lift and the leak carry the same detailed-data report of INTerpath-001.",
+     "relation": "SAME",
+     "confidence": 0.93,
+     "reason": "两者说的是同一次发生：INTerpath-001试验摘要embargo解除/数据泄露及同一批III期结果（复发风险降42%）。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "c565d55d62a2756b",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Atacicept and sibeprenlimab final analyses, same day, same disease.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同药物、不同试验（ORIGIN 3 vs VISIONARY）的独立研究，仅因同一疾病和同一会议被并列报道。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "05eb5848072c9e74",
+     "truth": "related",
+     "kind": "development",
+     "why": "Preview of the INTerpath-001 presentation, then the embargo lift.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "B 是 A 所预告的同一批数据在 embargo 解除后的正式披露，属同一事件的后续进展。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "c5cc6f5e9914fb89",
+     "b": "484da39d84dce141",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two first-line NSCLC trials, different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同试验、不同人群的两项独立研究，仅同处 ESMO 会议。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "166b613bd0f5b4a1",
+     "truth": "same",
+     "kind": "split",
+     "why": "Same detailed-data report of INTerpath-001 in both events, 70 minutes apart.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两者报道的是同一次 INTerpath-001 数据披露，A 中的报道也出现在 B 中。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "16185fadc1a5e49c",
+     "b": "03b4fabf39b7b03d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two FDA approvals (bepirovirsen, remibrutinib).",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同公司、不同药物、不同适应症的两个独立监管决定。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "a560a6c090274fbc",
+     "b": "7b0219f5c18c0ece",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "EU approval of enfortumab + pembrolizumab and the KEYNOTE-866 trial: one drug, different trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "不同试验（KEYNOTE-B15/EV-304 的获批 vs KEYNOTE-866 的阴性结果），是不同研究的不同事件。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "9ad4b8ba63d3dcfb",
+     "b": "342d8984a59d04ed",
+     "truth": "same",
+     "kind": "split",
+     "why": "The twin in-utero tumour transmission paper and the same press report, in both events.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两事件均围绕同一项双胞胎宫内肿瘤传播的测序研究，B的报道与A的'顶刊披露'为同一论文的媒体转述",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "fa4e835d0f10d1b6",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two phase 3 successes, different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "不同药物、不同试验（VERIFY vs PATH-1/2）、不同适应症的两项独立研究",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "af879b27fbe794d6",
+     "b": "e5add0f1b4e3cb04",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two calls of one project series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "同一机构按同一格式发布的系列不同期次、不同方向的科研项目公告，各是一件事",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e02d890c66cc8cb1",
+     "b": "d3e317cfaa1f8f92",
+     "truth": "same",
+     "kind": "split",
+     "why": "Nigeria's first Bundibugyo Ebola case: the lone report is one more report of what the larger event holds.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "B即A中多篇报道所报的同一批通报——尼日利亚首例邦迪布焦型埃博拉病例及肯尼亚、刚果（金）疫情进展",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "5f3b11ff96c4d4da",
+     "b": "8362f13cced54155",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CheckMate 8HW and an irAE study of ipilimumab + nivolumab in oesophageal cancer.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "同一药物组合但不同研究（食管癌irAE分析 vs CheckMate 8HW结直肠癌试验）、不同人群与终点",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "655b6ef080f40701",
+     "truth": "related",
+     "kind": "development",
+     "why": "Outbreak situation report and the later Kenyan death.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "同一起多国埃博拉疫情，B为肯尼亚疫情在随后几天的死亡新进展，属同一疫情的后续通报",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3193cd6a14e4edb9",
+     "b": "f352468fdb43a17a",
+     "truth": "same",
+     "kind": "split",
+     "why": "Tairex multi-agent clinical system: the same release is a report in both.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两事件均报道Tairex同一场产品发布（多智能体AI系统/医生分身），A中prnewswire稿件与B为同一新闻稿的不同语言版本。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "39e59c822accd5f6",
+     "b": "a814d9541131f157",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two NMPA / customs notices for different border ports.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两件是不同公告号（93号与94号）、不同省份口岸的独立监管决定。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3dd342c7a09e89ca",
+     "b": "b4fe9f6897b7c922",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Dostarlimab in gastroesophageal and in rectal cancer: one drug, two trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同试验（GONO DEWI vs AZUR-1）、不同瘤种（胃食管腺癌 vs 直肠癌）的独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "aae9b73f3bc6a0c6",
+     "b": "f1e802d64febfac4",
+     "truth": "related",
+     "kind": "known-split",
+     "why": "LATE-MT and MILD-MT are two independent trials published together; the joint reports cover both (strict reading: not one occurrence).",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "两项独立试验，但多篇报道（如NEJM中国团队两项研究同日见刊）同时介绍二者，属有直接关联。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "7616cd3c3d82e4cd",
+     "b": "0b6cdbc7c92f90d0",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "HER2+ gastroesophageal and HER2-low breast trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同试验、不同药物、不同瘤种的独立研究，仅同在ESMO会议。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "98fd90838ae8b06d",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "Atacicept ORIGIN 3 and a Chinese report that covers it together with the sibeprenlimab paper.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B为综述性报道，同时介绍包括ORIGIN 3在内的多项IgA肾病研究，与A有直接关联但非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "ecf7df48b53fdf4f",
+     "b": "91f1e525bc8d8c05",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A roundup of Chinese drugs at ESMO and a priority-review notice for one of them.",
+     "relation": "DIFFERENT",
+     "confidence": 0.85,
+     "reason": "A是ESMO会议多项研究的综述，B是依沃西单抗优先审评的监管决定，虽都提及harmoni-gi1但为不同发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e3a0e92ab9b86fde",
+     "b": "656ea8c146911211",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "NATALEE and TALENT: two early breast cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "NATALEE与TALENT是两项不同试验、不同药物、不同终点的独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "b46c9309f1ff7667",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A talk on T-DXd + pertuzumab and an anbenitamab phase 3 paper: both HER2+ breast.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A讨论DESTINY-Breast09的T-DXd方案，B是HEALER试验的anbenitamab方案，为不同研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "c565d55d62a2756b",
+     "b": "98fd90838ae8b06d",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "Sibeprenlimab VISIONARY and the same joint report.",
+     "relation": "RELATED",
+     "confidence": 0.8,
+     "reason": "B是同时报道VISIONARY与ORIGIN两项研究的综合稿，与A的VISIONARY结果发布有直接关联但非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "555e88cbaae6cc02",
+     "b": "577290b29aefc879",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "BioNTech's HPV16 vaccine trial and the Moderna / Merck melanoma vaccine.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A是BioNTech BNT113头颈癌疫苗失败，B是Moderna/默克黑色素瘤疫苗数据，为不同公司不同疫苗的不同事件。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "62f37e6d1f8a8e76",
+     "b": "b4fe9f6897b7c922",
+     "truth": "related",
+     "kind": "development",
+     "why": "FDA accelerated approval of dostarlimab in rectal cancer and the AZUR-1 results it rests on.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "B的AZUR-1试验结果是A中FDA加速批准所依据的同一试验数据的正式发表，属审批与结果论文的直接关联。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "577290b29aefc879",
+     "truth": "related",
+     "kind": "development",
+     "why": "The announcement that the INTerpath-001 data are coming, then the data itself.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "A是同一项研究数据公布前的预告，B是随后数据泄露与正式公布，属同一事件的后续进展而非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fc75ff7608248e7b",
+     "b": "354b10a2cb2ee5fa",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two discontinuation notices for different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同公司、不同药物的两份独立停产通告。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "0b6cdbc7c92f90d0",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "T-DXd + pertuzumab and TQB2102 in HER2-low.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同试验（DESTINY-Breast09 vs APEX-Breast01）、不同人群的两项独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "e816554dfb281b30",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Atacicept final analysis and ravulizumab interim analysis.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同试验（ORIGIN 3 vs I CAN）的两项独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "be44d580b829913c",
+     "b": "2fbed99d2724c3dc",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two EPAR updates of different products.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同药物、不同适应症的两次独立EPAR修订。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "79f4e24ae24829cf",
+     "b": "a58fbf0df34e864c",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "RASolute 302 subgroups and Tango's combination.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "A为联合方案早期试验数据，B为同一药物daraxonrasib的III期RASolute 302亚组分析，属同一药物研发项目下不同试验，有直接关联但非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "65692e8cabe8d92a",
+     "b": "d6f42998164b544d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two child deaths investigated by the same Hong Kong centre: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两起不同病原体（肺炎球菌 vs 甲型H1流感）的独立儿童死亡通报，非同一发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fca851e75080c506",
+     "b": "51efcedb9a23f6b2",
+     "truth": "related",
+     "kind": "development",
+     "why": "Reports that the Treasury would propose a rule, then the proposed rule.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "A是规则出台前的预告与传闻，B是随后正式发布的同一拟议规则，属同一事项的前后进展。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "d70f59449841c85b",
+     "b": "42eae0036f2c7b72",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "An ADHD review and an ADHD-drug menopause study.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "一篇是成人ADHD综述，另一篇是ADHD药物用于更年期脑雾的独立研究，主题与来源均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "166b613bd0f5b4a1",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "kind": "split",
+     "why": "Both hold the INTerpath-001 ESMO readout (42% lower recurrence) and the same headline report; the leak is the same release.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是A同一试验结果提前泄露引发的市场反应与报道，属同一结果的后续事件而非另一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "98f3dfca71eb5298",
+     "b": "09405a1f0b423fe6",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two ulcerative colitis drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两种不同药物、不同试验（icotrokinra vs mirikizumab）的独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "be44d580b829913c",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two EMA items: an approval recommendation and a vaccine EPAR update.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两个不同药物、不同适应症的独立监管文件，仅同属EMA发布。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "7c517b6e1ca9c534",
+     "b": "060135464705a99f",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "FourLight-1 and postMONARCH: two ESMO HR+ breast cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同的III期试验（FourLight-1 vs postMONARCH），药物不同（atirmociclib vs 阿贝西利），各自独立报告",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "25ed3de5aba0685a",
+     "truth": "different",
+     "kind": "series",
+     "why": "Rusfertide and oral minoxidil.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同药物、不同适应症、不同试验（VERIFY vs VDPHL01 302/304），仅同为2026年ESMO相关报道",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fd66c355f7f3492d",
+     "b": "9a967f03a22d1d25",
+     "truth": "same",
+     "kind": "known-split",
+     "why": "One TAK-921 / G-HOPE-001 readout: the single-report event is the company announcement the larger event already covers.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "同一项G-HOPE-001 III期研究同一次ESMO 2026结果发布，B为同一结果的监管筹备报道",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "23252a0df22f4337",
+     "b": "c7ae2de6c4537fa9",
+     "truth": "same",
+     "kind": "known-split",
+     "why": "DRC Ebola resurgence, same outlet and minute; the titles differ in angle only (judgement: no body text in the sample).",
+     "relation": "SAME",
+     "confidence": 0.75,
+     "reason": "同日对刚果（金）同一轮埃博拉疫情通报的不同报道，属同一次疫情通报",
+     "second": "RELATED",
+     "confirmed": false
+    },
+    {
+     "a": "bc2913b7aac2c84e",
+     "b": "036972fb29143a2a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two FDA recalls of tainted supplements: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "不同产品、不同监管行动（Green Lumber警示 vs Ultimate Forza召回），仅同为含未标示PDE5抑制剂的补充剂",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "aab4dfe6c2a1d7da",
+     "b": "14f147ce3465e278",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two elinzanetant analyses (sleep relief, daytime sleepiness): one programme, two papers (judgement).",
+     "relation": "RELATED",
+     "confidence": 0.7,
+     "reason": "同一类药物、同一批OASIS试验数据，但A为睡眠障碍荟萃分析、B为日间嗜睡安全性分析，属相关但不同的分析",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "30ed869f2b91ed62",
+     "b": "dc7b315ae085627e",
+     "truth": "same",
+     "kind": "split",
+     "why": "Zai Lab / Ideaya DLL3 ADC zoci + atezolizumab 1b data at ESMO, announced once.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两者报道的是同一项dllevate/Ib期研究同一次数据发布（同一ORR 81.8%），会议报告与公司新闻稿属同一发生。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "bb93d9abcfaddcaa",
+     "truth": "related",
+     "kind": "development",
+     "why": "Outbreak situation report and ECDC's threat assessment of the imported cases.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是ECDC针对A所述同一疫情输入事件发布的风险评估，属后续评估而非同一次通报。",
+     "second": null,
+     "confirmed": false
+    }
+   ]
+  },
+  {
+   "repeat": 3,
+   "pairs": 62,
+   "truth": {
+    "same": 9,
+    "related": 13,
+    "different": 40
+   },
+   "matrix": {
+    "RELATED→SAME": 2,
+    "DIFFERENT→DIFFERENT": 39,
+    "DIFFERENT→RELATED": 1,
+    "RELATED→RELATED": 11,
+    "SAME→SAME": 9
+   },
+   "batch": {
+    "sameCalls": 11,
+    "sameCorrect": 9,
+    "precision": 0.818,
+    "recall": 1
+   },
+   "merge": {
+    "confirmedPairs": 8,
+    "confirmedCorrect": 7,
+    "precision": 0.875,
+    "recall": 0.778
+   },
+   "plan": {
+    "groups": 6,
+    "mergedPairs": 8,
+    "mergedPairsCorrect": 6,
+    "vetoed": 1,
+    "precision": 0.75,
+    "recall": 0.667,
+    "groups_": [
+     {
+      "events": [
+       "05eb5848072c9e74",
+       "166b613bd0f5b4a1"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "30ed869f2b91ed62",
+       "dc7b315ae085627e"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "3193cd6a14e4edb9",
+       "f352468fdb43a17a"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "602460b803b87763",
+       "d3e317cfaa1f8f92",
+       "e02d890c66cc8cb1"
+      ],
+      "correct": false
+     },
+     {
+      "events": [
+       "9ad4b8ba63d3dcfb",
+       "342d8984a59d04ed"
+      ],
+      "correct": true
+     },
+     {
+      "events": [
+       "fd66c355f7f3492d",
+       "9a967f03a22d1d25"
+      ],
+      "correct": true
+     }
+    ]
+   },
+   "errors": [
+    {
+     "a": "166b613bd0f5b4a1",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "batch": "SAME",
+     "second": "RELATED",
+     "why": "Both hold the INTerpath-001 ESMO readout (42% lower recurrence) and the same headline report; the leak is the same release.",
+     "reason": "两者均指INTerpath-001同一次结果发布，B的泄露报道与A的数据公布是同一事件的不同侧面。"
+    },
+    {
+     "a": "23252a0df22f4337",
+     "b": "c7ae2de6c4537fa9",
+     "truth": "same",
+     "batch": "SAME",
+     "second": "RELATED",
+     "why": "DRC Ebola resurgence, same outlet and minute; the titles differ in angle only (judgement: no body text in the sample).",
+     "reason": "两篇均为2026-10-25关于刚果（金）埃博拉疫情同一轮反弹/蔓延的报道，属同一次疫情通报。"
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "e02d890c66cc8cb1",
+     "truth": "related",
+     "batch": "SAME",
+     "second": "SAME",
+     "why": "WHO situation report and news on the Kenyan and Nigerian imports of the same outbreak (judgement).",
+     "reason": "两事件均报道同一轮刚果（金）本迪布焦型埃博拉疫情及肯尼亚、尼日利亚的输入病例，属同一次疫情通报。"
+    }
+   ],
+   "relatedFound": 11,
+   "rows": [
+    {
+     "a": "fca851e75080c506",
+     "b": "51efcedb9a23f6b2",
+     "truth": "related",
+     "kind": "development",
+     "why": "Reports that the Treasury would propose a rule, then the proposed rule.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "A为规则出台前的预告，B为同一财政部拟议规则的正式发布及后续报道，指向同一次监管提案。",
+     "second": "RELATED",
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "e816554dfb281b30",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Atacicept final analysis and ravulizumab interim analysis.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两项不同药物、不同试验（ORIGIN 3 vs I CAN）的独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e816554dfb281b30",
+     "b": "f19f01ff0d3d158b",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two IgA nephropathy drugs, two interim analyses.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同药物、不同试验的独立研究，仅同属IgA肾病领域。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "39e59c822accd5f6",
+     "b": "a814d9541131f157",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two NMPA / customs notices for different border ports.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两份不同公告（93号与94号）、不同口岸，属同系列独立决定。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "be44d580b829913c",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two EMA items: an approval recommendation and a vaccine EPAR update.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "不同药物、不同适应症、不同监管事项，仅同为EMA文件。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "c565d55d62a2756b",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Atacicept and sibeprenlimab final analyses, same day, same disease.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "不同药物、不同试验的独立研究；虽有报道同时提及两者，但A、B各自代表的研究不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fc75ff7608248e7b",
+     "b": "354b10a2cb2ee5fa",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two discontinuation notices for different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两种不同药物、不同公司的各自停产决定，只是同一格式的系列公告。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "65692e8cabe8d92a",
+     "b": "d6f42998164b544d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two child deaths investigated by the same Hong Kong centre: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同病原体、不同患者的两起独立病例通报。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "79f4e24ae24829cf",
+     "b": "a58fbf0df34e864c",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "RASolute 302 subgroups and Tango's combination.",
+     "relation": "RELATED",
+     "confidence": 0.8,
+     "reason": "两项不同的ESMO报告（联合方案早期数据 vs RASolute 302亚组分析），但共享daraxonrasib且被同一批报道并列介绍。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "98f3dfca71eb5298",
+     "b": "09405a1f0b423fe6",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two ulcerative colitis drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同试验、不同人群的两项独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "7616cd3c3d82e4cd",
+     "b": "0b6cdbc7c92f90d0",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "HER2+ gastroesophageal and HER2-low breast trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同瘤种、不同试验的两项独立ESMO报告。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "c565d55d62a2756b",
+     "b": "98fd90838ae8b06d",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "Sibeprenlimab VISIONARY and the same joint report.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是同时报道A（VISIONARY）与另一项ORIGIN 3试验的综述性文章，属有直接关联但非同一发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3fb79b41a8a7b196",
+     "b": "b4a919e78d8c3423",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "GSK ris-rez and tarlatamab, both extensive-stage SCLC.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "两项不同的研究（GSK的B7-H3 ADC Ib期数据 vs 安进DeLLphi-305 III期），药物、试验和申办方均不同，仅同属ESMO 2026小细胞肺癌议题。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "4fa7e3fa0f1d4753",
+     "b": "b4a919e78d8c3423",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A bench study of SCLC immunity and a phase 3 result.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "一项是基础免疫学研究，另一项是III期临床试验结果，二者无直接关联，仅同属小细胞肺癌领域。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "90c8edd510d3f460",
+     "b": "e1dbe946aad4dfb0",
+     "truth": "different",
+     "kind": "series",
+     "why": "Merck acquires Silence; AbbVie lutikizumab trial.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "一笔并购交易与一项药物III期试验结果，公司、药物和事件性质均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "555e88cbaae6cc02",
+     "b": "577290b29aefc879",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "BioNTech's HPV16 vaccine trial and the Moderna / Merck melanoma vaccine.",
+     "relation": "DIFFERENT",
+     "confidence": 0.93,
+     "reason": "两项不同的mRNA癌症疫苗试验（BNT113头颈癌 vs intismeran黑色素瘤INTerpath-001），公司、药物、瘤种和结果均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "0b6cdbc7c92f90d0",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "T-DXd + pertuzumab and TQB2102 in HER2-low.",
+     "relation": "DIFFERENT",
+     "confidence": 0.96,
+     "reason": "两项不同的ADC药物、不同试验（DESTINY-Breast09 vs APEX-Breast01）和不同人群（HER2阳性 vs HER2低表达）的研究解读。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "05eb5848072c9e74",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "A preview of three Merck ESMO trials and the INTerpath-001 readout it names.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "A是默沙东预告ESMO 2026发布包括INTerpath-001在内的试验结果，B是该试验摘要embargo解除和数据公开的后续进展，属同一试验的预告与数据披露，但非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "a560a6c090274fbc",
+     "b": "7b0219f5c18c0ece",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "EU approval of enfortumab + pembrolizumab and the KEYNOTE-866 trial: one drug, different trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A是欧盟监管批准（KEYNOTE-B15/EV-304），B是另一项试验KEYNOTE-866的阴性结果发表，试验名与事件性质均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "d70f59449841c85b",
+     "b": "11637ca6ca335e6a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "An ADHD review and an ADHD mortality meta-analysis.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A是ADHD诊疗综述，B是ADHD死亡风险的Meta分析，是两项独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "5f3b11ff96c4d4da",
+     "b": "8362f13cced54155",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CheckMate 8HW and an irAE study of ipilimumab + nivolumab in oesophageal cancer.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "A是食管癌中irAE预后分析，B是CheckMate 8HW结直肠癌疗效试验，疾病与试验均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3dd342c7a09e89ca",
+     "b": "b4fe9f6897b7c922",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Dostarlimab in gastroesophageal and in rectal cancer: one drug, two trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "A是胃食管腺癌的GONO DEWI试验，B是直肠癌的AZUR-1试验，瘤种与试验名均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "62f37e6d1f8a8e76",
+     "b": "b4fe9f6897b7c922",
+     "truth": "related",
+     "kind": "development",
+     "why": "FDA accelerated approval of dostarlimab in rectal cancer and the AZUR-1 results it rests on.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "FDA批准基于AZUR-1数据，批准与随后公布的AZUR-1完整结果是同一药物的监管决定与其依据试验结果，属直接关联的两件事。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "c5cc6f5e9914fb89",
+     "b": "484da39d84dce141",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two first-line NSCLC trials, different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "A是sac-TMT的OptiTROP-Lung06试验，B是olomorasib的LOXO-RAS-20001/SUNRAY-01试验，药物与试验均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "79f4e24ae24829cf",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Tango's combination data and EMA's daraxonrasib recommendation, both pancreatic RAS.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A是监管机构对daraxonrasib单药的批准建议，B是Tango联合疗法的临床试验数据发布，属不同决定与不同研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e02d890c66cc8cb1",
+     "b": "d3e317cfaa1f8f92",
+     "truth": "same",
+     "kind": "split",
+     "why": "Nigeria's first Bundibugyo Ebola case: the lone report is one more report of what the larger event holds.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两事件均报道尼日利亚首例邦迪布焦型埃博拉输入病例及肯尼亚、刚果（金）疫情数字上升，为同一次通报。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "f6d07690cee8cc80",
+     "b": "a32dcd8a9856a35d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "ENERGIZE and VOLGA: two perioperative bladder cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "A为纳武利尤单抗的ENERGIZE试验，B为度伐利尤单抗联合维恩妥尤单抗的VOLGA试验，是两项不同试验。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "9ad4b8ba63d3dcfb",
+     "b": "342d8984a59d04ed",
+     "truth": "same",
+     "kind": "split",
+     "why": "The twin in-utero tumour transmission paper and the same press report, in both events.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "B是对同一项双胞胎宫内肿瘤传播研究的媒体报道，与A的论文为同一发生。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "ecf7df48b53fdf4f",
+     "b": "91f1e525bc8d8c05",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A roundup of Chinese drugs at ESMO and a priority-review notice for one of them.",
+     "relation": "DIFFERENT",
+     "confidence": 0.85,
+     "reason": "A是ESMO 2026中国创新药报告综述，B是依沃西单抗的监管优先审评决定，属不同事项。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "577290b29aefc879",
+     "truth": "related",
+     "kind": "development",
+     "why": "The announcement that the INTerpath-001 data are coming, then the data itself.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "A是数据公布前的预告，B是随后同一疫苗数据泄露与正式公布，属同一事件的后续进展。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "fa4e835d0f10d1b6",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two phase 3 successes, different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "两项完全不同的药物和试验（rusfertide的VERIFY vs upacicalcet的PATH-1/PATH-2），疾病领域也不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "aae9b73f3bc6a0c6",
+     "b": "f1e802d64febfac4",
+     "truth": "related",
+     "kind": "known-split",
+     "why": "LATE-MT and MILD-MT are two independent trials published together; the joint reports cover both (strict reading: not one occurrence).",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "两项独立试验（LATE-MT与MILD-MT），但多篇报道同时介绍同日发表于NEJM的这两项研究，属有直接关联。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e3a0e92ab9b86fde",
+     "b": "656ea8c146911211",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "NATALEE and TALENT: two early breast cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "不同药物、不同试验（NATALEE vs TALENT）、不同终点，仅同在ESMO 2026发布。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "166b613bd0f5b4a1",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "kind": "split",
+     "why": "Both hold the INTerpath-001 ESMO readout (42% lower recurrence) and the same headline report; the leak is the same release.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两者均指INTerpath-001同一次结果发布，B的泄露报道与A的数据公布是同一事件的不同侧面。",
+     "second": "RELATED",
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "05eb5848072c9e74",
+     "truth": "related",
+     "kind": "development",
+     "why": "Preview of the INTerpath-001 presentation, then the embargo lift.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "A是数据公布前的预告，B是随后同一试验数据的实际公布/泄露，属同一事件的后续。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "166b613bd0f5b4a1",
+     "truth": "same",
+     "kind": "split",
+     "why": "Same detailed-data report of INTerpath-001 in both events, 70 minutes apart.",
+     "relation": "SAME",
+     "confidence": 0.95,
+     "reason": "两者报道的是INTerpath-001同一次结果发布，共享同一批报道。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "b46c9309f1ff7667",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "A talk on T-DXd + pertuzumab and an anbenitamab phase 3 paper: both HER2+ breast.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "A讲T-DXd+P方案（DESTINY-Breast09），B讲国产HER2双抗anbenitamab的HEALER试验，是不同药物、不同试验的两项独立研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "16185fadc1a5e49c",
+     "b": "03b4fabf39b7b03d",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two FDA approvals (bepirovirsen, remibrutinib).",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两件不同的监管批准：不同药物、不同适应症、不同公司。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "aa170b0558e84da4",
+     "b": "fb279d0439b3d800",
+     "truth": "different",
+     "kind": "series",
+     "why": "A consensus and a weight-loss study.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "A是青少年减重干预的临床试验结果，B是地方体重管理临床路径共识文件，互不相关。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "fa9cb46ba8effe54",
+     "b": "b4a919e78d8c3423",
+     "truth": "related",
+     "kind": "development",
+     "why": "DeLLphi-305 preview and the readout.",
+     "relation": "RELATED",
+     "confidence": 0.9,
+     "reason": "A是对同一试验结果的会前预告，B是该结果的正式发布，属同一研究的前后报道而非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "99df797295e4e721",
+     "b": "895a76940c31322c",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two systematic review protocols.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两项主题完全不同的系统评价/Meta分析，仅方法学类型相同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "655b6ef080f40701",
+     "truth": "related",
+     "kind": "development",
+     "why": "Outbreak situation report and the later Kenyan death.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是同一多国埃博拉疫情中肯尼亚分支在数日后的新进展通报，属同一持续事件的不同时间通报。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "af879b27fbe794d6",
+     "b": "e5add0f1b4e3cb04",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two calls of one project series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "同一项目系列的不同期次、不同研究方向的两份独立公告，不是同一次发布。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "bc2913b7aac2c84e",
+     "b": "036972fb29143a2a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two FDA recalls of tainted supplements: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "涉及不同产品（Green Lumber vs Ultimate Forza）的不同监管行动（公共警示 vs 企业召回）。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "e310a7541773f7ea",
+     "b": "b104562be40d82f9",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CMS rural grants to Alaska and to Texas.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "同一Rural Health Transformation Program下对不同州、不同金额的两笔独立拨款。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "d70f59449841c85b",
+     "b": "42eae0036f2c7b72",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "An ADHD review and an ADHD-drug menopause study.",
+     "relation": "DIFFERENT",
+     "confidence": 0.9,
+     "reason": "前者是ADHD诊疗综述，后者是关于ADHD药物用于更年期脑雾的独立报道，主题与来源均不同。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "bb93d9abcfaddcaa",
+     "truth": "related",
+     "kind": "development",
+     "why": "Outbreak situation report and ECDC's threat assessment of the imported cases.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "同一疫情的不同文件：后者是针对该输入病例事件的专门风险评估，属后续进展而非同一次通报。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "3edac0e2e296c894",
+     "b": "b104562be40d82f9",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "CMS rural grants to Mississippi and to Texas: a series.",
+     "relation": "DIFFERENT",
+     "confidence": 0.97,
+     "reason": "同一项目下对不同州、不同金额的两笔独立拨款。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "23252a0df22f4337",
+     "b": "c7ae2de6c4537fa9",
+     "truth": "same",
+     "kind": "known-split",
+     "why": "DRC Ebola resurgence, same outlet and minute; the titles differ in angle only (judgement: no body text in the sample).",
+     "relation": "SAME",
+     "confidence": 0.7,
+     "reason": "两篇均为2026-10-25关于刚果（金）埃博拉疫情同一轮反弹/蔓延的报道，属同一次疫情通报。",
+     "second": "RELATED",
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "98fd90838ae8b06d",
+     "truth": "related",
+     "kind": "joint-report",
+     "why": "Atacicept ORIGIN 3 and a Chinese report that covers it together with the sibeprenlimab paper.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "B是介绍同日发表的多项研究（含A的ORIGIN 3）的汇总报道，并非同一次发生，但有直接关联。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "25ed3de5aba0685a",
+     "truth": "different",
+     "kind": "series",
+     "why": "Rusfertide and oral minoxidil.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "两项完全不同的药物、适应症和试验（VERIFY vs VDPHL01）。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "aab4dfe6c2a1d7da",
+     "b": "14f147ce3465e278",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two elinzanetant analyses (sleep relief, daytime sleepiness): one programme, two papers (judgement).",
+     "relation": "DIFFERENT",
+     "confidence": 0.8,
+     "reason": "A是NK受体拮抗剂改善睡眠的Meta分析，B是elinzanetant睡前服药日间嗜睡的具体试验分析，为不同研究。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "06a245773fed1324",
+     "b": "1d2a7ac47ba21bd7",
+     "truth": "different",
+     "kind": "series",
+     "why": "Two systematic reviews of different drugs.",
+     "relation": "DIFFERENT",
+     "confidence": 0.99,
+     "reason": "两项针对不同药物、不同疾病的独立Meta分析。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "be44d580b829913c",
+     "b": "2fbed99d2724c3dc",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two EPAR updates of different products.",
+     "relation": "DIFFERENT",
+     "confidence": 0.98,
+     "reason": "EMA对两种不同药物、不同适应症分别发布的EPAR修订，属不同监管文件。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "e02d890c66cc8cb1",
+     "truth": "related",
+     "kind": "development",
+     "why": "WHO situation report and news on the Kenyan and Nigerian imports of the same outbreak (judgement).",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两事件均报道同一轮刚果（金）本迪布焦型埃博拉疫情及肯尼亚、尼日利亚的输入病例，属同一次疫情通报。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "3193cd6a14e4edb9",
+     "b": "f352468fdb43a17a",
+     "truth": "same",
+     "kind": "split",
+     "why": "Tairex multi-agent clinical system: the same release is a report in both.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两事件均报道Tairex（紫荆智康）发布同一多智能体AI医疗系统，中文报道与PR Newswire新闻稿为同一发布。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "fd66c355f7f3492d",
+     "b": "9a967f03a22d1d25",
+     "truth": "same",
+     "kind": "known-split",
+     "why": "One TAK-921 / G-HOPE-001 readout: the single-report event is the company announcement the larger event already covers.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两事件均指同一项G-HOPE-001 III期研究结果发布，B为其后续上市申报计划，属同一次结果发布。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "56a926f8bcd3a5f3",
+     "b": "d147fac283d5363a",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "Two bevacizumab combinations in different cancers.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "两项不同的药物、不同瘤种的独立研究，仅同在ESMO 2026发布。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "577290b29aefc879",
+     "truth": "same",
+     "kind": "split",
+     "why": "The embargo lift and the leak carry the same detailed-data report of INTerpath-001.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两事件均围绕同一INTerpath-001 III期试验摘要embargo解除与数据泄露/公布。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "30ed869f2b91ed62",
+     "b": "dc7b315ae085627e",
+     "truth": "same",
+     "kind": "split",
+     "why": "Zai Lab / Ideaya DLL3 ADC zoci + atezolizumab 1b data at ESMO, announced once.",
+     "relation": "SAME",
+     "confidence": 0.9,
+     "reason": "两事件均报道再鼎zoci（DLL3 ADC）联合阿替利珠单抗一线治疗ES-SCLC的同一1b期数据发布。",
+     "second": "SAME",
+     "confirmed": true
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "a58fbf0df34e864c",
+     "truth": "related",
+     "kind": "development",
+     "why": "EMA's recommendation on daraxonrasib and a later RASolute 302 subgroup analysis.",
+     "relation": "RELATED",
+     "confidence": 0.85,
+     "reason": "A是监管机构基于RASolute 302的上市批准建议，B是同一试验在学术会议上的亚组分析数据发布，属同一研究的后续/不同发布，而非同一次发生。",
+     "second": null,
+     "confirmed": false
+    },
+    {
+     "a": "7c517b6e1ca9c534",
+     "b": "060135464705a99f",
+     "truth": "different",
+     "kind": "hard-negative",
+     "why": "FourLight-1 and postMONARCH: two ESMO HR+ breast cancer trials.",
+     "relation": "DIFFERENT",
+     "confidence": 0.95,
+     "reason": "两项不同试验（FourLight-1 vs postMONARCH）、不同药物（atirmociclib vs abemaciclib）的独立研究，仅同于ESMO 2026会议。",
+     "second": null,
+     "confirmed": false
+    }
+   ]
+  }
+ ]
+}

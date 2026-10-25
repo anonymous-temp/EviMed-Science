@@ -1,16 +1,16 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem, type FrontierTagRef } from "@/lib/frontierClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { trackFrontierItemAction } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { ScorePill } from "@/components/ui/Score";
 import { Tag } from "@/components/ui/Tag";
+import { openItemConversation } from "./frontierAsk";
 import { FrontierHideStrip } from "./FrontierHideStrip";
 import type { FrontierHideStripControls } from "./useFrontierHide";
 import {
@@ -18,6 +18,7 @@ import {
   CARD_MAX_TAGS,
   INLINE_ACTION,
   PLATFORM_LABELS,
+  PRACTICE_LABEL,
   SCORE_LABEL,
   SCORE_NOTE,
   cardEyebrow,
@@ -25,7 +26,7 @@ import {
   isSocialItem,
   itemMarkdown,
   metaTime,
-  researchDraft,
+  researchQuestion,
   scoreBand,
   scoreBreakdown,
 } from "./frontierText";
@@ -56,6 +57,8 @@ export interface FrontierCardProps {
   onOpened?: (item: FrontierItem) => void;
   /** A #tag was pressed: the feed narrows to it. Absent: the tag is a link to 全部 with it. */
   onTag?: (tag: FrontierTagRef) => void;
+  /** A line under the summary that belongs to where the card is shown (a congress hub's design caveat, c3-track). */
+  note?: ReactNode;
 }
 
 /**
@@ -71,7 +74,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
   onSave?: (item: FrontierItem) => void;
   saving?: boolean;
   onOpened?: (item: FrontierItem) => void;
-}): { more: MenuEntry[]; reports: MenuEntry[]; research: () => void } {
+}): { more: MenuEntry[]; reports: MenuEntry[]; research: () => void; ask: (question: string | null) => void } {
   const navigate = useNavigate();
   const origin = useFrontierOrigin();
   const copy = async () => {
@@ -87,7 +90,9 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     try { await addFrontierFollow({ kind, key, label, muted }); toast.success(muted ? "已屏蔽" : "已关注"); }
     catch (error) { toast.error(frontierErrorMessage(error)); }
   };
-  const research = () => { trackFrontierItemAction("research", item.id); navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } }); };
+  // One way into the assistant: 深入研究 is the question that fits the item, 就此提问 one of its own questions or the reader's (`openItemConversation`).
+  const research = () => { trackFrontierItemAction("research", item.id); openItemConversation(navigate, item, researchQuestion(item)); };
+  const ask = (question: string | null) => { trackFrontierItemAction("ask", item.id, { detail: question ? "suggested" : "own" }); openItemConversation(navigate, item, question); };
   const openEvent = () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); };
   const more: MenuEntry[] = [
     ...(reader ? [] : [{ label: "深入研究", onSelect: research }]),
@@ -96,8 +101,10 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },
     "separator",
-    { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
-    { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
+    ...(item.source.followable === false ? [] : [
+      { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
+      { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
+    ]),
     ...(item.event ? [{ label: "同一事件的全部报道", onSelect: openEvent }, { label: "关注此事件", onSelect: () => void follow("event", item.event!.id, item.title.slice(0, 120)) }] : []),
     ...item.entities.drugs.slice(0, 3).map((drug) => ({ label: `关注药物：${drug}`, onSelect: () => void follow("drug", drug, drug) })),
     ...item.specialties.slice(0, 2).map((specialty) => ({ label: `关注专科：${specialty.label}`, onSelect: () => void follow("specialty", specialty.key, specialty.label) })),
@@ -112,7 +119,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     })),
     ...(item.event ? ["separator" as const, { label: "同一事件的全部报道", onSelect: openEvent }] : []),
   ];
-  return { more, reports, research };
+  return { more, reports, research, ask };
 }
 
 /** What sits above the card's stretched link, so a press on it is its own and not the card's. */
@@ -134,7 +141,7 @@ const ABOVE = "relative z-sticky";
  *
  * 不感兴趣 hides the card at once and, while the page says so (`hideStrip`), one line stands in its place (`FrontierHideStrip`).
  */
-export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
+export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag, note }: FrontierCardProps) {
   const titleId = useId();
   const origin = useFrontierOrigin();
   const location = useLocation();
@@ -209,6 +216,10 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
         <div className="flex gap-4">
           <div className="min-w-0 flex-1">
             <h3 id={titleId} data-row-title data-prose="" className="mt-1.5 text-body font-semibold leading-6">
+              {/* Content, not provenance: what the item may change, said where the eye starts and not in the meta row, which a phone has no
+                * room for (the source's name went to 「国…」). The reason is on hover; a touch screen reads it in the reader. It sits above the
+                * card's stretched link, or the pointer never reaches it. */}
+              {item.practice && <Tag tone="accent" title={item.practice.reason} className={cn(ABOVE, "mr-2 align-middle")}>{PRACTICE_LABEL}</Tag>}
               <Link
                 to={articlePath(item.id)}
                 state={articleState}
@@ -225,6 +236,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
               </Link>
             </h3>
             {item.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure whitespace-pre-line text-ui text-text-2 sm:line-clamp-3">{item.summary}</p>}
+            {note}
           </div>
           {/* The item's first picture, beside the title and not a second link to the same article: the release walk counts a
             * hidden duplicate link as a control without a name, and each picture height as one more kind of control. A
