@@ -484,7 +484,9 @@ function GeoBand({
         onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
       ...(controls?.filters ?? []),
     ],
-    actions: <>{!onChat && ["overview", "visibility", "accuracy", "sources", "questions"].includes(tab) && <Button variant="text" size="sm" onClick={() => setScopeOpen(true)}>分析范围{geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}</Button>}{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
+    // The range is shown wherever it narrows what is read — every view's analysis and 方案's strategy — so a range carried in the
+    // address never applies unsaid; 行动's monitoring view reads none.
+    actions: <>{!onChat && !(tab === "actions" && selectedStep === "monitoring") && <Button variant="text" size="sm" onClick={() => setScopeOpen(true)}>分析范围{geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}</Button>}{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
   };
 
   return (

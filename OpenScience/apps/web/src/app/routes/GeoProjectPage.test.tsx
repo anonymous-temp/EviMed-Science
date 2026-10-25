@@ -438,8 +438,9 @@ describe("a GEO project's page", () => {
     await chooseResult("可见度");
     await waitFor(() => expect(buttons()).toEqual(["分析范围"]));
 
+    // 行动 reads the range too (its analysis of articles and placing), so it says so.
     await chooseResult("行动");
-    await waitFor(() => expect(buttons()).toEqual(["让 AI 写下一批"]));
+    await waitFor(() => expect(buttons()).toEqual(["分析范围", "让 AI 写下一批"]));
   });
 
   it("offers the budget in distribution where a market is connected, with the tier's suggestion", async () => {
@@ -906,5 +907,19 @@ describe("watching a project", () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, updatedAt: "2099-01-01T00:00:00.000Z" });
     act(() => { document.dispatchEvent(new Event("visibilitychange")); });
     await waitFor(() => expect(client.getGeoMonitoring.mock.calls.length).toBeGreaterThan(before));
+  });
+});
+
+describe("the analysis range", () => {
+  it("is shown on every view that reads it — 行动, 方案 and 依据 included — and not on one that reads none", async () => {
+    const query = "from=2026-10-01&to=2026-10-14";
+    for (const [path, shown] of [["actions?step=content", true], ["plan?step=sources", true], ["evidence", true], ["actions?step=monitoring", false]] as const) {
+      const view = renderProject(`/app/geo/geo_masi/${path}${path.includes("?") ? "&" : "?"}${query}`);
+      await screen.findByRole("heading", { level: 1 });
+      await waitFor(() => expect(document.querySelector("[data-toolbar]")).not.toBeNull());
+      if (shown) expect(await screen.findByRole("button", { name: "分析范围 · 已筛选" })).toBeVisible();
+      else expect(screen.queryByRole("button", { name: /^分析范围/ })).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 });
