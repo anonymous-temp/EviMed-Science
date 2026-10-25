@@ -45,7 +45,7 @@ import {
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
-import { learnedMethodId, methodScopeOf } from "./learningService.mjs";
+import { learnedMethodId, methodScopeOf, methodSourceProjects } from "./learningService.mjs";
 import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset } from "./researchMemory.mjs";
@@ -862,6 +862,8 @@ export class MethodDistillationRuns {
         scope: scopes.size === 1 && target.payload?.provenance?.scope ? lessonScope : undefined,
         evidence: evidence.length ? evidence : undefined,
         ...(folded.length ? {
+          // The merged method rests on the projects the folded ones were learnt in as well (`LearningService.amendMethod` unions them in).
+          sourceProjectIds: folded.flatMap((method) => methodSourceProjects(method.payload?.provenance)),
           consolidatedBy: `consolidate:distill:${job.id ?? run.id}`,
           mergedFrom: folded.map((method) => ({ methodId: method.id, digest: method.payload.contentDigest })),
           pendingRetirements: folded.map((method) => ({ methodId: method.id, baseDigest: method.payload.contentDigest, assignment: `distill:${run.id}` })),

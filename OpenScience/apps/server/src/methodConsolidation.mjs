@@ -65,7 +65,7 @@ import {
   storedEvidenceQuotes,
   validateMethodGraph,
 } from "@evimed/domain";
-import { learnedMethodId, methodRecordFrom, methodStepsOf } from "./learningService.mjs";
+import { learnedMethodId, methodRecordFrom, methodSourceProjects, methodStepsOf } from "./learningService.mjs";
 import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 import { candidatePairs } from "./methodSimilarity.mjs";
@@ -1046,8 +1046,10 @@ export class MethodConsolidation {
         if (prior.payload.provenance?.consolidatedBy === `consolidate:${job.id}` && prior.payload.body === parsed.body) created.set(rewrite.methodId, prior);
         continue;
       }
-      const candidate = await this.learning.createCandidate(job.userId, { projectId: job.projectId, frontmatter: parsed.frontmatter, body: parsed.body,
-        dependencies: rewrite.dependencies ?? [], provenance: { origin: "inferred", consolidatedBy: `consolidate:${job.id}`, ...(type === "merge" ? inheritedProvenance(sources) : {}),
+      // The project the pass ran in is where the model step ran, not where anything was learnt: what a derived method came from is its sources'
+      // projects (`sourceProjects`), and deleting one of them is what reaches it.
+      const candidate = await this.learning.createCandidate(job.userId, { projectId: null, frontmatter: parsed.frontmatter, body: parsed.body,
+        dependencies: rewrite.dependencies ?? [], provenance: { origin: "inferred", consolidatedBy: `consolidate:${job.id}`, ...sourceProjects(sources), ...(type === "merge" ? inheritedProvenance(sources) : {}),
           pendingRetirements: revisions.filter((/** @type {any} */ item) => item.operation === "retire" && item.assignment === rewrite.assignment && item.supersededBy === rewrite.methodId && sources.some(member => member.id === item.methodId && member.payload.contentDigest === item.baseDigest)).map((/** @type {any} */ item) => ({ methodId: item.methodId, baseDigest: item.baseDigest, assignment: item.assignment })) } }).catch(() => null);
       if (candidate) { created.set(rewrite.methodId, candidate); applied += 1; }
     }
@@ -1101,6 +1103,19 @@ export class MethodConsolidation {
     return { applied, pendingRetirements, refusals };
   }
 
+}
+
+/**
+ * The projects a method derived from other methods was learnt in: the union of its sources' own, the oldest source's first.
+ * A method built out of others rests on what they were learnt from, so deleting the project one of them came from reaches it
+ * (`LearningService.retireProjectMethods`: it is stopped when every project it names is gone). Nothing when the sources name none.
+ * @param {readonly any[]} sources @returns {{sourceProjectId: string, sourceProjectIds: string[]} | {}}
+ */
+export function sourceProjects(sources) {
+  // Oldest source first, as the ledger lists them newest first and the first project is where it was first learnt.
+  const oldestFirst = [...sources].sort((left, right) => String(left.payload?.createdAt ?? "").localeCompare(String(right.payload?.createdAt ?? "")) || String(left.id).localeCompare(String(right.id)));
+  const projects = [...new Set(oldestFirst.flatMap((source) => methodSourceProjects(source.payload?.provenance)))];
+  return projects.length ? { sourceProjectId: projects[0], sourceProjectIds: projects } : {};
 }
 
 /**

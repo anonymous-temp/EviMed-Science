@@ -121,3 +121,24 @@ test("a method that changed between the read and the write is read again, and st
   assert.deepEqual(result.retired, [method.id]);
   assert.equal((await documents.get("u1", "method", method.id)).payload.status, "retired");
 });
+
+test("a method learnt in two projects is stopped when the second of them goes: it was found by the first alone", async () => {
+  const { documents, learning, learnIn } = fixture();
+  const method = await learnIn("shaped-by-two", "p_one");
+  await learning.amendMethod("u1", method.id, {
+    expectedRevision: method.revision, frontmatter: frontmatter("shaped-by-two"), body: `${BODY}\n\nLearnt again elsewhere.`,
+    provenance: { origin: "inferred", runId: "run_elsewhere", sourceProjectId: "p_two" },
+  });
+  const savedBefore = async () => { const history = await documents.history("u1", "method", method.id, { limit: 50 }); return (Array.isArray(history) ? history : history.items).length; };
+  const before = await savedBefore();
+  const first = await learning.retireProjectMethods("u1", "p_one");
+  assert.deepEqual([first.retired, first.kept], [[], 1]);
+  assert.equal(await savedBefore(), before, "dropping a deleted project from a method's sources is bookkeeping: no history row of its own");
+  const kept = (await documents.get("u1", "method", method.id)).payload;
+  assert.notEqual(kept.status, "retired");
+  assert.deepEqual(methodSourceProjects(kept.provenance), ["p_two"], "the project that is gone leaves its sources");
+  assert.equal(kept.provenance.sourceProjectId, "p_two");
+  const second = await learning.retireProjectMethods("u1", "p_two");
+  assert.deepEqual(second.retired, [method.id]);
+  assert.equal((await documents.get("u1", "method", method.id)).payload.status, "retired");
+});

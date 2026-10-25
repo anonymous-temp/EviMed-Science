@@ -399,6 +399,54 @@ test("a merge that drops a quotation its sources store is not created, and the r
   assert.deepEqual(merged.payload.provenance.mergedFrom.map((/** @type {any} */ source) => source.methodId).sort(), [learnedMethodId("span-a-one"), learnedMethodId("span-a-two")]);
 });
 
+test("a merge, and a method factored out of others, rest on the projects their sources were learnt in: deleting them all stops it, restorably", async () => {
+  /** @type {{ type: string }} */
+  const plan = { type: "merge" };
+  const h = harness({
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: plan.type, REASON: "One method, written twice." }] }),
+    build: (input) => ({ revisions: [
+      { assignment: "A1", methodId: learnedMethodId("merged-a"), name: "merged-a", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("merged-a", "axis-a"), sections("- Never widen a claim twice.")) },
+      ...(plan.type === "merge" ? input.methods.map((/** @type {any} */ method) => ({ assignment: "A1", methodId: method.id, name: method.name, operation: "retire", baseDigest: method.digest, supersededBy: learnedMethodId("merged-a") })) : []),
+    ] }),
+  });
+  await h.make("span-a-one", "axis-a", { projectId: "p_one" });
+  await h.make("span-a-two", "axis-a", { projectId: "p_two" });
+  assert.equal((await h.sleep("job_1")).builds, 1);
+  const merged = await h.learning.getMethod("u1", learnedMethodId("merged-a"));
+  assert.deepEqual(merged.payload.provenance.sourceProjectIds, ["p_one", "p_two"], "the union of its originals' projects, not the project the pass ran in (p1)");
+  assert.equal(merged.payload.provenance.sourceProjectId, "p_one");
+
+  // The first project goes: the merge still rests on the other, and says so.
+  await h.learning.retireProjectMethods("u1", "p_one");
+  const afterFirst = await h.learning.getMethod("u1", merged.id);
+  assert.notEqual(afterFirst.payload.status, "retired");
+  assert.deepEqual(afterFirst.payload.provenance.sourceProjectIds, ["p_two"]);
+  assert.equal(afterFirst.payload.provenance.sourceProjectId, "p_two", "found by the project that is left");
+  // The last one goes: nothing it rests on is left, and it is stopped as an original would be.
+  const final = await h.learning.retireProjectMethods("u1", "p_two");
+  assert.ok(final.retired.includes(merged.id));
+  const stopped = await h.learning.getMethod("u1", merged.id);
+  assert.equal(stopped.payload.status, "retired");
+  assert.equal(stopped.payload.statusReason, "它只是从已删除的项目里学到的，已停用。");
+  // One click restores it, with the reason it was stopped for gone.
+  const restored = await h.learning.rollback("u1", merged.id, { expectedRevision: stopped.revision, targetRevision: stopped.revision });
+  assert.equal(restored.payload.status, "approved");
+});
+
+test("a method factored out of two others (shared_part) names both their projects too", async () => {
+  const h = harness({
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "shared_part", REASON: "They share a step." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("shared-step"), name: "shared-step", operation: "create", baseDigest: null,
+      skill: renderMethodSkill(frontmatter("shared-step", "axis-a"), sections("- Never skip the shared step.")) }] }),
+  });
+  await h.make("span-a-one", "axis-a", { projectId: "p_one" });
+  await h.make("span-a-two", "axis-a", { projectId: "p_two" });
+  assert.equal((await h.sleep()).builds, 1);
+  const shared = await h.learning.getMethod("u1", learnedMethodId("shared-step"));
+  assert.deepEqual(shared.payload.provenance.sourceProjectIds, ["p_one", "p_two"]);
+  assert.ok(!shared.payload.provenance.mergedFrom, "only a merge carries the evidence trail of its sources");
+});
+
 test("a build writes against the revision the pass's own bookkeeping left, not the one it listed with", async () => {
   // Recording a relation moves a method's revision. The build used to amend against the revision the pass began with, the write
   // conflicted, the conflict was swallowed, and the rewrite was lost: it never showed because no relation had ever been recorded.

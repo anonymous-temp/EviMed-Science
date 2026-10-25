@@ -177,6 +177,24 @@ test("a create under a name the library already holds becomes that method's next
   assert.equal(enqueued[0].opts.idempotencyKey, "consolidate:integrate:method:learned:do-the-thing:4");
 });
 
+test("a merge the distillation proposes names the projects of the methods it folds in, beside the lesson's own", async () => {
+  const learning = fakeLearning(["method:learned:do-the-thing", "method:learned:folded-a"]);
+  const read = learning.getMethod;
+  learning.getMethod = async (userId, methodId) => {
+    const found = await read(userId, methodId);
+    return { ...found, payload: { ...found.payload, status: "approved", contentDigest: `sha256:${methodId}`,
+      provenance: methodId.endsWith("folded-a") ? { sourceProjectId: "p_two", sourceProjectIds: ["p_two", "p_three"] } : { sourceProjectId: "p_one" } } };
+  };
+  const { distillation } = runs(learning);
+  await distillation.applyCandidate(job, run, {
+    candidate: { operation: "merge", targetMethodId: "method:learned:do-the-thing", mergedMethodIds: ["method:learned:folded-a"] },
+    skill: SKILL,
+  });
+  assert.equal(learning.amended.length, 1);
+  assert.deepEqual(learning.amended[0].provenance.sourceProjectIds, ["p_two", "p_three"], "the service unions them with what the target already names");
+  assert.equal(learning.amended[0].provenance.sourceProjectId, "p1", "and the lesson's own project is the provenance's sourceProjectId, as for any lesson");
+});
+
 test("a delivered package is read as one method, not as a method whose scripts are its own files", async () => {
   // 2026-09-21: the first two lessons production ever finished were refused as
   // `method_invalid` — `applyCandidate` handed the store the whole delivered

@@ -361,9 +361,14 @@ export class LearningService {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
     const name = String(input.frontmatter?.name ?? "");
     const id = learnedMethodId(name);
-    const sourceProjectId = sourceProjectOf(input.provenance, input.projectId);
+    // A method learnt from one lesson names the project the lesson was in. One derived from other methods (a merge, a factored-out shared part)
+    // names every project its sources were learnt in, which the caller states in the provenance and which is kept as it is stated: it was forced
+    // to the project the consolidation ran in, so deleting a source's project never reached a merge built from it.
+    const named = methodSourceProjects(input.provenance);
+    const sourceProjectId = named[0] ?? sourceProjectOf(null, input.projectId);
+    const sourceProjectIds = named.length ? named : sourceProjectId ? [sourceProjectId] : [];
     const provenance = withResultLinks({ origin: "inferred", ...input.provenance,
-      ...(sourceProjectId ? { sourceProjectId, sourceProjectIds: [sourceProjectId] } : {}) });
+      ...(sourceProjectId ? { sourceProjectId, sourceProjectIds } : {}) });
     const createdAt = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
     const scope = cleanMethodScope(input.scope);
@@ -502,8 +507,9 @@ export class LearningService {
     const sourceProjectId = sourceProjectOf(current.payload.provenance, null) ?? sourceProjectOf(input.provenance, null);
     // But every project a lesson came from is kept beside it: deleting a project retires only the methods that were
     // learnt in no other (`retireProjectMethods`).
+    // (A merge folds methods learnt elsewhere into this one, and its provenance names their projects as well as the lesson's.)
     const sourceProjectIds = methodSourceProjects({ ...current.payload.provenance,
-      sourceProjectIds: [...methodSourceProjects(current.payload.provenance), sourceProjectOf(input.provenance, null)].filter(Boolean) });
+      sourceProjectIds: [...methodSourceProjects(current.payload.provenance), ...methodSourceProjects(input.provenance)] });
     const payload = {
       ...current.payload,
       status: bodyChanged ? "candidate" : current.payload.status,
@@ -674,8 +680,11 @@ export class LearningService {
    *
    * A method is the researcher's, not the project's (`createCandidate`), and it used to outlive every project it came from.
    * Deleting a project is asking for what it held to go, and a way of working drawn only from its conversations is part of
-   * that. A method that a lesson from another project also shaped keeps standing: it is not only this project's. Retired,
-   * not deleted: the reason is written on it, and it can be returned to like any stopped method.
+   * that. A method that a lesson from another project also shaped keeps standing: it is not only this project's, and the deleted
+   * project leaves its list of sources — so that deleting the last of the others later finds it again (it was found by the first
+   * project it was learnt in alone, and a method learnt in two projects outlived both). A merge, or a method factored out of
+   * others, names every project its sources were learnt in (`createCandidate`) and goes the same way. Retired, not deleted: the
+   * reason is written on it, and it can be returned to like any stopped method.
    * Run inside the project's deletion (`transactionClient`), so the project goes only if its methods are stopped.
    *
    * @param {string} userId @param {string} projectId @param {{ transactionClient?: any }} [options]
@@ -685,33 +694,47 @@ export class LearningService {
     /** @type {string[]} */
     const retired = [];
     let kept = 0;
-    /** @type {string | null} */
-    let cursor = null;
-    do {
-      const page = await this.documents.list(userId, "method", {
-        limit: 100, cursor,
-        filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance: { sourceProjectId: projectId } },
-      });
-      for (const listed of page.items ?? []) {
-        if (listed.payload?.status === "retired") continue;
-        if (methodSourceProjects(listed.payload?.provenance).some((id) => id !== projectId)) { kept += 1; continue; }
-        // The revision read is the revision written against: one that moved in between is read again, a few times.
-        let document = listed;
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          if (document.payload?.status === "retired" || methodSourceProjects(document.payload?.provenance).some((id) => id !== projectId)) break;
-          const payload = { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
-          try {
-            await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient });
-            retired.push(document.id);
-            break;
-          } catch (error) {
-            if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
-            document = await this.documents.get(userId, "method", document.id) ?? document;
+    /** @type {Set<string>} */
+    const handled = new Set();
+    // By the project it was first learnt in, and by every project it names: a record from before the list names the first only.
+    for (const provenance of [{ sourceProjectId: projectId }, { sourceProjectIds: [projectId] }]) {
+      /** @type {string | null} */
+      let cursor = null;
+      do {
+        const page = await this.documents.list(userId, "method", {
+          limit: 100, cursor,
+          filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance },
+        });
+        for (const listed of page.items ?? []) {
+          if (handled.has(listed.id)) continue;
+          handled.add(listed.id);
+          // A stopped method keeps the reason it was stopped for, and its sources as they were.
+          if (listed.payload?.status === "retired") continue;
+          // The revision read is the revision written against: one that moved in between is read again, a few times.
+          let document = listed;
+          for (let attempt = 0; attempt < 4; attempt += 1) {
+            if (document.payload?.status === "retired") break;
+            const remaining = methodSourceProjects(document.payload?.provenance).filter((id) => id !== projectId);
+            const others = remaining.length > 0;
+            const payload = others
+              ? { ...document.payload, provenance: { ...document.payload.provenance,
+                ...(document.payload.provenance?.sourceProjectId === projectId ? { sourceProjectId: remaining[0] } : {}), sourceProjectIds: remaining } }
+              : { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
+            try {
+              // Dropping a deleted project from a method's sources is bookkeeping, not a change of the method: no history row.
+              await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient, ...(others ? { telemetry: true } : {}) });
+              if (others) kept += 1;
+              else retired.push(document.id);
+              break;
+            } catch (error) {
+              if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
+              document = await this.documents.get(userId, "method", document.id) ?? document;
+            }
           }
         }
-      }
-      cursor = page.nextCursor ?? null;
-    } while (cursor);
+        cursor = page.nextCursor ?? null;
+      } while (cursor);
+    }
     return { retired, kept };
   }
 
