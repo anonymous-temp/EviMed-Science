@@ -54,6 +54,7 @@ import {
   METHOD_RELATIONS_ACTIONS,
   METHOD_RELATION_TYPES,
   METHOD_SIMILARITY_PAIR_FLOOR,
+  METHOD_SIMILARITY_TOP_K,
   RUNTIME_ROOM_REFUSAL_CODES,
   bodyPreservation,
   cleanMethodDisplay,
@@ -453,7 +454,7 @@ export class MethodConsolidation {
     if (methods.length === 0) {
       this.#noop("no_methods");
       return { action: "sleep", methods: 0, groupsFormed: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], retirements: [], graphIssues: [],
-        shortlist: { mode: "none", pairs: 0, topScore: null }, noGroups: false, noMethods: true, noop: ["no_methods"] };
+        shortlist: { mode: "none", pairs: 0, topScore: null, p50: null, p90: null }, noGroups: false, noMethods: true, noop: ["no_methods"] };
     }
     // Two methods is the floor for *comparing* them, and nothing else. It used
     // to return here, which also skipped promotion, evaluation queueing and
@@ -582,7 +583,8 @@ export class MethodConsolidation {
       action: "sleep",
       mergedRetirements,
       methods: refreshed.length,
-      shortlist: { mode: shortlist.mode, pairs: shortlist.pairs.length, topScore: shortlist.topScore ?? null },
+      // `topScore`, `p50` and `p90` are cosines of the nearest-neighbour pairs, below the floor or not: what the candidate floor is read against.
+      shortlist: { mode: shortlist.mode, pairs: shortlist.pairs.length, topScore: shortlist.topScore ?? null, p50: shortlist.distribution?.p50 ?? null, p90: shortlist.distribution?.p90 ?? null },
       groupsFormed: groups.length,
       groups: outcome.groups,
       skippedUnchanged: outcome.skippedUnchanged,
@@ -617,16 +619,18 @@ export class MethodConsolidation {
     try { this.onNoop?.(reason, count); } catch { /* a counter never decides what is done */ }
   }
 
-  /** The shortlist of pairs a pass groups from: by embedding when the similarity module answers, by shared words otherwise.
-   *  `topScore` is the highest cosine between any two methods, below the floor or not, so the provisional floor can be read against a real library.
+  /** The shortlist of pairs a pass groups from: each method's nearest neighbours above the candidate floor by embedding when the
+   *  similarity module answers, by shared words otherwise. `topScore` is the highest cosine between any two methods and `distribution` the
+   *  median and ninetieth percentile of the neighbour cosines, below the floor or not, so the floor can be read against a real library.
    *  @param {readonly any[]} methods
-   *  @returns {Promise<{pairs: {a: string, b: string, overlap: number, score?: number}[], mode: string, topScore?: number | null}>} */
+   *  @returns {Promise<{pairs: {a: string, b: string, overlap: number, score?: number}[], mode: string, topScore?: number | null, distribution?: {p50: number, p90: number, n: number} | null}>} */
   async #shortlist(methods) {
     if (this.similarity) {
       const pairs = await this.similarity.pairs(methods).catch(() => null);
-      if (pairs) return { pairs, mode: /** @type {any} */ (pairs).mode ?? "embedding", topScore: /** @type {any} */ (pairs).topScore ?? null };
+      if (pairs) return { pairs, mode: /** @type {any} */ (pairs).mode ?? "embedding", topScore: /** @type {any} */ (pairs).topScore ?? null,
+        distribution: /** @type {any} */ (pairs).distribution ?? null };
     }
-    return { pairs: candidatePairs(methods), mode: "lexical", topScore: null };
+    return { pairs: candidatePairs(methods), mode: "lexical", topScore: null, distribution: null };
   }
 
   /**
@@ -772,11 +776,12 @@ export class MethodConsolidation {
       refusals: done.refusals, noop };
   }
 
-  /** The methods most like this one, at most a group's worth less itself: by embedding when the similarity module answers,
-   *  by shared words (`candidatePairs`) otherwise.
+  /** The methods most like this one, at most `METHOD_SIMILARITY_TOP_K` of them (the hourly shortlist's own bound, so a changed method is
+   *  read with the neighbours it would have been grouped with): by embedding when the similarity module answers, by shared words
+   *  (`candidatePairs`) otherwise.
    *  @param {any} subject @param {readonly any[]} neighbours @returns {Promise<any[]>} */
   async #nearestTo(subject, neighbours) {
-    const limit = CONSOLIDATION_LIMITS.maxGroupSize - 1;
+    const limit = Math.min(METHOD_SIMILARITY_TOP_K, CONSOLIDATION_LIMITS.maxGroupSize - 1);
     if (this.similarity) {
       const found = await this.similarity.nearest(this.similarity.methodText(subject), neighbours, { limit, minScore: METHOD_SIMILARITY_PAIR_FLOOR }).catch(() => null);
       if (found) return found.map((/** @type {any} */ entry) => entry.method);

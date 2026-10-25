@@ -1255,8 +1255,8 @@ account's last learning evidence, the account as twelve hex characters), `…_le
 `unproven_merge_expired`, `library_cap`; `open_science_learning_spend_cny` is where the follow-up judge's calls show (purpose `learning`).
 The job kind `learning-evidence` is the settling of a run 30 minutes after it ended; a memory reset cancels it with the rest of the
 account's learning. `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE` is gone: a run's `delivered` sample no longer exists. The
-consolidation pass's result lives on the job (`evimed_product.jobs`, `kind='consolidate'`): `shortlist.mode` and `shortlist.topScore` (read
-the provisional 0.80 floor against it), `groupsFormed`, `groups`, `skippedUnchanged`, `noop[]`, `relations`, `levels`; a second pass in the
+consolidation pass's result lives on the job (`evimed_product.jobs`, `kind='consolidate'`): `shortlist.mode`, `shortlist.topScore`, `shortlist.p50` and `shortlist.p90` (the cosines of each method's
+five nearest neighbours, the ones the 0.50 candidate floor refused included: move the floor by them, not by a guess), `groupsFormed`, `groups`, `skippedUnchanged`, `noop[]`, `relations`, `levels`; a second pass in the
 same hour must skip every group and dispatch no `method-relations` run.
 
 ### The knowledge base's document types after R10

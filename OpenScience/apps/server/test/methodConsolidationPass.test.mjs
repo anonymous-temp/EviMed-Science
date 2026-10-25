@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, renderMethodSkill } from "@evimed/domain";
+import { METHOD_SIMILARITY_PAIR_FLOOR, METHOD_SIMILARITY_TOP_K, METHOD_SKILL_SCHEMA, renderMethodSkill } from "@evimed/domain";
 
 import { LearningService, learnedMethodId } from "../src/learningService.mjs";
 import { DECIDE_VERSION, MethodConsolidation, groupKey, resolveAssignments } from "../src/methodConsolidation.mjs";
@@ -147,7 +147,8 @@ test("a pass over a library nothing groups says so instead of succeeding quietly
   await h.make("plots-b-one", "axis-b");
   const result = await h.sleep();
   assert.deepEqual([result.noGroups, result.groups, result.groupsFormed], [true, 0, 0]);
-  assert.ok(result.shortlist.topScore !== null && result.shortlist.topScore < 0.8, "and how close the closest two were, which is what the floor is read against");
+  assert.ok(result.shortlist.topScore !== null && result.shortlist.topScore < METHOD_SIMILARITY_PAIR_FLOOR, "and how close the closest two were, which is what the floor is read against");
+  assert.ok(result.shortlist.p50 !== null && result.shortlist.p90 !== null && result.shortlist.p50 <= result.shortlist.p90, "with the distribution of the neighbour cosines beside it");
   assert.ok(result.noop.includes("no_groups"));
   assert.deepEqual(h.dispatched, []);
   assert.deepEqual(h.noops, [["no_groups", 1]]);
@@ -158,6 +159,33 @@ test("a pass over a library nothing groups says so instead of succeeding quietly
   assert.ok(single.noop.includes("too_few_methods"));
   const empty = await harness().sleep();
   assert.deepEqual([empty.noMethods, empty.noop], [true, ["no_methods"]]);
+});
+
+test("two methods about related work at the cosine production showed (0.70) form a group and are read: the floor is no longer above everything", async () => {
+  // A text names its own vector as `vec(x,y,z)`: the reference, one at cosine 0.70 to it, and one orthogonal to both.
+  const embed = async (/** @type {string[]} */ texts) => texts.map((text) => (/vec\(([^)]*)\)/.exec(text)?.[1] ?? "1,0,0").split(",").map(Number));
+  const h = harness({ similarity: createMethodSimilarity({ embed }),
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "shared_part", REASON: "They share a step." }] }) });
+  await h.make("reference-work", "vec(1,0,0)");
+  await h.make("related-work", "vec(0.7,0.714143,0)");
+  await h.make("elsewhere", "vec(0,0,1)");
+  const result = await h.sleep();
+  assert.equal(result.shortlist.mode, "embedding");
+  assert.equal(result.shortlist.pairs, 1, "only the pair above the candidate floor");
+  assert.ok(Math.abs(result.shortlist.topScore - 0.7) < 1e-3, "the closest pair is on record");
+  assert.deepEqual([result.groupsFormed, result.groups], [1, 1]);
+  assert.equal(h.decides().length, 1, "and DECIDE read it");
+  assert.deepEqual(idsOf(h.decides()[0].input), [learnedMethodId("reference-work"), learnedMethodId("related-work")]);
+  assert.ok(result.shortlist.p50 !== null && result.shortlist.p90 >= result.shortlist.p50, "and the neighbour cosines, the kept pair and the ones the floor refused, are summarised");
+});
+
+test("an incremental pass reads a changed method with at most METHOD_SIMILARITY_TOP_K neighbours", async () => {
+  const h = harness();
+  const subject = await h.make("subject-a-zero", "axis-a");
+  for (let index = 1; index <= 8; index += 1) await h.make(`subject-a-${index}`, "axis-a");
+  const result = await h.integrate(subject.id);
+  assert.equal(result.neighbours, METHOD_SIMILARITY_TOP_K);
+  assert.deepEqual(idsOf(h.decides()[0].input).length, METHOD_SIMILARITY_TOP_K + 1);
 });
 
 test("a merge nobody has proven blocks only the build of its own group: the others are decided, related and built, and the merge expires", async () => {
