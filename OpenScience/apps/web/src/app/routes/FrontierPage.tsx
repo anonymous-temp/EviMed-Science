@@ -34,19 +34,21 @@ import {
 import { serveFrontierList, trackFrontierFilter, trackFrontierItemAction, useFrontierListTracking, type FrontierTrackSurface } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
 import { PageShell } from "@/components/layout/PageShell";
-import { frontierToolbar, type PageView } from "@/components/frontier/FrontierControls";
+import { frontierToolbar, type FollowChoice, type PageView } from "@/components/frontier/FrontierControls";
 import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
-import { NO_FILTERS, readChannel, readEvidence, readSpecialties, readTag, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
-import { rememberTagName, useHotTags, useTagFollow, useTagName, useTagSuggestions } from "@/components/frontier/useFrontierTags";
+import { NO_FILTERS, readChannel, readEvidence, readSpecialties, readTag, specialtyLabel, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
+import { rememberTagName, useFollowSet, useHotTags, useTagFollow, useTagName, useTagSuggestions } from "@/components/frontier/useFrontierTags";
 import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/frontier/FrontierHot";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { ForYouView, type ForYouState } from "@/components/frontier/ForYouView";
 import { SafetyStrip, recentAlerts, type SafetyAlerts } from "@/components/frontier/SafetyStrip";
 import { SourcesLink } from "@/components/frontier/SourcesList";
-import { FollowingView, followControls, useFollowing } from "@/components/frontier/FollowingView";
+import { FollowList, FollowingView, followAnswers, followChoiceLabel, followChoiceParam, readFollowChoice, useFollowing } from "@/components/frontier/FollowingView";
+import { useNarrow } from "@/lib/useMediaQuery";
+import type { FrontierPrefs } from "@/lib/frontierPrefs";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
 import { Drawer } from "@/components/ui/Drawer";
 import { ZoneDirectoryBody, readZoneScope, useZoneDirectory, zoneDirectoryControls, type ZoneScope } from "@/components/frontier/EvidenceZoneDirectory";
@@ -61,9 +63,13 @@ const FILTER_CONTROLS: Record<keyof FrontierFilterValue, string> = { channel: "c
 /** The views whose list the feed's filters narrow: a tag chosen anywhere else opens 全部 with it. */
 const FEED_VIEWS: ReadonlySet<PageView> = new Set(["selected", "all", "following"]);
 
-/** The view a link names. Every older address — `?view=hot` (the 热点 of before), `daily`, `all` — still lands where it did. */
+/**
+ * The view a link names. Every older address — `?view=hot` (the 热点 of before), `daily`, `all` — still lands where it did, and
+ * `?view=foryou` lands on 关注's first entry, 与我相关 (owner, 2026-10-25).
+ */
 function readView(value: string | null): PageView {
-  return value === "hot" || value === "daily" || value === "all" || value === "foryou" || value === "following" || value === "weekly" || value === "zones" ? value : "selected";
+  if (value === "foryou") return "following";
+  return value === "hot" || value === "daily" || value === "all" || value === "following" || value === "weekly" || value === "zones" ? value : "selected";
 }
 function readKey(value: string | null, table: readonly { key: string }[]): string {
   return value && table.some((entry) => entry.key === value) ? value : "";
@@ -131,15 +137,31 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const pageRoot = useRef<HTMLDivElement>(null);
   const restoreObserver = useRef<ResizeObserver | null>(null);
   useEffect(() => () => restoreObserver.current?.disconnect(), []);
+  const narrow = useNarrow();
   const view = readView(params.get("view"));
-  const follow = view === "following" ? params.get("follow") ?? "all" : null;
+  // An older link to 与我相关 (`?view=foryou`) is written as the entry of 关注 it now is, in place.
+  const legacyForYou = params.get("view") === "foryou";
+  useEffect(() => {
+    if (!legacyForYou) return;
+    setParams((current) => {
+      const updated = new URLSearchParams(current);
+      updated.set("view", "following");
+      updated.set("follow", "foryou");
+      return updated;
+    }, { replace: true });
+  }, [legacyForYou, setParams]);
+  const followParam = params.get("follow");
+  const choice: FollowChoice | null = useMemo(() => (view === "following" ? readFollowChoice(followParam) : null), [view, followParam]);
+  /** The server's `follow`: the whole of the follows or one of them; 与我相关 and a zone are not lists of items. */
+  const follow = choice?.kind === "all" ? "all" : choice?.kind === "follow" ? choice.id : null;
+  const forYouOpen = choice?.kind === "foryou";
   const [manageFollows, setManageFollows] = useState(false);
   // 「管理关注」 is about the view it was opened from: a link in it to another view (证据专区's 我关注的) closes it.
   useEffect(() => { setManageFollows(false); }, [view]);
   // The 关注 feed is asked for only once the reader follows something to put in it (one narrowed follow is its own proof).
   const following = useFollowing(ready && view === "following");
   const listingView = view === "selected" || view === "all"
-    || (view === "following" && Boolean(follow) && (follow !== "all" || following.topics.length > 0));
+    || (view === "following" && (choice?.kind === "follow" || (choice?.kind === "all" && following.topics.length > 0)));
   const q = (params.get("q") ?? "").trim();
   const channel = readChannel(params.get("channel"));
   const lane = readKey(params.get("lane"), FRONTIER_LANES);
@@ -156,11 +178,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const day = readDay(params.get("day"));
   const zoneScope = readZoneScope(params.get("scope"));
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
-  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || (follow && follow !== "all"));
+  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || choice?.kind === "follow");
   /** Where the list on screen is, as its events name it (frontierTracking): the feed, a search or the follows. */
   const listSurface: FrontierTrackSurface = q ? "search" : view === "following" ? "follows" : "feed";
   /** Where a card's star or hide is taken: 与我相关 or the list. */
-  const cardSurface: FrontierTrackSurface = view === "foryou" ? "for-you" : listSurface;
+  const cardSurface: FrontierTrackSurface = forYouOpen ? "for-you" : listSurface;
 
   const query = useMemo<FrontierItemsQuery>(() => ({
     view: view === "all" || view === "following" ? "all" : "selected",
@@ -343,7 +365,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const [forYou, setForYou] = useState<ForYouState>({ kind: "loading" });
   const [forYouAttempt, setForYouAttempt] = useState(0);
   useEffect(() => {
-    if (!ready || view !== "foryou") return;
+    if (!ready || !forYouOpen) return;
     let active = true;
     fetchFrontierForYou().then(
       (answer: FrontierForYou | null) => {
@@ -354,7 +376,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       (error: unknown) => { if (active) setForYou({ kind: "failed", message: frontierErrorMessage(error) }); },
     );
     return () => { active = false; };
-  }, [ready, view, forYouAttempt]);
+  }, [ready, forYouOpen, forYouAttempt]);
 
   const patchForYou = useCallback((change: (items: FrontierForYou["items"]) => FrontierForYou["items"]) => {
     setForYou((current) => (current.kind === "ready" && current.forYou
@@ -616,12 +638,13 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
    * its filters; anywhere else (与我相关, a search) it opens 全部 with it. The search lets go, and the view it began in comes back.
    */
   const chooseTag = (chosen: FrontierTagRef) => {
-    trackFrontierFilter("tag", view === "foryou" ? "for-you" : listSurface);
+    trackFrontierFilter("tag", forYouOpen ? "for-you" : listSurface);
     rememberTagName(chosen.slug, chosen.name);
     const updated = new URLSearchParams(params);
     const origin = searchOrigin.current;
     searchOrigin.current = null;
-    const target: PageView = q ? (origin && FEED_VIEWS.has(origin) ? origin : "all") : FEED_VIEWS.has(view) ? view : "all";
+    // 与我相关 is the server's ranking, which no filter narrows: a tag chosen there opens 全部 with it.
+    const target: PageView = q ? (origin && FEED_VIEWS.has(origin) ? origin : "all") : FEED_VIEWS.has(view) && !forYouOpen ? view : "all";
     for (const name of ["q", "sort", "day", "week", "item", "scope", "request"]) updated.delete(name);
     if (target === "selected") updated.delete("view"); else updated.set("view", target);
     if (target !== "all") updated.delete("window");
@@ -639,6 +662,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const tagName = useTagName(tag, onTagMerged);
   const tagFollow = useTagFollow(tag, tagName);
   const hotTags = useHotTags(FEED_VIEWS.has(view) ? specialties : []);
+  // Whether the reader follows a chosen specialty (「筛选」's 关注) or a search's words (「关注“<词>”」): read while either is on screen.
+  const bandFollows = useFollowSet(ready && (specialties.length > 0 || (Boolean(q) && view !== "zones")));
   const suggestions = useTagSuggestions(draft, ready && view !== "zones" && !composing.current);
 
   /** What the box holds, as the address's search: at once on Enter, a moment after the typing stops otherwise. */
@@ -679,8 +704,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   useEffect(() => {
     const position = restore.current;
     if (!position || position.query !== params.toString() || listingView || !ready) return;
-    const settled = view === "hot" ? Boolean(hot[hotWindow]) : view === "daily" ? !daily.loading : view === "foryou" ? forYou.kind !== "loading"
-      : view === "zones" ? !zones.loading : view === "weekly";
+    const settled = view === "hot" ? Boolean(hot[hotWindow]) : view === "daily" ? !daily.loading
+      : view === "following" ? (forYouOpen ? forYou.kind !== "loading" : !following.loading)
+        : view === "zones" ? !zones.loading : view === "weekly";
     if (!settled) return;
     const frame = requestAnimationFrame(() => {
       const scroller = pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto");
@@ -697,7 +723,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       restore.current = undefined;
     });
     return () => cancelAnimationFrame(frame);
-  }, [params, listingView, ready, view, hot, hotWindow, daily.loading, forYou.kind, zones.loading]);
+  }, [params, listingView, ready, view, hot, hotWindow, daily.loading, forYou.kind, zones.loading, forYouOpen, following.loading]);
 
   useEffect(() => {
     const remember = () => {
@@ -730,6 +756,37 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     />
   );
   const clearFilters = () => setFilters({ ...NO_FILTERS, byTime: false });
+  // A search's words as a topic follow (owner, 2026-10-25), offered once it is known whether they are followed already.
+  const searchFollowed = q ? bandFollows.followed("topic", q) : null;
+  const searchFollow = q && searchFollowed !== null ? {
+    label: searchFollowed ? `已关注“${q}”` : `关注“${q}”`,
+    disabled: searchFollowed || bandFollows.pending("topic", q),
+    onClick: () => bandFollows.follow("topic", q, q),
+  } : null;
+
+  /** The address of one entry of 关注: its filters kept, the search, the day and an open item let go of. */
+  const followHref = (entry: FollowChoice) => {
+    const updated = new URLSearchParams(params);
+    updated.set("view", "following");
+    updated.set("follow", followChoiceParam(entry));
+    for (const name of ["q", "sort", "day", "week", "window", "item", "scope", "request"]) updated.delete(name);
+    return `/app/frontier?${updated.toString()}`;
+  };
+  const showAllFollows = () => setParams((current) => {
+    const updated = new URLSearchParams(current); updated.set("follow", "all"); return updated;
+  });
+  const followList = (onPick?: () => void, onManage?: () => void) => choice && (
+    <FollowList state={following} choice={choice} hrefFor={followHref} onManage={onManage ?? (() => setManageFollows(true))}
+      onPick={() => { trackFrontierFilter("follow", "follows"); onPick?.(); }} />
+  );
+  // The onboarding card's answer becomes the first follows; then the view and 与我相关 are read again.
+  const answered = (answer: FrontierPrefs | undefined) => {
+    void followAnswers(answer, following.topics).finally(() => {
+      following.retry();
+      setForYouAttempt((value) => value + 1);
+    });
+  };
+  const narrowedLabel = choice && following ? followChoiceLabel(choice, following) : null;
 
   const feed = (
     <div data-frontier-list={listSurface} className="contents"><FeedList
@@ -748,6 +805,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       onMore={() => void loadMore()}
       onAll={() => setView("all")}
       onClear={() => { clearFilters(); setDraft(""); }}
+      unread={{ pressed: unread, onChange: (next) => setFilters({ unread: next }) }}
+      followSearch={searchFollow}
     /></div>
   );
 
@@ -784,18 +843,26 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         onCompositionEnd: (event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); },
       },
     },
+    specialtyFollow: (key) => {
+      const followed = bandFollows.followed("specialty", key);
+      return followed === null ? null : {
+        label: followed ? "已关注" : "关注", disabled: followed || bandFollows.pending("specialty", key),
+        onClick: () => bandFollows.follow("specialty", key, specialtyLabel(key)),
+      };
+    },
     hot: {
       window: hotWindow,
       board: hot[hotWindow]?.board ?? null,
       windows: Object.values(hot).some((entry) => Boolean(entry?.board?.takenAt)),
       onWindow: setHotWindow,
     },
-    follow: followControls(following),
-    narrowedFollow: view === "following" && follow !== "all",
-    onAllFollows: () => setParams((current) => {
-      const updated = new URLSearchParams(current); updated.delete("follow"); return updated;
-    }),
-    onManageFollows: () => setManageFollows(true),
+    following: {
+      // The feed's filters belong to a list of items: the whole of the follows (once there is one) or the one narrowed to.
+      feed: listingView && view === "following",
+      // On a phone the list of follows is in the sheet, so the one the list is narrowed to is said on the row.
+      token: narrow && narrowedLabel ? { label: `只看：${narrowedLabel}`, onRemove: showAllFollows } : null,
+      followList: narrow ? (close) => followList(close, () => { close(); setManageFollows(true); }) : undefined,
+    },
     issue: dailyControls(view === "weekly" ? weekly : daily, { weekly: view === "weekly", onDay: view === "weekly" ? openWeek : openDay }),
     zones: {
       ...zoneDirectoryControls({ scope: zoneScope, onScope: setZoneScope, query: view === "zones" ? q : "", directory: zones }),
@@ -813,12 +880,12 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         return <div data-frontier-list="weekly" className="contents"><WeeklyView expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={weekly} onWeek={openWeek} /></div>;
       case "daily":
         return <div data-frontier-list="daily" className="contents"><DailyIssue expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={daily} onDay={openDay} /></div>;
-      case "foryou":
-        return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)}
-          onOnboarded={() => setForYouAttempt((value) => value + 1)} />;
       case "following":
-        // The followed evidence zones are the first group of the feed, not a block above its filters.
-        return <FollowingView state={following} feed={feed} onAdd={() => setManageFollows(true)} />;
+        return (
+          <FollowingView state={following} choice={choice ?? { kind: "foryou" }} list={narrow ? null : followList()} feed={feed}
+            onAdd={() => setManageFollows(true)} onAnswered={answered}
+            forYou={<ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)} onOnboarded={answered} />} />
+        );
       case "zones":
         return (
           <ZoneDirectoryBody directory={zones} scope={zoneScope} query={q} onScope={setZoneScope} onClearSearch={() => setDraft("")}
@@ -856,11 +923,13 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       )}
       {ready ? main : <FrontierSkeleton />}
       {manageFollows && <Drawer title="管理关注" onClose={() => setManageFollows(false)}>
-        <FrontierFollows selected={follow === "all" ? null : follow} onSelect={(id) => {
+        <FrontierFollows selected={choice?.kind === "follow" ? choice.id : null} onSelect={(id) => {
           trackFrontierFilter("follow", "follows");
           setParams((current) => {
             const updated = new URLSearchParams(current);
-            if (id) updated.set("follow", id); else updated.delete("follow");
+            updated.set("view", "following");
+            // A follow chosen opens it; one taken away (removed, muted) leaves the whole of the follows.
+            updated.set("follow", id ?? "all");
             return updated;
           });
           setManageFollows(false);

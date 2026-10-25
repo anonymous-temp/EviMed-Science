@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Newspaper } from "lucide-react";
 import type { FrontierForYou, FrontierItem } from "@/lib/frontierClient";
+import type { FrontierPrefs } from "@/lib/frontierPrefs";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { FrontierOnboarding } from "./FrontierOnboarding";
@@ -46,7 +47,7 @@ export function forYouEmptyLine(forYou: FrontierForYou | null): string {
 }
 
 /**
- * 与我相关 (plan 2026-09-23 §6.2; 2026-09-24; ranked by the server since 2026-10-24): the items the server chose for the reader —
+ * 与我相关 (plan 2026-09-23 §6.2; 2026-09-24; ranked by the server since 2026-10-24; the first entry of 关注 since 2026-10-25): the items the server chose for the reader —
  * what they said they work on, follow, read, and what everyone should see — under the topic each was chosen for: the heading is
  * the topic's name, as Google News and Apple News let a section's name carry 「因为你关注」, and no card repeats 「因为你在做：…」.
  * Each item is the feed's own card. While the server says the reader has told it nothing yet, the onboarding card sits on top
@@ -58,15 +59,15 @@ export function ForYouView({ state, renderItem, onRetry, onOnboarded }: {
   state: ForYouState;
   renderItem: (item: FrontierItem) => ReactNode;
   onRetry: () => void;
-  /** The onboarding card was finished or skipped: read the block again. */
-  onOnboarded?: () => void;
+  /** The onboarding card was finished or skipped (with its answer, where it was kept): read the block again. */
+  onOnboarded?: (answer?: FrontierPrefs) => void;
 }) {
   if (state.kind === "loading") return <FrontierSkeleton />;
   if (state.kind === "failed") return <LoadError message={state.message} onRetry={onRetry} />;
   const forYou = state.forYou;
   if (forYou?.state === "unavailable") return <LoadError message="暂时读不到与我相关的动态。" onRetry={onRetry} />;
   const onboarding = forYou?.state === "available" && forYou.onboarding === true
-    ? <FrontierOnboarding onClose={() => onOnboarded?.()} /> : null;
+    ? <FrontierOnboarding onClose={(saved, answer) => onOnboarded?.(saved ? answer : undefined)} /> : null;
   if (!forYou || forYou.state !== "available" || forYou.items.length === 0) {
     return (
       <div className="space-y-8">

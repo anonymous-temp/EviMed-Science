@@ -622,17 +622,22 @@ function Inline({ filter }: { filter: ToolbarFilter }) {
  * list): the arrow keys move through them, Enter takes the one marked or, with none marked, searches the words now; Escape closes
  * the list first and empties the box after.
  */
-function SearchBox({ search, inputRef, autoFocus = false, shortcut = false, onEscapeEmpty }: {
+function SearchBox({ search, inputRef, focusOnMount = false, shortcut = false, onEscapeEmpty }: {
   search: ToolbarSearch;
   inputRef?: RefObject<HTMLInputElement | null>;
-  /** Opened over a phone's row: the cursor in it at once. */
-  autoFocus?: boolean;
+  /** Opened over a phone's row by a press on its icon: the cursor in it at once, the keyboard up. */
+  focusOnMount?: boolean;
   /** 「/」 reaches it (said to assistive technology). */
   shortcut?: boolean;
   /** Escape in an empty box (the phone's search over the row closes). */
   onEscapeEmpty?: () => void;
 }) {
   const listId = useId();
+  const own = useRef<HTMLInputElement>(null);
+  const input = inputRef ?? own;
+  useEffect(() => {
+    if (focusOnMount) input.current?.focus();
+  }, [focusOnMount, input]);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [active, setActive] = useState(-1);
@@ -682,9 +687,8 @@ function SearchBox({ search, inputRef, autoFocus = false, shortcut = false, onEs
   return (
     <div className="relative flex min-w-0 flex-1 sm:w-56 sm:flex-none">
       <SearchInput
-        ref={inputRef}
+        ref={input}
         size="sm"
-        autoFocus={autoFocus}
         aria-keyshortcuts={shortcut ? "/" : undefined}
         label={search.label}
         value={search.value}
@@ -924,7 +928,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
           </div>
           {searchOpen && search ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 py-1.5">
-              <SearchBox search={search} inputRef={searchInput} autoFocus shortcut={searchShortcut} onEscapeEmpty={() => setSearchOpen(false)} />
+              <SearchBox search={search} inputRef={searchInput} focusOnMount shortcut={searchShortcut} onEscapeEmpty={() => setSearchOpen(false)} />
               <Button variant="text" size="sm" className="shrink-0" onClick={() => setSearchOpen(false)}>取消</Button>
             </div>
           ) : (

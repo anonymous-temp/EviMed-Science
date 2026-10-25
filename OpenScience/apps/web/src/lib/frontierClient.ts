@@ -524,6 +524,11 @@ export interface FrontierFollow {
   key: string;
   label: string;
   muted: boolean;
+  /**
+   * How many items arrived for it since the reader last looked, where the server says so (c2-band, 2026-10-25): 关注's list shows it
+   * beside the follow. Absent from a server that does not count, and then no number is shown.
+   */
+  newItems?: number;
 }
 
 /** One row of `GET /api/frontier/tags`: a tag, how many items carried it in the last 30 days, and (for a search) its specialties. */
@@ -1537,7 +1542,8 @@ function parseFollow(value: unknown): FrontierFollow | null {
   const followId = text(follow?.id) ?? (typeof follow?.id === "number" ? String(follow.id) : null);
   const key = text(follow?.key);
   const kind = orNull(follow?.kind, ["topic", "specialty", "drug", "source", "event", "tag"] as const);
-  return followId && key && kind ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true } : null;
+  const fresh = typeof follow?.newItems === "number" && Number.isInteger(follow.newItems) && follow.newItems > 0 ? follow.newItems : undefined;
+  return followId && key && kind ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true, ...(fresh ? { newItems: fresh } : {}) } : null;
 }
 
 export const FRONTIER_FOLLOWS_CHANGED = "evimed:frontier-follows-changed";
