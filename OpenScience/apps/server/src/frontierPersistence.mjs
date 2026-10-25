@@ -686,7 +686,7 @@ DELETE FROM evimed_frontier.user_follows WHERE kind = 'specialty' AND key IN ('g
 
 -- c2-base 2026-10-25: hot-event topics (@evimed/domain frontierTopics.mjs) — a public hot event's general medical question,
 -- written as the question; the event as one attributed line; the reports and evidence the lead triggers found for it, and its
--- overview. `group_key` is the normalised key a re-sighting of the same event is recognised by; `subject_names` are the people
+-- overview. group_key is the normalised key a re-sighting of the same event is recognised by; subject_names are the people
 -- or bodies the event names, kept so code can hold them out of evidence queries and titles, and never served to a reader.
 CREATE TABLE IF NOT EXISTS evimed_frontier.topics (
   id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
