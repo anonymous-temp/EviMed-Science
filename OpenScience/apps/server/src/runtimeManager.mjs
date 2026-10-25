@@ -5032,12 +5032,14 @@ export class RuntimeManager {
     // this preparation: it runs only where the project's selected plugins are functionally the installed ones
     // (`whenUnchanged`; any other difference is the plugin apply worker's), never for a shared 循证 GEO context (which
     // mounts neither half), and any failure starts the project with the personal generation alone and is recorded.
+    // A null personal generation is the ordinary baseline (`rebasePersonal`): an installed composite stamped with personal
+    // skills the project no longer selects is re-stamped without them rather than unmounted.
     const rebaseComposite = async () => {
-      if (contextGeneration || this.extensionGenerationOverrides.has(key) || !this.rebasePersonalComposite || !personalSkillGeneration) return null;
+      if (contextGeneration || this.extensionGenerationOverrides.has(key) || !this.rebasePersonalComposite) return null;
       try { return (await this.rebasePersonalComposite(project, personalSkillGeneration, { whenUnchanged: true })) ?? null; }
       catch (error) { this.noteStartFinding(project, "extension_composite_rebase_failed", error); return null; }
     };
-    if (!extensionGeneration) extensionGeneration = await rebaseComposite();
+    if (!extensionGeneration && personalSkillGeneration) extensionGeneration = await rebaseComposite();
     if (contextGeneration) { personalSkillGeneration = null; extensionGeneration = null; }
     if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
       && !samePersonalPackages(extensionGeneration.projection.personal, personalSkillGeneration)) {
