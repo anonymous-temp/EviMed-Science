@@ -15,7 +15,7 @@
  *   produced, or whose author opened them to the internet, are exportable; a platform-visible card's incident stays a ledger row.
  * - **The class is closed and decided from the log's own fields**, never from prose: a challenge that amended a claim, a challenge that withdrew one, a
  *   producer's own correction, a card withdrawn, a source that changed under a card. The sentence a case says is made from the class by code.
- * - **A method observation is a label for the sequential test, never a verdict.** It goes to the learned methods and handbooks the producing run *read*
+ * - **A method observation is a label for the sequential test, never a verdict.** It goes to the learned methods the producing run *read*
  *   (`MethodFeedbackService`), under the revision it read, as the same `evidence_corrected` signal a researcher's own correction of the result is — so a
  *   result corrected both ways is one outcome. A source that changed under a card is an incident and no observation: the method did not write the
  *   retraction, and the lifecycle's association-not-cause rule would otherwise let a retraction roll a method back. A card of the platform's own
@@ -180,8 +180,7 @@ export function createEvidenceOutcomes({ database, documents, ensureOwner, metho
     const added = joined.recorded.filter((/** @type {any} */ item) => item.added);
     if (added.length) counters.observations.recorded += 1; else counters.observations.duplicate += 1;
     return {
-      state: added.length ? "recorded" : "duplicate", methods: joined.recorded.filter((/** @type {any} */ item) => item.kind === "method").length,
-      handbooks: joined.recorded.filter((/** @type {any} */ item) => item.kind === "handbook").length, capabilityId: joined.capabilityId ?? null,
+      state: added.length ? "recorded" : "duplicate", methods: joined.recorded.length, capabilityId: joined.capabilityId ?? null,
     };
   }
 
@@ -225,7 +224,7 @@ export function createEvidenceOutcomes({ database, documents, ensureOwner, metho
       card: card ? { title: text(card.title, 300), zoneKind: card.zone_kind, visibility: card.zone_visibility, producerKind, originality: card.originality ?? null } : null,
       produced: { runId: text(card?.lineage?.runId, 128), capabilityId: observation.capabilityId ?? null, resultVersionId: text(card?.lineage?.resultVersionId, 128) },
       exportable, exportedAt: null,
-      observation: { state: observation.state, ...("reason" in observation ? { reason: observation.reason } : {}), ...("methods" in observation ? { methods: observation.methods, handbooks: observation.handbooks } : {}) },
+      observation: { state: observation.state, ...("reason" in observation ? { reason: observation.reason } : {}), ...("methods" in observation ? { methods: observation.methods } : {}) },
       createdAt: now().toISOString(),
     };
     try {

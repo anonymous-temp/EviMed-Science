@@ -106,8 +106,7 @@ const operatorLevers = {
   OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY: ["open-science-web"],
-  // The two levers of 2026-10-12: repaired deliveries (the gate's bookkeeping) and the unused-method stop. Unset, the code's 0 and 20 hold.
-  OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: ["open-science-web"],
+  // The unused-method stop (2026-10-12). Unset, the code's 20 holds.
   OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: ["open-science-web"],
   // The thinking budget was a literal `high` in the gateway until 2026-09-09,
   // so the lever is new and this is what makes it real.
@@ -335,10 +334,9 @@ const operatorLevers = {
   OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
-  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: ["open-science-web"],
-  // The probation share (2026-10-10): a lever that never arrived would leave the default tenth in force, or none, whatever the operator set.
-  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE: ["open-science-web"],
+  // The promotion of a person's general method to the pack of everyone's (2026-10-25): a lever that never arrived would leave the default on, and three a day, whatever the operator set.
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links

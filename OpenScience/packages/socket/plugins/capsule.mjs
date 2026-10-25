@@ -40,15 +40,14 @@
  * tools. Both sets side by side made the model call both every time, the old one answering nothing
  * (LAB-MEM, 2026-10-13), so that half stands aside there (`memoryEnabled`); it is the capsule's own
  * recall and notes only where there is no engine.
- * The other half — the user's methods, the conversation's scope and the
- * handbook context — is not memory and stays (`enabled`).
+ * The other half — the user's methods and the conversation's scope — is not memory and stays (`enabled`).
  *
  * @module @evimed/dsh-socket/plugins/capsule
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
 import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onClaimedPromptAssemble, onPreStep, parentSessionOf, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
-import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
+import { skillBodyDigestAsync } from '../src/digest.mjs'
 import { isLearnedMethod, isOfficialMethod } from '../src/learnedMethods.mjs'
 import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from '@evimed/domain'
@@ -89,7 +88,7 @@ const METHODS_SECTION_MAX_CHARS = 12_000
 
 export const Config = Schema.object({
   enabled: Schema.boolean().default(true)
-    .description('Off registers nothing: no recall or note tool, no methods section, no conversation or handbook context (EVIMED_CAPSULE_ENABLED=0). Delegation then stops handing children the recall tool.'),
+    .description('Off registers nothing: no recall or note tool, no methods section, no conversation context (EVIMED_CAPSULE_ENABLED=0). Delegation then stops handing children the recall tool.'),
   memoryEnabled: Schema.boolean().default(true)
     .description('The memory half: the recall and note tools. Off when the deployment switches it off (EVIMED_CAPSULE_MEMORY_ENABLED=0) and for an account on the native memory engine, whose one memory entrance is the OpenViking plugin (the launch plan sets EVIMED_MEMORY_GATEWAY_URL). The methods and the context stay; delegation stops handing children the recall tool.'),
   methodsDir: Schema.string().default('')
@@ -174,51 +173,10 @@ export async function apply(ctx, config) {
   // This service reads only the control-plane snapshot authenticated by the
   // workload gateway. Capsule methods and their prose cannot supply a route.
   if (config.recallUrl) ctx.provide('evimedNativeRoute', async (/** @type {string} */ sessionId, /** @type {{requestId:string,textDigest:string}[]} */ inputs) => {
-    const response = await callControlPlane(ctx, config, 'handbook-context', { sessionId, inputs })
+    const response = await callControlPlane(ctx, config, 'native-route', { sessionId, inputs })
     if (!response.ok) throw new Error(response.message)
     return Array.isArray(response.data?.routes) ? response.data.routes : []
   }, true)
-
-  // Native inputs bypass shell dispatch. Only messages removed from this step's
-  // inbox are eligible; a queued future input is never selected from history.
-  if (config.recallUrl) {
-    /** @type {Set<string>} */ const attached = new Set()
-    ctx.effect(() => onPreStep(ctx, async (step, payload) => {
-      if (!step.root || !payload?.agent || !step.sessionId) return { allow: true }
-      const key = (/** @type {string} */ requestId) => JSON.stringify([step.sessionId, step.turn, requestId])
-      const inputs = await Promise.all(stepUserInputs(payload).filter(input => !attached.has(key(input.requestId)))
-        .map(async input => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
-      if (!inputs.length) return { allow: true }
-      const response = await callControlPlane(ctx, config, 'handbook-context', { sessionId: step.sessionId, inputs })
-      if (!response.ok) {
-        ctx.get('evimedDiagnostics')?.degrade?.(`native handbook context not read: ${response.message}`)
-        return { allow: true }
-      }
-      const contexts = Array.isArray(response.data?.contexts) ? response.data.contexts : []
-      /** @type {{requestId:string,digest:string}[]} */ const receipts = []
-      let bytes = 0
-      for (const item of contexts.slice(0, 16)) {
-        if (!inputs.some(input => input.requestId === item?.requestId) || receipts.some(receipt => receipt.requestId === item.requestId)
-          || typeof item.context !== 'string' || !item.context || !/^[a-f0-9]{64}$/.test(item.digest)) continue
-        bytes += new TextEncoder().encode(item.context).length + 1
-        if (bytes > 8192) break
-        injectContext(payload.agent, item.context, name)
-        receipts.push({ requestId: item.requestId, digest: item.digest })
-      }
-      return { allow: true, discardOnReject: true, onEntered: async () => {
-        if (!receipts.length) return
-        for (const receipt of receipts) attached.add(key(receipt.requestId))
-        while (attached.size > 1000) {
-          const oldest = attached.values().next().value
-          if (oldest === undefined) break
-          attached.delete(oldest)
-        }
-        const acknowledged = await callControlPlane(ctx, config, 'handbook-attached', { sessionId: step.sessionId, receipts })
-        if (!acknowledged.ok) ctx.get('evimedDiagnostics')?.degrade?.(`native handbook attachment not recorded: ${acknowledged.message}`)
-      } }
-    }, payload => ({ first: false, root: !isSubagentSession(payload?.agent) })))
-  }
-
 }
 
 /**

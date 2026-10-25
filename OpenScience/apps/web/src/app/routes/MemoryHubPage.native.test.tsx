@@ -13,12 +13,11 @@ const api = vi.hoisted(() => ({
   fetchMemoryProfile: vi.fn(), searchMemories: vi.fn(), fetchMemorySettings: vi.fn(), updateMemorySettings: vi.fn(), resetMemory: vi.fn(),
 }));
 const memory = vi.hoisted(() => ({ fetchMyCapsule: vi.fn(), rememberMemory: vi.fn(), fetchProjectOverview: vi.fn(), fetchMemoryGrowth: vi.fn(), fetchMemoryLearned: vi.fn() }));
-const practice = vi.hoisted(() => ({ listAllMethods: vi.fn(), listAllHandbooks: vi.fn() }));
+const practice = vi.hoisted(() => ({ listAllMethods: vi.fn() }));
 
 vi.mock("@/lib/apiClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")), getWebProjectId: () => "prj_1", ...api }));
 vi.mock("@/lib/memoryClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), ...memory }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: practice.listAllMethods }));
-vi.mock("@/lib/handbooksClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/handbooksClient")>("@/lib/handbooksClient")), listAllHandbooks: practice.listAllHandbooks }));
 vi.mock("@/lib/geoClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/geoClient")>("@/lib/geoClient")), useGeoFeature: () => "off", listGeoProjects: () => Promise.resolve([]) }));
 vi.mock("@/lib/vcrClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/vcrClient")>("@/lib/vcrClient")), useVcrFeature: () => "off", getVcrHome: () => Promise.resolve({ studies: [] }) }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
@@ -46,7 +45,6 @@ beforeEach(() => {
   memory.fetchMemoryGrowth.mockResolvedValue({ unit: null, first: null, fromStart: false, points: [], moments: [], timeZone: "Asia/Shanghai" });
   memory.fetchMemoryLearned.mockResolvedValue({ days: [], timeZone: "Asia/Shanghai" });
   practice.listAllMethods.mockResolvedValue([]);
-  practice.listAllHandbooks.mockResolvedValue([]);
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ projects: [], currentId: "default" }); });
 

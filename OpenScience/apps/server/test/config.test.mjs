@@ -624,14 +624,9 @@ test("the learning loop has no cap by default, a day, a week or a run (owner rul
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learning-caps", learningDailyLimitCny: 25 }).learningDailyLimitCny, 25);
 });
 
-test("the loop learns nothing from a repaired delivery by default, and stops a method its model never opens after twenty loads (owner, 2026-10-12)", () => {
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn" }).learningRepairDistillShare, 0);
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn", learningRepairDistillShare: 1 }).learningRepairDistillShare, 1, "every repaired delivery, as before");
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "0.25" }).learningRepairDistillShare, 0.25);
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "" }).learningRepairDistillShare, 0, "an empty value is unset, as .env.example and compose leave it");
-  for (const bad of ["2", "-1", "some"]) {
-    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: bad }), /OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE must be a number from 0 to 1/, bad);
-  }
+test("the loop stops a method its model never opens after twenty loads (owner, 2026-10-12), and has no lever for a repaired delivery any more (deleted 2026-10-25)", () => {
+  assert.equal("learningRepairDistillShare" in loadConfig({ dataDir: "/tmp/os-config-learn" }), false);
+  assert.equal("learningRepairDistillShare" in configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "1" }), false, "a value left in an old .env is read by nothing");
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn" }).learningUnusedRetireLoads, 20);
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn", learningUnusedRetireLoads: 0 }).learningUnusedRetireLoads, 0, "zero is the switch, not an error");
   assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: "35" }).learningUnusedRetireLoads, 35);

@@ -1,7 +1,5 @@
 import { FolderOpen, Radar, UsersRound } from "lucide-react";
 import type { WebStructuredMemory } from "@/lib/apiClient";
-import { capabilityTitle } from "@/lib/researchAgentUi";
-import type { WebHandbook } from "@/lib/handbooksClient";
 import { entryGroup, recordGroup, recordProjectId, selfSection, type MemoryGroup, type SelfSection } from "@/lib/memoryGroups";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
@@ -12,10 +10,10 @@ import { fileSummary, fileTopic, isFileMemory } from "./memoryNative";
 
 /**
  * What the memory page lists, as one shape per kind of row. Two stores hold a
- * fact (the structured memories and the notes of the researcher's own capsule)
- * and two hold a practice (a learned method and a capability handbook); the page
- * reads each as one list, so each pair is one type here and the rest of the page
- * never asks which store a row came from until it has to write to it.
+ * fact (the structured memories and the notes of the researcher's own capsule);
+ * the page reads them as one list, so the pair is one type here and the rest of
+ * the page never asks which store a row came from until it has to write to it.
+ * A practice is a learned method.
  */
 
 /** A fact: one sentence about the researcher or a project, from either store. */
@@ -24,10 +22,8 @@ export type FactItem =
     record: WebStructuredMemory }
   | { kind: "entry"; key: string; group: MemoryGroup; section: SelfSection; projectId: string | null; at: string; text: string; entry: OwnCapsuleEntry };
 
-/** A practice the platform learned: for every study, or for one research tool. */
-export type PracticeItem =
-  | { kind: "method"; key: string; at: string; title: string; summary: string; tool: null; method: WebMethod }
-  | { kind: "handbook"; key: string; at: string; title: string; summary: string; tool: string; handbook: WebHandbook };
+/** A practice the platform learned, for every study. */
+export type PracticeItem = { kind: "method"; key: string; at: string; title: string; summary: string; method: WebMethod };
 
 /** What a row in the hub is, for the one drawer that opens at a time. */
 export type OpenItem = FactItem | PracticeItem;
@@ -73,24 +69,16 @@ export function factItems(
   return newestFirst(items);
 }
 
-/** The practices a list shows: learned methods for every study, then handbooks for one tool each. */
+/** The practices a list shows: the learned methods in force, newest first. */
 export function practiceItems(
   methods: readonly WebMethod[],
-  handbooks: readonly WebHandbook[],
   { query = "" }: { query?: string } = {},
-): { methods: PracticeItem[]; handbooks: PracticeItem[] } {
+): PracticeItem[] {
   const text = query.trim();
-  const found = (item: PracticeItem) => !text || matches(`${item.title} ${item.summary} ${item.tool ?? ""}`, text);
-  return {
-    methods: newestFirst(methods.filter((method) => method.status === "approved").map((method): PracticeItem => ({
-      kind: "method", key: `method:${method.id}`, at: method.bodyUpdatedAt ?? method.updatedAt ?? "", title: methodTitle(method),
-      summary: method.summary || (method.description ? memoryExcerpt(method.description, 120) : ""), tool: null, method,
-    })).filter(found)),
-    handbooks: newestFirst(handbooks.filter((handbook) => handbook.status === "active").map((handbook): PracticeItem => ({
-      kind: "handbook", key: `handbook:${handbook.id}`, at: handbook.appliedAt ?? handbook.updatedAt ?? "", title: handbook.title,
-      summary: handbook.summary ?? "", tool: (handbook.capabilityId ? capabilityTitle(handbook.capabilityId) : null) ?? "科研工具", handbook,
-    })).filter(found)),
-  };
+  return newestFirst(methods.filter((method) => method.status === "approved").map((method): PracticeItem => ({
+    kind: "method", key: `method:${method.id}`, at: method.bodyUpdatedAt ?? method.updatedAt ?? "", title: methodTitle(method),
+    summary: method.summary || (method.description ? memoryExcerpt(method.description, 120) : ""), method,
+  })).filter((item) => !text || matches(`${item.title} ${item.summary}`, text)));
 }
 
 /** Where a project in the dropdown belongs: the researcher's own, a 虚拟临床研究 study, or a 循证 GEO project. */

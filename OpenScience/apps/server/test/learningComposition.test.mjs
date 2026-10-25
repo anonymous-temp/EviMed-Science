@@ -351,12 +351,21 @@ test("what later became of a result has its producers: a correction and a recalc
   assert.match(join, /!state\.learning && !state\.trial/);
 });
 
-test("the platform handbook path is handed the independent-family harm check and a ledger to write its refusals in", () => {
+test("the promotion of a person's method to the pack of everyone's is handed the independent-family harm check, a ledger to write its refusals in, and the moments it is told and ticked at", () => {
   // Constructed with neither, it would skip every check and say so on a counter nobody reads (review L14c): wired is not fed.
-  const call = serverSource.slice(serverSource.indexOf("platformHandbooks = createPlatformHandbooks({"), serverSource.indexOf("evolution.service.callbacks.handbookSelection"));
-  assert.match(call, /harm: judgeService \? async \(\{ text \}\) => judgeService\.judge\("J23", \{ text \}, \{ userId: await evolutionService\.owner\(\), projectId: EVOLUTION_PROJECT_ID,/);
-  assert.match(call, /module: "evolution",\s*limits: \{ daily: 0, weekly: 0, moduleDaily: config\.evolutionDailyBudgetCny \?\? 10 \}/, "booked to the evolution module's own day, like its other Jev sites");
+  const call = serverSource.slice(serverSource.indexOf("officialPromotion = createOfficialPromotion({"), serverSource.indexOf("learningService.onTookEffect = async"));
+  assert.match(call, /harm: judgeService \? async \(\{ text \}\) => judgeService\.judge\("J23", \{ text \}, \{ \.\.\.await ensureEvidenceProject\(store\),/);
+  assert.match(call, /module: "learning", limits: \{ daily: 0, weekly: 0, moduleDaily: 0 \}/, "no spend cap: method learning has none (owner 2026-10-10), the per-day count is the bound");
   assert.match(call, /audit: \(event, detail\) => securityAudit\(config, event, "recorded", detail\),/);
+  assert.match(call, /recentGuestRun: async \(userId, runId\) => \(runId \? \(await guestMarkedRuns\(productDatabase, userId, \[runId\]\)\)\.has\(runId\) : false\)/, "a method learned in a guest run is refused");
+  assert.match(call, /review: config\.reviewProvider === "dashscope" \?/, "no independent reviewer, nothing is considered");
+  // The learning service tells it when a method may have come into force (a person who paused learning is read at that moment); the housekeeping tick judges and re-checks.
+  const told = serverSource.slice(serverSource.indexOf("learningService.onTookEffect = async"), serverSource.indexOf("// Sharing a capsule with other accounts of this deployment"));
+  assert.match(told, /memoryPausedFor\(memorySettings, userId, null\)\)\.learning\) return;/);
+  assert.match(told, /officialPromotion\?\.consider\(\{ userId, method \}\)/);
+  assert.match(serverSource, /await evidenceOutcomes\?\.tick\(\);\s*await officialPromotion\?\.tick\(\);/);
+  // What the handbook arm left in a database is taken away once at start, and a failure of that costs the start nothing.
+  assert.match(serverSource, /void retireHandbookArm\(\{ database: productDatabase, report: \(line\) => process\.stderr\.write\(`\$\{line\}\\n`\) \}\)\.catch\(\(\) => \{\}\);/);
 });
 
 test("a new turn of a conversation is read once as the answer to the run before it, beside the adoption and never in front of it", () => {
@@ -364,7 +373,8 @@ test("a new turn of a conversation is read once as the answer to the run before 
   assert.match(serverSource, /void learningEvidence\?\.onNewTurn\(full, \{ sessionId, text, requestId: input\?\.requestIds\?\.\[0\] \?\? "" \}\)\.catch\(\(\) => null\);/);
   const call = serverSource.slice(serverSource.indexOf("learningEvidence = new LearningEvidence({"), serverSource.indexOf("learningTriggers = new LearningTriggers({"));
   assert.match(call, /judge: new FollowUpJudge\(config, \{ usageLedger,/);
-  assert.match(call, /methodsOpened: methodFeedback \? async \(project, run\) => \(await methodFeedback\.usedBy\(project, run\)\)\.methods\.map/);
+  assert.match(call, /methodsOpened: methodFeedback \? async \(project, run\) => \[\s*\.\.\.\(await methodFeedback\.usedBy\(project, run\)\)\.methods\.map/);
+  assert.match(call, /\.\.\.await officialOpenedBy\(project\.userId, run\),/, "and the platform's official methods it opened, so a reaction can be about one of them");
   assert.match(call, /report: \(reason\) => learningMetrics\.observeEvidenceFailure\(reason\)/);
   // The loop's own evidence is not a researcher-feedback signal of the evolution module.
   assert.match(serverSource, /event\.trigger === "learning-evidence"\) return;/);
@@ -378,14 +388,15 @@ test("the gates that turn a finished run away before the loop is asked are count
   }
 });
 
-test("the 2026-10-12 learning levers reach the parts that read them: the unused-method stop, its denominator, and the repair sample", () => {
+test("the 2026-10-12 learning levers reach the parts that read them: the unused-method stop and its denominator", () => {
   // Constructed with the option is not fed: `recordCarried` is the only writer of the count the stop reads, and a
   // `MethodConsolidation` built without the limit would fall back to the domain's default and ignore the deployment's.
   const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
   assert.match(record, /if \(derived\.answered\) \{[^]*?for \(const \{ id: methodId, reason \} of derived\.carriedBy\) \{\s*await learningService\.recordCarried\(project\.userId, methodId, reason \?\? undefined\)/,
     "a card is counted by why it was there: the exposure slot's is not a load the method is stopped for");
   assert.match(serverSource, /unusedAfterLoads: config\.learningUnusedRetireLoads, onRetirement: \(code\) => learningMetrics\.observeRetirement\(code\)/);
-  assert.match(serverSource, /repairShare: config\.learningRepairDistillShare, onRepairSample: \(distilled\) => learningMetrics\.observeRepairSample\(distilled\)/);
+  // The repair sample is gone (2026-10-25): a repaired delivery queues no lesson, so nothing is handed the share and nothing counts it.
+  assert.doesNotMatch(serverSource, /repairShare|learningRepairDistillShare|observeRepairSample/);
 });
 
 test("the loop's counters are kept for a conversation that read a clinical source too: they carry no text, so the early return does not come before them", () => {
@@ -402,17 +413,19 @@ test("the loop's counters are kept for a conversation that read a clinical sourc
 test("a method that changed or was stopped, and a conversation that is about to begin, reach the runtime that is up", () => {
   assert.match(serverSource, /learningService\.onMountChange = \(userId\) => runtimeManager\.refreshCapsuleMethods\(\{ userId \}\)/);
   assert.match(serverSource, /runtimeManager\.methodSimilarity = methodSimilarity;/, "the mount ranks the library by the consolidation's own reading of close");
-  const native = serverSource.slice(serverSource.indexOf("preparePrompt: nativeHandbookContext || learningService"), serverSource.indexOf("authorizeMutation: maintenanceService"));
+  const native = serverSource.slice(serverSource.indexOf("preparePrompt: nativeInputRoute || learningService"), serverSource.indexOf("authorizeMutation: maintenanceService"));
   assert.match(native, /request\?\.mode !== "steer"/, "a steer is the same conversation");
   assert.match(native, /runtimeManager\.refreshCapsuleMethods\(\{ userId: project\.userId, projectId: project\.id, sessionId: String\(request\?\.sessionId \?\? ""\),\s*query: nativeInputText\(request\?\.content\)/);
   assert.match(native, /scopeId: runScopeOf\(envelope\.route\.effectiveAgentId, OPEN_DOMAIN_ANSWER_AGENT_ID\)/, "the scope is the route the first message was given");
-  assert.match(native, /if \(failed\) throw failed\.error;/, "a supplement that could not be prepared is still told, after the methods were");
+  assert.match(native, /if \(failed\) throw failed\.error;/, "a route that could not be prepared is still told, after the methods were");
 });
 
 test("a conversation that planned and delegated nothing is counted against what the control plane gave it, not skipped for want of a receipt", () => {
   // 2026-10-23: `readRunStateProjection` scopes a native turn's projection through its workflow proof, which a turn that called none of
   // the plan tools does not have, so `recordMethodUse` returned at once for the answer line and its methods were never carried or read.
   const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
-  assert.match(record, /const given = run\.sessionId \? runtimeManager\.methodsGivenTo\(project, String\(run\.sessionId\)\) : \[\];\s*if \(!read && !given\.length\) return;/);
+  assert.match(record, /const learnedGiven = run\.sessionId \? runtimeManager\.methodsGivenTo\(project, String\(run\.sessionId\)\) : \[\];/);
+  assert.match(record, /const officialOffered = run\.sessionId \? runtimeManager\.officialGivenTo\(project, String\(run\.sessionId\)\)\.offered : \[\];\s*const given = \[\.\.\.learnedGiven, \.\.\.officialOffered\.map\(\(method\) => \(\{ \.\.\.method, reason: "similarity" \}\)\)\];\s*if \(!read && !given\.length\) return;/,
+    "the platform's official methods the conversation was offered are carried like any other card");
   assert.match(record, /Array\.isArray\(read\?\.mountedMethods\) && read\.mountedMethods\.length \? read\.mountedMethods/, "the runtime's own receipt is preferred");
 });

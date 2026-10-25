@@ -11,7 +11,6 @@ import {
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
 } from "./security.mjs";
-import { handbookContextFor, platformTrialContext } from "./capabilityHandbooks.mjs";
 import { userLibraryDir } from "./libraryService.mjs";
 
 export const KNOWLEDGE_BASE_DIR = "knowledge-base";
@@ -285,7 +284,7 @@ export async function prepareResearchContext(
   // `attended`: a person is in this conversation now and can answer a question (the web chat, an IM channel). It is said
   // by the caller that knows — the dispatch a person sent — and everything else is a turn nobody is watching: a scheduled
   // task, a proactive episode, a module's background step, a platform job.
-  { query: _query = "", memories = [], resident = null, specialists: _specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null, sourceContext = null, platformTrial = null, attended = false } = {},
+  { query: _query = "", memories = [], resident = null, specialists: _specialists = [], routedSpecialist = null, mountableSkills = [], sourceContext = null, attended = false } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   // A pointer, not a retrieval. Until 2026-09-20 every dispatch indexed the
@@ -363,16 +362,12 @@ export async function prepareResearchContext(
   // is that work; an open conversation is not, and reads them in the evidence method when it loads it.
   const evidenceTurn = Boolean(routedSpecialist) || session.mode !== "open-domain";
 
-  const attachedHandbooks = handbookContextFor(handbooks, project, routedSpecialist?.agentId ?? session.agentId ?? "");
-  // The platform's entry on probation, for the sampled runs the caller decided it for (`learningPlatformHandbooks.probationFor`): the model's context only.
-  const trialContext = platformTrialContext(platformTrial);
   return {
     // The capability the routing sentence above names, or null when it was not said. A dispatch passes it on to
     // `dispatchPrompt`, which states it in the session's index: that file is where the runtime learns the route. The sentence
     // is prose for the model and is never read back by the runtime, because this context also embeds the researcher's
     // recalled memories and knowledge text (2026-10-10 review D5).
     routedCapability: routedSpecialist ? String(routedSpecialist.agentId) : null,
-    handbooks: attachedHandbooks.items,
     // What this prompt actually carries, for the caller to record. A run record
     // saying a skill was mounted must come from the code that mounted it, not
     // from the code that intended to.
@@ -397,8 +392,6 @@ export async function prepareResearchContext(
       ...(memoryInstruction ? [memoryInstruction] : []),
       ...(specialistInstruction ? [specialistInstruction] : []),
       ...(routingInstruction ? [routingInstruction] : []),
-      attachedHandbooks.context,
-      ...(trialContext ? [trialContext] : []),
       // Platform text, not retrieved material: the registry read this body from
       // the image and checked its frontmatter name against the manifest, so it
       // carries the same authority as the sentences around it and is not

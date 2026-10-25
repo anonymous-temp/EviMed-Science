@@ -3556,7 +3556,7 @@ export class RuntimeManager {
     this.geoProjectOf = null;
     /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
     this.learningService = null;
-    /** How close a method is to a question (`methodSimilarity.mjs`), which the mount ranks the library by; assigned by the composition root. @type {{ nearest: Function } | null} */
+    /** How close a method is to a question (`methodSimilarity.mjs`), which the mount ranks the library by; assigned by the composition root. @type {{ nearest: Function, pairs: Function } | null} */
     this.methodSimilarity = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
     this.learningMetrics = null;
@@ -3826,7 +3826,8 @@ export class RuntimeManager {
    * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
    *   learned: {id: string, name: string, digest: string, reason: string}[], learnedBytes: number, version: string,
    *   rank: { mode: string | null, topScore: number | null },
-   *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
+   *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[],
+   *   official?: {id: string, name: string, digest: string, directoryName: string}[], officialLeftOut?: any[] }>}
    */
   async syncCapsuleMethods(project, { query = null, scopeId = undefined, launch = true, keep = null } = {}) {
     const paused = await this.recallPausedFor(project);

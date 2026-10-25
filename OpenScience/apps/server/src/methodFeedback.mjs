@@ -36,18 +36,15 @@
  */
 import { createHash } from "node:crypto";
 import {
-  feedbackSignalFromCorrection, feedbackSignalFromReplay, foldMethodFeedback, isResearcherOwnedWork, methodScientific,
+  feedbackSignalFromCorrection, feedbackSignalFromReplay, isResearcherOwnedWork, methodScientific,
   projectResultCorrection, retirementProposal,
 } from "@evimed/domain";
-import { CAPABILITY_HANDBOOK_RECORD_TYPE } from "./handbookConsolidation.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { learnedMethodId, methodRecordFrom, methodScopeOf } from "./learningService.mjs";
 import { retirementSentence } from "./methodConsolidation.mjs";
 
-/** How many methods and handbooks one run is joined to; a run reads a handful, and a count is never a ledger. */
+/** How many methods one run is joined to; a run reads a handful, and a count is never a ledger. */
 const MAX_USED = 16;
-/** How often a write that lost a race to another telemetry write is tried again. */
-const WRITE_ATTEMPTS = 6;
 
 /** @param {any} error @returns {string} a bounded error code */
 const codeOf = (error) => (typeof error?.code === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(error.code) ? error.code : "method_feedback_failed");
@@ -74,18 +71,17 @@ export class MethodFeedbackService {
 
   /**
    * What one run read, resolved to the revisions of the methods it read: the learned methods it invoked (the platform's
-   * own trial candidates excepted, which are an evaluation's and not the researcher's), the handbooks it used, the
+   * own trial candidates excepted, which are an evaluation's and not the researcher's), the
    * learned methods it was given and passed over, and what could not be resolved with the reason. Nothing is guessed:
    * a name that is no method of this account, or a file no revision was, is listed as unresolved.
    * @param {any} project @param {any} run
    * @returns {Promise<{ methods: { id: string, name: string, status: string, digest: string, current: boolean, document: any }[],
-   *   handbooks: { id: string, capabilityId: string, digest: string }[], passedOver: { id: string, name: string }[],
-   *   unresolved: { name: string, reason: string }[] }>}
+   *   passedOver: { id: string, name: string }[], unresolved: { name: string, reason: string }[] }>}
    */
   async usedBy(project, run) {
     const userId = project.userId;
     /** @type {Awaited<ReturnType<MethodFeedbackService["usedBy"]>>} */
-    const used = { methods: [], handbooks: [], passedOver: [], unresolved: [] };
+    const used = { methods: [], passedOver: [], unresolved: [] };
     const invoked = (Array.isArray(run?.methodsInvoked) ? run.methodsInvoked : []).filter((/** @type {any} */ entry) => entry?.name && entry?.digest && !entry.trial);
     for (const entry of invoked.slice(0, MAX_USED)) {
       const id = learnedMethodId(String(entry.name));
@@ -98,14 +94,6 @@ export class MethodFeedbackService {
     const invokedNames = new Set(invoked.map((/** @type {any} */ entry) => String(entry.name)));
     for (const entry of (Array.isArray(run?.methodsLoaded) ? run.methodsLoaded : []).slice(0, MAX_USED)) {
       if (entry?.name && !entry.trial && !invokedNames.has(String(entry.name))) used.passedOver.push({ id: learnedMethodId(String(entry.name)), name: String(entry.name) });
-    }
-    for (const mounted of (Array.isArray(run?.capabilityHandbooks) ? run.capabilityHandbooks : []).slice(0, MAX_USED)) {
-      if (mounted?.ownerId !== userId || !mounted.id || !mounted.contentDigest) continue;
-      const row = await this.learning.documents.get(userId, "method", mounted.id).catch(() => null);
-      // Used, not attached: the run's own observation says whether the model opened it (`recordHandbookRunObservations`).
-      const read = row?.payload?.recordType === CAPABILITY_HANDBOOK_RECORD_TYPE
-        && (row.payload.observations ?? []).some((/** @type {any} */ item) => item?.runId === run.id && item.used === true && item.contentDigest === mounted.contentDigest);
-      if (read) used.handbooks.push({ id: String(mounted.id), capabilityId: String(mounted.capabilityId ?? ""), digest: String(mounted.contentDigest) });
     }
     return used;
   }
@@ -124,7 +112,6 @@ export class MethodFeedbackService {
         scientific: methodScientific(method.document.payload.scientific, method.digest),
         ...(methodScopeOf(method.document.payload) ? { scope: methodScopeOf(method.document.payload) } : {}),
       })),
-      handbooks: used.handbooks,
       passedOver: used.passedOver,
       unresolved: used.unresolved,
     };
@@ -149,7 +136,7 @@ export class MethodFeedbackService {
   async #record(project, run, source) {
     const userId = project.userId;
     const used = await this.usedBy(project, run);
-    /** @type {{ kind: "method" | "handbook", id: string, digest: string, added: boolean, acted?: string }[]} */
+    /** @type {{ kind: "method", id: string, digest: string, added: boolean, acted?: string }[]} */
     const recorded = [];
     const base = (/** @type {string} */ digest) => ({
       id: identity([source.signal, digest, source.result.versionId, source.successor?.versionId ?? "", source.replay?.id ?? "", source.event?.id ?? ""]),
@@ -166,32 +153,7 @@ export class MethodFeedbackService {
         recorded.push(item);
       } catch (error) { this.report(codeOf(error)); }
     }
-    for (const handbook of used.handbooks) {
-      try { recorded.push({ kind: "handbook", id: handbook.id, digest: handbook.digest, added: await this.#recordHandbook(userId, handbook, base(handbook.digest)) }); }
-      catch (error) { this.report(codeOf(error)); }
-    }
     return { recorded, unresolved: used.unresolved, skipped: recorded.length || used.unresolved.length ? null : "no_method_read" };
-  }
-
-  /**
-   * A handbook is versioned by replacement, not by amendment (`HandbookConsolidation`), so an entry is recorded only
-   * against the version that is current; a handbook replaced since the run read it carries nothing from it.
-   * @param {string} userId @param {{ id: string, digest: string }} handbook @param {any} entry
-   */
-  async #recordHandbook(userId, handbook, entry) {
-    for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
-      const row = await this.learning.documents.get(userId, "method", handbook.id);
-      if (row?.payload?.recordType !== CAPABILITY_HANDBOOK_RECORD_TYPE || row.payload.contentDigest !== handbook.digest) return false;
-      const scientific = foldMethodFeedback(row.payload.scientific, entry);
-      if (scientific === row.payload.scientific) return false;
-      try {
-        await this.learning.documents.put(userId, "method", row.id, { ...row.payload, scientific }, { expectedRevision: row.revision, telemetry: true });
-        return true;
-      } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === WRITE_ATTEMPTS - 1) throw error;
-      }
-    }
-    return false;
   }
 
   /**

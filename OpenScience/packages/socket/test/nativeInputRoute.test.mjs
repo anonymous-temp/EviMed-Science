@@ -4,16 +4,18 @@ import test from 'node:test'
 import { apply } from '../plugins/capsule.mjs'
 import { sha256Hex } from '../src/digest.mjs'
 
+// The route of an input typed in the kernel's own window (`nativeInputRoute.mjs` on the control plane) is the one thing the plugin asks the gateway
+// about an input. It used to ask for the account's capability handbooks too, and to tell the gateway they had been attached; both are gone.
+
 /** @param {import('node:test').TestContext} t */
 async function fixture(t, omitRoutes = false) {
   /** @type {any[]} */ const calls = []
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk
     const body = JSON.parse(raw)
-    // The current document selection is refreshed separately; these assertions track handbook receipts only.
+    // The current document selection is refreshed separately; these assertions track the route reads only.
     if (!req.url?.endsWith('/session')) calls.push({ path: req.url, body, token: req.headers.authorization })
-    const data = req.url?.endsWith('/handbook-context') ? { ...(omitRoutes ? {} : { routes: body.inputs }), contexts: (body.inputs ?? []).map((/** @type {any} */ input) => ({ requestId: input.requestId, digest: 'd'.repeat(64), context: `Supplement ${input.requestId}` })) }
-      : req.url?.endsWith('/handbook-attached') ? { attached: body.receipts.map((/** @type {any} */ item) => item.requestId) } : { context: '' }
+    const data = req.url?.endsWith('/native-route') ? (omitRoutes ? {} : { routes: body.inputs }) : { context: '' }
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(data))
   })
   await new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(undefined)))
@@ -31,51 +33,29 @@ async function fixture(t, omitRoutes = false) {
 }
 /** @param {string} id @param {string} [text] @param {string} [kind] */
 const input = (id, text = id, kind = 'user') => ({ role: 'user', source: { kind, rpcId: id }, content: [{ type: 'text', text }] })
-/** @param {any[]} messages @param {number} [turn] @param {boolean} [child] */
-const step = (messages, turn = 2, child = false) => ({ turn, step: 1, messages, agent: { id: 'agent', session: { id: 'session', header: child ? { origin: 'subagent', parentSession: 'root' } : {} }, inject: () => { throw new Error('Current context must never enter the next inbox') } } })
+/** @param {any[]} messages @param {number} [turn] */
+const step = (messages, turn = 2) => ({ turn, step: 1, messages, agent: { id: 'agent', session: { id: 'session', header: {} }, inject: () => { throw new Error('Current context must never enter the next inbox') } } })
 
-test('only this step input IDs receive context, are acknowledged after entering and are deduplicated within the turn', async t => {
+test('a step that enters injects nothing and asks the gateway about nothing: a native input carries no supplement', async t => {
   const f = await fixture(t)
   const payload = step([input('A')])
-  const first = await f.hooks.get('agent/pre-step')(payload, async () => ({ kind: 'enter', messages: payload.messages }))
-  assert.equal(first.messages[0], payload.messages[0])
-  assert.equal(first.messages.at(-1).content[0].text, 'Supplement A')
-  assert.deepEqual(f.calls.map(call => call.path.split('/').at(-1)), ['handbook-context', 'handbook-attached'])
-  assert.deepEqual(f.calls[0].body.inputs, [{ requestId: 'A', textDigest: await sha256Hex('A') }])
-  assert.ok(f.calls.every(call => call.token === 'Bearer fixture-workload'))
-  await f.hooks.get('agent/pre-step')(payload, async () => ({ kind: 'enter', messages: payload.messages }))
-  assert.equal(f.calls.length, 2)
-  const future = step([input('B')], 3)
-  const next = await f.hooks.get('agent/pre-step')(future, async () => ({ kind: 'enter', messages: future.messages }))
-  assert.equal(next.messages.at(-1).content[0].text, 'Supplement B')
-  assert.equal(f.calls[2].body.inputs[0].requestId, 'B')
+  const entered = await f.hooks.get('agent/pre-step')(payload, async () => ({ kind: 'enter', messages: payload.messages }))
+  assert.equal(entered.messages.length, 1, 'no context is added to what enters')
+  assert.deepEqual(f.calls, [], 'neither a read nor an acknowledgement of anything')
 })
-
-test('rejected steps, plugin messages and subagent inputs do not acknowledge native context', async t => {
-  const f = await fixture(t)
-  const payload = step([input('A')])
-  assert.equal((await f.hooks.get('agent/pre-step')(payload, async () => ({ kind: 'reject' }))).kind, 'reject')
-  assert.equal(f.calls.length, 1, 'a read alone is not an attachment')
-  await f.hooks.get('agent/pre-step')(step([input('machine', 'x', 'plugin:other')]), async () => ({ kind: 'enter', messages: [] }))
-  await f.hooks.get('agent/pre-step')(step([input('child')], 2, true), async () => ({ kind: 'enter', messages: [] }))
-  assert.equal(f.calls.length, 1)
-  await f.hooks.get('agent/pre-step')(payload, async () => ({ kind: 'enter', messages: payload.messages }))
-  assert.equal(f.calls.length, 3, 'a later entering retry can attach the still-unconsumed request')
-})
-
 
 test('pre-assembly route service uses the workload-authenticated exact-input gateway', async t => {
   const f = await fixture(t)
   const resolve = f.services.get('evimedNativeRoute')
   assert.equal(typeof resolve, 'function')
   const inputs = [{ requestId: 'current', textDigest: await sha256Hex('current text') }]
-  const contexts = await resolve('session', inputs)
+  const routes = await resolve('session', inputs)
   assert.deepEqual(f.calls[0].body, { sessionId: 'session', inputs })
+  assert.equal(f.calls[0].path.split('/').at(-1), 'native-route')
   assert.equal(f.calls[0].token, 'Bearer fixture-workload')
-  assert.equal(contexts[0].requestId, 'current')
-  assert.equal(f.calls.length, 1, 'route resolution alone does not acknowledge handbook attachment')
+  assert.equal(routes[0].requestId, 'current')
+  assert.equal(f.calls.length, 1)
 })
-
 
 test('an older control plane without route metadata cannot grant native capabilities', async t => {
   const f = await fixture(t, true)

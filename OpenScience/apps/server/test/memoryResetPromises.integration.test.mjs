@@ -101,7 +101,7 @@ test("a reset cancels the account's queued and running learning jobs and deletes
   assert.equal((await database.query("SELECT id FROM evimed_product.feedback_events WHERE id=$1", [bobsFeedback])).rowCount, 1);
 
   // A second reset finds nothing.
-  assert.deepEqual(await resetLearnedMemory(database, alice), { methods: 0, handbooks: 0, entries: 0, jobs: 0, feedback: 0 });
+  assert.deepEqual(await resetLearnedMemory(database, alice), { methods: 0, entries: 0, jobs: 0, feedback: 0 });
 });
 
 test("the reset is an instant per account, to the millisecond, and a run is placed on one side of it", options, async () => {

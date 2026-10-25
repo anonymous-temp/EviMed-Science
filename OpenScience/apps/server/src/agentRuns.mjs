@@ -841,7 +841,6 @@ function foldEvents(events) {
         ...current,
         ...(!current.promptDispatchStartedAt&&typeof event.promptDispatchStartedAt==='string'&&Number.isFinite(Date.parse(event.promptDispatchStartedAt))?{promptDispatchStartedAt:event.promptDispatchStartedAt}:{}),
         ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
-        ...(event.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(event.capabilityHandbooks) } : {}),
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
@@ -1064,20 +1063,6 @@ function normalizeRecalledMemories(value) {
   // it over a conversation, and the panel that lists them must list them all.
   // Still bounded — the row is rewritten on every learning write.
   return rows.length > 0 ? rows.slice(0, 40) : undefined;
-}
-
-/** The supplementary body never belongs in the run ledger, only its exact receipt. */
-function normalizeCapabilityHandbooks(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => typeof item?.id === "string" && item.id.startsWith("method:capability-handbook:") && item.id.length <= 256
-    && typeof item.ownerId === "string" && /^[A-Za-z0-9_.:@-]{1,128}$/.test(item.ownerId)
-    && typeof item.capabilityId === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(item.capabilityId)
-    && /^sha256:[a-f0-9]{64}$/.test(item.contentDigest)
-    && /^\.evimed-handbooks\/[a-f0-9]{64}\/SKILL\.md$/.test(item.path)
-    && Number.isSafeInteger(item.version) && item.version > 0)
-    .slice(0, 24).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version, requestId }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version,
-      ...(typeof requestId === "string" && requestId.length > 0 && requestId.length <= 512 && ![...requestId].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ? { requestId } : {}),
-    }));
 }
 
 function normalizeMethodDigests(value) {
@@ -5419,7 +5404,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], appendCapabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   /** Recorded by the trusted manager immediately before its first native prompt; never retroactive. @param {any} project @param {string} runId @param {string} at */
   async recordRuntimeEgressDispatch(project,runId,at){
@@ -5457,10 +5442,6 @@ export class AgentRunStore {
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
-        ...(patch.appendCapabilityHandbooks || patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(
-          (patch.appendCapabilityHandbooks ? [...(current.capabilityHandbooks ?? []), ...patch.appendCapabilityHandbooks] : patch.capabilityHandbooks)
-            .filter((item, index, all) => item?.ownerId === project.userId && all.findIndex(other => other?.id === item.id && other?.contentDigest === item.contentDigest) === index)) }
-          : current.capabilityHandbooks ? { capabilityHandbooks: current.capabilityHandbooks } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),

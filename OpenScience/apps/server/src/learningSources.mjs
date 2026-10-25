@@ -1,8 +1,8 @@
 /**
- * 「从哪里学到的」: the conversations a learned method or a capability handbook
+ * 「从哪里学到的」: the conversations a learned method
  * came out of, as links a researcher can follow from its drawer.
  *
- * Hidden knowledge: a method or handbook stores the run that taught it, not the
+ * Hidden knowledge: a method stores the run that taught it, not the
  * conversation, and the run may sit in a project that was deleted since — the
  * lesson's own copy is then all that is left (`resolveLessonSourceRun`). This
  * resolves each run to its conversation within the account that owns it, keeps

@@ -16,32 +16,23 @@
   ],
   "whyItIsWrong": "Three quarters of what the loop read was a delivery that needed a repair inside its run, and since 2026-09-17 a verdict of the gate withholds nothing, so what those runs repaired was the platform's own bookkeeping: where an anchor sits in a quote, how citation numbers line up, which fields a package carries. The methods and handbooks made from them taught how to satisfy EviMed's checks, not how this researcher does research, and the researcher's own corrections -- the signal the loop exists for -- queued nothing in 30 days. The hourly merging pass then built on its own output: with the originals kept until the merge cleared the harm test, which reads only runs that opened the method, which nobody did, 27 of 35 methods were rewordings of two lessons, and each rode as a card in every run. The account handbooks were 9.5 KB against a platform limit of 6000 characters that the run writing them was never told.",
   "caughtBy": "nobody",
-  "fix": "A delivery repaired inside its run queues no lesson unless an operator asks (OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE, 0); a method nobody opens in 20 answered runs is stopped with the count as its reason; a merge nobody has used is not built on again (`unprovenMerge`); method-distillation 1.2.0 says a method is a research practice and the gate's bookkeeping is `no_change`, and a lesson filed as a handbook is told the platform's length and held to it by the contract (apps/server/src/learningTriggers.mjs, packages/domain/src/methodGraph.mjs, capabilities/method-distillation/SKILL.md).",
+  "fix": "A delivery repaired inside its run queues no lesson (first behind OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE at 0, then the trigger, the account handbook and the share were deleted outright on 2026-10-25); a method nobody opens in 20 answered runs is stopped with the count as its reason; a merge nobody has used is not built on again (`unprovenMerge`); method-distillation 1.2.0 says a method is a research practice and the gate's bookkeeping is `no_change` (apps/server/src/learningTriggers.mjs, packages/domain/src/methodGraph.mjs, capabilities/method-distillation/SKILL.md).",
   "scenarios": {
     "triggers": [
       {
-        "name": "a delivery repaired three times inside its own run, with the shares as configured by default",
+        "name": "a delivery repaired three times inside its own run",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3 },
-        "shares": { "repair": 0 },
-        "expect": { "queued": [], "sampledOut": ["repair_accepted"] },
-        "note": "It is the repair share that keeps this out. (The share of clean deliveries that queued a lesson, a third, was removed on 2026-10-23: a clean delivery queues no lesson of its own, what it teaches is read when the run is settled.)"
+        "expect": { "queued": [], "sampledOut": [] },
+        "note": "No trigger reads a repair: the share that kept it out was 0 for two weeks and the trigger was deleted on 2026-10-25, with the account handbook it fed. (The share of clean deliveries that queued a lesson, a third, was removed on 2026-10-23: a clean delivery queues no lesson of its own, what it teaches is read when the run is settled.)"
       },
       {
         "name": "the same run, in which the researcher typed a correction into the running turn",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3, "corrections": 1 },
-        "shares": { "repair": 0 },
-        "expect": { "queued": ["correction"], "sampledOut": ["repair_accepted"] }
-      },
-      {
-        "name": "an operator who asks for the gate's lessons back gets them",
-        "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3 },
-        "shares": { "repair": 1 },
-        "expect": { "queued": ["repair_accepted"], "sampledOut": [] }
+        "expect": { "queued": ["correction"], "sampledOut": [] }
       },
       {
         "name": "a delivery accepted on its first submission queues no lesson at its end: what it teaches is read when the run is settled, and in the routine over three clean ones",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 1 },
-        "shares": { "repair": 0 },
         "expect": { "queued": [], "sampledOut": [] }
       }
     ],
@@ -65,8 +56,8 @@
     "distillation": [
       {
         "name": "the repair was an anchor offset moved after citation numbers were renumbered",
-        "trigger": "repair_accepted",
-        "signal": "reviewer",
+        "trigger": "delivered",
+        "signal": "run",
         "lesson": "Gate issues: quote location off by one line after the reference list was renumbered; the run re-anchored three claims and resubmitted.",
         "expect": { "operation": "no_change", "reason": "platform bookkeeping" }
       },
@@ -76,15 +67,8 @@
         "signal": "researcher",
         "lesson": "The assistant included cohort studies in an efficacy review; the researcher: 不对，这次综述只纳入随机对照试验，观察性研究不要放进纳入标准里。",
         "expect": { "operation": "create", "appliesTo": "the inclusion criteria of an efficacy review", "namesAResearchPractice": true }
-      },
-      {
-        "name": "a handbook lesson from a long repair history, which must fit the platform's length",
-        "trigger": "repair_accepted",
-        "signal": "reviewer",
-        "lesson": "Two rounds of repairs for a pooled estimate whose heterogeneity statistic was reported without its interval, found by the reviewer.",
-        "expect": { "maxHandbookChars": 6000 }
       }
     ]
   },
-  "liveCheck": "The `distillation` scenarios need a real method-distillation 1.2.0 run (DSH + DeepSeek) on a frozen input built from each lesson; they are the evaluation cases for what the model is asked to judge, and the rest of this case is held by tests. Principle 6: the gate-bookkeeping answer is `no_change`, the correction is a research practice with its applicability, and the handbook fits the length it is told. After the release, count the next week's distill jobs by trigger: repair_accepted should be 0 and correction should be above 0 once a researcher says the assistant was wrong."
+  "liveCheck": "The `distillation` scenarios need a real method-distillation 1.2.0 run (DSH + DeepSeek) on a frozen input built from each lesson; they are the evaluation cases for what the model is asked to judge, and the rest of this case is held by tests. Principle 6: the gate-bookkeeping answer is `no_change`, and the correction is a research practice with its applicability. After the release, count the next week's distill jobs by trigger: there is no repair_accepted any more and correction should be above 0 once a researcher says the assistant was wrong."
 }

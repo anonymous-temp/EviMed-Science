@@ -463,33 +463,18 @@ test("the configured concurrency is real: two lanes work at once, a third waits"
   assert.throws(() => new LearningWorker({ jobs, distillation: {}, consolidation: {}, concurrency: 0 }), /concurrency/);
 });
 
-test("one paired evaluation of a handbook at a time: the next waits its turn without spending an attempt", async () => {
-  // 2026-09-21: two evaluations held both lanes and half the deployment's
-  // runtimes for hours. Only a handbook arm that is given an `evaluate` hook
-  // evaluates anything now (`HandbookConsolidation`); no deployment composes one.
-  /** @type {() => void} */
-  let release = () => {};
-  const holding = new Promise((resolve) => { release = () => resolve(undefined); });
-  const slow = { calls: [], handbookConsolidation: { evaluate: async () => ({}) },
-    async run(/** @type {any} */ request) { this.calls.push(request); await holding; return { action: "optimize" }; } };
+test("a queued optimize job from before the account handbook arm was deleted ends by name: no run, no retry (2026-10-25)", async () => {
+  // The action applied a capability handbook and went with the handbook. A job already in the queue (the startup step removes them where it can reach
+  // the database) is not run by a consolidation that no longer knows the action, and not retried either.
+  const consolidation = { calls: 0, async run() { this.calls += 1; return { action: "optimize" }; } };
   const { jobs, worker: instance } = worker({
-    consolidation: slow,
-    jobs: fakeJobs([
-      { id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "optimize", candidateId: "c1" } },
-      { id: "e2", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "optimize", candidateId: "c2" } },
-    ]),
+    consolidation,
+    jobs: fakeJobs([{ id: "old", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "optimize", candidateId: "c1" } }]),
   });
-  instance.concurrency = 2;
-  const first = instance.tick();
-  await new Promise((resolve) => setImmediate(resolve));
   await instance.tick();
-  const deferred = jobs.failed.find((entry) => entry.id === "e2");
-  assert.equal(deferred?.error.code, "learning_evaluation_busy");
-  assert.deepEqual({ retry: deferred.options.retry, refundAttempt: deferred.options.refundAttempt }, { retry: true, refundAttempt: true });
-  release();
-  await first;
-  await instance.close();
-  assert.deepEqual(jobs.finished.map((entry) => entry.id), ["e1"]);
+  assert.equal(consolidation.calls, 0, "the consolidation was never asked to run it");
+  assert.equal(jobs.failed[0].error.code, "consolidate_action_invalid");
+  assert.equal(jobs.failed[0].options.retry, false, "a refusal that cannot change is not retried");
 });
 
 test("the settle job of a delivery is claimed only where the evidence ledger is composed, and is finished with what it settled", async () => {

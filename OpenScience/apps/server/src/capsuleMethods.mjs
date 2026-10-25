@@ -481,7 +481,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * card names and one that begins now is shown only the selection.
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
- *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null,
+ *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
  *   keep?: Iterable<string> | null, keepDirectory?: boolean, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not

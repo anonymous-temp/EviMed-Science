@@ -36,7 +36,8 @@ export function createNativeCapsuleSearch({ service, subscriptions = null }) {
 
 /** The workload credential, never a caller-supplied field, fixes account and project.
  *
- * What this answers is the capsule's: its facts, its notes, the methods and handbooks it mounts. The account's own memory is
+ * What this answers is the capsule's: its facts, its notes, the methods it mounts — and the route of the input a conversation is about to
+ * run (`native-route`, `nativeInputRoute.mjs`). The account's own memory is
  * the engine's, reached through the memory gateway (`memoryGateway.mjs`); the records half this route once added to a recall was
  * the legacy engine's and is gone (2026-10-25).
  *
@@ -71,7 +72,7 @@ export function createNativeCapsuleSearch({ service, subscriptions = null }) {
  * With the memory engine on, a conversation's own entrance is the engine's plugin, whose `search` also covers the capsule's half
  * (`createNativeCapsuleSearch`, `memoryGateway.mjs`), and the capsule's recall and note tools are not registered for it
  * (`packages/socket/plugins/capsule.mjs`, `memoryEnabled`); the recall and note actions here are for a deployment without the engine.
- * @param {{ runtimeManager: any, store: any, service: any, evaluationIsolation?: any, handbooks?: any,
+ * @param {{ runtimeManager: any, store: any, service: any, evaluationIsolation?: any, nativeRoutes?: any,
  *   recallLimit?: number, recallMaxLimit?: number,
  *   subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null,
  *   clinicalContext?: ((identity:any,runs:any[])=>Promise<boolean>) | null,
@@ -80,7 +81,7 @@ export function createNativeCapsuleSearch({ service, subscriptions = null }) {
  *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, nativeRoutes = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
   recallLimit = 5, recallMaxLimit = 8 }) {
   const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
   const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
@@ -90,7 +91,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
     try {
       const url = new URL(req.url, "http://evimed.local");
       const action = url.pathname.slice(CAPSULE_GATEWAY_PATH.length + 1);
-      if (req.method !== "POST" || url.search || !["recall", "note", "session", "handbook-context", "handbook-attached"].includes(action)) {
+      if (req.method !== "POST" || url.search || !["recall", "note", "session", "native-route"].includes(action)) {
         throw new HttpError(404, "not_found", "Capsule operation not found.");
       }
       const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
@@ -108,8 +109,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
       if (++window.count > 120) throw new HttpError(429, "capsule_rate_limited", "Too many memory operations.");
       const body = await readJson(req, 64 * 1024);
       const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "limit"]
-        : action === "handbook-context" ? ["sessionId", "inputs"]
-          : action === "handbook-attached" ? ["sessionId", "receipts"]
+        : action === "native-route" ? ["sessionId", "inputs"]
         : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];
       if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((field) => !allowed.includes(field))) {
         throw new HttpError(400, "capsule_payload_invalid", "Unsupported memory fields.");
@@ -119,10 +119,10 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
       const currentUser = await store.userById(identity.userId);
       if (!currentUser) throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable.");
       const project = await store.requireProject(currentUser, identity.projectId);
-      if (action === "handbook-context" || action === "handbook-attached") {
-        if (!handbooks) { sendJson(res, 200, action === "handbook-context" ? { contexts: [] } : { attached: [] }); return; }
-        const answer = action === "handbook-context" ? await handbooks.read(project, body) : await handbooks.acknowledge(project, body);
-        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "handbook", answer) : answer);
+      if (action === "native-route") {
+        if (!nativeRoutes) { sendJson(res, 200, { routes: [] }); return; }
+        const answer = await nativeRoutes.read(project, body);
+        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "native-route", answer) : answer);
         return;
       }
       if (action === "session") {

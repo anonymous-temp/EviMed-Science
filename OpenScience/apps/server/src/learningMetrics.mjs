@@ -36,12 +36,12 @@ import { LEARNING_REFUSAL_REASONS } from "./learningTriggers.mjs";
 import { REPLAY_OUTCOMES, REPLAY_VERDICTS } from "./methodReplay.mjs";
 import { SCRIPT_OUTCOMES } from "./scriptLessons.mjs";
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
-import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
+import { LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
 const METHOD_STATUSES = Object.freeze(["candidate", "approved", "retired"]);
 const JOB_STATUSES = Object.freeze(["queued", "running", "succeeded", "failed", "canceled"]);
-const RESULT_OPERATIONS = Object.freeze(["create", "amend", "merge", "no_change", "handbook"]);
+const RESULT_OPERATIONS = Object.freeze(["create", "amend", "merge", "no_change"]);
 const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carried", "explored", "appliedCorrected", "appliedClean"]);
 /** How a mount ranked the library (`selectLearnedMethods`): by meaning, by the words they share, or not at all (no first message to rank by). */
 const MOUNT_RANKING = Object.freeze(["embedding", "lexical", "recent"]);
@@ -75,7 +75,6 @@ export class LearningMetrics {
     this.runs = { withMethods: 0 };
     this.runMethodsLoaded = 0;
     this.runMethodsInvoked = 0;
-    this.repairs = { distilled: 0, sampledOut: 0 };
     /** @type {Record<string, number>} */
     this.triggerRefused = Object.fromEntries([...LEARNING_REFUSAL_REASONS, "other"].map((reason) => [reason, 0]));
     /** @type {Record<string, number>} */
@@ -152,13 +151,6 @@ export class LearningMetrics {
     if (n > 0) this.relations[label] = (this.relations[label] ?? 0) + n;
   }
 
-  /** One repaired delivery that would have queued a lesson: whether the repair sample took it (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`).
-   *  @param {boolean} distilled */
-  observeRepairSample(distilled) {
-    if (distilled) this.repairs.distilled += 1;
-    else this.repairs.sampledOut += 1;
-  }
-
   /** One method the consolidation pass stopped on its own, by the branch that decided.
    *  @param {string} code */
   observeRetirement(code) {
@@ -228,12 +220,6 @@ export class LearningMetrics {
         series: [{ value: this.mountedBytes }] },
       { name: "open_science_learning_runs_with_methods_total", help: "Finished runs that carried at least one learned method.", type: "counter",
         series: [{ value: this.runs.withMethods }] },
-      { name: "open_science_learning_repair_lessons_total", type: "counter",
-        help: "Repaired deliveries that would have queued a distillation (OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE, none by default), by whether the sample took them.",
-        series: [
-          { value: this.repairs.distilled, labels: { outcome: "distilled" } },
-          { value: this.repairs.sampledOut, labels: { outcome: "sampled_out" } },
-        ] },
       { name: "open_science_learning_trigger_refused_total", type: "counter",
         help: "Finished runs and corrections the learning gates turned away, by reason: not_researcher_work, internal_project, internal_agent, clinical_context, paused, before_reset, trial, transcript_incomplete, not_finished, run_unavailable, not_eligible, enqueue_failed.",
         series: Object.entries(this.triggerRefused).map(([reason, value]) => ({ value, labels: { reason } })) },
@@ -302,7 +288,7 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,appliedClean}')::numeric END),0) AS "appliedClean"
     FROM evimed_product.documents
     WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType' = ANY($1::text[]) AND ($2::text IS NULL OR user_id=$2)
-    GROUP BY 1,2`, [[LEARNED_METHOD_RECORD_TYPE, HANDBOOK_CANDIDATE_RECORD_TYPE], owner]);
+    GROUP BY 1,2`, [[LEARNED_METHOD_RECORD_TYPE], owner]);
   const jobs = await rows(`SELECT coalesce(payload->>'trigger','') AS trigger, status, count(*)::integer AS n,
       coalesce(result->>'operation','') AS operation
     FROM evimed_product.jobs WHERE kind='distill' AND ($1::text IS NULL OR user_id=$1)
@@ -338,9 +324,7 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
   const byStatus = Object.fromEntries(METHOD_STATUSES.map((status) => [status, 0]));
   /** @type {Record<string, number>} */
   const uses = Object.fromEntries(USE_KINDS.map((kind) => [kind, 0]));
-  let handbookCandidates = 0;
   for (const row of methods) {
-    if (row.record_type === HANDBOOK_CANDIDATE_RECORD_TYPE) { handbookCandidates += count(row.n); continue; }
     const status = closed(row.status, METHOD_STATUSES);
     byStatus[status] = (byStatus[status] ?? 0) + count(row.n);
     for (const kind of USE_KINDS) uses[kind] += count(row[kind]);
@@ -373,7 +357,7 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
     account: createHash("sha256").update(`learning-evidence:${row.user_id}`).digest("hex").slice(0, 12),
     at: Math.floor(new Date(row.last_at).getTime() / 1000),
   })).filter((entry) => Number.isFinite(entry.at));
-  return { methods: byStatus, uses, handbookCandidates, lessons, results, evidence, evidenceLastAt, spend };
+  return { methods: byStatus, uses, lessons, results, evidence, evidenceLastAt, spend };
 }
 
 /**
@@ -382,7 +366,6 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
  * @param {any} database @param {string} userId @param {{now?: Date}} [options]
  */
 export async function learningSummary(database, userId, { now = new Date() } = {}) {
-  const handbooks = await handbookSummary(database, userId);
   const counts = await learningLedgerCounts(database, { userId, now });
   /** @type {Record<string, number>} */
   const queued = {};
@@ -398,8 +381,6 @@ export async function learningSummary(database, userId, { now = new Date() } = {
     uses: counts.uses,
     lessons: { byTrigger: queued, ...ended },
     results: counts.results,
-    handbookCandidates: counts.handbookCandidates,
-    handbooks,
     spend24hCny: counts.spend ? Math.round((counts.spend.settled) * 1e6) / 1e6 : null,
   };
 }
@@ -424,14 +405,12 @@ export function learningMetricFamilies(enabled, ledger, counters) {
     families.push(
       { name: "open_science_learning_methods", help: "Learned methods in the account libraries, by status.", type: "gauge",
         series: METHOD_STATUSES.map((status) => ({ value: ledger.methods[status] ?? 0, labels: { status } })) },
-      { name: "open_science_learning_handbook_candidates", help: "Lessons taught by the platform reviewer alone, awaiting or consumed by the capability handbook loop.", type: "gauge",
-        series: [{ value: ledger.handbookCandidates }] },
       { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one, carried as a card by an answered run (as meant for the work), explored (exposure only), and what the researcher did after a run that opened one: applied_corrected or applied_clean.", type: "gauge",
         series: USE_KINDS.map((kind) => ({ value: ledger.uses[kind] ?? 0, labels: { kind: kind.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`) } })) },
       { name: "open_science_learning_distill_jobs", help: "Distillation lessons queued, by trigger and job status.", type: "gauge",
         series: Object.entries(ledger.lessons).flatMap(([trigger, statuses]) => JOB_STATUSES.map((status) => ({ value: statuses[status] ?? 0, labels: { trigger, status } }))) },
       { name: "open_science_learning_lessons_total", type: "counter",
-        help: "Distillation lessons queued, by trigger (correction, routine, script, repair_accepted, edit_diff; delivered only for jobs queued before 2026-10-23).",
+        help: "Distillation lessons queued, by trigger (correction, routine, script, edit_diff; delivered only for jobs queued before 2026-10-23).",
         series: Object.entries(ledger.lessons).map(([trigger, statuses]) => ({ value: Object.values(statuses).reduce((total, value) => total + value, 0), labels: { trigger } })) },
       { name: "open_science_learning_evidence_total", type: "counter",
         help: "What researchers did to runs, as the learning loop counts it, by evidence (steer, follow_up, result_corrected, silent) and verdict (correction, preference, rejection, accept, none).",
@@ -451,38 +430,4 @@ export function learningMetricFamilies(enabled, ledger, counters) {
   }
   if (counters) families.push(...counters.families());
   return families;
-}
-
-/** Actual current-version use records, separate from causal quality evidence. No first-page totals.
- * @param {any} database @param {string} userId */
-export async function handbookSummary(database, userId) {
-  const result = await database.query(`WITH owned AS MATERIALIZED (
-    SELECT id,payload,updated_at FROM evimed_product.documents
-    WHERE user_id=$1 AND kind='method' AND deleted_at IS NULL
-      AND payload->>'recordType' IN ('handbook-candidate','capability-handbook')
-  ), active AS MATERIALIZED (
-    SELECT * FROM owned WHERE payload->>'recordType'='capability-handbook' AND payload->>'status'='active'
-  ), dispositions AS (
-    SELECT coalesce(payload->'dispositions'->(payload->>'contentDigest')->>'disposition',
-      payload->'dispositions'->(payload->>'contentDigest')->>'state','queued') AS state,count(*)::integer AS n
-    FROM owned WHERE payload->>'recordType'='handbook-candidate' GROUP BY 1
-  ), observations AS (
-    SELECT observation FROM active CROSS JOIN LATERAL jsonb_array_elements(coalesce(payload->'observations','[]'::jsonb)) observation
-    WHERE observation->>'contentDigest'=payload->>'contentDigest'
-  ) SELECT jsonb_build_object(
-    'dispositions',coalesce((SELECT jsonb_object_agg(state,n) FROM dispositions),'{}'::jsonb),
-    'applied',(SELECT count(*) FROM active),
-    'unmeasured',(SELECT count(*) FROM active WHERE payload->>'verification'='unmeasured'),
-    'evaluated',(SELECT count(*) FROM active WHERE payload->>'verification'='evaluated'),
-    'verifiedImprovement',(SELECT count(*) FROM active WHERE payload->>'verification'='evaluated' AND payload #>> '{evaluation,verdict}'='better'),
-    'attached',(SELECT count(*) FROM observations WHERE observation->>'attached'='true'),
-    'used',(SELECT count(*) FROM observations WHERE observation->>'used'='true'),
-    'outcomes',coalesce((SELECT sum(jsonb_array_length(coalesce(observation->'outcomes','[]'::jsonb))) FROM observations),0),
-    'recent',coalesce((SELECT jsonb_agg(item) FROM (SELECT jsonb_build_object(
-      'id',id,'title',coalesce(payload #>> '{display,title}',payload #>> '{frontmatter,name}'),
-      'capabilityId',payload->>'capabilityId','version',payload->'version','verification',payload->>'verification',
-      'appliedAt',payload->>'appliedAt','source',payload->'source','evaluationVerdict',payload #>> '{evaluation,verdict}'
-      ) AS item FROM active ORDER BY payload->>'appliedAt' DESC,id LIMIT 6) recent),'[]'::jsonb)
-  ) AS handbook_summary`, [userId]);
-  return result.rows[0]?.handbook_summary ?? null;
 }

@@ -39,7 +39,7 @@
 import { createHash } from "node:crypto";
 
 import {
-  HANDBOOK_TEXT_LIMITS, METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
+  METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
   parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
@@ -66,7 +66,7 @@ export const DISTILLATION_INPUT_FILE = "distillation-input.json";
  * a job already queued under it is still read. `script` (2026-10-25) is a program the researcher's runs keep carrying:
  * the same normalised code in three runs of two conversations (`scriptLessons.mjs`), whose method may attach it as a code skill.
  */
-export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction", "delivered", "routine", "script"]);
+export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "correction", "delivered", "routine", "script"]);
 
 /** Bumped when the input shape or the cleaning rules change, so a re-run under
  *  new rules is a different job rather than a duplicate of the old one. */
@@ -83,23 +83,24 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepte
 // the results produced under its revision and the scope it declared — and the related methods carry the same — so a
 // lesson drawn from a correction narrows the method that was read instead of writing a near-duplicate beside it, and a
 // lesson read under the old shape would be learnt without them (N14).
-// "6" since 2026-10-12: the input states the text limit of a lesson filed as an account handbook (`authoringLimits.maxHandbookChars`), and the
-// capability learns the researcher's research methods, not the delivery gate's bookkeeping; a lesson re-queued under the new rules is a new
-// dispatch and does not adopt the run that wrote an over-long handbook under the old ones.
+// "6" since 2026-10-12: the capability learns the researcher's research methods, not the delivery gate's bookkeeping; a lesson re-queued under
+// the new rules is a new dispatch and does not adopt the run that wrote one under the old ones.
 // "7" since 2026-10-13: a method is how this person does this kind of work, not only a research method, and a turn of an ordinary
 // conversation that produced or changed a file is a lesson (`learningTriggers.leftFiles`); a lesson re-queued under the old definition
 // is a new dispatch and does not adopt a run that read it.
 // "8" since 2026-10-23: the input is a trajectory digest (`trajectory`) with an excerpt anchored on each intervention, not the tail of
 // the transcript; a routine carries its members' digests; the related methods are the nearest by meaning; and what the lesson rests on
 // is quoted and checked in code. A lesson read under the old shape learnt the platform's choreography.
-export const DISTILLATION_EXTRACTOR_VERSION = "8";
+// "9" since 2026-10-25: a lesson has no handbook to be filed as. The input says nothing of the account handbook arm any more (`signal` is the
+// researcher's or the run's, `methodsUsed` has no handbooks, `authoringLimits` no handbook length, and the gate's findings, `repairIssues`, are not carried), so a lesson read under the old shape is a new dispatch.
+export const DISTILLATION_EXTRACTOR_VERSION = "9";
 
 /**
  * How many messages of context a trigger that points at no intervention is worth: an edit diff points at the writing of one
- * deliverable, a repair at its rounds. Every other trigger is read through the digest and the excerpts anchored on its
+ * deliverable. Every other trigger is read through the digest and the excerpts anchored on its
  * interventions (`TRAJECTORY_ANCHOR_RADIUS`), which is what the plan's own instruction asked for.
  */
-const TAIL_WINDOW = Object.freeze({ edit_diff: 60, repair_accepted: 80 });
+const TAIL_WINDOW = Object.freeze({ edit_diff: 60 });
 
 /** How many anchored windows one lesson reads, and how many messages the closing window holds when nothing anchors one. */
 const MAX_WINDOWS = 4;
@@ -131,18 +132,18 @@ const EVIDENCE_LENGTH = Object.freeze({ min: 8, max: 600 });
  *  - `researcher` — the researcher corrected the run or edited what it
  *    delivered. Their own words; the only source a personal method may come
  *    from (build spec iron rule 3).
- *  - `reviewer` — the run repaired against the platform's own findings and
- *    nothing else: no correction, no edit. What it teaches is how to pass
- *    EviMed's checks, which is the capability's handbook, not this person's
- *    way of working (audit 2026-09-26, L-G3).
  *  - `run` — a delivery or a repeated routine: what the researcher's own work
  *    did, with nobody correcting it.
+ *
+ * There was a third, `reviewer`: a run that repaired against the platform's own findings and nothing else, whose lesson was how to pass EviMed's
+ * checks and was filed as the capability's handbook, never as this person's method (audit 2026-09-26, L-G3). Its one trigger is deleted
+ * (2026-10-25), and with it the handbook.
  * @param {{trigger: string, corrections?: readonly any[], feedback?: readonly any[]}} input
- * @returns {"researcher" | "reviewer" | "run"}
+ * @returns {"researcher" | "run"}
  */
 export function lessonSignal(input) {
   if ((input.corrections?.length ?? 0) > 0 || (input.feedback?.length ?? 0) > 0) return "researcher";
-  return input.trigger === "repair_accepted" ? "reviewer" : "run";
+  return "run";
 }
 
 /** @param {any} message The text parts of one transcript message, joined. */
@@ -308,18 +309,18 @@ function anchoredExcerpts({ runId, trigger, messages, interventions, rootSession
  * The researcher comes first. What they corrected and what they changed in a
  * delivery are the evidence a personal method may rest on, so they open the
  * input — before the transcript and before the platform reviewer's findings —
- * and `signal` says which of the three kinds of evidence this lesson has
+ * and `signal` says which kind of evidence this lesson has
  * (`lessonSignal`). Both production methods of 2026-09 were learnt from the
  * reviewer's findings alone and read as the researcher's own way of working
  * (audit 2026-09-26, L-G3).
  *
  * Then the trajectory (`trajectoryDigest`): what was asked, what was done to it, what it left. The excerpts follow, each anchored on
  * an intervention; a lesson with none (a routine, a clean delivery) has the digests and nothing raw.
- * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[],
+ * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], relatedMethods?: any[], mountedTools?: string[],
  *   shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null,
  *   scripts?: {hash: string, runs: number, conversations: number, exemplars: {runId: string, at?: string, source: string}[]} | null,
  *   peerRuns?: {runId: string, run?: any, shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null, transcript: {header: any, messages: any[]} | null}[],
- *   methodsUsed?: {invoked?: any[], handbooks?: any[], passedOver?: any[], unresolved?: any[]} | null}} input
+ *   methodsUsed?: {invoked?: any[], passedOver?: any[], unresolved?: any[]} | null}} input
  *   `methodsUsed`: what the run read, resolved to revisions with what became of the results produced under each
  *   (`MethodFeedbackService.usedForLesson`); absent when this deployment cannot say, which is not "none".
  *   `shapes`: the run's files' structure by path (`readArtifactShapes`); absent, the digest has path and format only.
@@ -365,8 +366,6 @@ export function buildDistillationInput(input) {
     trajectory,
     excerptDropped: { sensitive: anchored.dropped.sensitive + trajectory.dropped.sensitive, bounded: anchored.dropped.bounded },
     transcriptExcerpts: anchored.excerpts,
-    // The platform reviewer's findings, after everything the researcher did.
-    repairIssues: (input.repairIssues ?? []).slice(0, 20),
     // With its status: a retired method reached the distiller looking like a
     // method on file until 2026-09-29, so the lesson that had been stopped —
     // two were, for writing package bookkeeping into reports — could be
@@ -396,7 +395,6 @@ export function buildDistillationInput(input) {
     // correction has to account for; one that was passed over was not evidence of anything.
     methodsUsed: {
       invoked: (input.methodsUsed?.invoked ?? []).slice(0, 8),
-      handbooks: (input.methodsUsed?.handbooks ?? []).slice(0, 4),
       passedOver: (input.methodsUsed?.passedOver ?? []).slice(0, 8),
       unresolved: (input.methodsUsed?.unresolved ?? []).slice(0, 8),
       known: Boolean(input.methodsUsed),
@@ -411,9 +409,6 @@ export function buildDistillationInput(input) {
       maxBodyLines: SKILL_AUTHORING_LIMITS.maxBodyLines,
       maxDescriptionChars: SKILL_AUTHORING_LIMITS.maxDescriptionChars,
       minTestScenarios: SKILL_AUTHORING_LIMITS.minTestScenarios,
-      // A `reviewer` lesson is filed as an account handbook and offered to the platform's, whose text (name, description and body together) is at
-      // most this many characters; the contract returns a longer one to be shortened in place.
-      maxHandbookChars: HANDBOOK_TEXT_LIMITS.max,
     },
     mountedTools: input.mountedTools ?? [],
     // The other clean runs of the same kind a `routine` induction compares against: each by its digest — what it was asked, what it
@@ -671,10 +666,10 @@ export class MethodDistillationRuns {
   }
 
   /**
-   * @param {{job: any, project: any, run: any, feedback?: any[], repairIssues?: any[]}} request
+   * @param {{job: any, project: any, run: any, feedback?: any[]}} request
    * @returns {Promise<{state: string, runId?: string, sessionId?: string, methodId?: string, operation?: string}>}
    */
-  async execute({ job, project, run, feedback = [], repairIssues = [] }) {
+  async execute({ job, project, run, feedback = [] }) {
     const trigger = String(job.payload?.trigger ?? "");
     const transcript = await readRunTranscript(project, run.id).catch(() => null);
     // What the run left, read for its shape: the digest says what kind of thing it made, not only where it put it.
@@ -706,7 +701,7 @@ export class MethodDistillationRuns {
     }
     const methodsUsed = this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
     const scripts = trigger === "script" ? await this.#scriptsOf(job) : null;
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, methodsUsed, shapes, toolTraces, scripts });
+    const input = buildDistillationInput({ run, trigger, transcript, feedback, relatedMethods: related, peerRuns, methodsUsed, shapes, toolTraces, scripts });
     const dispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
     const identity = await this.dispatch({
       userId: job.userId,
@@ -745,11 +740,6 @@ export class MethodDistillationRuns {
    * The contract validator has already checked the SKILL.md against the same
    * `validateMethodSkill` the store will run again — deliberately twice, once
    * where the run can repair it and once where nothing can talk past it.
-   *
-   * A lesson whose only evidence is the platform reviewer's findings
-   * (`lessonSignal` = `reviewer`) is kept as a handbook candidate and never
-   * reaches the researcher's library, whatever operation it proposes: it is
-   * about passing EviMed's checks, not about how this person works.
    *
    * What the method rests on is stored beside it: the quotations the candidate names (`candidate.evidence`) that are in what the
    * distillation was shown (`context.evidence`, `evidenceCorpus`), as `{ runId, seqRange, quote }` in `provenance.evidence`. A
@@ -849,19 +839,6 @@ export class MethodDistillationRuns {
     // The situation it is for and the ones it must not be loaded into, in the candidate's own words (the contract
     // requires both); the store cleans and bounds them and keeps them beside the method, outside its digest.
     const scope = { applicability: candidate?.applicability, counterexamples: candidate?.counterexamples };
-    if (signal === "reviewer") {
-      const kept = await this.learning.recordHandbookCandidate(job.userId, {
-        frontmatter: parsed.frontmatter,
-        body: parsed.body,
-        ...(files ? { files } : {}),
-        provenance,
-        dependencies: candidate?.dependencies ?? [],
-        capabilityId: provenance.capabilityId ?? null,
-        ...(candidate?.display ? { display: candidate.display } : {}),
-        ...(steps ? { steps } : {}),
-      });
-      return { operation: "handbook", methodId: kept?.id };
-    }
     // A method's id is its name, account-wide (`learnedMethodId`). A `create`
     // under a name the library already holds is that method's next revision,
     // not a second method: without this it was refused as a revision conflict,

@@ -8,7 +8,9 @@
  * server-side repair rounds have defaulted to 0 since the 2026-09-17 ruling,
  * while its transcript condition read a receipt that was written after the
  * `run` object it inspected was taken. Under defaults neither could fire, and
- * the method library stayed empty (2026-09-19 proposal §2, fact 3).
+ * the method library stayed empty (2026-09-19 proposal §2, fact 3). The second is
+ * gone for good (2026-10-25): a repaired delivery is the delivery gate's own bookkeeping, and
+ * the only lesson it ever taught was how to pass that gate.
  *
  * The owner's ruling (2026-09-19) replaces the clicks with signals the platform
  * observes for itself, and the rectification of 2026-10-23 moves two of them to
@@ -31,7 +33,6 @@
  *    when a run is settled (`learningEvidence.settle`, thirty minutes after it ended or
  *    when its next turn came), by `routineLessonFor` over the family
  *    the feedback ledger holds; every Nth, not only the Nth.
- *  - **a repaired delivery** — `repair_accepted`, at share 0 (below).
  *
  * `delivered` — one lesson per finished delivery, sampled at a third — is gone: its content is a
  * settled run (`silent` evidence) and the routine over such runs. What it queued was
@@ -45,21 +46,19 @@
  * (`methodConsolidation.mjs`), and it is retired by its own runs — the harm
  * test over the runs that used it — or by the researcher, never by a paired
  * evaluation nobody asked for (ruling of 2026-09-21). A lesson whose only
- * evidence is the platform's own reviewer is kept for the capability handbook
- * and never becomes the researcher's method (`lessonSignal`).
+ * evidence is the platform's own reviewer is never written (`lessonSignal`).
  *
  * A run that drew on someone else's pack that no other account has yet vouched for — a share by a new author, before enough
  * accounts have kept it enabled (`capsuleShareTrust.mjs`, plan §7, 2026-10-05) — still learns for its own account: its lessons
  * are queued as any run's are, marked `guestInfluence`. What it must not do is reach the platform, and the one channel from
- * learning to the platform is the handbook-gap scan (`evolutionLearningCoupling.mjs`), which leaves such a run out. The mark is
- * written here, once, when the run finishes.
+ * learning to the platform is the promotion of a person's general method to the pack of everyone's (`officialPromotion.mjs`), which
+ * refuses a method learned in such a run. The mark is written here, once, when the run finishes.
  *
- * A delivery that needed repairs inside its own run is not read by default (owner ruling of 2026-10-12: the loop learns the researcher's research methods
- * from their corrections and edits, no longer how to pass the delivery gate). Since 2026-09-17 a verdict of the gate withholds nothing, so a repair is the
- * platform's own bookkeeping — 21 of the 28 lessons read by 2026-10-12 were of that kind, 14 of 17 handbooks they became failed on length, and the methods
- * the merging pass then built from them were rewordings of two lessons about anchors and recorded scope. Its share is
- * `OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE` (0), chosen by a hash of the run id (`runSampling.mjs`) and counted. What a researcher corrects in
- * the result (`result-corrected`, `afterCorrection`), or says in the running turn stays unsampled.
+ * A delivery that needed repairs inside its own run teaches nothing (owner ruling of 2026-10-12: the loop learns the researcher's research methods
+ * from their corrections and edits, no longer how to pass the delivery gate; deleted outright on 2026-10-25, after a share of 0 for two weeks). Since
+ * 2026-09-17 a verdict of the gate withholds nothing, so a repair is the platform's own bookkeeping — 21 of the 28 lessons read by 2026-10-12 were of that
+ * kind, 14 of 17 capability handbooks they became failed on length, and the methods the merging pass then built from them were rewordings of two lessons about anchors
+ * and recorded scope. What a researcher corrects in the result (`result-corrected`, `afterCorrection`), or says in the running turn is what a run teaches.
  *
  * What this module still refuses is work that is not the researcher's: an
  * automated run (an evaluation cell, a probe, an audit or acceptance harness —
@@ -87,7 +86,6 @@ import { METHOD_INDUCTION_MIN_TRAJECTORIES, artifactShapesMatch, isLearningCorre
 import { isInternalProject } from "./internalProjects.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset, memoryPausedFor } from "./memorySettings.mjs";
-import { sampledByHash } from "./runSampling.mjs";
 import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
 
 /** The answer line: the ordinary conversation, which no capability took. Its scope is `conversation` (`learningScopeOf`). */
@@ -107,9 +105,6 @@ export function learningScopeOf(run) {
   const agentId = String(run?.effectiveAgentId ?? "");
   return agentId && agentId !== ANSWER_LINE_AGENT_ID ? agentId : CONVERSATION_SCOPE;
 }
-
-/** What the repaired-delivery sample is hashed with, so it is independent of the platform handbooks' probation sample over the same runs. */
-export const REPAIR_SAMPLE_PURPOSE = "learning-distill-repair";
 
 /**
  * Why a finished run was not read for a lesson, as a closed vocabulary — each one is a counter (`open_science_learning_trigger_refused_total`),
@@ -214,13 +209,6 @@ export function lessonPeers(payload) {
   return [];
 }
 
-/** The largest number of attempts any deliverable of the run took, from the
- *  run's own projection. @param {any} projection */
-function inRunAttempts(projection) {
-  const items = Array.isArray(projection?.plan?.items) ? projection.plan.items : [];
-  return items.reduce((most, item) => Math.max(most, Number.isSafeInteger(item?.attempts) ? item.attempts : 0), 0);
-}
-
 /**
  * Why a finished run may not be read for a lesson on what the run itself says, or null. Pure; the rules that need a store (the
  * clinical-context check, the researcher's pause, a reset, a trial) are the class's (`LearningTriggers.refusalFor`).
@@ -246,19 +234,17 @@ export function learningRefusal({ run, runs = [], project = null, internalAgent 
 
 /**
  * Which lessons one finished run is evidence for, at the moment it finishes. Pure, so the rules can be read and tested without a
- * queue. A correction typed into the run is one; a delivery repaired inside its own run is the
- * other, and only where an operator asks for it. What the run teaches by being left alone is decided later, when it is settled
- * (`routineLessonFor`).
+ * queue. A correction typed into the run is the one lesson a run is evidence for the moment it finishes. What it teaches by being left
+ * alone is decided later, when it is settled (`routineLessonFor`).
  *
  * `runs` is the ledger of the run's own `project`, where its current record is read.
  *
  * @param {{ run: any, runs: readonly any[], project?: { id?: string | null, userId?: string | null, archivedAt?: string | null } | null,
- *   projection?: any,
  *   internalAgent?: (agentId: string) => boolean, guestInfluence?: boolean }} input
  *   `guestInfluence`: the run drew on a received pack no other account has vouched for; each lesson says so.
  * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> }[]}
  */
-export function learningTriggersFor({ run, runs, project = null, projection = null, internalAgent = () => false, guestInfluence = false }) {
+export function learningTriggersFor({ run, runs, project = null, internalAgent = () => false, guestInfluence = false }) {
   if (learningRefusal({ run, runs, project, internalAgent })) return [];
   const ledgerRun = runs.find((item) => item?.id === run.id) ?? run;
 
@@ -278,19 +264,6 @@ export function learningTriggersFor({ run, runs, project = null, projection = nu
   }
   /** @param {typeof lessons} list */
   const marked = (list) => (guestInfluence ? list.map((lesson) => ({ ...lesson, payload: { ...lesson.payload, guestInfluence: { uncorroborated: true } } })) : list);
-  if (run.status !== "succeeded" || !leftFiles(run)) return marked(lessons);
-
-  const attempts = inRunAttempts(projection);
-  const serverRounds = (run.repairRounds?.content ?? 0) + (run.repairRounds?.structural ?? 0);
-  if (attempts > 1 || serverRounds > 0) {
-    lessons.push({
-      trigger: "repair_accepted",
-      // The key the retired producer used, so a job it already queued is the
-      // same job rather than a second lesson from one run.
-      idempotencyKey: `distill:${run.id}:repair_accepted`,
-      payload: { runId: run.id, trigger: "repair_accepted", repairRounds: run.repairRounds ?? null, inRunAttempts: attempts },
-    });
-  }
   return marked(lessons);
 }
 
@@ -374,14 +347,11 @@ export class LearningTriggers {
    *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null,
    *   evidence?: { afterRun: (project: any, run: any, options: { guestInfluence: boolean }) => Promise<unknown>,
    *     mirrorResultCorrected?: (project: any, input: { event: any, runId: string }) => Promise<unknown> } | null,
-   *   onRefused?: ((reason: string) => void) | null,
-   *   repairShare?: number, onRepairSample?: ((distilled: boolean) => void) | null }} dependencies
-   *   `repairShare`: the share (0 to 1) of deliveries that needed repairs inside their own run that queue a lesson; 0, the default, is none
-   *   (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`), and `onRepairSample` is told, for each one that would have queued one, whether the sample took it.
+   *   onRefused?: ((reason: string) => void) | null }} dependencies
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
     routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null,
-    evidence = null, onRefused = null, repairShare = 0, onRepairSample = null }) {
+    evidence = null, onRefused = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -395,34 +365,12 @@ export class LearningTriggers {
     this.guestInfluence = guestInfluence;
     this.evidence = evidence;
     this.onRefused = onRefused;
-    this.repairShare = repairShare;
-    this.onRepairSample = onRepairSample;
   }
 
   /** Counts one refusal; a counter never decides what is learned. @param {string} reason @returns {string} */
   #refused(reason) {
     try { this.onRefused?.(reason); } catch { /* a counter never decides what is learned */ }
     return reason;
-  }
-
-  /**
-   * The lessons that stand once the sample has been applied: a delivery that needed repairs inside its own run (`repair_accepted`) is
-   * queued for `repairShare` of the runs only, none by default: what a run repaired against the gate is the gate's bookkeeping (a verdict
-   * withholds nothing since 2026-09-17), and the loop is to learn how the researcher works. Every other lesson is untouched.
-   * @param {any} run @param {readonly { trigger: string }[]} lessons
-   * @returns {{ lessons: readonly any[], sampledOut: string[] }}
-   */
-  #sampled(run, lessons) {
-    /** @type {string[]} */
-    const sampledOut = [];
-    const kept = lessons.filter((lesson) => {
-      if (lesson.trigger !== "repair_accepted") return true;
-      const taken = sampledByHash(run.id, this.repairShare, REPAIR_SAMPLE_PURPOSE);
-      try { this.onRepairSample?.(taken); } catch { /* a counter never decides what is learned */ }
-      if (!taken) sampledOut.push(lesson.trigger);
-      return taken;
-    });
-    return { lessons: kept, sampledOut };
   }
 
   /**
@@ -545,20 +493,17 @@ export class LearningTriggers {
     const runs = await this.agentRuns.list(project).catch(() => []);
     const refused = await this.refusalFor(project, run, { runs });
     if (refused) return { queued: [], skipped: refused };
-    const projection = await this.agentRuns.runWorkflowProjection(project, run).catch(() => null);
     const agentId = String(run.effectiveAgentId ?? "");
     const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
     const guestInfluence = await this.#guestInfluenced(project, run);
-    const { lessons, sampledOut } = this.#sampled(run, learningTriggersFor({
-      run, runs, project, projection, internalAgent: () => internal, guestInfluence,
-    }));
+    const lessons = learningTriggersFor({ run, runs, project, internalAgent: () => internal, guestInfluence });
     const queued = [];
     for (const lesson of lessons) {
       if (await this.queue(project, run, lesson)) queued.push(lesson.trigger);
     }
     // What the researcher typed into the run, and the settling of it. A failure here is the evidence's, never the lessons'.
     try { await this.evidence?.afterRun(project, runs.find((/** @type {any} */ item) => item?.id === run.id) ?? run, { guestInfluence }); } catch { /* counted by the evidence ledger */ }
-    return { queued, skipped: null, ...(sampledOut.length ? { sampledOut } : {}), ...(guestInfluence ? { guestInfluence: "uncorroborated" } : {}) };
+    return { queued, skipped: null, ...(guestInfluence ? { guestInfluence: "uncorroborated" } : {}) };
   }
 
   /**

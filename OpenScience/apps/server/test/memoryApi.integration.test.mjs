@@ -131,7 +131,7 @@ test("the researcher's switches pause learning and recall without deleting, and 
 
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   assert.equal(reset.status, 200);
-  assert.deepEqual((await reset.json()).data, { methods: 0, handbooks: 0, entries: 0, jobs: 0, feedback: 0, native: { files: 1, sessions: 0, revisions: 0 } },
+  assert.deepEqual((await reset.json()).data, { methods: 0, entries: 0, jobs: 0, feedback: 0, native: { files: 1, sessions: 0, revisions: 0 } },
     "the engine's file goes with the rest (and is counted as the engine's)");
   assert.equal((await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.length, 0, "the engine's file is gone");
   assert.ok(await app.memorySettings.resetInstant(user.id), "and the instant of the reset is the account's, for what is learned afterwards");
@@ -140,9 +140,9 @@ test("the researcher's switches pause learning and recall without deleting, and 
   assert.equal(after.recallPaused, true);
 });
 
-test("a reset clears every kind the memory page shows — memories, learned methods, handbooks, the researcher's own capsule notes — and nothing that is not theirs", options, async (t) => {
+test("a reset clears every kind the memory page shows — memories, learned methods, the researcher's own capsule notes — and nothing that is not theirs", options, async (t) => {
   // 2026-10-07 walk (C1 D-P0-1): the dialog said 「永久删除全部记忆」 and only the structured records went; the page still held
-  // every method, every handbook and every capsule note.
+  // every method and every capsule note.
   const { app, base, headers, user } = await fixture(t);
   const other = await app.store.createUser(`memory${randomUUID().replaceAll("-", "").slice(0, 10)}`, "test-only-memory-password", "Other");
   const documents = app.capsuleService.documents;
@@ -153,9 +153,6 @@ test("a reset clears every kind the memory page shows — memories, learned meth
     "## Workflow", "1. Match markers.", "## Verification", "- Every marker has one entry.", "## Constraints", "- Do not invent entries.", "## Output", "A reference list."].join("\n");
   const seed = async (owner) => {
     const method = await learning.createCandidate(owner, { projectId: null, frontmatter, body, provenance: { origin: "inferred", runId: "run_1", sourceProjectId: "default" } });
-    await documents.put(owner, "method", `method:capability-handbook:geo-content:${frontmatter.name}`, { recordType: "capability-handbook", capabilityId: "geo-content",
-      status: "active", frontmatter, body, contentDigest: "sha256:a", version: 1, createdAt: new Date().toISOString() }, { expectedRevision: 0 });
-    await documents.put(owner, "method", "method:handbook:geo-content:waiting", { recordType: "handbook-candidate", status: "candidate", frontmatter, body, contentDigest: "sha256:b" }, { expectedRevision: 0 });
     const capsule = await app.capsuleService.ownCapsule(owner, { create: true });
     const note = await app.capsuleService.addEntry(owner, capsule.id, { factKind: "preference", layer: "profile", content: "先看一手研究" });
     const forgotten = await app.capsuleService.addEntry(owner, capsule.id, { factKind: "preference", layer: "profile", content: "旧偏好" });
@@ -182,8 +179,8 @@ test("a reset clears every kind the memory page shows — memories, learned meth
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   const resetBody = await reset.json();
   assert.equal(reset.status, 200, JSON.stringify(resetBody));
-  assert.deepEqual(resetBody.data, { methods: 1, handbooks: 1, entries: 2, jobs: 1, feedback: 1, native: { files: 0, sessions: 0, revisions: 0 } },
-    "the method, the handbook and both own notes (in force and forgotten); the waiting lesson goes without being counted as one; and the lesson queued and the feedback recorded");
+  assert.deepEqual(resetBody.data, { methods: 1, entries: 2, jobs: 1, feedback: 1, native: { files: 0, sessions: 0, revisions: 0 } },
+    "the method and both own notes (in force and forgotten), and the lesson queued and the feedback recorded");
   assert.equal((await database.query("SELECT status FROM evimed_product.jobs WHERE id=$1", [lessons[user.id]])).rows[0].status, "canceled");
   assert.equal((await database.query("SELECT status FROM evimed_product.jobs WHERE id=$1", [lessons[other.id]])).rows[0].status, "queued", "another account's lesson stands");
   assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_product.feedback_events WHERE user_id=$1", [user.id])).rows[0].n, 0);
@@ -191,8 +188,6 @@ test("a reset clears every kind the memory page shows — memories, learned meth
 
   assert.deepEqual((await learning.listMethods(user.id)).items, []);
   assert.equal(await documents.get(user.id, "method", mine.method.id), null);
-  assert.deepEqual((await documents.list(user.id, "method", { filter: { recordType: "capability-handbook" } })).items, []);
-  assert.deepEqual((await documents.list(user.id, "method", { filter: { recordType: "handbook-candidate" } })).items, [], "a lesson waiting to become a handbook would put one back");
   const left = await app.capsuleService.mine(user.id);
   assert.deepEqual([left.entries, left.forgotten], [[], []]);
   assert.ok(await documents.get(user.id, "fact", mine.document.id), "a knowledge-base document's facts belong to the document");
@@ -205,12 +200,12 @@ test("a reset clears every kind the memory page shows — memories, learned meth
   assert.equal((await learning.listMethods(other.id)).items.length, 1);
   assert.equal((await app.capsuleService.mine(other.id)).entries.length, theirs.note ? 1 : 0);
   const again = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
-  assert.deepEqual((await again.json()).data, { methods: 0, handbooks: 0, entries: 0, jobs: 0, feedback: 0, native: { files: 0, sessions: 0, revisions: 0 } });
+  assert.deepEqual((await again.json()).data, { methods: 0, entries: 0, jobs: 0, feedback: 0, native: { files: 0, sessions: 0, revisions: 0 } });
   // The fixture's own cleanup closes the pool, so the second account is removed here, while it is open.
   await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [other.id]);
 });
 
-test("the page's new reads answer through the real app: handbooks to read and stop, a method's sources, the notes the researcher forgot", options, async (t) => {
+test("the page's new reads answer through the real app: a method's sources and the notes the researcher forgot, and the handbook routes are gone", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
   const documents = app.capsuleService.documents;
   const learning = new LearningService({ documents });
@@ -221,25 +216,15 @@ test("the page's new reads answer through the real app: handbooks to read and st
   const method = await learning.createCandidate(user.id, { projectId: null, frontmatter, body, provenance: { origin: "inferred", runId: "run_1", sourceProjectId: "default" },
     display: { title: "引用标记对齐", summary: "每个标记对应一条。" } });
   await documents.put(user.id, "method", method.id, { ...method.payload, status: "approved" }, { expectedRevision: method.revision });
-  const handbookId = "method:capability-handbook:geo-content:citation-alignment";
-  await documents.put(user.id, "method", handbookId, { recordType: "capability-handbook", capabilityId: "geo-content", status: "active", frontmatter, body,
-    contentDigest: "sha256:a", version: 1, display: { title: "每一句结论落回来源", summary: "写结论时同时写出处。" }, createdAt: new Date().toISOString(),
-    appliedAt: new Date().toISOString(), source: { projectId: "default", runId: "run_9", sessionId: "ses_9" } }, { expectedRevision: 0 });
   const capsule = await app.capsuleService.ownCapsule(user.id, { create: true });
   const old = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "preference", layer: "profile", content: "旧偏好" });
   await app.capsuleService.updateEntry(user.id, capsule.id, old.id, { status: "retired", expectedRevision: old.revision });
   const read = async (path) => { const response = await fetch(`${base}${path}`, { headers }); assert.equal(response.status, 200, path); return (await response.json()).data; };
 
-  const handbooks = await read("/api/handbooks");
-  assert.deepEqual(handbooks.items.map((item) => [item.title, item.capabilityId]), [["每一句结论落回来源", "geo-content"]]);
-  const detail = await read(`/api/handbooks/${encodeURIComponent(handbookId)}`);
-  assert.equal(detail.body, body);
-  assert.deepEqual(detail.sources, [], "a run this deployment cannot find is a link not shown, and the drawer still opens");
-  const stopped = await fetch(`${base}/api/handbooks/${encodeURIComponent(handbookId)}/retire`, { method: "POST", headers, body: JSON.stringify({ expectedRevision: detail.revision }) });
-  assert.equal(stopped.status, 200);
-  assert.equal((await read("/api/handbooks")).items.length, 0);
-  assert.equal((await read("/api/handbooks?status=retired")).items.length, 1);
-
+  // The capability handbooks are gone with their routes: nothing answers where the page used to read and stop them.
+  for (const path of ["/api/handbooks", "/api/handbooks/method%3Acapability-handbook%3Ageo-content%3Acitation-alignment"]) {
+    assert.notEqual((await fetch(`${base}${path}`, { headers })).status, 200, path);
+  }
   assert.deepEqual((await read(`/api/methods/${encodeURIComponent(method.id)}/sources`)).items, []);
   const mine = await read("/api/capsules/mine");
   assert.deepEqual([mine.entries.length, mine.forgotten.map((entry) => entry.payload.content)], [0, ["旧偏好"]]);

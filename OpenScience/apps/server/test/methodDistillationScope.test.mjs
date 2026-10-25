@@ -48,7 +48,7 @@ const candidate = { operation: "create", applicability: "A claim rests on a sour
 test("the input says which methods the run read, what became of their results and the scope each declared; the rules changed, so the identity did", () => {
   const input = buildDistillationInput({ run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "correction", transcript: null, feedback: [EVENT],
     methodsUsed: { invoked: [{ id: "method:learned:quote-first", name: "quote-first", digest: `sha256:${hex("a")}`, scientific: { against: 1, causalBenefit: "unproven" } }],
-      handbooks: [], passedOver: [{ id: "method:learned:sweep", name: "sweep" }], unresolved: [{ name: "gone", reason: "method_unavailable" }] },
+      passedOver: [{ id: "method:learned:sweep", name: "sweep" }], unresolved: [{ name: "gone", reason: "method_unavailable" }] },
     relatedMethods: [{ id: "method:learned:quote-first", payload: { status: "approved", contentDigest: `sha256:${hex("a")}`, frontmatter: { name: "quote-first" }, body: "b",
       scope: { applicability: "A claim rests on a source.", counterexamples: ["Fewer than three studies."], digest: `sha256:${hex("a")}` },
       scientific: { entries: [{ id: `sf_${"1".repeat(32)}`, signal: "analytic_corrected", at: "2026-10-04T00:00:00.000Z", digest: `sha256:${hex("a")}`, used: "invoked", runId: "run_1",
@@ -69,20 +69,18 @@ test("the input says which methods the run read, what became of their results an
   assert.notEqual(distillationDispatchId("run_1", "correction", EVENT.id), `method-distillation-${"0".repeat(32)}`);
 });
 
-test("the input states the text limit of a lesson filed as an account handbook, the number the platform's field check applies", async () => {
-  const { HANDBOOK_TEXT_LIMITS, handbookFieldChecks } = await import("../src/learningPlatformHandbooks.mjs");
-  const input = buildDistillationInput({ run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "repair_accepted", transcript: null });
-  assert.equal(input.signal, "reviewer");
-  assert.equal(input.authoringLimits.maxHandbookChars, HANDBOOK_TEXT_LIMITS.max);
-  // One number, measured one way: a lesson one character over what the run is told is refused on length by the check that follows it.
-  const lesson = (/** @type {number} */ total) => ({ frontmatter: { name: "n", description: "d" }, body: "x".repeat(total - "n\nd\n".length) });
-  assert.ok(!handbookFieldChecks(lesson(HANDBOOK_TEXT_LIMITS.max)).failed.includes("too_long"));
-  assert.ok(handbookFieldChecks(lesson(HANDBOOK_TEXT_LIMITS.max + 1)).failed.includes("too_long"));
+test("the input says nothing of a handbook any more: no length limit for one, no handbooks among the methods the run used, no gate findings", () => {
+  const input = buildDistillationInput({ run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "delivered", transcript: null });
+  assert.equal(input.signal, "run");
+  assert.equal("maxHandbookChars" in input.authoringLimits, false);
+  assert.equal("handbooks" in input.methodsUsed, false);
+  assert.equal("repairIssues" in input, false);
+  assert.throws(() => buildDistillationInput({ run: { id: "run_1" }, trigger: "repair_accepted", transcript: null }), { code: "distillation_trigger_invalid" });
 });
 
 test("a deployment that cannot say which methods the run read says it does not know, and that is not an empty list", () => {
   const unknown = buildDistillationInput({ run: { id: "run_1" }, trigger: "correction", transcript: null, feedback: [EVENT] });
-  assert.deepEqual(unknown.methodsUsed, { invoked: [], handbooks: [], passedOver: [], unresolved: [], known: false });
+  assert.deepEqual(unknown.methodsUsed, { invoked: [], passedOver: [], unresolved: [], known: false });
   const none = buildDistillationInput({ run: { id: "run_1" }, trigger: "correction", transcript: null, feedback: [EVENT], methodsUsed: { invoked: [], passedOver: [] } });
   assert.equal(none.methodsUsed.known, true);
   const crowded = buildDistillationInput({ run: { id: "run_1" }, trigger: "correction", transcript: null, methodsUsed: {

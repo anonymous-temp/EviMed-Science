@@ -1252,10 +1252,26 @@ capsules' index subtrees are withdrawn). `open_science_capsule_runtime_refresh_t
 enabling or disabling a pack asks of the account's running runtimes. `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` is on by default, so a
 deployment's private override that pins it `false` turns sharing off by value: check `GET /api/me` → `features.capsuleShare`.
 
+The official starter packs (2026-10-25). The folder `capsules/official/` (one folder per pack, one `<method>.md` per method, `pack.json` for the card) is
+published at every start by the publisher account 「EviMed 证据中心」: a pack whose content hash is the one already published is left alone, a changed one is
+scanned once, sealed and signed, and continues the version before it (`open_science_official_pack_publications_total{result}`, `…_scans_total{model}`,
+`…_adoptions_total{result}`, `…_source_issues_total{issue}`: a pack the folder reader refused is named there and in one stderr line `official pack <id>: …`). Every ordinary
+account gets its copy when it first reads its capsules, enabled, apart from the eight in force; a pack it switched off stays off across versions. The mount offers
+an official method last and below the person's own: `open_science_official_method_mount_total{result}` counts what was offered and what a person's own method
+about the same thing kept out (`leftOutPersonal`; the closeness is in the run's receipt), and `deltaUnread` when it could not be read; `…_method_opened_total` and `…_method_applied_total{outcome}` count the runs that opened one and what the person did next. Outcomes of the runs that opened one are folded across accounts into one
+record per method body; harm shown by the same sequential test a learned method's own runs go through stops that body for everyone
+(`…_method_stopped_total`). `node scripts/ops/official-packs.mjs` reads the published packs and every body with outcomes or a stop; `--restore
+<official:pack:method> <body hash>` gives a stopped body back, counted from nothing. A person's general method can join the pack 「大家的做法」 after the
+promotion gates (`OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` on, `…_PER_DAY` 3; it needs the learning loop, the official packs and a review provider that is not DeepSeek, and
+asks nothing of a model otherwise): `open_science_official_promotion_total{state}`, `…_rejected_total{reason}`, `…_activated_total`, `…_harm_checks_total{outcome}`,
+`…_harm_check_skipped_total{reason}` (J23 ships uncalibrated, so the harm check reads `skipped` until it is calibrated), `…_reviewer_configured`. No notice names an account.
+The capability-handbook arm is gone: the start deletes any `capability-handbook` / `handbook-candidate` method record and `evolution-handbook-*` record left in
+a database, cancels the arm's queued jobs and says it in one stderr line `handbook arm retired: …`; `handbook arm: N platform handbook tool(s) are still
+published` means the evolution module still serves handbook tools, which it retires through its own review.
+
 The learning loop. `node scripts/ops/learning-evidence-report.mjs [--user <id>] [--json]` reads the evidence ledger (read-only);
-`node scripts/ops/learning-sweep.mjs --all` is a report for every account that holds a method or handbook naming a retired feature, `--user
-<id> --apply` retires them restorably (reason `stale_feature`) and closes applied handbook candidates, `--user <id> --restore` gives back
-everything it put away. Counters: `open_science_learning_evidence_total{evidence,verdict}`, `…_evidence_last_at{account}` (the time of an
+`node scripts/ops/learning-sweep.mjs --all` is a report for every account that holds a method naming a retired feature, `--user
+<id> --apply` retires them restorably (reason `stale_feature`), `--user <id> --restore` gives back everything it put away. Counters: `open_science_learning_evidence_total{evidence,verdict}`, `…_evidence_last_at{account}` (the time of an
 account's last learning evidence, the account as twelve hex characters), `…_lessons_total{trigger}`, `…_trigger_refused_total{reason}`,
 `…_evidence_failed_total{reason}`, `…_evidence_quotes_total{outcome}`, `…_mount_selected_total{reason}`, `…_mount_ranked_total`,
 `…_method_applied_total{outcome}`, `…_consolidate_noop_total{reason}`, `…_relations_total{type}`, `…_replay_total{outcome}` and `…_replay_judged_total{verdict}`

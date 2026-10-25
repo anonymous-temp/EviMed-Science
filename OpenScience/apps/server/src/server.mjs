@@ -95,7 +95,8 @@ import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertC
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { createEvolutionPositiveEvidence } from "./evolutionPositiveEvidence.mjs";
-import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies, projectFactsReader } from "./learningPlatformHandbooks.mjs";
+import { PROMOTION_CLASSES, createOfficialPromotion, officialPromotionMetricFamilies, projectFactsReader, promotionJudgeMessages } from "./officialPromotion.mjs";
+import { retireHandbookArm } from "./handbookArmRetirement.mjs";
 import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
 import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
@@ -123,11 +124,10 @@ import { MethodReplay, MethodReplayJudge, createTrajectoryReader } from "./metho
 import { ScriptLessons, ScriptUses } from "./scriptLessons.mjs";
 import { createEvolutionVerification } from "./evolutionVerification.mjs";
 import { createMethodSimilarity } from "./methodSimilarity.mjs";
-import { HandbookConsolidation } from "./handbookConsolidation.mjs";
-import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
-import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
+import { NativeInputRoute } from "./nativeInputRoute.mjs";
+import { createResearchDispatchContext } from "./researchDispatchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
-import { methodObservationSessionsForRun, recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
+import { methodObservationSessionsForRun, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily, officialMethodDocument, runScopeOf } from "./learnedMethodMount.mjs";
@@ -164,8 +164,6 @@ import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } fr
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { withdrawProjectDerivedMemory } from "./derivedMemory.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
-import { HandbookLibrary } from "./handbookLibrary.mjs";
-import { createHandbookRoutes } from "./handbookRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
 import { capabilityUse, projectWorks } from "./projectOverview.mjs";
 import { memoryMetricFamilies, recordMethodsRetired } from "./memoryMetrics.mjs";
@@ -1170,8 +1168,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let evidenceOutcomes = null;
   /** @type {ReturnType<typeof createEvolutionLeadSources> | null} */
   let evolutionLeadSources = null;
-  /** @type {ReturnType<typeof createPlatformHandbooks> | null} */
-  let platformHandbooks = null;
+  /** The promotion of a person's general method to the pack of everyone's (`officialPromotion.mjs`): composed once the learning loop's models exist. @type {ReturnType<typeof createOfficialPromotion> | null} */
+  let officialPromotion = null;
   /** The platform's official starter packs (`officialPacks.mjs`): composed beside the capsule service, asked for by name by what runs before it. @type {OfficialPacks | null} */
   let officialPacks = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
@@ -1462,12 +1460,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // 「从哪里学到的」: a lesson's run, live or kept when its project was deleted (`agentRuns` is composed further down; asked per request).
     resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
   });
-  // The capability handbooks the platform learned for the account, to read, stop and go back from — the other half of 做法.
-  const handbookLibrary = learningService ? new HandbookLibrary({ learning: learningService }) : null;
-  const handbookRoutes = createHandbookRoutes({
-    store, library: handbookLibrary, maxJsonBytes: config.maxJsonBytes,
-    resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
-  });
   // Terminal-hook writes still in flight.
   //
   // `onRunFinished` fires from the run store's own monitor, so a transcript
@@ -1687,6 +1679,45 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       scanOwner: () => ensureEvidenceProject(store), sourcesDir: overrides.officialPacksDir ?? OFFICIAL_PACKS_DIR,
       report: (line) => process.stderr.write(`${line}\n`) }) : null;
   if (capsuleService) capsuleService.official = officialPacks;
+  // A person's general method becomes everyone's (`officialPromotion.mjs`): told by the learning service when a method may have come into force, and read
+  // by the loop's housekeeping tick. Its three model calls are the platform's own, booked to the publisher's evidence project and bounded by the per-day count
+  // (`OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY`), not by a spend cap (method learning has none, owner 2026-10-10). With no independent reviewer nothing is asked.
+  if (config.officialPromotionEnabled && config.learningEnabled && officialPacks && learningService && productDocuments && productDatabase) {
+    const promotionFetch = overrides.frontierModelFetch ?? globalThis.fetch;
+    const promotionLimits = { daily: 0, weekly: 0 };
+    const promotionKey = (/** @type {string} */ text) => createHash("sha256").update(text).digest("hex");
+    officialPromotion = createOfficialPromotion({
+      documents: productDocuments, officialPacks, perDay: config.officialPromotionPerDay, report: code => process.stderr.write(`${code}\n`),
+      facts: projectFactsReader({ store, documents: productDocuments }),
+      judge: async ({ text, scopeId }) => {
+        const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: promotionFetch }, { ...await ensureEvidenceProject(store),
+          purpose: "evidence", runId: `official-promotion-judge:${promotionKey(text)}`, limits: promotionLimits, signal: AbortSignal.timeout(60_000),
+          body: { model: "deepseek-flash", thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 200, messages: promotionJudgeMessages({ text, scopeId }) } });
+        return JSON.parse(response.choices?.[0]?.message?.content ?? "{}");
+      },
+      // Another family, or none: with the DeepSeek review provider there is no independent reviewer and no method is considered.
+      review: config.reviewProvider === "dashscope" ? async ({ text, scopeId }) => {
+        const result = await callReviewModel({ config, usageLedger, fetchImpl: promotionFetch }, { ...await ensureEvidenceProject(store), purpose: "evidence", limits: promotionLimits,
+          signal: AbortSignal.timeout(120_000), schemaName: "official_promotion_review", maxTokens: 400,
+          schema: { type: "object", properties: { general: { type: "boolean" }, class: { type: "string", enum: [...PROMOTION_CLASSES] } }, required: ["general", "class"], additionalProperties: false },
+          messages: promotionJudgeMessages({ text, scopeId }) });
+        return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
+      } : null,
+      // A model of an independent family (the Jev judge port, site J23) reads what the method tells a reader to do, before it can be promoted. Uncalibrated as
+      // shipped, so until it is measured the check is skipped and counted.
+      harm: judgeService ? async ({ text }) => judgeService.judge("J23", { text }, { ...await ensureEvidenceProject(store), taskId: `promotion-harm:${promotionKey(text).slice(0, 32)}`,
+        module: "learning", limits: { daily: 0, weekly: 0, moduleDaily: 0 } }) : null,
+      audit: (event, detail) => securityAudit(config, event, "recorded", detail),
+      established: userIds => evidenceEstablishedAuthors(productDatabase, userIds),
+      recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
+    });
+    // A person who paused learning has no method of theirs taken anywhere: the pause is read at the moment, not when the method was written.
+    learningService.onTookEffect = async (userId, methodId) => {
+      if ((await memoryPausedFor(memorySettings, userId, null)).learning) return;
+      const method = await learningService.getMethod(userId, methodId);
+      if (method) await officialPromotion?.consider({ userId, method });
+    };
+  }
   // Sharing a capsule with other accounts of this deployment, in the app (plan §7, F17): share links, deliveries to named accounts, and
   // taking either back. Off with its own switch (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`): not composed, so no table of it is read and its routes
   // answer 404 by name. Needs the control-plane database and the transfer service; absent either, the routes answer 503 by name.
@@ -1713,7 +1744,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }) });
   const memoryRoutes = createMemoryRoutes({
     config, memorySettings, nativeMemory, store, context, audit, decodeRouteComponent,
-    // 「重置记忆」 clears what the page shows: the methods, handbooks and capsule notes live in the product ledger.
+    // 「重置记忆」 clears what the page shows: the methods and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
     // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.
     releasePausedRuntimes: userId => runtimeManager.releasePausedMethodRuntimes(userId),
@@ -3340,8 +3371,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
   // what the pump was given when a second kernel without a downlink could be
   // selected; there is one kernel now and it always publishes one.
-  /** @type {NativeHandbookContext | null} */
-  let nativeHandbookContext = null;
+  /** @type {NativeInputRoute | null} */
+  let nativeInputRoute = null;
   const runtimeEventPump = new RuntimeEventPump({
     runEvents,
     isDshKernel: true,
@@ -3375,11 +3406,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // A new turn of a conversation is the researcher's answer to the run before it: read once for what it says about that run,
           // beside the adoption and never in front of it (learningEvidence.mjs).
           void learningEvidence?.onNewTurn(full, { sessionId, text, requestId: input?.requestIds?.[0] ?? "" }).catch(() => null);
-          return (await nativeHandbookContext?.routeFor(full, sessionId, input?.requestIds, text)) ?? routeAdoptedInput(full, sessionId, text);
+          return (await nativeInputRoute?.routeFor(full, sessionId, input?.requestIds, text)) ?? routeAdoptedInput(full, sessionId, text);
         },
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
-      await recordNativeSessionHandbooks(full, sessionId);
       // The calls this conversation made before its run existed (see `attributeLateCalls`).
       for (const running of (await agentRuns.list(full).catch(() => [])).filter((/** @type {any} */ item) => item.sessionId === sessionId && item.status === "running")) {
         await attributeLateCalls(full, running);
@@ -4194,30 +4224,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               code: typeof error?.code === "string" ? error.code : "tool_edges_unavailable",
             });
           }
-          // The counters the whole loop turns on.
-          //
-          // This is the producer `recordObservation` never had. Without it the
-          // ledger's `learning` row records what was mounted and nothing about
-          // what came of it, `learning.counts` stays at zero for every method,
-          // and no inferred method can ever reach a paired evaluation — a
-          // library that only ever grows candidates, which is indistinguishable
-          // from a library with nothing worth promoting.
-          //
-          // It runs inside the transcript write on purpose: it needs the same
-          // sessions, and both must finish before the run's container is let go
-          // (above, before the clinical-context return: it carries no clinical content).
-          if (learningService && config.learningEnabled && !internalFor(project.userId, project.id)) {
-            const state = await memoryPausedFor(memorySettings, project.userId, project.id, run.sessionId);
-            if (!state.learning && !state.trial) {
-              await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
-                run: await recordNativeHandbookAttachments(project, run), projection: await agentRuns.runWorkflowProjection(project, run), sessions,
-                observeGaps: Boolean(evolution),
-              }).catch((error) => securityAudit(config, "handbook.observe", "failed", {
-                userId: project.userId, projectId: project.id, runId: run.id,
-                code: typeof error?.code === "string" ? error.code : "handbook_observation_unavailable",
-              }));
-            }
-          }
         } catch (error) {
           await securityAudit(config, "run.transcript.persist", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
@@ -4332,20 +4338,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     service: personalSkillGenerations, runtime: runtimeManager, resolveProject: sourceProject,
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
   }) : null;
-  const ownedContextDependencies = {
-    learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns, sourceService, researchSessions,
-    paused: (userId, projectId, sessionId) => memoryPausedFor(memorySettings, userId, projectId, sessionId),
-    audit: (event, status, detail) => securityAudit(config, event, status, detail),
-    // The platform's entry on probation for a sampled dispatch (learningPlatformHandbooks.mjs, `probationFor`). The module is composed further down, so it is asked for by name each time.
-    platformTrial: ({ project, run, capabilityId, fits }) => platformHandbooks?.probationFor({ userId: project.userId, projectId: project.id, runId: run.id, capabilityId, fits }) ?? null,
-  };
-  const prepareOwnedResearchContext = createOwnedResearchContext(ownedContextDependencies);
-  const selectOwnedHandbooks = createOwnedHandbookSelector(ownedContextDependencies);
-  if (learningService && config.learningEnabled) nativeHandbookContext = new NativeHandbookContext({
+  const prepareOwnedResearchContext = createResearchDispatchContext({ config, sourceService, researchSessions });
+  // The route of an input typed in the kernel's own window, frozen when the prompt is prepared: the capsule plugin's run policy reads it, and the
+  // adoption of the turn files the run under it. It rides the learning switch because what it serves is the researcher's methods (`refreshCapsuleMethods`).
+  if (learningService && config.learningEnabled) nativeInputRoute = new NativeInputRoute({
     route: routeAdoptedInput,
-    select: (project, session, route) => selectOwnedHandbooks(project, session, {}, route),
-    budget: project => remainingHandbookPromptBytes(config, runtimeManager, project),
-    attached: recordNativeSessionHandbooks,
     allowed: async (project, sessionId) => {
       if (!config.learningEnabled || internalFor(project.userId, project.id)) return false;
       const state = await memoryPausedFor(memorySettings, project.userId, project.id, sessionId);
@@ -4460,14 +4457,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       resolveRun: async (peerProject, runId) => (await agentRuns.list(peerProject).catch(() => [])).find((item) => item?.id === runId) ?? null,
       onEvidence: ({ kept, dropped }) => learningMetrics.observeEvidenceQuotes(kept, dropped),
     });
-    const handbookConsolidation = agentRegistry.then((registry) => new HandbookConsolidation({
-      learning: learningService, jobs: productJobs, registry,
-      resolveSourceRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
-      enabled: async (userId, projectId) => config.learningEnabled
-        && !(await memoryPausedFor(memorySettings, userId, projectId)).learning,
-      // A lesson that became an account's handbook may be general enough for the platform's (learningPlatformHandbooks.mjs, flywheel F16); told, never asked.
-      onApplied: (applied) => platformHandbooks?.consider(applied),
-    }));
     // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`).
     const methodReplay = feedbackEvents ? new MethodReplay({
       learning: learningService, feedback: feedbackEvents,
@@ -4495,7 +4484,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       onRelation: (type, times) => learningMetrics.observeRelation(type, times),
       judgeService,
       screenBaseline: createMethodScreenBaseline({ config, usageLedger }),
-      handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
       platformTools: async () => evolution ? evolution.service.availableTools({}) : [],
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
@@ -4556,8 +4544,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: memorySettings, canReuseRun, canReuseRuns,
       evidence: learningEvidence, onRefused: (reason) => learningMetrics.observeTriggerRefused(reason),
-      // The deliveries that needed repairs inside their run (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`, 0): the gate's own bookkeeping is not the researcher's method.
-      repairShare: config.learningRepairDistillShare, onRepairSample: (distilled) => learningMetrics.observeRepairSample(distilled),
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
@@ -4602,7 +4588,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           return user ? store.requireProject(user, projectId) : null;
         } });
         await evidenceOutcomes?.tick();
-        await platformHandbooks?.tick();
+        await officialPromotion?.tick();
       },
       resolveProject: async (job) => {
         const user = await store.userById(job.userId);
@@ -4623,9 +4609,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       maintain: async () => {
         await store.loadUsers();
         for (const user of [...store.users.values()]) {
-          await handbookConsolidation.then((handbooks) => handbooks.reconcile(user.id)).catch((error) => securityAudit(config, "handbook.reconcile", "failed", {
-            userId: user.id, code: typeof error?.code === "string" ? error.code : "handbook_reconcile_unavailable",
-          }));
           // One project's unreadable directory must not stop the sweep: the
           // point of a retention policy is that it runs, and a policy that
           // stops at the first awkward project is a policy that protects the
@@ -5120,7 +5103,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     commit: memoryGatewayHandler.commitSession,
     report: (line) => process.stderr.write(`${line}\n`),
   });
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, handbooks: nativeHandbookContext, evaluationIsolation,
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, nativeRoutes: nativeInputRoute, evaluationIsolation,
     // The recall tool answers with at most this many (review M6): five unless the model asks, and never more than the most.
     recallLimit: config.memoryRecallToolLimit, recallMaxLimit: config.memoryRecallToolMaxLimit,
     subscriptions: recallSubscriptions,
@@ -5380,7 +5363,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const run = (await agentRuns.list(project)).find(row => row.id === runId);
       return run ? { id: run.id, sessionId: run.sessionId ?? null, agentId: run.agentId ?? null, model: run.model ?? null,
         platformSkills: run.platformSkillGeneration ?? null, personalSkills: run.personalSkillGeneration ?? null,
-        methods: run.methodsLoaded ?? [], handbooks: run.capabilityHandbooks ?? [] } : null;
+        methods: run.methodsLoaded ?? [] } : null;
     },
   });
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
@@ -5819,10 +5802,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const tool=await evolution?.service.get(use.toolId);
       const methodId=use.methodId??tool?.payload?.methodId;
       if(methodId&&learningService)return learningService.getMethod(run.userId,methodId).catch(()=>null);
-      const entry=(await evolution?.service.list("handbook-candidate")??[]).find(row=>row.payload.toolId===use.toolId);
-      const origin=entry?.payload.derivedFrom;
-      if(origin?.userId!==run.userId||!origin.handbookId||!productDocuments)return null;
-      return productDocuments.get(run.userId,"method",origin.handbookId).catch(()=>null);
+      return null;
     },
     loadResult: (run,id) => resultProvenance?.get(run.userId,run.projectId,id).catch(()=>null)??Promise.resolve(null),
     loadReplay: (run,id) => productDocuments?.get(run.userId,'result-replay',id).catch(()=>null)??Promise.resolve(null),
@@ -5831,7 +5811,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   evolution = createEvolution({ judgeService, config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
     usageLedger, notifications: notificationService, registry: agentRegistry, runtimeManager, researchSessions, agentRuns,
     evaluationIsolation, sourceService, autopilot: autopilotService, dataSemantics, resolvePositiveEvidence,
-    observeHandbookOutcome: input => platformHandbooks?.observeTool(input), controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
+    controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
     canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, webReader,
     report: code => process.stderr.write(`evolution: ${code}\n`) });
   if (evolution) {
@@ -5872,42 +5852,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         matchZone: createOfficialZoneMatcher({ database: productDatabase, entityVocabulary }), report: code => process.stderr.write(`${code}\n`) });
       evidenceRecalculation = recalculation;
       evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
-    }
-    // General lessons become platform handbooks (learningPlatformHandbooks.mjs, flywheel F16): composed with its switch, the evolution module (whose supply and
-    // records it uses and whose budget its two model calls spend) and the learning loop that notices the lesson. Off, `onApplied` finds nothing and no tick runs.
-    if (config.learningPlatformHandbooksEnabled && config.learningEnabled && productDatabase && productDocuments) {
-      const handbooksFetch = overrides.frontierModelFetch ?? globalThis.fetch;
-      const handbookLimits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
-      const evolutionService = evolution.service;
-      platformHandbooks = createPlatformHandbooks({
-        service: evolutionService, supply: evolution.supply, perDay: config.learningPlatformHandbooksPerDay, report: code => process.stderr.write(`${code}\n`),
-        // A run handed a probation entry is recorded as a use of the entry's tool, which is what the evolution module's feedback and its sequential harm test read.
-        probationShare: config.learningPlatformHandbooksProbationShare, served: event => evolution.onExecution(event),
-        facts: projectFactsReader({ store, documents: productDocuments }),
-        judge: async ({ text, capabilityId }) => evolution.budgeted("maintenance","memory",`handbook-judge:${capabilityId}:${createHash("sha256").update(text).digest("hex")}`,async () => {
-          const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
-            purpose: "evolution", limits: handbookLimits, signal: AbortSignal.timeout(60_000),
-            body: { model: "deepseek-flash", thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 200, messages: handbookJudgeMessages({ text, capabilityId }) } });
-          return JSON.parse(response.choices?.[0]?.message?.content ?? "{}");
-        }),
-        // Another family, or none: with the DeepSeek review provider there is no independent reviewer and a candidate stays a candidate.
-        review: config.reviewProvider === "dashscope" ? async ({ text, capabilityId }) => evolution.budgeted("maintenance","memory",`handbook-review:${capabilityId}:${createHash("sha256").update(text).digest("hex")}`,async () => {
-          const result = await callReviewModel({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID, purpose: "evolution",
-            limits: handbookLimits, signal: AbortSignal.timeout(120_000), schemaName: "platform_handbook_review", maxTokens: 400,
-            schema: { type: "object", properties: { general: { type: "boolean" }, class: { type: "string", enum: [...HANDBOOK_LESSON_CLASSES] } }, required: ["general", "class"], additionalProperties: false },
-            messages: handbookJudgeMessages({ text, capabilityId }) });
-          return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
-        }) : null,
-        // A model of an independent family (the Jev judge port, site J23) reads what the lesson tells a reader to do, before it can be promoted. Asked straight
-        // through the judge service like the evolution module's other Jev sites; uncalibrated as shipped, so until it is measured the check is skipped and counted.
-        harm: judgeService ? async ({ text }) => judgeService.judge("J23", { text }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
-          taskId: `hb-harm:${createHash("sha256").update(text).digest("hex").slice(0, 32)}`, module: "evolution",
-          limits: { daily: 0, weekly: 0, moduleDaily: config.evolutionDailyBudgetCny ?? 10 } }) : null,
-        audit: (event, detail) => securityAudit(config, event, "recorded", detail),
-        established: (userIds) => evidenceEstablishedAuthors(productDatabase, userIds),
-        recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
-      });
-      evolution.service.callbacks.handbookSelection = project => platformHandbooks.entries(project.capabilityId??null);
     }
     // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
     // the worker's daily scan; 循证 GEO and 虚拟临床研究 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
@@ -6061,27 +6005,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * request body.
    * @param {Record<string, any>} project @param {string} sessionId @param {string} text
    */
-  /** Join only confirmed, current-input attachments to a kernel-owned run. */
-  async function recordNativeHandbookAttachments(project, run) {
-    if (!nativeHandbookContext || !run?.kernelRequestIds?.length) return run;
-    try {
-      const receipts = await nativeHandbookContext.receipts(project, run);
-      const fresh = receipts.filter(item => !(run.capabilityHandbooks ?? []).some(previous => previous.id === item.id && previous.contentDigest === item.contentDigest));
-      return fresh.length ? await agentRuns.recordLearning(project, run.id, { appendCapabilityHandbooks: fresh }) ?? run : run;
-    } catch (error) {
-      await securityAudit(config, "handbook.native.attach", "failed", { userId: project.userId, projectId: project.id, runId: run.id,
-        code: typeof error?.code === "string" ? error.code : "handbook_attachment_unavailable" });
-      return run;
-    }
-  }
-
-  async function recordNativeSessionHandbooks(project, sessionId, requestIds = null) {
-    for (const run of (await agentRuns.list(project)).filter(item => item.sessionId === sessionId
-      && (!requestIds || requestIds.some(id => item.kernelRequestIds?.includes(id))))) {
-      await recordNativeHandbookAttachments(project, run);
-    }
-  }
-
   async function routeAdoptedInput(project, sessionId, text) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
@@ -6487,7 +6410,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
-      if (await handbookRoutes(req, res)) return;
       if (evolution && await evolution.routes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (knowledgePageRoutes && await knowledgePageRoutes(req, res)) return;
@@ -6592,7 +6514,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceCommunity,
           evidenceOutcomes,
           evolutionLeadSources,
-          platformHandbooks,
+          officialPromotion,
           officialPacks,
         });
         return;
@@ -8257,15 +8179,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     } : null,
     recordPromptActor: recordExtensionPromptActor,
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
-    // A conversation typed in the kernel's own window: its supplements are frozen before the prompt goes, and so is what the runtime carries of
+    // A conversation typed in the kernel's own window: the route of its input is frozen before the prompt goes, and so is what the runtime carries of
     // the researcher's methods, chosen by what it asks (`RuntimeManager.refreshCapsuleMethods`). Neither refuses the prompt.
-    preparePrompt: nativeHandbookContext || learningService ? async (project, request) => {
+    preparePrompt: nativeInputRoute || learningService ? async (project, request) => {
       /** @type {any} */
       let envelope = null;
       /** @type {{ error: unknown } | null} */
       let failed = null;
-      if (nativeHandbookContext) {
-        try { envelope = await nativeHandbookContext.prepare(project, request); } catch (error) { failed = { error }; }
+      if (nativeInputRoute) {
+        try { envelope = await nativeInputRoute.prepare(project, request); } catch (error) { failed = { error }; }
       }
       if (request?.mode !== "steer") {
         await runtimeManager.refreshCapsuleMethods({ userId: project.userId, projectId: project.id, sessionId: String(request?.sessionId ?? ""),
@@ -8503,6 +8425,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let capsuleFoldRun = false;
   let officialPublishRun = false;
   let legacyMemoryRetired = false;
+  let handbookArmRetired = false;
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
@@ -8555,6 +8478,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void retireLegacyMemory({ database: productDatabase, withdrawals: memoryWithdrawals, report: (line) => process.stderr.write(`${line}\n`) })
           .then((retired) => { if (retired.withdrawn === "queued") void memoryIndexWorker?.drainWithdrawals(); })
           .catch(() => {});
+      }
+      // What is left of the capability-handbook arm — an account's handbooks and candidates, the jobs that applied them, the evolution module's records of the platform
+      // handbook path — is taken away once at start (idempotent; `handbookArmRetirement.mjs`): said on stderr, and a failure costs the start nothing.
+      if (productDatabase && !handbookArmRetired) {
+        handbookArmRetired = true;
+        void retireHandbookArm({ database: productDatabase, report: (line) => process.stderr.write(`${line}\n`) }).catch(() => {});
       }
       evidenceProgramme?.worker?.start();
       review?.worker.start();
@@ -9628,7 +9557,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null, officialPacks = null }) {
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, officialPromotion = null, capsuleService = null, officialPacks = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -10211,7 +10140,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
   addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
-  for (const family of platformHandbookMetricFamilies(platformHandbooks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of officialPromotionMetricFamilies(officialPromotion?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of officialPackMetricFamilies(officialPacks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evolutionLeadSourceMetricFamilies(evolutionLeadSources?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);

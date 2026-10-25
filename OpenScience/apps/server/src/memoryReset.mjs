@@ -1,6 +1,5 @@
 import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
-import { CAPABILITY_HANDBOOK_RECORD_TYPE } from "./handbookLibrary.mjs";
-import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
+import { LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateScriptUses } from "./scriptLessons.mjs";
 
@@ -11,17 +10,17 @@ const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-ev
 /**
  * 「重置记忆」, the half that is not a memory file.
  *
- * Hidden knowledge: the memory page shows four kinds of thing, kept in two
+ * Hidden knowledge: the memory page shows three kinds of thing, kept in two
  * stores — the memory files (the engine's, which `NativeMemoryStore.reset`
  * deletes) and, in the product ledger,
- * the learned methods, the capability handbooks and the notes of the
+ * the learned methods and the notes of the
  * researcher's own capsules. The reset used to clear only the first and say it
- * had cleared everything; the page then still showed every method and handbook
+ * had cleared everything; the page then still showed every method
  * (2026-10-07 walk). This is the rest of it, so the dialog's sentence is true.
  *
  * What goes, because the page shows it or would show it again: the account's
- * learned methods, its handbooks and the lessons still waiting to become one
- * (a waiting lesson applied after the reset would put a handbook back), and the
+ * learned methods and the lessons still waiting to become one
+ * (a waiting lesson applied after the reset would put a method back), and the
  * notes in its own capsules outside the document layer. What stays, because it
  * is not about the researcher: the capsules other people shared, and the facts a
  * knowledge-base document yielded, which belong to the document (`mine`).
@@ -46,7 +45,7 @@ const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-ev
  *
  * @param {any} database the product database
  * @param {string} userId
- * @returns {Promise<{ methods: number, handbooks: number, entries: number, jobs: number, feedback: number }>}
+ * @returns {Promise<{ methods: number, entries: number, jobs: number, feedback: number }>}
  */
 export async function resetLearnedMemory(database, userId) {
   await migrateProductStore(database);
@@ -63,7 +62,7 @@ export async function resetLearnedMemory(database, userId) {
       ) DELETE FROM evimed_product.documents d USING doomed
         WHERE d.user_id=$1 AND d.kind=doomed.kind AND d.id=doomed.id
         RETURNING doomed.kind AS kind, doomed.record_type AS record_type`,
-    [userId, [LEARNED_METHOD_RECORD_TYPE, CAPABILITY_HANDBOOK_RECORD_TYPE, HANDBOOK_CANDIDATE_RECORD_TYPE], DOCUMENT_MEMORY_LAYER]);
+    [userId, [LEARNED_METHOD_RECORD_TYPE], DOCUMENT_MEMORY_LAYER]);
     const count = (/** @type {(row: any) => boolean} */ match) => removed.rows.filter(match).length;
     // Queued and running both: a lesson that was already being learned would otherwise write its method after the reset
     // (the worker re-checks the lease after the write, not before it; the write itself refuses a conversation that ended
@@ -77,7 +76,6 @@ export async function resetLearnedMemory(database, userId) {
     await client.query("DELETE FROM evimed_learning.script_uses WHERE user_id=$1", [userId]);
     return {
       methods: count((row) => row.record_type === LEARNED_METHOD_RECORD_TYPE),
-      handbooks: count((row) => row.record_type === CAPABILITY_HANDBOOK_RECORD_TYPE),
       entries: count((row) => row.kind === "fact"),
       jobs: Number(jobs.rowCount ?? 0),
       feedback: Number(feedback.rowCount ?? 0),
