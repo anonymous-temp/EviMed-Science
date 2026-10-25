@@ -58,4 +58,7 @@ test("a dashboard row is a route: the congress's id folds, the segment stays", (
   assert.equal(frontierRoutePattern("/api/frontier/track/approvals"), "/api/frontier/track/approvals");
   assert.equal(frontierRoutePattern("/api/frontier/track/congresses"), "/api/frontier/track/congresses");
   assert.equal(frontierRoutePattern("/api/frontier/track/congresses/esmo-2026"), "/api/frontier/track/congresses/:id");
+  // Anything else under track/ is one label: a request cannot mint a metric series.
+  assert.equal(frontierRoutePattern("/api/frontier/track/x9f3k2"), "/api/frontier/track/:route");
+  assert.equal(frontierRoutePattern("/api/frontier/track/approvals/extra"), "/api/frontier/track/:route");
 });

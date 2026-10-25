@@ -14,6 +14,11 @@ import { addFrontierFollow, listFrontierFollows, removeFrontierFollow, type Fron
 /** The reasons in the order the domain lists them. */
 export const HIDE_REASONS: readonly FrontierHideReason[] = FRONTIER_HIDE_REASONS;
 
+/** The reasons offered for an item: 「不想看这个来源」 only where the source can be muted by the name the card shows. */
+export function hideReasonsFor(item: Pick<FrontierItem, "source">): readonly FrontierHideReason[] {
+  return item.source.followable === false ? HIDE_REASONS.filter((reason) => reason !== "source") : HIDE_REASONS;
+}
+
 /** What a reason chip says for this item: the domain's label, and for the source's own the source's name. */
 export function hideReasonLabel(reason: FrontierHideReason, item: Pick<FrontierItem, "source">): string {
   return reason === "source" ? `不想看“${item.source.name}”` : FRONTIER_HIDE_REASON_LABELS_ZH[reason] ?? reason;
@@ -24,6 +29,7 @@ export function hideReasonLabel(reason: FrontierHideReason, item: Pick<FrontierI
  * when they cannot be read nothing is muted (a guess here could delete a follow the reader made).
  */
 export async function muteSourceOf(item: Pick<FrontierItem, "source">): Promise<() => Promise<void>> {
+  if (item.source.followable === false) return async () => undefined;
   const key = item.source.id;
   const before = (await listFrontierFollows()).find((follow) => follow.kind === "source" && follow.key === key) ?? null;
   if (before?.muted) return async () => undefined;

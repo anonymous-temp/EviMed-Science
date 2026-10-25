@@ -187,7 +187,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   // 追踪 (c3-track 2026-10-25): its segment and the one filter of that segment, in the address.
   const trackSegment = readTrackSegment(params.get("segment"));
   const trackAgency = /^[a-z-]{2,24}$/.test(params.get("agency") ?? "") ? params.get("agency")! : "";
-  const trackSpecialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
+  // 指南's specialty has its own parameter: `specialty` is the feed's 「筛选」, kept across views.
+  const trackSpecialty = readKey(params.get("guidelineSpecialty"), FRONTIER_SPECIALTIES);
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
   // A typed follow that has matched nothing (yet) is not a filter that excluded everything: it says what it is waiting for (c3-watch).
   const typedFollow = choice?.kind === "follow" ? following.topics.find((entry) => entry.id === choice.id && entry.kind === "query") : undefined;
@@ -559,7 +560,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
     // A view is a fresh look: the search, the day, the time range and the zones' scope belong to the view they were chosen in.
-    for (const name of ["q", "day", "week", "window", "sort", "follow", "item", "scope", "request", "segment", "agency", "specialty"]) updated.delete(name);
+    for (const name of ["q", "day", "week", "window", "sort", "follow", "item", "scope", "request", "segment", "agency", "guidelineSpecialty"]) updated.delete(name);
     searchOrigin.current = null;
     setParams(updated);
   };
@@ -574,8 +575,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     updated.delete("specialty");
     setParams(updated);
   };
-  const setTrackFilter = (name: "agency" | "specialty", value: string) => {
-    trackFrontierFilter(name, "track");
+  const setTrackFilter = (name: "agency" | "guidelineSpecialty", value: string) => {
+    trackFrontierFilter(name === "guidelineSpecialty" ? "specialty" : name, "track");
     const updated = new URLSearchParams(params);
     if (value) updated.set(name, value); else updated.delete(name);
     setParams(updated, { replace: true });
@@ -884,7 +885,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     issue: dailyControls(view === "weekly" ? weekly : daily, { weekly: view === "weekly", onDay: view === "weekly" ? openWeek : openDay }),
     track: {
       filters: trackControls({ segment: trackSegment, onSegment: setTrackSegment, agency: trackAgency, onAgency: (next) => setTrackFilter("agency", next), approvals: approvals.state,
-        specialty: trackSpecialty, onSpecialty: (next) => setTrackFilter("specialty", next), guidelines: guidelines.state }),
+        specialty: trackSpecialty, onSpecialty: (next) => setTrackFilter("guidelineSpecialty", next), guidelines: guidelines.state }),
     },
     zones: {
       ...zoneDirectoryControls({ scope: zoneScope, onScope: setZoneScope, query: view === "zones" ? q : "", directory: zones }),
@@ -906,7 +907,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       case "track":
         return (
           <TrackBody segment={trackSegment} approvals={approvals} agency={trackAgency} onAgency={(next) => setTrackFilter("agency", next)}
-            guidelines={guidelines} specialty={trackSpecialty} onSpecialty={(next) => setTrackFilter("specialty", next)} congresses={congresses} />
+            guidelines={guidelines} specialty={trackSpecialty} onSpecialty={(next) => setTrackFilter("guidelineSpecialty", next)} congresses={congresses} />
         );
       case "weekly":
         return <div data-frontier-list="weekly" className="contents"><WeeklyView expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={weekly} onWeek={openWeek} /></div>;

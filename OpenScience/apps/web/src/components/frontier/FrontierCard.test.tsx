@@ -393,3 +393,15 @@ describe("a social post's card", () => {
     expect(document.querySelector("article img")).toBeNull();
   });
 });
+
+describe("a card of a stream source shown by its journal", () => {
+  it("offers no 关注 or 屏蔽 of the source, which would act on the whole stream", async () => {
+    const item = frontierItem({ source: { id: "pubmed-cardiology", name: "The Lancet Oncology", homepage: null, platformProduced: false, followable: false } });
+    renderCard(item);
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    const entries = (await screen.findAllByRole("menuitem")).map((entry) => entry.textContent);
+    expect(entries).toContain("不感兴趣");
+    expect(entries).not.toContain("关注 The Lancet Oncology");
+    expect(entries).not.toContain("屏蔽 The Lancet Oncology");
+  });
+});

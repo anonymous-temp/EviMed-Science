@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import {
   FRONTIER_ACCESSES, FRONTIER_AGENCY_REGIONS, FRONTIER_APPROVAL_KIND_LABELS_ZH, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAG_LABELS_ZH, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH,
-  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, FRONTIER_SCORE_TIERS, frontierScoreLevel, frontierScoreTier, frontierSourceDisplayName, frontierSpecialtyKey,
+  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, FRONTIER_SCORE_TIERS, frontierIsStreamSource, frontierScoreLevel, frontierScoreTier, frontierSourceDisplayName, frontierSpecialtyKey,
 } from "@evimed/domain";
 import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.mjs";
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
@@ -692,7 +692,10 @@ export class FrontierService {
       // `platformProduced`: the source's content is EviMed's own (contract 1.3.0) — the label 「EviMed 出品」, and the reason such
       // an item is never counted as another institution's report of anything.
       source: { id: row.primary_source_id, name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }),
-        homepage: row.source_homepage ?? null, platformProduced: row.source_platform_produced === true },
+        homepage: row.source_homepage ?? null, platformProduced: row.source_platform_produced === true,
+        // A stream (a PubMed or OpenAlex query) is named by the item's journal, but a follow or a mute acts on the whole stream: such a
+        // source is not offered to follow or mute by that name (c3-select's journal names).
+        followable: !frontierIsStreamSource({ id: row.primary_source_id, access: row.source_access }) },
       url: row.canonical_url,
       doi: row.doi ?? null,
       pmid: row.pmid ?? null,

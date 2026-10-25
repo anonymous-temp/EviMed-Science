@@ -84,6 +84,8 @@ function useTrackPaging<Row extends { item: FrontierItem }, Page extends { items
     setState({ kind: "loading" });
     setRows([]);
     setCursor(null);
+    // A 显示更多 of the list before this one may still be in flight; its answer is dropped, so the button is free again here.
+    setLoadingMore(false);
     reader.current(null).then(
       (page) => {
         if (current !== generation.current) return;

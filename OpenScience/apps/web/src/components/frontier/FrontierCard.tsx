@@ -101,8 +101,10 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },
     "separator",
-    { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
-    { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
+    ...(item.source.followable === false ? [] : [
+      { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
+      { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
+    ]),
     ...(item.event ? [{ label: "同一事件的全部报道", onSelect: openEvent }, { label: "关注此事件", onSelect: () => void follow("event", item.event!.id, item.title.slice(0, 120)) }] : []),
     ...item.entities.drugs.slice(0, 3).map((drug) => ({ label: `关注药物：${drug}`, onSelect: () => void follow("drug", drug, drug) })),
     ...item.specialties.slice(0, 2).map((specialty) => ({ label: `关注专科：${specialty.label}`, onSelect: () => void follow("specialty", specialty.key, specialty.label) })),

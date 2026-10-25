@@ -7,7 +7,7 @@ import type { FrontierCongressHub } from "@/lib/frontierClient";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierCongressPage } from "./FrontierCongressPage";
 
-const client = vi.hoisted(() => ({ useFrontierFeature: vi.fn(), fetchFrontierCongress: vi.fn(), addFrontierFollow: vi.fn() }));
+const client = vi.hoisted(() => ({ useFrontierFeature: vi.fn(), fetchFrontierCongress: vi.fn(), addFrontierFollow: vi.fn(), hideFrontierItem: vi.fn() }));
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/frontierClient")>()), ...client }));
 
 function hub(over: Partial<FrontierCongressHub> = {}): FrontierCongressHub {
@@ -80,6 +80,20 @@ describe("a congress's hub", () => {
     expect(document.querySelector('[data-frontier-list="congress"]')).not.toBeNull();
     // No back office on the page.
     for (const gone of ["track_facts", "deepseek", "预算", "已核对"]) expect(document.body).not.toHaveTextContent(gone);
+  });
+
+  it("takes a card the reader said 不感兴趣 to out of its day, as the topic page does", async () => {
+    client.hideFrontierItem.mockResolvedValue({ ...frontierItem().state, hidden: true });
+    renderHub();
+    await screen.findByRole("heading", { level: 1 });
+    const day = () => screen.getByRole("list", { name: "10月24日 周六的报道" });
+    const card = within(day()).getAllByRole("listitem").find((entry) => entry.getAttribute("data-frontier-item") === "i2")!;
+    await userEvent.click(within(card).getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "不感兴趣" }));
+    await waitFor(() => expect(within(day()).getAllByRole("listitem").filter((entry) => entry.hasAttribute("data-frontier-item"))
+      .map((entry) => entry.getAttribute("data-frontier-item"))).toEqual(["i1"]));
+    expect(client.hideFrontierItem).toHaveBeenCalledWith("i2");
+    expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("1 条");
   });
 
   it("shows the first ten items of a day and the rest on demand", async () => {

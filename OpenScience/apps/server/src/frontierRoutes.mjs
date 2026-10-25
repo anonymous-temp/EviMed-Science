@@ -60,7 +60,11 @@ export function frontierRoutePattern(pathname) {
     return "/api/frontier/items/:id/:action";
   }
   if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : parts.length === 2 ? "/api/frontier/follows/:id" : "/api/frontier/follows/:id/seen";
-  if (parts[0] === "track") return parts.length === 3 && parts[1] === "congresses" ? "/api/frontier/track/congresses/:id" : `/api/frontier/track/${parts[1] ?? ""}`;
+  if (parts[0] === "track") {
+    if (parts.length === 3 && parts[1] === "congresses") return "/api/frontier/track/congresses/:id";
+    // Only the three lists name themselves: anything else is one label, so a request cannot mint a metric series (before auth, too).
+    return parts.length === 2 && ["approvals", "guidelines", "congresses"].includes(parts[1]) ? `/api/frontier/track/${parts[1]}` : "/api/frontier/track/:route";
+  }
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
   if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media", "prefs", "topics"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";

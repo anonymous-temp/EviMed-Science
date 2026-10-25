@@ -206,16 +206,18 @@ function CongressEmpty({ hub }: { hub: FrontierCongressHub }) {
 
 /** One day: its heading, its recap, its items (the first few, the rest on demand). */
 function DaySection({ day, onStar, onHide }: { day: FrontierCongressHub["days"][number]; onStar: (item: FrontierItem) => void; onHide: (item: FrontierItem) => void }) {
-  const more = useShowMore(day.items, { first: DAY_FIRST, step: DAY_STEP, resetKey: day.day });
+  // A card the reader said 不感兴趣 to leaves the day, as on the topic page.
+  const rows = day.items.filter(({ item }) => !item.state.hidden);
+  const more = useShowMore(rows, { first: DAY_FIRST, step: DAY_STEP, resetKey: day.day });
   const headingId = `congress-day-${day.day}`;
   return (
     <section aria-labelledby={headingId}>
       <h2 id={headingId} className="mb-3 flex min-w-0 items-baseline gap-2 text-section font-semibold text-text">
         {shortDate(day.day)}
-        {day.items.length > 0 && <span className="text-caption font-normal tabular-nums text-text-3">{day.items.length} 条</span>}
+        {rows.length > 0 && <span className="text-caption font-normal tabular-nums text-text-3">{rows.length} 条</span>}
       </h2>
       {day.recap && <DayRecap recap={day.recap} />}
-      {day.items.length > 0 && (
+      {rows.length > 0 && (
         <ul aria-label={`${shortDate(day.day)}的报道`}>
           {more.visible.map(({ item, caveat }) => (
             <FrontierCard key={item.id} item={item} onStar={onStar} onHide={onHide}
