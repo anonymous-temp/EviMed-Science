@@ -1710,6 +1710,7 @@
       "id": "curated/biosequence-analysis",
       "name": "biosequence-analysis",
       "origin": "curated",
+      "version": "1.5",
       "source": {
         "kind": "repository",
         "repository": "K-Dense-AI/scientific-agent-skills",
@@ -1722,7 +1723,7 @@
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:d2dea76b4fe08bb261d64536eaeababacf36ff1112baddbe5394dc21d8d24270",
+      "digest": "sha256:db53343f6aaaf33ee8ba730a1fc33c48af025bbb8cb15813a9b5adcbccd464d1",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"agents/openai.yaml","sha256":"56cc41590230210038fa61b796d43e37f10aae1025006031e839bd56fb1fddb3"},

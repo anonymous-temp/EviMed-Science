@@ -1,6 +1,6 @@
 ---
 name: biosequence-analysis
-description: Analyze local biological sequences with Biopython: FASTA/GenBank parsing, transforms, alignments, structures, motifs and phylogenetics, with provenance and service limits.
+description: "Analyze local biological sequences with Biopython: FASTA/GenBank parsing, transforms, alignments, structures, motifs and phylogenetics, with provenance and service limits."
 allowed-tools: Read Write Edit Bash
 compatibility: Runtime Python 3.11, NumPy and Biopython 1.88 are preinstalled; no runtime installs. Remote records use managed access or supplied files. Local BLAST, MUSCLE, Clustal Omega and DSSP are not installed.
 license: Biopython License Agreement

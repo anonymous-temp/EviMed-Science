@@ -856,7 +856,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/biopython",
-      "digest": "sha256:d2dea76b4fe08bb261d64536eaeababacf36ff1112baddbe5394dc21d8d24270",
+      "digest": "sha256:db53343f6aaaf33ee8ba730a1fc33c48af025bbb8cb15813a9b5adcbccd464d1",
       "fills": "Bounded local sequence analysis and traceable record retrieval",
       "upstreamReview": {
         "class": "A",
