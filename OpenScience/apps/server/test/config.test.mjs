@@ -224,6 +224,8 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["deployment", "switch"],
   // The API-only (CDSS) stack has no web app and no person to share with: sharing stays off there while the hosted default is on.
   OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ["deployment", "switch"],
+  // The official starter packs are published for the web app's people; the API-only stack serves an institution's subjects and publishes none.
+  OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_LEARNING_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_AUTOPILOT_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["deployment", "switch"],

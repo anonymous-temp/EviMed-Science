@@ -44,7 +44,7 @@
 import { METHOD_RELEVANT_MOUNT_REASONS } from "@evimed/domain";
 import { toSkillName } from "@evimed/harness-port";
 
-import { learnedMethodDirectoryName } from "./learnedMethodMount.mjs";
+import { learnedMethodDirectoryName, officialMethodDirectoryName } from "./learnedMethodMount.mjs";
 import { runHistory } from "./agentRuns.mjs";
 
 /** Scope learning reads to the actual native input, without changing preserved history.
@@ -74,10 +74,10 @@ export function methodObservationSessionsForRun({ run, projection, sessions }) {
   });
 }
 
-/** A mounted learned method's own file, as the `read` tool is handed it:
+/** A mounted learned (`_lm…`) or official (`_om…`) method's own file, as the `read` tool is handed it:
  *  absolute (`/runtime/capsule-methods/_lm…/SKILL.md`) or relative to the
  *  methods directory. */
-const MOUNTED_METHOD_FILE = /(?:^|\/)(_lm[0-9a-f]{32})\/SKILL\.md$/;
+const MOUNTED_METHOD_FILE = /(?:^|\/)(_(?:lm|om)[0-9a-f]{32})\/SKILL\.md$/;
 
 /**
  * The shell programs that print a file's text, a closed vocabulary. A command
@@ -91,10 +91,10 @@ const READING_PROGRAMS = new Set([
 ]);
 
 /** A path under one method's directory, wherever it is named in a command: the directory and what follows it. */
-const METHOD_PATH_IN_COMMAND = /(?:^|[\s/'"=(])(_lm[0-9a-f]{32})\/([^\s'";|&)<>]*)/g;
+const METHOD_PATH_IN_COMMAND = /(?:^|[\s/'"=(])(_(?:lm|om)[0-9a-f]{32})\/([^\s'";|&)<>]*)/g;
 
 /** A method directory named as a place to be: `cd /runtime/capsule-methods/_lm…` or `cd _lm…/`. */
-const METHOD_DIRECTORY_TARGET = /(?:^|\/)(_lm[0-9a-f]{32})\/*$/;
+const METHOD_DIRECTORY_TARGET = /(?:^|\/)(_(?:lm|om)[0-9a-f]{32})\/*$/;
 
 /**
  * Whether a file name, as a shell would expand it inside a method directory, is that method's own file: `SKILL.md` itself, or a
@@ -128,7 +128,7 @@ function namesSkillFile(tail) {
  */
 export function methodFilesReadByCommand(command) {
   const text = String(command ?? "");
-  if (!text.includes("_lm")) return [];
+  if (!text.includes("_lm") && !text.includes("_om")) return [];
   /** @type {Set<string>} */
   const read = new Set();
   /** @type {string | null} */
@@ -170,7 +170,15 @@ export function methodFilesReadByCommand(command) {
  */
 function usedIn(invoked, method) {
   return invoked.has(toSkillName(method.name, "capsule"))
-    || (Boolean(method.id) && invoked.has(`file:${learnedMethodDirectoryName(String(method.id))}`));
+    || (Boolean(method.id) && invoked.has(`file:${mountedDirectoryOf(String(method.id))}`));
+}
+
+/**
+ * Where a method is mounted: the platform's official methods (`official:<pack>:<method>`) under `_om…`, a learned method under `_lm…`.
+ * @param {string} methodId @returns {string}
+ */
+function mountedDirectoryOf(methodId) {
+  return methodId.startsWith("official:") ? officialMethodDirectoryName(methodId) : learnedMethodDirectoryName(methodId);
 }
 
 /**

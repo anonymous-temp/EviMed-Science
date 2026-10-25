@@ -130,7 +130,9 @@ import { LearningWorker } from "./learningWorker.mjs";
 import { methodObservationSessionsForRun, recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
-import { learnedMethodFamilyForRuntime, methodFamily, runScopeOf } from "./learnedMethodMount.mjs";
+import { learnedMethodFamilyForRuntime, methodFamily, officialMethodDocument, runScopeOf } from "./learnedMethodMount.mjs";
+import { OfficialPacks, officialPackMetricFamilies } from "./officialPacks.mjs";
+import { OFFICIAL_PACKS_DIR } from "./officialPackSources.mjs";
 import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
 import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
@@ -1170,6 +1172,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let evolutionLeadSources = null;
   /** @type {ReturnType<typeof createPlatformHandbooks> | null} */
   let platformHandbooks = null;
+  /** The platform's official starter packs (`officialPacks.mjs`): composed beside the capsule service, asked for by name by what runs before it. @type {OfficialPacks | null} */
+  let officialPacks = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -1491,6 +1495,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    */
   /** @param {string} text @returns {string} */
   const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
+  /**
+   * The platform's official methods a finished run opened, in the shape a follow-up is judged against: identity, the body it read, what it is for.
+   * @param {string} userId @param {any} run
+   * @returns {Promise<{ id: string, digest: string, title: string, whenToUse: string }[]>}
+   */
+  const officialOpenedBy = async (userId, run) => {
+    const opened = new Set((Array.isArray(run?.methodsInvoked) ? run.methodsInvoked : []).map((/** @type {any} */ entry) => String(entry?.name ?? "")).filter((name) => name.startsWith("official-")));
+    if (!opened.size || !officialPacks) return [];
+    return (await officialPacks.methodsFor(userId).catch(() => []))
+      .filter((method) => opened.has(method.name))
+      .map((method) => ({ id: method.key, digest: officialMethodDocument(method).digest, title: method.description, whenToUse: method.whenToUse }));
+  };
   const recordMethodUse = async ({ project, run, sessions }) => {
     if (!learningService || !config.learningEnabled) return;
     // A conversation trying someone else's capsule (「试用一次」) reads that
@@ -1502,7 +1518,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // of the traffic — leaves none the control plane can scope to its turn (`readRunStateProjection`), and used to be counted for
     // nothing: not carried, not read. What the control plane gave the conversation when its first prompt arrived is its receipt then.
     const read = await agentRuns.runWorkflowProjection(project, run);
-    const given = run.sessionId ? runtimeManager.methodsGivenTo(project, String(run.sessionId)) : [];
+    const learnedGiven = run.sessionId ? runtimeManager.methodsGivenTo(project, String(run.sessionId)) : [];
+    // The platform's official methods the conversation was offered are carried like any other card (`officialGivenTo`).
+    const officialOffered = run.sessionId ? runtimeManager.officialGivenTo(project, String(run.sessionId)).offered : [];
+    const given = [...learnedGiven, ...officialOffered.map((method) => ({ ...method, reason: "similarity" }))];
     if (!read && !given.length) return;
     const projection = { ...(read ?? {}),
       mountedMethods: Array.isArray(read?.mountedMethods) && read.mountedMethods.length ? read.mountedMethods
@@ -1530,8 +1549,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         contentDigest: document.payload.contentDigest,
       });
     }
+    // The platform's official methods this account holds are known methods of the run too, so the ones it opened are in the run's
+    // `methodsInvoked`: what the researcher does next is folded into their own, platform-wide counters (`OfficialPacks.recordApplied`), and none of the
+    // learned-method writes below applies to them.
+    const officialKnown = family === null || !officialPacks ? [] : await officialPacks.methodsFor(project.userId).catch(() => []);
+    const officialNames = new Set(officialKnown.map((method) => method.name));
+    for (const method of officialKnown) {
+      const { digest } = officialMethodDocument(method);
+      methods.push({ id: method.key, name: method.name, digest, contentDigest: digest });
+    }
     const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
     const derived = runMethodObservations({ run, projection, methods, sessions: observedSessions });
+    const isOfficialId = (/** @type {string} */ id) => String(id).startsWith("official:");
+    derived.invokedWithoutMount = derived.invokedWithoutMount.filter((entry) => !isOfficialId(entry.id));
+    derived.carriedBy = derived.carriedBy.filter((entry) => !isOfficialId(entry.id));
+    derived.observations = derived.observations.filter((entry) => !isOfficialId(entry.methodId));
+    derived.eligible = derived.eligible.filter((id) => !isOfficialId(id));
+    officialPacks?.noteOpened(derived.methodsInvoked.filter((entry) => officialNames.has(entry.name)).length);
     learningMetrics.observeRun({ loaded: derived.methodsLoaded.length, invoked: derived.methodsInvoked.length });
     if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
       await agentRuns.recordLearning(project, run.id, {
@@ -1646,6 +1680,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // What became of an account's capsule cleanup: a deletion that rolled back and was released, or a cleanup that stopped on a code.
     report: (event, details) => { void securityAudit(config, "capsule.account-cleanup", event === "rolled_back" ? "released" : "failed", { userId: details.userId, code: details.code ?? event }).catch(() => {}); },
   }) : null;
+  // The platform's official starter packs (`officialPacks.mjs`): published once at start, held by every ordinary account when it first reads its capsules, the
+  // lowest tier of the methods a run is offered. The one model scan of a version is metered to the publisher's own evidence project.
+  officialPacks = config.officialPacksEnabled && productDocuments && productDatabase && capsuleService && capsuleTransferService
+    ? new OfficialPacks({ documents: productDocuments, database: productDatabase, transfers: capsuleTransferService, scanner: capsuleScanner,
+      scanOwner: () => ensureEvidenceProject(store), sourcesDir: overrides.officialPacksDir ?? OFFICIAL_PACKS_DIR,
+      report: (line) => process.stderr.write(`${line}\n`) }) : null;
+  if (capsuleService) capsuleService.official = officialPacks;
   // Sharing a capsule with other accounts of this deployment, in the app (plan §7, F17): share links, deliveries to named accounts, and
   // taking either back. Off with its own switch (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`): not composed, so no table of it is read and its routes
   // answer 404 by name. Needs the control-plane database and the transfer service; absent either, the routes answer 503 by name.
@@ -4480,11 +4521,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         scripts: scriptUses ? new ScriptLessons({ uses: scriptUses, execute: (body, options) => codeController.execVerify(body, options),
           queue: () => (project, run, lesson) => learningTriggers.queue(project, run, lesson), onOutcome: (outcome, times) => learningMetrics.observeScript(outcome, times) }) : null,
         // The learned methods the previous run opened, by title and when they apply: what a follow-up can be about.
-        methodsOpened: methodFeedback ? async (project, run) => (await methodFeedback.usedBy(project, run)).methods.map((method) => ({
-          id: method.id, digest: method.digest,
-          title: String(method.document?.payload?.display?.title ?? method.name),
-          whenToUse: String(method.document?.payload?.frontmatter?.whenToUse ?? method.document?.payload?.frontmatter?.description ?? ""),
-        })) : null,
+        methodsOpened: methodFeedback ? async (project, run) => [
+          ...(await methodFeedback.usedBy(project, run)).methods.map((method) => ({
+            id: method.id, digest: method.digest,
+            title: String(method.document?.payload?.display?.title ?? method.name),
+            whenToUse: String(method.document?.payload?.frontmatter?.whenToUse ?? method.document?.payload?.frontmatter?.description ?? ""),
+          })),
+          // And the platform's official methods it opened, so that a reaction can be about one of them (`methodAppliedOutcomes.mjs`).
+          ...await officialOpenedBy(project.userId, run),
+        ] : null,
         resolveProject: async (userId, projectId) => {
           const user = await store.userById(userId);
           return user ? store.requireProject(user, projectId) : null;
@@ -4502,6 +4547,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       runsOf: (project) => agentRuns.list(project),
       onApplied: (outcome) => learningMetrics.observeApplied(outcome),
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
+      // The platform's official methods a run opened are counted in their own, platform-wide records (`OfficialPacks.recordApplied`), never in the account's.
+      official: officialPacks ? {
+        methods: async (userId) => (await officialPacks.methodsFor(userId)).map((method) => ({ key: method.key, name: method.name, sha: method.sha, digest: officialMethodDocument(method).digest })),
+        recordApplied: (applied) => officialPacks.recordApplied(applied),
+      } : null,
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: memorySettings, canReuseRun, canReuseRuns,
@@ -6543,6 +6593,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceOutcomes,
           evolutionLeadSources,
           platformHandbooks,
+          officialPacks,
         });
         return;
       }
@@ -8450,6 +8501,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
   let evidenceReownRun = false;
   let capsuleFoldRun = false;
+  let officialPublishRun = false;
   let legacyMemoryRetired = false;
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
@@ -8481,6 +8533,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // The per-project notes capsules and per-project lists of packs an earlier release made become the person's one capsule, once at start
       // (idempotent; `capsuleOneCapsule.mjs`): the index is told to forget the emptied capsules' copies through the withdrawal ledger. Said on
       // stderr, one line per account; a failure is said too and costs the start nothing.
+      // The platform's official starter packs are published once at start (idempotent by their hash; `officialPacks.mjs`): said on stderr, one line per
+      // pack, and a failure is said too and costs the start nothing.
+      if (officialPacks && !officialPublishRun) {
+        officialPublishRun = true;
+        void officialPacks.publishAll()
+          .then((results) => { for (const result of results) process.stderr.write(`official pack ${result.packId}: ${result.state}${result.version ? ` v${result.version}` : ""}\n`); })
+          .catch((/** @type {any} */ error) => process.stderr.write(`official packs failed: ${error?.code ?? error?.name ?? "error"}\n`));
+      }
       if (capsuleService && productDatabase && !capsuleFoldRun) {
         capsuleFoldRun = true;
         const withdrawIndex = memoryIndexing && memoryWithdrawals
@@ -9565,7 +9625,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null }) {
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null, officialPacks = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -10149,6 +10209,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
   addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
   for (const family of platformHandbookMetricFamilies(platformHandbooks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of officialPackMetricFamilies(officialPacks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evolutionLeadSourceMetricFamilies(evolutionLeadSources?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);

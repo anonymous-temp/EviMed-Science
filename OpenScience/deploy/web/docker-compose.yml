@@ -755,6 +755,8 @@ services:
       # is on unless turned off; the zone subscription is off until turned on).
       # Value-less: unset keeps config.mjs's defaults.
       OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:
+      # The platform's official starter packs: on unless turned off (config.mjs).
+      OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES:
       OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS:

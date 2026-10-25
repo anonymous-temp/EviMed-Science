@@ -49,7 +49,7 @@
 import { errorMessage } from '../src/runPolicy.mjs'
 import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onClaimedPromptAssemble, onPreStep, parentSessionOf, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
-import { isLearnedMethod } from '../src/learnedMethods.mjs'
+import { isLearnedMethod, isOfficialMethod } from '../src/learnedMethods.mjs'
 import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from '@evimed/domain'
 
@@ -445,7 +445,9 @@ async function loadMethods(ctx, directory, selection = undefined) {
 export function mountedMethodDescription(method) {
   const note = isLearnedMethod(method)
     ? '这是 EviMed 从这位用户以往的研究里学到的做法。'
-    : '这是用户启用的记忆胶囊里的做法。'
+    : isOfficialMethod(method)
+      ? '这是 EviMed 平台给每位用户的默认做法。'
+      : '这是用户启用的记忆胶囊里的做法。'
   const own = method.description || `用户自己的方法：${method.name}`
   return `${own.slice(0, Math.max(0, 1024 - note.length - 1))}\n${note}`
 }

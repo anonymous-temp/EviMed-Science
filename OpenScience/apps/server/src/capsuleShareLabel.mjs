@@ -14,7 +14,8 @@ export function sharedFrom(capsule, entryPayload = null) {
   const share = entryPayload?.share ?? capsule.payload.share ?? null;
   const name = String(share?.authorName ?? capsule.payload.card?.author ?? "").trim() || null;
   return {
-    label: name ? `来自 ${name} 的分享` : "来自他人的分享", authorName: name,
+    // One of the platform's own packs is not somebody's share: it says whose it is and what it is (`OfficialPacks`).
+    label: capsule.payload.official ? `${name ?? "EviMed 证据中心"}的默认做法` : name ? `来自 ${name} 的分享` : "来自他人的分享", authorName: name,
     snapshotHash: share?.snapshotHash ?? capsule.payload.transfer?.manifestSha256 ?? null, channel: share?.channel ?? capsule.payload.transfer?.channel ?? null,
     sharedAt: share?.sharedAt ?? null,
   };

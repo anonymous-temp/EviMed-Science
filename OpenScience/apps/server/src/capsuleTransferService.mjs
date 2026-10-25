@@ -281,6 +281,39 @@ async function exportableMethods(client, userId, rows) {
   return marked.size ? rows.filter((row) => !marked.has(row.payload?.provenance?.runId)) : rows;
 }
 
+/**
+ * The rows a received pack is written as: the capsule, and one fact for each entry the scan kept. An import writes them for a pack a person
+ * took in, and an official pack's adoption writes the same rows for the platform's own (`adoptOfficial`), so that a pack of either kind is
+ * one shape for everything that reads packs: the shelf, the mount, a takedown, an upgrade in place.
+ * `kept`, `unchecked` and `held` are sets of entry ids (`capsuleScan.mjs`); `factExtra(entry)` and `capsuleExtra` add the fields only an official
+ * pack has.
+ * @param {{ capsuleId: string, preview: any, kept: Set<string>, unchecked: Set<string>, held: Set<string>, share: Record<string, any>,
+ *   signingKeyFingerprint: string, channel: string, title: string, description: string,
+ *   factExtra?: (entry: any) => Record<string, any>, capsuleExtra?: Record<string, any> }} input
+ */
+function receivedPackRecords({ capsuleId, preview, kept, unchecked, held, share, signingKeyFingerprint, channel, title, description, factExtra = () => ({}), capsuleExtra = {} }) {
+  return [
+    { kind: "capsule", id: capsuleId, payload: { title, description, imported: true, activationMode: "guest",
+      transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, manifestSha256: preview.manifestSha256, issuerId: preview.issuerId,
+        issuerTrust: preview.issuerTrust, signingKeyFingerprint, importedAt: new Date().toISOString(), authorId: share.authorId, channel },
+      share,
+      ...(preview.card ? { card: preview.card } : {}),
+      scan: preview.scan, ...capsuleExtra } },
+    ...preview.entries.filter((/** @type {any} */ entry) => kept.has(entry.id)).map((/** @type {any} */ entry) => ({ kind: "fact", id: randomUUID(), payload: {
+      // The sharer's runtime note stays the assistant's note here, and so is
+      // never mounted (`capsuleMethods.mjs`); only what a person wrote or a
+      // pack brought becomes this pack's own. A pack exported before origins
+      // travelled could hold only entries its sharer had approved by hand.
+      capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: entry.origin === "inferred" ? "inferred" : "system",
+      status: "approved", contextOnly: true, ...(unchecked.has(entry.id) ? { unscanned: true } : {}),
+      ...(held.has(entry.id) ? { safetyHold: true } : {}),
+      provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
+      transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
+      ...factExtra(entry),
+    } })),
+  ];
+}
+
 /** Portable snapshots are immutable ciphertext; online state can be revoked, offline copies cannot. */
 export class CapsuleTransferService {
   /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string,
@@ -657,6 +690,18 @@ export class CapsuleTransferService {
     const source = await this.#assemble(userId, capsuleId, kinds, { exclude });
     if (!source.facts.length) throw new HttpError(409, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
+    return this.#seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named });
+  }
+
+  /**
+   * The part of an export that does not depend on whose memory the entries came from: entries in the pack's own shape, the card, the
+   * signed and sealed archive, the file on disk and the snapshot's record. A personal export and the platform's own packs
+   * (`publishOfficial`) end here, so that a pack of either is made, signed and recorded by the one piece of code.
+   * `source` is `{ revision, facts: [{ id, revision, payload: { factKind, content, origin }, nativeSource? }] }`.
+   * @param {{ userId: string, accountCreatedAt: string, capsuleId: string, scopes: string[], channel: string, input: any, previous: any,
+   *   source: { revision: number, facts: any[] }, recipientIds: string[], named: { requested: number, ids: string[] } }} seal
+   */
+  async #seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named }) {
     const snapshotId = randomUUID();
     const entries = source.facts.map(fact => {
       const id = randomUUID(); const place = location(fact.payload.factKind); const content = checkedText(fact.payload.content);
@@ -707,6 +752,124 @@ export class CapsuleTransferService {
     // How many of the names the sender typed the file is sealed for: the count, never which (the same answer a delivery gives).
     return { filename: `capsule-${snapshotId}.evimedcap`, archive, snapshot: snapshotView(record),
       ...(named.requested > 0 ? { reached: { requested: named.requested, sealed: named.ids.length } } : {}) };
+  }
+
+  /**
+   * The platform's own pack, made and signed the way a person's is (`#seal`): one snapshot of the publisher account's pack
+   * `official-pack:<packId>`, which continues the version before it (`previousSnapshotId`, the card's changelog counts what changed). The
+   * seal is the container's own requirement and protects nothing — the text is every account's — so its password is a fixed word of the pack,
+   * not a secret anyone holds. The made archive is checked against the publisher's key as `inspect` would check it, and a pack that does not
+   * verify is never recorded.
+   * @param {{ publisherId: string, packId: string, version: number, methods: { key: string, content: string }[],
+   *   card: { title: string, author: string, summary: string, changelog?: string }, previousSnapshotId?: string | null }} input
+   * @returns {Promise<{ snapshot: any, archive: string, issuerId: string, signingKeyFingerprint: string }>}
+   */
+  async publishOfficial({ publisherId, packId, version, methods, card, previousSnapshotId = null }) {
+    productId(publisherId, "user");
+    const capsuleId = `official-pack:${packId}`;
+    const accountCreatedAt = await this.withAccount(publisherId, null);
+    const prior = previousSnapshotId ? await this.documents.get(publisherId, "preferences", previousSnapshotId) : null;
+    const previous = prior?.payload?.recordType === "capsule-snapshot" && prior.payload.capsuleId === capsuleId ? prior : null;
+    await this.#assertRoomForSnapshot(publisherId);
+    const made = await this.#seal({ userId: publisherId, accountCreatedAt, capsuleId, scopes: ["workstyle"], channel: "official",
+      input: { card, password: digest(`evimed-official-pack:${packId}`) }, previous,
+      source: { revision: version, facts: methods.map((method) => ({ id: method.key, revision: version, payload: { factKind: "method_preference", content: method.content, origin: "system" } })) },
+      recipientIds: [], named: { requested: 0, ids: [] } });
+    // What was made is what a recipient could open: signed by the publisher's registered key, with every entry in place.
+    const { envelope, container } = parseArchive(made.archive);
+    const issuer = await this.identities.resolve(envelope.manifest.issuer?.userId, envelope.manifest.issuer?.signingKeyId);
+    if (!issuer || issuer.ownerId !== publisherId || !verifyCapsule(container, { signingPublicKey: issuer.publicKey }).ok) {
+      await this.#discardOfficialSnapshot(publisherId, made.snapshot.id);
+      throw new HttpError(503, "capsule_official_unverified", "The platform pack that was just made does not verify.");
+    }
+    return { snapshot: made.snapshot, archive: made.archive, issuerId: String(issuer.issuerId), signingKeyFingerprint: digest(String(issuer.publicKey)) };
+  }
+
+  /**
+   * An earlier version of a platform pack goes: its record is revoked and its file leaves the disk, as a person's revoke does. The copies
+   * accounts hold are not touched by it (they continue to the newer version when they next read, `OfficialPacks.ensureFor`).
+   * @param {string} publisherId @param {string} snapshotId
+   */
+  async retireOfficialSnapshot(publisherId, snapshotId) {
+    await this.#discardOfficialSnapshot(publisherId, snapshotId);
+  }
+
+  /** @param {string} publisherId @param {string} snapshotId */
+  async #discardOfficialSnapshot(publisherId, snapshotId) {
+    const record = await this.documents.get(publisherId, "preferences", snapshotId);
+    if (!record || record.payload.recordType !== "capsule-snapshot" || record.payload.status === "revoked") return;
+    try {
+      await this.documents.put(publisherId, "preferences", record.id, { ...record.payload, status: "revoked", revokedAt: new Date().toISOString() }, { expectedRevision: record.revision });
+    } catch (error) { if (/** @type {any} */ (error)?.code !== "product_revision_conflict") throw error; }
+    await this.#discardArchive(publisherId, snapshotId);
+  }
+
+  /**
+   * One account's copy of one of the platform's packs, written from the publication's own record: no archive is opened and no scan is paid
+   * for, because the publisher scanned this version once (`OfficialPacks`) and its verdict is what every account's copy carries. The rows
+   * are the ones a received pack is made of (`receivedPackRecords`) with the pack's identity and its methods' (`official`) beside them, so
+   * the shelf, the takedown and the mount read them as they read any pack; the copy's id is fixed per account and pack, which is what makes
+   * a second writer a conflict and not a second pack.
+   *
+   * A copy that exists continues to this version in place (`#upgrade`): the methods whose text changed are retired and written again, those
+   * that are gone are retired, and whether the pack is enabled (`official.disabled`) is the account's and is never touched.
+   * @param {string} userId
+   * @param {{ publisherId: string, packId: string, contentHash: string, snapshotId: string, manifestSha256: string, archiveSha256: string, issuerId: string,
+   *   signingKeyFingerprint: string, card: any, scan: any, version: number, publishedAt: string, methods: any[] }} publication
+   * @param {{ existing?: any | null }} [options] the account's copy of this pack, when it has one
+   * @returns {Promise<"created" | "upgraded" | "unchanged">}
+   */
+  async adoptOfficial(userId, publication, { existing = null } = {}) {
+    const accountCreatedAt = await this.withAccount(userId, null);
+    const share = { authorId: publication.publisherId, authorName: publication.card?.author ?? null, snapshotHash: publication.manifestSha256,
+      sharedAt: publication.publishedAt, channel: "official" };
+    const guards = [{ userId: publication.publisherId, kind: "preferences", id: publication.snapshotId, filter: { status: "active", archiveSha256: publication.archiveSha256 } }];
+    /** @param {any} method */
+    const entryOf = (method) => ({ id: method.key, factKind: "method_preference", layer: "methods", content: method.content, origin: "system", version: publication.version,
+      sha256: digest(method.content), path: `methods/${method.methodId}/SKILL.md` });
+    /** @param {any} method */
+    const officialOf = (method) => ({ packId: method.packId, methodId: method.methodId, key: method.key, sha: method.sha, scope: method.scope, name: method.name,
+      description: method.description, whenToUse: method.whenToUse, body: method.body });
+    const scan = { kept: [], unchecked: [], held: [], dropped: publication.scan?.dropped ?? [], safety: publication.scan?.safety ?? [], model: publication.scan?.model ?? "unavailable",
+      checkedAt: publication.scan?.checkedAt ?? publication.publishedAt };
+    const packOfficial = { packId: publication.packId, contentHash: publication.contentHash, version: publication.version };
+    if (!existing) {
+      const wanted = publication.methods.map(entryOf);
+      const preview = { snapshotId: publication.snapshotId, archiveSha256: publication.archiveSha256, manifestSha256: publication.manifestSha256, issuerId: publication.issuerId,
+        issuerTrust: "verified", card: publication.card, entries: wanted, scan: { ...scan, kept: wanted.map((entry) => entry.id) } };
+      const byKey = new Map(publication.methods.map((method) => [method.key, method]));
+      try {
+        await this.documents.createBatch(userId, receivedPackRecords({
+          capsuleId: `official-copy:${publication.packId}`, preview, kept: new Set(preview.scan.kept), unchecked: new Set(), held: new Set(), share,
+          signingKeyFingerprint: publication.signingKeyFingerprint, channel: "official", title: String(publication.card?.title ?? publication.packId),
+          description: "EviMed 证据中心提供的默认做法：随时停用。",
+          factExtra: (entry) => ({ official: officialOf(/** @type {any} */ (byKey.get(entry.id))) }),
+          capsuleExtra: { official: { ...packOfficial, since: new Date().toISOString() } },
+        }), { guards, accountCreatedAt });
+      } catch (error) {
+        // Another request wrote this account's copy first, or the publication was replaced while this ran: either way there is nothing to add.
+        if (["product_revision_conflict", "product_guard_conflict"].includes(String(/** @type {any} */ (error)?.code))) return "unchanged";
+        throw error;
+      }
+      return "created";
+    }
+    const held = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: existing.id } })).items
+      .filter((/** @type {any} */ fact) => fact.payload.official?.key);
+    const live = new Map(held.filter((/** @type {any} */ fact) => fact.payload.status !== "retired").map((/** @type {any} */ fact) => [fact.payload.official.key, fact]));
+    const sameBody = new Set(held.map((/** @type {any} */ fact) => `${fact.payload.official.key}\u0000${fact.payload.official.sha}`));
+    const wanted = publication.methods.filter((method) => !sameBody.has(`${method.key}\u0000${method.sha}`)).map(entryOf);
+    const keys = new Set(publication.methods.map((method) => method.key));
+    const retire = [...live.values()].filter((/** @type {any} */ fact) => !keys.has(fact.payload.official.key)
+      || publication.methods.find((method) => method.key === fact.payload.official.key)?.sha !== fact.payload.official.sha);
+    if (!wanted.length && !retire.length && existing.payload.official?.contentHash === publication.contentHash) return "unchanged";
+    const byKey = new Map(publication.methods.map((method) => [method.key, method]));
+    const preview = { snapshotId: publication.snapshotId, archiveSha256: publication.archiveSha256, manifestSha256: publication.manifestSha256, issuerId: publication.issuerId,
+      issuerTrust: "verified", card: publication.card, entries: wanted, scan: { ...scan, kept: wanted.map((entry) => entry.id) } };
+    await this.#upgrade(userId, preview, { capsule: existing, facts: retire }, guards, share, publication.signingKeyFingerprint, {
+      factExtra: (entry) => ({ official: officialOf(/** @type {any} */ (byKey.get(entry.id))) }),
+      capsuleExtra: (heldPayload) => ({ official: { ...heldPayload.official, ...packOfficial } }),
+    });
+    return "upgraded";
   }
 
   /**
@@ -1082,25 +1245,10 @@ export class CapsuleTransferService {
     // A toxic herb's dose above its bound stays context (`capsuleScan.mjs`).
     const held = new Set(Array.isArray(preview.scan.held) ? preview.scan.held : []);
     let records;
-    try { records = await this.documents.createBatch(userId, [
-      { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? preview.card?.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。", imported: true, activationMode: "guest",
-        transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, manifestSha256: preview.manifestSha256, issuerId: preview.issuerId,
-          issuerTrust: preview.issuerTrust, signingKeyFingerprint, importedAt: new Date().toISOString(), authorId: share.authorId, channel },
-        share,
-        ...(preview.card ? { card: preview.card } : {}),
-        scan: preview.scan } },
-      ...preview.entries.filter(entry => kept.has(entry.id)).map(entry => ({ kind: "fact", id: randomUUID(), payload: {
-        // The sharer's runtime note stays the assistant's note here, and so is
-        // never mounted (`capsuleMethods.mjs`); only what a person wrote or a
-        // pack brought becomes this pack's own. A pack exported before origins
-        // travelled could hold only entries its sharer had approved by hand.
-        capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: entry.origin === "inferred" ? "inferred" : "system",
-        status: "approved", contextOnly: true, ...(unchecked.has(entry.id) ? { unscanned: true } : {}),
-        ...(held.has(entry.id) ? { safetyHold: true } : {}),
-        provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
-        transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
-      } })),
-    ], { guards, accountCreatedAt }); } catch (error) {
+    try { records = await this.documents.createBatch(userId, receivedPackRecords({
+      capsuleId, preview, kept, unchecked, held, share, signingKeyFingerprint, channel,
+      title: checkedText(input.title ?? preview.card?.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。",
+    }), { guards, accountCreatedAt }); } catch (error) {
       if (error.code === "product_guard_conflict") throw new HttpError(409, "capsule_snapshot_revoked", "The hosted snapshot was revoked or changed before import.");
       throw error;
     }
@@ -1118,8 +1266,9 @@ export class CapsuleTransferService {
    * (`keptSince` starts again), so an author cannot earn corroboration with a harmless snapshot and replace it with another.
    * @param {string} userId @param {any} preview @param {any} upgrade @param {readonly any[]} guards @param {Record<string, any>} share
    * @param {string} signingKeyFingerprint
+   * @param {{ factExtra?: (entry: any) => Record<string, any>, capsuleExtra?: (held: any) => Record<string, any> }} [extras] what only an official pack carries (`adoptOfficial`)
    */
-  async #upgrade(userId, preview, upgrade, guards, share, signingKeyFingerprint) {
+  async #upgrade(userId, preview, upgrade, guards, share, signingKeyFingerprint, { factExtra = () => ({}), capsuleExtra = () => ({}) } = {}) {
     const kept = new Set(preview.scan.kept);
     const unchecked = new Set(Array.isArray(preview.scan.unchecked) ? preview.scan.unchecked : preview.scan.model === "ok" ? [] : preview.scan.kept);
     const held = new Set(Array.isArray(preview.scan.held) ? preview.scan.held : []);
@@ -1143,6 +1292,7 @@ export class CapsuleTransferService {
             ...(unchecked.has(entry.id) ? { unscanned: true } : {}), ...(held.has(entry.id) ? { safetyHold: true } : {}),
             provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
             transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
+            ...factExtra(entry),
           }, { expectedRevision: 0, transactionClient: client });
         }
         return this.documents.put(userId, "capsule", upgrade.capsule.id, {
@@ -1154,6 +1304,7 @@ export class CapsuleTransferService {
           ...(upgrade.capsule.payload.keptSince ? { keptSince: at } : {}),
           ...(preview.card ? { card: preview.card } : {}),
           scan: preview.scan,
+          ...capsuleExtra(upgrade.capsule.payload),
         }, { expectedRevision: upgrade.capsule.revision, transactionClient: client });
       });
     } catch (error) {

@@ -345,6 +345,8 @@ const operatorLevers = {
   // living and used by the defaults while the operator believes they shortened them, or a new author's pack counted as
   // corroborated by a threshold the operator never set, or by accounts of any age and use.
   OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ["open-science-web"],
+  // The platform's official starter packs: a lever that does not arrive publishes and mounts them whatever the operator set.
+  OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS: ["open-science-web"],

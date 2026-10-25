@@ -776,6 +776,10 @@ function memorySharingSettings(overrides, frontierEnabled) {
     capsuleKdfMaxWaiting: integer("capsuleKdfMaxWaiting", "OPEN_SCIENCE_CAPSULE_KDF_MAX_WAITING", 6, 0, 100),
     capsuleKdfMaxWaitMs: integer("capsuleKdfMaxWaitMs", "OPEN_SCIENCE_CAPSULE_KDF_MAX_WAIT_MS", 10_000, 100, 60_000),
     capsuleMaxLiveSnapshots: integer("capsuleMaxLiveSnapshots", "OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS", 300, 1, 5000),
+    // The platform's official starter packs from 「EviMed 证据中心」 (`officialPacks.mjs`, owner decision 2026-10-25): published once at start, held by every
+    // ordinary account on its shelf, the lowest tier of the methods a run is offered. Off, none is published, copied or mounted (copies an account
+    // already holds stay on its shelf and are mounted by nothing).
+    officialPacksEnabled: overrides.officialPacksEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED", true),
     evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
     evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
     evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),

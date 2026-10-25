@@ -3581,7 +3581,9 @@ export class RuntimeManager {
      * What the control plane gave each conversation when its first prompt arrived (`refreshCapsuleMethods`): the learned methods, by
      * id, name, mounted digest and why. The run ledger's receipt for a conversation that planned and delegated nothing, which leaves no
      * run-state file the control plane can scope to its turn. Bounded: only a conversation still being prompted needs one.
-     * @type {Map<string, { learned: {id: string, name: string, digest: string, reason: string}[] }>}
+     * The platform's official methods it was offered, and the ones the person's own methods kept out of its mount, ride beside them (`official`,
+     * `officialLeftOut`: the receipt of the tier, `selectOfficialMethods`).
+     * @type {Map<string, { learned: {id: string, name: string, digest: string, reason: string}[], official: {id: string, name: string, digest: string}[], officialLeftOut: any[] }>}
      */
     this.sessionMethods = new Map();
     /** Launches that went ahead although the deployment disagrees with its
@@ -3914,10 +3916,11 @@ export class RuntimeManager {
         if (query !== null || scopeId !== undefined) runtime.methodMountFor = { query, scopeId };
         const mounted = await this.syncCapsuleMethods(project, { ...wanted, launch: false, keep: served });
         for (const method of mounted.learned ?? []) served.add(learnedMethodDirectoryName(method.id));
+        for (const method of mounted.official ?? []) served.add(method.directoryName);
         if (sessionId) {
           const given = `${key}\u0000${sessionId}`;
           this.sessionMethods.delete(given);
-          this.sessionMethods.set(given, { learned: mounted.learned ?? [] });
+          this.sessionMethods.set(given, { learned: mounted.learned ?? [], official: mounted.official ?? [], officialLeftOut: mounted.officialLeftOut ?? [] });
           while (this.sessionMethods.size > 2048) this.sessionMethods.delete(/** @type {string} */ (this.sessionMethods.keys().next().value));
         }
         runtime.capsuleMethodsMounted = mounted.count;
@@ -3952,6 +3955,17 @@ export class RuntimeManager {
    */
   methodsGivenTo(project, sessionId) {
     return this.sessionMethods.get(`${this.key(project)}\u0000${sessionId}`)?.learned ?? [];
+  }
+
+  /**
+   * The platform's official methods the control plane offered one conversation when its first prompt arrived, and what the person's own
+   * methods kept out (`leftOut`, each with the method it yielded to): the tier's receipt for a conversation that left none of its own.
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @returns {{ offered: {id: string, name: string, digest: string}[], leftOut: any[] }}
+   */
+  officialGivenTo(project, sessionId) {
+    const held = this.sessionMethods.get(`${this.key(project)}\u0000${sessionId}`);
+    return { offered: held?.official ?? [], leftOut: held?.officialLeftOut ?? [] };
   }
 
   activateModelGatewayRuntime(project, runtime) {

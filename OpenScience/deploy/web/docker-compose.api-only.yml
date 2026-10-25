@@ -133,6 +133,9 @@ services:
       # `.env.example` (which says true) turns it on here too: remove that line from it. (A literal would end the question, and
       # `deploymentEnvReachesTheContainer.test.mjs` refuses a lever written down: an operator must be able to move it.)
       OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ${OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:-false}
+      # The official starter packs are for the people who use the web app; the accounts this shape serves are an institution's and the subjects
+      # it made, which are given none (`OfficialPacks.ensureFor`), so nothing would read them: off here, publishing included.
+      OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED: ${OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED:-false}
       OPEN_SCIENCE_REVIEW_ENABLED: ${OPEN_SCIENCE_REVIEW_ENABLED:-false}
       OPEN_SCIENCE_IM_ENABLED: ${OPEN_SCIENCE_IM_ENABLED:-false}
       # 「虚拟临床研究」 is a product surface with an engine of its own: off here, and

@@ -129,6 +129,9 @@ export function createGuestInfluence({ database, documents = null, minAccounts =
         AND payload @> '{"imported":true}'::jsonb`, [userId, capsuleIds]);
       const guest = [];
       for (const row of packs.rows) {
+        // One of the platform's own packs is the platform's text, vetted before it was published (`officialPacks.mjs`), and not a stranger's
+        // share waiting for other accounts to vouch for it: a run that read it is no guest-influenced run.
+        if (row.payload?.official) continue;
         const authorId = typeof row.payload?.transfer?.authorId === "string" ? row.payload.transfer.authorId : null;
         const snapshotHash = typeof row.payload?.transfer?.manifestSha256 === "string" ? row.payload.transfer.manifestSha256 : null;
         const corroborated = await shareIsCorroborated({ authorId, snapshotHash }, { database, minAccounts, keptDays, minAccountAgeDays, minFinishedRuns, now });
