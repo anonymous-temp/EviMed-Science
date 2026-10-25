@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { BookOpen, ChartNoAxesCombined, FileText, FlaskConical, Github, PenLine, Puzzle, type LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag } from "@/components/ui/Tag";
@@ -53,7 +53,7 @@ export function CatalogueView({ entries, view }: { entries: CatalogueEntry[]; vi
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-surface-1"><Icon size={20} aria-hidden className="text-accent" /></div>
           <div className="min-w-0 flex-1">
             {entry.to
-              ? <Link to={entry.to} className="max-w-full rounded text-left font-semibold text-title-ink hover:text-accent">{entry.title}</Link>
+              ? <Link to={entry.to} className={buttonClasses({ variant: "text", className: "h-auto max-w-full whitespace-normal p-0 text-left font-semibold text-title-ink" })}>{entry.title}</Link>
               : <Button variant="text" className="h-auto max-w-full whitespace-normal p-0 text-left font-semibold text-title-ink" onClick={entry.open}>{entry.title}</Button>}
             <div className="mt-1 text-caption text-text-3">{entry.group === "插件" ? "对话扩展" : entry.group}</div>
           </div>
