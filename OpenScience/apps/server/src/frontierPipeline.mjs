@@ -1918,7 +1918,8 @@ export class FrontierPipeline {
       editorVersion: result?.editorVersion ?? null, checkedAt: now.toISOString(),
       reason: (reason === "exhausted" ? "budget" : reason) ?? (result?.error === "usage_budget_exceeded" ? "budget" : result?.error ? "call_failed" : null),
       fields: result?.fieldDiagnostics ?? { title_zh: ["not_checked"],
-        summary_zh: input && !(input.abstract || input.summary || input.bodyExcerpt) ? ["source_missing"] : ["not_checked"] } });
+        summary_zh: input && !(input.abstract || input.summary || input.bodyExcerpt) ? ["source_missing"] : ["not_checked"] },
+      scoresRaw: result?.output?.scoresRaw ?? null });
     await this.#withEditClaim(item, async (client) => {
       await client.query("UPDATE evimed_frontier.items SET editor_diagnostics=$2::jsonb WHERE id=$1", [item.id, JSON.stringify(metadata)]);
       if (item.state === "published") await bumpFrontierVersion(client);

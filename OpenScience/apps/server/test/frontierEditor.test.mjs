@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { FRONTIER_EVIDENCE_TYPES } from "@evimed/domain";
+import { FRONTIER_EVIDENCE_TYPES, FRONTIER_GENRES } from "@evimed/domain";
 import {
   FRONTIER_AI_MINUTE_INSTRUCTIONS,
   FRONTIER_DIGEST_INSTRUCTIONS,
@@ -12,7 +12,9 @@ import {
   FRONTIER_EDIT_INSTRUCTIONS,
   FRONTIER_MODEL_INPUT_CHARS,
   FRONTIER_PROSE_ISSUE_KINDS,
+  FRONTIER_SCORE_ANCHORS_ZH,
   FRONTIER_SCREEN_INSTRUCTIONS,
+  FRONTIER_TITLE_GUIDES_ZH,
   FRONTIER_TEXT_LIMITS,
   FRONTIER_TRANSLATE_BODY_INSTRUCTIONS,
   FRONTIER_TRANSLATE_POST_INSTRUCTIONS,
@@ -658,15 +660,54 @@ test("trimToWholeSentences keeps the longest prefix of whole sentences that fits
   assert.equal(trimToWholeSentences("结果为阳性（见表 1。）后续无关。", length("结果为阳性（见表 1。）")), "结果为阳性（见表 1。）");
 });
 
-test("a Chinese source keeps its own title; the model's title is not used or checked", async () => {
-  const { callModel } = stubModel([() => answer({ title_zh: "完全不同的标题 99%" })]);
-  const result = await new FrontierEditor(config, { owner, callModel }).edit(item({
-    titleRaw: "国家药监局批准司美格鲁肽新适应症", isChinese: true,
-    abstract: "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%，风险比 0.80，随访 39.8 个月。",
-  }));
-  assert.equal(result.verification, "passed");
-  assert.equal(result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症");
-  assert.match(result.modelInput, /中文信源：是/);
+test("a Chinese source's title follows the title rule: kept when it already does, rewritten when it is a hook, and its own when a rewrite fails a check (c2-style S10)", async () => {
+  // The review of 2026-10-25: 820 of 838 WeChat titles were shown as written, 275 with ！, ？, 刚刚 or 重磅, because code copied them.
+  const source = { isChinese: true, abstract: "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%，风险比 0.80，随访 39.8 个月。" };
+  const write = async (/** @type {string} */ titleRaw, /** @type {string} */ titleZh) => {
+    const { callModel } = stubModel([() => answer({ title_zh: titleZh })]);
+    const editor = new FrontierEditor(config, { owner, callModel });
+    return { result: await editor.edit(item({ ...source, titleRaw })), counters: editor.counters.chineseTitles };
+  };
+  const hook = await write("重磅！刚刚，司美格鲁肽又获批了？", "国家药监局批准司美格鲁肽用于降低心血管事件风险");
+  assert.equal(hook.result.verification, "passed");
+  assert.equal(hook.result.output?.titleZh, "国家药监局批准司美格鲁肽用于降低心血管事件风险", "a hook is rewritten");
+  assert.deepEqual(hook.counters, { kept: 0, rewritten: 1, refused: 0 });
+  assert.match(hook.result.modelInput, /中文信源：是$/m, "the input states the fact; the rule is the instructions'");
+  const kept = await write("国家药监局批准司美格鲁肽新适应症", " 国家药监局批准司美格鲁肽新适应症 ");
+  assert.equal(kept.result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症");
+  assert.deepEqual(kept.counters, { kept: 1, rewritten: 0, refused: 0 });
+  // A rewrite with a number the source does not state is not the title; the source's own is, and the edit is not failed for it.
+  const refused = await write("国家药监局批准司美格鲁肽新适应症", "司美格鲁肽心血管事件降低 99%");
+  assert.equal(refused.result.verification, "passed");
+  assert.equal(refused.result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症");
+  assert.deepEqual(refused.counters, { kept: 0, rewritten: 0, refused: 1 });
+  assert.equal((await write("国家药监局批准司美格鲁肽新适应症", "")).result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症", "an empty answer keeps the source's");
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /原标题是悬念、钩子、问句、感叹，或带网站、栏目名后缀时，按同样的写法改写/);
+  assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /原样照抄标题/);
+});
+
+test("the edit asks each genre for its title formula and its place on the scales, and the raw scores reach the diagnostics (c2-style S6, S9)", async () => {
+  for (const genre of FRONTIER_GENRES) {
+    assert.ok(FRONTIER_EDIT_INSTRUCTIONS.includes(FRONTIER_TITLE_GUIDES_ZH[genre]), genre);
+    assert.ok(FRONTIER_EDIT_INSTRUCTIONS.includes(FRONTIER_SCORE_ANCHORS_ZH[genre]), genre);
+  }
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /满分只留给少见的条目/);
+  // An out-of-scale first answer is sent back once; the rewrite's scores are used, and the model's own numbers are diagnostics only.
+  const { callModel, calls } = stubModel([() => answer({ scores: { impact: 55, novelty: 40, relevance: 45 } }), () => answer({ scores: { impact: 18, novelty: 9, relevance: 12 } })]);
+  const result = await new FrontierEditor(config, { owner, callModel }).edit(item());
+  assert.equal(calls.length, 2);
+  assert.equal(result.verification, "repaired");
+  assert.deepEqual(result.output?.scores, { impact: 18, novelty: 9, relevance: 12 });
+  assert.deepEqual(result.output?.scoresRaw, { impact: 18, novelty: 9, relevance: 12 });
+  const checkedAt = "2026-10-25T08:00:00.000Z";
+  assert.deepEqual(frontierEditorDiagnostics({ schemaVersion: 1, outcome: "passed", checkedAt, scoresRaw: { impact: 55, novelty: 40, relevance: 45 } })?.scoresRaw,
+    { impact: 55, novelty: 40, relevance: 45 });
+  assert.equal(frontierEditorDiagnostics({ schemaVersion: 1, outcome: "passed", checkedAt, scoresRaw: { impact: "55" } })?.scoresRaw, undefined, "only three integers are kept");
+  // One call and no rewrite (the backfill's): the scale's end at once, not a failed edit.
+  const single = stubModel([() => answer({ scores: { impact: 55, novelty: 40, relevance: 45 } })]);
+  const once = await new FrontierEditor(config, { owner, callModel: single.callModel }).edit(item(), { singleAttempt: true });
+  assert.equal(once.verification, "passed");
+  assert.deepEqual(once.output?.scores, { impact: 30, novelty: 20, relevance: 20 });
 });
 
 test("an evidence type code has decided is the one used, whatever the model says", async () => {
@@ -715,9 +756,13 @@ test("the verification's other checks: vocabularies, lengths, links, Chinese pro
   const six = { drugs: ["a", "b", "c", "d", "e", "f"], trials: [], orgs: [], diseases: [] };
   assert.deepEqual(issues({ entities: six }), []);
   assert.deepEqual(verifyEdit(answer({ entities: six }), item(), modelInput).output.entities.drugs, ["a", "b", "c", "d", "e"]);
-  assert.deepEqual(issues({ scores: { impact: 31, novelty: 2, relevance: 2 } }), []);
-  assert.deepEqual(verifyEdit(answer({ scores: { impact: 31, novelty: -1, relevance: 25 } }), item(), modelInput).output.scores,
-    { impact: 30, novelty: 0, relevance: 20 });
+  // A score out of its scale is the wrong unit (c2-style S9, review G9: 55/40/45 had been clamped to every maximum): the first answer
+  // is sent back with the scale named, a rewrite still out of it takes the scale's end, and the model's own numbers are kept raw.
+  assert.ok(issues({ scores: { impact: 31, novelty: 2, relevance: 2 } }).some((issue) => issue.includes("超出了 0 到 30 的刻度")));
+  const rewrite = verifyEdit(answer({ scores: { impact: 31, novelty: -1, relevance: 25 } }), item(), modelInput, { attempt: 2 });
+  assert.deepEqual(rewrite.issues, []);
+  assert.deepEqual(rewrite.output.scores, { impact: 30, novelty: 0, relevance: 20 });
+  assert.deepEqual(rewrite.output.scoresRaw, { impact: 31, novelty: -1, relevance: 25 });
   assert.ok(issues({ scores: { impact: 3.5, novelty: 2, relevance: 2 } }).some((issue) => issue.includes("整数")));
   assert.ok(issues({ flags: ["sponsored"] }).some((issue) => issue.includes("flags")));
   assert.deepEqual(verifyEdit(answer({ flags: ["preprint", "press-release"] }), item(), modelInput).output.flags, ["press-release"],

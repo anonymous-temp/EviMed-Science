@@ -83,6 +83,7 @@ import {
   isFrontierGenre,
 } from "@evimed/domain";
 import { checkNumbers } from "./frontierNumbers.mjs";
+import { FRONTIER_SENTENCE_RULE, FRONTIER_STYLE_CARDS, FRONTIER_TITLE_RULE } from "./frontierStyle.mjs";
 import { FRONTIER_ITEM_TAG_LIMIT, frontierTagNameRefusal, tagKey, tagName } from "./frontierTags.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 
@@ -148,7 +149,7 @@ const GENRE_LINE = FRONTIER_GENRES.map((genre) => `${genre} ${FRONTIER_GENRE_LAB
  * @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>}
  */
 export const FRONTIER_REASON_LENSES_ZH = Object.freeze({
-  paper: "这项结果会不会改变对某类患者的某个具体决定，或给研究设计什么借鉴",
+  paper: "这项结果会改变哪一类患者的哪一个具体决定（用药、检查、转诊或随访），对谁；或给研究设计什么借鉴",
   preprint: "这个信号值不值得提前跟踪、等正式发表",
   guideline: "处方、检查或治疗顺序要不要跟着改",
   policy: "哪件事、从什么时候起必须变，影响医院、医生、药师还是患者",
@@ -163,9 +164,43 @@ export const FRONTIER_REASON_LENSES_ZH = Object.freeze({
   roundup: "",
 });
 /** What every 推荐理由 obeys, after its lens: said once, in the edit's instructions and the reason's own. */
-const REASON_RULES = "只写原文支持的这一层价值，不重复导读里的事实；直接写判断，不用「可了解」「可帮助」「可据此」「有助于」「为……提供参考」这类开头和套话。不写为什么入选、为什么推荐或值不值得读，不评价本平台，不用命令语气，不用「必读」「重磅」「颠覆」「首次」「这意味着」「值得注意的是」「仍需验证」「有待观察」这类词，不用冒号和破折号。汇总简讯、原文只有标题或宣传口号，或支持不了具体的阅读价值时给空字符串。";
+const REASON_RULES = "只写原文支持的这一层价值，不重复导读里的事实；直接写判断，不用「可了解」「可帮助」「可据此」「有助于」「为……提供参考」这类开头和套话。不写为什么入选、为什么推荐或值不值得读，不评价本平台，不用命令语气，不用「必读」「重磅」「颠覆」「首次」「这意味着」「值得注意的是」「仍需验证」「有待观察」这类词，不用冒号和破折号，不罗列数字。汇总简讯、原文只有标题或宣传口号，或支持不了具体的阅读价值时给空字符串。";
 const REASON_LENS_LINE = FRONTIER_GENRES.filter((genre) => FRONTIER_REASON_LENSES_ZH[genre])
   .map((genre) => `${FRONTIER_GENRE_LABELS_ZH[genre]}写${FRONTIER_REASON_LENSES_ZH[genre]}`).join("；");
+
+/**
+ * The title formula of each genre with one title we wrote (c2-style, `frontierStyle.mjs`: the style cards, and the title corpus
+ * behind `FRONTIER_TITLE_RULE`). Said once, in the edit's `title_zh` line, for a translated title and — since 2026-10-25 — for a
+ * Chinese source's own title, which is kept when it already follows the rule and rewritten when it is a hook (the review of
+ * 2026-10-25: 820 of 838 WeChat titles were shown as written, 275 of them with ！, ？, 刚刚 or 重磅).
+ * @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>}
+ */
+export const FRONTIER_TITLE_GUIDES_ZH = /** @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>} */ (Object.freeze(Object.fromEntries(
+  FRONTIER_GENRES.map((genre) => [genre, `${FRONTIER_STYLE_CARDS[genre].title}（例：${FRONTIER_STYLE_CARDS[genre].exemplars[0].title}）`]))));
+const TITLE_GUIDE_LINE = FRONTIER_GENRES.map((genre) => `${FRONTIER_GENRE_LABELS_ZH[genre]}写${FRONTIER_TITLE_GUIDES_ZH[genre]}`).join("；");
+
+/**
+ * Where each genre sits on the three scales (c2-style S9, review G9 of 2026-10-25: 258 of 510 精选 items had every sub-score at its
+ * maximum, every PREPARE consensus scored 84, 57 of 71 selected X posts the maximum). The anchors of the scale say what earns its
+ * top; these say where an ordinary item of a genre sits, so the top is left to the few that earn it.
+ * @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>}
+ */
+export const FRONTIER_SCORE_ANCHORS_ZH = Object.freeze({
+  paper: "大样本随机试验或关键研究的主要结果 impact 可到 25 以上，单中心、小样本、回顾性研究和动物、细胞研究 impact 一般不超过 20",
+  preprint: "按同类论文的刻度打分",
+  guideline: "主要学会的全国性或国际指南的重大更新 impact 可到 25 以上，地方、单个专科小范围或单一技术的专家共识 impact 一般不超过 15、novelty 不超过 10",
+  policy: "全国性的强制要求 impact 可到 25 以上，地方性、征求意见或一般性通知不超过 20",
+  approval: "首个获批或改变治疗选择的批准 impact 可到 25 以上，新增规格、仿制药、生物类似药和受理不超过 20",
+  safety: "新增黑框警告、撤市或高风险召回 impact 可到 25 以上，一般说明书修订、短缺和低风险召回不超过 20",
+  industry: "按交易或研发进展对靶点格局和药物可及性的影响打分",
+  conference: "主要会议上的大型随机试验结果 impact 可到 25 以上，单臂、早期或亚组结果不超过 20，会前预告不超过 10",
+  trial: "只有登记、尚无结果的试验 impact 一般不超过 15",
+  commentary: "按它在原始研究之外补充的内容打分，不高于被解读的研究本身",
+  news: "按报道所依据的研究或事件打分",
+  social: "帖子按它本身给出的信息打分，只是转述一篇论文、一份指南或一个会议结果时 impact 不超过 15、novelty 不超过 10",
+  roundup: "合集 impact 不超过 10、novelty 不超过 10",
+});
+const SCORE_ANCHOR_LINE = FRONTIER_GENRES.map((genre) => `${FRONTIER_GENRE_LABELS_ZH[genre]}：${FRONTIER_SCORE_ANCHORS_ZH[genre]}`).join("；");
 
 /** The screening instructions: the stable prefix of every screening call. */
 export const FRONTIER_SCREEN_INSTRUCTIONS = [
@@ -204,9 +239,9 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "",
   "字段要求：",
   "- genre：这条消息的类型，从类型词表里选一个键，按内容而不是按渠道选：公众号转述的审批是 approval，公众号对一篇论文的解读是 commentary，媒体对一项研究的报道是 news 而不是 paper。条目注明「类型：…（已由程序确定）」时照填。",
-  "- title_zh：中文标题，不超过 40 个字，陈述事实，不用问句。条目注明「中文信源：是」时，原样照抄标题。",
+  `- title_zh：中文标题，不超过 40 个字，陈述事实。${FRONTIER_TITLE_RULE}按类型写：${TITLE_GUIDE_LINE}。条目注明「中文信源：是」时：原标题已经写明主体和结果、也没有上面这些毛病，就原样照抄，不要只为换个说法而改写；原标题是悬念、钩子、问句、感叹，或带网站、栏目名后缀时，按同样的写法改写，只用原文里有的事实和数字。`,
   // The answer-first 导读 follows AIHOT's rules-answer-first-summary.md (MIT, KKKKhazix/AIHOT 47531fa).
-  "- summary_zh：导读，两三句，不超过 200 个字，答案前置：第一句直接说清这条消息的核心——谁做了什么、主要结果或决定是什么，不先铺背景，不用「研究显示」「本文介绍」之类的转述套话开头；后面只补一到两个最重要的事实或数字及其不确定性；只写原文有的内容，不夸大。条目注明「正文：无」时给空字符串，不要复述标题。第一句按类型写：研究写发现（人群、干预、主要结果）；指南写机构和最重要的推荐；政策写发文部门、措施和对象；审批写机构、药品和适应症；安全警示写产品、风险和措施；行业动态写公司、事件和金额；会议报道写会议、研究和结果；临床试验写设计、人群和干预；解读评论写被解读的研究和结论。",
+  `- summary_zh：导读，两三句，不超过 200 个字，答案前置：第一句直接说清这条消息的核心——谁做了什么、主要结果或决定是什么，不先铺背景，不用「研究显示」「本文介绍」之类的转述套话开头；后面只补一到两个最重要的事实或数字及其不确定性；只写原文有的内容，不夸大。${FRONTIER_SENTENCE_RULE}条目注明「正文：无」时给空字符串，不要复述标题。第一句按类型写：研究写发现（人群、干预、主要结果）；指南写机构和最重要的推荐；政策写发文部门、措施和对象；审批写机构、药品和适应症；安全警示写产品、风险和措施；行业动态写公司、事件和金额；会议报道写会议、研究和结果；临床试验写设计、人群和干预；解读评论写被解读的研究和结论。`,
   // The reason follows AIHOT's editorialJudgment rule in content-understanding.md (MIT, KKKKhazix/AIHOT 47531fa), for clinicians.
   `- reason_zh：推荐理由，一句话，45 到 70 个字，写给临床医生、药师或研究者：读了这条可以拿它做什么。按类型选一个角度：${REASON_LENS_LINE}。${REASON_RULES}`,
   "- tags：0 到 4 个中文标签，按重要程度排列，是这条消息主要讲的疾病、药物或药物类别、治疗手段、技术、研究方法、生物学或临床概念、人群或卫生政策；每个 2 到 16 个字。条目给了「候选标签」时，意思相同的必须原样照抄候选里的写法；候选里没有的重要概念自己写，用国内临床和指南常用的规范名（如 非小细胞肺癌、2型糖尿病、司美格鲁肽、CAR-T 细胞治疗）。只标主要讲的，顺带提到的不标。不写专科、栏目、证据类型和研究设计（如 随机对照试验、Meta 分析、队列研究），不写机构、公司、国家或地区，不写医学、治疗、研究这类泛词；没有就给空数组。",
@@ -214,7 +249,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "- specialties：0 到 2 个专科键，按相关程度排列。按专科说明选：药学只给药学实践本身（合理用药、相互作用、处方审核等），全科与基层只给基层与家庭医学的内容，写到某个药、某种常见病不等于药学或全科。",
   "- evidence_type：证据类型键。条目已注明证据类型的，照填。研究设计不在词表里的（卫生经济学评价、决策分析、建模、方法学研究、问卷调查、病例报告）一律填 other，不要套用最接近的设计。",
   "- entities：drugs（药物，中文通用名）、trials（试验名称，保留原文）、orgs（机构，中文简称）、diseases（疾病，中文规范名），每类最多 5 个，没有就给空数组。",
-  "- scores：impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。都给整数。",
+  `- scores：三项都给整数，impact 最高 30，novelty 和 relevance 最高 20，超出刻度的数不算。impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。满分只留给少见的条目；impact 25 以上只给会直接改变处方、诊疗路径或必须执行的政策的条目，novelty 18 以上只给首次报告的关键结果或首个获批，relevance 18 以上只给国内已上市或在审的药物、国内政策和指南、中国人群的数据。按类型：${SCORE_ANCHOR_LINE}。`,
   "- flags：只有两种情况才填。来源明确是一篇企业新闻稿、且明确说明顶线结果尚未发表时含 \"press-release\"（注册记录或没有论文链接不触发）；监管机构的安全公告明确说某药品新增、加强或要求加框警告（黑框警告，boxed warning）时含 \"boxed-warning\"（已有的、放宽或取消的黑框警告不算）。都不是就给 []。",
   "",
   `栏目词表：${LANE_LINE}。`,
@@ -307,7 +342,7 @@ export function frontierReasonInstructions(genre) {
 }
 
 /** Which lenses and rules wrote a 推荐理由 (`items.reason_version`): the edit's and the reason's own write the same. */
-export const FRONTIER_REASON_VERSION = `frontier-reason-1.${createHash("sha256").update(`${REASON_RULES}\n${JSON.stringify(FRONTIER_REASON_LENSES_ZH)}`).digest("hex").slice(0, 12)}`;
+export const FRONTIER_REASON_VERSION = `frontier-reason-2.${createHash("sha256").update(`${REASON_RULES}\n${JSON.stringify(FRONTIER_REASON_LENSES_ZH)}`).digest("hex").slice(0, 12)}`;
 
 /**
  * The lines of a reader-side input (a 导读's, a brief's, a reason's) that state the source: the title (and its Chinese) and
@@ -872,7 +907,7 @@ export function buildModelInput(item, { timeZone = DISPLAY_TIME_ZONE } = {}) {
   if (item.evidenceFixed?.type) {
     lines.push(`证据类型：${item.evidenceFixed.type}（已由程序确定，照填）`);
   }
-  lines.push(`中文信源：${item.isChinese ? "是（title_zh 原样照抄标题）" : "否"}`);
+  lines.push(`中文信源：${item.isChinese ? "是" : "否"}`);
   lines.push(...glossaryInputLines(item.glossary ?? []));
   lines.push(`来源：${clip(item.sourceName, 120)}${item.sourceTypeLabel ? `（${item.sourceTypeLabel}）` : ""}`);
   const day = item.datePrecision === "inferred" ? null : isoDay(item.publishedAt, timeZone);
@@ -1019,7 +1054,8 @@ export function trimToWholeSentences(text, limit) {
  * @typedef {{ genre: import("@evimed/domain").FrontierGenre | null, titleZh: string | null, summaryZh: string | null, reasonZh: string | null, tags: string[], lane: string | null,
  *             specialties: string[], evidenceType: string | null,
  *             entities: { drugs: string[], trials: string[], orgs: string[], diseases: string[] },
- *             scores: { impact: number, novelty: number, relevance: number } | null, flags: string[] }} FrontierEditOutput
+ *             scores: { impact: number, novelty: number, relevance: number } | null, flags: string[],
+ *             scoresRaw?: { impact: number, novelty: number, relevance: number } | null }} FrontierEditOutput
  */
 
 /** A name that is another dimension — a specialty, a lane, an evidence type — never a tag. */
@@ -1067,11 +1103,13 @@ export function verifyTagNames(value, numberSource, candidates) {
  * @param {any} answer the model's parsed JSON (or null)
  * @param {FrontierEditItem} item
  * @param {string} modelInput
+ * @param {{ attempt?: number }} [options] which answer this is: the first (a score out of its scale is sent back) or a rewrite (it
+ *   takes the scale's end)
  * @returns {{ output: FrontierEditOutput, issues: string[], failed: Set<string>, kinds: FrontierProseIssue[],
- *             reasonIssues: string[], reasonKinds: FrontierProseIssueKind[],
+ *             reasonIssues: string[], reasonKinds: FrontierProseIssueKind[], chineseTitle: "kept" | "rewritten" | "refused" | null,
  *             numbers: { checked: number, missing: Array<{ field: string, raw: string }>, unitMismatches: Array<{ field: string, raw: string }> } }}
  */
-export function verifyEdit(answer, item, modelInput) {
+export function verifyEdit(answer, item, modelInput, { attempt = 1 } = {}) {
   /** @type {string[]} */
   const issues = [];
   /** @type {Set<string>} */
@@ -1099,7 +1137,12 @@ export function verifyEdit(answer, item, modelInput) {
     if (!isChineseProse(text)) failProse(field, "language", `${field} 要用中文写。`);
     return text;
   };
-  const titleZh = item.isChinese ? String(item.titleRaw ?? "").trim().slice(0, 200) : prose("title_zh", FRONTIER_TEXT_LIMITS.title);
+  // A Chinese source's title (c2-style S10): the model's title when it passes every check a translated title gets — within its
+  // length, no link, Chinese, every number in the source — and the source's own title otherwise. A refused rewrite is not sent back:
+  // the source's title is a title already (principle 19), so the answer is not failed for it.
+  const sourceTitle = String(item.titleRaw ?? "").trim().slice(0, 200);
+  const chineseTitle = item.isChinese ? chineseTitleOf(value.title_zh, sourceTitle, modelInput) : null;
+  const titleZh = item.isChinese ? chineseTitle?.title ?? sourceTitle : prose("title_zh", FRONTIER_TEXT_LIMITS.title);
   // An item with nothing but its title has nothing to summarise (「正文：无」).
   const summaryZh = prose("summary_zh", FRONTIER_TEXT_LIMITS.summary, !(item.abstract || item.summary || item.bodyExcerpt));
 
@@ -1192,13 +1235,22 @@ export function verifyEdit(answer, item, modelInput) {
       fail("scores", `scores.${dimension} 必须是 0 到 ${max} 的整数。`);
       return null;
     }
-    // A 25 on a 0–20 scale says "the top" in the wrong unit: the scale's end.
+    // Out of the scale is the wrong unit, not "the top" (c2-style S9, review G9: answers of 55/40/45 were clamped to 30/20/20 and so
+    // to every maximum): the first answer is sent back with the scale named; a second answer still out of it takes the scale's end.
+    if ((number > max || number < 0) && attempt === 1) {
+      fail("scores", `scores.${dimension} 是 ${number}，超出了 0 到 ${max} 的刻度：impact 按 0–30、novelty 和 relevance 按 0–20 打分。`);
+      return null;
+    }
     return Math.min(max, Math.max(0, number));
   };
   const impact = score("impact");
   const novelty = score("novelty");
   const relevance = score("relevance");
   if (impact !== null && novelty !== null && relevance !== null) scores = { impact, novelty, relevance };
+  // The model's own numbers before the scale's end is applied (c2-style S9, review G9: half of 精选 sat at every maximum, and a
+  // clamped 25 on a 0–20 scale cannot be told from a 20): kept in the diagnostics, never scored with.
+  const scoresRaw = Number.isInteger(rawScores.impact) && Number.isInteger(rawScores.novelty) && Number.isInteger(rawScores.relevance)
+    ? { impact: rawScores.impact, novelty: rawScores.novelty, relevance: rawScores.relevance } : null;
 
   /** @type {string[]} */
   let flags = [];
@@ -1211,7 +1263,8 @@ export function verifyEdit(answer, item, modelInput) {
   }
 
   return {
-    output: { genre, titleZh, summaryZh, reasonZh, tags, lane, specialties, evidenceType, entities, scores, flags },
+    output: { genre, titleZh, summaryZh, reasonZh, tags, lane, specialties, evidenceType, entities, scores, flags, scoresRaw },
+    chineseTitle: item.isChinese ? (chineseTitle?.basis ?? "refused") : null,
     issues,
     failed,
     kinds,
@@ -1222,6 +1275,21 @@ export function verifyEdit(answer, item, modelInput) {
 }
 
 /**
+ * A Chinese source's title as the model wrote it: `kept` (the source's own), `rewritten` (checked like a translated title) or null
+ * (empty, or refused by a check — the caller keeps the source's title). Whitespace and quotes the model added do not make a rewrite.
+ * @param {unknown} value @param {string} sourceTitle @param {string} modelInput
+ * @returns {{ title: string, basis: "kept" | "rewritten" } | null}
+ */
+function chineseTitleOf(value, sourceTitle, modelInput) {
+  const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (!text) return null;
+  if (text.replace(/\s+/g, "") === sourceTitle.replace(/\s+/g, "")) return { title: sourceTitle, basis: "kept" };
+  if (codePoints(text) > FRONTIER_TEXT_LIMITS.title || LINK.test(text) || !isChineseProse(text)) return null;
+  if (checkNumbers({ title_zh: text }, editNumberSource(modelInput)).missing.length) return null;
+  return { title: text, basis: "rewritten" };
+}
+
+/**
  * The verified edit of an answer whose summary is over its limit and nothing
  * else is wrong with it: no other field failed, and the summary failed on
  * length alone (not empty, no link, Chinese, every number in the source). Its
@@ -1229,16 +1297,16 @@ export function verifyEdit(answer, item, modelInput) {
  * with them. Null when any of that does not hold, or no whole sentence fits.
  * @param {any} answer the model's parsed JSON
  * @param {ReturnType<typeof verifyEdit>} verified that answer, verified
- * @param {FrontierEditItem} item @param {string} modelInput
+ * @param {FrontierEditItem} item @param {string} modelInput @param {number} [attempt] the attempt `verified` was checked as
  * @returns {ReturnType<typeof verifyEdit> | null}
  */
-function trimOverlongSummary(answer, verified, item, modelInput) {
+function trimOverlongSummary(answer, verified, item, modelInput, attempt = 1) {
   if (verified.failed.size !== 1 || !verified.failed.has("summary_zh")) return null;
   const summaryKinds = verified.kinds.filter(({ field }) => field === "summary_zh");
   if (!summaryKinds.length || summaryKinds.some(({ kind }) => kind !== "length")) return null;
   const kept = verified.output.summaryZh ? trimToWholeSentences(verified.output.summaryZh, FRONTIER_TEXT_LIMITS.summary) : null;
   if (!kept) return null;
-  const again = verifyEdit({ ...answer, summary_zh: kept }, item, modelInput);
+  const again = verifyEdit({ ...answer, summary_zh: kept }, item, modelInput, { attempt });
   return again.issues.length ? null : again;
 }
 
@@ -1259,7 +1327,14 @@ export function frontierEditorDiagnostics(value) {
     inputSha256: typeof value.inputSha256 === "string" && /^[a-f0-9]{64}$/.test(value.inputSha256) ? value.inputSha256 : null,
     editorVersion: typeof value.editorVersion === "string" && /^[a-zA-Z0-9._:-]{1,160}$/.test(value.editorVersion) ? value.editorVersion : null,
     checkedAt, reason: FRONTIER_DIAGNOSTIC_REASONS.includes(value.reason) ? value.reason : null,
-    fields: { title_zh: field(value.fields?.title_zh), summary_zh: field(value.fields?.summary_zh) } };
+    fields: { title_zh: field(value.fields?.title_zh), summary_zh: field(value.fields?.summary_zh) },
+    ...(rawScoresOf(value.scoresRaw) ? { scoresRaw: rawScoresOf(value.scoresRaw) } : {}) };
+}
+
+/** The edit's sub-scores as the model wrote them (c2-style S9): three integers, or null. @param {any} value */
+function rawScoresOf(value) {
+  const ok = (/** @type {unknown} */ n) => Number.isInteger(n) && /** @type {number} */ (n) >= -1000 && /** @type {number} */ (n) <= 1000;
+  return value && ok(value.impact) && ok(value.novelty) && ok(value.relevance) ? { impact: value.impact, novelty: value.novelty, relevance: value.relevance } : null;
 }
 
 /** @param {any} verified @param {FrontierEditItem} item */
@@ -1624,6 +1699,9 @@ export class FrontierEditor {
       summaryTrimmed: 0,
       // Published edits whose 推荐理由 was dropped by its own checks (by why), and those whose answer left it empty.
       reasonDropped: /** @type {Record<string, number>} */ ({}), reasonEmpty: 0,
+      // A Chinese source's title in published edits (c2-style S10): kept as written, rewritten by the model and checked, or the
+      // source's own because the rewrite was refused by a check (or missing).
+      chineseTitles: { kept: 0, rewritten: 0, refused: 0 },
       numbersChecked: 0, numberFailures: 0, unitMismatches: 0, numberCheck: { first: 0, firstFailed: 0 },
       // The wave-two calls: clustering's adjudication, profiles, abstracts.
       sameEventCalls: 0, sameEventFailures: 0, profileCalls: 0, profileFailures: 0, profilePhrasesDropped: 0, abstractCalls: 0,
@@ -1955,7 +2033,8 @@ export class FrontierEditor {
       if (singleAttempt || code === "usage_budget_exceeded" || code === "frontier_editor_unavailable") return this.#finish(result, code);
       try { answer = await ask(messages); } catch (second) { return this.#finish(result, errorCode(second), second); }
     }
-    const first = verifyEdit(answer, item, modelInput);
+    // One call and no rewrite (the backfill's): a score out of its scale takes the scale's end at once, as a rewrite's would.
+    const first = verifyEdit(answer, item, modelInput, { attempt: singleAttempt ? 2 : 1 });
     this.#countNumbers(first.numbers);
     // The number check's own first-pass rate (plan §10.5.8 「复核一次通过率」):
     // a first answer with a number the source does not have.
@@ -1986,7 +2065,7 @@ export class FrontierEditor {
           "请修正这些问题，重新输出完整的 JSON 对象，键名不变。数字只能使用原文里出现过的；找不到对应数字时，删去这个数字，不要改写成别的数字。",
         ].join("\n") },
       ]);
-      second = verifyEdit(again, item, modelInput);
+      second = verifyEdit(again, item, modelInput, { attempt: 2 });
       this.#countNumbers(second.numbers);
       lastAnswer = again;
       }
@@ -2007,7 +2086,7 @@ export class FrontierEditor {
     // A summary whose only fault is its length keeps the whole sentences that
     // fit (principle 19: the verified part stands). The kept text goes through
     // the same verification as any answer, numbers included.
-    const trimmed = trimOverlongSummary(lastAnswer, last, item, modelInput);
+    const trimmed = trimOverlongSummary(lastAnswer, last, item, modelInput, second || singleAttempt ? 2 : 1);
     if (trimmed) {
       result.verification = "repaired";
       result.fieldDiagnostics = editFieldDiagnostics(trimmed, item);
@@ -2023,6 +2102,7 @@ export class FrontierEditor {
     // the title only if it passed on its own, structure from the latest
     // answer where it passed, else the screening verdict.
     this.#countIssues(this.counters.finalIssues, last.kinds);
+    if (last.chineseTitle) this.counters.chineseTitles[last.chineseTitle] += 1;
     const defaults = item.defaults ?? {};
     const keep = (/** @type {string} */ field) => !last.failed.has(field) && !last.failed.has("answer");
     const titleZh = item.isChinese ? last.output.titleZh
@@ -2047,6 +2127,7 @@ export class FrontierEditor {
       entities: keep("entities") ? last.output.entities : { drugs: [], trials: [], orgs: [], diseases: [] },
       scores: null,
       flags: keep("flags") ? last.output.flags : [],
+      scoresRaw: last.output.scoresRaw ?? null,
     };
     this.counters.verification["title-only"] += 1;
     return result;
@@ -2060,8 +2141,9 @@ export class FrontierEditor {
     return result;
   }
 
-  /** @param {{ output: FrontierEditOutput, reasonKinds: FrontierProseIssueKind[] }} verified a published answer */
+  /** @param {{ output: FrontierEditOutput, reasonKinds: FrontierProseIssueKind[], chineseTitle?: "kept" | "rewritten" | "refused" | null }} verified a published answer */
   #countReason(verified) {
+    if (verified.chineseTitle) this.counters.chineseTitles[verified.chineseTitle] += 1;
     if (verified.reasonKinds.length) {
       for (const kind of new Set(verified.reasonKinds)) this.counters.reasonDropped[kind] = (this.counters.reasonDropped[kind] ?? 0) + 1;
     } else if (!verified.output.reasonZh) this.counters.reasonEmpty += 1;

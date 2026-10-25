@@ -36,7 +36,7 @@ test("every genre has a row of fields; a post has none and is not asked", () => 
   assert.equal(frontierBriefWanted("paper"), true);
   assert.equal(frontierBriefWanted("unknown"), false);
   assert.equal(frontierBriefInstructions("social"), null);
-  assert.match(FRONTIER_BRIEF_VERSION, /^frontier-brief-1\.[a-f0-9]{12}$/);
+  assert.match(FRONTIER_BRIEF_VERSION, /^frontier-brief-2\.[a-f0-9]{12}$/);
 });
 
 test("the instructions share one prefix and end with the genre's fields, the quotation outside the points", () => {

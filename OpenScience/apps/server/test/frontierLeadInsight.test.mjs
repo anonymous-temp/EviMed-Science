@@ -7,6 +7,7 @@ import { buildInsightInput, frontierInsightBasis, frontierInsightWorthAsking, fr
 import { FRONTIER_LEAD_GUIDES, FRONTIER_LEAD_INSTRUCTIONS, FRONTIER_LEAD_LIMITS, buildLeadInput, frontierLeadInstructions, frontierLeadLimit, frontierWriteLead,
   verifyLead } from "../src/frontierLead.mjs";
 import { FRONTIER_GENRES } from "@evimed/domain";
+import { FRONTIER_STYLE_CARDS } from "../src/frontierStyle.mjs";
 import { frontierFullTextParagraphs, frontierGluedShare } from "../src/frontierReaderTidy.mjs";
 
 const SOURCE = ["B-Well 1 和 B-Well 2 两项 III 期试验合并数据显示，基线 HBsAg≤3000 IU/ml 人群功能性治愈率 19%（233/1220），安慰剂组 0%（0/614），",
@@ -60,8 +61,12 @@ test("the 导读 is written by its genre: the shared rules first (the cached pre
   for (const genre of FRONTIER_GENRES) {
     const instructions = frontierLeadInstructions(genre);
     assert.ok(instructions.startsWith(FRONTIER_LEAD_INSTRUCTIONS), genre);
-    assert.ok(instructions.endsWith(FRONTIER_LEAD_GUIDES[genre]), genre);
+    assert.ok(instructions.includes(`写法：${FRONTIER_LEAD_GUIDES[genre]}`), genre);
+    // c2-style: the genre's two exemplars close it, said as what to learn from them.
+    assert.ok(instructions.includes("只学顺序和句子的写法，不要照抄其中的事实、名称和措辞"), genre);
+    for (const exemplar of FRONTIER_STYLE_CARDS[genre].exemplars) assert.ok(instructions.includes(exemplar.lead), genre);
   }
+  assert.match(FRONTIER_LEAD_INSTRUCTIONS, /一句只讲一件事/, "the admitted banned moves are a rule of every 导读");
   assert.match(frontierLeadInstructions("social"), /一两句话/);
   assert.match(frontierLeadInstructions("approval"), /CHMP 的积极意见不等于批准/);
   assert.match(frontierLeadInstructions("paper", { briefed: true }), /另有「要点」/);
