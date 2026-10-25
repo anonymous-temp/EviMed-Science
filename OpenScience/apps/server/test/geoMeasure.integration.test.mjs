@@ -15,6 +15,7 @@ import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.m
 import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
+import { coverageKeyOf, roundCoverages } from "../src/geoCoverage.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
 
@@ -878,6 +879,39 @@ test("a round no engine answered in is not measured: the last net effect stands 
     assert.deepEqual(await rows(`SELECT id FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'NET'`, [empty.roundId]), []);
     assert.equal(await latestNet(), answered, "the net effect of the last week with answers stands");
     assert.deepEqual(await sources(), counted, "the counts the market ranks outlets by are untouched");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an engine paused part-way through a round is out of its coverage key, as it is out of its cells (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_k");
+  const h = await harness({ answers: ({ question }) => ({ answer: question === Q3 ? A_Q3 : A_RIGHT }) });
+  try {
+    const baseline = await enqueueRound(h.deps, { geoProjectId: "geo_k", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(7 * 86_400_000);
+    const weekly = await enqueueRound(h.deps, { geoProjectId: "geo_k", kind: "weekly" });
+    // The first question on both engines, then 豆包 is paused (a failed re-check): the rest of its jobs are skipped.
+    await tickProbe({ ...h.deps, maxAsks: 2 });
+    const at = h.clock.now().getTime();
+    h.state.breaker.seed({ doubao: Array(h.state.breaker.threshold).fill("failed") }, at);
+    h.state.breaker.checked("doubao", at, false);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    const skipped = await rows(`SELECT engine FROM evimed_geo.probe_jobs WHERE round_id = $1 AND status = 'skipped' AND error_code = 'engine_paused'`, [weekly.roundId]);
+    assert.ok(skipped.length > 0 && skipped.every((row) => row.engine === "doubao"));
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.snapshots WHERE round_id = $1 AND engine = 'doubao' AND status = 'valid'`, [weekly.roundId]))[0].n, 1,
+      "豆包 answered its first question before it was paused");
+    await tickParse({ ...h.deps, maxParse: 20 });
+    await tickMetrics(h.deps);
+
+    const coverages = await roundCoverages(database, [baseline.roundId, weekly.roundId]);
+    const [measured] = await rows(`SELECT ref -> 'balance' -> 'engines' AS engines FROM evimed_geo.rounds WHERE id = $1`, [weekly.roundId]);
+    assert.deepEqual(measured.engines, ["deepseek"], "the cells are over DeepSeek alone");
+    assert.deepEqual(coverages.get(weekly.roundId)?.engines, ["deepseek"], "and so is the key");
+    assert.notEqual(coverageKeyOf(coverages.get(weekly.roundId)), coverageKeyOf(coverages.get(baseline.roundId)),
+      "a one-engine week is not compared with the two-engine baseline");
   } finally {
     await h.probe.close();
   }
