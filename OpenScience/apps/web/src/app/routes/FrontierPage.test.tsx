@@ -41,6 +41,7 @@ const client = vi.hoisted(() => ({
   fetchFrontierTag: vi.fn(),
   addFrontierFollow: vi.fn(),
   removeFrontierFollow: vi.fn(),
+  listFrontierCongresses: vi.fn(),
 }));
 // Partial: the vocabulary, the parsers and the error words stay real.
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
@@ -159,6 +160,7 @@ beforeEach(() => {
   client.fetchFrontierTag.mockResolvedValue(null);
   client.addFrontierFollow.mockImplementation(async (input: { kind: string; key: string; label: string }) => ({ id: "f-new", muted: false, ...input }));
   const answered = { role: "physician", specialties: ["oncology"], interests: ["hcc"], interestTags: [{ slug: "hcc", name: "肝细胞癌" }], onboardedAt: ago(48), skippedAt: null };
+  client.listFrontierCongresses.mockReset().mockResolvedValue([]);
   prefs.fetchFrontierPrefs.mockReset().mockResolvedValue(answered);
   prefs.saveFrontierPrefs.mockReset().mockResolvedValue(answered);
 });
@@ -214,7 +216,7 @@ describe("the page and its views", () => {
     expect(screen.queryByRole("navigation", { name: "前沿动态" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "动态视图" })).not.toBeInTheDocument();
     // Six views: the three lists of items first, then the ranking, the issues and the zones (owner, 2026-10-25).
-    expect(viewTabs().getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["精选", "全部", "关注", "热榜", "简报", "证据专区"]);
+    expect(viewTabs().getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["精选", "全部", "关注", "热榜", "追踪", "简报", "证据专区"]);
     expect(viewTabs().getByRole("tab", { name: "精选" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("精选");
     expect(lastFeedQuery()).toMatchObject({ view: "selected", q: null, lane: null, starred: false });
