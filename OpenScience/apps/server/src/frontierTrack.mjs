@@ -112,10 +112,6 @@ export function frontierCongressPatterns(congress) {
   return [...new Set(patterns)];
 }
 
-/** The characters a congress's patterns are matched against. */
-const HAYSTACK_SQL = `(coalesce(i.title_raw, '') || ' ' || coalesce(i.title_zh, '') || ' ' || coalesce(i.summary_zh, '') || ' ' || coalesce(i.lead_zh, '')
-  || ' ' || coalesce(array_to_string(i.tags, ' '), ''))`;
-
 /**
  * The congress's items, as a SQL fragment over `evimed_frontier.items i` and its parameters: published, dated in the window, and
  * naming it or sharing an event with an item that does.
@@ -123,14 +119,19 @@ const HAYSTACK_SQL = `(coalesce(i.title_raw, '') || ' ' || coalesce(i.title_zh, 
  */
 function congressItemsSql(congress, timeZone, firstParam) {
   const window = frontierCongressItemWindow(congress);
-  const [zone, from, to, pattern] = [firstParam, firstParam + 1, firstParam + 2, firstParam + 3];
-  const day = ITEM_DAY_SQL(`$${zone}`);
-  const sql = `i.state = 'published' AND ${day} BETWEEN $${from}::date AND $${to}::date AND (${HAYSTACK_SQL} ~* $${pattern}
-      OR i.event_id IN (SELECT h.event_id FROM evimed_frontier.items h WHERE h.event_id IS NOT NULL AND h.state = 'published'
-        AND ((COALESCE(h.published_at, h.visible_at)) AT TIME ZONE $${zone})::date BETWEEN $${from}::date AND $${to}::date
-        AND (coalesce(h.title_raw, '') || ' ' || coalesce(h.title_zh, '') || ' ' || coalesce(h.summary_zh, '') || ' ' || coalesce(h.lead_zh, '')
-          || ' ' || coalesce(array_to_string(h.tags, ' '), '')) ~* $${pattern}))`;
-  return { sql, params: [timeZone, window.from, window.to, frontierCongressPatterns(congress).join("|")] };
+  const [zone, from, to, pattern, lo, hi] = [firstParam, firstParam + 1, firstParam + 2, firstParam + 3, firstParam + 4, firstParam + 5];
+  // The calendar day is read in the feed's zone, which no index holds; the instant bounds (a day wider on each side than any zone
+  // can move a day) let the published and visible indexes cut the table to the window before the day and the words are looked at.
+  const near = (/** @type {string} */ alias) => `(${alias}.published_at BETWEEN $${lo}::timestamptz AND $${hi}::timestamptz
+      OR (${alias}.published_at IS NULL AND ${alias}.visible_at BETWEEN $${lo}::timestamptz AND $${hi}::timestamptz))`;
+  const day = (/** @type {string} */ alias) => `((COALESCE(${alias}.published_at, ${alias}.visible_at)) AT TIME ZONE $${zone})::date`;
+  const words = (/** @type {string} */ alias) => `(coalesce(${alias}.title_raw, '') || ' ' || coalesce(${alias}.title_zh, '') || ' ' || coalesce(${alias}.summary_zh, '') || ' ' || coalesce(${alias}.lead_zh, '')
+    || ' ' || coalesce(array_to_string(${alias}.tags, ' '), ''))`;
+  const sql = `i.state = 'published' AND ${near("i")} AND ${day("i")} BETWEEN $${from}::date AND $${to}::date AND (${words("i")} ~* $${pattern}
+      OR i.event_id IN (SELECT h.event_id FROM evimed_frontier.items h WHERE h.event_id IS NOT NULL AND h.state = 'published' AND ${near("h")}
+        AND ${day("h")} BETWEEN $${from}::date AND $${to}::date AND ${words("h")} ~* $${pattern}))`;
+  return { sql, params: [timeZone, window.from, window.to, frontierCongressPatterns(congress).join("|"),
+    `${frontierShiftDay(window.from, -1)}T00:00:00Z`, `${frontierShiftDay(window.to, 2)}T00:00:00Z`] };
 }
 
 // ───────────────────────── the recap ─────────────────────────

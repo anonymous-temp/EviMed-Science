@@ -57,9 +57,9 @@ describe("the toolbar's controls", () => {
     const filters = trackControls({ ...base, approvals: ready(approvalsPage(), 3), guidelines: { kind: "idle" } });
     expect(filters).toHaveLength(2);
     expect(filters[0]).toMatchObject({ kind: "chips", value: "approvals", pinned: true });
-    expect((filters[0] as { options: Array<{ label: string }> }).options.map((option) => option.label)).toEqual(["审批", "指南", "会议"]);
+    expect((filters[0] as unknown as { options: Array<{ label: string }> }).options.map((option) => option.label)).toEqual(["审批", "指南", "会议"]);
     expect(filters[1]).toMatchObject({ kind: "select", label: "机构", allLabel: "全部机构", value: null });
-    expect((filters[1] as { options: Array<{ label: string }> }).options.map((option) => option.label)).toEqual(["FDA 2", "EMA 1"]);
+    expect((filters[1] as unknown as { options: Array<{ label: string }> }).options.map((option) => option.label)).toEqual(["FDA 2", "EMA 1"]);
   });
   it("is the specialty for 指南 and nothing but the segment for 会议 or while the list is read", () => {
     const guidelines = ready({ items: [], nextCursor: null, listId: null, specialties: [{ key: "oncology", label: "肿瘤", count: 2 }] } as FrontierGuidelines, 0);

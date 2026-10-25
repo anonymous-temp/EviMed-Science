@@ -276,6 +276,20 @@ test("a congress's items are those that name it by the calendar's words or by it
   assert.equal(await instance.congress("no-such-congress"), null);
 });
 
+test("an item with no publication moment is dated by when it became visible, and the window is cut by instants before days are read", options, async () => {
+  const undated = await item({ text: "u1", publishedAt: "2026-10-24T04:00:00Z", title: "Late-breaking result at ESMO 2026" });
+  await database.query("UPDATE evimed_frontier.items SET published_at = NULL WHERE id = $1", [undated.id]);
+  const hub = await track().congress("esmo-2026");
+  assert.deepEqual(hub?.days.map((entry) => [entry.day, entry.items.map((row) => row.rowId)]), [["2026-10-24", [String(undated.id)]]]);
+  // A day the zone moves across: 23:30 UTC on the 29th is the 30th in Shanghai, still inside ESMO's window (to 30 October); 16:30 UTC
+  // on the 30th is already the 31st there, outside.
+  const edge = await item({ text: "u2", publishedAt: "2026-10-29T23:30:00Z", title: "ESMO 2026 follow-up" });
+  const beyond = await item({ text: "u3", publishedAt: "2026-10-30T16:30:00Z", title: "ESMO 2026 follow-up too late" });
+  const found = new Set((await track().congress("esmo-2026"))?.days.flatMap((entry) => entry.items.map((row) => row.rowId)));
+  assert.ok(found.has(String(edge.id)));
+  assert.ok(!found.has(String(beyond.id)));
+});
+
 test("an upcoming congress has no items to count and an empty hub", options, async () => {
   await item({ text: "x", publishedAt: "2026-10-24T04:00:00Z", title: "AHA 2026 abstracts" });
   const hub = await track().congress("aha-2026");
