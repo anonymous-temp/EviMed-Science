@@ -170,6 +170,23 @@ def test_a_lead_source_is_served_by_the_sources_listing():
     served = serialize_source(row)
     assert served["access"] == "lead" and served["name"] == "示例医药网"
 
+def test_the_daily_cap_of_leads_is_600_everywhere_it_is_written():
+    """c2-fixes F4: 300 were spent by 10:12 on 2026-10-25 and the specialty and genre-gap leads after them were ``capped``."""
+    from pathlib import Path
+
+    from knowledge_plugin import leads
+    from knowledge_plugin.settings import Settings
+
+    env = {"KNOWLEDGE_PLUGIN_DATABASE_URL": "postgresql://unused"}
+    assert Settings.from_env(env).leads_daily == leads.DEFAULT_DAILY == 600
+    assert Settings.from_env({**env, "KNOWLEDGE_PLUGIN_LEADS_DAILY": "120"}).leads_daily == 120
+    root = Path(__file__).resolve().parents[1]
+    assert "| `KNOWLEDGE_PLUGIN_LEADS_DAILY` | `600` |" in (root / "README.md").read_text(encoding="utf-8")
+    compose = root.parents[1] / "OpenScience" / "deploy" / "web" / "docker-compose.knowledge.yml"
+    if compose.is_file():
+        assert "KNOWLEDGE_PLUGIN_LEADS_DAILY: ${KNOWLEDGE_PLUGIN_LEADS_DAILY:-600}" in compose.read_text(encoding="utf-8")
+
+
 # ------------------------------------------------------------------------------------ the API
 
 
@@ -208,6 +225,47 @@ async def test_a_post_is_answered_address_by_address_idempotent_and_capped(regis
         http.headers["Authorization"] = TOKEN
         refused = await http.post("/v1/leads", json={"leads": [{"url": "https://a.example.cn/9", "trigger": "hot-tag"}]})
         assert refused.status_code == 501 and refused.json()["code"] == "capability_unavailable"
+
+
+async def seed_lead(pool, url: str, state: str, reason: str | None, *, days_ago: float = 1) -> None:
+    from knowledge_plugin.leads import shanghai_day, url_sha256
+
+    done = NOW - timedelta(days=days_ago)
+    async with pool.connection() as conn:
+        await conn.execute(
+            """INSERT INTO evimed_knowledge.leads (url_sha256, url, trigger, received_at, day, state, state_reason, attempts,
+                      next_attempt_at, done_at) VALUES (%s, %s, 'zh-report', %s, %s, %s, %s, 1, %s, %s)""",
+            (url_sha256(url), url, done, shanghai_day(done), state, reason, done, done))
+
+
+async def test_a_host_the_plugin_could_not_read_is_refused_up_front_and_spends_nothing_of_the_cap(registry_file, pool):
+    """c2-fixes F3: robots-denied, a challenge or a 401/403/451 within seven days and no page served since."""
+    from knowledge_plugin.api import create_app
+    from knowledge_plugin.leads import blocked_hosts
+
+    await synced(pool, registry_file)
+    await seed_lead(pool, "https://www.robots.example.org/a", "failed", "robots-denied:robots_disallow", days_ago=2)
+    await seed_lead(pool, "https://shield.example.org/a", "failed", "challenge:cf_challenge")
+    await seed_lead(pool, "https://forbidden.example.org/a", "failed", "blocked:http_403", days_ago=6.5)
+    await seed_lead(pool, "https://mixed.example.org/a", "failed", "robots-denied:robots_disallow")      # one path denied ...
+    await seed_lead(pool, "https://mixed.example.org/b", "stale", "older_than_window")                   # ... another page served
+    await seed_lead(pool, "https://old.example.org/a", "failed", "robots-denied:robots_disallow", days_ago=8)
+    await seed_lead(pool, "https://down.example.org/a", "failed", "http_404")
+    await seed_lead(pool, "https://slow.example.org/a", "failed", "timeout:timeout")
+    await seed_lead(pool, "https://config.example.org/a", "failed", "blocked:host_not_allowed")
+    await seed_lead(pool, "https://waiting.example.org/a", "queued", None)
+    async with pool.connection() as conn:
+        assert await blocked_hosts(conn, NOW) == {"robots.example.org", "shield.example.org", "forbidden.example.org"}
+    app = create_app(registry_file, pool=pool, clock=lambda: NOW)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://plugin") as http:
+        http.headers["Authorization"] = TOKEN
+        urls = ["https://robots.example.org/news/1", "https://shield.example.org/news/1", "https://forbidden.example.org/x",
+                "https://mixed.example.org/news/1", "https://old.example.org/news/1", "https://down.example.org/news/1",
+                "https://fine.example.org/news/1"]
+        body = (await http.post("/v1/leads", json={"leads": [{"url": url, "trigger": "specialty"} for url in urls]})).json()
+    assert [r["status"] for r in body["results"]] == ["refused", "refused", "refused", "accepted", "accepted", "accepted", "accepted"]
+    assert [r.get("reason") for r in body["results"][:3]] == ["host_blocked"] * 3
+    assert [body[k] for k in ("accepted", "duplicate", "refused", "capped")] == [4, 0, 3, 0], "four a day in this fixture: no cap spent"
 
 
 async def test_a_page_the_stream_already_holds_is_a_duplicate(registry_file, pool):
@@ -342,8 +400,9 @@ async def test_a_wechat_article_is_bought_within_the_shared_cap_never_read_as_a_
         source = await (await conn.execute("SELECT name, owner_entity, access FROM evimed_knowledge.sources WHERE id = %s", (entry["source_id"],))).fetchone()
         candidate = await (await conn.execute("SELECT line, key, evidence FROM evimed_knowledge.source_candidates")).fetchone()
     assert dict(source) == {"name": "医学界", "owner_entity": "医学界", "access": "lead"}
-    assert (candidate["line"], candidate["key"]) == ("lead", "wechat:MzA5")
-    assert candidate["evidence"]["hint"]["verified_url"] == link
+    assert (candidate["line"], candidate["key"]) == ("lead", "wechat:biz:MzA5"), "keyed by biz, validated by the link (c2-fixes F1)"
+    assert candidate["evidence"]["hint"]["verified_url"] == link and candidate["evidence"]["hint"]["url"] == link
+    assert candidate["evidence"]["hint"]["account"] == "医学界" and candidate["evidence"]["hint"]["biz"] == "MzA5"
     # The day's Dajiala cap spent: the lead waits for tomorrow, no attempt spent past the third.
     link2 = "https://mp.weixin.qq.com/s?__biz=MzA5&mid=2248&idx=1&sn=def"
     await queue(pool, registry_file, link2)

@@ -7,7 +7,8 @@ its own rules, exactly as it reads any source:
 
 - **Received** (``submit``): each address once (idempotent on its canonical form: a second post of it, or of a page the
   stream already holds, is ``duplicate``), within a day's cap (``KNOWLEDGE_PLUGIN_LEADS_DAILY``, Shanghai day; past it,
-  ``capped``), never from an owner-excluded or discovery-excluded host (``refused``). Nothing is fetched while the
+  ``capped``), never from an owner-excluded or discovery-excluded host (``refused``) — nor from a host the plugin's own
+  record shows it cannot read (``refused``, reason ``host_blocked``: ``blocked_hosts``). Nothing is fetched while the
   platform waits: an accepted address is queued.
 - **Read** (``LeadReader.tick``, a loop of the crawler): a few a minute, through the protected fetch — robots, the
   per-host pacing and budgets, the address policy, the relay when Beijing is refused — with the readers the plugin
@@ -46,13 +47,16 @@ from .normalize import Rejected, canonical_url, normalize_doi, prepare
 log = logging.getLogger("knowledge_plugin.leads")
 
 LEAD_ACCESS = "lead"
-DEFAULT_DAILY = 300                     # addresses accepted a Shanghai day (KNOWLEDGE_PLUGIN_LEADS_DAILY)
+DEFAULT_DAILY = 600                     # addresses accepted a Shanghai day (KNOWLEDGE_PLUGIN_LEADS_DAILY; settings.py holds the same number)
 PER_POST = 50                           # addresses one post carries at most (the contract's bound)
 PER_TICK = 8                            # addresses one tick reads
 FRESH_DAYS = 30                         # a page or an article older than this (or undated) is not emitted
 MAX_ATTEMPTS = 3
 RETRY_AFTER = timedelta(hours=1)
 RETENTION = timedelta(days=30)
+BLOCKED_WINDOW = timedelta(days=7)      # a host that denied a read this recently is not queued again (``blocked_hosts``)
+# How a read ends when the host says no: ``leads.state_reason`` is ``<fetch outcome>:<detail>`` (``LeadReader.tick``).
+BLOCKED_REASON = re.compile(r"^(robots-denied:|challenge:|blocked:http_(401|403|451)$)")
 LEAD_FLOOR_S = 86400                    # a lead source's cadence is a registry formality: it is never polled
 LEAD_CEILING_S = 604800
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -176,14 +180,40 @@ async def excluded_hosts(conn) -> set[str]:
     return {site_family(host_of(value)) for row in rows for value in (row["homepage"], (row["config"] or {}).get("url")) if host_of(value)}
 
 
-async def submit(conn, leads: list[Lead], now: datetime, *, daily_cap: int, excluded: set[str]) -> dict:
-    """Receive a post (module docstring): each address accepted (queued), a duplicate, refused or capped."""
+async def blocked_hosts(conn, now: datetime) -> set[str]:
+    """The host families a lead read was refused by within ``BLOCKED_WINDOW`` — robots.txt denied it, a challenge page
+    answered, or the host said 401, 403 or 451 — and that no lead read got a page from in the same window (a host that
+    served one page denied this one only: its robots rules or its paywall, not the host). The plugin's own record of what it
+    fetched, in the same two states the reader writes (``leads.state``), so an address of such a host is never queued for a
+    fetch the plugin already knows will fail (c2-fixes 2026-10-25: about 95 of the 300 accepted leads of 2026-10-25 failed so)."""
+    rows = await (await conn.execute(
+        """SELECT url, state, state_reason FROM evimed_knowledge.leads
+            WHERE done_at > %s AND state IN ('fetched', 'stale', 'failed')""", (now - BLOCKED_WINDOW,))).fetchall()
+    denied: set[str] = set()
+    served: set[str] = set()
+    for row in rows:
+        family = host_family(row["url"])
+        if not family:
+            continue
+        if row["state"] in ("fetched", "stale"):
+            served.add(family)
+        elif BLOCKED_REASON.match(row["state_reason"] or ""):
+            denied.add(family)
+    return denied - served
+
+
+async def submit(conn, leads: list[Lead], now: datetime, *, daily_cap: int, excluded: set[str],
+                 blocked: set[str] | None = None) -> dict:
+    """Receive a post (module docstring): each address accepted (queued), a duplicate, refused or capped. ``blocked``
+    is ``blocked_hosts`` (read here when not given)."""
     from .discovery import canonical_url as public_url, host_matches, host_of
 
     day = shanghai_day(now)
     results: list[dict] = []
     counts = {status: 0 for status in STATUSES}
     async with conn.transaction():
+        if blocked is None:
+            blocked = await blocked_hosts(conn, now)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtext('evimed-knowledge-leads'))")
         received = int((await (await conn.execute(
             "SELECT count(*) AS n FROM evimed_knowledge.leads WHERE day = %s", (day,))).fetchone())["n"])
@@ -194,6 +224,8 @@ async def submit(conn, leads: list[Lead], now: datetime, *, daily_cap: int, excl
                 status, reason = "refused", "not_a_public_address"
             elif host_matches(host_of(clean), excluded):
                 status, reason = "refused", "excluded"
+            elif host_family(clean) in blocked:
+                status, reason = "refused", "host_blocked"
             else:
                 key = url_sha256(canonical_url(clean))
                 seen = await (await conn.execute(
@@ -472,10 +504,10 @@ class LeadReader:
     # ---------------------------------------------------------------- a WeChat article
 
     async def read_wechat(self, row: dict, sources: list[dict], now: datetime) -> Read:
-        from .discovery import Candidate
         from .social import wechat as wechat_mod
         from .social.providers import ProviderError
         from .social.spend import SpendCapReached, day_window
+        from .social.wechat_discovery import candidate_from_lead_read
 
         collector = self._collector
         if collector is None or not collector.dajiala.configured:
@@ -512,10 +544,11 @@ class LeadReader:
             return Read("failed", "wechat_no_title")
         if registered:
             return Read("fetched", entry=entry, source=registered["id"])
-        candidate = Candidate("lead", "social", f"wechat:{biz or nickname}", name=nickname or None,
-                              hint={"platform": "wechat", "account": nickname, "biz": biz, "ghid": detail.get("user_name"),
-                                    "alias": detail.get("alias"), "verified_url": link, "expected_names": [nickname] if nickname else []},
-                              evidence={"lead_url": row["url"], "trigger": row["trigger"]})
+        candidate = candidate_from_lead_read(
+            "lead", link, nickname, biz,
+            hint={"platform": "wechat", "account": nickname, "biz": biz, "ghid": detail.get("user_name"), "alias": detail.get("alias"),
+                  "verified_url": link, "expected_names": [nickname] if nickname else []},
+            evidence={"lead_url": row["url"], "trigger": row["trigger"]})
         return Read("fetched", entry=entry, lead_row=target, candidate=candidate)
 
     # ---------------------------------------------------------------- identifiers

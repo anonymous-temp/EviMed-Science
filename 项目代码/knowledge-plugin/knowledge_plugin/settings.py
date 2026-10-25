@@ -136,7 +136,9 @@ class Settings:
     # ct-mix 2026-10-24: the addresses the platform's lead triggers hand over (POST /v1/leads, ``leads.py``): read or not,
     # and how many a Shanghai day are accepted.
     leads_enabled: bool = True
-    leads_daily: int = 300
+    # c2-fixes 2026-10-25: 600 (was 300). On 2026-10-25 the 300 were spent by 10:12 CST and every specialty and genre-gap URL after it
+    # answered ``capped`` while the platform kept searching; the plugin's own reads, not this cap, bound what is fetched.
+    leads_daily: int = 600
     host: str = "0.0.0.0"
     port: int = 8080
     registry_path: str = str(PROJECT_ROOT / "registry" / "sources.json")
@@ -200,7 +202,7 @@ class Settings:
             discovery_caps=(env.get("KNOWLEDGE_PLUGIN_DISCOVERY_CAPS") or "").strip()[:500],
             discovery_outbound_pages=_int(env, "KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES", 120, 0, 2000),
             leads_enabled=_bool(env, "KNOWLEDGE_PLUGIN_LEADS", True),
-            leads_daily=_int(env, "KNOWLEDGE_PLUGIN_LEADS_DAILY", 300, 0, 5000),
+            leads_daily=_int(env, "KNOWLEDGE_PLUGIN_LEADS_DAILY", 600, 0, 5000),
             host=(env.get("KNOWLEDGE_PLUGIN_HOST") or "0.0.0.0").strip(),
             port=_int(env, "KNOWLEDGE_PLUGIN_PORT", 8080, 1, 65535),
             registry_path=registry_path,

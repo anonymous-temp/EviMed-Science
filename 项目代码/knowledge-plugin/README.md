@@ -72,7 +72,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_DISCOVERY_CAPS` | unset | the daily validations per candidate line, `line=n,…` over the defaults (`outbound=60,journal=25,directory=30,hot-origin=15,social=20,request=25,readmit=30,lead=20`) |
 | `KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES` | `120` | article pages the outbound line reads a day to find the sites they link to |
 | `KNOWLEDGE_PLUGIN_LEADS` | `1` | `0` reads no leads and answers `POST /v1/leads` 501 (contract 1.6.0, `leads.py`) |
-| `KNOWLEDGE_PLUGIN_LEADS_DAILY` | `300` | addresses `POST /v1/leads` accepts a Shanghai day; past it, `capped` |
+| `KNOWLEDGE_PLUGIN_LEADS_DAILY` | `600` | addresses `POST /v1/leads` accepts a Shanghai day; past it, `capped` |
 | `KNOWLEDGE_PLUGIN_PORT` / `KNOWLEDGE_PLUGIN_HOST` | `8080` / `0.0.0.0` | listen address |
 | `KNOWLEDGE_PLUGIN_REGISTRY` | `registry/sources.json` | the runtime registry file (watched; re-synced on change) |
 | `KNOWLEDGE_PLUGIN_CONCURRENCY` / `KNOWLEDGE_PLUGIN_TEXT_CONCURRENCY` | `4` / `2` | parallel polls / enrichments |

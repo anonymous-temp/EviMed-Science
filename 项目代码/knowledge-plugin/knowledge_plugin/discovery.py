@@ -880,6 +880,10 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
         curated = {row.source.id for row in base}
         async with pool.connection() as conn:
             async with conn.transaction():
+                # c2-fixes 2026-10-25: lead candidates an earlier build keyed ``wechat:<biz>`` move to their right key (idempotent).
+                from .social.wechat_discovery import rekey_lead_candidates
+
+                report["rekeyed"] = await rekey_lead_candidates(conn, clock(), day)
                 if status.get("retiredDay") != day:
                     report["retired"] = await apply_retirements(conn, clock(), day, curated)
                     status["retiredDay"] = day
