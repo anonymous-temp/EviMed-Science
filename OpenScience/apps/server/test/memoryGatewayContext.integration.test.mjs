@@ -222,13 +222,18 @@ test('nested and legacy project corrections remain readable and searchable besid
     const listing = await tool('list', { uri, recursive: true });
     assert.equal(listing.status, 200); assert.match(listing.text, /wording.md/); assert.doesNotMatch(listing.text, /EXCLUDED|owner.md|sensitive.md|tone.md|secret.md|overview|abstract/);
   }
+  // The pinned v0.5.1.1 refuses `exclude_uris` in list mode, so only a context search names the private siblings; a list
+  // search sends none and is post-filtered, which the absent EXCLUDED texts above prove.
   const asked = f.stub.sent('POST', '/api/v1/search/search');
-  for (const request of asked) {
+  const context = asked.filter(request => request.body.mode === 'context'), listed = asked.filter(request => request.body.mode !== 'context');
+  assert.ok(context.length > 0 && listed.length > 0, 'both search modes were exercised');
+  for (const request of context) {
     assert.equal(request.body.exclude_uris.includes(`${root}/preferences`), false);
     assert.ok(request.body.exclude_uris.includes(`${root}/preferences/self`));
     assert.ok(request.body.exclude_uris.includes(sensitive));
-    assert.equal(request.user, a.namespaceId);
   }
+  for (const request of listed) assert.equal(request.body.exclude_uris, undefined);
+  for (const request of asked) assert.equal(request.user, a.namespaceId);
   assert.ok(f.stub.requests.every(request => !request.user || request.user === a.namespaceId));
 });
 
