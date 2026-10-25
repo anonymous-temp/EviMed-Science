@@ -118,11 +118,14 @@ export function usageDiscovery(detail) {
  *   database: any,
  *   config?: Record<string, any>,
  *   plugin?: (() => any) | null,
+ *   topics?: (() => Promise<any>) | null,
  *   now?: () => Date,
  * }} options
  *   `plugin` returns the ingest's status (its `pluginHealthDetail` holds the plugin's own blocks); absent, those parts are `null`.
+ *   `topics` reads the hot-event topics' figures (`FrontierTopics.figures`, c2-leads 2026-10-25: the last week's topics by field,
+ *   their yield and their latency); absent, that part is `null` with its reason.
  */
-export function createFrontierUsage({ database, config = {}, plugin = null, now = () => new Date() }) {
+export function createFrontierUsage({ database, config = {}, plugin = null, topics = null, now = () => new Date() }) {
   const timeZone = String(config.frontierTimeZone || "Asia/Shanghai");
   /** @type {{ at: number, value: any } | null} */
   let cached = null;
@@ -266,6 +269,9 @@ export function createFrontierUsage({ database, config = {}, plugin = null, now 
       sources: await part(() => sourceStates(at)),
       discovery: discovery ?? absent(detail ? "plugin_does_not_report_discovery" : "plugin_health_unavailable"),
       providers: providers ?? absent(detail ? "plugin_does_not_report_providers" : "plugin_health_unavailable"),
+      // c2-leads 2026-10-25: the hot-event topics — the last week's topics by field and surges, their yield (a lead item within a
+      // day) and the hours from the first sighting to the first lead item. The module's stop rule reads these.
+      topics: topics ? await part(() => topics()) : absent("topics_unavailable"),
     };
   }
 

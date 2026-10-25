@@ -1434,18 +1434,28 @@ export {
   frontierLeadPlaces,
   frontierLeadQueryKey,
 } from './src/frontierLeadWatch.mjs'
-// frontierTopics — 11 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
+// frontierTopics — 20 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
 // labels, the hot lists it is first seen on, a topic's states, its items' roles and origins, the evidence programme's states
-// for it, and the limits it lives within.
+// for it, the limits it lives within, and the outside-event trigger's pure decisions (a candidate, a surge, the title key,
+// an item's role, the names a text holds).
 export {
   FRONTIER_HOT_BOARDS,
+  FRONTIER_TOPIC_BACKGROUND_DAYS,
+  FRONTIER_TOPIC_CANDIDATE,
   FRONTIER_TOPIC_DOMAIN_LABELS_ZH,
   FRONTIER_TOPIC_DOMAINS,
+  FRONTIER_TOPIC_EVIDENCE_GENRES,
   FRONTIER_TOPIC_ITEM_ROLES,
   FRONTIER_TOPIC_ITEM_VIA,
   FRONTIER_TOPIC_LIMITS,
+  FRONTIER_TOPIC_MIN_CONFIDENCE,
   FRONTIER_TOPIC_PROGRAMME_STATES,
   FRONTIER_TOPIC_STATUSES,
+  FRONTIER_TOPIC_SURGE,
+  frontierHotTitleKey,
+  frontierTopicItemRole,
+  frontierTopicNamesIn,
+  frontierTopicSurge,
   isFrontierTopicDomain,
 } from './src/frontierTopics.mjs'
 /** @typedef {import('./src/frontierTopics.mjs').FrontierTopicDomain} FrontierTopicDomain */

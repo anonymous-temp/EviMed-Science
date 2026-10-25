@@ -30,7 +30,8 @@
  *   accepted, duplicate or refused) is not handed over again; one the plugin answered `capped`, or never answered, may be
  *   handed over another day. The plugin is idempotent on the address besides.
  * - **What is not handed over** (review 2026-10-25): a result dated before the plugin's freshness window
- *   (`FRONTIER_LEAD_FRESH_DAYS`, the plugin's own `FRESH_DAYS`: it would only be answered `stale`), and a result from a host
+ *   (`FRONTIER_LEAD_FRESH_DAYS`, the plugin's own `FRESH_DAYS`: it would only be answered `stale`) unless it names a work by its
+ *   identifier (a DOI, a PubMed record, a trial: read from its index whatever its age), and a result from a host
  *   the plugin refused `FRONTIER_LEAD_REFUSED_LIMIT` times in `FRONTIER_LEAD_REFUSED_DAYS` days (robots, a challenge, an
  *   owner exclusion: the next address there is refused too) — each recorded with why (`skipped: stale | refused-host`).
  * - **The plugin's day cap ends the day's searching.** Once the plugin answers `capped` for any address of the feed's day,
@@ -155,6 +156,20 @@ export function frontierLeadUrl(value) {
   return parsed.toString();
 }
 
+/**
+ * Whether an address names a work by its identifier — a DOI at doi.org, a PubMed record, a ClinicalTrials.gov study — which the
+ * plugin reads from its index whatever its age (its `leads.py` `lead_kind`): such a result is never held as stale. A format.
+ * @param {string} url
+ */
+export function frontierLeadIdentifierAddress(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return false; }
+  const host = parsed.hostname.toLowerCase();
+  if ((host === "doi.org" || host === "dx.doi.org") && /^\/10\.\d{4,9}\//.test(parsed.pathname)) return true;
+  if (host === "pubmed.ncbi.nlm.nih.gov" && /^\/\d{6,9}\/?$/.test(parsed.pathname)) return true;
+  return (host === "clinicaltrials.gov" || host === "www.clinicaltrials.gov") && /NCT\d{8}/i.test(parsed.pathname);
+}
+
 /** An address's host without `www.` (the family a refusal counts against), or null. @param {unknown} url */
 function hostFamily(url) {
   try { return new URL(String(url)).hostname.toLowerCase().replace(/\.$/, "").replace(/^www\./, ""); } catch { return null; }
@@ -167,7 +182,7 @@ function clip(text, limit) {
 }
 
 /**
- * @typedef {{ trigger: string, kind: "search", query: string, language: string | null, timeRange: "day" | "week",
+ * @typedef {{ trigger: string, kind: "search", query: string, language: string | null, timeRange: "day" | "week" | "month" | "year",
  *   subject: Record<string, unknown>, excludeHost?: string | null, chineseOnly?: boolean, dedupeKey?: string } | { trigger: string, kind: "address", url: string,
  *   subject: Record<string, unknown> }} FrontierLeadPlan
  *   `chineseOnly`: hand over only results whose title is written in Chinese (a `zh-report` looks for a Chinese report; the
@@ -179,7 +194,7 @@ export class FrontierLeads {
   /**
    * @param {{ database: any, plugin: any, webSearch?: { search: (body: Record<string, unknown>, context: { caller: any }) => Promise<any> } | null,
    *   owner: () => ({ userId: string, projectId: string } | null), budget?: (() => Promise<{ state: string, budgetCny?: number }>) | null,
-   *   config?: Record<string, any>, now?: () => Date, topics?: { duePlans: (now: Date) => Promise<FrontierLeadPlan[]> } | null }} dependencies
+   *   config?: Record<string, any>, now?: () => Date, topics?: { duePlans: (now: Date) => Promise<Array<Record<string, any>>> } | null }} dependencies
    *   `plugin` offers `submitLeads(leads)` (`KnowledgePluginClient`); `webSearch` is the gateway's search (`createWebSearch`);
    *   `owner` the feed's internal project the searches are booked to; `budget` the pipeline's day budget; `topics` the
    *   hot-event topics (`FrontierTopics`), whose due searches lead the plan.
@@ -378,7 +393,7 @@ export class FrontierLeads {
    */
   async #outsideEvents(now) {
     if (!this.topics || typeof this.topics.duePlans !== "function") return [];
-    try { return await this.topics.duePlans(now); } catch (error) {
+    try { return /** @type {FrontierLeadPlan[]} */ (await this.topics.duePlans(now)); } catch (error) {
       const code = typeof (/** @type {any} */ (error))?.code === "string" ? /** @type {any} */ (error).code : "frontier_topics_plan_failed";
       this.counters.failures[code] = (this.counters.failures[code] ?? 0) + 1;
       return [];
@@ -419,7 +434,7 @@ export class FrontierLeads {
       const published = publishedDate ? Date.parse(publishedDate) : Number.NaN;
       const skipped = excludeHost && host.replace(/^www\./, "") === excludeHost ? "own-site"
         : frontierLeadSkipHost(host) ? "social-network" : chineseOnly && !isChineseTitle(title) ? "not-chinese"
-        : Number.isFinite(published) && published < freshFrom ? "stale"
+        : Number.isFinite(published) && published < freshFrom && !frontierLeadIdentifierAddress(url) ? "stale"
         : refusedHosts.has(hostFamily(url) ?? "") ? "refused-host" : null;
       if (skipped) this.counters.held[skipped] = (this.counters.held[skipped] ?? 0) + 1;
       fresh.push({ url, title, snippet: typeof row.snippet === "string" ? row.snippet.slice(0, 700) : null, publishedDate, skipped });

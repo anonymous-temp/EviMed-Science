@@ -59,7 +59,7 @@ export function frontierRoutePattern(pathname) {
   }
   if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : "/api/frontier/follows/:id";
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
-  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media", "prefs"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
+  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media", "prefs", "topics"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";
 }
 
@@ -190,6 +190,9 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       // `?window=week|month`: that window's ranking instead of the current list.
       return reply(await service.hot(url.searchParams, user));
     }
+    // Hot-event topics (c2-leads 2026-10-25, contract §T): 热榜's 「热点话题」 (`?status=active|recent&limit=N`) and one topic page.
+    if (parts.length === 1 && parts[0] === "topics" && method === "GET") return reply(await service.topicList(user, url.searchParams));
+    if (parts.length === 2 && parts[0] === "topics" && method === "GET") return reply(await service.topic(user, parts[1]));
     if (parts.length === 3 && parts[0] === "events" && parts[2] === "read" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["mark"]);
       sendJson(res, 200, { data: await service.markEventRead(user, parts[1], body.mark) });

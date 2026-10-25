@@ -355,6 +355,7 @@ import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { createFrontierUsage } from "./frontierUsage.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierLeads } from "./frontierLeads.mjs";
+import { FrontierTopics } from "./frontierTopics.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
 // 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
@@ -2219,7 +2220,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
    *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage>, interactions: FrontierInteractions,
-   *   reading?: ReturnType<typeof createFrontierReadingMetrics> } | null} */
+   *   reading?: ReturnType<typeof createFrontierReadingMetrics>, topics?: FrontierTopics } | null} */
   let frontier = null;
   // The gateway's search (composed with the gateways below), which the feed's lead triggers call in-process.
   /** @type {{ service: ReturnType<typeof createWebSearch> | null }} */
@@ -2285,7 +2286,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         save: ({ user, project, rel, buffer }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer }),
       } : null,
       ...(overrides.frontierPdfTransport ? { pdfTransport: overrides.frontierPdfTransport } : {}) });
-    const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder, policies:evolutionModulePolicies,
+    // Hot-event topics (c2-leads 2026-10-25, frontierTopics.mjs): the plugin's hot lists, the editor's two calls under the feed's
+    // budget, the shared vocabulary's keys; their searches ride the lead triggers below, their reading the service.
+    const topics = new FrontierTopics({ database: productDatabase, plugin: client, editor, entityVocabulary, budget, config });
+    const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder, policies:evolutionModulePolicies, topics,
       dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions, tags: tagStore, tagUpkeep, interactions });
     const composer = new FrontierComposer({ events, daily, weekly, monthly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
@@ -2305,13 +2309,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     // Lead triggers (ct-mix 2026-10-24): searches for what the feed is missing, through the gateway's search under the
     // module's purpose and budget, handed to the plugin.
-    const leads = new FrontierLeads({ database: productDatabase, plugin: client, config, budget, owner: () => editor.owner,
+    const leads = new FrontierLeads({ database: productDatabase, plugin: client, config, budget, owner: () => editor.owner, topics,
       webSearch: { search: (/** @type {Record<string, unknown>} */ body, /** @type {{ caller: any }} */ searchContext) => {
         if (!webSearchRef.service) throw Object.assign(new Error("Open-web search is not composed yet."), { code: "web_search_unconfigured" });
         return webSearchRef.service.search(body, searchContext);
       } } });
     const worker = new FrontierWorker({
-      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, leads, database: productDatabase,
+      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, leads, topics, database: productDatabase,
       ensureOwner: async () => {
         const owner = await ensureFrontierProject({ store, config });
         editor.owner = owner;
@@ -2323,13 +2327,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
     frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications,
-      interactions };
+      interactions, topics };
   }
   // The operators' figures for the feed (frontierUsage.mjs): readers, reads, notices, sources, discovery, providers and the model's spend per day.
   // They ride the module's switch and read tables it already has; the plugin's own blocks come from the ingest's last health read.
   if (frontier) {
     const { ingest: frontierIngest } = frontier;
-    frontier.usage = createFrontierUsage({ database: productDatabase, config, plugin: () => frontierIngest.status() });
+    const frontierTopics = frontier.topics ?? null;
+    frontier.usage = createFrontierUsage({ database: productDatabase, config, plugin: () => frontierIngest.status(),
+      topics: frontierTopics ? () => frontierTopics.figures() : null });
     // What readers do with what they are served (frontierReadingMetrics.mjs): click-through by genre, slot, surface and position,
     // dwell, the end reached, return on the next day and the seventh, onboarding — for the operator only.
     frontier.reading = createFrontierReadingMetrics({ database: productDatabase, config });
@@ -5498,6 +5504,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     service: frontier?.service ?? null,
     // Published evidence cards ride beside the items, as an index only (flywheel F12).
     cards: frontier ? createEvidenceCardSearch({ judgeService, database: productDatabase, entityVocabulary, sourceChanges }) : null,
+    // Hot-event topics ride beside them the same way, as an index (c2-leads 2026-10-25).
+    topics: frontier?.service ? ((/** @type {any} */ frontierService) => ({ search: (/** @type {any} */ user, /** @type {any} */ request) => frontierService.searchTopics(user, request) }))(frontier.service) : null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the

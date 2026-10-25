@@ -24,6 +24,7 @@ import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
 import { HttpError } from "./security.mjs";
 import { FrontierSubscriptions, frontierFollowPredicate, frontierTagPredicate } from "./frontierSubscriptions.mjs";
 import { FRONTIER_ITEM_TAG_LIMIT, FrontierTagStore } from "./frontierTags.mjs";
+import { frontierTopicSummary } from "./frontierTopics.mjs";
 
 /**
  * What a reader of 「前沿动态」 is served (plan §7.3, §10.5).
@@ -512,7 +513,8 @@ export class FrontierService {
    *   budget?: (() => Promise<{ spentCny: number, budgetCny: number, state: string }>) | null, now?: () => Date,
    *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, monthly?: any, profiles?: any, actions?: any,
    *   tags?: import("./frontierTags.mjs").FrontierTagStore | null, tagUpkeep?: import("./frontierTagUpkeep.mjs").FrontierTagUpkeep | null,
-   *   interactions?: import("./frontierInteractions.mjs").FrontierInteractions | null }} options
+   *   interactions?: import("./frontierInteractions.mjs").FrontierInteractions | null,
+   *   topics?: import("./frontierTopics.mjs").FrontierTopics | null }} options
    *   The second wave's readers, each optional (a route without its module
    *   answers 404 `not_found`, which the page reads as 「还在准备」):
    *   `events` a `FrontierEvents` (hot list, event pages), `daily` a
@@ -522,7 +524,7 @@ export class FrontierService {
    */
   constructor({ database, config, vocabulary, policies = createModuleEvolutionPolicies(), ingest = null, embedder = null, budget = null, now = () => new Date(),
     dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, monthly = null, profiles = null, actions = null,
-    tags = null, tagUpkeep = null, interactions = null }) {
+    tags = null, tagUpkeep = null, interactions = null, topics = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
     this.policies = policies;
     this.database = database;
@@ -545,6 +547,8 @@ export class FrontierService {
     this.tags = tags ?? new FrontierTagStore({ database, now });
     this.tagUpkeep = tagUpkeep;
     this.interactions = interactions;
+    /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): 热榜's 「热点话题」, the topic page and `frontier_search`; null serves none. */
+    this.topics = topics;
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
@@ -1275,6 +1279,8 @@ export class FrontierService {
         // Where those pages are served, said only with them: a link to a page needs the base the deployment serves it under.
         ...(this.config.evidencePublicWebEnabled === true ? { evidencePublicBasePath: this.config.evidencePublicBasePath } : {}),
         evidenceUpkeep: this.config.evidenceUpkeepEnabled === true,
+        // Hot-event topics (c2-leads 2026-10-25): 热榜's 「热点话题」 and the topic pages.
+        topics: Boolean(this.topics),
       },
       versions: {
         content: String(metaNumber(read.meta[FRONTIER_META_KEYS.contentVersion])),
@@ -1703,6 +1709,87 @@ export class FrontierService {
         developments: read.developments ?? [],
       },
     };
+  }
+
+  // ───────────────────────── c2-leads 2026-10-25: hot-event topics (contract §T) ─────────────────────────
+
+  /**
+   * The topics a reader is shown: `?status=active` (the default) or `recent` (closed ones too, newest first), `?limit` 1–30.
+   * Each is `frontierTopicSummary` with its overview's references and the evidence programme's card.
+   * @param {{ id: string }} _user @param {URLSearchParams} [params]
+   */
+  async topicList(_user, params = new URLSearchParams()) {
+    if (!this.topics) throw failure(404, "not_found", "Frontier route not found.");
+    const status = params.get("status") || "active";
+    if (status !== "active" && status !== "recent") throw failure(400, "frontier_query_invalid", "The status parameter is invalid.");
+    const raw = params.get("limit");
+    const limit = raw == null || raw === "" ? 10 : Number(raw);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 30) throw failure(400, "frontier_query_invalid", "The limit parameter is invalid.");
+    const rows = await this.topics.list({ status, limit });
+    return { topics: await Promise.all(rows.map((/** @type {any} */ row) => this.#topicSummary(row))) };
+  }
+
+  /**
+   * One topic page: the topic and its items by role, each the feed's own card (the reader's marks overlaid, a withdrawn or
+   * disabled-source item left out), or 404 `frontier_topic_not_found`.
+   * @param {{ id: string }} user @param {string} publicId
+   */
+  async topic(user, publicId) {
+    if (!this.topics) throw failure(404, "not_found", "Frontier route not found.");
+    const read = await this.topics.read(publicId);
+    if (!read) throw failure(404, "frontier_topic_not_found", "No such topic.");
+    const items = await this.hydrate(user, { rowIds: read.items.map((/** @type {any} */ entry) => entry.rowId) });
+    return {
+      topic: await this.#topicSummary(read.topic),
+      items: read.items.flatMap((/** @type {any} */ entry) => (items.has(entry.rowId) ? [{ role: entry.role, item: items.get(entry.rowId) }] : [])),
+    };
+  }
+
+  /**
+   * The topics a `frontier_search` query names, as the gateway passes them on (kind `topic`, an index like the cards): the
+   * question, the field, the peg, the overview and the items to read, never the subject names.
+   * @param {{ id: string }} _user @param {{ q: string, limit?: number }} request
+   */
+  async searchTopics(_user, { q, limit = 3 }) {
+    if (!this.topics) return { topics: [] };
+    const rows = await this.topics.search({ q, limit: Math.max(1, Math.min(5, Number(limit) || 3)) });
+    const topics = [];
+    for (const row of rows) {
+      const summary = await this.#topicSummary(row);
+      const items = (await this.database.query(`SELECT x.role, coalesce(nullif(i.title_zh, ''), i.title_raw) AS title, i.canonical_url AS url, s.name AS source_name
+        FROM evimed_frontier.topic_items x JOIN evimed_frontier.items i ON i.id = x.item_id AND i.state = 'published'
+          JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+        WHERE x.topic_id = $1 ORDER BY CASE x.role WHEN 'evidence' THEN 0 WHEN 'report' THEN 1 ELSE 2 END, i.score_total DESC NULLS LAST LIMIT 8`, [row.id])).rows;
+      topics.push({ kind: "topic", ...summary, items: items.map((/** @type {any} */ item) => ({ role: item.role, title: item.title, source: item.source_name,
+        url: /^https?:\/\//i.test(String(item.url ?? "")) ? item.url : null })) });
+    }
+    return { topics };
+  }
+
+  /** A topic row as the reader is served it: its overview's references resolved to the items, its card when settled. @param {any} row */
+  async #topicSummary(row) {
+    const marks = Array.isArray(row.overview_refs) ? row.overview_refs : [];
+    /** @type {Array<{ n: number, itemId: string, title: string, sourceName: string }> | null} */
+    let refs = null;
+    if (row.overview_zh && marks.length) {
+      const ids = marks.map((/** @type {any} */ mark) => String(mark.itemId)).filter((id) => PUBLIC_ID.test(id));
+      const found = new Map((await this.database.query(`SELECT i.public_id, coalesce(nullif(i.title_zh, ''), i.title_raw) AS title, s.name AS source_name
+        FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+        WHERE i.public_id = ANY($1::text[]) AND i.state = 'published'`, [ids])).rows.map((/** @type {any} */ item) => [item.public_id, item]));
+      refs = marks.flatMap((/** @type {any} */ mark) => {
+        const item = found.get(String(mark.itemId));
+        return item ? [{ n: Number(mark.n), itemId: String(mark.itemId), title: String(item.title ?? ""), sourceName: String(item.source_name ?? "") }] : [];
+      });
+    }
+    /** @type {{ id: string, title: string, href: string } | null} */
+    let card = null;
+    if (row.programme_card_id) {
+      const present = (await this.database.query("SELECT to_regclass('evimed_frontier.evidence_cards') IS NOT NULL AS ok")).rows[0]?.ok === true;
+      const found = present ? (await this.database.query(`SELECT id, zone_id, title FROM evimed_frontier.evidence_cards WHERE id = $1 AND state = 'published'`,
+        [String(row.programme_card_id)])).rows[0] : null;
+      if (found) card = { id: found.id, title: found.title, href: `/app/frontier/zones/${encodeURIComponent(found.zone_id)}/evidence/${encodeURIComponent(found.id)}` };
+    }
+    return frontierTopicSummary(row, { refs, card });
   }
 
   /** Persist only the exact visible versions acknowledged by the reader; newer reports remain unseen.
@@ -2188,6 +2275,23 @@ export function frontierMetricFamilies(enabled, snapshot) {
       Object.entries(leads.counters.plugin ?? {}).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
     add("lead_failures_total", "Lead searches and hand-overs that failed, by code.", "counter",
       Object.entries(leads.counters.failures ?? {}).map(([code, value]) => ({ labels: { code }, value: Number(value) })));
+    add("lead_held_total", "Lead search results not handed over, by why (stale, refused-host, social-network, own-site, not-chinese).", "counter",
+      Object.entries(leads.counters.held ?? {}).map(([reason, value]) => ({ labels: { reason }, value: Number(value) })));
+  }
+  // c2-leads 2026-10-25: the hot-event topics — rounds and candidates, accepted by field, refused by reason, items joined, overviews.
+  const topics = worker.topics;
+  if (topics?.counters) {
+    add("topics_total", "What the outside-event trigger did since this process started.", "counter",
+      ["rounds", "candidates", "groups", "surges", "resighted", "writeDropped", "quotaFull", "closed", "snapshots"]
+        .map((kind) => ({ labels: { kind }, value: Number(topics.counters[kind] ?? 0) })));
+    add("topics_accepted_total", "Hot-event topics made, by field.", "counter",
+      Object.entries(topics.counters.accepted ?? {}).map(([domain, value]) => ({ labels: { domain }, value: Number(value) })));
+    add("topics_refused_total", "Hot-event groups not made a topic, by reason (not_medical, private_health, low_confidence).", "counter",
+      Object.entries(topics.counters.refused ?? {}).map(([reason, value]) => ({ labels: { reason }, value: Number(value) })));
+    add("topics_joined_total", "Items joined to a topic, by how (lead, corpus).", "counter",
+      Object.entries(topics.counters.joined ?? {}).map(([via, value]) => ({ labels: { via }, value: Number(value) })));
+    add("topics_overviews_total", "Topic overviews by outcome (written, empty, dropped, failed).", "counter",
+      Object.entries(topics.counters.overviews ?? {}).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
   add("worker_loop_failures_total", "Worker loop runs that ended in an error, by loop.", "counter",
     Object.entries(worker.loops).map(([loop, state]) => ({ labels: { loop }, value: Number(/** @type {any} */ (state).failures) })));

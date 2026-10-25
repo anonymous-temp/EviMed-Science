@@ -100,3 +100,78 @@ export const FRONTIER_TOPIC_LIMITS = Object.freeze({
 export function isFrontierTopicDomain(value) {
   return typeof value === 'string' && /** @type {readonly string[]} */ (FRONTIER_TOPIC_DOMAINS).includes(value)
 }
+
+// ───────────────────────── c2-leads 2026-10-25: the pure decisions of the outside-event trigger ─────────────────────────
+
+/**
+ * What makes a hot-list entry a candidate (numbers only, no language rule: principle 5): new — not seen on any board in the
+ * `unseenHours` before its sighting, after `frontierHotTitleKey` —, at most `maxRank` on its board, and seen in `minStreak`
+ * consecutive snapshots of that board (a flash entry is gone at the next round). At most `perRound` candidates go to the
+ * model in one round, the best-ranked first.
+ */
+export const FRONTIER_TOPIC_CANDIDATE = Object.freeze({ maxRank: 30, minStreak: 2, unseenHours: 48, perRound: 60 })
+
+/**
+ * A surge (one a day beside `FRONTIER_TOPIC_LIMITS.perDay`, with more searches a wave): an event in the top `topRank` of at
+ * least `boards` boards at once, with at least `medicalEntries` entries in its group that are themselves the medical question
+ * (on 2026-03-24 Weibo held 「心源性猝死」 and 「黄金四分钟是心源性猝死抢救关键」 within hours) — both counted in code from the
+ * grouping call's answer.
+ */
+export const FRONTIER_TOPIC_SURGE = Object.freeze({ topRank: 10, boards: 2, medicalEntries: 3 })
+
+/** The grouping call's confidence below which a group is not made a topic. */
+export const FRONTIER_TOPIC_MIN_CONFIDENCE = 0.7
+
+/** An item older than the topic's first sighting by more than this is the topic's background, whatever its genre. */
+export const FRONTIER_TOPIC_BACKGROUND_DAYS = 30
+
+/** The genres that are evidence to a topic (`@evimed/domain` `FRONTIER_GENRES`); every other genre is a report on it. */
+export const FRONTIER_TOPIC_EVIDENCE_GENRES = Object.freeze(['paper', 'preprint', 'trial', 'guideline', 'conference', 'approval', 'safety'])
+
+/**
+ * The key two hot-list titles are the same entry by, across boards and rounds: NFKC, lower case, without the hashtag marks,
+ * the spaces, the punctuation and the symbols — a format, not a reading of the words.
+ * @param {unknown} title @returns {string}
+ */
+export function frontierHotTitleKey(title) {
+  return String(title ?? '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '').slice(0, 200)
+}
+
+/**
+ * What an item is to a topic, in code: its background when it is older than the topic's first sighting by more than
+ * `FRONTIER_TOPIC_BACKGROUND_DAYS`, evidence when its genre is one of `FRONTIER_TOPIC_EVIDENCE_GENRES`, a report otherwise.
+ * @param {{ genre: string, publishedAt?: string | Date | null, firstSeenAt: string | Date }} input
+ * @returns {'report' | 'evidence' | 'background'}
+ */
+export function frontierTopicItemRole({ genre, publishedAt = null, firstSeenAt }) {
+  const published = publishedAt == null ? Number.NaN : new Date(publishedAt).getTime()
+  const first = new Date(firstSeenAt).getTime()
+  if (Number.isFinite(published) && Number.isFinite(first) && published < first - FRONTIER_TOPIC_BACKGROUND_DAYS * 86_400_000) return 'background'
+  return /** @type {readonly string[]} */ (FRONTIER_TOPIC_EVIDENCE_GENRES).includes(genre) ? 'evidence' : 'report'
+}
+
+/**
+ * The names of an event's people or bodies a text holds (NFKC, case-folded substring; a name shorter than two characters
+ * is not matched): a topic's title, question and evidence queries must hold none.
+ * @param {unknown} text @param {readonly unknown[]} names @returns {string[]}
+ */
+export function frontierTopicNamesIn(text, names) {
+  const haystack = String(text ?? '').normalize('NFKC').toLowerCase()
+  const found = []
+  for (const name of names ?? []) {
+    const needle = String(name ?? '').normalize('NFKC').toLowerCase().trim()
+    if ([...needle].length >= 2 && haystack.includes(needle)) found.push(String(name))
+  }
+  return found
+}
+
+/**
+ * Whether a group is a surge (`FRONTIER_TOPIC_SURGE`): its members' boards where one stood in the top `topRank`, and the
+ * count of its members that are themselves the medical question.
+ * @param {{ members: ReadonlyArray<{ board: string, rank: number }>, medicalEntries: number }} group
+ * @returns {{ surge: boolean, topBoards: number }}
+ */
+export function frontierTopicSurge({ members, medicalEntries }) {
+  const topBoards = new Set(members.filter((member) => Number(member.rank) <= FRONTIER_TOPIC_SURGE.topRank).map((member) => member.board)).size
+  return { surge: topBoards >= FRONTIER_TOPIC_SURGE.boards && Number(medicalEntries) >= FRONTIER_TOPIC_SURGE.medicalEntries, topBoards }
+}
