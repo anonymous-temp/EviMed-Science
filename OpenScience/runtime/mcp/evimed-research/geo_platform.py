@@ -88,7 +88,17 @@ GATEWAY_CODE = re.compile(r"^(?:geo|social_posts)_[a-z0-9_]{1,60}$")
 AUTH_CODES = ("geo_gateway_token_invalid", "geo_gateway_token_missing", "geo_unconfigured")
 # A write the store refused by one of its constraints, or one too large to read: the run corrects it -- or sends it in smaller
 # writes -- and writes again; it is neither an outage nor data to give up on (2026-10-25: both were told "go on without").
-CORRECTABLE_CODES = ("geo_write_rejected", "geo_request_too_large")
+CORRECTABLE_CODES = ("geo_write_rejected", "geo_request_too_large", "geo_request_key_conflict")
+# A diagnosis start's and recovery's refusals with their own next step (2026-10-25: the gateway folded them into an invalid
+# payload, so a run could not tell that a recovery waits for the person's acceptance of a possible second charge).
+NEXT_ACTIONS = {
+    "geo_request_key_conflict": "Use a new requestKey for a new start or recovery; reuse a key only to retry that same call.",
+    "geo_recovery_exhausted": "These cells have had their recovery; read diagnosis_progress and report the cells still missing as not measured.",
+    "geo_recovery_acknowledgment_required": (
+        "Ask the user whether another, possibly billed, call for these cells is acceptable; "
+        "recover with acknowledgeUnknown:true only after they agree."
+    ),
+}
 ID = {"type": "string", "minLength": 1, "maxLength": 80, "pattern": r"^[A-Za-z0-9_-]+$"}
 
 
@@ -102,9 +112,15 @@ class GeoPlatformError(Exception):
         """What the run should do next: fix the call, retry, or go on without -- by the code, as vcr_platform.py decides its own."""
         if self.code in AUTH_CODES:
             return "unsupported"
+        if self.code == "geo_recovery_acknowledgment_required":
+            return "needs_user"
         if self.code in CORRECTABLE_CODES or self.code.endswith("_invalid"):
             return "invalid_input"
         return "retry" if self.retryable else "unsupported"
+
+    def next_action(self):
+        """The code's own next step, or None where the stop reason's general one says it."""
+        return NEXT_ACTIONS.get(self.code)
 
 
 def tool_definitions():
@@ -208,17 +224,15 @@ def tool_definitions():
         {
             "name": "geo_write",
             "description": (
-                "Write this 循证 GEO project. questions: groups merge into the latest map by name+pool (replace:true = whole map); "
+                "Write this 循证 GEO project. questions: groups merge into the map by name+pool (data.replace:true = whole map); "
                 "rows+requestKey save original rows under a measurement contract. "
-                "start_diagnosis measures a saved version (check diagnosis_progress); recover_diagnosis retries failed cells once "
-                "with the same requestKey; acknowledgeUnknown only if the user accepts a possible billable duplicate. "
-                "value merges by id; research runs after this run."
+                "start_diagnosis measures a saved version; recover_diagnosis retries failed cells "
+                "under a new requestKey (reuse one only to retry that call); acknowledgeUnknown only if the user accepts a possible "
+                "billed duplicate. value merges by id; research runs after this run."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "planContextRef": {"type": "string", "description": "Exact control-plane context from the submitted native request; attribution hint only."},
-                    "promptRequestId": {"type": "string", "description": "Actual submitted native request ID accompanying planContextRef."},
                     "what": {"type": "string", "enum": list(WRITE_WHATS)},
                     "items": {"type": "array", "minItems": 1, "maxItems": WRITE_MAX_ITEMS, "items": {"type": "object"}},
                     "data": {"type": "object", "description": (
@@ -226,7 +240,7 @@ def tool_definitions():
                         "contract{samplingMode:one_shot|recurring,engines,repeats(one_shot=1),metricIds,reportPresentation:summary|detailed,sourceBasis:answers|answers_and_project_sources},requestKey. "
                         "Preserve original text; kind defaults client; real requires URL and date; classificationStatus is unclassified|suggested|confirmed. "
                         "start_diagnosis:{version,requestKey}; recover_diagnosis:{roundId,requestKey,jobIds,acknowledgeUnknown?} for failed calls. "
-                        "Read diagnosis_progress with filter.round before recovery. Never default acknowledgeUnknown to true; preserve requestKey on retries."
+                        "Read diagnosis_progress with filter.round before recovery. Never default acknowledgeUnknown to true; keep a requestKey only when retrying the same call."
                     )},
                 },
                 "required": ["what"],
@@ -433,7 +447,9 @@ def write(arguments: dict) -> dict:
     if "items" in arguments and "data" in arguments:
         raise GeoPlatformError("geo_write_payload_invalid", "A write carries items or data, not both.")
     payload = {"what": what}
-    for key in ("items", "data", "planContextRef", "promptRequestId"):
+    # A plan context is never a write's: the gateway refuses it (a project token cannot attest a native call's origin), so the
+    # tool neither offers nor forwards it.
+    for key in ("items", "data"):
         if key in arguments:
             payload[key] = arguments[key]
     try:

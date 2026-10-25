@@ -531,6 +531,25 @@ class GeoStopReasonTests(_GatewayCase):
         self.assertEqual(geo_platform.GeoPlatformError("geo_gateway_unreachable", "x", retryable=True).stop_reason(), "retry")
         self.assertEqual(geo_platform.GeoPlatformError("geo_disabled", "x").stop_reason(), "unsupported")
 
+    def test_a_diagnosis_refusal_with_its_own_next_step_says_it_and_an_acknowledgement_is_the_users(self):
+        expected = {
+            "geo_recovery_acknowledgment_required": ("needs_user", "Ask the user"),
+            "geo_recovery_exhausted": ("unsupported", "not measured"),
+            "geo_request_key_conflict": ("invalid_input", "new requestKey"),
+        }
+        for code, (stop, words) in expected.items():
+            _Gateway.answers["write"] = (409, {"error": "Refused: %s" % code, "code": code})
+            result = self.server.call_tool("geo_write", {"what": "recover_diagnosis", "data": {"roundId": "r1", "requestKey": "k1", "jobIds": ["j1"]}})
+            self.assertEqual((result["error"]["code"], result["error"]["stopReason"]), (code, stop))
+            self.assertIn(words, " ".join(result["next_actions"]))
+            self.assertNotIn("Go on without", " ".join(result["next_actions"]))
+
+    def test_the_write_offers_no_plan_context_the_gateway_would_refuse(self):
+        write = {tool["name"]: tool for tool in geo_platform.tool_definitions()}["geo_write"]
+        self.assertNotIn("planContextRef", write["inputSchema"]["properties"])
+        self.assertNotIn("same requestKey", write["description"])
+        self.assertIn("new requestKey", write["description"])
+
     def test_the_write_says_a_questions_write_adds_to_the_map_unless_it_replaces_it(self):
         write = {tool["name"]: tool for tool in geo_platform.tool_definitions()}["geo_write"]
         self.assertIn("data.replace:true", write["description"])

@@ -655,20 +655,16 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "geo_write_payload_invalid",
   "geo_plan_file_required",
   "geo_write_rejected",
-  // Invalid or unavailable write inputs are normalized to geo_write_payload_invalid
-  // by the runtime gateway. Keep their direct producer identities classified too;
-  // recovery exhaustion/acknowledgment never authorizes another provider request.
-  "geo_question_import_invalid",
-  "geo_diagnosis_invalid",
-  "geo_contract_missing",
+  // The three refusals of a diagnosis start or recovery the gateway passes to
+  // the run by name, because each has its own next step: a request key already
+  // spent on another request (use a new one), a cell whose recovery is used up
+  // (report it as not measured), and a recovery that may call the provider a
+  // second time (only the person can accept that). The other refusals of an
+  // import, start or recovery reach the run as `geo_write_payload_invalid`, so
+  // they are page codes (`GEO_ROUTE_ERROR_CODES`), not these.
   "geo_request_key_conflict",
-  "geo_recovery_invalid",
   "geo_recovery_exhausted",
   "geo_recovery_acknowledgment_required",
-  "geo_round_empty",
-  "geo_round_question_invalid",
-  // A nonexistent or foreign round is normalized to an invalid selection.
-  "geo_round_not_found",
   "social_posts_query_invalid",
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",
@@ -1700,8 +1696,12 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   "geo_feedback_not_found",
   "geo_review_failed",
 
-  'geo_question_import_invalid', 'geo_diagnosis_invalid', 'geo_contract_missing',
-  'geo_recovery_invalid', 'geo_recovery_exhausted', 'geo_recovery_acknowledgment_required',
+  // An import, diagnosis start or recovery the page sent wrongly, or a round
+  // that could not be planned. The gateway hands the run each of these as
+  // `geo_write_payload_invalid`; the recovery refusals the run hears by name
+  // are tool codes (above).
+  'geo_question_import_invalid', 'geo_diagnosis_invalid', 'geo_contract_missing', 'geo_recovery_invalid',
+  'geo_round_empty', 'geo_round_question_invalid', 'geo_round_engine_invalid', 'geo_round_too_large',
   'geo_not_enabled',
   'geo_path_invalid',
   'geo_payload_invalid',
@@ -2197,6 +2197,17 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_action_not_found: '找不到这条行动，它可能已经完成或被新一版策略取代。',
   geo_action_choice_invalid: '这一步只能“跳过”或“换信源”，换信源要写明一个信源的网站域名。',
   geo_owned_link_invalid: '这个发布链接没有登记成功：需要一个具体页面的网址和发布平台，并且不能和已登记的重复。',
+  geo_request_key_conflict: '这个请求编号已经用在另一次请求上；新的开始或补测要换一个新的编号，只有重试同一次请求时才沿用原编号。',
+  geo_recovery_exhausted: '这些单元格已经补测过，不能再补测；仍未测到的会按未测记入结果。',
+  geo_recovery_acknowledgment_required: '这次补测涉及可能已经发出、甚至已经计费的请求，再补测可能重复计费；需要你确认接受后才能补测。',
+  geo_question_import_invalid: '这份问句没有导入：请按提示修改问句或测量约定后再导入。',
+  geo_diagnosis_invalid: '请选择一个已保存的问句版本，再开始诊断。',
+  geo_contract_missing: '这个问句版本没有保存测量约定；请连同测量约定重新保存后再开始。',
+  geo_recovery_invalid: '只能补测这次诊断里失败或缺失的单元格，请重新选择。',
+  geo_round_empty: '这次没有可以测量的问句或平台，所以没有开始测量。',
+  geo_round_question_invalid: '这次测量的问句不属于同一个可测量的问句版本，所以没有开始；请检查问句版本后再试。',
+  geo_round_engine_invalid: '这次测量选择的平台不在可测范围或测量约定里，所以没有开始。',
+  geo_round_too_large: '这次测量的提问次数超过单轮上限，所以没有开始；请减少问句、平台或重复次数。',
   // 「虚拟临床研究」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown
@@ -2903,7 +2914,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // 「循证 GEO」's runtime tools, then its routes. The tool family comes first:
   // a run reading the platform's data has a different next step (go on with
   // what it has) from a person whose page action was refused (try again).
-  [/^(?:geo_(?:disabled$|no_project$|unconfigured$|plan_file_required$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
+  [/^(?:geo_(?:disabled$|no_project$|unconfigured$|plan_file_required$|recovery_exhausted$|recovery_acknowledgment_required$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
     '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
   [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
   // 「虚拟临床研究」, read the same way and for the same reason: a run whose study
