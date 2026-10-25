@@ -107,6 +107,13 @@ export class CapsuleService {
     // sets the strict switch.
     this.strictIndex = Boolean(strictIndex);
     this.lastIndexError = null;
+    /**
+     * The platform's official starter packs (`officialPacks.mjs`), assigned by the composition root beside this service: each account's
+     * copies are brought up to date when the account first reads its capsules (`received`, the mount), and their methods are the lowest
+     * tier of what a run is given (`learnedMethodMount.mjs`). Absent, the account has no official pack and nothing here changes.
+     * @type {import('./officialPacks.mjs').OfficialPacks | null}
+     */
+    this.official = null;
   }
 
   /**
@@ -255,6 +262,15 @@ export class CapsuleService {
       candidates: await read("candidate"),
       forgotten: await read("retired"),
     };
+  }
+
+  /**
+   * The methods of the platform's official packs this account may be given, with the account's own switches applied. What a run is given of
+   * them is chosen against the person's own methods (`selectOfficialMethods`, `learnedMethodMount.mjs`); this is only who holds what.
+   * @param {string} userId
+   */
+  async officialMethods(userId) {
+    return this.official ? this.official.methodsFor(userId) : [];
   }
 
   /** @param {string} userId @param {string} capsuleId */
@@ -412,15 +428,18 @@ export class CapsuleService {
    * @param {string} userId
    */
   async received(userId) {
+    // The platform's own packs are on every ordinary account's shelf: an account's first read of it brings them there (`OfficialPacks.ensureFor`).
+    await this.official?.ensureFor(userId).catch(() => null);
     const packs = await this.#allCapsules(userId, { imported: true });
     const account = new Set((await this.active(userId)).items.map((item) => String(item.capsuleId)));
+    const stopped = this.official ? await this.official.stoppedBodies().catch(() => new Set()) : new Set();
     const result = [];
     for (const capsule of packs) {
       // Only what the shelf shows: a status and a kind to count, and the first
       // words of a method. The whole entries were a hundred packs of a hundred
       // entries of 20,000 characters each, per read (security review 2026-09-20).
       const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id },
-        fields: { status: true, factKind: true, content: 120 } });
+        fields: { status: true, factKind: true, content: 120, official: true } });
       /** @type {Record<string, number>} */
       const counts = {};
       const methods = [];
@@ -428,6 +447,8 @@ export class CapsuleService {
       for (const entry of page.items) {
         if (entry.payload.status === "candidate") waiting += 1;
         if (entry.payload.status !== "approved") continue;
+        // A method of the platform's that its own runs' outcomes stopped is not offered on the shelf either (`OfficialPacks.recordApplied`).
+        if (entry.payload.official && stopped.has(`${entry.payload.official.key}@${entry.payload.official.sha}`)) continue;
         counts[entry.payload.factKind] = (counts[entry.payload.factKind] ?? 0) + 1;
         if (entry.payload.factKind === "method_preference" && methods.length < 5) methods.push(methodHeading(entry.payload.content));
       }
@@ -440,7 +461,10 @@ export class CapsuleService {
         sharedFrom: sharedFrom(capsule), takenDown: capsule.payload.takenDown ? { by: capsule.payload.takenDown.by, at: capsule.payload.takenDown.at,
           reason: capsule.payload.takenDown.reason ?? null } : null,
         issuerTrust: capsule.payload.transfer?.issuerTrust ?? "unverified", importedAt: capsule.payload.transfer?.importedAt ?? capsule.createdAt ?? null,
-        enabled: account.has(capsule.id),
+        // An official pack is enabled unless its account switched it off, and it is never one of the capsules in force (`active`): it does not
+        // count towards the eight.
+        enabled: capsule.payload.official ? capsule.payload.official.disabled !== true && !capsule.payload.takenDown : account.has(capsule.id),
+        ...(capsule.payload.official ? { official: { packId: String(capsule.payload.official.packId) } } : {}),
         counts, methods,
         // A pack imported before whole-pack trust still holds candidates; the
         // first enable or trial scans it and settles them.
@@ -508,6 +532,15 @@ export class CapsuleService {
    * @param {string} userId @param {string} capsuleId @param {{ projectId?: string | null }} [options]
    */
   async enableReceived(userId, capsuleId, { projectId = null } = {}) {
+    const held = await this.get(userId, capsuleId);
+    if (held.payload.official) {
+      // One of the platform's own packs: its scan was the publisher's, once (`OfficialPacks`), and it is in force by its own flag, not by the
+      // account's list of eight.
+      assertNotTakenDown(held);
+      await this.#setOfficialEnabled(userId, held, true);
+      await this.#activationChanged(userId, capsuleId, "enabled");
+      return (await this.received(userId)).find((pack) => pack.id === capsuleId) ?? null;
+    }
     await this.#scannedPack(userId, capsuleId, projectId);
     await this.activate(userId, capsuleId, { mode: "guest" });
     await this.#keep(userId, capsuleId, true);
@@ -537,6 +570,28 @@ export class CapsuleService {
   }
 
   /**
+   * Switch one official pack on or off for this account. The flag lives on the account's copy and is kept across upgrades (`adoptOfficial`):
+   * a pack that was switched off stays off when its next version arrives.
+   * @param {string} userId @param {any} capsule @param {boolean} enabled
+   */
+  async #setOfficialEnabled(userId, capsule, enabled) {
+    let current = capsule;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if ((current.payload.official.disabled !== true) === enabled) return current;
+      const at = new Date().toISOString();
+      const { disabled: _off, disabledAt: _at, ...official } = current.payload.official;
+      try {
+        return await this.documents.put(userId, "capsule", current.id, { ...current.payload,
+          official: enabled ? { ...official, enabledAt: at } : { ...official, disabled: true, disabledAt: at } }, { expectedRevision: current.revision });
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 2) throw error;
+        current = await this.get(userId, current.id);
+      }
+    }
+    return current;
+  }
+
+  /**
    * One click: the pack stops contributing anything — out of the account's
    * list (and out of any project's list an earlier release left, before
    * `capsuleOneCapsule.mjs` has folded it). Recall stops at once, and a method it
@@ -544,7 +599,12 @@ export class CapsuleService {
    * @param {string} userId @param {string} capsuleId
    */
   async disable(userId, capsuleId) {
-    await this.get(userId, capsuleId);
+    const held = await this.get(userId, capsuleId);
+    if (held.payload.official) {
+      await this.#setOfficialEnabled(userId, held, false);
+      await this.#activationChanged(userId, capsuleId, "disabled");
+      return { disabled: true, lists: 0 };
+    }
     // Every activation list, the account's and any project's left from before, page by page:
     // the same kind also holds the export snapshots.
     /** @type {any[]} */
@@ -584,6 +644,9 @@ export class CapsuleService {
    * @param {string} userId @param {string} capsuleId @param {{ projectId?: string | null }} [options]
    */
   async prepareTrial(userId, capsuleId, { projectId = null } = {}) {
+    const held = await this.get(userId, capsuleId);
+    // An official pack was scanned once, by its publisher: a trial of it asks nothing more of the model.
+    if (held.payload.official) { assertNotTakenDown(held); return held; }
     return this.#scannedPack(userId, capsuleId, projectId);
   }
 

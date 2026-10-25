@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
 import { formatDay } from "@/lib/format";
-import {
-  handbookDetail, handbookVersions, retireHandbook, rollbackHandbook, type WebHandbook, type WebHandbookDetail,
-} from "@/lib/handbooksClient";
 import { announceMemoryChanged } from "@/lib/memoryClient";
 import {
   methodSources, methodTitle, methodVersions, retireMethod, rollbackMethod, type ConversationSource, type MethodVersion, type WebMethod,
@@ -26,13 +23,12 @@ type Loaded<T> = T | null | "failed";
 interface PracticeView {
   /** The row's own title, which is also the drawer's. */
   title: string;
-  /** What it is: 「做法」, or the research tool a handbook is for. */
+  /** What it is: 「做法」. */
   kind: string;
   /** Which version the researcher is on, once known. */
   version: number | null;
   at: string | null;
   steps: string | null;
-  stepsLoading: boolean;
   whenToUse: string;
   sources: Loaded<ConversationSource[]>;
   versions: Loaded<MethodVersion[]>;
@@ -43,20 +39,18 @@ interface PracticeView {
 }
 
 /**
- * A learned method or a capability handbook, opened from its row (2026-10-07
- * plan §3.2 item 4): how it is done, when it is used, which conversations it
- * was learned from, the versions it has had — and the two things a researcher
- * can do about it, 回到上一版 and 不再使用.
+ * A learned method, opened from its row (2026-10-07 plan §3.2 item 4): how it is
+ * done, when it is used, which conversations it was learned from, the versions
+ * it has had — and the two things a researcher can do about it, 回到上一版 and
+ * 不再使用.
  *
  * There is no form to edit one, and none will be added: a method is what the
  * model learned from the work, never something the researcher types (owner
  * ruling 2026-09-20). To change one they say so in a conversation, and the
  * loop learns it. The drawer is read-only text and two undo buttons.
  *
- * It says nothing about whether the practice has been measured. A handbook's
- * `verification` is the loop's bookkeeping; no evaluator can honestly compare a
- * handbook with and without it under the learning budget, so a state that never
- * moved is not on the page (plan §3.2 item 5, report).
+ * It says nothing about whether the practice has been measured: the loop's
+ * bookkeeping is not on the page (plan §3.2 item 5, report).
  */
 function PracticeDrawerView({ view }: { view: PracticeView }) {
   const [reading, setReading] = useState<number | null>(null);
@@ -67,9 +61,9 @@ function PracticeDrawerView({ view }: { view: PracticeView }) {
   return (
     <Drawer title={view.title} description={meta} onClose={view.onClose}>
       <div className="flex min-h-full flex-col gap-6">
-        {(view.steps || view.stepsLoading) && (
+        {view.steps && (
           <DrawerSection label="怎么做">
-            {view.steps ? <MarkdownViewer className="text-ui text-text">{view.steps}</MarkdownViewer> : <p role="status" className="text-ui text-text-3">正在读取</p>}
+            <MarkdownViewer className="text-ui text-text">{view.steps}</MarkdownViewer>
           </DrawerSection>
         )}
         {view.whenToUse && (
@@ -175,59 +169,9 @@ export function MethodDrawer({ method, onClose, onChanged }: { method: WebMethod
     <PracticeDrawerView view={{
       title, kind: "做法", version: method.version ?? 1, at: method.bodyUpdatedAt ?? method.updatedAt,
       // The steps in the researcher's language, or no 「怎么做」 at all: the body is the SKILL.md written for the model, in English.
-      steps: method.steps || null, stepsLoading: false,
+      steps: method.steps || null,
       whenToUse: method.scope?.applicability || method.whenToUse || "",
       sources, versions, busy, onGoBack: () => void goBack(), onStop: () => void stop(), onClose,
-    }} />
-  );
-}
-
-export function HandbookDrawer({ handbook, tool, onClose, onChanged }: { handbook: WebHandbook; tool: string; onClose: () => void; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const key = `${handbook.id}:${handbook.revision}`;
-  const detail: Loaded<WebHandbookDetail> = useLoaded(() => handbookDetail(handbook), key);
-  const versions = useLoaded(async () => (await handbookVersions(handbook)).items, key);
-  const read = detail && detail !== "failed" ? detail : null;
-  const current = Array.isArray(versions) ? versions.find((version) => version.current) ?? versions[0] : null;
-
-  const run = async (operation: () => Promise<void>) => {
-    setBusy(true);
-    try {
-      await operation();
-      announceMemoryChanged();
-      onChanged();
-    } catch (error) {
-      toast.error(productErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const stop = () => run(async () => {
-    const stopped = await retireHandbook(handbook, "在记忆页里停用");
-    onClose();
-    toast.success(`已停用“${handbook.title}”`, {
-      action: {
-        label: "撤销",
-        onClick: () => void rollbackHandbook(stopped, stopped.revision - 1)
-          .then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(productErrorMessage(error))),
-      },
-    });
-  });
-  // A handbook goes back to a version by naming it: the one before the one in force.
-  const goBack = () => run(async () => {
-    const previous = Array.isArray(versions) ? versions.filter((version) => !version.current)[0] : null;
-    if (!previous) return;
-    await rollbackHandbook(handbook, previous.revision);
-    onClose();
-    toast.success(`“${handbook.title}”已回到上一版`);
-  });
-
-  return (
-    <PracticeDrawerView view={{
-      title: handbook.title, kind: `用在${tool}`, version: current?.version ?? null, at: handbook.appliedAt ?? handbook.updatedAt,
-      steps: read ? read.steps || null : null, stepsLoading: detail === null,
-      whenToUse: handbook.whenToUse || read?.whenToUse || "",
-      sources: read ? read.sources : detail === "failed" ? "failed" : null, versions, busy, onGoBack: () => void goBack(), onStop: () => void stop(), onClose,
     }} />
   );
 }

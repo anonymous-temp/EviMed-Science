@@ -66,6 +66,32 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(screen.queryByRole("button", { name: "采用" })).not.toBeInTheDocument();
   });
 
+  it("lists the platform's own starter packs apart from what people sent, by the platform as sender, switched on, with nothing of the back office", async () => {
+    const official = {
+      ...structuredClone(pack), id: "official-copy:daily-writing", title: "日常文稿", enabled: true, official: { packId: "daily-writing" }, counts: { method_preference: 3 },
+      methods: ["周报与进展汇报：事实只用你给的", "邮件：一件事，写清要对方做什么"],
+      card: { title: "日常文稿", author: "EviMed 证据中心", summary: "周报、纪要、邮件这类日常文稿的写法。" }, scan: { model: "ok", checkedAt: "2026-10-25T00:00:00Z", dropped: [] },
+    };
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(official), structuredClone(pack)]);
+    const { container } = shelf();
+    const defaults = await screen.findByRole("list", { name: "EviMed 的默认做法" });
+    expect(within(defaults).getByText("日常文稿")).toBeInTheDocument();
+    expect(within(defaults).getByText(/EviMed 证据中心提供 · 周报、纪要、邮件这类日常文稿的写法。/)).toBeInTheDocument();
+    expect(within(defaults).getByRole("switch", { name: "启用“日常文稿”" })).toBeChecked();
+    // What a person was sent is the other list, and keeps saying who sent it.
+    const sent = screen.getByRole("list", { name: "收到的胶囊" });
+    expect(within(sent).getByText("李主任的工作方式")).toBeInTheDocument();
+    expect(within(sent).queryByText("日常文稿")).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/official|packId|来自 EviMed|分享|扫描|签名/);
+  });
+
+  it("shows no list of defaults when the account holds none", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+    shelf();
+    await screen.findByText("李主任的工作方式");
+    expect(screen.queryByRole("list", { name: "EviMed 的默认做法" })).not.toBeInTheDocument();
+  });
+
   it("does not say whether the publisher could be verified", async () => {
     client.fetchReceivedCapsules.mockResolvedValue([{ ...structuredClone(pack), issuerTrust: "unverified", scan: null }]);
     const { container } = shelf();

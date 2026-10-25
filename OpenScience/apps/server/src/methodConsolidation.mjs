@@ -86,7 +86,7 @@ export { candidatePairs };
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
  *  are a DDL CHECK constraint, and `consolidate` was already one of them. `replay` checks one changed method against the runs the person
  *  accepted (`methodReplay.mjs`). */
-export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "optimize", "replay"]);
+export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "replay"]);
 
 /**
  * Codes that mean a learning step never started, and how long its job waits
@@ -108,8 +108,6 @@ export const DEFERRED_LEARNING_ERRORS = new Map([
   // room; with one slot that is when the researcher's runtime has gone idle.
   [RUNTIME_YIELDED_CODE, 60_000],
   ["usage_budget_exceeded", 3_600_000],
-  // One paired evaluation of a handbook at a time (`LearningWorker`); the next asks again.
-  ["learning_evaluation_busy", 300_000],
 ]);
 
 /** @param {any} error @returns {boolean} */
@@ -345,7 +343,7 @@ export class MethodConsolidation {
    * audit line (plan 2026-09-23 §5.8).
    *
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          jobs?: any, judgeService?: any, screenBaseline?: any, handbookConsolidation?: any, platformTools?: () => Promise<any[]>,
+   *          jobs?: any, judgeService?: any, screenBaseline?: any, platformTools?: () => Promise<any[]>,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          unusedAfterLoads?: number, onRetirement?: ((code: string) => void) | null,
    *          similarity?: {pairs: (methods: readonly any[]) => Promise<any[]>, nearest: (text: string, methods: readonly any[], options?: any) => Promise<any[]>, methodText: (method: any) => string} | null,
@@ -357,7 +355,7 @@ export class MethodConsolidation {
   constructor({
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    describe = null, handbookConsolidation = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
+    describe = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
     unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
@@ -370,7 +368,6 @@ export class MethodConsolidation {
     this.readResult = readResult;
     this.learning = learning;
     this.jobs = jobs;
-    this.handbookConsolidation = handbookConsolidation;
     this.platformTools = platformTools;
     // Optional, and optional on purpose: a consolidation pass that cannot write
     // an audit line still has to finish, because the line is a record of what
@@ -447,8 +444,7 @@ export class MethodConsolidation {
     }
     if (action === "sleep") return this.sleep(request);
     if (action === "integrate") return this.integrate(request);
-    if (action === "replay") return this.replayChange(request);
-    return this.optimize(request);
+    return this.replayChange(request);
   }
 
   /**
@@ -831,16 +827,6 @@ export class MethodConsolidation {
     } catch {
       // isolated: a change that was not replayed stands on its own runs' counters, as it did before the replay existed
     }
-  }
-
-  /**
-   * The owner-scoped handbook arm. Its consumer applies validated supplements
-   * without editing a shipped capability or a personal preference.
-   * @param {{job: any}} request
-   */
-  async optimize({ job }) {
-    if (!this.handbookConsolidation) throw new HttpError(503, "handbook_loop_unavailable", "The handbook consumer is unavailable.");
-    return this.handbookConsolidation.run({ job });
   }
 
   /**

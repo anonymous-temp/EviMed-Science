@@ -53,7 +53,7 @@ import {
  *   memorySettings: any,
  *   nativeMemory?: import("./nativeMemoryStore.mjs").NativeMemoryStore | null,
  *   nativeMemoryImport?: import("./nativeMemoryImport.mjs").NativeMemoryImport | null,
- *   resetProduct?: ((userId: string) => Promise<{ methods: number, handbooks: number, entries: number, jobs: number, feedback: number }>) | null,
+ *   resetProduct?: ((userId: string) => Promise<{ methods: number, entries: number, jobs: number, feedback: number }>) | null,
  *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
  *   projectWork?: ((user: any, project: any, options: { timeZone: string }) => Promise<{ capabilities: any[], works: any[] }>) | null,
  *   store: any,
@@ -127,8 +127,8 @@ export function createMemoryRoutes({
       return true;
     }
 
-    // Everything the account remembers, deleted: the memories, the methods and
-    // handbooks the platform learned, and the notes of its own capsules — each
+    // Everything the account remembers, deleted: the memories, the methods
+    // the platform learned, and the notes of its own capsules — each
     // kind the memory page shows, which is what the confirmation says
     // (`resetLearnedMemory`). The switches are left as they are: a reset is a
     // clean slate, not a change of mind about learning.

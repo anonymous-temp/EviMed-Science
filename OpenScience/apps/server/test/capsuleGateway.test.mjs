@@ -8,7 +8,7 @@ import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
-async function fixture(t, { sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved", recallLimits = {}, resident = null } = {}) {
+async function fixture(t, { sessions = null, recallItems = [], nativeRoutes = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved", recallLimits = {}, resident = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -31,7 +31,7 @@ async function fixture(t, { sessions = null, recallItems = [], handbooks = null,
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, sessions, handbooks, subscriptions, clinicalContext, resident, ...recallLimits });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, sessions, nativeRoutes, subscriptions, clinicalContext, resident, ...recallLimits });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -263,21 +263,24 @@ test("a conversation's first step asks what its own state adds: the pack a trial
 });
 
 
-test("native handbook reads and acknowledgements keep workload ownership and closed payloads", async t => {
+test("native input routes are read under the workload's ownership with a closed payload, and nothing else of the handbook arm is answered", async t => {
   const calls = [];
-  const f = await fixture(t, { handbooks: {
-    read: async (project, input) => { calls.push({ action: "read", project, input }); return { contexts: [{ requestId: "A", digest: "a".repeat(64), context: "Scoped lesson" }] }; },
-    acknowledge: async (project, input) => { calls.push({ action: "ack", project, input }); return { attached: ["A"] }; },
+  const f = await fixture(t, { nativeRoutes: {
+    read: async (project, input) => { calls.push({ action: "read", project, input }); return { routes: [{ requestId: "A", digest: "a".repeat(64), route: { effectiveAgentId: "geo-content" } }] }; },
   } });
   const input = { sessionId: "session", inputs: [{ requestId: "A", textDigest: "b".repeat(64) }] };
-  const read = await f.request("handbook-context", input);
-  assert.equal(read.status, 200); assert.equal((await read.json()).contexts[0].context, "Scoped lesson");
+  const read = await f.request("native-route", input);
+  assert.equal(read.status, 200); assert.equal((await read.json()).routes[0].route.effectiveAgentId, "geo-content");
   assert.deepEqual(calls[0].project, f.project);
   assert.deepEqual(calls[0].input, input);
-  assert.equal((await f.request("handbook-context", { ...input, userId: "other" })).status, 400);
-  assert.equal((await f.request("handbook-context", input, f.issue({ userId: "other" }))).status, 401);
-  assert.equal((await f.request("handbook-attached", { sessionId: "session", receipts: [{ requestId: "A", digest: "a".repeat(64) }] })).status, 200);
-  assert.equal(calls[1].action, "ack");
+  assert.equal((await f.request("native-route", { ...input, userId: "other" })).status, 400);
+  assert.equal((await f.request("native-route", input, f.issue({ userId: "other" }))).status, 401);
+  // The two operations of the retired handbook context are not found any more.
+  assert.equal((await f.request("handbook-context", input)).status, 404);
+  assert.equal((await f.request("handbook-attached", { sessionId: "session", receipts: [] })).status, 404);
+  // With no route store composed the answer is an empty list, never an error.
+  const none = await fixture(t);
+  assert.deepEqual(await (await none.request("native-route", input)).json(), { routes: [] });
 });
 
 test("the project's evidence-zone subscriptions are one more provider of a recall, for this project only, after what the capsules returned", async (t) => {

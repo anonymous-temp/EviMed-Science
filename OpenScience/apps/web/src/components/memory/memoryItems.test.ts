@@ -49,34 +49,19 @@ const method = (overrides: Record<string, unknown> = {}) => ({
   id: "m1", status: "approved", title: "引用标记对齐", summary: "每个标记对应一条。", name: "citation-alignment", description: "", bodyUpdatedAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z",
   ...overrides,
 } as never);
-const handbook = (overrides: Record<string, unknown> = {}) => ({
-  id: "h1", status: "active", capabilityId: "meta-analysis", title: "每一句结论落回来源", summary: "写出处。", appliedAt: "2026-09-23T00:00:00Z", updatedAt: "2026-09-23T00:00:00Z",
-  ...overrides,
-} as never);
 
 describe("the practices a list shows", () => {
-  it("lists only methods in force and handbooks in use, each group newest first", () => {
-    const { methods, handbooks } = practiceItems(
-      [method(), method({ id: "m2", bodyUpdatedAt: "2026-09-25T00:00:00Z" }), method({ id: "waiting", status: "candidate" }), method({ id: "stopped", status: "retired" })],
-      [handbook(), handbook({ id: "h2", appliedAt: "2026-09-24T00:00:00Z" }), handbook({ id: "h3", status: "retired" })],
-    );
-    expect(methods.map((item) => item.key)).toEqual(["method:m2", "method:m1"]);
-    expect(handbooks.map((item) => item.key)).toEqual(["handbook:h2", "handbook:h1"]);
+  it("lists only methods in force, newest first", () => {
+    const items = practiceItems([
+      method(), method({ id: "m2", bodyUpdatedAt: "2026-09-25T00:00:00Z" }), method({ id: "waiting", status: "candidate" }), method({ id: "stopped", status: "retired" }),
+    ]);
+    expect(items.map((item) => item.key)).toEqual(["method:m2", "method:m1"]);
   });
 
-  it("names a handbook's tool by its title, and never by its identifier", () => {
-    const { handbooks } = practiceItems([], [handbook(), handbook({ id: "h2", capabilityId: "no-such-capability" }), handbook({ id: "h3", capabilityId: null })]);
-    expect(handbooks.map((item) => item.tool)).not.toContain("meta-analysis");
-    expect(handbooks.find((item) => item.key === "handbook:h2")?.tool).toBe("科研工具");
-  });
-
-  it("searches the title, the sentence and the tool", () => {
+  it("searches the title and the sentence", () => {
     const all = [method()];
-    const books = [handbook()];
-    expect(practiceItems(all, books, { query: "标记" }).methods).toHaveLength(1);
-    expect(practiceItems(all, books, { query: "标记" }).handbooks).toHaveLength(0);
-    expect(practiceItems(all, books, { query: "落回来源" }).handbooks).toHaveLength(1);
-    expect(practiceItems(all, books, { query: "没有" })).toEqual({ methods: [], handbooks: [] });
+    expect(practiceItems(all, { query: "标记" })).toHaveLength(1);
+    expect(practiceItems(all, { query: "没有" })).toEqual([]);
   });
 });
 

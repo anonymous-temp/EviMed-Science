@@ -132,7 +132,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
       {confirmingReset && (
         <ConfirmDialog
           title="重置记忆？"
-          body="将永久清空你的全部记忆、已学到的做法和经验，以及你自己胶囊里的记录，不可撤销。对话、报告、知识库和别人分享给你的胶囊不受影响。"
+          body="将永久清空你的全部记忆、已学到的做法，以及你自己胶囊里的记录，不可撤销。对话、报告、知识库和别人分享给你的胶囊不受影响。"
           confirmLabel="清空"
           onConfirm={() => void reset()}
           onCancel={() => setConfirmingReset(false)}

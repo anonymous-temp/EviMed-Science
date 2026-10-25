@@ -655,20 +655,8 @@ function countSetting(overrides, key, name, fallback) {
 }
 
 /**
- * A share from 0 to 1 (a sample of runs, `runSampling.mjs`), from an override or the environment. Unset or empty is the default; a value outside the
- * range stops the process at start with the variable's name, as the module settings do, because a share nobody chose would decide how much is learned.
- * @param {Record<string, any>} overrides @param {string} key @param {string} name @param {number} fallback
- */
-function shareSetting(overrides, key, name, fallback) {
-  const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
-  const value = raw == null || raw === "" ? fallback : Number(raw);
-  if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`${name} must be a number from 0 to 1, got ${JSON.stringify(raw)}.`);
-  return value;
-}
-
-/**
  * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
- * and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
+ * (the official promotion, on since 2026-10-25, is the one that is on) and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
  *
  * - `OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED` (off): the operator's `GET /api/ops/evidence-flywheel` and the `open_science_evidence_flywheel_*`
  *   families. It reads existing tables only; it is a switch because a scrape that verifies cards is database work an operator chooses to ask for.
@@ -682,18 +670,18 @@ function shareSetting(overrides, key, name, fallback) {
  * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证 GEO, 虚拟临床研究) hand 循证进化 what they could
  *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
  *   sources taken in a day, because each lead is a scouting run on the module's own budget.
- * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
- *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
- *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
- *   `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE` (0.1, from 0 to 1) is the share of eligible runs a handbook entry on probation is served to, by a hash of
- *   the run id, so that the harm test can observe it; an entry that is never served can never leave probation (review L-6, owner decision 7).
+ * - `OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` (on): a method the learning loop wrote for a person that holds no personal or project fact may join the platform's
+ *   pack 「大家的做法」 (`officialPromotion.mjs`), after the code's field checks, a generality judge, a harm judge, the author rule and an independent re-check by a
+ *   model of another family. It needs the learning loop on and a review provider that is not DeepSeek: with none, nothing is considered and nothing is spent.
+ *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY` (3, at most 30) bounds the methods re-checked and activated in a day, each a model call of the platform's own.
+ *   (This replaced the platform handbook path, `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_*`, whose one producer was a repaired delivery read at share 0; 2026-10-25.)
  *
  * @param {Record<string, any>} overrides
  */
 function evidenceFlywheelSettings(overrides) {
-  const handbooksRaw = overrides.learningPlatformHandbooksPerDay !== undefined ? overrides.learningPlatformHandbooksPerDay : process.env.OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY;
-  const handbooksPerDay = handbooksRaw == null || handbooksRaw === "" ? 3 : Number(handbooksRaw);
-  if (!Number.isSafeInteger(handbooksPerDay) || handbooksPerDay < 1 || handbooksPerDay > 30) throw new Error(`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(handbooksRaw)}.`);
+  const promotionRaw = overrides.officialPromotionPerDay !== undefined ? overrides.officialPromotionPerDay : process.env.OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY;
+  const promotionPerDay = promotionRaw == null || promotionRaw === "" ? 3 : Number(promotionRaw);
+  if (!Number.isSafeInteger(promotionPerDay) || promotionPerDay < 1 || promotionPerDay > 30) throw new Error(`OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(promotionRaw)}.`);
   const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
   const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
   if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
@@ -711,9 +699,8 @@ function evidenceFlywheelSettings(overrides) {
     learningEvidenceOutcomesBatch: outcomesBatch,
     evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
-    learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
-    learningPlatformHandbooksPerDay: handbooksPerDay,
-    learningPlatformHandbooksProbationShare: shareSetting(overrides, "learningPlatformHandbooksProbationShare", "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE", 0.1),
+    officialPromotionEnabled: overrides.officialPromotionEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", true),
+    officialPromotionPerDay: promotionPerDay,
   };
 }
 
@@ -776,6 +763,10 @@ function memorySharingSettings(overrides, frontierEnabled) {
     capsuleKdfMaxWaiting: integer("capsuleKdfMaxWaiting", "OPEN_SCIENCE_CAPSULE_KDF_MAX_WAITING", 6, 0, 100),
     capsuleKdfMaxWaitMs: integer("capsuleKdfMaxWaitMs", "OPEN_SCIENCE_CAPSULE_KDF_MAX_WAIT_MS", 10_000, 100, 60_000),
     capsuleMaxLiveSnapshots: integer("capsuleMaxLiveSnapshots", "OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS", 300, 1, 5000),
+    // The platform's official starter packs from 「EviMed 证据中心」 (`officialPacks.mjs`, owner decision 2026-10-25): published once at start, held by every
+    // ordinary account on its shelf, the lowest tier of the methods a run is offered. Off, none is published, copied or mounted (copies an account
+    // already holds stay on its shelf and are mounted by nothing).
+    officialPacksEnabled: overrides.officialPacksEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED", true),
     evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
     evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
     evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),
@@ -3148,13 +3139,6 @@ export function loadConfig(overrides = {}) {
     // opening any). The card costs prompt room in every research run, and the harm test cannot see a method nobody opens. Restoring a
     // stopped method starts its count again. Zero never stops one for this. Stated beside the rule it feeds: `METHOD_UNUSED_RETIRE_LOADS`.
     learningUnusedRetireLoads: countSetting(overrides, "learningUnusedRetireLoads", "OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS", METHOD_UNUSED_RETIRE_LOADS),
-    // The share of repaired deliveries that queue a distillation. Zero by default (owner ruling of 2026-10-12: the loop is to learn the
-    // researcher's research methods from their corrections and edits, not how to pass the delivery gate). Since 2026-09-17 a verdict of the
-    // gate withholds nothing, so what a run repaired inside its turn is the platform's own bookkeeping, and 21 of the 28 lessons the loop
-    // had read by 2026-10-12 were of that kind, filed as account handbooks that 14 of 17 platform candidates then failed on length.
-    // Chosen by a hash of the run id (`runSampling.mjs`); 1 restores every repaired delivery. (The share of clean deliveries that queued a lesson, a third, was removed
-    // on 2026-10-23: what it read is the settled run and the routine over three of them, `learningEvidence.mjs`.)
-    learningRepairDistillShare: shareSetting(overrides, "learningRepairDistillShare", "OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE", 0),
     // Who sees the operations page.
     //
     // An id list, empty by default, no new role and no approval flow. It gates one surface — the

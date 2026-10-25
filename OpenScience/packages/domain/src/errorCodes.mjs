@@ -1338,9 +1338,6 @@ const capsuleTransferErrorCodes = Object.freeze([
   // method, not 「内容已发生变化」 — what a bare 409 used to be read as.
   'method_no_earlier_version',
   'method_revision_unavailable',
-  // The same two for a capability handbook (`HandbookLibrary`): one that is gone, and a version that is.
-  'handbook_unavailable',
-  'handbook_revision_unavailable',
 ])
 
 /**
@@ -2733,8 +2730,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_community_not_found: '这个官方专区不存在，或还没有发布。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
-  handbook_unavailable: '这条经验已不存在，刷新后再试。',
-  handbook_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
   // ——— 记忆：原生引擎 (nativeMemoryStore.mjs, memoryGateway.mjs) ———
   memory_engine_unavailable: '记忆服务暂时不可用，稍后再来看；对话照常进行，不受影响。',

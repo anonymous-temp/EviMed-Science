@@ -12,10 +12,9 @@ import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
 import { sharedFrom } from "../src/capsuleShareLabel.mjs";
 import { capsuleShareMetricFamilies, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
 import { CapsuleSharing } from "../src/capsuleSharing.mjs";
-import { createGuestInfluence, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
+import { createGuestInfluence, guestMarkedRuns, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
 import { CapsuleTransferService, renderCapsuleTransferFiles } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { createEvolutionLearningCoupling } from "../src/evolutionLearningCoupling.mjs";
 import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
@@ -549,14 +548,8 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   assert.equal((await triggersAt(0).afterRun(project, finished(`run_n1_${tag}`, { recalledMemories: [] }))).guestInfluence, undefined, "a run that used no guest capsule is as it always was");
   assert.equal(made.snapshot.channel, "delivery");
 
-  // Observations of marked runs do not count towards a platform lead; the same observations of runs that were not marked do.
-  const book = (name, runIds) => documents.put(alice, "method", `book-${name}-${tag}`, { recordType: "capability-handbook", status: "active", capabilityId: name, contentDigest: "d",
-    observations: runIds.map((runId) => ({ runId, used: true, gapCodes: ["method-missing"] })) }, { expectedRevision: 0 });
-  await book("guestgap", [guestA.id, guestB.id]);
-  await book("vouchedgap", [vouchedA.id, vouchedB.id]);
-  const events = [];
-  await createEvolutionLearningCoupling({ service: { ingestEvent: async (event) => events.push(event) }, database }).scan();
-  const mine = events.filter((event) => event.userId === alice);
-  assert.ok(mine.some((event) => event.id.includes(`book-vouchedgap-${tag}`)), "runs that used a corroborated pack make a lead");
-  assert.ok(!mine.some((event) => event.id.includes(`book-guestgap-${tag}`)), "runs that used an uncorroborated one make none");
+  // What reaches the platform from a run is read through the same mark: the promotion of a person's method to the pack of everyone's refuses a method
+  // learned in a marked run, and takes one learned in a run whose pack another account had vouched for.
+  const marked = await guestMarkedRuns(database, alice, [guestA.id, guestB.id, vouchedA.id, vouchedB.id]);
+  assert.deepEqual([...marked].sort(), [guestA.id, guestB.id].sort(), "only the runs that used an uncorroborated pack are marked");
 });

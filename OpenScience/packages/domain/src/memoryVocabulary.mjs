@@ -50,9 +50,10 @@ import { workspaceLayout } from './workspaceLayout.mjs'
  */
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-evolution', role: 'injected', emitters: ['apps/server/src/evolutionRuns.mjs'] },
-  { tag: 'evimed-handbook', role: 'injected', emitters: ['apps/server/src/capabilityHandbooks.mjs'] },
-  // A platform handbook on probation, served to a sampled share of runs so its harm test can observe it (2026-10-10).
-  { tag: 'evimed-platform-handbook', role: 'injected', emitters: ['apps/server/src/capabilityHandbooks.mjs'] },
+  // The capability handbooks of an account and the platform's on probation, deleted with their arm on 2026-10-25: nothing writes either tag now, and the
+  // transcripts of the last ninety days still carry them as machine text.
+  { tag: 'evimed-handbook', role: 'injected', emitters: [], legacy: 'an account\'s capability handbook in a dispatch context, retired 2026-10-25 with the handbook arm; transcripts from before still carry it' },
+  { tag: 'evimed-platform-handbook', role: 'injected', emitters: [], legacy: 'the platform handbook on probation served to a sampled run, retired 2026-10-25 with the handbook arm; transcripts from before still carry it' },
   { tag: 'evimed-brief', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-capsule', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   // A 「试用一次」 conversation's borrowed capsule, in its dispatch context.

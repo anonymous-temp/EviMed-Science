@@ -18,11 +18,11 @@ import { migrateUsageLedger } from "./usagePersistence.mjs";
  *   could be counted.
  * - **`guestInfluence`**: which of a finished run's guest capsules were not corroborated when it ran. Such a run still learns for
  *   its own account — its lesson is queued as every other run's is — but nothing it produced reaches a platform-level consumer:
- *   the run is marked, and `evolutionLearningCoupling.mjs`, the one place a researcher's handbook becomes a platform lead, leaves
- *   its observations out.
+ *   the run is marked, and `officialPromotion.mjs`, the one place a researcher's method becomes the platform's, refuses a method
+ *   learned in it (`recentGuestRun`); official packs themselves are never read as a guest's influence.
  *
- * What was found to flow where is in the work package's report; the short version is that a lesson, a learned method and a
- * handbook are each one account's, and the only channel from learning to the whole platform is the handbook-gap scan.
+ * What was found to flow where is in the work package's report; the short version is that a lesson and a learned method are each
+ * one account's, and the only channel from learning to the whole platform is that promotion.
  *
  * A finished run is one the usage ledger holds a settled kernel request for (`evimed_usage.model_requests`, purpose `kernel`):
  * the ledger is the one record of an account's research that survives its projects, and a request the model answered and the
@@ -129,6 +129,9 @@ export function createGuestInfluence({ database, documents = null, minAccounts =
         AND payload @> '{"imported":true}'::jsonb`, [userId, capsuleIds]);
       const guest = [];
       for (const row of packs.rows) {
+        // One of the platform's own packs is the platform's text, vetted before it was published (`officialPacks.mjs`), and not a stranger's
+        // share waiting for other accounts to vouch for it: a run that read it is no guest-influenced run.
+        if (row.payload?.official) continue;
         const authorId = typeof row.payload?.transfer?.authorId === "string" ? row.payload.transfer.authorId : null;
         const snapshotHash = typeof row.payload?.transfer?.manifestSha256 === "string" ? row.payload.transfer.manifestSha256 : null;
         const corroborated = await shareIsCorroborated({ authorId, snapshotHash }, { database, minAccounts, keptDays, minAccountAgeDays, minFinishedRuns, now });

@@ -15,7 +15,9 @@
  *
  * The budget is spent in the mount's order, which is the build spec's 「你本次
  * 明说的 > 你自己的 > 对方的 > 平台默认」: the person's own capsule methods, then
- * the methods learnt from their work, then what a received pack brings.
+ * the methods learnt from their work, then what a received pack brings, then the
+ * platform's own starter methods (`officialPacks.mjs`) of the conversation scope —
+ * for an account that holds them, which an integration's subject account does not.
  *
  * One thing differs from the mount, on purpose:
  *
@@ -37,6 +39,7 @@
  * @module agentMemoryRecall
  */
 
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
 import { cleanMethodDisplay } from "@evimed/domain";
@@ -263,9 +266,17 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
         fromCapsules.push(...await capsuleMethods(capsules, user.id, input.projectId ?? null, null, titles));
       }
     }
+    // The platform's own methods, last: the account's enabled official packs, those that are for the conversation. An institution's named
+    // capsules are somebody else's shelf and bring none.
+    /** @type {any[]} */
+    const platform = methodMode === "all" && !named && capsules && user && typeof capsules.officialMethods === "function"
+      ? (await capsules.officialMethods(user.id).catch(() => [])).filter((/** @type {any} */ method) => method.scope.includes("conversation")).map((/** @type {any} */ method) => ({
+        source: "official", id: method.key, capsuleId: method.capsuleId, title: method.description, summary: null, whenToUse: method.whenToUse, content: method.body,
+        digest: `sha256:${sha256(method.body)}`, bytes: Buffer.byteLength(method.body, "utf8"), since: null, received: true, contextOnly: true }))
+      : [];
     // One budget, in the mount's order: the person's own capsule methods,
-    // their learned methods, then a received pack's.
-    const ordered = [...fromCapsules.filter((method) => !method.received), ...own, ...fromCapsules.filter((method) => method.received)];
+    // their learned methods, a received pack's, then the platform's.
+    const ordered = [...fromCapsules.filter((method) => !method.received), ...own, ...fromCapsules.filter((method) => method.received), ...platform];
     let bytes = 0;
     for (const method of ordered) {
       if (methods.length >= MAX_MOUNTED_CAPSULE_METHODS) break;

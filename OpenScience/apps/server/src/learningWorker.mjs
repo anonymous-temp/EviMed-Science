@@ -102,11 +102,6 @@ export class LearningWorker {
     this.concurrency = concurrency;
     /** @type {Set<Promise<any>>} */
     this.lanes = new Set();
-    // Paired evaluations of a handbook in progress on this worker (the optional `evaluate` hook of
-    // `HandbookConsolidation`, which no deployment composes). One at a time: each holds a lane and a
-    // background runtime for hours, and two of them held both lanes and half the deployment's runtimes
-    // on 2026-09-21.
-    this.evaluating = 0;
     // Set when the process is shutting down (`interrupt`): a job that ends now
     // ended because the platform is restarting, not because of anything in it.
     this.closing = false;
@@ -248,19 +243,6 @@ export class LearningWorker {
         /** @type {any} */ (error).code = "consolidate_action_invalid";
         throw error;
       }
-      if (action === "optimize" && this.consolidation.handbookConsolidation?.evaluate) {
-        if (this.evaluating >= 1) {
-          const error = new Error("Another paired evaluation is running; this one waits its turn.");
-          /** @type {any} */ (error).code = "learning_evaluation_busy";
-          throw error;
-        }
-        this.evaluating += 1;
-        try {
-          return await this.consolidation.run({ job });
-        } finally {
-          this.evaluating -= 1;
-        }
-      }
       return this.consolidation.run({ job });
     }
     const project = await this.resolveProject(job);
@@ -273,7 +255,7 @@ export class LearningWorker {
       /** @type {any} */ (error).code = "distillation_run_unavailable";
       throw error;
     }
-    return this.distillation.execute({ job, project, run, feedback: job.payload?.feedback ?? [], repairIssues: job.payload?.repairIssues ?? [] });
+    return this.distillation.execute({ job, project, run, feedback: job.payload?.feedback ?? [] });
   }
 
   /**

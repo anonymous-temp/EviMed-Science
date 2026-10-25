@@ -360,13 +360,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       }).catch(() => {});
     }
   }
-  /** Freeze supplemental context without changing the native request or refusing research. */
+  /** Freeze the route (and the methods) of an input without changing the native request or refusing research. */
   async function prepareNativeContext(project, payload) {
     if (!preparePrompt) return;
     try { await preparePrompt(project, payload?.args?.request); }
     catch (error) {
-      await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
-        code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
+      await audit("native.route.prepare", { userId: project.userId, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "native_route_unavailable" }).catch(() => {});
     }
   }
   // An explicit selection is part of this operation's authority, not an

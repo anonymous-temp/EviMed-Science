@@ -25,7 +25,7 @@ import path from "node:path";
 import { METHOD_RELEVANT_MOUNT_REASONS, NEVER_SHARED_LAYERS } from "@evimed/domain";
 import { entryReaches } from "./capsuleEntryProject.mjs";
 import { sharedFrom } from "./capsuleShareLabel.mjs";
-import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
+import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods, selectOfficialMethods } from "./learnedMethodMount.mjs";
 import { assertNoSymlinkPath, safeId, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** The directory name under the project's runtime root. */
@@ -481,7 +481,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * card names and one that begins now is shown only the selection.
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
- *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null,
+ *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
  *   keep?: Iterable<string> | null, keepDirectory?: boolean, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
@@ -490,10 +490,15 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * `learnedFamily` is which learned methods this runtime may carry
  * (`learnedMethodFamilyForRuntime`); absent, the whole library.
  *
+ * `official` is what the platform's tier put in the mount and `officialLeftOut` what it left out because a method of the person's own says
+ * the same thing, each with the one it yielded to and how near they were: the mount's receipt of the tier (`selectOfficialMethods`).
+ *
  * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
  *   learned: {id: string, name: string, digest: string, reason: string}[],
  *   learnedBytes: number, version: string, rank: { mode: string | null, topScore: number | null },
- *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
+ *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[],
+ *   official: {id: string, name: string, digest: string, directoryName: string}[],
+ *   officialLeftOut: {id: string, name: string, reason: string, twin: {id: string, name: string}, score: number}[] }>}
  */
 export async function materializeCapsuleMethods({
   capsules,
@@ -563,8 +568,30 @@ export async function materializeCapsuleMethods({
     spentBytes += method.bytes;
     receivedMethods.push(method);
   }
+  // The platform's tier, last: what a run is given of the official packs is what is left of the room after everything of the person's own and
+  // everything they were sent, chosen against their own methods (`selectOfficialMethods`: a method of theirs about the same thing wins).
+  const officialAll = capsules && typeof capsules.officialMethods === "function" ? await capsules.officialMethods(userId).catch(() => []) : [];
+  const officialMethods = await selectOfficialMethods(officialAll, {
+    scopeId: scopeId ?? null,
+    family: learnedFamily,
+    query,
+    similarity,
+    personal: [...ownMethods.map(ownMethodDocument), ...((/** @type {any} */ (learnedMethods)).candidates ?? [])],
+    maxCount: MAX_MOUNTED_CAPSULE_METHODS - ownMethods.length - learnedMethods.length - receivedMethods.length,
+    maxBytes: maxPromptBytes - spentBytes,
+    cardDirectory: runtimeCapsuleMethodsDir,
+    keep,
+    onLeftOut: countLeftOut,
+  });
+  const official = capsules?.official;
+  if (official) {
+    official.noteMount("offered", officialMethods.length);
+    official.noteMount("leftOutPersonal", officialMethods.leftOut.length);
+    if (officialMethods.deltaMode === "lexical") official.noteMount("deltaUnread", 1);
+  }
+  spentBytes += officialMethods.reduce((total, method) => total + method.promptBytes, 0);
   const capsuleMethods = [...ownMethods, ...receivedMethods];
-  const methods = [...ownMethods, ...learnedMethods, ...receivedMethods];
+  const methods = [...ownMethods, ...learnedMethods, ...receivedMethods, ...officialMethods];
   const learned = learnedMethods.map((method) => ({
     id: method.id,
     name: method.name,
@@ -575,17 +602,18 @@ export async function materializeCapsuleMethods({
   const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,
     factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
   const rank = { mode: /** @type {any} */ (learnedMethods).mode ?? null, topScore: /** @type {any} */ (learnedMethods).topScore ?? null };
-  const reasons = new Map(learnedMethods.map((method) => [method.directoryName, method.reason]));
+  const reasons = new Map([...learnedMethods, ...officialMethods].map((method) => [method.directoryName, method.reason]));
   const version = selectionVersion(methods.map((method) => ({ directory: method.directoryName, digest: String(method.digest ?? method.document ?? ""), reason: reasons.get(method.directoryName) ?? null })));
+  const officialReceipt = officialMethods.map((method) => ({ id: method.id, name: method.name, digest: method.digest, directoryName: method.directoryName }));
   if (methods.length === 0 && !keepDirectory) {
     await fs.rm(directory, { recursive: true, force: true });
-    return { directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, version, rank, capsule };
+    return { directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
   }
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
   // New and changed first, stale last (see above). What a running runtime was given and is still approved is written too, and stays.
   /** @type {any[]} */
-  const kept = /** @type {any} */ (learnedMethods).kept ?? [];
+  const kept = [...(/** @type {any} */ (learnedMethods).kept ?? []), ...officialMethods.kept];
   let bytes = 0;
   for (const method of [...methods, ...kept]) {
     // A code skill is a body plus the scripts it tells the run to execute.
@@ -616,10 +644,24 @@ export async function materializeCapsuleMethods({
   }
   // What the plugin lists, in the order of the selection: the researcher's own entries, the learned methods best first, what a
   // received pack brought. A learned method carries the reason it is there; a capsule entry none.
+  // `leftOut` is the receipt of what the personal delta kept out of this selection (a plugin that predates it ignores the field).
   await writeFile(directory, path.join(directory, SELECTION_FILE), `${JSON.stringify({
     version, methods: methods.map((method) => ({ directory: method.directoryName, reason: reasons.get(method.directoryName) ?? null })),
+    ...(officialMethods.leftOut.length ? { leftOut: officialMethods.leftOut } : {}),
   })}\n`, { encoding: "utf8", mode: 0o444 });
-  return { directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, version, rank, capsule };
+  return { directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
+}
+
+/**
+ * One of the person's own capsule methods as a document the similarity module reads: its heading is its name and the opening of its text is
+ * what it says, which is all `methodText` embeds.
+ * @param {{ id: string, content: string }} method
+ */
+function ownMethodDocument(method) {
+  const text = String(method.content ?? "").trim();
+  const first = text.split("\n", 1)[0].trim();
+  const name = (first.startsWith("# ") ? first.slice(2) : first).slice(0, 80);
+  return { id: method.id, payload: { frontmatter: { name, description: text.replace(/\s+/g, " ").slice(0, 400) }, contentDigest: `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}` } };
 }
 
 /** The file beside the method directories that says which learned method is there for which reason. */

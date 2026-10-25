@@ -124,7 +124,7 @@ export interface MethodVersion {
   current: boolean;
 }
 
-/** A conversation a method or handbook was learned from, as 「从哪里学到的」 links it. */
+/** A conversation a method was learned from, as 「从哪里学到的」 links it. */
 export interface ConversationSource {
   projectId: string;
   sessionId: string;

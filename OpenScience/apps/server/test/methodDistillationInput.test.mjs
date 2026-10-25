@@ -72,9 +72,9 @@ test("the first request and the intervention survive a long delegated run, and n
   assert.ok(!text.includes("锚点与回执"), "the closing summary of the platform's submit is not in it either");
 });
 
-test("a trigger that points at an edit or a repair still reads a tail, without the choreography in it", () => {
+test("a trigger that points at an edit still reads a tail, without the choreography in it", () => {
   const { transcript, run } = delegatedRun();
-  const input = buildDistillationInput({ run, trigger: "repair_accepted", transcript });
+  const input = buildDistillationInput({ run, trigger: "edit_diff", transcript });
   assert.ok(input.transcriptExcerpts.length >= 1);
   assert.ok(input.transcriptExcerpts.every((excerpt) => excerpt.anchor.kind === "tail"));
   const text = JSON.stringify(input.transcriptExcerpts);
@@ -304,7 +304,7 @@ test("the related methods are the nearest to what the lesson is about, the files
   assert.ok(queries[0].includes("每节不要超过三行，数字都带单位") && queries[0].includes("帮我把本周随访数据整理成周报"), "what the person said and first asked");
   assert.ok(queries[0].includes("总览") && queries[0].includes("md"), "and the shape of what was left");
   assert.deepEqual(dispatched[0].input.trajectory.artifacts[0].shape?.labels, ["周报", "总览", "下周计划"], "the digest says what kind of thing the run left");
-  assert.equal(dispatched[0].input.extractorVersion, "8");
+  assert.equal(dispatched[0].input.extractorVersion, "9");
 
   await make({ similarity: { nearest: async () => { throw new Error("embedder down"); } } }).execute({ project, run, job: lesson });
   assert.deepEqual(dispatched[1].input.relatedMethods.map((entry) => entry.id), library.slice(0, 8).map((entry) => entry.id), "the most recently written, as before");

@@ -18,7 +18,7 @@ export const EVOLUTION_DATA_LEVELS = Object.freeze(['D0', 'D1', 'D2', 'D3', 'D4'
 export const EVOLUTION_VALIDATION_LEVELS = Object.freeze(['V0', 'V1', 'V2', 'V3', 'V4'])
 export const EVOLUTION_DECISION_CLASSES = Object.freeze(['A', 'B', 'C', 'D'])
 export const EVOLUTION_GAP_CODES = Object.freeze(['connector', 'extraction', 'method-missing', 'method-implementation', 'routing', 'skill-instruction', 'writing', 'model-capability', 'outside-product'])
-export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset', 'handbook',
+export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset',
   // The platform's own modules saying they could not do something (flywheel F20, 2026-10-06): the evidence programme, 循证 GEO and 虚拟临床研究.
   // Every lead of these three is reduced to a closed code and closed entity keys (`evolutionLeadSources.mjs`), never a researcher's words.
   'evidence-programme', 'communication', 'virtual-study'])
@@ -66,8 +66,6 @@ export function evolutionValidationLevel(assessments, usage = {}) {
 export function evolutionToolVisible(tool) {
   if (tool.status !== 'active') return false
   if (tool.toolKind === 'workflow') return tool.smokePassed === true
-  // A text-only handbook entry from an account's general lesson is visible once its independent re-check held (flywheel F16).
-  if (tool.toolKind === 'handbook') return tool.recheckPassed === true
   return Number(String(tool.validationLevel).slice(1)) >= (tool.noPublishedCases === true ? 1 : 2)
 }
 /** Public field contract, with no hidden expected values. @param {any} value */

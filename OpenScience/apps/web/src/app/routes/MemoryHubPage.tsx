@@ -18,7 +18,7 @@ import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
 import { MemoryControls } from "@/components/memory/MemoryControls";
 import { MEMORY_OVERVIEW_ADDRESS, memoryTabAddress, MemoryFrame, type MemoryPageTab, type MemoryTab } from "@/components/memory/MemoryFrame";
 import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
-import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
+import { MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
 import { factItems, factRowSummary, factsOfProject, OTHER_PROJECT, practiceItems, projectScopeGroups, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
 import { ImportDialog } from "@/components/memory/ImportDialog";
@@ -45,7 +45,7 @@ function tabFromAddress(params: URLSearchParams): MemoryTab | null {
 
 /** The reads a tab needs that did not answer, named by tab: a list that could not be read is never an empty one. */
 const SOURCES_OF: Record<MemoryTab, readonly MemoryRead[]> = {
-  self: ["profile", "mine"], project: ["profile", "mine"], methods: ["methods", "handbooks"],
+  self: ["profile", "mine"], project: ["profile", "mine"], methods: ["methods"],
 };
 
 /** What a conversation begun from an empty tab leaves in the composer, unsent: the blanks are the person's to fill. */
@@ -65,9 +65,9 @@ const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目�
  *    choice A — nothing of the kind is the account's, and none has a page): the
  *    card its facts were written under, what its conversations did and what they
  *    delivered, and a line when the project has memory switched off.
- *  - 做法: what the platform learned — for every study, and for one research
- *    tool each — read, stopped, or taken back to the version before. Never
- *    typed in: methods are learned, not written (owner ruling 2026-09-20).
+ *  - 做法: what the platform learned, read, stopped, or taken back to the
+ *    version before. Never typed in: methods are learned, not written (owner
+ *    ruling 2026-09-20).
  *  - 总览 (`/app/memory/overview`) and 地图 (`/app/memory/map`): pages of their own that wear this page's frame — the capsule as six parts
  *    and the explorer they drill into. 「成长」 was a tab until 2026-10-17: the line of how much the capsule held said "grew to 75" over a
  *    line that fell to 42; what the capsule gained is the overview's first card now, what happened each week the map's 「时间」 view, and
@@ -75,20 +75,19 @@ const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目�
  *
  * What the page no longer has, and why: the two stat blocks and 「查看做法」
  * counted the same methods three ways and moved nothing the reader could see;
- * 「效果待观察」 and 「完成对照评估」 were a state no code could change (the
- * handbook loop is built without an evaluator, and none can compare a handbook
- * with and without it under the learning budget); 「推断」 sat on every row of
- * a page where nearly every row is learned, and then once in every drawer: whose
- * words a memory is, is not said on the page at all (owner ruling of 2026-10-10).
+ * 「效果待观察」 and 「完成对照评估」 were a state no code could change (no
+ * evaluator can compare a method with and without it under the learning
+ * budget); 「推断」 sat on every row of a page where nearly every row is
+ * learned, and then once in every drawer: whose words a memory is, is not said
+ * on the page at all (owner ruling of 2026-10-10).
  * The tabs, the toolbar's search and the project scope of the header are `MemoryFrame`'s, which the map draws too, so the two pages are one
  * column and one band. The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
  * 已忘记的内容 · 本项目不使用记忆 · 重置记忆); the page asks nothing of the
  * server to be read — making the capsule on first use moved to opening 分享与导入.
  *
- * Four reads feed it (the memories, the notes of the researcher's own capsule,
- * the methods, the handbooks), each to its last page. When any fails, one line
- * says so with 重试, and a tab whose own read failed shows nothing rather than
- * 「还没有记忆」.
+ * Three reads feed it (the memories, the notes of the researcher's own capsule,
+ * the methods), each to its last page. When any fails, one line says so with
+ * 重试, and a tab whose own read failed shows nothing rather than 「还没有记忆」.
  *
  * Where the reader is lives in the address (design reference A08): `?tab=`,
  * `?project=` on 项目, `?q=` for the search and `?open=` for the row whose
@@ -168,8 +167,8 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   // The notes in force and, among them, the ones an outside agent proposed that wait for the researcher (待确认 in their drawer).
   const entries = useMemo(() => [...(data.mine?.entries ?? []), ...(data.mine?.candidates ?? [])], [data.mine]);
   const facts = useMemo(() => factItems(found ?? records, entries, { query }), [found, records, entries, query]);
-  const everyPractice = useMemo(() => practiceItems(data.methods ?? [], data.handbooks ?? []), [data.methods, data.handbooks]);
-  const practices = useMemo(() => practiceItems(data.methods ?? [], data.handbooks ?? [], { query }), [data.methods, data.handbooks, query]);
+  const everyPractice = useMemo(() => practiceItems(data.methods ?? []), [data.methods]);
+  const practices = useMemo(() => practiceItems(data.methods ?? [], { query }), [data.methods, query]);
 
   const self = facts.filter((fact) => fact.group === "self");
   const choices = useProjectChoices(facts);
@@ -189,7 +188,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     const recordId = params.get("record");
     const methodId = params.get("method");
     if (!recordId && !methodId) { handled.current = true; return; }
-    // The reads the address names, not all four: a link to a memory opens when the memories are in, whatever the methods are doing.
+    // The reads the address names, not all three: a link to a memory opens when the memories are in, whatever the methods are doing.
     if (!readIn(recordId ? SOURCES_OF.self : SOURCES_OF.methods)) return;
     handled.current = true;
     const next = new URLSearchParams(params);
@@ -202,7 +201,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
         next.set("open", target.key);
       }
     } else if (methodId) {
-      const target = everyPractice.methods.find((item) => item.kind === "method" && item.method.id === methodId);
+      const target = everyPractice.find((item) => item.method.id === methodId);
       next.set("tab", "methods");
       if (target) next.set("open", target.key);
       else setMissing(data.methods === null ? "暂时读不到已学做法，请重试。" : "当前列表中没有找到这条做法。");
@@ -213,7 +212,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   }, [data.methods, readIn, params, setParams, facts, records, entries, everyPractice]);
 
   const serviceDown = data.serviceDown;
-  const unread = (["profile", "mine", "methods", "handbooks"] as const).filter((name) => data[name] === null && !(serviceDown && name === "profile"));
+  const unread = (["profile", "mine", "methods"] as const).filter((name) => data[name] === null && !(serviceDown && name === "profile"));
   const tabUnread = SOURCES_OF[tab].some((name) => unread.includes(name));
   // What 「记住这一条」 asked and is not written yet (about twelve seconds), and whether that is taking longer than it should.
   const pending = useMemo(() => data.profile?.pending ?? [], [data.profile]);
@@ -228,7 +227,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     const holds: [MemoryTab, number][] = [
       ["self", everyFact.filter((fact) => fact.group === "self").length],
       ["project", everyFact.filter((fact) => fact.group === "project").length],
-      ["methods", everyPractice.methods.length + everyPractice.handbooks.length],
+      ["methods", everyPractice.length],
     ];
     for (const [candidate, rows] of holds) {
       if (!readIn(SOURCES_OF[candidate])) return;
@@ -252,12 +251,12 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const counts: Record<MemoryTab, number | undefined> = {
     self: loading("self") ? undefined : self.length,
     project: loading("project") ? undefined : projectFacts.length,
-    methods: loading("methods") ? undefined : practices.methods.length + practices.handbooks.length,
+    methods: loading("methods") ? undefined : practices.length,
   };
   const scrollAnchor = usePageScroll(readIn(SOURCES_OF[tab]) && landed);
 
   const opened: FactItem | PracticeItem | null = openKey
-    ? [...facts, ...everyFact, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
+    ? [...facts, ...everyFact, ...everyPractice].find((item) => item.key === openKey) ?? null
     : null;
   const setProjectChoice = (id: string | null) => { if (id) setParams((current) => withParam(current, "project", id), { replace: true }); };
   const chooseTab = (next: MemoryPageTab) => {
@@ -338,26 +337,13 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
         </div>
       );
     }
-    if (practices.methods.length + practices.handbooks.length === 0) return empty("还没有学到的做法", "做的研究多了，会从中学到做法，出现在这里。");
+    if (practices.length === 0) return empty("还没有学到的做法", "做的研究多了，会从中学到做法，出现在这里。");
     return (
-      <div className="space-y-6">
-        {practices.methods.length > 0 && (
-          <GroupSection title="所有研究都会用">
-            <List label="所有研究都会用的做法">
-              {practices.methods.map((item) => <MemoryListRow key={item.key} title={item.title} summary={item.summary} onOpen={() => setOpenKey(item.key)} />)}
-            </List>
-          </GroupSection>
-        )}
-        {practices.handbooks.length > 0 && (
-          <GroupSection title="用在某个科研工具里">
-            <List label="用在某个科研工具里的做法">
-              {practices.handbooks.map((item) => (
-                <MemoryListRow key={item.key} title={item.title} summary={item.summary} end={<span className="text-caption text-text-3">{item.tool}</span>} onOpen={() => setOpenKey(item.key)} />
-              ))}
-            </List>
-          </GroupSection>
-        )}
-      </div>
+      <GroupSection title="所有研究都会用">
+        <List label="所有研究都会用的做法">
+          {practices.map((item) => <MemoryListRow key={item.key} title={item.title} summary={item.summary} onOpen={() => setOpenKey(item.key)} />)}
+        </List>
+      </GroupSection>
     );
   };
 
@@ -402,8 +388,6 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
         />
       ) : opened?.kind === "method" ? (
         <MethodDrawer key={opened.key} method={opened.method} onClose={close} onChanged={reload} />
-      ) : opened?.kind === "handbook" ? (
-        <HandbookDrawer key={opened.key} handbook={opened.handbook} tool={opened.tool} onClose={close} onChanged={reload} />
       ) : null}
       {drawer === "remember" && (
         <RememberDialog

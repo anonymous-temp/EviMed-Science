@@ -169,7 +169,7 @@ export function diagnosticApplicability({ raised, known }) {
  * One entry as the record keeps it: a closed projection, bounded, with every identifier checked for its shape. Throws
  * when an entry does not name what it is about — a signal with no result version, a digest that is not a method's.
  *
- * `digest` is the content digest of the revision of the method (or handbook) the producing run read. `result` is the
+ * `digest` is the content digest of the revision of the method the producing run read. `result` is the
  * version the signal is about; `successor` is a correction's system-generated successor, kept as the second half of the
  * pair and never as evidence of its own. `replay` and `event` name the recalculation or the feedback event that is the
  * signal's source, so every entry can be traced to a record that exists independently.

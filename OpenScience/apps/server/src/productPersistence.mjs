@@ -631,7 +631,7 @@ UPDATE evimed_product.documents
            coalesce(payload #>> '{provenance,sourceProjectId}', project_id))),
        project_id = NULL
  WHERE kind='method' AND project_id IS NOT NULL
-   AND payload->>'recordType' IN ('learned-method','handbook-candidate');
+   AND payload->>'recordType' = 'learned-method';
 -- Which body a method is on, counted from its saved revisions: a new text is a
 -- new version, a counter write or a status change of the same text is not
 -- (audit L-G4). Once, for the methods written before the count existed.

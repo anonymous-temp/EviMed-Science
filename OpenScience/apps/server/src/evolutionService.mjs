@@ -81,7 +81,7 @@ export class EvolutionService {
   /** Only closed operational codes cross the researcher's tenant boundary. @param {any} input */
   async addLead(input) {
     if (!EVOLUTION_TRACKS.includes(input.track) || !EVOLUTION_LEAD_SOURCES.includes(input.source) || !EVOLUTION_GAP_CODES.includes(input.gapCode)) throw new HttpError(400, 'evolution_lead_invalid', 'Unknown evolution lead vocabulary.');
-    const privateSource = ['runtime-failure', 'autopilot', 'dataset', 'handbook'].includes(input.source);
+    const privateSource = ['runtime-failure', 'autopilot', 'dataset'].includes(input.source);
     // The platform's own modules (flywheel F20): a closed code and closed entity keys, chosen from lists `evolutionLeadSources.mjs` owns.
     const payload = MODULE_LEAD_SOURCES.includes(input.source) ? moduleLeadPayload(input) : privateSource ? { track: input.track, source: input.source, gapCode: input.gapCode, code: EVOLUTION_GAP_CODES.includes(input.code) ? input.code : input.gapCode }
       : { track: input.track, source: input.source, gapCode: input.gapCode, method: input.method, papers: input.papers ?? [], features: input.features ?? {}, origin: input.origin ?? 'literature' };

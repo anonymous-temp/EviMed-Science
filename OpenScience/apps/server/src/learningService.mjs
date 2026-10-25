@@ -89,30 +89,12 @@ import { HttpError } from "./security.mjs";
  *  `source-method` rows the source pipeline already writes under this kind. */
 export const LEARNED_METHOD_RECORD_TYPE = "learned-method";
 
-/**
- * A lesson whose only evidence was the platform's own reviewer — the gate's
- * findings a run repaired against, with nothing the researcher said or changed.
- *
- * It is about how to pass EviMed's checks, which is the capability's handbook
- * (the L2 loop, spec §19.17), not how this person works. Both methods the loop
- * learnt in production were of this kind and sat in the researcher's own list
- * as 「我的做法」 (audit 2026-09-26, L-G3). Such a lesson stays under its own
- * record type: never listed as the researcher's or exported in a pack. The
- * handbook loop applies it as a separate owner-scoped capability supplement.
- */
-export const HANDBOOK_CANDIDATE_RECORD_TYPE = "handbook-candidate";
-
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 
 /** @param {string} name @returns {string} */
 export function learnedMethodId(name) {
   return `method:learned:${name}`;
-}
-
-/** @param {string} name @returns {string} */
-export function handbookCandidateId(name, capabilityId = "") {
-  return `method:handbook:${capabilityId ? `${capabilityId}:` : ""}${name}`;
 }
 
 /** @param {any} document @returns {boolean} */
@@ -276,11 +258,22 @@ export class LearningService {
      * @type {((userId: string) => unknown) | null}
      */
     this.onMountChange = null;
+    /**
+     * Told, after a write that may have put a method in force, which one it was (`createCandidate`, `amendMethod`, an approval): the composition
+     * root hands it to the promotion of general methods to everyone's pack (`officialPromotion.mjs`), which reads the method itself and decides.
+     * Told and never asked, like `onMountChange`.
+     * @type {((userId: string, methodId: string) => unknown) | null}
+     */
+    this.onTookEffect = null;
   }
 
-  /** @param {string} userId */
-  #mountChanged(userId) {
+  /**
+   * @param {string} userId
+   * @param {string | null} [methodId] the method whose write this is, when it may have come into force: `onTookEffect` is told it too
+   */
+  #mountChanged(userId, methodId = null) {
     try { Promise.resolve(this.onMountChange?.(userId)).catch(() => {}); } catch { /* told, never asked */ }
+    if (methodId) try { Promise.resolve(this.onTookEffect?.(userId, methodId)).catch(() => {}); } catch { /* told, never asked */ }
   }
 
   /**
@@ -423,67 +416,8 @@ export class LearningService {
       expectedRevision: 0,
       projectId: null,
     });
-    if (payload.status === "approved") this.#mountChanged(userId);
+    if (payload.status === "approved") this.#mountChanged(userId, id);
     return this.getMethod(userId, id);
-  }
-
-  /**
-   * Recheck a handbook with the same body, dependency and provenance rules as a method.
-   * @param {string} userId
-   * @param {{frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], display?: unknown, steps?: unknown, capabilityId?: string | null}} input
-   * @param {{ allowStale?: boolean }} [options] see `#validated`: a record being given back may name what was true when it was written
-   */
-  async validateHandbook(userId, input, { allowStale = false } = {}) {
-    return this.#validated({ ...input, allowStale, resolveDigest: await this.#digestResolver(userId) });
-  }
-
-  /** Queue exactly one application per owner, capability and reviewed content.
-   * @param {string} userId @param {any} candidate @param {{retryOf?:string,transactionClient?:any}} [options] */
-  async enqueueHandbook(userId, candidate, { retryOf, transactionClient = null } = {}) {
-    if (!this.jobs || candidate?.payload?.recordType !== HANDBOOK_CANDIDATE_RECORD_TYPE) return null;
-    const { capabilityId, contentDigest, provenance } = candidate.payload;
-    return this.jobs.enqueue(userId, "consolidate", {
-      ...(retryOf ? { retryOf } : {}),
-      action: "optimize", candidateId: candidate.id, candidateDigest: contentDigest,
-      candidateRevision: candidate.payload.candidateRevision ?? candidate.revision, capabilityId,
-      sourceRunId: provenance?.runId ?? null, sourceProjectId: provenance?.sourceProjectId ?? null,
-    }, { idempotencyKey: `handbook:${sha256(JSON.stringify([userId, candidate.id, capabilityId, contentDigest, retryOf ?? null]))}`, projectId: null, transactionClient });
-  }
-
-  /** One record per capability and name, separate from personal methods. Prior digest outcomes are preserved.
-   * @param {string} userId @param {any} input */
-  async recordHandbookCandidate(userId, input) {
-    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
-    const name = String(input.frontmatter?.name ?? "");
-    const id = handbookCandidateId(name, input.capabilityId ?? "");
-    const current = await this.documents.get(userId, "method", productId(id, "method"));
-    if (current?.payload?.contentDigest === digest) {
-      await this.enqueueHandbook(userId, current);
-      return current;
-    }
-    const steps = cleanMethodSteps(input.steps);
-    const payload = {
-      recordType: HANDBOOK_CANDIDATE_RECORD_TYPE,
-      candidateRevision: (current?.revision ?? 0) + 1,
-      dispositions: { ...(current?.payload?.dispositions ?? {}), [digest]: { state: "queued", at: this.now().toISOString() } },
-      // Applied supplements have a separate record type and revision history.
-      status: "candidate",
-      frontmatter: input.frontmatter,
-      body: input.body,
-      ...(input.files ? { files: input.files } : {}),
-      dependencies: input.dependencies ?? [],
-      contentDigest: digest,
-      capabilityId: typeof input.capabilityId === "string" && input.capabilityId ? input.capabilityId : null,
-      provenance: { origin: "inferred", ...input.provenance, derivedFrom: "reviewer" },
-      ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
-      ...(steps ? { displaySteps: { text: steps, contentDigest: digest } } : {}),
-      createdAt: current?.payload?.createdAt ?? this.now().toISOString(),
-      updatedAt: this.now().toISOString(),
-    };
-    await this.documents.put(userId, "method", id, payload, { expectedRevision: current?.revision ?? 0, projectId: null });
-    const candidate = await this.documents.get(userId, "method", id);
-    await this.enqueueHandbook(userId, candidate);
-    return candidate;
   }
 
   /**
@@ -541,7 +475,7 @@ export class LearningService {
     };
     if (payload.files === undefined) delete payload.files;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
-    this.#mountChanged(userId);
+    this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
 
@@ -756,7 +690,7 @@ export class LearningService {
       statusChangedAt: this.now().toISOString(),
     };
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision });
-    this.#mountChanged(userId);
+    this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
 
@@ -876,7 +810,7 @@ export class LearningService {
     payload.statusReason = effectiveStatusReason(payload);
     payload.statusChangedAt = at;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
-    this.#mountChanged(userId);
+    this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
 

@@ -104,7 +104,7 @@ export function reviewModelApiKey(config) {
  *   schema: Record<string, any>, schemaName: string,
  *   thinking?: { enabled: boolean, budget?: number },
  *   maxTokens?: number, timeoutMs?: number, signal?: AbortSignal, at?: Date,
- *   purpose?: "review" | "evolution", limits?: { daily?: number, weekly?: number },
+ *   purpose?: "review" | "evolution" | "evidence", limits?: { daily?: number, weekly?: number },
  * }} call
  * @returns {Promise<{ value: any, model: string, usage: { cacheHitTokens: number, cacheMissTokens: number, completionTokens: number, reasoningTokens: number }, cost: number, requestId: string | null, reasoningChars: number, modelReported: boolean }>}
  */

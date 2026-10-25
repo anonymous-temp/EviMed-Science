@@ -284,27 +284,16 @@ test("a researcher's own method is never changed by the join, and agreement and 
   assert.equal((await calm.learning.retirementProposals(USER)).length, 0);
 });
 
-test("a handbook the run used carries the same record, and one that was only attached or has been replaced since carries nothing", async () => {
+test("a run record from before the handbook arm was deleted still carries its handbook list, and nothing is joined to it: only the methods the run read get the record", async () => {
   const f = fixture();
   const method = await f.method();
   const handbookId = "method:capability-handbook:meta-analysis:quote-first";
-  const handbook = (extra = {}) => ({ recordType: "capability-handbook", capabilityId: "meta-analysis", status: "active", contentDigest: `sha256:${hex("e")}`,
-    frontmatter: { name: "quote-first" }, body: "x", version: 1, observations: [], ...extra });
-  await f.documents.put(USER, "method", handbookId, handbook({ observations: [{ runId: "run-1", contentDigest: `sha256:${hex("e")}`, attached: true, used: true }] }), { expectedRevision: 0 });
-  const other = "method:capability-handbook:meta-analysis:only-attached";
-  await f.documents.put(USER, "method", other, handbook({ observations: [{ runId: "run-1", contentDigest: `sha256:${hex("e")}`, attached: true, used: false }] }), { expectedRevision: 0 });
-  const replaced = "method:capability-handbook:meta-analysis:replaced";
-  await f.documents.put(USER, "method", replaced, handbook({ contentDigest: `sha256:${hex("f")}`, observations: [{ runId: "run-1", contentDigest: `sha256:${hex("e")}`, attached: true, used: true }] }), { expectedRevision: 0 });
   f.run({ invoked: [method], extra: { capabilityHandbooks: [
-    { id: handbookId, ownerId: USER, capabilityId: "meta-analysis", contentDigest: `sha256:${hex("e")}` },
-    { id: other, ownerId: USER, capabilityId: "meta-analysis", contentDigest: `sha256:${hex("e")}` },
-    { id: replaced, ownerId: USER, capabilityId: "meta-analysis", contentDigest: `sha256:${hex("e")}` },
-    { id: handbookId, ownerId: "someone-else", capabilityId: "meta-analysis", contentDigest: `sha256:${hex("e")}` }] } });
+    { id: handbookId, ownerId: USER, capabilityId: "meta-analysis", contentDigest: `sha256:${hex("e")}` }] } });
   const joined = await f.service.fromCorrection(PROJECT, f.correction());
-  assert.deepEqual(joined.recorded.map((item) => [item.kind, item.id, item.added]), [["method", method.id, true], ["handbook", handbookId, true], ["handbook", replaced, false]]);
-  assert.equal((await f.documents.get(USER, "method", handbookId)).payload.scientific.entries[0].signal, "analytic_corrected");
-  assert.equal((await f.documents.get(USER, "method", other)).payload.scientific, undefined);
-  assert.equal((await f.documents.get(USER, "method", replaced)).payload.scientific, undefined);
+  assert.deepEqual(joined.recorded.map((item) => [item.kind, item.id, item.added]), [["method", method.id, true]]);
+  assert.equal(await f.documents.get(USER, "method", handbookId), null, "nothing is read or written for the old handbook id");
+  assert.equal((await f.service.usedBy(PROJECT, { id: "run-1", methodsInvoked: [], capabilityHandbooks: [{ id: handbookId, ownerId: USER }] })).methods.length, 0);
 });
 
 test("what a lesson is shown of the methods a run read: identity, revision, what became of the results, the scope, and what was passed over", async () => {

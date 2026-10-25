@@ -204,7 +204,6 @@ export class EvolutionWorker {
     const paused = Boolean(this.config.evolutionSearchPaused);
     if (!paused) await this.every('scout', { ms: DAY, key: day }, () => this.service.enqueue('scout', { action: 'daily-scan', day }, `daily-scout:${day}`));
     await this.every('daily-events', { ms: DAY, key: day }, async () => {
-      await this.service.ingestEvent({id:`handbook-scan:${day}`,type:"handbook-gap-scan"});
       await this.service.ingestEvent({ id: `source-facts:${day}`, type: 'source-facts-scan', origin: 'tool-result' });
       await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
       if (this.service.callbacks?.scanLeadSources) await this.service.ingestEvent({ id: `lead-sources:${day}`, type: 'lead-source-scan', origin: 'platform-inference' });

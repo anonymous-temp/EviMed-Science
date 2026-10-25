@@ -35,7 +35,6 @@ vi.mock("@/lib/apiClient", async () => ({
   updateMemorySettings: (...args: unknown[]) => updateMemorySettings(...args),
 }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: () => Promise.resolve([]) }));
-vi.mock("@/lib/handbooksClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/handbooksClient")>("@/lib/handbooksClient")), listAllHandbooks: () => Promise.resolve([]) }));
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({
   id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, weight: 0.4, state: "current", at: "2026-09-10T00:00:00.000Z",
