@@ -51,6 +51,7 @@ export const FRONTIER_FOLLOW_QUERY_INSTRUCTIONS = [
   "Return JSON {\"kind\": \"drug\"|\"trial\"|\"disease\"|\"topic\"|\"question\", \"concepts\": [{\"type\": \"drug\"|\"trial\"|\"disease\"|\"topic\", \"zh\": string[], \"en\": string[]}]}.",
   "kind: drug = one medicine or a drug class; trial = one named study; disease = one condition; topic = a subject made of several parts, a method or a field; question = typed as a question.",
   "concepts: the one to three things a news item must be about to belong here, the main one first. Do not add a concept the person did not type: 「GLP-1 和胰腺炎」 is two concepts, GLP-1 receptor agonists and pancreatitis; 「司美格鲁肽」 is one.",
+  "A concept is ONE thing and its names are other names for that same thing, never different things: 「肥胖患者减重药物会影响心血管结局吗」 is three concepts (obesity, weight-loss drugs, cardiovascular outcomes), not three names of one. A name never joins two things: 「房颤抗凝」 is two concepts, atrial fibrillation and anticoagulation, each with its own names; there is no concept called 「房颤抗凝」.",
   "zh and en: the names that appear in titles and abstracts, up to eight each — the usual name, the common synonyms and abbreviations as written (GLP-1, HER2, NSCLC); for a drug class its best-known members. Leave a list empty when the thing has no name in that language. Names only: no explanations, no sentences.",
 ].join("\n");
 
@@ -142,13 +143,16 @@ const chinese = (name) => /[\u3400-\u9fff]/u.test(name);
  * @param {string} typed @param {string[]} names @param {string[]} keys @param {Set<string>} typedKeys
  */
 function grounded(typed, names, keys, typedKeys) {
-  const haystack = typed.normalize("NFKC").toLowerCase();
+  const haystack = squash(typed);
   if (names.some((name) => {
-    const needle = name.toLowerCase();
+    const needle = squash(name);
     return needle.length >= 2 && (haystack.includes(needle) || (needle.includes(haystack) && haystack.length >= 2));
   })) return true;
   return keys.some((key) => typedKeys.has(key));
 }
+
+/** Letters and digits only, case-folded: «RSV 疫苗» and «RSV疫苗» are the same words. @param {string} value */
+const squash = (value) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 /**
  * The glossary's keys for a concept's names, by its type; a name the glossary does not know keys as itself, normalised (the

@@ -130,7 +130,7 @@ const SORTS = Object.freeze(["relevance", "time"]);
 /** The hot rankings a reader may ask for (`GET /hot?window=`). */
 export const FRONTIER_HOT_WINDOWS = Object.freeze(["current", ...Object.keys(FRONTIER_HOT_PERIODS)]);
 /** What a reader may follow: the six kinds picked from an item and `query`, something they typed (c3-watch; the domain's list). */
-const FOLLOW_KINDS = FRONTIER_FOLLOW_KINDS;
+const FOLLOW_KINDS = /** @type {readonly string[]} */ (FRONTIER_FOLLOW_KINDS);
 
 /** An item's channel (contract 1.4.0), the plugin's vocabulary. */
 export const FRONTIER_CHANNELS = Object.freeze(["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"]);
