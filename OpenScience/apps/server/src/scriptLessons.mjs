@@ -34,7 +34,7 @@
 
 import { createHash } from "node:crypto";
 
-import { hasSensitiveText, identifierShapesIn } from "@evimed/domain";
+import { identifierShapesIn } from "@evimed/domain";
 
 import { CONVERSATION_SCOPE, learningScopeOf } from "./learningTriggers.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
@@ -106,8 +106,13 @@ export function pythonSnippetsOf(transcript) {
   return snippets;
 }
 
-/** Whether a program carries a credential or an identifier: such a snippet is dropped before anything is stored. @param {string} source */
-export const sensitiveSource = (source) => hasSensitiveText(source) || identifierShapesIn(source).length > 0;
+/**
+ * Whether a program carries a credential or an identifier by shape (`identifierShapesIn`): such a snippet is dropped before anything is stored.
+ * Not by word: a keyword pattern (`token`, `secret`, `password`) refused every script that merely named one of them, and a program is code, whose
+ * words are not a sentence to read for what it is about (2026-10-25).
+ * @param {string} source
+ */
+export const sensitiveSource = (source) => identifierShapesIn(source).length > 0;
 
 /**
  * The program Python runs to normalise a batch of snippets (stdin `{snippets: [{id, source}]}`, stdout's last line `{results: [...]}`).

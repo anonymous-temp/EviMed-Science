@@ -56,7 +56,8 @@ export function caseIssues(cases) {
 
 /**
  * @typedef {{ id: string, lang: string, gold: string, alsoAcceptable: string[], ambiguous: boolean, predicted: string, failure: string | null,
- *   rawVerdict: string | null, quote: string | null, goldQuote: string | null, concerns: string[], goldConcerns: string[] | null, tag?: string }} Result
+ *   rawVerdict: string | null, quote: string | null, goldQuote: string | null, concerns: string[], goldConcerns: string[] | null, tag?: string,
+ *   adoptCheck?: "confirmed" | "disagreed" | null }} Result
  */
 
 /** Whether a result is right: the gold class, or (lenient) a class the label allows. @param {Result} result @param {boolean} [lenient] */
@@ -105,6 +106,8 @@ export function adoptReport(results) {
     recall: ratio(gold.filter((result) => result.predicted === "adopt").length, gold.length),
     falseAdopts: predictedAdopt.filter((result) => !rightLenient.includes(result)).map((result) => ({ id: result.id, gold: result.gold, tag: result.tag ?? null })),
     missedAdopts: gold.filter((result) => result.predicted !== "adopt").map((result) => ({ id: result.id, predicted: result.predicted })),
+    // The second reading of every first-reading `adopt` (examples in the other order): it stood, or it did not.
+    checks: { confirmed: results.filter((result) => result.adoptCheck === "confirmed").length, disagreed: results.filter((result) => result.adoptCheck === "disagreed").length },
   };
 }
 
@@ -182,6 +185,7 @@ export function render(summary) {
     `adopt: predicted ${summary.adopt.predicted}, right ${summary.adopt.correct} → precision ${pct(summary.adopt.precision)} (with the labels' second choices ${pct(summary.adopt.precisionLenient)}), recall ${pct(summary.adopt.recall)}`,
     `  false adopts: ${summary.adopt.falseAdopts.map((item) => `${item.id}(${item.gold}${item.tag ? `, ${item.tag}` : ""})`).join(" ") || "none"}`,
     `  missed adopts: ${summary.adopt.missedAdopts.map((item) => `${item.id}→${item.predicted}`).join(" ") || "none"}`,
+    `  second reading of an adopt: confirmed ${summary.adopt.checks.confirmed}, disagreed ${summary.adopt.checks.disagreed}`,
     `quotations: accepted ${summary.quotes.accepted} of ${summary.quotes.carrying} that should carry one; not a substring ${summary.quotes.quoteNotFound}; valid ${pct(summary.quotes.validRate)}; overlap the gold ${pct(summary.quotes.overlapRate)}`,
     `methods named: exact ${summary.concerns.exact} of ${summary.concerns.cases}`,
     "",

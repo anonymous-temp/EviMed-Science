@@ -32,7 +32,7 @@ test("the bank has an anchor and a pool for every verdict, in both languages, an
   }
   assert.ok(anchors.length <= 16, "a small fixed set, not the bank");
   assert.ok(FOLLOW_UP_EXAMPLES.some((example) => example.lang === "en") && FOLLOW_UP_EXAMPLES.some((example) => example.lang === "zh"));
-  const byMessage = (text) => anchors.find((example) => example.message.includes(text));
+  const byMessage = (/** @type {string} */ text) => anchors.find((example) => example.message.includes(text));
   assert.equal(byMessage("这次就这样吧")?.verdict, "accept", "「这次就这样吧」 is accept, not adopt");
   assert.equal(byMessage("以后周报都按这个来")?.verdict, "adopt");
   assert.equal(byMessage("记住我喜欢短的")?.verdict, "preference", "「记住我喜欢短的」 is a preference, not an adoption");
@@ -43,7 +43,9 @@ test("the bank has an anchor and a pool for every verdict, in both languages, an
 });
 
 test("a malformed bank is named, one fault at a time", () => {
+  /** @type {any[]} */
   const good = FOLLOW_UP_EXAMPLES.map((example) => ({ ...example }));
+  /** @param {(bank: any[]) => any[]} change */
   const faults = (change) => followUpExampleIssues(change(good.map((example) => ({ ...example }))));
   assert.ok(faults((bank) => { bank[0].verdict = "applause"; return bank; }).some((issue) => /not one of/.test(issue)));
   assert.ok(faults((bank) => { bank[0].quote = "not in the message at all"; return bank; }).some((issue) => /not a substring/.test(issue)));
@@ -51,8 +53,8 @@ test("a malformed bank is named, one fault at a time", () => {
   assert.ok(faults((bank) => { bank[accept].quote = "好"; return bank; }).some((issue) => /carries no quotation/.test(issue)));
   assert.ok(faults((bank) => { bank[1].id = bank[0].id; return bank; }).some((issue) => /repeated/.test(issue)));
   assert.ok(faults((bank) => { bank[1].message = bank[0].message; return bank; }).some((issue) => /repeats another/.test(issue)));
-  assert.ok(faults((bank) => bank.map((example) => (example.verdict === "adopt" ? { ...example, anchor: undefined } : example))).some((issue) => /no adopt example is an anchor/.test(issue)));
-  assert.ok(faults((bank) => bank.filter((example) => !(example.verdict === "none" && !example.anchor))).some((issue) => /no none example is in the pool/.test(issue)));
+  assert.ok(faults((bank) => bank.map((/** @type {any} */ example) => (example.verdict === "adopt" ? { ...example, anchor: undefined } : example))).some((issue) => /no adopt example is an anchor/.test(issue)));
+  assert.ok(faults((bank) => bank.filter((/** @type {any} */ example) => !(example.verdict === "none" && !example.anchor))).some((issue) => /no none example is in the pool/.test(issue)));
   assert.deepEqual(followUpExampleIssues([]), ["the bank holds no examples"]);
 });
 

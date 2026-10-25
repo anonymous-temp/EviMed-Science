@@ -80,5 +80,5 @@ test("a run is kept when it was accepted, adopted or its file taken, and nothing
   assert.equal(learningRunOutcome([{ evidence: "used" }, { evidence: "steer" }]), "corrected", "an unread steer is a correction");
   assert.equal(learningRunOutcome([{ evidence: "used" }, { evidence: "steer", verdict: "none" }]), "clean", "a steer its judge read as nothing is no correction");
   assert.equal(learningRunOutcome([{ evidence: "used" }, { evidence: "result-corrected" }]), "corrected");
-  assert.equal(learningRunOutcome(null), "unknown");
+  assert.equal(learningRunOutcome(/** @type {any} */ (null)), "unknown");
 });

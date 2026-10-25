@@ -930,3 +930,17 @@ test("stopping a logical autopilot scope preserves the real attempt, not its uns
   assert.deepEqual(runsToReadBeforeStop([old, sent], { boundedRunId: logical, captured: id => id === "new" }), []);
   assert.deepEqual(runsToReadBeforeStop([sent], { boundedRunId: logical.slice(0, -3) }), []);
 });
+
+test("an excerpt drops a message by the shape of a credential or an identifier, wherever it sits in the message, and never because a sentence mentions a password", () => {
+  const messages = [
+    { sessionId: "ses_root", seq: 1, parts: [{ type: "text", text: "把表里的密码列和 token 列去掉，再按科室汇总" }] },
+    { sessionId: "ses_root", seq: 2, parts: [{ type: "tool", tool: "bash", callId: "c1", status: "completed", input: { command: "export password=hunter2hunter2" }, output: "ok" }] },
+    { sessionId: "ses_root", seq: 3, parts: [{ type: "tool", tool: "read", callId: "c2", status: "completed", input: { path: "notes/secret-santa.md" }, output: "the secret santa list" }] },
+    { sessionId: "ses_root", seq: 4, parts: [{ type: "text", text: "患者手机号 13800138000，请回电" }] },
+  ];
+
+  const excerpt = transcriptExcerpt(messages);
+
+  assert.deepEqual(excerpt.messages.map((entry) => entry.seq), [1, 3], "a sentence that mentions passwords and a file called secret-santa are language and names");
+  assert.deepEqual(excerpt.dropped, { sensitive: 2, bounded: 0 }, "a secret assigned to a name inside a tool call, and a phone number, are shapes");
+});

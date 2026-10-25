@@ -14,7 +14,7 @@ import { METHOD_SKILL_SCHEMA, SOCKET_TOOL_NAME_LIST } from "@evimed/domain";
 
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  MethodDistillationRuns, buildDistillationInput, evidenceCorpus, lessonQueryText, reactionsOf, unionEvidence, verifiedEvidence,
+  MethodDistillationRuns, buildDistillationInput, evidenceCorpus, lessonQueryText, reactionCorpus, reactionsOf, unionEvidence, verifiedEvidence,
 } from "../src/methodDistillationRuns.mjs";
 import { TRANSCRIPT_DIR_NAME, transcriptPath } from "../src/runTranscripts.mjs";
 
@@ -133,6 +133,28 @@ test("a stored quotation must be in what the distillation was shown, from the ru
   assert.equal(unionEvidence(many.map((quote) => ({ quote })), [{ quote: "最新的一条引用内容" }]).at(-1).quote, "最新的一条引用内容", "past twenty the oldest give way");
 });
 
+test("a quotation of two characters is evidence when it is the researcher's own reaction, and is not when it is only in some text: 「太长了」 is a person saying so, 「周报」 is a word in a request", () => {
+  const { transcript, run } = delegatedRun();
+  const feedback = [
+    { id: "fe_1", trigger: "learning-evidence", detail: { evidence: "follow-up", verdict: "correction", rule: "回答写得更短", quote: "太长了" } },
+    { id: "fe_2", trigger: "learning-evidence", detail: { evidence: "steer", verdict: "correction", rule: "写得更短", quote: "短点" } },
+    { id: "fe_3", trigger: "result-corrected", detail: { instruction: "删掉第二节" } },
+  ];
+  const input = buildDistillationInput({ run, trigger: "correction", transcript, feedback });
+  const corpus = evidenceCorpus(input);
+  const reactions = reactionCorpus(input);
+  assert.ok(reactions.get("run_1")?.includes("太长了") && reactions.get("run_1")?.includes("短点") && reactions.get("run_1")?.includes("删掉第二节"), "what the person said of the run, by their own words");
+  assert.ok(!reactions.get("run_1")?.some((text) => text.includes("回答写得更短")), "the judge's rule is not the person's words");
+  const entry = (quote, runId = "run_1") => ({ runId, seqRange: [6, 6], quote });
+  const { kept, dropped } = verifiedEvidence([entry("太长了"), entry("短点"), entry("周报"), entry("回答写得更短"), entry("太长了", "run_other"), entry("短")], corpus, reactions);
+  assert.deepEqual(kept.map((item) => item.quote), ["太长了", "短点"]);
+  assert.equal(dropped, 4, "a short quotation of a request, of the judge's rule, of another run's words, and one character are dropped, never repaired");
+  // Without the reactions a short quotation proves nothing; eight characters or more are checked against everything shown, as before.
+  assert.deepEqual(verifiedEvidence([entry("太长了"), entry("帮我把本周随访数据整理成周报")], corpus).kept.map((item) => item.quote), ["帮我把本周随访数据整理成周报"]);
+  // A method keeps them: a union holds short quotations once, and the newest of twenty stay.
+  assert.deepEqual(unionEvidence([{ runId: "a", seqRange: [1, 2], quote: "太长了" }], [{ runId: "b", seqRange: [3, 4], quote: "太长了" }, { quote: "短点" }]).map((item) => item.quote), ["太长了", "短点"]);
+});
+
 // ---------------------------------------------------------------------------------------------------- applyCandidate
 
 const BODY = ["## Purpose", "P.", "", "## When to Use", "W.", "", "## Inputs", "I.", "", "## Workflow", "1. Do.", "", "## Verification", "- Checked.", "",
@@ -186,6 +208,19 @@ test("a created method stores the quotations that are in the input, the scope it
   const talk = ledger();
   await distillationOver(talk).applyCandidate(job, { id: "run_2", effectiveAgentId: "open-domain-answer" }, { skill: SKILL, candidate: { operation: "create" } }, { signal: "run" });
   assert.equal(talk.created[0].provenance.scope, "conversation");
+});
+
+test("a created method stores a researcher's two-character reaction as evidence when it is handed the reactions it was shown", async () => {
+  const { transcript, run } = delegatedRun();
+  const feedback = [{ id: "fe_1", trigger: "learning-evidence", detail: { evidence: "follow-up", verdict: "correction", rule: "回答写得更短", quote: "太长了" } }];
+  const input = buildDistillationInput({ run, trigger: "correction", transcript, feedback });
+  const learning = ledger();
+  const candidate = { operation: "create", evidence: [{ runId: "run_1", seqRange: [6, 6], quote: "太长了" }, { runId: "run_1", seqRange: [6, 6], quote: "周报" }] };
+  await distillationOver(learning).applyCandidate(job, run, { skill: SKILL, candidate }, { signal: "researcher", evidence: evidenceCorpus(input), reactions: reactionCorpus(input) });
+  assert.deepEqual(learning.created[0].provenance.evidence, [{ runId: "run_1", seqRange: [6, 6], quote: "太长了" }]);
+  const without = ledger();
+  await distillationOver(without).applyCandidate(job, run, { skill: SKILL, candidate }, { signal: "researcher", evidence: evidenceCorpus(input) });
+  assert.equal(without.created[0].provenance.evidence, undefined, "no reactions, no short quotation");
 });
 
 test("an amendment keeps the quotations the method stood on and its scope; a lesson from another scope widens it to none, and never narrows one that had none", async () => {

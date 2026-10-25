@@ -35,7 +35,8 @@ function ledger({ usageFails = false } = {}) {
       if (sql.includes("FROM evimed_product.feedback_events") && sql.includes("GROUP BY 1,2")) {
         return { rows: [
           { evidence: "follow-up", verdict: "correction", n: 4 }, { evidence: "follow-up", verdict: "accept", n: 6 }, { evidence: "silent", verdict: "none", n: 9 },
-          { evidence: "steer", verdict: "correction", n: 2 }, { evidence: "something-new", verdict: "none", n: 1 },
+          { evidence: "steer", verdict: "correction", n: 2 }, { evidence: "steer", verdict: "none", n: 1 }, { evidence: "used", verdict: "none", n: 5 },
+          { evidence: "follow-up", verdict: "adopt", n: 3 }, { evidence: "something-new", verdict: "none", n: 1 },
         ] };
       }
       if (sql.includes("FROM evimed_product.feedback_events")) {
@@ -66,7 +67,7 @@ test("the durable counts come from the ledger in closed vocabularies, across eve
   assert.equal(counts.lessons.other.succeeded, 1, "a trigger nobody named is `other`, never a new label");
   assert.deepEqual(counts.results, { create: 0, amend: 1, merge: 0, no_change: 3, handbook: 2, other: 1 });
   assert.deepEqual(counts.spend, { settled: 1.25, open: 0.5 });
-  assert.deepEqual(counts.evidence, { "follow-up": { correction: 4, accept: 6 }, silent: { none: 9 }, steer: { correction: 2 }, other: { none: 1 } },
+  assert.deepEqual(counts.evidence, { "follow-up": { correction: 4, accept: 6, adopt: 3 }, silent: { none: 9 }, steer: { correction: 2, none: 1 }, used: { none: 5 }, other: { none: 1 } },
     "what researchers did to runs, by kind and verdict, in closed vocabularies");
   assert.equal(counts.evidenceLastAt.length, 1);
   assert.match(counts.evidenceLastAt[0].account, /^[a-f0-9]{12}$/, "an account is a hash, never its id");
@@ -106,7 +107,14 @@ test("launches and runs count what they carried, and the families expose all of 
   counters.observeEvidenceFailure("quote_not_found");
   counters.observeEvidenceFailure("judge_failed");
   counters.observeEvidenceFailure("judge_failed");
+  counters.observeEvidenceFailure("adopt_unconfirmed");
   counters.observeEvidenceQuotes(3, 1);
+  counters.observeFollowUpJudge("adopt_confirmed");
+  counters.observeFollowUpJudge("adopt_disagreed");
+  counters.observeFollowUpJudge("adopt_disagreed");
+  counters.observeFollowUpJudge("examples_ngram");
+  counters.observeFollowUpJudge("steer_judged");
+  counters.observeFollowUpJudge("something nobody named");
   counters.observeRepairSample(false);
   counters.observeRepairSample(false);
   counters.observeRepairSample(true);
@@ -125,7 +133,7 @@ test("launches and runs count what they carried, and the families expose all of 
     "open_science_learning_runs_with_methods_total", "open_science_learning_run_methods_total",
     "open_science_learning_repair_lessons_total", "open_science_learning_method_retirements_total",
     "open_science_learning_consolidate_noop_total", "open_science_learning_relations_total",
-    "open_science_learning_trigger_refused_total", "open_science_learning_evidence_failed_total", "open_science_learning_evidence_quotes_total",
+    "open_science_learning_trigger_refused_total", "open_science_learning_evidence_failed_total", "open_science_learning_evidence_quotes_total", "open_science_learning_follow_up_judge_total",
     "open_science_learning_lessons_total", "open_science_learning_evidence_total", "open_science_learning_evidence_last_at",
     "open_science_learning_replay_total", "open_science_learning_replay_judged_total",
   ]) assert.ok(byName.has(name), `${name} is exposed`);
@@ -142,10 +150,12 @@ test("launches and runs count what they carried, and the families expose all of 
   const series = (/** @type {string} */ name) => Object.fromEntries((byName.get(name)?.series ?? []).map((sample) => [Object.values(sample.labels ?? {}).join("/"), sample.value]));
   assert.deepEqual(Object.entries(series("open_science_learning_trigger_refused_total")).filter(([, value]) => value > 0), [["not_researcher_work", 1], ["paused", 2], ["other", 1]],
     "a gate that turned runs away is a number per reason, and a reason nobody named is `other`");
-  assert.deepEqual(Object.entries(series("open_science_learning_evidence_failed_total")).filter(([, value]) => value > 0), [["judge_failed", 2], ["quote_not_found", 1]]);
+  assert.deepEqual(Object.entries(series("open_science_learning_evidence_failed_total")).filter(([, value]) => value > 0), [["judge_failed", 2], ["quote_not_found", 1], ["adopt_unconfirmed", 1]]);
+  assert.deepEqual(Object.entries(series("open_science_learning_follow_up_judge_total")).filter(([, value]) => value > 0),
+    [["adopt_confirmed", 1], ["adopt_disagreed", 2], ["examples_ngram", 1], ["steer_judged", 1], ["other", 1]], "what the judging did, by outcome from a closed list");
   assert.deepEqual(series("open_science_learning_evidence_quotes_total"), { kept: 3, dropped: 1 });
   assert.deepEqual(series("open_science_learning_lessons_total"), { repair_accepted: 3, delivered: 4, correction: 1, other: 1 }, "lessons queued, by trigger, from the ledger");
-  assert.deepEqual(series("open_science_learning_evidence_total"), { "follow_up/correction": 4, "follow_up/accept": 6, "silent/none": 9, "steer/correction": 2, "other/none": 1 });
+  assert.deepEqual(series("open_science_learning_evidence_total"), { "follow_up/correction": 4, "follow_up/accept": 6, "silent/none": 9, "steer/correction": 2, "steer/none": 1, "used/none": 5, "follow_up/adopt": 3, "other/none": 1 });
   assert.equal(byName.get("open_science_learning_evidence_last_at")?.series.length, 1);
   assert.ok(!JSON.stringify(byName.get("open_science_learning_evidence_last_at")).includes("user_with_a_long_internal_id"));
   assert.deepEqual(byName.get("open_science_learning_mounts_total")?.series.map((sample) => sample.value), [1, 1]);
