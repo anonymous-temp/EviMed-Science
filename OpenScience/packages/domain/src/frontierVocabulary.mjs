@@ -756,6 +756,15 @@ export function frontierAuthorityScore({ authority, evidenceType = null, preprin
  */
 export const FRONTIER_FOLLOW_KINDS = /** @type {readonly ('topic'|'specialty'|'drug'|'source'|'event'|'tag'|'query')[]} */ (Object.freeze(['topic', 'specialty', 'drug', 'source', 'event', 'tag', 'query']))
 
+/**
+ * What a typed follow was understood to be (c3-watch): one medicine or class, one named study, one condition, a subject of several parts,
+ * or a question. The model proposes one of these words, code holds it to the list (anything else reads as `topic`).
+ */
+export const FRONTIER_FOLLOW_QUERY_KINDS = /** @type {readonly ('drug'|'trial'|'disease'|'topic'|'question')[]} */ (Object.freeze(['drug', 'trial', 'disease', 'topic', 'question']))
+
+/** The longest a typed follow's words may be, in characters. */
+export const FRONTIER_FOLLOW_LABEL_MAX = 60
+
 /** Each score dimension's maximum; the four sum to 100. */
 export const FRONTIER_SCORE_MAXIMA = Object.freeze({ authority: 30, impact: 30, novelty: 20, relevance: 20 })
 

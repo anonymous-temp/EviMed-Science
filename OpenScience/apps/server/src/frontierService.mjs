@@ -1,4 +1,4 @@
-import { FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, frontierEventEvidenceCounts } from '@evimed/domain';
+import { FRONTIER_FOLLOW_KINDS, FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, frontierEventEvidenceCounts } from '@evimed/domain';
 import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
@@ -23,6 +23,7 @@ import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
 import { HttpError } from "./security.mjs";
 import { FrontierSubscriptions, frontierFollowPredicate, frontierTagPredicate } from "./frontierSubscriptions.mjs";
+import { FRONTIER_FOLLOW_QUERY_MAX, followQueryView, typedFollowKey, typedFollowLabel, typedFollowQuery } from "./frontierFollowQuery.mjs";
 import { FRONTIER_ITEM_TAG_LIMIT, FrontierTagStore } from "./frontierTags.mjs";
 import { frontierTopicSummary } from "./frontierTopics.mjs";
 
@@ -128,7 +129,8 @@ const AXES = Object.freeze(["timeline", "published"]);
 const SORTS = Object.freeze(["relevance", "time"]);
 /** The hot rankings a reader may ask for (`GET /hot?window=`). */
 export const FRONTIER_HOT_WINDOWS = Object.freeze(["current", ...Object.keys(FRONTIER_HOT_PERIODS)]);
-const FOLLOW_KINDS = Object.freeze(["topic", "specialty", "drug", "source", "event", "tag"]);
+/** What a reader may follow: the six kinds picked from an item and `query`, something they typed (c3-watch; the domain's list). */
+const FOLLOW_KINDS = FRONTIER_FOLLOW_KINDS;
 
 /** An item's channel (contract 1.4.0), the plugin's vocabulary. */
 export const FRONTIER_CHANNELS = Object.freeze(["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"]);
@@ -514,7 +516,7 @@ export class FrontierService {
    *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, monthly?: any, profiles?: any, actions?: any,
    *   tags?: import("./frontierTags.mjs").FrontierTagStore | null, tagUpkeep?: import("./frontierTagUpkeep.mjs").FrontierTagUpkeep | null,
    *   interactions?: import("./frontierInteractions.mjs").FrontierInteractions | null,
-   *   topics?: import("./frontierTopics.mjs").FrontierTopics | null }} options
+   *   topics?: import("./frontierTopics.mjs").FrontierTopics | null, watch?: import("./frontierFollowMatches.mjs").FrontierFollowWatch | null }} options
    *   The second wave's readers, each optional (a route without its module
    *   answers 404 `not_found`, which the page reads as 「还在准备」):
    *   `events` a `FrontierEvents` (hot list, event pages), `daily` a
@@ -524,7 +526,7 @@ export class FrontierService {
    */
   constructor({ database, config, vocabulary, policies = createModuleEvolutionPolicies(), ingest = null, embedder = null, budget = null, now = () => new Date(),
     dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, monthly = null, profiles = null, actions = null,
-    tags = null, tagUpkeep = null, interactions = null, topics = null }) {
+    tags = null, tagUpkeep = null, interactions = null, topics = null, watch = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
     this.policies = policies;
     this.database = database;
@@ -549,6 +551,8 @@ export class FrontierService {
     this.interactions = interactions;
     /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): 热榜's 「热点话题」, the topic page and `frontier_search`; null serves none. */
     this.topics = topics;
+    /** Typed follows (`FrontierFollowWatch`, c3-watch): their reading, matches and counts; null stores a typed follow by its words and counts none. */
+    this.watch = watch;
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
@@ -1419,16 +1423,57 @@ export class FrontierService {
     return { state: { starred: state.starred, hidden: state.hidden, read: state.read } };
   }
 
-  /** @param {Record<string, any>} row */
-  #follow(row) {
-    return { id: String(row.id), kind: row.kind, key: row.key, label: row.label, muted: row.muted === true, createdAt: iso(row.created_at) };
+  /**
+   * A follow as the page reads it. `fresh` is how many published items arrived since the reader last opened it (c3-watch): absent
+   * when it could not be counted, and then no number is shown. A typed follow also says how its words were read.
+   * @param {Record<string, any>} row @param {number} [fresh]
+   */
+  #follow(row, fresh) {
+    return {
+      id: String(row.id), kind: row.kind, key: row.key, label: row.label, muted: row.muted === true, createdAt: iso(row.created_at),
+      ...(row.kind === "query" ? { query: followQueryView(row.query) } : {}),
+      ...(row.seen_at ? { seenAt: iso(row.seen_at) } : {}),
+      ...(fresh === undefined ? {} : { newItems: fresh }),
+    };
   }
 
   /** @param {{ id: string }} user */
   async listFollows(user) {
-    const rows = await this.#transaction(async (client) => (await client.query(`SELECT id, kind, key, label, muted, created_at
+    const rows = await this.#transaction(async (client) => (await client.query(`SELECT id, kind, key, label, muted, created_at, query, seen_at
       FROM evimed_frontier.user_follows WHERE user_id=$1 ORDER BY created_at DESC, id DESC`, [user.id])).rows);
-    return { follows: rows.map((/** @type {any} */ row) => this.#follow(row)) };
+    const counts = await this.#newCounts(user.id, rows);
+    return { follows: rows.map((/** @type {any} */ row) => this.#follow(row, counts.get(String(row.id)))) };
+  }
+
+  /**
+   * How many items each follow has had since it was last opened (`FrontierFollowWatch#newCounts`). A count that cannot be read is
+   * no count — the list of follows is still the list.
+   * @param {string} userId @param {Array<Record<string, any>>} rows
+   * @returns {Promise<Map<string, number>>}
+   */
+  async #newCounts(userId, rows) {
+    if (!this.watch || !rows.length) return new Map();
+    try {
+      const { follows } = await this.subscriptions.read(userId);
+      const since = new Map(rows.map((row) => [String(row.id), new Date(row.seen_at ?? row.created_at)]));
+      return await this.watch.newCounts(userId, follows, since);
+    } catch {
+      return new Map();
+    }
+  }
+
+  /**
+   * The reader opened a follow's feed: what arrived before now is no longer new (c3-watch).
+   * @param {{ id: string }} user @param {string} followId
+   */
+  async markFollowSeen(user, followId) {
+    if (!/^\d{1,18}$/.test(String(followId ?? ""))) throw failure(404, "frontier_follow_not_found", "No such follow.");
+    await this.ready();
+    const row = (await this.database.query(`UPDATE evimed_frontier.user_follows SET seen_at = clock_timestamp() WHERE user_id=$1 AND id=$2
+      RETURNING id, kind, key, label, muted, created_at, query, seen_at`, [user.id, followId])).rows[0];
+    if (!row) throw failure(404, "frontier_follow_not_found", "No such follow.");
+    this.counters.writes += 1;
+    return { follow: this.#follow(row, 0) };
   }
 
   /**
@@ -1488,6 +1533,7 @@ export class FrontierService {
   async createFollow(user, body) {
     const kind = String(body.kind ?? "");
     if (!FOLLOW_KINDS.includes(kind)) throw failure(400, "frontier_follow_invalid", "The follow kind is invalid.");
+    if (kind === "query") return this.#createQueryFollow(user, body);
     if (body.muted != null && typeof body.muted !== "boolean") throw failure(400, "frontier_follow_invalid", "muted must be a boolean.");
     let key;
     if (kind === "specialty") {
@@ -1537,6 +1583,41 @@ export class FrontierService {
     });
     this.counters.writes += 1;
     return { follow: this.#follow(row) };
+  }
+
+  /**
+   * Follow something the reader typed (c3-watch): its words read once into a query (`FrontierFollowWatch#parse` — a model call that
+   * can fail without refusing anyone: the words themselves are the fallback), stored with the follow, and the last seven days
+   * matched at once. The same words again are the same follow.
+   * @param {{ id: string }} user @param {{ key?: unknown, label?: unknown, muted?: unknown }} body
+   */
+  async #createQueryFollow(user, body) {
+    if (body.muted != null && body.muted !== false) throw failure(400, "frontier_follow_invalid", "A typed follow cannot be muted.");
+    const label = typedFollowLabel(body.label ?? body.key);
+    if (!label) throw failure(400, "frontier_follow_invalid", "The words to follow are empty or too long.");
+    const key = typedFollowKey(label);
+    await this.ready();
+    const columns = "id, kind, key, label, muted, created_at, query, seen_at";
+    const held = (await this.database.query(`SELECT ${columns} FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query' AND key=$2`, [user.id, key])).rows[0];
+    if (held) return { follow: this.#follow(held, 0) };
+    const typed = Number((await this.database.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query'", [user.id])).rows[0].n);
+    if (typed >= FRONTIER_FOLLOW_QUERY_MAX) throw failure(409, "frontier_follow_limit", `At most ${FRONTIER_FOLLOW_QUERY_MAX} typed follows per account.`);
+    // Read outside the transaction: a model call must not hold a connection. It does not throw.
+    const parsed = this.watch ? await this.watch.parse(user.id, label) : { query: typedFollowQuery(label, null) };
+    const row = await this.#transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`frontier-follows:${user.id}`]);
+      const count = Number((await client.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1", [user.id])).rows[0].n);
+      if (count >= MAX_FOLLOWS) throw failure(409, "frontier_follow_limit", `At most ${MAX_FOLLOWS} follows per account.`);
+      const saved = (await client.query(`INSERT INTO evimed_frontier.user_follows AS f (user_id, kind, key, label, muted, query) VALUES ($1,'query',$2,$3,false,$4::jsonb)
+        ON CONFLICT (user_id, kind, key) DO UPDATE SET label = EXCLUDED.label RETURNING ${columns}`, [user.id, key, label, JSON.stringify(parsed.query)])).rows[0];
+      await this.#bumpState(client, user.id);
+      await client.query("UPDATE evimed_frontier.user_profiles SET for_you_at=NULL WHERE user_id=$1", [user.id]);
+      return saved;
+    });
+    // The seven days, after the commit: a failure leaves the follow without its scan and the sweep does it.
+    await this.watch?.backfill({ id: row.id, userId: user.id, query: parsed.query });
+    this.counters.writes += 1;
+    return { follow: this.#follow(row, 0) };
   }
 
   /** @param {{ id: string }} user @param {string} followId */
