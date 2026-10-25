@@ -8,6 +8,7 @@ import { fetchMemoryProfile } from "@/lib/apiClient";
 import { fetchMyCapsule } from "@/lib/memoryClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { ForgottenDrawer } from "./ForgottenDrawer";
+import { ImportDialog } from "./ImportDialog";
 import { MemoryControls } from "./MemoryControls";
 import { RememberDialog } from "./RememberDialog";
 
@@ -31,8 +32,8 @@ function ForgottenHost({ onClose, onChanged }: { onClose: () => void; onChanged:
   );
 }
 
-/** The drawers the header's actions open: sharing and importing (on the tab named), the forgotten list, and the one-line 「记住这一条」. */
-export type HeaderDrawer = { kind: "share"; tab: ShareTab } | { kind: "forgotten" } | { kind: "remember" };
+/** The drawers the header's actions open: sharing and importing (on the tab named), the forgotten list, the one-line 「记住这一条」 and 「从其他 AI 导入」. */
+export type HeaderDrawer = { kind: "share"; tab: ShareTab } | { kind: "forgotten" } | { kind: "remember" } | { kind: "import" };
 
 /**
  * The capsule's header actions on a page that is not the memory lists — the overview and the map (T0.7): the 记忆 switch, the one 「⋯」
@@ -62,8 +63,10 @@ export function MemoryHeaderActions({ projectId, onChanged, drawer: held, onDraw
         onShare={() => setDrawer({ kind: "share", tab: "export" })}
         onForgotten={() => setDrawer({ kind: "forgotten" })}
         onRemember={() => setDrawer({ kind: "remember" })}
+        onImport={() => setDrawer({ kind: "import" })}
       />
       {drawer?.kind === "remember" && <RememberDialog projectId={projectId ?? null} onClose={() => setDrawer(null)} onAsked={onChanged} />}
+      {drawer?.kind === "import" && <ImportDialog onClose={() => setDrawer(null)} onSaved={onChanged} />}
       {drawer?.kind === "share" && <ShareDrawer initialTab={drawer.tab} onClose={() => setDrawer(null)} onImported={onChanged} />}
       {drawer?.kind === "forgotten" && <ForgottenHost onClose={() => setDrawer(null)} onChanged={onChanged} />}
     </>

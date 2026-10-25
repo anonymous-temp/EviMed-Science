@@ -1,0 +1,138 @@
+import { useState } from "react";
+import { webErrorMessage } from "@/lib/apiClient";
+import { offerMemoryImport, saveMemoryImport, type MemoryImportOffer } from "@/lib/memoryClient";
+import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/Button";
+import { FormDialog } from "@/components/ui/FormDialog";
+import { Textarea } from "@/components/ui/Input";
+
+/** The most the control plane reads of a pasted text (`IMPORT_MAX_CHARS`). */
+export const IMPORT_MAX_CHARS = 8_000;
+
+/**
+ * What the person sends to the assistant they used before. It asks for lines about the person and nothing else, and it says what is not
+ * wanted: nothing about other people, and none of the secrets the platform never keeps.
+ */
+export const IMPORT_PROMPT = [
+  "请列出你记得的关于我本人的全部信息，每条一行，只写我自己的：",
+  "我的身份和工作、我做事的偏好和习惯、我常用的工具、我正在做的项目。",
+  "不要写别人的信息，不要写密码、证件号、银行卡这类内容，不要加解释，也不要加标题。",
+].join("\n");
+
+type Step = "prompt" | "paste" | "review";
+
+/**
+ * 「从其他 AI 导入」: four short steps in one dialog. Copy the question to the assistant used before; paste what it answered; read what
+ * this one made of it (short statements in the person's voice, each one tickable); save the ones to keep. What is private (health, money, a
+ * child) is offered unticked and says so; what is never kept (a password, an identity number, someone else's details) is not offered, and one
+ * plain line says that some lines were left out for that reason. Nothing is written until 保存.
+ *
+ * The statements are the person's own once they save: the engine writes them under its own rules, which apply a second time.
+ */
+export function ImportDialog({ onClose, onSaved }: {
+  onClose: () => void;
+  /** The statements were handed to the memory: the page reads its list again, and they appear when the engine has written them. */
+  onSaved: () => void;
+}) {
+  const [step, setStep] = useState<Step>("prompt");
+  const [text, setText] = useState("");
+  const [offer, setOffer] = useState<MemoryImportOffer | null>(null);
+  const [kept, setKept] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(IMPORT_PROMPT);
+      toast.success("已复制");
+    } catch {
+      toast.error("无法复制，请手动选择文字复制");
+    }
+  };
+  const read = async () => {
+    const pasted = text.trim();
+    if (!pasted || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await offerMemoryImport(pasted);
+      setOffer(next);
+      setKept(new Set(next.statements.filter((statement) => statement.ticked).map((statement) => statement.id)));
+      setStep("review");
+    } catch (reason) {
+      setError(webErrorMessage(reason, { fallback: "没有读出内容，请重试。" }));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = async () => {
+    if (!offer || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await saveMemoryImport(offer.id, [...kept]);
+      toast.success(saved.saved > 0 ? `已交给记忆：${saved.saved} 条，几秒后出现在列表里` : "没有选中的内容，没有记下");
+      onSaved();
+      onClose();
+    } catch (reason) {
+      setError(webErrorMessage(reason, { fallback: "没有记下，请重试。" }));
+      setBusy(false);
+    }
+  };
+  const toggle = (id: string, on: boolean) => setKept((current) => { const next = new Set(current); if (on) next.add(id); else next.delete(id); return next; });
+
+  return (
+    <FormDialog title="从其他 AI 导入" onClose={onClose} busy={busy}>
+      {step === "prompt" && (
+        <div className="space-y-3">
+          <p className="text-ui text-text-2">把下面这段话发给你原来用的 AI 助手，请它把记得的关于你的内容列出来。</p>
+          <pre aria-label="要发给原来助手的话" className="max-w-measure whitespace-pre-wrap rounded-input border border-border bg-surface-2 p-3 text-ui text-text">{IMPORT_PROMPT}</pre>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => void copy()}>复制这段话</Button>
+            <Button type="button" onClick={() => setStep("paste")}>下一步</Button>
+          </div>
+        </div>
+      )}
+      {step === "paste" && (
+        <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void read(); }}>
+          <p className="text-ui text-text-2">把它的回答粘贴在这里，最多 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字。</p>
+          <Textarea aria-label="原来助手的回答" rows={8} maxLength={IMPORT_MAX_CHARS} value={text} onChange={(event) => setText(event.target.value)} />
+          {error && <p role="alert" className="text-ui text-error">{error}</p>}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-caption text-text-3">{text.length} / {IMPORT_MAX_CHARS}</span>
+            <div className="flex gap-2">
+              <Button type="button" variant="text" disabled={busy} onClick={() => setStep("prompt")}>上一步</Button>
+              <Button type="submit" loading={busy} disabled={!text.trim()}>读取</Button>
+            </div>
+          </div>
+        </form>
+      )}
+      {step === "review" && offer && (
+        <div className="space-y-3">
+          {offer.statements.length > 0
+            ? <p className="text-ui text-text-2">下面是读出的内容。勾选的会记下，不勾的不会。</p>
+            : <p className="text-ui text-text-2">没有读出可以记下的内容。</p>}
+          <ul className="max-h-96 space-y-2 overflow-y-auto">
+            {offer.statements.map((statement) => (
+              <li key={statement.id}>
+                <label className="flex items-start gap-2 text-ui">
+                  <input type="checkbox" className="mt-1" checked={kept.has(statement.id)} disabled={busy} onChange={(event) => toggle(statement.id, event.target.checked)} />
+                  <span className="min-w-0">
+                    <span className="block max-w-measure whitespace-pre-wrap text-text">{statement.text}</span>
+                    {statement.sensitivity === "on_request" && <span className="block text-caption text-text-3">偏私人的内容，勾选就表示你明确要记住它。</span>}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {offer.leftOut > 0 && <p className="text-caption text-text-3">有 {offer.leftOut} 条没有列出：密码、证件号、他人信息这类内容不会记下。</p>}
+          {error && <p role="alert" className="text-ui text-error">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="text" disabled={busy} onClick={() => setStep("paste")}>返回修改</Button>
+            <Button type="button" loading={busy} disabled={kept.size === 0} onClick={() => void save()}>保存所选</Button>
+          </div>
+        </div>
+      )}
+    </FormDialog>
+  );
+}

@@ -113,14 +113,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the landing's header: the verbs of a capsule are on the map too", () => {
-  it("has the 记忆 switch and the one 「⋯」 of the lists, with the same four entries, and runs the 「刚记住了」 prompt", async () => {
+  it("has the 记忆 switch and the one 「⋯」 of the lists, with the same entries (and 从其他 AI 导入 beside 分享与导入), and runs the 「刚记住了」 prompt", async () => {
     const user = userEvent.setup();
     open();
     expect(await screen.findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
     expect(writePrompt).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "从其他 AI 导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
     expect(screen.getByRole("button", { name: "记住这一条" })).toBeInTheDocument();
   });
 
