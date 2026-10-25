@@ -29,11 +29,18 @@
  *   pin counts against nothing either.
  * - **The per-source cap** (3 a day, 5 for an authority-5 journal) binds every rule here, as it bound the line.
  * - **Merge rules** (`frontierMixMergeVerdict`): a roundup is never selected; a news report of a paper in the paper's
- *   event is never selected over it — only beside the paper once the paper is selected, and only when the event's
- *   grouping call judged that it adds something (`addsValue`); an X post announcing a paper is never selected — the post
- *   is discussion, counted by the event's heat. When either of them would have cleared the line, the paper takes the
- *   place (`event-primary`) if it is in the medium band. A Chinese 解读 of the paper may stand beside it (Chinese value),
- *   whatever the event's one-selected-report rule said.
+ *   event is never selected over it; an X post announcing a paper is never selected — the post is discussion, counted by
+ *   the event's heat. When either of them would have cleared the line, the paper takes the place (`event-primary`) if it
+ *   is in the medium band. A Chinese 解读 of a selected paper may stand beside it (Chinese value), whatever the event's
+ *   one-selected-report rule said.
+ * - **One pick per event** (c2-fixes 2026-10-25, gap review G8). The event grouping call answered "adds value" for 97% of
+ *   the reports it judged, so `addsValue` let almost every second report through and 16 of 280 selected events held two to
+ *   five items (about 11% of 精选: two genre-floor conference reports of one event in one round; a Paris court ruling in
+ *   Czech and in German beside an earlier lane-floor pick; a fifth item four days after the fourth). Now an event that
+ *   already has a selected item takes no pick, and an event with none takes at most one in a round — its paper if it has
+ *   one among the candidates, else the best-ranked report. The one exception is the Chinese 解读 of a selected paper
+ *   (the `beside-paper` verdict): it stands beside the paper, the paper being selected already or the event's pick of the
+ *   round.
  * - **Selection is sticky** (the pipeline's rule): what is already selected counts against its group, its source and
  *   the day, and is never taken back here.
  *
@@ -213,6 +220,7 @@ export function frontierMixMergeVerdict(candidate, members = []) {
  *     groups: Record<FrontierMixGroup, { floor: number, ceiling: number | null, before: number, after: number }>,
  *     rules: Record<string, number>,
  *     genreFloors: Record<string, number>,
+ *     eventHeld: number,
  *   },
  * }} FrontierMixResult
  */
@@ -324,7 +332,43 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
     return verdict && /** @type {readonly string[]} */ (FRONTIER_MIX_EXCLUSIONS).includes(verdict) ? verdict : null
   }
   // The one-selected-report rule stands, except for a Chinese 解读 beside its paper.
-  const blocked = (/** @type {FrontierMixCandidate} */ c) => Boolean(excludedBy(c)) || (c.besideSelected === true && merge.get(c.id)?.verdict !== 'beside-paper')
+  const blockedByMerge = (/** @type {FrontierMixCandidate} */ c) => Boolean(excludedBy(c)) || (c.besideSelected === true && merge.get(c.id)?.verdict !== 'beside-paper')
+
+  // One pick per event (module docstring): the reports of an event that must wait for another, decided once per round.
+  const selectedIds = new Set([
+    ...candidates.filter((c) => c.selected).map((c) => c.id),
+    ...Object.values(events).flatMap((members) => members.filter((member) => member.selected === true).map((member) => member.id)),
+  ])
+  /** A Chinese 解读 of a paper that is selected already: it stands beside it, outside the event's one pick. */
+  const besideSelectedPaper = (/** @type {FrontierMixCandidate} */ c) => {
+    const entry = merge.get(c.id)
+    return entry?.verdict === 'beside-paper' && entry.paperId != null && selectedIds.has(entry.paperId)
+  }
+  /** The ranking an event's one pick goes by: its paper, then the higher score, then a Chinese report, then the id. */
+  const eventRank = (/** @type {FrontierMixCandidate} */ a, /** @type {FrontierMixCandidate} */ b) => {
+    const paper = (/** @type {FrontierMixCandidate} */ c) => (c.genre === 'paper' || c.genre === 'preprint' ? 0 : 1)
+    return paper(a) - paper(b) || (scoreOf(b) ?? -1) - (scoreOf(a) ?? -1) || Number(b.zh) - Number(a.zh) || String(a.id).localeCompare(String(b.id))
+  }
+  /** @type {Set<string>} */
+  const eventHeld = new Set()
+  /** @type {Map<string, FrontierMixCandidate[]>} */
+  const byEvent = new Map()
+  for (const c of candidates) {
+    if (c.eventId == null || c.selected || c.safety || !frontierMixGroup(c.genre) || blockedByMerge(c)) continue
+    byEvent.set(c.eventId, [...(byEvent.get(c.eventId) ?? []), c])
+  }
+  for (const [eventId, list] of byEvent) {
+    const contenders = list.filter((c) => !besideSelectedPaper(c))
+    const heldAlready = [...(events[eventId] ?? []).map((member) => member.id), ...candidates.filter((c) => c.eventId === eventId).map((c) => c.id)]
+      .some((id) => selectedIds.has(id))
+    const winner = heldAlready ? null : [...contenders].sort(eventRank)[0] ?? null
+    for (const c of contenders) {
+      if (c === winner) continue
+      if (winner && merge.get(c.id)?.verdict === 'beside-paper' && merge.get(c.id)?.paperId === winner.id) continue
+      eventHeld.add(c.id)
+    }
+  }
+  const blocked = (/** @type {FrontierMixCandidate} */ c) => blockedByMerge(c) || eventHeld.has(c.id)
 
   // What is already selected counts (selection is sticky).
   /** @type {Record<string, number>} */
@@ -502,6 +546,8 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
       rules,
       // What a floor place under the line asked of each genre that has a percentile (the rest asked `floorScore`).
       genreFloors: Object.fromEntries(Object.keys(genreFloors).map((genre) => [genre, frontierMixGenreFloorScore(genreFloors[genre], floorScore)])),
+      // Reports left out because their event has a selected item or another report of it was chosen for the round.
+      eventHeld: eventHeld.size,
     },
   }
 }

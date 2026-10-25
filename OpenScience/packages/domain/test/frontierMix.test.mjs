@@ -347,3 +347,103 @@ test('the replay passes the genre floors to each day: the same export, industry 
   assert.equal(withFloors.rules['genre-floor'], 4)
   assert.equal(withFloors.size, without.size, 'the day\'s size is the line\'s, not the floor\'s')
 })
+
+// ------------------------------------------------------------------------------------ one pick per event (c2-fixes 2026-10-25, G8)
+
+/** @param {Array<[string, string, boolean?]>} members */
+const eventOf = (members) => members.map(([id, genre, selected]) => ({ id, genre, evidenceType: null, selected: selected === true }))
+
+test('one pick per event per round: two conference reports of one event, as in production\'s event 30447, give one place', () => {
+  const papers = Array.from({ length: 2 }, () => item({ genre: 'paper', score: 88 }))
+  const twins = [item({ genre: 'conference', score: 72, eventId: 'e30447' }), item({ genre: 'conference', score: 70, eventId: 'e30447' }),
+    item({ genre: 'conference', score: 66, eventId: 'e30447' })]
+  const others = [item({ genre: 'conference', score: 68, eventId: 'e2' }), item({ genre: 'conference', score: 65, eventId: 'e3' })]
+  const events = { e30447: eventOf(twins.map((c) => [c.id, 'conference'])), e2: eventOf([[others[0].id, 'conference']]), e3: eventOf([[others[1].id, 'conference']]) }
+  const result = frontierMixSelect({ candidates: [...papers, ...twins, ...others], threshold: 82, events })
+  const picked = new Set(result.picks.map((pick) => pick.id))
+  assert.deepEqual(twins.map((c) => picked.has(c.id)), [true, false, false], 'the best-ranked report of the event, once')
+  assert.ok(picked.has(others[0].id) && picked.has(others[1].id), 'other events are not affected')
+  assert.equal(result.plan.eventHeld, 2)
+  // The same reports with no event take all three: it is the grouping that holds them.
+  const loose = frontierMixSelect({ candidates: [...papers, ...twins.map((c) => ({ ...c, eventId: null })), ...others], threshold: 82 })
+  assert.equal(twins.every((c) => loose.picks.some((pick) => pick.id === c.id)), true)
+  assert.equal(loose.plan.eventHeld, 0)
+})
+
+test('an event that already has a selected item takes no pick, whatever put it there and however many it holds', () => {
+  // Event 21842: one Paris court ruling, in Czech and in German, beside an earlier lane-floor pick.
+  const earlier = item({ genre: 'industry', score: 61, selected: true, rule: 'lane-floor', eventId: 'e21842' })
+  const czech = item({ genre: 'industry', zh: false, score: 58, eventId: 'e21842' })
+  const german = item({ genre: 'industry', zh: false, score: 57, eventId: 'e21842' })
+  const separate = item({ genre: 'industry', score: 56, eventId: 'e9' })
+  const papers = Array.from({ length: 40 }, () => item({ genre: 'paper', score: 88 }))
+  const events = { e21842: eventOf([[earlier.id, 'industry', true], [czech.id, 'industry'], [german.id, 'industry']]), e9: eventOf([[separate.id, 'industry']]) }
+  const result = frontierMixSelect({ candidates: [...papers, earlier, czech, german, separate], threshold: 82, events, genreFloors: { industry: 52 } })
+  const picked = result.picks.map((pick) => pick.id)
+  assert.equal(picked.includes(czech.id) || picked.includes(german.id), false)
+  assert.ok(picked.includes(separate.id), 'an event of its own still has its place')
+  // Event 25153: four selected, a fifth four days later (its other members are on other days: only `events` knows them).
+  const late = item({ genre: 'paper', score: 95, eventId: 'e25153' })
+  const history = eventOf([['a1', 'paper', true], ['a2', 'news', true], ['a3', 'news', true], ['a4', 'industry', true], [late.id, 'paper']])
+  const fifth = frontierMixSelect({ candidates: [late, ...papers], threshold: 82, events: { e25153: history } })
+  assert.equal(fifth.picks.some((pick) => pick.id === late.id), false)
+  assert.ok(fifth.plan.eventHeld >= 1)
+})
+
+test('an event\'s one pick is its paper, then the best-ranked report — the same whatever order the candidates come in', () => {
+  const industry = Array.from({ length: 3 }, (_, index) => item({ id: `r${index}`, genre: 'industry', score: 58, eventId: 'e5' }))
+  const events = { e5: eventOf(industry.map((c) => [c.id, 'industry'])) }
+  const papers = Array.from({ length: 40 }, () => item({ genre: 'paper', score: 88 }))
+  const picks = (/** @type {any[]} */ list) => frontierMixSelect({ candidates: [...papers, ...list], threshold: 82, events, genreFloors: { industry: 52 } })
+    .picks.filter((pick) => pick.group === 'industry').map((pick) => pick.id)
+  assert.deepEqual(picks(industry), ['r0'], 'a tie goes to the id')
+  assert.deepEqual(picks([...industry].reverse()), ['r0'])
+  assert.deepEqual(picks([industry[1], industry[2], industry[0]]), ['r0'])
+  // A paper outranks a better-scored report of its event (the rewrite is excluded, the 解读 stands beside).
+  const paper = item({ genre: 'paper', score: 70, eventId: 'e6' })
+  const report = item({ genre: 'industry', score: 80, eventId: 'e6' })
+  const both = frontierMixSelect({ candidates: [paper, report, ...papers], threshold: 82, genreFloors: { industry: 52 },
+    events: { e6: eventOf([[paper.id, 'paper'], [report.id, 'industry']]) } })
+  assert.equal(both.picks.some((pick) => pick.id === report.id), false, 'the event has its paper')
+})
+
+test('the exception: a Chinese 解读 of a selected paper stands beside it, a news report that "adds value" and an English one do not', () => {
+  const paper = item({ genre: 'paper', score: 90, selected: true, rule: 'threshold', eventId: 'e' })
+  const reading = item({ genre: 'commentary', zh: true, score: 84, eventId: 'e' })
+  const english = item({ genre: 'commentary', zh: false, score: 90, eventId: 'e' })
+  const story = item({ genre: 'news', score: 95, eventId: 'e', addsValue: true })
+  const events = { e: eventOf([[paper.id, 'paper', true], [reading.id, 'commentary'], [english.id, 'commentary'], [story.id, 'news']]) }
+  const result = frontierMixSelect({ candidates: [paper, reading, english, story], threshold: 82, events })
+  assert.deepEqual(result.picks.map((pick) => pick.id), [reading.id])
+  // The paper and its 解读 in the same round: both, whichever the order.
+  const fresh = item({ genre: 'paper', score: 90, eventId: 'f' })
+  const note = item({ genre: 'commentary', zh: true, score: 84, eventId: 'f' })
+  const members = { f: eventOf([[fresh.id, 'paper'], [note.id, 'commentary']]) }
+  for (const order of [[fresh, note], [note, fresh]]) {
+    assert.deepEqual(frontierMixSelect({ candidates: order, threshold: 82, events: members }).picks.map((pick) => pick.id).sort(), [fresh.id, note.id].sort())
+  }
+  // A 解读 whose paper is neither selected nor a candidate competes like any other report of the event.
+  const alone = item({ genre: 'commentary', zh: true, score: 90, eventId: 'g' })
+  const other = item({ genre: 'commentary', zh: true, score: 85, eventId: 'g' })
+  const older = frontierMixSelect({ candidates: [alone, other], threshold: 82,
+    events: { g: eventOf([['p-old', 'paper'], [alone.id, 'commentary'], [other.id, 'commentary']]) } })
+  assert.equal(older.picks.length >= 1, true)
+})
+
+test('the replay of a day with events holds one pick per event and leaves the rest of the day as it was', () => {
+  const day = '2026-10-24T04:00:00Z'
+  const row = (/** @type {string} */ id, /** @type {string} */ genre, /** @type {number} */ score, /** @type {number | null} */ event) => ({
+    public_id: id, source_id: `s-${id}`, source_type: 'media', channel: 'news', genre, lang: 'zh', score_total: score, verification: 'passed',
+    flags: [], selected: false, safety_alert: false, first_seen_at: day, published_at: day, event_id: event })
+  const rows = [
+    row('n1', 'news', 90, 30447), row('n2', 'news', 89, 30447), row('n3', 'news', 88, 30447),
+    row('n4', 'news', 87, 41), row('n5', 'news', 86, 42), row('n6', 'news', 85, 43),
+    row('i1', 'industry', 85, 21842), row('i2', 'industry', 84, 21842),
+  ]
+  const [replayed] = frontierMixReplay(rows, { threshold: 82 })
+  assert.equal(replayed.after.groups.news, 4, 'one report of the event with three and three events of their own')
+  assert.equal(replayed.after.groups.industry, 1, 'the event with two holds one')
+  assert.equal(replayed.after.total, 5)
+  const ungrouped = frontierMixReplay(rows.map((entry) => ({ ...entry, event_id: null })), { threshold: 82 })[0]
+  assert.deepEqual([ungrouped.after.groups.news, ungrouped.after.groups.industry], [6, 2], 'without the grouping the day takes them all')
+})
