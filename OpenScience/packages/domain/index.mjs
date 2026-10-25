@@ -1470,6 +1470,7 @@ export {
   frontierShiftDay,
 } from './src/frontierTrack.mjs'
 /** @typedef {import('./src/frontierTrack.mjs').FrontierApprovalKind} FrontierApprovalKind */
+/** @typedef {import('./src/frontierLeadWatch.mjs').FrontierCongress} FrontierCongress */
 // frontierTopics — 20 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
 // labels, the hot lists it is first seen on, a topic's states, its items' roles and origins, the evidence programme's states
 // for it, the limits it lives within, and the outside-event trigger's pure decisions (a candidate, a surge, the title key,

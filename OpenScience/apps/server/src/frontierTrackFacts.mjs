@@ -129,7 +129,8 @@ export function frontierQuoteSaysDate(value, quote) {
   const [year, month, day] = [match[1], Number(match[2]), Number(match[3])];
   const text = String(quote).toLowerCase();
   const numbers = (text.match(/\d+/g) ?? []).map(Number);
-  const years = (text.match(/\b(?:19|20)\d{2}\b/g) ?? []);
+  /** @type {string[]} */
+  const years = text.match(/\b(?:19|20)\d{2}\b/g) ?? [];
   if (years.length && !years.includes(year)) return false;
   if (!numbers.includes(day)) return false;
   return numbers.includes(month) || new RegExp(`\\b${MONTHS[month - 1]}`).test(text);

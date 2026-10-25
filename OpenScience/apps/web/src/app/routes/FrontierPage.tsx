@@ -568,7 +568,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     setParams(updated);
   };
   const setTrackFilter = (name: "agency" | "specialty", value: string) => {
-    trackFrontierFilter(name === "agency" ? "channel" : "specialty", "track");
+    trackFrontierFilter(name, "track");
     const updated = new URLSearchParams(params);
     if (value) updated.set(name, value); else updated.delete(name);
     setParams(updated, { replace: true });

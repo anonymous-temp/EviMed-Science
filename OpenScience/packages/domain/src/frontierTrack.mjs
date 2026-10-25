@@ -83,7 +83,7 @@ export function frontierQuoteNamesAgency(quote, key) {
   const aliases = /** @type {Record<string, readonly string[]>} */ (FRONTIER_AGENCY_ALIASES)[key]
   if (!aliases) return false
   const text = String(quote ?? '').normalize('NFKC').toLowerCase()
-  return aliases.some((alias) => (/^[a-z0-9 ,.\-]+$/.test(alias) ? new RegExp(`(?<![a-z0-9])${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`).test(text) : text.includes(alias)))
+  return aliases.some((alias) => (/^[a-z0-9 ,.-]+$/.test(alias) ? new RegExp(`(?<![a-z0-9])${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`).test(text) : text.includes(alias)))
 }
 
 export const FRONTIER_AGENCY_REGIONS = Object.freeze([
