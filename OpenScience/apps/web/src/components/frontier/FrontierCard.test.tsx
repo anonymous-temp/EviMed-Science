@@ -118,6 +118,9 @@ describe("a card", () => {
     expect(label).toHaveAttribute("data-tag", "");
     expect(label).toHaveClass("bg-accent-soft", "text-accent");
     expect(label.closest("a,button")).toBeNull();
+    // In the title row, not the meta row: on a phone the meta row has room for the source's name and the score and no more.
+    expect(label.closest("[data-row-title]")).not.toBeNull();
+    expect(label).toHaveClass("z-sticky");
     await userEvent.hover(label);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("国内首个获批，改变一线用药选择。");
     // A label with no reason is not shown: the parse drops it.

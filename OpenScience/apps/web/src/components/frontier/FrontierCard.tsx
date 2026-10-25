@@ -187,8 +187,6 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
           {markSelected && item.selected && <span className="sr-only">精选</span>}
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
           {eyebrow && <Tag>{eyebrow}</Tag>}
-          {/* Content, not provenance: what the item may change, with the reason on hover or focus (a touch screen reads it in the reader). */}
-          {item.practice && <Tag tone="accent" title={item.practice.reason}>{PRACTICE_LABEL}</Tag>}
           {flags.map((flag) => (flag.key === "retracted"
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
@@ -212,6 +210,10 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
         <div className="flex gap-4">
           <div className="min-w-0 flex-1">
             <h3 id={titleId} data-row-title data-prose="" className="mt-1.5 text-body font-semibold leading-6">
+              {/* Content, not provenance: what the item may change, said where the eye starts and not in the meta row, which a phone has no
+                * room for (the source's name went to 「国…」). The reason is on hover; a touch screen reads it in the reader. It sits above the
+                * card's stretched link, or the pointer never reaches it. */}
+              {item.practice && <Tag tone="accent" title={item.practice.reason} className={cn(ABOVE, "mr-2 align-middle")}>{PRACTICE_LABEL}</Tag>}
               <Link
                 to={articlePath(item.id)}
                 state={articleState}
