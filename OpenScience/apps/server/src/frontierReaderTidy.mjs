@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import { frontierParagraphs } from "./frontierEditor.mjs";
 
 /** The texts a verdict is kept for, as `item_texts.reader_tidy.source` names them. */
-export const FRONTIER_TIDY_SOURCES = Object.freeze(/** @type {const} */ (["body", "abstract", "excerpt"]));
+export const FRONTIER_TIDY_SOURCES = Object.freeze(/** @type {const} */ (["body", "abstract", "excerpt", "summary"]));
 
 /**
  * What one call is shown and what an answer may take out: at most `paragraphs` paragraphs (the rest are kept unjudged),
@@ -64,10 +64,11 @@ const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex")
 
 /**
  * The text a verdict was made for: the column `source` names, hashed as stored.
- * @param {any} texts an `item_texts` row @param {"body" | "abstract" | "excerpt"} source
+ * @param {any} texts an `item_texts` row @param {"body" | "abstract" | "excerpt" | "summary"} source
  */
 export function frontierTidyBasis(texts, source) {
-  const text = source === "body" ? texts?.body_text : source === "abstract" ? texts?.abstract_raw : texts?.body_excerpt;
+  const text = source === "body" ? texts?.body_text : source === "abstract" ? texts?.abstract_raw
+    : source === "summary" ? texts?.reader_summary : texts?.body_excerpt;
   return typeof text === "string" && text.trim() ? { text, sha: sha256(text) } : null;
 }
 
@@ -185,7 +186,7 @@ export async function frontierTidyVerdict(editor, input) {
 /**
  * The paragraphs a reader is shown of a text: `frontierParagraphs`, a structured abstract laid out by section first, and the
  * stored verdict's paragraphs taken out (`frontierTidyDrops`) when it was made for exactly this text.
- * @param {string} text @param {"body" | "abstract" | "excerpt"} source @param {any} [tidy] `item_texts.reader_tidy`
+ * @param {string} text @param {"body" | "abstract" | "excerpt" | "summary"} source @param {any} [tidy] `item_texts.reader_tidy`
  */
 export function frontierSettledParagraphs(text, source, tidy = null) {
   const paragraphs = frontierParagraphs(source === "abstract" ? frontierAbstractLayout(text) : text);
