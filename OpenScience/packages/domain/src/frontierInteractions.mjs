@@ -27,8 +27,8 @@
  * @module frontierInteractions
  */
 
-/** @typedef {'impression' | 'open' | 'dwell' | 'read-depth' | 'reach-end' | 'star' | 'unstar' | 'hide' | 'unhide' | 'open-original' | 'toggle-translation' | 'expand-body' | 'share' | 'research' | 'save' | 'related-open' | 'filter-change' | 'onboarding-shown' | 'onboarding-done' | 'onboarding-skipped'} FrontierInteractionType */
-/** @typedef {'feed' | 'for-you' | 'hot' | 'daily' | 'weekly' | 'monthly' | 'follows' | 'search' | 'safety' | 'event' | 'reader' | 'push' | 'direct'} FrontierSurface */
+/** @typedef {'impression' | 'open' | 'dwell' | 'read-depth' | 'reach-end' | 'star' | 'unstar' | 'hide' | 'unhide' | 'open-original' | 'toggle-translation' | 'expand-body' | 'share' | 'research' | 'ask' | 'save' | 'related-open' | 'filter-change' | 'onboarding-shown' | 'onboarding-done' | 'onboarding-skipped'} FrontierInteractionType */
+/** @typedef {'feed' | 'for-you' | 'hot' | 'daily' | 'weekly' | 'monthly' | 'follows' | 'search' | 'safety' | 'event' | 'track' | 'congress' | 'reader' | 'push' | 'direct'} FrontierSurface */
 /** @typedef {'editorial' | 'personal' | 'must-see' | 'explore'} FrontierSlot */
 
 export const FRONTIER_INTERACTION_TYPES = /** @type {readonly FrontierInteractionType[]} */ (Object.freeze([
@@ -46,6 +46,7 @@ export const FRONTIER_INTERACTION_TYPES = /** @type {readonly FrontierInteractio
   'expand-body',
   'share',
   'research',
+  'ask',
   'save',
   'related-open',
   'filter-change',
@@ -60,12 +61,12 @@ export const FRONTIER_INTERACTION_TYPES = /** @type {readonly FrontierInteractio
  * reached without a list: a notification (`push`) or an address (`direct`).
  */
 export const FRONTIER_SURFACES = /** @type {readonly FrontierSurface[]} */ (Object.freeze([
-  'feed', 'for-you', 'hot', 'daily', 'weekly', 'monthly', 'follows', 'search', 'safety', 'event', 'reader', 'push', 'direct',
+  'feed', 'for-you', 'hot', 'daily', 'weekly', 'monthly', 'follows', 'search', 'safety', 'event', 'track', 'congress', 'reader', 'push', 'direct',
 ]))
 
 /** The surfaces that are lists: an impression happens on one of these only. */
 export const FRONTIER_LIST_SURFACES = /** @type {readonly FrontierSurface[]} */ (Object.freeze([
-  'feed', 'for-you', 'hot', 'daily', 'weekly', 'monthly', 'follows', 'search', 'safety', 'event',
+  'feed', 'for-you', 'hot', 'daily', 'weekly', 'monthly', 'follows', 'search', 'safety', 'event', 'track', 'congress',
 ]))
 
 /**
@@ -170,6 +171,8 @@ export const FRONTIER_INTERACTION_RULES = Object.freeze({
   'expand-body': { target: 'item' },
   share: { target: 'item', list: true, detail: ['markdown', 'link'] },
   research: { target: 'item', list: true },
+  // c3-base: a reader asked about the item from its 「就此提问」 — one of its suggested questions, or their own.
+  ask: { target: 'item', list: true, detail: ['suggested', 'own'] },
   save: { target: 'item', list: true },
   'related-open': { target: 'item', detail: ['item', 'event'] },
   'filter-change': { target: 'none', detail: FRONTIER_FILTER_CONTROLS },
