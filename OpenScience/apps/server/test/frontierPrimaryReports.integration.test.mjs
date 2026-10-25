@@ -54,6 +54,7 @@ beforeEach(async () => {
   await database.query("DELETE FROM evimed_frontier.entries");
   await database.query("DELETE FROM evimed_frontier.sources");
   await insertSource(database, "nejm", { name: "新英格兰医学杂志 NEJM", authority: 5, access: "crossref-issn" });
+  await insertSource(database, "lancet", { name: "柳叶刀 The Lancet", authority: 5, access: "crossref-issn" });
   await insertSource(database, "small-journal", { name: "Small Journal", authority: 3, access: "crossref-issn" });
   await insertSource(database, "endpoints", { name: "Endpoints News", lane: "pipeline", source_type: "media", access: "rss", egress: "direct", authority: 3, owner_entity: "Endpoints" });
   await insertSource(database, "yixuejie", { name: "医学界", lane: "evidence", source_type: "media", access: "rss", egress: "direct", authority: 3, owner_entity: "医学界" });
@@ -332,4 +333,24 @@ test("without an embedder the reports are the recent items that share the paper'
   assert.equal(editor.judgeInputs.length, 1);
   assert.equal(editor.judgeInputs[0].reports.length, 1, "the other disease's report shares no word with the paper");
   assert.match((await textsOf(paper.id)).reader_reports, /^ESMO on X：DeLLphi-305试验中/);
+});
+
+test("the other two held items of the review: NEJM's IVUS letter and The Lancet's RISE UP comment get no reports, and the trial's reports are not theirs", options, async () => {
+  await trialReports();
+  await report("x-myesmo", "Mitapivat reduces sickle cell crises in the phase 3 RISE UP trial", "mitapivat在RISE UP 3期试验中减少镰状细胞危象", "RISE UP试验显示mitapivat降低镰状细胞病患者的疼痛危象。", null, 0.55);
+  const letter = await heldPaper({ doi: "10.1056/nejmc2609433", title: "IVUS-Guided PCI in Left Main Coronary Disease" });
+  const comment = await heldPaper({ sourceId: "lancet", doi: "10.1016/s0140-6736(26)02046-5", title: "Mitapivat in the RISE UP trial: a new therapy for sickle cell disease" });
+  const editor = editorWith({
+    // The model reads a letter as not research; it reads the comment's title as the trial's and finds no report that is the comment's own.
+    judge: (input) => (input.paper.doi.includes("nejmc") ? { paper: "other", reports: [] } : { paper: "research", reports: [] }),
+  });
+  await pipelineFor(editor).processBatch();
+  assert.equal(editor.judgeInputs.length, 2);
+  const comments = editor.judgeInputs.find((input) => input.paper.doi.includes("s0140"));
+  assert.ok(comments.reports.some((/** @type {any} */ r) => /RISE UP/.test(r.title)), "the sickle cell report was shown for it");
+  for (const paper of [letter, comment]) {
+    assert.equal(await textsOf(paper.id), undefined);
+    assert.equal((await itemOf(paper.id)).state, "screened");
+  }
+  assert.equal(editor.leadInputs.length, 0);
 });
