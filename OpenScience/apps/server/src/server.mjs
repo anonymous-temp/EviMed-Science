@@ -4191,14 +4191,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
-          // A turn typed in the kernel's own composer was handed the project's card and the capsule's profile at its first step, before
-          // there was a run to name them on: the conversation's state kept what they held, and the run says it recalled them.
-          if (memorySettings.configured && run.sessionId && !run.dispatchId) {
-            const held = nativeResidentMemos(run, await memorySettings.residentState(project.userId, project.id, String(run.sessionId)).catch(() => null));
-            if (held.length) await agentRuns.recordLearning(project, run.id, { recalledMemories: held }).catch((error) => securityAudit(config, "run.resident.record", "failed", {
-              userId: project.userId, projectId: project.id, runId: run.id, code: typeof error?.code === "string" ? error.code : "resident_unrecorded",
-            }));
-          }
           if (evolution && reusableClinicalContext) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
           // The web pages the run read (contract X5), off the same transcript:
           // each `web_read` result carries the gateway's receipt. A write of
@@ -4209,6 +4201,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             await agentRuns.recordLearning(project, run.id, { pagesRead: reading.pages, pagesReadTotal: reading.total }).catch((error) => securityAudit(config, "run.pages_read.record", "failed", {
               userId: project.userId, projectId: project.id, runId: run.id,
               code: typeof error?.code === "string" ? error.code : "pages_read_unrecorded",
+            }));
+          }
+          // A turn typed in the kernel's own composer was handed the project's card and the capsule's profile at its first step, before
+          // there was a run to name them on: the conversation's state kept what they held, and the run says it recalled them.
+          if (memorySettings.configured && run.sessionId && !run.dispatchId) {
+            const held = nativeResidentMemos(run, await memorySettings.residentState(project.userId, project.id, String(run.sessionId)).catch(() => null));
+            if (held.length) await agentRuns.recordLearning(project, run.id, { recalledMemories: held }).catch((error) => securityAudit(config, "run.resident.record", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id, code: typeof error?.code === "string" ? error.code : "resident_unrecorded",
             }));
           }
           // Which documents of the knowledge base the run used (N-16): a passage `kb_search` returned, or the parsed text read
