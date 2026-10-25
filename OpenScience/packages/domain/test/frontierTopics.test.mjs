@@ -43,7 +43,7 @@ test('a hot title is keyed by its characters alone: hashtags, spaces, punctuatio
 
 test('an item is evidence by its genre, a report otherwise, and background when it is a month older than the topic', async () => {
   const { frontierTopicItemRole, FRONTIER_TOPIC_EVIDENCE_GENRES, FRONTIER_GENRES } = await import('../index.mjs')
-  for (const genre of FRONTIER_TOPIC_EVIDENCE_GENRES) assert.ok(FRONTIER_GENRES.includes(genre), genre)
+  for (const genre of FRONTIER_TOPIC_EVIDENCE_GENRES) assert.ok(/** @type {readonly string[]} */ (FRONTIER_GENRES).includes(genre), genre)
   const firstSeenAt = '2026-03-24T14:00:00Z'
   assert.equal(frontierTopicItemRole({ genre: 'paper', publishedAt: '2026-03-20T00:00:00Z', firstSeenAt }), 'evidence')
   assert.equal(frontierTopicItemRole({ genre: 'guideline', publishedAt: null, firstSeenAt }), 'evidence')
