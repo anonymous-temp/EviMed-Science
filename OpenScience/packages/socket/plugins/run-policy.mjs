@@ -159,6 +159,7 @@ import { attendanceReceiptFor, attendanceReceiptsFileFor, verifyRunContextAuthor
 const QUOTE_LOCATOR = 'locate_quote'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
+import { ChildAttendance } from '../src/childAttendance.mjs'
 import { unreadableSubmission } from '@evimed/domain'
 
 const Schema = await configSchema()
@@ -392,8 +393,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const state = new Map()
   /** A child may submit only the one parent-plan item that created it. */
   const childOwners = new Map()
-  /** A child keeps the attendance of the trusted parent turn that created it, even if its parent later moves on. */
-  const unattendedChildren = new Map()
+  /** A child keeps the attendance of the trusted parent turn that created it, even if its parent later moves on; released when it settles. */
+  const unattendedChildren = new ChildAttendance()
 
   /** @param {string} sessionId @returns {Record<string, any>} */
   const sessionState = (sessionId) => {
@@ -493,7 +494,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** @param {string} childSessionId @param {Record<string, any>} entry @param {Record<string, any>} item */
   const bindChildOwner = (childSessionId, entry, item) => {
     if (!childSessionId) return
-    unattendedChildren.set(childSessionId, entry.unattended === true)
+    unattendedChildren.bind(childSessionId, entry.unattended === true)
     childOwners.set(childSessionId, {
       parentSessionId: entry.sessionId,
       runId: entry.runId,
@@ -519,6 +520,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const awaitOwnedSubagent = async (run, childSessionId, sessionId) => {
     const collection = await collectSubagentRun(run)
     childOwners.delete(childSessionId)
+    unattendedChildren.release(childSessionId)
     if (collection.releaseError) diagnostics(sessionId)?.degrade?.(`child session ${childSessionId || '(unnamed)'} not released: ${collection.releaseError}`)
     if (!collection.ok) throw collection.error
     return toSubagentOutcome(run, collection.settled)
@@ -542,6 +544,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const childSessionId = toSubagentOutcome(run, null).childSessionId
     abort.abort(new Error(`子代理的启动记录没有写成：${errorMessage(error)}`))
     childOwners.delete(childSessionId)
+    unattendedChildren.release(childSessionId)
     void awaitOwnedSubagent(run, childSessionId, sessionId).catch((failure) => {
       diagnostics(sessionId)?.degrade?.(`stopped child session ${childSessionId || '(unnamed)'} ended in a fault: ${errorMessage(failure)}`)
     })
@@ -1033,7 +1036,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     // orchestration tools it may not use (`NATIVE_CHILD_TOOL_DENY`).
     if (isSubagentSession(agent)) {
       const parent = parentSessionOf(agent)
-      unattendedChildren.set(String(agent.session.id ?? ''), unattendedChildren.get(parent) ?? sessionState(parent).unattended === true)
+      unattendedChildren.inherit(String(agent.session.id ?? ''), parent, (id) => state.get(id)?.unattended === true)
       installChildComposition(agent, { deny: NATIVE_CHILD_TOOL_DENY })
     }
     narrowRootTools(agent)
@@ -1219,6 +1222,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     nativeChildOwners.set(childId, entry)
   }
   ctx.effect(() => onSubagentSettled(ctx, (childId) => {
+    // A settled child runs no further step: what it inherited goes with it.
+    unattendedChildren.release(childId)
     const entry = nativeChildOwners.get(childId)
     if (!entry) {
       // A delegation's child (collected by its own tool) or one whose call has not been observed yet.
