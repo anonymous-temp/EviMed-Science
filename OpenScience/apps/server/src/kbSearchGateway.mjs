@@ -132,12 +132,12 @@ export function createKbSearchGatewayHandler(config, runtimeManager, { index, ev
       if (contextFor && (!policy || !['owned', 'geo-project'].includes(policy.kind))) throw new Error('Knowledge context unavailable');
       const shared = policy?.kind === 'geo-project';
       if (shared && (typeof policy.acceptSource !== 'function' || typeof policy.sourceScope !== 'function')) throw new Error('Knowledge context incomplete');
-      const selectedScope = shared ? (_identity, id) => policy.sourceScope(id) : sourceScope;
       // Intersect before the index chooses its small-library shortcut too. An empty intersection is empty,
       // never an invitation to read all documents. Failure to read a saved scope must not broaden it.
-      // The personal path asks even without a session (`resolveConversationSourceScope` refuses a sessionless call while any
-      // conversation of the project holds a selection, 2026-10-23); a project's shared context proves the session it is given.
-      if (selectedScope && (sessionId || !shared)) {
+      // A project's shared context proves the session it is given. A call without one asks the project-wide check on both
+      // paths (`resolveConversationSourceScope` refuses it while any conversation of the project holds a selection, 2026-10-23).
+      const selectedScope = shared && sessionId ? (_identity, id) => policy.sourceScope(id) : sourceScope;
+      if (selectedScope) {
         const selected = await selectedScope(identity, sessionId);
         if (selected) request.sourceIds = request.sourceIds
           ? request.sourceIds.filter(id => selected.includes(id)) : [...selected];

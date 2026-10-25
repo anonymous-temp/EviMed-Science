@@ -518,10 +518,10 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
       if (contextFor && (!context || context.kind !== "owned" && (context.kind !== "geo-project" || context.includeLibrary !== false
         || typeof context.current !== "function" || !context.resources || typeof context.acceptSource !== "function"))) throw gatewayError(503, "kb_browse_unavailable", UNAVAILABLE);
       const scoped = context?.kind === "geo-project" ? context : null;
-      // The conversation's document selection. The personal path asks even without a session (a sessionless call is refused while
-      // any conversation of the project holds one); a project's shared context proves the session it is given, as kb_search does.
-      const selected = scoped
-        ? (body.sessionId && typeof scoped.sourceScope === "function" ? await scoped.sourceScope(body.sessionId) : null)
+      // The conversation's document selection. A project's shared context proves the session it is given, as kb_search does; a
+      // call without one asks the project-wide check on both paths (refused while any conversation of the project holds one).
+      const selected = scoped && body.sessionId && typeof scoped.sourceScope === "function"
+        ? await scoped.sourceScope(body.sessionId)
         : sourceScope ? await sourceScope(identity, body.sessionId) : null;
       const data = await Promise.race([
         answer({ userId: identity.userId, projectId: identity.projectId, context: scoped }, request, selected),
