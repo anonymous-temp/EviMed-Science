@@ -148,7 +148,9 @@ own rules — a page through the protected fetch (robots, pacing, the relay) wit
 bought through Dajiala within the shared daily cap (never read as a page), a DOI through Crossref, a PMID through PubMed's summary,
 a trial number through ClinicalTrials.gov's API — and emits ordinary entries: a page or an article only when it carries a date
 within 30 days. An entry goes under the registered source of its site, account or journal, else under a lead source of its own
-(`evimed_knowledge.lead_sources`, access `lead`, never polled, named and owned by the site), and the site, account or journal
+(`evimed_knowledge.lead_sources`, access `lead`, never polled, owned by the site and named by what its page calls itself when that is a
+name — never a copyright line, a host or a headline —, else by its outlet in a small host table, else by the title's last segment; a page's
+title is its og:title or only h1 without the site it ends with), and the site, account or journal
 becomes a discovery candidate of line `lead` unless `registry/discovery.json` excludes it. `/v1/health` `leads` counts today's
 addresses by what came of them. The plugin still never calls the platform and makes no model call.
 
