@@ -23,6 +23,18 @@ export async function builtinPluginState(ctx) {
     return { id, enabled: rows[0].enabled }
   }) }
 }
+/**
+ * What `evimedPlugins/builtin` answers: the loader's actual state, and whether it is what this kernel's own launch
+ * environment expected (`matchesLaunch`). The control plane decides the proof by comparing the state with the profile it
+ * wrote itself (`probePersonalSkillGeneration`, the runtime's `builtinPlugins`). The environment is the controller's, from
+ * another container whose deployment flags can disagree with the web's, so a disagreement is reported here and never
+ * refuses the proof: it used to fail every personal-generation proof on such a deployment.
+ * @param {{items:{id:string,enabled:boolean}[]}} state @param {unknown} disabledClientBundles
+ */
+export function builtinProof(state, disabledClientBundles) {
+  const expected = Array.isArray(disabledClientBundles) ? disabledClientBundles : null
+  return { ...state, matchesLaunch: expected ? state.items.every(item => item.enabled !== expected.includes(item.id)) : null }
+}
 /** Read the installed package selected by the bundle's own module resolver.
  * @param {string} manifestUrl */
 export async function installedCitationVersion(manifestUrl) {
@@ -278,12 +290,7 @@ export async function registerPluginProbe(ctx, options = {}) {
       for (const initialize of initializers) initialize.call(this)
     }
     async status() { return { busy: await pluginRuntimeBusy(ctx) } }
-    async builtin() {
-      const state = await builtinPluginState(ctx)
-      const disabled = options.disabledClientBundles
-      if (disabled && state.items.some(item => item.enabled === disabled.includes(item.id))) throw probeFailure('extension_probe_config_invalid')
-      return state
-    }
+    async builtin() { return builtinProof(await builtinPluginState(ctx), options.disabledClientBundles) }
     async verify() { return this.probe(false) }
     async verifyExtensions() { return this.probe(true) }
     /** @param {{sessionId:string}} request */

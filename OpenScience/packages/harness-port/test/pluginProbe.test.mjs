@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadHarnessModule } from '../index.mjs'
-import { builtinPluginState, pluginRuntimeBusy, verifyCitationAgent, registerCitationConfiguration } from '../src/pluginProbe.mjs'
+import { builtinPluginState, builtinProof, pluginRuntimeBusy, verifyCitationAgent, registerCitationConfiguration } from '../src/pluginProbe.mjs'
 import { CITE_VERSION } from './helpers/pins.mjs'
 
 test('builtin integration proof reads actual native Loader state and refuses an enabled failed row', async () => {
@@ -14,6 +14,14 @@ test('builtin integration proof reads actual native Loader state and refuses an 
   assert.deepEqual(await builtinPluginState(ctx), { items: [{ id: 'annotation', enabled: false }, { id: 'mermaid', enabled: true }] })
   failed = true
   await assert.rejects(builtinPluginState(ctx), /extension_probe_config_invalid/)
+})
+
+test('a launch environment that disagrees with the profile is reported beside the state, never a refused proof', () => {
+  const state = { items: [{ id: 'annotation', enabled: true }, { id: 'mermaid', enabled: false }] }
+  assert.deepEqual(builtinProof(state, ['mermaid']), { ...state, matchesLaunch: true })
+  // The web wrote the profile with Mermaid off; the controller's container was launched without that flag.
+  assert.deepEqual(builtinProof(state, []), { ...state, matchesLaunch: false })
+  assert.deepEqual(builtinProof(state, undefined), { ...state, matchesLaunch: null })
 })
 
 test('a runtime without the loader service loses only the integration proof', async () => {

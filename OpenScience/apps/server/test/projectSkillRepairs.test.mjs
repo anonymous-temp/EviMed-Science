@@ -227,3 +227,15 @@ test('a generation is published without a disabled id the platform no longer shi
   listed = [{ name: 'matplotlib', invocation: { userInvocable: true, modelInvocable: false } }]
   await assert.rejects(manager.probePersonalSkillGeneration(project, expected), { status: 502 })
 })
+
+test('the integration proof compares the kernel with the profile this control plane wrote, whatever the controller expected', async () => {
+  const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0 }), project = { id: 'paper', userId: 'owner' }
+  const expected = { reference: { generationHash: 'f'.repeat(64) }, pins: [], platformSkills: { disabled: [], disabledPlugins: ['mermaid'] } }
+  manager.runtimes.set(manager.key(project), { modelGatewayTokenJti: 'live', personalSkillGeneration: expected, builtinPlugins: { annotation: true, mermaid: false } })
+  let items = [{ id: 'annotation', enabled: true }, { id: 'mermaid', enabled: false }]
+  manager.callKernel = async (_runtime, _project, method) => method === 'evimedPlugins/builtin' ? { items, matchesLaunch: false }
+    : method === 'session/list' ? { items: [] } : assert.fail(method)
+  assert.equal((await manager.probePersonalSkillGeneration(project, expected)).pendingSession, false)
+  items = [{ id: 'annotation', enabled: true }, { id: 'mermaid', enabled: true }]
+  await assert.rejects(manager.probePersonalSkillGeneration(project, expected), { status: 502 })
+})
