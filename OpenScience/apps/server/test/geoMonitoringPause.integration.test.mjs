@@ -95,3 +95,30 @@ test("the monitoring view says the measurement is paused, since when, and names 
   const summaries = await service.spine.stepSummaries(project.id);
   assert.equal(summaries.monitoring?.count, 1, "the rail counts the round that measured, not the empty one");
 });
+
+test("a round that heard no answer is neither the spine's latest or baseline round nor the round the sources page counts", options, async () => {
+  const userId = `u-${randomUUID().slice(0, 8)}`;
+  const project = await store.createProject({ userId, projectId: "p-spine", engines: ["deepseek"], coverageDays: 90, product: { brandName: "玛仕度肽" } });
+  const service = new GeoService({ store, config: CONFIG });
+  // An empty single-step round first (a diagnosis tried while the engines were paused), then a baseline that heard an answer, then
+  // this week's re-measure that heard none.
+  await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status, planned, done, failed, sample_date, finished_at)
+    VALUES ('rs-step-empty', $1, $2, 'single_step', 'partial', 1, 0, 1, NULL, now() - interval '5 days'),
+           ('rs-base', $1, $2, 'baseline', 'done', 1, 1, 0, current_date - 3, now() - interval '3 days'),
+           ('rs-week-empty', $1, $2, 'weekly', 'partial', 1, 0, 1, NULL, now() - interval '1 hour')`, [userId, project.id]);
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status, citations)
+    VALUES ('ss-base', $1, 'rs-base', $2, 'deepseek', now() - interval '3 days', 'valid', '[{"url":"https://www.dxy.cn/a","domain":"dxy.cn"}]'::jsonb)`,
+  [userId, project.id]);
+  await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, mentions_ours, judged_at) VALUES ('ss-base', $1, $2, true, now())`,
+    [userId, project.id]);
+  await database.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, cited, mentions_ours) VALUES ('src-dxy', $1, $2, 'dxy.cn', '{}'::jsonb, 0)`,
+    [userId, project.id]);
+
+  const spine = await service.spine.load(project);
+  assert.equal(spine.rounds.latest?.id, "rs-base", "the latest reading is the round that heard an answer, not this week's empty one");
+  assert.equal(spine.rounds.baseline?.id, "rs-base", "the baseline is the first round that measured, not the empty diagnosis before it");
+
+  const sources = await service.sources({ id: userId }, project.id);
+  const dxy = sources.sources.find((/** @type {any} */ row) => row.domain === "dxy.cn");
+  assert.deepEqual([dxy?.cited, dxy?.mentionsOurs], [{ deepseek: 1 }, 1], "the sources page counts the latest round with answers, not the empty week (all zero)");
+});

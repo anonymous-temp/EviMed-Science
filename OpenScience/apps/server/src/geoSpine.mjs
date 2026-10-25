@@ -29,6 +29,8 @@ import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { ORDER_SELECT, mapOrder } from "./geoMarketStore.mjs";
 import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 
+/** A round (aliased `r`) that heard an answer — a valid or refused one, what every number is made of. */
+const ANSWERED = `EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id = r.id AND answered.status IN ('valid', 'refusal'))`;
 /** The rounds that measure the whole question set. */
 const HEADLINE_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
 /** The rounds a group's series is drawn from: the full ones, and the checks after a publication (flagged by their kind). */
@@ -133,10 +135,13 @@ export class GeoSpine {
     const [strategy, targets, headline, baseline] = await Promise.all([
       this.store.latestStrategy(geoId),
       this.store.latestTargets(geoId),
-      this.#query(`SELECT id, kind, set_version, sample_date::text AS day, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-        AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...HEADLINE_KINDS]]),
-      this.#query(`SELECT id, kind, set_version, sample_date::text AS day, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'single_step')
-        AND status IN ('done', 'partial') ORDER BY finished_at ASC NULLS LAST, created_at ASC LIMIT 1`, [geoId]),
+      // A round that heard no answer (its engines paused, 2026-10-25) is neither the latest reading nor the baseline: it measured nothing.
+      this.#query(`SELECT r.id, r.kind, r.set_version, r.sample_date::text AS day, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
+        AND r.kind = ANY($2::text[]) AND r.status IN ('done', 'partial') AND ${ANSWERED}
+        ORDER BY r.finished_at DESC NULLS LAST, r.created_at DESC LIMIT 1`, [geoId, [...HEADLINE_KINDS]]),
+      this.#query(`SELECT r.id, r.kind, r.set_version, r.sample_date::text AS day, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
+        AND r.kind IN ('baseline', 'single_step') AND r.status IN ('done', 'partial') AND ${ANSWERED}
+        ORDER BY r.finished_at ASC NULLS LAST, r.created_at ASC LIMIT 1`, [geoId]),
     ]);
     const latestRound = headline.rows[0] ?? null;
     const baselineRound = baseline.rows[0] ?? null;

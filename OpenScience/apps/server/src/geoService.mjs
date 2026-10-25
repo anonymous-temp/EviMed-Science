@@ -1282,8 +1282,12 @@ export class GeoService {
    * @param {string} geoId @param {number} [limit]
    */
   async #sourceRounds(geoId, limit = 1) {
-    return (await this.store.query(`SELECT id, kind, sample_date, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-      AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT $3`, [geoId, [...GEO_HEADLINE_ROUND_KINDS], limit])).rows;
+    // Only rounds that heard an answer: an empty round (its engines paused, 2026-10-25) cited no site, and as the latest it would draw
+    // every source at zero.
+    return (await this.store.query(`SELECT r.id, r.kind, r.sample_date, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
+      AND r.kind = ANY($2::text[]) AND r.status IN ('done', 'partial')
+      AND EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id = r.id AND answered.status IN ('valid', 'refusal'))
+      ORDER BY r.finished_at DESC NULLS LAST, r.created_at DESC LIMIT $3`, [geoId, [...GEO_HEADLINE_ROUND_KINDS], limit])).rows;
   }
 
   /** The newest of those, or null before there is one. @param {string} geoId */
