@@ -809,16 +809,16 @@
       "id": "capability/method-distillation",
       "name": "method-distillation",
       "origin": "capability",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "source": {"kind":"release"},
-      "digest": "sha256:feefacc7047bf4dd2af49147eab266ad611dc55f13fe6697424d880fc4dd1287",
+      "digest": "sha256:10530e34bd6c058c89160666e54fc0095ae90826e34e9f4884b8b68d9747bab9",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"b89197b2e28f1db940d4ca4aa63752065e9a2a88681866ccd5dc72af1978acc3"}],
+      "references": [{"path":"capability.yaml","sha256":"ad7939ff9be5d7c8bdba801ad92e05de608056128e72655defa2178c7327605e"}],
       "operations": [
         {
           "name": "method-candidate",
           "kind": "deliverable",
-          "summary": "Induce one reusable method — how this person does this kind of work — from a run's trajectory digest, the excerpts anchored on what the person did to it, feedback and repair rounds, or a program their runs keep carrying, and propose exactly one of create, amend, merge or no change.",
+          "summary": "Induce one reusable method — how this person does this kind of work — from a run's trajectory digest, the excerpts anchored on what the person did to it, feedback and corrections, or a program their runs keep carrying, and propose exactly one of create, amend, merge or no change.",
           "accepts": ["distillationInput"],
           "produces": ["SKILL.md","method-candidate.json","distillation-notes.md"]
         }
