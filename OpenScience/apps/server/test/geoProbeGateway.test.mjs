@@ -555,3 +555,13 @@ test("the probe admits the full original import length and preserves exact white
   const tooLong = await run(configured, async () => { throw new Error("must not call upstream"); }, { op: "ask", question: "q".repeat(4001), providers: ["deepseek"] });
   assert.equal(tooLong.statusCode, 400);
 });
+
+test("a connection that broke after the ask was sent is an upstream error, never 'unreachable', which says it was never asked", async () => {
+  const broken = (code) => async () => { throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("socket"), { code }) }); };
+  for (const code of ["ECONNRESET", "UND_ERR_SOCKET", "UND_ERR_HEADERS_TIMEOUT"]) {
+    const res = await run(configured, broken(code), { op: "ask", question: "q", providers: ["deepseek"] });
+    assert.deepEqual([res.statusCode, res.json().code], [502, "geo_probe_upstream_error"], code);
+  }
+  const refused = await run(configured, broken("ECONNREFUSED"), { op: "ask", question: "q", providers: ["deepseek"] });
+  assert.deepEqual([refused.statusCode, refused.json().code], [502, "geo_probe_unavailable"]);
+});

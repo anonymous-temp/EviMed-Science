@@ -44,6 +44,7 @@ import { preserveGeoAssessment, geoAssessmentId } from "./geoLearningSignals.mjs
 import { migrateGeo } from "./geoPersistence.mjs";
 import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 import { geoOwnedLinkKey } from "./geoStore.mjs";
+import { GEO_UNDELIVERED_FAILURE_CODES } from "./geoProbeGateway.mjs";
 import { HttpError, randomId } from "./security.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
@@ -52,6 +53,28 @@ export const GEO_PROBE_LOCK_KEY = "evimed_geo_probe";
 
 /** Rounds whose big versions wait for the night window. */
 export const GEO_NIGHT_ROUND_KINDS = Object.freeze(["baseline", "weekly", "noise"]);
+
+/**
+ * The original cells of a one-shot diagnosis an earlier recovery still holds: its job for the same question and engine is queued,
+ * leased, answered, or failed in a way that may have reached the provider. A recovery whose job provably never reached it (skipped,
+ * or failed with `GEO_UNDELIVERED_FAILURE_CODES` and no vendor task taken) holds nothing: the cell may be recovered again
+ * (2026-10-25: one generation was the limit, so a recovery asked while the probe host was down used the cell's only chance).
+ * @param {{ query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }> }} db
+ * @param {string} geoProjectId @param {string} originalRoundId @param {string[]} jobIds the original round's job ids
+ * @returns {Promise<Set<string>>}
+ */
+export async function geoRecoveryHeldCells(db, geoProjectId, originalRoundId, jobIds) {
+  if (!jobIds.length) return new Set();
+  const rows = (await db.query(`SELECT DISTINCT original.id FROM evimed_geo.probe_jobs original
+      JOIN evimed_geo.rounds prior ON prior.geo_project_id = $1 AND prior.ref ->> 'recoveryOf' = $2 AND (prior.ref -> 'recoveredJobIds') ? original.id
+      LEFT JOIN evimed_geo.probe_jobs again ON again.round_id = prior.id AND again.question_id = original.question_id AND again.engine = original.engine
+    WHERE original.round_id = $2 AND original.id = ANY($3::text[])
+      AND (again.id IS NULL OR NOT (again.status IN ('failed', 'skipped') AND again.external_ref IS NULL
+        AND (again.status = 'skipped' OR again.error_code = ANY($4::text[]))
+        AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.probe_job_id = again.id AND answered.status IN ('valid', 'refusal'))))`,
+  [geoProjectId, originalRoundId, jobIds, [...GEO_UNDELIVERED_FAILURE_CODES]])).rows;
+  return new Set(rows.map((row) => String(row.id)));
+}
 
 /**
  * The question set recurring measurement reads (a baseline, a weekly re-measure, a sentinel, a noise round): the newest set saved
@@ -442,9 +465,9 @@ export class GeoMeasureStore {
         }
       }
       if (round.ref?.recoveryOf) {
-        const prior = await client.query(`SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id=$1 AND ref->>'recoveryOf'=$2
-          AND (ref->'recoveredJobIds') ?| $3::text[] LIMIT 1`, [round.geoProjectId, round.ref.recoveryOf, round.ref.recoveredJobIds]);
-        if (prior.rows.length) throw new HttpError(409, "geo_recovery_exhausted", "Each failed cell permits one explicit recovery; inspect the previous recovery first.");
+        // Under the diagnosis lock above: two recoveries of one cell cannot both pass.
+        const held = await geoRecoveryHeldCells(client, round.geoProjectId, String(round.ref.recoveryOf), /** @type {string[]} */ (round.ref.recoveredJobIds));
+        if (held.size) throw new HttpError(409, "geo_recovery_exhausted", "An earlier recovery of these cells is running, answered, or may have reached the provider; inspect it first.");
       }
       await client.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, surface, status, planned, done, failed, ref, created_at)
         VALUES ($1, $2, $3, $4, $5, $6::text[], $7::jsonb, 'queued', $8, 0, 0, $9::jsonb, $10)`,

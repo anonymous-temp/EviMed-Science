@@ -198,6 +198,83 @@ test("one-shot inclusion submit failures and failed polls cannot resubmit a paid
   }
 });
 
+test("a busy probe is a wait for a one-shot cell too: it is asked once the probe is free, with no attempt spent and nothing failed", options, async () => {
+  const p = await project("busy-wait");
+  await service.saveQuestions(owner, p.id, { ...input, rows: [{ text: "Busy question" }] });
+  const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "busy-start" });
+  // Only this cell's question is busy, and only the first time it is asked (the suite's other rounds share the probe).
+  const probe = await startFakeProbe({ ask: ({ question, nth }) => question === "Busy question" && nth === 1 ? { status: 409 } : { answer: "Ours is one option. ".repeat(12), screenshot: null } });
+  const job = async () => (await store.query("SELECT status, attempts FROM evimed_geo.probe_jobs WHERE round_id=$1", [started.roundId])).rows[0];
+  try {
+    const now = new Date();
+    const deps = { store: measure, config: { geoProbeUrl: probe.url, geoProbeTimeoutMs: 1000, geoWeeklyAskCap: 1500 }, state: geoMeasureState(), now: () => now, maxAsks: 10 };
+    for (let tick = 0; tick < 6 && !probe.asks.some((ask) => ask.question === "Busy question"); tick += 1) { await tickProbe(deps); now.setTime(now.getTime() + 15 * 60_000); }
+    const waiting = await job();
+    assert.deepEqual([waiting.status, Number(waiting.attempts)], ["queued", 0], "the refusal of a busy probe cost the cell nothing");
+    for (let tick = 0; tick < 6 && (await job()).status !== "done"; tick += 1) { await tickProbe(deps); now.setTime(now.getTime() + 15 * 60_000); }
+    assert.equal(probe.asks.filter((ask) => ask.question === "Busy question").length, 2);
+    assert.equal((await job()).status, "done");
+    assert.deepEqual((await store.query("SELECT status FROM evimed_geo.snapshots WHERE round_id=$1", [started.roundId])).rows.map((row) => row.status), ["valid"]);
+  } finally { await probe.close(); }
+});
+
+test("an unreachable probe host fails a one-shot cell as never sent: it is recovered without an acknowledgement", options, async () => {
+  const p = await project("unreachable");
+  await service.saveQuestions(owner, p.id, { ...input, rows: [{ text: "Unreachable question" }] });
+  const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "unreachable-start" });
+  // The suite's earlier rounds share the database: only this cell is asked.
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='skipped' WHERE status IN ('queued','leased') AND round_id<>$1", [started.roundId]);
+  const probe = await startFakeProbe({ ask: () => ({ answer: "never", screenshot: null }) });
+  const url = probe.url;
+  await probe.close();
+  const deps = { store: measure, config: { geoProbeUrl: url, geoProbeTimeoutMs: 1000, geoWeeklyAskCap: 1500 }, state: geoMeasureState(), now: () => new Date(), maxAsks: 10 };
+  await tickProbe(deps);
+  const [job] = (await store.query("SELECT status, error_code FROM evimed_geo.probe_jobs WHERE round_id=$1", [started.roundId])).rows;
+  assert.deepEqual([job.status, job.error_code], ["failed", "geo_probe_unavailable"], "a refused connection never put the ask to the engine");
+  const progress = await service.diagnosisProgress(owner, p.id, started.roundId);
+  assert.equal(progress.cells[0].deliveryUnknown, false);
+  const recovered = await service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "unreachable-recover", jobIds: [progress.cells[0].jobId] });
+  assert.equal(recovered.planned, 1);
+});
+
+test("a cell whose recovery provably never reached the provider may be recovered again; one that may have is not", options, async () => {
+  const p = await project("recover-again");
+  await service.saveQuestions(owner, p.id, { ...input, rows: [{ text: "Recovered twice" }] });
+  const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "again-start" });
+  const [original] = (await store.query("SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1", [started.roundId])).rows;
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='failed', error_code='delivery_unknown_no_automatic_retry' WHERE id=$1", [original.id]);
+  const first = await service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "again-1", jobIds: [original.id], acknowledgeUnknown: true });
+  await assert.rejects(service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "again-early", jobIds: [original.id], acknowledgeUnknown: true }), { code: "geo_recovery_exhausted" },
+    "a recovery still queued holds the cell");
+  // The probe host was down when the recovery was asked: it cost nothing, so the cell has not had its chance.
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='failed', error_code='geo_probe_unavailable' WHERE round_id=$1", [first.roundId]);
+  assert.equal((await service.diagnosisProgress(owner, p.id, started.roundId)).cells[0].recoverable, true);
+  const second = await service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "again-2", jobIds: [original.id], acknowledgeUnknown: true });
+  assert.notEqual(second.roundId, first.roundId);
+  // This time it may have reached the provider: no third recovery.
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='failed', error_code='delivery_unknown_no_automatic_retry' WHERE round_id=$1", [second.roundId]);
+  await assert.rejects(service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "again-3", jobIds: [original.id], acknowledgeUnknown: true }), { code: "geo_recovery_exhausted" });
+  assert.equal((await service.diagnosisProgress(owner, p.id, started.roundId)).cells[0].recoverable, false);
+});
+
+test("recovering an inclusion cell whose paid task was taken asks for the acknowledgement the tool promises", options, async () => {
+  const p = await project("inclusion-held-recover");
+  await service.saveQuestions(owner, p.id, { ...input, rows: [{ text: "Held inclusion" }, { text: "Failed poll" }] });
+  const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "held-start" });
+  const jobs = (await store.query("SELECT j.id FROM evimed_geo.probe_jobs j JOIN evimed_geo.questions q ON q.id=j.question_id WHERE j.round_id=$1 ORDER BY q.text", [started.roundId])).rows;
+  // The vendor took both tasks (each 1 算力): one was never answered within the hold, the other's poll came back failed.
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='failed', error_code=CASE WHEN id=$2 THEN 'failed' ELSE 'inclusion_hold_expired' END, external_ref='vendor-'||id WHERE round_id=$1",
+    [started.roundId, jobs[0].id]);
+  const progress = await service.diagnosisProgress(owner, p.id, started.roundId);
+  assert.deepEqual(progress.cells.map((cell) => cell.deliveryUnknown), [true, true], "the page asks for the acknowledgement");
+  assert.equal(progress.counts.deliveryUnknown, 2);
+  for (const job of jobs) {
+    await assert.rejects(service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: `held-${job.id}`, jobIds: [job.id] }), { code: "geo_recovery_acknowledgment_required" });
+  }
+  const recovered = await service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "held-ack", jobIds: jobs.map((job) => job.id), acknowledgeUnknown: true });
+  assert.equal(recovered.planned, 2);
+});
+
 test("legacy groups edits cannot discard an imported measurement agreement", options, async () => {
   const p = await project("preserve-contract");
   await service.saveQuestions(owner, p.id, input);

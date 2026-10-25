@@ -52,7 +52,7 @@ import {
 } from "@evimed/domain";
 import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoRoundReadings, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
-import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
+import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite, geoRecoveryMayCharge } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
@@ -66,7 +66,7 @@ import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
 import { readFrozenGeoAnalysisPage, hasGeoFrozenAnalysisContext } from "./geoAnalysisFrozenPages.mjs";
 import { readGeoAnalysis, presentGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
-import { GEO_ROUND_ANSWERED } from "./geoMeasureStore.mjs";
+import { GEO_ROUND_ANSWERED, geoRecoveryHeldCells } from "./geoMeasureStore.mjs";
 import { geoRivalMonitoringRows } from "./geoAnalysisMetrics.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
 import { GeoOwnedPublications } from "./geoOwnedPublications.mjs";
@@ -1146,18 +1146,21 @@ export class GeoService {
       || !Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) throw failure(400, "geo_read_filter_invalid", "Progress takes limit 1–500 and offset 0–100000.");
     const round = (await this.store.query(`SELECT id, status, set_version, engines, planned, surface, ref FROM evimed_geo.rounds WHERE id=$1 AND geo_project_id=$2 AND user_id=$3`, [roundId, project.id, project.userId])).rows[0];
     if (!round) throw failure(404, "geo_round_not_found", "Diagnosis not found.");
-    const recovered = (await this.store.query(`SELECT ref->'recoveredJobIds' AS ids FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2 AND ref->>'recoveryOf'=$3`, [project.id, project.userId, round.id])).rows.flatMap((row) => row.ids ?? []);
+    // A cell an earlier recovery still holds is not recoverable; one whose recovery provably never reached the provider is again.
+    const recoveredIds = (await this.store.query(`SELECT ref->'recoveredJobIds' AS ids FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2 AND ref->>'recoveryOf'=$3`, [project.id, project.userId, round.id])).rows.flatMap((row) => row.ids ?? []);
+    const recovered = [...await geoRecoveryHeldCells(this.store, project.id, String(round.id), [...new Set(recoveredIds.map(String))])];
     const recoverableRound = round.surface?.measurementContract?.samplingMode === "one_shot" && !round.ref?.recoveryOf;
+    // `deliveryUnknown` is every cell a recovery may pay for again (`geoRecoveryMayCharge`): the acknowledgement the page asks for.
     const stats = (await this.store.query(`SELECT count(*)::integer AS total,
       count(*) FILTER (WHERE j.status='queued')::integer AS queued, count(*) FILTER (WHERE j.status='leased')::integer AS leased,
       count(*) FILTER (WHERE j.status='done')::integer AS done, count(*) FILTER (WHERE j.status='failed')::integer AS failed,
       count(*) FILTER (WHERE j.status='skipped')::integer AS skipped,
-      count(*) FILTER (WHERE j.error_code='delivery_unknown_no_automatic_retry')::integer AS delivery_unknown,
+      count(*) FILTER (WHERE j.status IN ('failed','skipped') AND (j.error_code IN ('delivery_unknown_no_automatic_retry','inclusion_hold_expired') OR j.external_ref IS NOT NULL))::integer AS delivery_unknown,
       count(*) FILTER (WHERE $3::boolean AND j.status IN ('failed','skipped') AND NOT(j.id=ANY($4::text[]))
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')))::integer AS recoverable,
       array_agg(DISTINCT j.engine) AS observed_engines FROM evimed_geo.probe_jobs j WHERE j.round_id=$1 AND j.geo_project_id=$2`,
     [roundId, project.id, recoverableRound, recovered])).rows[0];
-    const jobs = (await this.store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.attempts, j.error_code, j.snapshot_id, s.status AS answer_status,
+    const jobs = (await this.store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.attempts, j.error_code, j.external_ref, j.snapshot_id, s.status AS answer_status,
       EXISTS (SELECT 1 FROM evimed_geo.snapshots preserved WHERE preserved.probe_job_id=j.id AND preserved.status IN ('valid','refusal')) AS has_preserved_answer,
       q.text, q.original_id, q.original_group FROM evimed_geo.probe_jobs j JOIN evimed_geo.questions q ON q.id=j.question_id AND q.geo_project_id=j.geo_project_id
       LEFT JOIN evimed_geo.snapshots s ON s.id=j.snapshot_id WHERE j.round_id=$1 AND j.geo_project_id=$2 ORDER BY j.created_at,j.id LIMIT $3 OFFSET $4`, [roundId, project.id, limit, offset])).rows;
@@ -1169,7 +1172,7 @@ export class GeoService {
       page: { limit, offset, total, shown: jobs.length, more: nextOffset != null, nextOffset },
       cells: jobs.map((job) => ({ jobId: job.id, questionId: job.question_id, text: job.text, originalId: job.original_id, originalGroup: job.original_group,
         engine: job.engine, status: job.status, answerStatus: job.answer_status ?? null, attempts: Number(job.attempts), errorCode: job.error_code ?? null,
-        snapshotId: job.snapshot_id ?? null, deliveryUnknown: job.error_code === "delivery_unknown_no_automatic_retry", recoverable: recoverableRound && !recovered.includes(job.id) && !job.has_preserved_answer && ["failed", "skipped"].includes(job.status) })) };
+        snapshotId: job.snapshot_id ?? null, deliveryUnknown: ["failed", "skipped"].includes(job.status) && geoRecoveryMayCharge(job), recoverable: recoverableRound && !recovered.includes(job.id) && !job.has_preserved_answer && ["failed", "skipped"].includes(job.status) })) };
   }
 
   /**
