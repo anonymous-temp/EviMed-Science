@@ -180,7 +180,7 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // is what notices a method being added to one half without a decision about
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
-  // Nine kernel calls, four EviMed probe calls and three scoped skill calls,
+  // Nine kernel calls, five EviMed probe calls and three scoped skill calls,
   // 129 refused methods and the gateway acknowledgement. Browser model
   // selection has its own validated proxy policy; the run's wire still
   // classifies these methods as denied. 0.2.0 added five: the product-usage
@@ -190,7 +190,7 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // on the proxy as well), `remoteAccess/follow` (open there: the page's own
   // access snapshot) and `terminal/attach` in place of `follow`, `resize` and
   // `write`; the adapter calls none of them.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 150);
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 151);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -224,7 +224,7 @@ test("owned plugin probe methods have exact actual Typert registrations and clos
     const probe = await registerPluginProbe(ctx);
     assert.equal(probe.typertRemote.namespace, "evimedPlugins");
     const actual = remoteMethods(probe).map(item => `${probe.typertRemote.namespace}/${item.method}`).sort();
-    assert.deepEqual(actual, ["evimedPlugins/extensionInvocationFacts", "evimedPlugins/status", "evimedPlugins/verify", "evimedPlugins/verifyExtensions"]);
+    assert.deepEqual(actual, ["evimedPlugins/builtin", "evimedPlugins/extensionInvocationFacts", "evimedPlugins/status", "evimedPlugins/verify", "evimedPlugins/verifyExtensions"]);
     assert.deepEqual(SEAMS.wire.unary.filter(method => method.startsWith("evimedPlugins/")).sort(), actual);
     for (const method of actual) {
       assert.ok(ALLOWED_WIRE_METHODS.has(method));

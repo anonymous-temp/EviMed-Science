@@ -7,7 +7,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
 import { Switch } from "@/components/ui/Switch";
-import { Tabs } from "@/components/ui/Tabs";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { Tag } from "@/components/ui/Tag";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { SkillPackagePanel } from "@/components/skills/SkillPackagePanel";
@@ -23,6 +23,7 @@ import {
 import { MissingRecord, orMissing, RecordMissing } from "./MissingRecord";
 import { DrawerSection } from "./PlatformSkillDrawer";
 import { SkillEditor } from "./SkillEditor";
+import { skillActivationText } from "./catalogueModel";
 
 /** The browser downloads a file the way a link would, from a menu item that cannot be one. */
 function download(url: string) {
@@ -66,7 +67,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
   const act = async (work: () => Promise<unknown>) => {
     if (working.current) return; working.current = true;
     setBusy(true); setError(null);
-    try { await work(); if (alive.current) await load(); }
+    try { await work(); if (alive.current) { await load(); onChanged(); } }
     catch (caught) { if (alive.current) setError(productErrorMessage(caught)); }
     finally { working.current = false; if (alive.current) setBusy(false); }
   };
@@ -78,6 +79,11 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
   const defaultSelection = defaults?.payload.skills.find(item => item.skillId === skillId);
   const stale = skill && currentSelection && currentSelection.revision !== skill.revision;
   const staleDefault = skill && defaultSelection && defaultSelection.revision !== skill.revision;
+  useEffect(() => {
+    if (selection?.activation?.phase !== "waiting") return;
+    const timer = setTimeout(() => void load(), 3000);
+    return () => clearTimeout(timer);
+  }, [selection, load]);
   const menu = skill && !editing && (
     <Menu label="更多操作" items={[
       { label: "编辑", icon: Pencil, onSelect: () => { setView("content"); setEditing(true); } },
@@ -94,11 +100,12 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
         <SkillEditor key={skill.revision} initial={{ expectedRevision: skill.revision, title: skill.payload.title, description: skill.payload.description, instructions: skill.payload.instructions }} busy={busy} onSave={value => void save(value)} onCancel={() => setEditing(false)} />
       ) : (
         <div className="flex flex-col gap-6">
-          <Tabs label="技能内容" items={[{ value: "content", label: "内容" }, { value: "versions", label: "版本" }]} value={view} onChange={setView} />
+          <Toolbar label="技能内容" views={{ label: "技能内容", items: [{ value: "content", label: "内容" }, { value: "versions", label: "版本" }], value: view, onChange: next => setView(next as "content" | "versions") }} />
           {view === "content" ? (
             <div className="flex flex-col gap-6">
-              {skill.payload.description && <p className="text-ui text-text-2">{skill.payload.description}</p>}
-              <DrawerSection title="使用">
+              {skill.payload.description && <p className="text-body text-text-2">{skill.payload.description}</p>}
+              <div className="rounded-card bg-surface-1 p-4"><DrawerSection title="使用">
+                <p role="status" className="text-ui text-text-2">{skillActivationText(!!currentSelection, selection?.activation)}</p>
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-3">
                     <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={!!currentSelection} disabled={busy || !selection}
@@ -111,7 +118,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
                     {staleDefault && <Button size="sm" variant="text" disabled={busy || !defaults} onClick={() => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>
                 </div>
-              </DrawerSection>
+              </DrawerSection></div>
               <DrawerSection title="全文"><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-surface-1 p-4 text-ui text-text">{skill.payload.instructions}</pre></DrawerSection>
               {skill.payload.resources.length > 0 && (
                 <DrawerSection title="资源"><List label="技能资源" divided>{skill.payload.resources.map(resource => <ListRow key={`${resource.id}:${resource.path}`} title={resource.path} href={personalSkillResourceUrl(skill.id, skill.revision, resource.id)} />)}</List></DrawerSection>

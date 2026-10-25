@@ -18,6 +18,7 @@
     "optional": [
       "storageDomain",
       "skills",
+      "loader",
       "fs",
       "jobs",
       "web",
@@ -132,6 +133,8 @@
     "@deepseek-ai/dsh-mcp-client": "config-row",
     "@deepseek-ai/dsh-agent-preset": "config-row",
     "@deepseek-ai/dsh-skill-filesystem": "provider-base",
+    "@deepseek-ai/dsh-skill": "provider-base",
+    "@deepseek-ai/dsh-host-plugin-inventory": "provider-base",
     "@deepseek-ai/dsh-compaction-basic": "provider-base",
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
     "@deepseek-ai/dsh-tool-bash": "config-row",
@@ -281,6 +284,7 @@
       "skills/list",
       "agentPresets/list",
       "evimedPlugins/status",
+      "evimedPlugins/builtin",
       "evimedPlugins/verify",
       "evimedPlugins/verifyExtensions",
       "evimedPlugins/extensionInvocationFacts",
@@ -452,6 +456,7 @@
       ],
       "agentPresets/list": [],
       "evimedPlugins/status": [],
+      "evimedPlugins/builtin": [],
       "evimedPlugins/verify": [],
       "evimedPlugins/verifyExtensions": [],
       "evimedPlugins/extensionInvocationFacts": [

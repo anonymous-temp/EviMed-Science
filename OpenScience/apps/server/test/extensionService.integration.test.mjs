@@ -78,6 +78,26 @@ test('remove and retry preserve owned histories and cannot adopt a foreign insta
   assert.equal(history.items[0].removed,true);
   const fresh=await service.install(b,request('b-own'));assert.equal(fresh.installation.effective,false);
 });
+test('removed library installations remain immutable project pins while another selection changes; only disable or removal is permitted',options,async()=>{
+  const entries=[1,2,3].map(index=>({...descriptor,id:`retained-${index}`,coordinate:{kind:'npm',name:`retained-${index}`,version:'1.0.0'},integrity:hash(`retained-${index}`)}));
+  const retained=new ExtensionService(database,{catalogue:entries,access:service.access});
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'retained-project','Retained',1048576)",[a.id]);
+  const installed=[];for(const entry of entries)installed.push(await retained.install(a,{coordinate:entry.coordinate,scope:'library',idempotencyKey:entry.id}));
+  const selections=installed.map(item=>({installationId:item.installation.id,enabled:true,settings:{rowLimit:20},connectionRefs:[]}));
+  const first=await retained.saveProject(a,'retained-project',{expectedRevision:0,selections});
+  for(const item of installed.slice(0,2))await retained.remove(a,item.installation.id,{expectedRevision:1});
+  const changed=await retained.saveProject(a,'retained-project',{expectedRevision:first.revision,selections:[selections[0],selections[1],{...selections[2],enabled:false}]});
+  assert.equal(changed.selections.length,3);assert.equal(changed.selections[2].enabled,false);
+  for(const original of first.selections.slice(0,2)){
+    const pin=changed.selections.find(item=>item.installationId===original.installationId);
+    assert.deepEqual(pin.coordinate,original.coordinate);assert.equal(pin.integrity,original.integrity);
+  }
+  await assert.rejects(retained.saveProject(a,'retained-project',{expectedRevision:changed.revision,selections:[{...selections[0],settings:{rowLimit:30}},selections[1],selections[2]]}),{status:409});
+  const disabled=await retained.saveProject(a,'retained-project',{expectedRevision:changed.revision,selections:[{...selections[0],enabled:false},selections[1],selections[2]]});
+  await assert.rejects(retained.saveProject(a,'retained-project',{expectedRevision:disabled.revision,selections}),{status:409});
+  const removed=await retained.saveProject(a,'retained-project',{expectedRevision:disabled.revision,selections:[selections[1],selections[2]]});
+  assert.equal(removed.selections.length,2);
+});
 test('project installation saves desired activation atomically without claiming a native generation',options,async()=>{
   const added=await service.install(a,{...request('project-default'),scope:'project',projectId:'p2'});
   const state=await service.project(a,'p2');assert.equal(state.selections.length,1);

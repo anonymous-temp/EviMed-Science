@@ -1710,16 +1710,33 @@
       "id": "curated/biosequence-analysis",
       "name": "biosequence-analysis",
       "origin": "curated",
-      "source": {"kind":"derived","path":"biopython","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/biopython",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:4529e8872fa33e7af4a0f3d7042dde7cbb52b9ba69d47b7195453584b30e3dad",
+      "digest": "sha256:d2dea76b4fe08bb261d64536eaeababacf36ff1112baddbe5394dc21d8d24270",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agents/openai.yaml","sha256":"56cc41590230210038fa61b796d43e37f10aae1025006031e839bd56fb1fddb3"}],
+      "references": [
+        {"path":"agents/openai.yaml","sha256":"56cc41590230210038fa61b796d43e37f10aae1025006031e839bd56fb1fddb3"},
+        {"path":"references/advanced.md","sha256":"d1cf9047ec67c87fe82da2665eabecf09dce95a258691570ea664de097763493"},
+        {"path":"references/alignment.md","sha256":"e47263f09d365b320099e8939488496257b83e157270276c73835ae884e155be"},
+        {"path":"references/blast.md","sha256":"a0b72ff4e89e91ab766a4f327f0ae440c70fc7277ad151ca00206078dfc55757"},
+        {"path":"references/databases.md","sha256":"a64a4c7f32c14b7880c10cde4677c45938c79bfd05bafe7ca9afb7f8d9476099"},
+        {"path":"references/phylogenetics.md","sha256":"c940bfead88e0b7f4e3d6da192f4a7790cda927ca0547548a828da4c3ad3f129"},
+        {"path":"references/review.md","sha256":"8cc46d96da575ce554088ebf55609c8562c65c10fc3aaeea595bbfddb6649cd9"},
+        {"path":"references/sequence_io.md","sha256":"2fba4dbe55dbddd08cc221b0d8aa763efa02a7bb89da85ba88e3a4a2294ea251"},
+        {"path":"references/structure.md","sha256":"f694063b158779cd816a410851e53c2c1bfd565341a7dff94dceaa82b98f5559"}
+      ],
       "dependencies": [
+        {"kind":"python-package","name":"Bio","supply":"image","optional":true,"basis":"observed","evidence":"SKILL.md (instructions)"},
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {
@@ -2321,15 +2338,52 @@
       "id": "curated/hypothesis-development",
       "name": "hypothesis-development",
       "origin": "curated",
-      "source": {"kind":"derived","path":"hypogenic+hypothesis-generation","package":"scientific-agent-skills"},
+      "version": "2.4",
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/hypothesis-generation",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:195ab52dfbb08d5c3c7ff47bf6667704228c5691b8226fc8d800d91254ee5ead",
+      "digest": "sha256:464514c28a584448dee2d061430735f0e5cc0cc9df72d58d7a4f0364123621c4",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agents/openai.yaml","sha256":"10fd780a98c018225c01f6e110d5a675548a4c907c98e0bcbaec34aa3a5fdb16"}],
+      "scripts": [
+        {"path":"scripts/_common.py","sha256":"7a41a5f9b97092ee188d45959f38f92a4215d4f298dd04fd0f2817e9f607e74e"},
+        {"path":"scripts/audit_evidence_ledger.py","sha256":"18fc0a947fec34ea573eb824f540ce6ccb351aed5e08fc80ae476c2150aef2bb"},
+        {"path":"scripts/check_falsification_controls.py","sha256":"9baea063c8ea22ed6083102d16104e14e6a7e5c139dfedc4a0620a5e7717d934"},
+        {"path":"scripts/check_operationalization.py","sha256":"efc093f4b58b23e095238e60badef04d34dfb012b7958e1326a1f7d58ed5edd6"},
+        {"path":"scripts/generate_preregistration_scaffold.py","sha256":"c5c8a43772e11fa6b6011dc7593540f73dd838228499c093bddf4764da503f04"},
+        {"path":"scripts/lint_causal_claims.py","sha256":"561186e71f7c0b573f7ba45ef0009460c1398048929ed55fad53a65cda56dafe"},
+        {"path":"scripts/validate_hypothesis_schema.py","sha256":"2bf9d43471d0404c8bb13e57910d3448dcaf4ad86c022d3c5975b70988589801"},
+        {"path":"scripts/validate_prediction_matrix.py","sha256":"3fcf97f1f139e5c6fc95a128cbddf4f3e308317503f4c5dd6fbf02f944342ec0"}
+      ],
+      "references": [
+        {"path":"agents/openai.yaml","sha256":"10fd780a98c018225c01f6e110d5a675548a4c907c98e0bcbaec34aa3a5fdb16"},
+        {"path":"assets/evidence_ledger_template.csv","sha256":"1ec5cc4ada96e05041c67865bcdfd3bb0a4f7cc92f24ca1ce7a826028a41d3de"},
+        {"path":"assets/falsification_controls_template.json","sha256":"beea4e2be3b5abdad1014934a7c2fe1f9f00f07b3270119cfeb8134a94603e26"},
+        {"path":"assets/hypothesis_record_template.json","sha256":"73f080a6696c415f228b38100bb7b0f6bc89ad2c7997bf50d62b585b0bc8fe0c"},
+        {"path":"assets/operationalization_template.json","sha256":"36ecdbd91c022554e60db646b548f5694d8409277a5b15fdf309d86f8c1e3070"},
+        {"path":"assets/prediction_rival_matrix_template.csv","sha256":"ccf6cb53c048a9f4d60788a8ec73c5d683ec549dab7df95b30282f6c0963653a"},
+        {"path":"assets/preregistration_scaffold_template.md","sha256":"fa577c7413435054ed927a9a925abc2f3a99373e55431eb6407425670276d87b"},
+        {"path":"assets/search_boundary_template.json","sha256":"b885d4e252c0df7010d8fca3dab7e3fef49e9f386b7a1b15240531ce374bf6ec"},
+        {"path":"assets/source_ledger.csv","sha256":"9543f313b9cffec9bd2cf39376edca86d39c10635b447fa7689147931d8c4813"},
+        {"path":"references/causal_inference_and_claims.md","sha256":"0162cd131dd12c6235a3b78c033c685abd80e98d5f40f9fb297b4d8104f85122"},
+        {"path":"references/concepts_and_workflow.md","sha256":"a86a8f464fb555212e79bf13e307f3c129e9c853069856eb3c93c3c8a60bb7fc"},
+        {"path":"references/ethics_safety_and_ai.md","sha256":"81d5691cd46d646ead2db50635bdcc07755e5f738b040c2ad707ac3b0eda034d"},
+        {"path":"references/experimental_design_patterns.md","sha256":"83c0c75c7b1edadc92e4ae23607624277c19955fc6a71ee0313b6efc51e4e939"},
+        {"path":"references/hypothesis_quality_criteria.md","sha256":"12698b549f77a6ee64807b959093f39628fe3d47aa9a00a9b235681bf0b09269"},
+        {"path":"references/literature_search_strategies.md","sha256":"2a34fa0645f854093aea2d867059bae563c795f1935ba4b9c6d494bdc389fdcb"},
+        {"path":"references/preregistration_and_open_science.md","sha256":"33788e3cd4eeb62e80e9fb952e3bfb532320d373e7b00ed7c0a75b4200ccdbf4"},
+        {"path":"references/security_validation.md","sha256":"e816a06c0665e083aacae5dfcad20351a2392e9ce211f80a4e7a5a9d53e21be9"},
+        {"path":"references/source_ledger.md","sha256":"b0281b810134599210f905f967267f0b44638676f673fca7528275f8e5042e55"},
+        {"path":"references/tool_reference.md","sha256":"e701b78cae8bc73598151844670928c5c234b0baf03e67673fa3532e18ea835d"}
+      ],
       "dependencies": [
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
@@ -2360,6 +2414,87 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["results.json","hypothesis-development-report.md","execution-receipt.json"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "audit_evidence_ledger",
+          "kind": "script",
+          "summary": "Audit a local evidence ledger and dated search boundary without networking.",
+          "entrypoint": "scripts/audit_evidence_ledger.py",
+          "params": [
+            {"name":"ledger","type":"string","required":true,"description":"Local evidence ledger CSV"},
+            {"name":"search_boundary","type":"string","required":true,"description":"Local search-boundary JSON"},
+            {"name":"--record","type":"string","description":"Optional local hypothesis record JSON for cross-checks"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "check_falsification_controls",
+          "kind": "script",
+          "summary": "Audit falsifiers, discriminating tests, nulls, and controls without scoring.",
+          "entrypoint": "scripts/check_falsification_controls.py",
+          "params": [
+            {"name":"checklist","type":"string","required":true,"description":"Local falsification/control checklist JSON"},
+            {"name":"--record","type":"string","description":"Optional local hypothesis record JSON for cross-checks"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "check_operationalization",
+          "kind": "script",
+          "summary": "Audit a local operationalization and measurement checklist without scoring.",
+          "entrypoint": "scripts/check_operationalization.py",
+          "params": [
+            {"name":"checklist","type":"string","required":true,"description":"Local operationalization checklist JSON"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "generate_preregistration_scaffold",
+          "kind": "script",
+          "summary": "Generate a deterministic local Markdown preregistration scaffold.",
+          "entrypoint": "scripts/generate_preregistration_scaffold.py",
+          "params": [
+            {"name":"record","type":"string","required":true,"description":"Local hypothesis record JSON"},
+            {"name":"--output","type":"string","required":true,"description":"Output Markdown path"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "lint_causal_claims",
+          "kind": "script",
+          "summary": "Lexically lint causal versus associational claims in bounded Markdown.",
+          "entrypoint": "scripts/lint_causal_claims.py",
+          "params": [
+            {"name":"document","type":"string","required":true,"description":"Local Markdown document"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "validate_hypothesis_schema",
+          "kind": "script",
+          "summary": "Validate a structured hypothesis record without judging scientific merit.",
+          "entrypoint": "scripts/validate_hypothesis_schema.py",
+          "params": [
+            {"name":"record","type":"string","required":true,"description":"Local hypothesis record JSON"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "validate_prediction_matrix",
+          "kind": "script",
+          "summary": "Validate a prediction/rival-hypothesis CSV without ranking candidates.",
+          "entrypoint": "scripts/validate_prediction_matrix.py",
+          "params": [
+            {"name":"matrix","type":"string","required":true,"description":"Local prediction/rival matrix CSV"},
+            {"name":"--record","type":"string","description":"Optional local hypothesis record JSON for cross-checks"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
         }
       ]
     },
@@ -2369,7 +2504,13 @@
       "name": "markdown-mermaid-writing",
       "origin": "curated",
       "version": "1.3",
-      "source": {"kind":"derived","path":"markdown-mermaid-writing","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/markdown-mermaid-writing",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -2549,7 +2690,13 @@
       "name": "matplotlib",
       "origin": "curated",
       "version": "1.4",
-      "source": {"kind":"derived","path":"matplotlib","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/matplotlib",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -2597,6 +2744,36 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["figure.png","figure.svg"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "plot_template",
+          "kind": "script",
+          "entrypoint": "scripts/plot_template.py",
+          "params": [
+            {
+              "name": "--plot-type",
+              "type": "string",
+              "default": "all",
+              "values": ["line","scatter","bar","histogram","heatmap","contour","box","violin","3d","all"],
+              "description": "Type of plot to create"
+            },
+            {"name":"--style","type":"string","default":"default","description":"Matplotlib style to use"},
+            {"name":"--output","type":"string","default":"plot.png","description":"Output filename"},
+            {"name":"--no-show","type":"boolean","description":"Save without opening an interactive window"}
+          ]
+        },
+        {
+          "name": "style_configurator",
+          "kind": "script",
+          "entrypoint": "scripts/style_configurator.py",
+          "params": [
+            {"name":"--preset","type":"string","description":"Use a predefined style preset"},
+            {"name":"--output","type":"string","description":"Save style to .mplstyle file"},
+            {"name":"--preview","type":"boolean","description":"Show style preview"},
+            {"name":"--list","type":"boolean","description":"List available presets"},
+            {"name":"--interactive","type":"boolean","description":"Run in interactive mode"},
+            {"name":"--no-show","type":"boolean","description":"Save a requested preview without opening a window"}
+          ]
         }
       ]
     },
@@ -2700,7 +2877,13 @@
       "name": "pathway-enrichment",
       "origin": "curated",
       "version": "1.3",
-      "source": {"kind":"derived","path":"pathway-enrichment","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/pathway-enrichment",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -2747,6 +2930,27 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["results.json","pathway-enrichment-report.md","execution-receipt.json"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "run_enrichment",
+          "kind": "script",
+          "entrypoint": "scripts/run_enrichment.py",
+          "params": [
+            {"name":"--libraries","type":"string","description":"Enrichr names or local GMT paths; human default: Hallmark 2020 + GO BP 2026."},
+            {"name":"--organism","type":"string","default":"human","values":["human","mouse","fly","yeast","worm","fish"]},
+            {"name":"--outdir","type":"string","default":"enrichment_results"},
+            {"name":"--fdr","type":"number","default":0.05},
+            {"name":"--genes","type":"string","required":true,"description":"Text gene list or CSV/TSV with header."},
+            {"name":"--background","type":"string","description":"Tested gene universe; required with local GMT."},
+            {"name":"--deseq2","type":"string","description":"CSV with gene index and signed Wald stat (not LRT stat)."},
+            {"name":"--rnk","type":"string","description":"Two columns: gene,score; comma or tab separated."},
+            {"name":"--min-size","type":"integer","default":15},
+            {"name":"--max-size","type":"integer","default":500},
+            {"name":"--permutations","type":"integer","default":1000},
+            {"name":"--seed","type":"integer","default":123},
+            {"name":"--threads","type":"integer","default":4}
+          ],
+          "limits": ["必须且只能给出其中一个：--deseq2、--rnk"]
         }
       ]
     },
@@ -2896,15 +3100,39 @@
       "id": "curated/research-grant-development",
       "name": "research-grant-development",
       "origin": "curated",
-      "source": {"kind":"derived","path":"research-grants","package":"scientific-agent-skills"},
+      "version": "1.5",
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/research-grants",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:eb7dc366fd08711d94a486c3212a8554ee170d6f8517baac9229ef67a929d215",
+      "digest": "sha256:258bbf4f1884da4d885e94f40f13627e406bb0635c6b38a424914d515fb94f8d",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agents/openai.yaml","sha256":"3470232f46eb8db6469c19ac5c50b882a6af46adb64a9c4ccc88297e0b5a2ce3"}],
+      "references": [
+        {"path":"agents/openai.yaml","sha256":"3470232f46eb8db6469c19ac5c50b882a6af46adb64a9c4ccc88297e0b5a2ce3"},
+        {"path":"assets/budget_justification_template.md","sha256":"a65ce61ac86ff3971f64d735854f8b9b53af93d3c0614e7c391d908c8b28ff45"},
+        {"path":"assets/nih_specific_aims_template.md","sha256":"f960b6410bf6c4a8ebfcb23d069ccdaae5692c38b61d55662ce21a06eaa49696"},
+        {"path":"assets/nsf_project_summary_template.md","sha256":"a8c5c638df67fa54f8bb8ab8c4d92bc9a10c471afcbf73e15b6e173c33d8c788"},
+        {"path":"references/README.md","sha256":"c1dc961d3ea576cd4d06e76a47d1a4236b7e9d77bf90a612302125938db9bc5c"},
+        {"path":"references/broader_impacts.md","sha256":"de888b798004a3c0174d8dfd99626c8654a9ca53f78e2dcd4d2e242bed9873e1"},
+        {"path":"references/core_components.md","sha256":"eefc46d059c3f6bffa329250f5c796fe1a86cc552fb766672fad834763eae28a"},
+        {"path":"references/darpa_guidelines.md","sha256":"f7bc5c2d0b461275599a157a074a90b71169415ebdeea3417549952b09598fc6"},
+        {"path":"references/doe_guidelines.md","sha256":"79e4afebf7fb71dabfc661144913d0d6af9583072e52b8405a67f2932b5ac5d7"},
+        {"path":"references/nih_guidelines.md","sha256":"ff3f8dda0a2f77743401b44caff6c4f94471fb0348e2d4abf4f7b86e8874f285"},
+        {"path":"references/nsf_guidelines.md","sha256":"78fe17b0e5798767e6ff9074f28d6b8d154dbe256b9d36dcbdaa78fbd6b73f24"},
+        {"path":"references/nstc_guidelines.md","sha256":"852b3bdcd990a17b9164680b4bf344f0800e551d4126310531f7c1d2be7f6c35"},
+        {"path":"references/proposal_types_and_resubmission.md","sha256":"267d3c8688407620c3cf633a0b4e18730c4d65b5380531796d1e8b4a4da9db1f"},
+        {"path":"references/review_criteria.md","sha256":"e6d6b9822ee6cb744eff39a79a7502c3ce6668c76ae49a5f652793421e81a458"},
+        {"path":"references/specific_aims_guide.md","sha256":"58e4bd4e03dffe99476454a2af0b92ea79eff2b8ef897fa40207e8d3403bc7a6"},
+        {"path":"references/writing_principles.md","sha256":"718b079d8f93df8ce4bd44767b3d794ddde7ebe5901a9957caf7b2ace9c5bda8"}
+      ],
       "dependencies": [
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
@@ -3179,7 +3407,13 @@
       "name": "statistical-power",
       "origin": "curated",
       "version": "1.3",
-      "source": {"kind":"derived","path":"statistical-power","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/statistical-power",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -3235,6 +3469,21 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["power-analysis.md","power-curve.csv","power-curve.png"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "export_power_analysis",
+          "kind": "script",
+          "summary": "Export a reproducible two-group power analysis as Markdown, CSV, and PNG.",
+          "entrypoint": "scripts/export_power_analysis.py",
+          "params": [
+            {"name":"--output-dir","type":"path","required":true},
+            {"name":"--effect-size","type":"string","default":0.5},
+            {"name":"--alpha","type":"string","default":0.05},
+            {"name":"--target-power","type":"string","default":0.8},
+            {"name":"--minimum-n","type":"string","default":10},
+            {"name":"--maximum-n","type":"string","default":120},
+            {"name":"--step","type":"string","default":5}
+          ]
         }
       ]
     },

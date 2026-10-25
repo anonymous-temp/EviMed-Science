@@ -1562,6 +1562,7 @@ export { parsePersonalSkill, createPersonalSkillProvider, validatePersonalSkillR
 export { createNativeExtensionPreparer, createDisposableNativeExtensionPreparer } from './src/extensionPreparation.mjs'
 
 export { createScopedSkillCatalogue, registerScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from './src/scopedSkillCatalogue.mjs'
+export { registerProjectSkillProvider } from './src/projectSkills.mjs'
 
 export { registerHostedLoopx, verifyHostedLoopx } from './src/loopxBootstrap.mjs'
 

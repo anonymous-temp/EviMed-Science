@@ -8,6 +8,17 @@ import SEAMS from '../seam-manifest.json' with { type: 'json' }
 /** The citation bundle this runtime is built with: the seam manifest names it, and a test holds the name equal to `deps-version.json`. */
 const CITE_VERSION = SEAMS.plugins['dsh-cite']
 export const CITATION_TOOLS = Object.freeze(['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health'])
+/** Actual Loader state of the two admitted optional client integrations; no profile administration is exposed.
+ * @param {any} ctx */
+export async function builtinPluginState(ctx) {
+  const { readPluginInventory } = await loadHarnessModule('@deepseek-ai/dsh-host-plugin-inventory')
+  const inventory = await readPluginInventory(ctx)
+  return { items: Object.entries({ annotation: 'dsh-annotation', mermaid: 'ui-mermaid' }).map(([id, rowId]) => {
+    const rows = inventory.entries.filter((/** @type {any} */ entry) => entry.entryId === rowId)
+    if (rows.length !== 1 || rows[0].enabled && rows[0].fiberPhase !== 'active') throw probeFailure('extension_probe_config_invalid')
+    return { id, enabled: rows[0].enabled }
+  }) }
+}
 /** Read the installed package selected by the bundle's own module resolver.
  * @param {string} manifestUrl */
 export async function installedCitationVersion(manifestUrl) {
@@ -252,8 +263,8 @@ export async function verifyCitationAgent(ctx, agent) {
 }
 
 /** Bounded platform probes cross the authenticated kernel wire.
- * @param {any} ctx */
-export async function registerPluginProbe(ctx) {
+ * @param {any} ctx @param {{disabledClientBundles?:string[]}} [options] */
+export async function registerPluginProbe(ctx, options = {}) {
   const { TypertRemoteService, Remote } = await loadHarnessModule('@deepseek-ai/dsh-typert-protocol')
   /** @type {((this:any)=>void)[]} */
   const initializers = []
@@ -263,6 +274,12 @@ export async function registerPluginProbe(ctx) {
       for (const initialize of initializers) initialize.call(this)
     }
     async status() { return { busy: await pluginRuntimeBusy(ctx) } }
+    async builtin() {
+      const state = await builtinPluginState(ctx)
+      const disabled = options.disabledClientBundles
+      if (disabled && state.items.some(item => item.enabled === disabled.includes(item.id))) throw probeFailure('extension_probe_config_invalid')
+      return state
+    }
     async verify() { return this.probe(false) }
     async verifyExtensions() { return this.probe(true) }
     /** @param {{sessionId:string}} request */
@@ -301,7 +318,7 @@ export async function registerPluginProbe(ctx) {
       } finally { await rm(workspace, { recursive: true, force: true }) }
     }
   }
-  for (const name of ['status', 'verify', 'verifyExtensions', 'extensionInvocationFacts']) Remote(PluginProbe.prototype[name], {
+  for (const name of ['status', 'builtin', 'verify', 'verifyExtensions', 'extensionInvocationFacts']) Remote(PluginProbe.prototype[name], {
     kind: 'method', name, static: false, private: false,
     addInitializer: (/** @type {(this:any)=>void} */ initialize) => initializers.push(initialize),
   })

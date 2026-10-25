@@ -152,9 +152,10 @@ function closingParenthesis(text, open) {
  * anything but a literal is read as far as its literal parts go and no further.
  *
  * @param {string} source
+ * @param {{ includePositionals?: boolean }} [options]
  * @returns {{ params: Record<string, any>[], groups: { required: boolean, flags: string[] }[] }}
  */
-export function readArgparse(source) {
+export function readArgparse(source, { includePositionals = false } = {}) {
   /** @type {Map<string, { required: boolean, flags: string[] }>} */ const groups = new Map();
   for (const match of source.matchAll(/^\s*(\w+)\s*=\s*\w+\.add_mutually_exclusive_group\(([^)]*)\)/gmu)) groups.set(match[1], { required: /required\s*=\s*True/u.test(match[2]), flags: [] });
   /** @type {Record<string, any>[]} */ const params = [];
@@ -163,7 +164,10 @@ export function readArgparse(source) {
     const close = closingParenthesis(source, open);
     if (close < 0) continue;
     const body = source.slice(open + 1, close);
-    const flag = /^\s*["'](--[A-Za-z][A-Za-z0-9-]*)["']/u.exec(body)?.[1];
+    // argparse aliases are positional strings before the keyword arguments;
+    // prefer the long spelling, and expose positional inputs only on request.
+    const names = [...(/^\s*((?:["'][^"']+["']\s*,?\s*)+)/u.exec(body)?.[1] ?? "").matchAll(/["']([^"']+)["']/gu)].map((name) => name[1]);
+    const flag = names.find((name) => name.startsWith("--")) ?? (includePositionals && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(names[0] ?? "") ? names[0] : null);
     if (!flag) continue;
     const rest = body.slice(body.indexOf(flag) + flag.length);
     const group = groups.get(match[1]);
@@ -174,7 +178,7 @@ export function readArgparse(source) {
     const help = /help\s*=\s*(?:"([^"]*)"|'([^']*)')/u.exec(rest);
     const param = {
       name: flag, type,
-      ...(/required\s*=\s*True/u.test(rest) && !group ? { required: true } : {}),
+      ...((!flag.startsWith("--") && !/nargs\s*=/u.test(rest) || /required\s*=\s*True/u.test(rest) && !group) ? { required: true } : {}),
       ...(fallback ? { default: fallback[3] !== undefined ? Number(fallback[3]) : (fallback[1] ?? fallback[2]) } : {}),
       ...(choices ? { values: [...choices.matchAll(/["']([^"']+)["']/gu)].map((value) => value[1]) } : {}),
       ...(help ? { description: help[1] ?? help[2] } : {}),
@@ -291,7 +295,8 @@ export async function collectSkillPackages(root = repoRoot) {
     });
   }
 
-  // curated: derived from a reviewed upstream pack; the executor's flags are read from the executor.
+  // Held packages are derived baselines; refreshed ones retain a complete pinned
+  // counterpart plus the hosted edits its inventory records.
   const executorSource = await fs.readFile(path.join(curatedRoot, "_runtime/execute_skill.py"), "utf8");
   const executor = readArgparse(executorSource);
   const template = (await readJson(path.join(curatedRoot, "_runtime/operations.json")));
@@ -308,6 +313,7 @@ export async function collectSkillPackages(root = repoRoot) {
   for (const skill of inventory.skills) {
     const contract = inventory.policy.delivery.executable[skill.name];
     const [, upstreamPath] = /^[^/]+\/(.+)$/u.exec(skill.derivedFrom ?? "") ?? [];
+    const refreshed = skill.upstreamReview?.decision === "refreshed";
     const params = executor.params.map((flag) => (flag.name === "--skill"
       ? { ...flag, required: true, values: [skill.name], description: "固定为这个技能的名称" }
       : { ...flag, ...(described.has(flag.name) ? { description: template.operation.params.find((/** @type {any} */ param) => param.name === flag.name).description } : {}),
@@ -325,10 +331,24 @@ export async function collectSkillPackages(root = repoRoot) {
       const python = name && Object.hasOwn(image.python, name.toLowerCase());
       return { kind: python ? "python-package" : "system-tool", name, constraint: constraint ?? null, basis: "declared", evidence: "inventory.json: delivery contract" };
     });
+    const nativeOperations = [];
+    if (refreshed) {
+      for (const file of await packageFiles(path.join(curatedRoot, skill.name))) {
+        // A module without a CLI parser is support code, not an operation.
+        if (!file.path.startsWith("scripts/") || !file.path.endsWith(".py") || !file.text?.includes("argparse.ArgumentParser(")) continue;
+        const parsed = readArgparse(file.text, { includePositionals: true });
+        const summary = /^\s*(?:#![^\n]*\n)?\s*"""([\s\S]*?)"""/u.exec(file.text)?.[1].replace(/\s+/gu, " ").trim();
+        nativeOperations.push({
+          name: file.path.slice("scripts/".length, -".py".length), kind: "script", entrypoint: file.path,
+          summary, params: parsed.params, limits: groupLimits(parsed.groups),
+        });
+      }
+    }
     await add({
       origin: "curated", name: skill.name, dir: path.join(curatedRoot, skill.name),
-      source: { kind: "derived", package: inventory.source.package, path: upstreamPath ?? null },
-      licence: curatedLicence, dependencies: [...contractDependencies, ...declared], operations: operation ? [operation] : [],
+      source: refreshed ? { kind: "repository", repository: inventory.source.repository, commit: inventory.source.pin.commit, package: inventory.source.package, path: `skills/${upstreamPath}` }
+        : { kind: "derived", package: inventory.source.package, path: upstreamPath ?? null },
+      licence: curatedLicence, dependencies: [...contractDependencies, ...declared], operations: [...(operation ? [operation] : []), ...nativeOperations],
     });
   }
 

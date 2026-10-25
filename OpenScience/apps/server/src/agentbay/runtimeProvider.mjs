@@ -1,4 +1,6 @@
 import {platformSkillGenerationRoot,verifyPlatformSkillGeneration} from "../platformSkillSupply.mjs";
+import { verifyPersonalSkillGeneration } from '../personalSkillGenerationService.mjs';
+import { openScopedFileNoFollow, readStableFileHandle } from '../security.mjs';
 /**
  * The runtime as an Alibaba AgentBay cloud session (plan §3.1): one session per
  * project, a VM of its own with the EviMed runtime image, reached only through
@@ -470,9 +472,11 @@ export class AgentBayRuntimeProvider {
     return result.stdout.slice(-4096);
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
-  async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
+  async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
     this.assertConfigured();
+    const identity = await this.manager.inspectRuntimeImage();
+    const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference, identity.imageId) : null;
     // A session that just ended may still be coming home; its Context copy
     // and manifests are what this start reads.
     await this.exiting.get(this.manager.key(project));
@@ -481,7 +485,8 @@ export class AgentBayRuntimeProvider {
     let existing = null;
     if (record) {
       const found = await this.client.getSession(record.sessionId).catch(() => null);
-      if (found && record.release === release && record.imageId === this.config.agentbayImageId && record.bridgeSecret) {
+      if (found && record.release === release && record.imageId === this.config.agentbayImageId && record.bridgeSecret
+        && (record.personalGenerationHash ?? null) === (personal?.reference.generationHash ?? null)) {
         existing = found;
       } else if (found) {
         // A session of another release or image: bring its work home and
@@ -512,6 +517,7 @@ export class AgentBayRuntimeProvider {
       const bridgeSecret = randomBytes(32).toString("base64url");
       await this.writeRecord(project, {
         sessionId: created.sessionId, release, imageId: this.config.agentbayImageId, bridgeSecret,
+        personalGenerationHash: personal?.reference.generationHash ?? null,
         contexts, createdAt: new Date().toISOString(),
       });
       agentbay = { sessionId: created.sessionId, session: created.session, contexts, bridgeSecret, browserSessionSecret: null, modelGateway: null, reattached: false };
@@ -527,6 +533,8 @@ export class AgentBayRuntimeProvider {
       capsuleMethodCount: capsuleMethodsMounted,
       capsuleMethodsRuntimeDir: SESSION_PATHS.capsuleMethods,
       pluginConfig,
+      personalSkillGeneration: personal ? { ...personalSkillGeneration, platformSkills: personal.platformSkills } : null,
+      personalSkillsRuntimeDir: personal ? `/opt/evimed/personal-skill-generations/${personal.reference.ownerHash}/${personal.reference.projectHash}/${personal.reference.generationHash}/skills` : '/opt/evimed/personal-skills',
       platformSkillGeneration,
       platformSkillsRuntimeDir: platformSkillGeneration ? `/opt/evimed/platform-skill-generations/${platformSkillGeneration.reference.generationHash}/skills` : "",
       gateways: publicRuntimeGatewayUrls(this.config),
@@ -578,6 +586,7 @@ export class AgentBayRuntimeProvider {
     }
     files.set("bridge.secret", `${ab.bridgeSecret}\n`);
     files.set("kernel.env", renderKernelEnvironment(this.kernelEnvironment(project, plan)));
+    if (plan.personalSkillGeneration?.reference) await this.syncPersonalGeneration(project, plan);
     if (plan.platformSkillGeneration) {
       const selected = await verifyPlatformSkillGeneration(this.config, plan.platformSkillGeneration.reference);
       const host = platformSkillGenerationRoot(this.config, selected.reference);
@@ -625,6 +634,10 @@ export class AgentBayRuntimeProvider {
         presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
         capabilitiesDir: "/opt/evimed/capabilities",
         capabilitySkillsDir: "/opt/evimed/capability-skills",
+        personalSkillsDir: plan.personalSkillsRuntimeDir ?? '/opt/evimed/personal-skills',
+        disabledPlatformSkills: plan.personalSkillGeneration?.platformSkills?.disabled ?? [],
+        disabledClientBundles: [...new Set([...(plan.personalSkillGeneration?.platformSkills?.disabledPlugins ?? []),
+          ...(config.runtimeAnnotationEnabled === false ? ['annotation'] : []), ...(config.runtimeMermaidEnabled === false ? ['mermaid'] : [])])],
         platformSkillsDir: plan.platformSkillsRuntimeDir ?? "",
         evolutionGatewayUrl: plan.platformSkillGeneration ? gateways.evolution : "",
         capsuleMethodsDir: plan.capsuleMethodCount ? SESSION_PATHS.capsuleMethods : "",
@@ -662,6 +675,30 @@ export class AgentBayRuntimeProvider {
         },
       }),
     };
+  }
+
+  /** The same verified immutable projection as Docker, transferred as bytes outside every customer workspace.
+   * Base64 staging uses the existing root-only upload transport; no skill body is ever evaluated as a command.
+   * @param {any} project @param {any} plan */
+  async syncPersonalGeneration(project, plan) {
+    const image = await this.manager.inspectRuntimeImage();
+    const selected = await verifyPersonalSkillGeneration(this.config, project, plan.personalSkillGeneration.reference, image.imageId);
+    const quote = value => `'${String(value).replace(/'/g, "'\\''")}'`;
+    const remoteRoot = `/opt/evimed/personal-skill-generations/${selected.reference.ownerHash}/${selected.reference.projectHash}/${selected.reference.generationHash}/skills`;
+    if (plan.personalSkillsRuntimeDir !== remoteRoot) throw new HttpError(400, 'extension_contract_invalid', 'Invalid personal skill projection.');
+    for (const file of selected.files) {
+      const relative = file.path.slice('skills/'.length), target = `${remoteRoot}/${relative}`, staged = `/run/evimed/uploads/${randomBytes(12).toString('hex')}.b64`;
+      const opened = await openScopedFileNoFollow(this.config.dataDir, path.join(selected.root, file.path));
+      let bytes;
+      try { bytes = await readStableFileHandle(opened.handle, opened.stat); }
+      finally { await opened.handle.close(); }
+      if (`sha256:${createHash('sha256').update(bytes).digest('hex')}` !== file.digest) throw new HttpError(400, 'extension_contract_invalid', 'The selected skill bytes changed.');
+      const made = await this.command(plan.agentbay.session, `install -d -o root -g root -m 0700 /run/evimed/uploads && install -d -o root -g root -m 0755 ${quote(path.posix.dirname(target))}`);
+      if (!made.ok) throw new HttpError(502, 'agentbay_file_write_failed', 'The immutable personal skill directory could not be prepared.');
+      await this.writeSessionFile(plan.agentbay.session, staged, bytes.toString('base64'));
+      const written = await this.command(plan.agentbay.session, `base64 -d ${quote(staged)} > ${quote(target + '.part')} && chmod 0444 ${quote(target + '.part')} && chown 0:0 ${quote(target + '.part')} && mv -f ${quote(target + '.part')} ${quote(target)} && sha256sum ${quote(target)}; rc=$?; rm -f ${quote(staged)}; exit $rc`);
+      if (!written.ok || written.stdout.trim().split(/\s+/)[0] !== file.digest.slice(7)) throw new HttpError(502, 'agentbay_file_write_failed', 'The immutable personal skill bytes could not be verified.');
+    }
   }
 
   /** The project's materialized capsule methods as one text bundle the

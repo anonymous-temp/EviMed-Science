@@ -5,6 +5,7 @@ import { canonicalJson, extensionGenerationIdentity, personalSkillName, canonica
 import { ProductDocuments, ProductJobs } from './productStore.mjs'
 import { selectPersonalSkillMounts } from './personalSkillMount.mjs'
 import { HttpError, openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle, writeFileExclusiveNoFollow, assertProjectCapacity, directorySize } from './security.mjs'
+import { normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins, platformSkillRequirement } from '@evimed/domain/platform-skill-policy'
 
 export const PERSONAL_SKILLS_RUNTIME_DIR = '/opt/evimed/personal-skills'
 const sha = value => createHash('sha256').update(value).digest('hex')
@@ -13,9 +14,10 @@ const DIGEST = /^sha256:[a-f0-9]{64}$/u
 const fail = () => new HttpError(400, 'extension_contract_invalid', 'The personal skill generation is invalid.')
 const stateId = project => `personal-skills:project:${project.id}`
 /** Domain identity plus authoritative account/project epochs and the selection CAS version.
- * @param {any} identity @param {any} scope @param {number} selectionRevision */
-const generationIdentity = (identity, scope, selectionRevision) => sha(canonicalJson({
+ * @param {any} identity @param {any} scope @param {number} selectionRevision @param {any} [platformSkills] */
+const generationIdentity = (identity, scope, selectionRevision, platformSkills) => sha(canonicalJson({
   identity: extensionGenerationIdentity(identity, { ownerId: identity.ownerId, projectId: identity.projectId }, sha), scope, selectionRevision,
+  ...(platformSkills ? { platformSkills } : {}),
 }))
 
 /** The private controller never accepts an arbitrary mount or another owner's reference. @param {any} project @param {any} value */
@@ -62,13 +64,18 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
   finally { await input.handle.close() }
   let manifest
   try { manifest = JSON.parse(bytes.toString('utf8')) } catch { throw fail() }
-  if (Object.keys(manifest).sort().join(',') !== 'files,identity,pins,reference,schemaVersion,scope,selectionRevision'
+  const keys = Object.keys(manifest).filter(key => key !== 'platformSkills').sort().join(',')
+  if (keys !== 'files,identity,pins,reference,schemaVersion,scope,selectionRevision'
     || manifest.schemaVersion !== 1 || canonicalJson(manifest.reference) !== canonicalJson(checked)
     || bytes.toString('utf8') !== `${canonicalJson(manifest)}\n` || !Array.isArray(manifest.files) || manifest.files.length > 512
     || !Array.isArray(manifest.pins) || manifest.pins.length > 64 || !Number.isSafeInteger(manifest.selectionRevision)
     || manifest.identity.ownerId !== project.userId || manifest.identity.projectId !== project.id
     || (expectedImage && manifest.identity.baseRuntimeImageDigest !== expectedImage)
-    || generationIdentity(manifest.identity, manifest.scope, manifest.selectionRevision) !== checked.generationHash) throw fail()
+    || generationIdentity(manifest.identity, manifest.scope, manifest.selectionRevision, manifest.platformSkills) !== checked.generationHash) throw fail()
+  if (manifest.platformSkills && (Object.keys(manifest.platformSkills).some(key => !['disabled', 'disabledPlugins'].includes(key))
+    || canonicalJson(normalizeDisabledPlatformSkills(manifest.platformSkills.disabled)) !== canonicalJson(manifest.platformSkills.disabled)
+    || manifest.platformSkills.disabledPlugins !== undefined && canonicalJson(normalizeDisabledBuiltinPlugins(manifest.platformSkills.disabledPlugins)) !== canonicalJson(manifest.platformSkills.disabledPlugins)
+    || manifest.platformSkills.disabled.some(id => platformSkillRequirement(id).required))) throw fail()
   const seen = new Set()
   const contents = new Map(), prefixMaps = new Map()
   let total = 0
@@ -135,7 +142,7 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
   await walk(root)
   if (actual.size !== seen.size + 1 || !actual.has('manifest.json') || [...seen].some(name => !actual.has(name))) throw fail()
   return { reference: checked, pins: manifest.pins, selectionRevision: manifest.selectionRevision, identity: manifest.identity,
-    scope: manifest.scope, root, mountRoot: path.join(root, 'skills') }
+    scope: manifest.scope, root, mountRoot: path.join(root, 'skills'), files: manifest.files, platformSkills: manifest.platformSkills ?? { disabled: [] } }
 }
 
 /** Product documents/jobs remain the only durable state. Identity callbacks are trusted deployment authority. */
@@ -148,7 +155,9 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
  * @param {any} generation @returns {string[]}
  */
 export function personalPackageIdentity(generation) {
-  return (generation?.pins ?? []).map((/** @type {any} */ pin) => `${pin.skillId}\0${pin.revision}\0${pin.digest}`).sort()
+  return [...(generation?.pins ?? []).map((/** @type {any} */ pin) => `${pin.skillId}\0${pin.revision}\0${pin.digest}`),
+    ...(generation?.platformSkills?.disabled ?? []).map(id => `disabled-platform:${id}`),
+    ...(generation?.platformSkills?.disabledPlugins ?? []).map(id => `disabled-plugin:${id}`)].sort()
 }
 
 /** Whether two personal generations hold the same skills, whatever image each was published for.
@@ -184,7 +193,7 @@ export async function personalGenerationForStart({ state, identity, busy }) {
   const permitted = (/** @type {any} */ candidate) => personalGenerationCompatible(identity, candidate) && (candidate.pins ?? []).every((/** @type {any} */ pin) =>
     (desired?.pins ?? []).some((/** @type {any} */ wanted) => wanted.skillId === pin.skillId && wanted.revision === pin.revision && wanted.digest === pin.digest))
   const found = installed.find(permitted)
-  if (found) return found
+  if (found && (samePersonalPackages(found, desired) || await busy())) return found
   if (!personalGenerationCompatible(identity, desired)) return null
   const republish = installed.some(old => old?.reference && samePersonalPackages(old, desired))
   return !republish && await busy() ? null : desired
@@ -203,11 +212,44 @@ export class PersonalSkillGenerationService {
     await this.skills.requireProject(user, project)
     return this.documents.get(user.id, 'extension-generation', stateId(project))
   }
+  /** A cold runtime must earn a new epoch-bound proof even when its immutable bytes did not change.
+   * Reuse the same leased apply worker; a serving restart never synthesizes an effective state.
+   * @param {any} project @param {any} captured @param {string|null} runtimeGeneration */
+  async requestRuntimeProof(project, captured, runtimeGeneration) {
+    if (!captured?.reference || !runtimeGeneration) return null
+    const user = await this.resolveUser(project)
+    return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+      const scope = await this.plugins.scope(user, project, client), current = await this.current(project)
+      const candidate = current?.payload.desired
+      if (candidate?.reference?.generationHash !== captured.reference.generationHash || candidate.selectionRevision !== captured.selectionRevision) return null
+      if (current.payload.runtimeGeneration === runtimeGeneration && current.payload.effective?.reference?.generationHash === captured.reference.generationHash) return null
+      const pending = await client.query(`SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='personal-skill-apply'
+        AND status IN ('queued','running') AND payload->>'generationHash'=$3 AND (payload->>'selectionRevision')::integer=$4
+        AND (payload->>'proofRuntimeGeneration' IS NULL OR payload->>'proofRuntimeGeneration'=$5) LIMIT 1`,
+      [user.id, project.id, captured.reference.generationHash, captured.selectionRevision, runtimeGeneration])
+      if (pending.rows.length) return null
+      return this.jobs.enqueue(user.id, 'personal-skill-apply', { stateRevision: current.revision, generationHash: captured.reference.generationHash,
+        selectionRevision: captured.selectionRevision, accountCreatedAt: scope.accountCreatedAt, projectCreatedAt: scope.projectCreatedAt, proofRuntimeGeneration: runtimeGeneration },
+      { idempotencyKey: `personal-skill-proof:${project.id}:${sha(runtimeGeneration + ':' + captured.reference.generationHash)}`, projectId: project.id, maxAttempts: 3, transactionClient: client })
+    }))
+  }
+  /** The persisted choice survives a preparation refusal; no runtime effect is claimed.
+   * @param {any} user @param {any} project @param {number} selectionRevision */
+  async recordFailure(user, project, selectionRevision) {
+    await this.skills.requireProject(user, project)
+    const selection = await this.skills.projectSelections(user, project)
+    if (selection.revision !== selectionRevision) return
+    const current = await this.current(project)
+    return this.documents.put(user.id, 'extension-generation', stateId(project), {
+      desired: { reference: null, selectionRevision, pins: [], platformSkills: { disabled: selection.payload.disabledPlatformSkills ?? [], disabledPlugins: selection.payload.disabledBuiltinPlugins ?? [] } },
+      effective: current?.payload.effective ?? null, lastGood: current?.payload.lastGood ?? null, runtimeGeneration: current?.payload.runtimeGeneration ?? null, phase: 'failed', error: 'personal_skill_apply_failed',
+    }, { expectedRevision: current?.revision ?? 0, projectId: project.id })
+  }
   /** @param {any} user @param {any} project */
   async reconcile(user, project) {
     await this.skills.requireProject(user, project)
     await this.skills.initializeProject(user, project)
-    if (String(this.config.runtimeProvider ?? 'docker') !== 'docker') throw new HttpError(503, 'product_state_unavailable', 'Personal skill runtime mounting is unavailable for this provider.')
+    if (!['docker', 'agentbay'].includes(String(this.config.runtimeProvider ?? 'docker'))) throw new HttpError(503, 'product_state_unavailable', 'Personal skill runtime mounting is unavailable for this provider.')
     const selected = await selectPersonalSkillMounts({ service: this.skills, user, project })
     const borrowedScope = this.plugins.borrowAdmission(`${user.id}:${project.id}`, client => this.plugins.scope(user, project, client))
     const scope = borrowedScope ? await borrowedScope : await this.database.transaction(client => this.plugins.scope(user, project, client))
@@ -220,10 +262,10 @@ export class PersonalSkillGenerationService {
         if (locked.rows[0]?.revision !== selected.selectionRevision) throw new HttpError(409, 'product_revision_conflict', 'Project skills changed.')
         const old = await this.documents.get(user.id, 'extension-generation', stateId(project))
         if (old?.payload.desired?.waiting && old.payload.desired.selectionRevision === selected.selectionRevision) return old.payload.desired
-        const pending = { reference: null, pins: [], identity: null, scope, selectionRevision: selected.selectionRevision,
+        const pending = { reference: null, pins: [], identity: null, scope, selectionRevision: selected.selectionRevision, platformSkills: selected.platformSkills,
           findings: [...selected.findings, { code: 'runtime_image_unavailable' }], waiting: true }
         const row = await this.documents.put(user.id, 'extension-generation', stateId(project), { desired: pending,
-          effective: old?.payload.effective ?? null, lastGood: old?.payload.lastGood ?? null, phase: 'waiting', error: 'runtime_image_unavailable' },
+          effective: old?.payload.effective ?? null, lastGood: old?.payload.lastGood ?? null, runtimeGeneration: old?.payload.runtimeGeneration ?? null, phase: 'waiting', error: 'runtime_image_unavailable' },
         { expectedRevision: old?.revision ?? 0, projectId: project.id })
         await this.jobs.enqueue(user.id, 'personal-skill-apply', { stateRevision: row.revision, generationHash: null,
           selectionRevision: selected.selectionRevision, accountCreatedAt: scope.accountCreatedAt, projectCreatedAt: scope.projectCreatedAt },
@@ -235,7 +277,7 @@ export class PersonalSkillGenerationService {
       || Object.values(trusted).some(value => !DIGEST.test(String(value)))) throw fail()
     const identity = { ownerId: user.id, projectId: project.id, ...trusted, selections: [],
       skills: selected.skills.map(pin => ({ skillId: pin.skillId, revision: pin.revision, digest: pin.digest })) }
-    const generationHash = generationIdentity(identity, scope, selected.selectionRevision)
+    const generationHash = generationIdentity(identity, scope, selected.selectionRevision, selected.platformSkills)
     const reference = { ownerHash: sha(user.id), projectHash: sha(project.id), generationHash }
     const root = personalGenerationRoot(this.config, reference)
     const files = []; const pins = []; let total = 0
@@ -321,13 +363,13 @@ export class PersonalSkillGenerationService {
       try { await directory.handle.chmod(0o755) }
       finally { await directory.handle.close() }
     }
-    const manifest = { schemaVersion: 1, reference, identity, scope, selectionRevision: selected.selectionRevision,
+    const manifest = { schemaVersion: 1, reference, identity, scope, selectionRevision: selected.selectionRevision, platformSkills: selected.platformSkills,
       pins, files: files.sort((a, b) => a.path.localeCompare(b.path)) }
     const manifestBytes = Buffer.from(`${canonicalJson(manifest)}\n`)
     if (manifestBytes.length > 1024 * 1024) throw fail()
     await publishImmutable('manifest.json', manifestBytes)
     await verifyPersonalSkillGeneration(this.config, project, reference, trusted.baseRuntimeImageDigest)
-    const candidate = { reference, pins, selectionRevision: selected.selectionRevision, findings: selected.findings, identity, scope }
+    const candidate = { reference, pins, selectionRevision: selected.selectionRevision, platformSkills: selected.platformSkills, findings: selected.findings, identity, scope }
     return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
       const locked = await client.query(`SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='extension-defaults'
         AND id=$2 AND deleted_at IS NULL FOR SHARE`, [user.id, `skills:project:${project.id}`])
@@ -341,7 +383,7 @@ export class PersonalSkillGenerationService {
       const old = await this.documents.get(user.id, 'extension-generation', stateId(project))
       if (old?.payload.desired?.reference?.generationHash === generationHash && old.payload.desired.selectionRevision === selected.selectionRevision) return old.payload.desired
       const state = await this.documents.put(user.id, 'extension-generation', stateId(project), { desired: candidate,
-        effective: old?.payload.effective ?? null, lastGood: old?.payload.lastGood ?? null, phase: 'waiting', error: null },
+        effective: old?.payload.effective ?? null, lastGood: old?.payload.lastGood ?? null, runtimeGeneration: old?.payload.runtimeGeneration ?? null, phase: 'waiting', error: null },
       { expectedRevision: old?.revision ?? 0, projectId: project.id })
       await this.jobs.enqueue(user.id, 'personal-skill-apply', { stateRevision: state.revision, generationHash,
         selectionRevision: selected.selectionRevision, accountCreatedAt: scope.accountCreatedAt, projectCreatedAt: scope.projectCreatedAt },
@@ -356,7 +398,12 @@ export class PersonalSkillGenerationService {
     let state = await this.current(project)
     const selection = await this.skills.projectSelections(user, project)
     const identity = await this.identities(project).catch(() => null)
-    const baseline = () => ({ reference: null, pins: [], selectionRevision: selection.revision, findings: [] })
+    const baseline = () => {
+      if ((selection.payload.disabledPlatformSkills ?? []).length || (selection.payload.disabledBuiltinPlugins ?? []).length) {
+        throw Object.assign(new HttpError(503, 'product_state_unavailable', 'The saved project choices cannot be applied until its runtime composition is available.'), { preserveSkillPolicy: true })
+      }
+      return { reference: null, pins: [], selectionRevision: selection.revision, findings: [] }
+    }
     const compatible = candidate => personalGenerationCompatible(identity, candidate)
     if (!identity || !state || state.payload.desired?.selectionRevision !== selection.revision
       || !compatible(state.payload.desired)) {

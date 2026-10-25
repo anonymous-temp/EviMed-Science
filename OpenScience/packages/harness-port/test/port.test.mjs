@@ -183,7 +183,7 @@ function fakeContext(overrides = {}) {
   /** @type {Map<string, any>} */
   const services = new Map(Object.entries({
     tools: {}, systemPrompt: {}, agents: {}, sessions: { flush: async () => {} }, subagents: {}, agentPresets: {}, shell: {},
-    storageDomain: {}, skills: {}, fs: {}, jobs: {}, workflowEngine: {}, commands: {},
+    storageDomain: {}, skills: {}, loader: { entries: () => [] }, fs: {}, jobs: {}, workflowEngine: {}, commands: {},
     web: { registerSearchProvider: () => () => {}, registerFetchProvider: () => () => {} },
     ...overrides.services,
   }));
@@ -529,6 +529,9 @@ test("the startup probe crashes on a missing gate seam and degrades on a missing
   const degraded = await probeSeams(noStorage, { dshVersion: SEAMS.dsh });
   assert.deepEqual(degraded.fatal, []);
   assert.ok(degraded.degraded.some((line) => line.includes("ctx.storageDomain")));
+  const noLoader = await probeSeams(fakeContext({ services: { loader: undefined } }), { dshVersion: SEAMS.dsh });
+  assert.deepEqual(noLoader.fatal, []);
+  assert.ok(noLoader.degraded.some((line) => line.includes('ctx.loader')));
 
   // The awaited checkpoint a pinned bundle (the OpenViking memory plugin) drains its capture queue at: an enhancement's seam.
   const noFlush = await probeSeams(fakeContext({ services: { sessions: {} } }), { dshVersion: SEAMS.dsh });

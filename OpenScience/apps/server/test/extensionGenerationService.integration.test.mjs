@@ -17,6 +17,11 @@ import {ExtensionGenerationService,verifyExtensionGeneration,extensionGeneration
 import {ExtensionGenerationWorker} from '../src/extensionGenerationWorker.mjs';
 import {composeExtensionExecution} from '../src/extensionHostedIntegration.mjs';
 import {RuntimeManager} from '../src/runtimeManager.mjs';
+import {SkillLibraryService} from '../src/skillLibraryService.mjs';
+import {SkillLibraryArtifacts} from '../src/skillLibraryArtifacts.mjs';
+import {createPlatformSkillCatalogue} from '../src/platformSkillCatalogue.mjs';
+import {PersonalSkillGenerationService} from '../src/personalSkillGenerationService.mjs';
+import {parsePersonalSkill} from '@evimed/harness-port/personal-skills';
 const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL??'',options={skip:!url&&'Isolated local PG generation fixture is required'};
 if(url){const parsed=new URL(url);assert.equal(parsed.hostname,'127.0.0.1');assert.match(parsed.pathname,/evimed_test/);}
 const h=value=>createHash('sha256').update(value).digest('hex'),d=value=>'sha256:'+h(canonicalJson(value));
@@ -45,6 +50,48 @@ before(async()=>{if(!url)return;root=await fs.mkdtemp(path.join(os.tmpdir(),'ext
 after(async()=>{if(db){await db.query('DELETE FROM evimed_product.jobs WHERE user_id=ANY($1::text[])',[[a.id,b.id,lead.id,viewer.id]]);await db.query('DELETE FROM evimed_control.users WHERE id=ANY($1::text[])',[[a.id,b.id,lead.id,viewer.id]]);await db.close();await isolated.drop();}if(root){for(const file of await fs.readdir(root,{recursive:true})){const target=path.join(root,file);const stat=await fs.lstat(target);if(stat.isDirectory())await fs.chmod(target,0o700);}await fs.rm(root,{recursive:true,force:true});}});
 async function legacy(projectId,timeout){return plugins.documents.put(a.id,'plugin',`project:${projectId}:dsh-cite`,{schemaVersion:1,pluginId:'dsh-cite',binaryVersion:plugins.entry().version,enabled:true,settings:{timeoutMs:timeout}},{expectedRevision:0,projectId});}
 async function add(projectId,key){const installed=await extensions.install(a,{coordinate:entry.coordinate,scope:'project',projectId,idempotencyKey:key});await db.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE id=$1",[installed.job.id]);const job=await extensions.jobs.claim(['extension-prepare'],'fixture-preparer');await extensions.jobs.finish(a.id,job.id,job.leaseToken,{installationId:installed.installation.id,installationRevision:1,integrity:entry.integrity,artifactDigest:artifact.artifactDigest,qualified:false});return installed;}
+
+test('installed isolated-tool composition survives optional skill off/on and personal revision changes in the same immutable composite',options,async()=>{
+  const project={id:'skill-composite',userId:a.id};
+  await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Skill composite',1048576)",[a.id,project.id]);
+  const artifacts=new SkillLibraryArtifacts({root:await fs.realpath(path.join(root,'skill-artifacts')),parseSkill:parsePersonalSkill,minFreeBytes:0});
+  const skills=new SkillLibraryService(db,{artifacts,projectAccess:async(user,selected)=>{assert.equal(user.id,selected.userId);},platformCatalogue:createPlatformSkillCatalogue({rootDir:new URL('../../..',import.meta.url).pathname})});
+  const personal=new PersonalSkillGenerationService(db,{config:{dataDir:root},skillService:skills,pluginService:plugins,resolveUser:async()=>a,
+    identities:async()=>({baseRuntimeImageDigest:identities.baseRuntimeImageDigest,adapterRevision:identities.adapterRevision,permissionProfileRevision:identities.permissionProfileRevision}),ledgerBusy:async()=>false});
+  const source=await skills.create(a,{expectedRevision:0,title:'Sources',description:'Preserve source material',instructions:'Preserve the quotations.'});
+  await skills.saveProjectSelections(a,project,{expectedRevision:0,skills:[{skillId:source.id,revision:1}]});
+  let selected=await plugins.withAdmission(project,()=>personal.reconcile(a,project));
+  await personal.markEffective(project,selected,'fixture-runtime');
+  await add(project.id,'skill-composite-install');
+  const selection=await extensions.project(a,project.id),state=await service.reconcile(a,project.id,{expectedRevision:selection.revision});
+  let installed=state.payload.desired;await service.markEffective(project,installed,runtimeProof(installed));
+  const original=installed.projection.plugins.find(plugin=>plugin.extensionId===entry.id);
+  for(const disabled of [['office:docx'],[]]){
+    const currentSelection=await skills.projectSelections(a,project);
+    await skills.saveProjectPlatform(a,project,{expectedRevision:currentSelection.revision,disabled});
+    selected=await plugins.withAdmission(project,()=>personal.reconcile(a,project));
+    const rebased=await service.rebasePersonal(project,selected);
+    assert.deepEqual(rebased.projection.plugins.find(plugin=>plugin.extensionId===entry.id),original);
+    assert.deepEqual(rebased.projection.personal.platformSkills.disabled,disabled);
+    await personal.markEffective(project,selected,'fixture-runtime');
+    await service.markEffective(project,rebased,runtimeProof(rebased));
+    const observed=await db.transaction(client=>db.withTransactionClient(client,()=>service.snapshot(a,project.id,client)));
+    assert.equal(extensionMountIdentity(observed.manifest),extensionMountIdentity(rebased),'proof settlement does not invalidate the rebased installed composition');
+    installed=rebased;
+  }
+  const edited=await skills.update(a,source.id,{expectedRevision:1,title:'Sources',description:'Preserve source material',instructions:'Preserve quotations and table values.'});
+  const currentSelection=await skills.projectSelections(a,project);
+  await skills.saveProjectSelections(a,project,{expectedRevision:currentSelection.revision,skills:[{skillId:edited.id,revision:edited.revision}]});
+  selected=await plugins.withAdmission(project,()=>personal.reconcile(a,project));
+  const final=await service.rebasePersonal(project,selected);
+  assert.deepEqual(final.projection.plugins.find(plugin=>plugin.extensionId===entry.id),original);
+  assert.equal(final.projection.personal.pins[0].revision,2);
+  assert.notEqual(final.reference.generationHash,installed.reference.generationHash);
+  const baseline=await service.rebasePersonal(project,null);
+  assert.equal(baseline.projection.personal.reference,null);
+  assert.deepEqual(baseline.projection.personal.pins,[],'an ordinary baseline cannot restore a persisted personal revision');
+  assert.deepEqual(baseline.projection.plugins.find(plugin=>plugin.extensionId===entry.id),original);
+});
 async function claim(state){const result=await db.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND kind='plugin-apply' AND payload->>'variant'='extension-generation-v1' AND (payload->>'stateRevision')::integer=$2 AND project_id=$3 ORDER BY created_at DESC LIMIT 1",[a.id,state.revision,state.projectId]);await db.query("UPDATE evimed_product.jobs SET run_after='1970-01-01'::timestamptz WHERE id=$1",[result.rows[0].id]);const claimed=await service.jobs.claim(['plugin-apply'],'fixture-dispatcher');assert.equal(claimed?.id,result.rows[0].id,'the fixture must claim its exact named generation job');return claimed;}
 function rollbackManager(project,good){
   const manager=new RuntimeManager({runtimeIdleTimeoutMs:0});manager.runtimes.set(manager.key(project),{extensionGeneration:good,modelGatewayTokenJti:'fixture-runtime'});
@@ -234,6 +281,23 @@ test('revoking the real lead who configured a rolled-back generation leaves owne
   selected=await extensions.saveProject(lead,'p1',{expectedRevision:selected.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{rows:10},connectionRefs:[]}]});state=await service.reconcile(lead,'p1',{expectedRevision:selected.revision});runtime.probeGeneration=async(_project,candidate)=>{if(candidate.reference?.generationHash!==good.reference.generationHash)throw Object.assign(new Error('Fixture refusal'),{code:'plugin_apply_failed'});return runtimeProof(candidate);};await worker.runClaimed(await claim(state));runtime.probeGeneration=async(_project,candidate)=>runtimeProof(candidate);
   assert.equal((await service.current(project)).payload.phase,'rolled-back');await members.removeMember({studyId:study.id,userId:lead.id,role:'lead'});
   const manager=rollbackManager(project,good);await manager.assertExtensionPromptGeneration(project);await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'project_not_found',status:404});manager.runtimes.clear();
+  const skills=new SkillLibraryService(db,{artifacts:{root:path.join(root,'skill-artifacts'),maxGlobalBytes:8*1024*1024,minFreeBytes:0},projectAccess:async(user,currentProject)=>{assert.equal(user.id,currentProject.userId);},platformCatalogue:createPlatformSkillCatalogue({rootDir:new URL('../../..',import.meta.url).pathname})});
+  await skills.initializeProject(a,project);let personalSelection=await skills.projectSelections(a,project);
+  await skills.saveProjectPlatform(a,project,{expectedRevision:personalSelection.revision,disabled:['office:docx']});personalSelection=await skills.projectSelections(a,project);
+  await skills.saveProjectBuiltins(a,project,{expectedRevision:personalSelection.revision,disabled:['annotation']});
+  const personal=new PersonalSkillGenerationService(db,{config:{dataDir:root},skillService:skills,pluginService:plugins,resolveUser:async()=>a,
+    identities:async()=>({baseRuntimeImageDigest:identities.baseRuntimeImageDigest,adapterRevision:identities.adapterRevision,permissionProfileRevision:identities.permissionProfileRevision}),ledgerBusy:async()=>false});
+  const policy=await plugins.withAdmission(project,()=>personal.reconcile(a,project));
+  const cold=new RuntimeManager({dataDir:root,runtimeIdleTimeoutMs:0});let coldPlan;
+  cold.syncCapsuleMethods=async()=>({count:0});cold.personalSkillGenerations={prepareForRuntime:async()=>policy};cold.extensionGenerationResolver=async()=>null;
+  cold.rebasePersonalComposite=(currentProject,candidate)=>service.rebasePersonal(currentProject,candidate);cold.prepareGeneration=async()=>({joined:true});
+  cold.provider={preflight:async()=>{},prepare:async(_project,input)=>{coldPlan=input;throw new Error('cold provider boundary');}};
+  await assert.rejects(cold.startKernel(project),/cold provider boundary/);
+  assert.equal(coldPlan.extensionGeneration.projection.plugins.some(plugin=>plugin.extensionId===entry.id),false,'a revoked installer cannot keep its optional tools');
+  assert.deepEqual(coldPlan.personalSkillGeneration.platformSkills,{disabled:['office:docx'],disabledPlugins:['annotation']},'ordinary owner research retains every saved disable');
+  await db.query("DELETE FROM evimed_product.revisions WHERE user_id=$1 AND id=ANY($2::text[])",[a.id,['skills:project:p1','personal-skills:project:p1']]);
+  await db.query("DELETE FROM evimed_product.documents WHERE user_id=$1 AND id=ANY($2::text[])",[a.id,['skills:project:p1','personal-skills:project:p1']]);
+  await db.query("UPDATE evimed_product.jobs SET status='succeeded' WHERE user_id=$1 AND project_id='p1' AND kind='personal-skill-apply'",[a.id]);
   await members.addMember({studyId:study.id,userId:lead.id,role:'lead'});selected=await extensions.project(a,'p1');await extensions.saveProject(a,'p1',{expectedRevision:selected.revision,selections:original});state=await service.reconcile(a,'p1',{expectedRevision:(await extensions.project(a,'p1')).revision});await worker.runClaimed(await claim(state));
 });
 test('an already admitted unchanged document operation retains its proven runtime pin while a no-op update waits',options,async()=>{

@@ -12,6 +12,8 @@ import {
   type SkillTransferResult, type SkillTransferUpload,
 } from "@/lib/skillLibraryClient";
 
+const FILE_INPUT_STYLE = "h-auto p-2 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-surface-2 file:px-3 file:py-2 file:text-ui file:text-text disabled:file:cursor-not-allowed";
+
 /**
  * Bringing a skill in: a file, a public repository at one commit, or the history and account data of an earlier export.
  * The three live in one drawer, opened from the page's 「新建技能」 menu, so the list stays where it is.
@@ -68,7 +70,7 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel }: {
         <Button type="button" variant="text" disabled={busy} onClick={() => { setMode("transfer"); setPreview(null); }}>历史与账户数据</Button>
       </div>
       <Input label="技能名称" value={title} required disabled={busy} onChange={event => setTitle(event.target.value)} />
-      {mode === "file" ? <Input label="技能文件" type="file" accept=".md,.zip,.tgz,.gz" required disabled={busy} onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); }} /> : <>
+      {mode === "file" ? <Input label="技能文件" type="file" className={FILE_INPUT_STYLE} accept=".md,.zip,.tgz,.gz" required disabled={busy} onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); }} /> : <>
         <Input label="公开仓库" placeholder="owner/repository" value={repository} required disabled={busy} onChange={event => { setRepository(event.target.value); setPreview(null); }} />
         <Input label="固定提交" placeholder="完整的 40 位提交编号" value={commit} required pattern="[a-f0-9]{40}" disabled={busy} onChange={event => { setCommit(event.target.value); setPreview(null); }} />
         <Input label="技能子目录" placeholder="例如 skills/source-check，可留空" value={subdirectory} disabled={busy} onChange={event => { setSubdirectory(event.target.value); setPreview(null); }} />
@@ -147,7 +149,7 @@ function SkillTransferImport({ onBusy, onClose, recovery }: { recovery?: Pending
   return <section aria-label="技能历史迁移" className="flex flex-col gap-4">
     <p className="text-ui text-text-2">迁移技能内容、资源和历史版本。账户数据中的角色、连接和启用设置不会导入。</p>
     <label className="text-ui text-text">数据格式<select className={inputClasses({ className: "mt-2" })} aria-label="数据格式" disabled={busy || started} value={format} onChange={event => { setFormat(event.target.value as SkillTransferFormat); setFile(null); setUpload(null); setPreview(null); setSelected([]); }}><option value="portable">技能历史文件</option><option value="account">账户导出文件</option></select></label>
-    <Input label="迁移文件" type="file" accept={format === "account" ? ".json,.tar.gz,.tgz" : ".json"} disabled={busy || started} onChange={event => { setFile(event.target.files?.[0] ?? null); setUpload(null); setPreview(null); setSelected([]); }} />
+    <Input label="迁移文件" type="file" className={FILE_INPUT_STYLE} accept={format === "account" ? ".json,.tar.gz,.tgz" : ".json"} disabled={busy || started} onChange={event => { setFile(event.target.files?.[0] ?? null); setUpload(null); setPreview(null); setSelected([]); }} />
     {!started && <Button disabled={!file || busy} loading={busy && !upload} onClick={() => void stage()}>上传迁移文件</Button>}
     {upload && format === "account" && <fieldset disabled={busy || started} className="flex flex-col gap-2"><legend className="text-ui text-text">选择要导入的技能</legend>{upload.sourceSkills.map(skill => <label key={skill.sourceId} className="flex items-center gap-2 text-ui text-text"><input type="checkbox" checked={selected.includes(skill.sourceId)} onChange={event => { setSelected(current => event.target.checked ? [...current, skill.sourceId] : current.filter(id => id !== skill.sourceId)); setPreview(null); }} />{skill.title}</label>)}{upload.sourceSkills.length === 0 && <p className="text-ui text-text-2">文件中没有可导入的技能。</p>}</fieldset>}
     {upload && !started && <Button variant="secondary" disabled={busy || format === "account" && !selected.length} onClick={() => void inspect()}>预览迁移</Button>}

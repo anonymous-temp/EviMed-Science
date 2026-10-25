@@ -253,10 +253,11 @@
 # root, and the workspace is where users upload files — an uploaded SKILL.md
 # would become an instruction.
 - id: skill-filesystem
-  name: '@deepseek-ai/dsh-skill-filesystem'
+  name: '@evimed/dsh-socket/plugins/project-skills'
   config:
     includeDefaultRoots: false
     watch: false
+    disabledSkills: !!js JSON.parse(process.env.EVIMED_DISABLED_PLATFORM_SKILLS || '[]')
     # Absolute, and not by accident. The loader resolves each root with
     # `path.resolve`, so a relative one lands under `process.cwd()` — which in a
     # runtime container is `/workspace`. These four were written `./skills/...`

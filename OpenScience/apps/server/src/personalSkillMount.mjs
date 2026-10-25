@@ -40,5 +40,6 @@ export async function selectPersonalSkillMounts({ service, user, project, maxSki
   // Selection changes during asynchronous validation are not silently published under the earlier digest.
   const current = await service.projectSelections(user, project);
   if (current.revision !== selected.revision) throw new HttpError(409, "product_revision_conflict", "Project skills changed before preparation finished.");
-  return { selectionRevision: selected.revision, skills, findings, instructionBytes: bytes };
+  return { selectionRevision: selected.revision, skills, findings, instructionBytes: bytes,
+    platformSkills: { disabled: selected.payload.disabledPlatformSkills ?? [], disabledPlugins: selected.payload.disabledBuiltinPlugins ?? [] } };
 }

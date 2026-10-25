@@ -615,7 +615,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
     }
     const contextGeneration = payload.contextGeneration ? await verifyContextGeneration(config, project, payload.contextGeneration) : null;
-    const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
+    const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [],
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     plan.platformSkillGeneration = platform;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);

@@ -27,16 +27,17 @@ vi.mock("@/lib/inboxClient", () => ({
 
 const store = vi.hoisted(() => ({
   collapsed: false,
+  width: 260,
   setSidebarWidth: vi.fn(),
   toggleSidebar: vi.fn(),
 }));
 
 vi.mock("@/lib/store", () => ({
-  SIDEBAR_MIN: 220,
-  SIDEBAR_MAX: 420,
+  SIDEBAR_MIN: 184,
+  SIDEBAR_MAX: 340,
   useUiStore: () => ({
     sidebarCollapsed: store.collapsed,
-    sidebarWidth: 260,
+    sidebarWidth: store.width,
     setSidebarCollapsed: vi.fn(),
     setSidebarWidth: store.setSidebarWidth,
     toggleSidebar: store.toggleSidebar,
@@ -83,6 +84,7 @@ function renderSidebar(initialPath = "/app/chat") {
 beforeEach(() => {
   vi.clearAllMocks();
   store.collapsed = false;
+  store.width = 260;
   projectModule.current = null;
   mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
   mocks.fetchWebConnectors.mockResolvedValue([]);
@@ -108,7 +110,7 @@ describe("Sidebar landmark and collapse", () => {
   it("keeps the account row at least 1 rem above the window's bottom, or the device's safe area (R13 V-12)", async () => {
     renderSidebar();
     const landmark = await screen.findByRole("complementary", { name: "侧栏" });
-    const row = within(landmark).getByRole("link", { name: "设置" }).parentElement!;
+    const row = within(landmark).getByRole("link", { name: "设置" }).parentElement!.parentElement!;
     expect(row).toHaveClass("pb-[max(1rem,env(safe-area-inset-bottom))]");
   });
 
@@ -147,7 +149,7 @@ describe("Sidebar navigation", () => {
   it("uses the global entry for New Conversation and the brand", async () => {
     renderSidebar();
     expect(screen.getByRole("link", { name: "新对话" })).toHaveAttribute("href", "/app/home");
-    expect(screen.getByRole("link", { name: "EviMed 首页" })).toHaveAttribute("href", "/app/home");
+    expect(screen.getByRole("link", { name: "EviMed Science 首页" })).toHaveAttribute("href", "/app/home");
     await userEvent.click(screen.getByRole("link", { name: "新对话" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/home");
     expect(screen.getByTestId("intent")).toBeEmptyDOMElement();
@@ -182,8 +184,8 @@ describe("Sidebar navigation", () => {
     const links = within(nav).getAllByRole("link");
     expect(links[links.findIndex(link => link.textContent === "定时任务") + 1]).toHaveAccessibleName("插件与技能");
     expect(screen.getAllByRole("link", { name: "插件与技能" })).toHaveLength(1);
-    // It opens on the first of the page's two tabs, 技能 — the one the page's own action belongs to — and stays lit on the other.
-    expect(screen.getByRole("link", { name: "插件与技能" })).toHaveAttribute("href", "/app/extensions/skills");
+    // Discovery is the default; existing item URLs remain supported.
+    expect(screen.getByRole("link", { name: "插件与技能" })).toHaveAttribute("href", "/app/extensions/discover");
   });
 
   // 运维 left 设置 for a page of its own (R19): the footer holds its entry for an operator, beside the gear, and for nobody else.
@@ -214,7 +216,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     const row = await screen.findByRole("link", { name: "前沿动态" });
     expect(row).toHaveAttribute("href", "/app/frontier");
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.indexOf("前沿动态")).toBe(rows.indexOf("新对话") + 1);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier");
@@ -236,7 +238,7 @@ describe("Sidebar navigation", () => {
     const row = await screen.findByRole("link", { name: "循证 GEO" });
     expect(row).toHaveAttribute("href", "/app/geo");
     await screen.findByRole("link", { name: "前沿动态" });
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
@@ -257,7 +259,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     const row = await screen.findByRole("link", { name: "虚拟临床研究" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
@@ -309,7 +311,7 @@ describe("Sidebar navigation", () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "虚拟临床研究" });
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
@@ -318,7 +320,7 @@ describe("Sidebar navigation", () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "循证 GEO" });
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
@@ -372,7 +374,7 @@ describe("Sidebar navigation", () => {
   });
 
   // The rows that used to be here and are now tabs of one of the six. The
-  // inbox is not in this list: it is still reachable, as the bell above.
+  // inbox is not in this list: it is still reachable, as a footer utility.
   it("no longer offers a row for a view of another destination", async () => {
     renderSidebar();
     for (const gone of ["资料整理", "科研笔记本", "科研记忆", "记忆胶囊", "能力模板", "设置", "账户与额度", "运行记录"]) {
@@ -400,13 +402,19 @@ describe("Sidebar navigation", () => {
     expect(screen.queryByText("最近任务")).not.toBeInTheDocument();
   });
 
-  it("carries the brand and the inbox bell above the nav", async () => {
+  it("keeps the brand above navigation and the inbox beside account utilities", async () => {
     mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 2, safetyUnread: 0 });
     renderSidebar();
-    expect(screen.getByRole("img", { name: "EviMed" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "EviMed Science" })).toBeInTheDocument();
+    const brand = screen.getByRole("link", { name: "EviMed Science 首页" });
+    const navigation = screen.getByRole("navigation", { name: "工作台" });
+    expect(brand.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // One old notification did not earn a permanent navigation row; unread
     // work earns a dot on the bell, and the count is in its name.
     const bell = await screen.findByRole("button", { name: "收件箱，2 条未读" });
+    const settings = screen.getByRole("link", { name: "设置" });
+    expect(bell.parentElement).toBe(settings.parentElement);
+    expect(screen.getByRole("region", { name: "项目" }).compareDocumentPosition(bell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(bell);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/inbox");
   });
@@ -432,18 +440,32 @@ describe("Sidebar navigation", () => {
 });
 
 describe("Sidebar chrome", () => {
+  it.each([184, 232])("keeps the full brand and all account actions at %i px", async (width) => {
+    store.width = width;
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "Researcher" }, operator: true, project: { id: "default", name: "我的研究" }, projects: [] });
+    renderSidebar();
+    const operations = await screen.findByRole("link", { name: "运维" });
+    const brand = screen.getByRole("link", { name: "EviMed Science 首页" });
+    expect(within(brand).getByText("EviMed Science")).toHaveClass("whitespace-nowrap", "text-ui");
+    expect(brand.parentElement).toBe(screen.getByRole("button", { name: "收起侧边栏" }).parentElement);
+    const utilities = operations.parentElement!;
+    expect(within(utilities).getByRole("button", { name: "收件箱" })).toBeInTheDocument();
+    expect(within(utilities).getByRole("link", { name: "设置" })).toBeInTheDocument();
+    expect(within(utilities.parentElement!).getByText("Researcher").compareDocumentPosition(utilities) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   // A width a mouse can set, a keyboard can (WAI-ARIA window splitter).
   it("resizes from the keyboard through a focusable separator", async () => {
     renderSidebar();
     const separator = await screen.findByRole("separator", { name: "调整侧边栏宽度" });
     expect(separator).toHaveAttribute("aria-valuenow", "260");
-    expect(separator).toHaveAttribute("aria-valuemin", "220");
-    expect(separator).toHaveAttribute("aria-valuemax", "420");
+    expect(separator).toHaveAttribute("aria-valuemin", "184");
+    expect(separator).toHaveAttribute("aria-valuemax", "340");
     separator.focus();
     await userEvent.keyboard("{ArrowRight}");
     expect(store.setSidebarWidth).toHaveBeenLastCalledWith(276);
     await userEvent.keyboard("{Home}");
-    expect(store.setSidebarWidth).toHaveBeenLastCalledWith(220);
+    expect(store.setSidebarWidth).toHaveBeenLastCalledWith(184);
     await userEvent.keyboard("{Enter}");
     expect(store.toggleSidebar).toHaveBeenCalled();
   });

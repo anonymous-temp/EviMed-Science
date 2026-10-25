@@ -574,9 +574,9 @@ describe("a GEO project's page", () => {
   it("names the three measurement tabs 「AI 回答监测」 in the browser tab, and the others by the project", async () => {
     renderProject("/app/geo/geo_masi/accuracy");
     await screen.findByTestId("accuracy-tab");
-    await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · AI 回答监测 · EviMed"));
+    await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · AI 回答监测 · EviMed Science"));
     await chooseResult("信源");
-    await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · EviMed"));
+    await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · EviMed Science"));
   });
 
   it("reads the project again, and the tabs' data with it, when a step of the programme changes state", async () => {

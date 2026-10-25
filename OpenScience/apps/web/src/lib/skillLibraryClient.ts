@@ -32,7 +32,11 @@ export interface SkillUpdatePlan {
 export interface SkillUpdateResult extends SkillUpdatePlan { skill: PersonalSkill; applied: boolean; taken: string[]; kept: string[]; pinnedRevision?: number }
 export type PersonalSkill = ProductRecord<PersonalSkillPayload>;
 export interface SkillSelection { skillId: string; revision: number; digest?: string; nativeName?: string }
-export interface SkillSelectionRecord { revision: number; payload: { skills: SkillSelection[] } }
+export interface SkillActivation {
+  phase: "saved" | "waiting" | "effective" | "failed" | "rolled-back";
+  savedRevision: number; effectiveRevision: number | null; error: string | null;
+}
+export interface SkillSelectionRecord { revision: number; payload: { skills: SkillSelection[] }; activation?: SkillActivation }
 export interface SkillVersion { revision: number; payload: PersonalSkillPayload; deletedAt: string | null; recordedAt: string }
 export interface SkillWrite { title: string; description: string; instructions: string; expectedRevision: number }
 const skillPath = (id: string) => `/skills/${encodeURIComponent(id)}`;
@@ -82,7 +86,18 @@ export interface PlatformSkill {
   source: "platform" | "community";
   /** Whether the control plane can copy this skill into the account's own skills. */
   canCopy: boolean;
+  provenance?: { kind: string; publisher: string; upstreamPublisher?: string; repository: string | null; version: string | null; license: string | null };
+  requirement?: { required: boolean; reason: string | null };
+  scope?: "project";
 }
+export interface ProjectPlatformSkills {
+  id: string; revision: number; payload: { disabled: string[] };
+  items: Array<PlatformSkill & { enabled: boolean; effective: boolean | null }>;
+  activation: SkillActivation;
+}
+export const projectPlatformSkills = (projectId: string) => productRequest<ProjectPlatformSkills>(`/projects/${encodeURIComponent(projectId)}/skills/platform`);
+export const saveProjectPlatformSkills = (projectId: string, expectedRevision: number, disabled: string[]) =>
+  productRequest<ProjectPlatformSkills>(`/projects/${encodeURIComponent(projectId)}/skills/platform`, "PUT", { expectedRevision, disabled });
 /**
  * `geoGroup` names the group the 循证 GEO method pack is listed under and `loopxGroup` the one the long task's entry skill is,
  * so a page can mark them without spelling them.

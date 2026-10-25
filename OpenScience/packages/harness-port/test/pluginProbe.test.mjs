@@ -1,8 +1,19 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadHarnessModule } from '../index.mjs'
-import { pluginRuntimeBusy, verifyCitationAgent, registerCitationConfiguration } from '../src/pluginProbe.mjs'
+import { builtinPluginState, pluginRuntimeBusy, verifyCitationAgent, registerCitationConfiguration } from '../src/pluginProbe.mjs'
 import { CITE_VERSION } from './helpers/pins.mjs'
+
+test('builtin integration proof reads actual native Loader state and refuses an enabled failed row', async () => {
+  let failed = false
+  const ctx = { get: () => undefined, loader: { entries: () => [
+    { id: 'dsh-annotation', parent: { tree: { ctx: {} } }, options: { name: '@changfenhuang/dsh-annotation' }, disabled: true },
+    { id: 'ui-mermaid', parent: { tree: { ctx: {} } }, options: { name: 'dsh-mermaid' }, disabled: false, fiber: { state: failed ? 3 : 2 } },
+  ] } }
+  assert.deepEqual(await builtinPluginState(ctx), { items: [{ id: 'annotation', enabled: false }, { id: 'mermaid', enabled: true }] })
+  failed = true
+  await assert.rejects(builtinPluginState(ctx), /extension_probe_config_invalid/)
+})
 
 /** Every live registration a test made, disposed after it: the registry is
  *  runtime-wide, as the configuration it holds is. */

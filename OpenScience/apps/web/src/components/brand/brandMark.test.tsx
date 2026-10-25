@@ -36,7 +36,7 @@ describe("the EviMed mark", () => {
     expect(favicon).toContain(`d="${EVIMED_MARK_PATH}"`);
     const { container } = render(<EviMedMark className="h-5 w-5" />);
     const svg = container.querySelector("svg")!;
-    expect(svg).toHaveAttribute("aria-label", "EviMed");
+    expect(svg).toHaveAttribute("aria-label", "EviMed Science");
     expect(svg).toHaveClass("text-accent");
     const paths = svg.querySelectorAll("path");
     expect(paths).toHaveLength(1);
