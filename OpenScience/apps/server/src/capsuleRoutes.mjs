@@ -2,7 +2,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 import { withoutSharerAccount } from "./capsuleSharerAccount.mjs";
 import { CAPSULE_TRANSFER_MAX_BYTES } from "./capsuleTransferService.mjs";
 import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
-import { recordShareTrial } from "./capsuleShareMetrics.mjs";
+import { recordShareEnabled, recordShareOpened, recordShareTrial } from "./capsuleShareMetrics.mjs";
 import { productId } from "./productPersistence.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
@@ -211,8 +211,12 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       if (!transferService) throw new HttpError(503, "product_state_unavailable", "Capsule transfer is temporarily unavailable.");
       const accountContext = { accountCreatedAt: user.accountCreatedAt, projectId: await current() };
       if (parts[0] === "transfers" && method === "POST") {
-        if (parts[1] === "preview") return reply(await transferService.preview(user.id,
-          await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password"]), accountContext));
+        if (parts[1] === "preview") {
+          const previewed = await transferService.preview(user.id, await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password"]), accountContext);
+          // A file read is the file channel's `opened`: a delivery or a link is opened through its own route, which counts it there.
+          recordShareOpened("file");
+          return reply(previewed);
+        }
         if (parts[1] === "import") {
           const imported = await transferService.import(user.id,
             await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password", "expectedDigest", "confirmed", "title"]), accountContext);
@@ -292,6 +296,8 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     if (parts.length === 2 && action === "enable" && method === "POST") {
       await bodyOf(req, maxJsonBytes, []);
       const enabled = await service.enableReceived(user.id, capsuleId, { projectId: await current() });
+      // How the pack reached this account says which channel's funnel the click belongs to; a platform pack is no share and counts for none.
+      recordShareEnabled(enabled?.sharedFrom?.channel);
       await audit(user, "capsule.pack.enable", { capsuleId });
       return reply(enabled);
     }

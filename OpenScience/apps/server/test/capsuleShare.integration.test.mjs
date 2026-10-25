@@ -8,6 +8,8 @@ import { after, before, test } from "node:test";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { packCapsule } from "../src/capsuleContainer.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
+import { selectCapsuleMethods } from "../src/capsuleMethods.mjs";
+import { createReceivedPackOutcomes } from "../src/capsuleShareOutcomes.mjs";
 import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
 import { sharedFrom } from "../src/capsuleShareLabel.mjs";
 import { capsuleShareMetricFamilies, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
@@ -289,6 +291,74 @@ test("a share link is redeemed by an account until its expiry, its cap or its re
   await assert.rejects(sharing.openLink(carol, third.token), { code: "capsule_share_link_revoked" });
   await assert.rejects(links.revoke(alice, third.link.id), { code: "capsule_share_not_found" }, "another account cannot revoke or see a link");
   assert.equal((await links.list(alice)).length, 0, "an account lists only its own links");
+});
+
+/** The funnel's rows that moved, as `stage/channel: count`. */
+const funnel = () => Object.fromEntries(capsuleShareMetricFamilies().find((family) => family.name === "open_science_capsule_share_funnel_total").series
+  .filter((row) => row.value > 0).map((row) => [`${row.labels.stage}/${row.labels.channel}`, row.value]));
+
+test("the funnel moves where each thing happens: a delivery is sent per recipient and opened once, a link is opened by an account's first look, a file is sent when it is made, and a new pack is imported per channel", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("先看数据再下结论。");
+  assert.deepEqual(funnel(), {}, "nothing yet");
+
+  // Delivery: one sent per recipient actually delivered (an unreachable name is none), one opened per recipient however often they look.
+  const delivered = await sharing.deliver(author, capsule.id, { recipients: [alice, bob, "no-such-account-xyz"] });
+  assert.equal(delivered.delivered, 2);
+  assert.deepEqual(funnel(), { "sent/delivery": 2 });
+  const aliceDelivery = (await shareNotices(alice))[0].source.id.split("/")[1];
+  const first = await sharing.open(alice, aliceDelivery);
+  await sharing.open(alice, aliceDelivery);
+  assert.deepEqual(funnel(), { "sent/delivery": 2, "opened/delivery": 1 }, "a delivery is opened the first time only");
+  await sharing.import(alice, aliceDelivery, { expectedDigest: first.preview.archiveSha256, title: "d" });
+  assert.equal(funnel()["imported/delivery"], 1);
+
+  // Link: sent when the link is made; opened by each account's first look (the owner's own look counts none, a repeat counts none).
+  const made = await sharing.createLink(author, capsule.id, { maxUses: 5 });
+  assert.equal(funnel()["sent/link"], 1);
+  await sharing.openLink(carol, made.token);
+  await sharing.openLink(carol, made.token);
+  await sharing.openLink(author, made.token);
+  assert.equal(funnel()["opened/link"], 1, "an account's first look is one open; its second and the owner's own are not");
+  const looked = await sharing.openLink(dave, made.token);
+  assert.equal(funnel()["opened/link"], 2);
+  await sharing.importLink(dave, made.token, { expectedDigest: looked.preview.archiveSha256, title: "l" });
+  assert.equal(funnel()["imported/link"], 1);
+
+  // File: sent when it is exported, imported when taken in as a file; the method pack for other tools is no step of any of it.
+  const file = await transfers.export(author, capsule.id, { password: "test-only-funnel-password", scopes: ["workstyle"] });
+  assert.equal(funnel()["sent/file"], 1);
+  const read = await transfers.preview(bob, { archive: file.archive, password: "test-only-funnel-password" });
+  await transfers.import(bob, { archive: file.archive, password: "test-only-funnel-password", expectedDigest: read.archiveSha256, confirmed: true, title: "f" });
+  assert.equal(funnel()["imported/file"], 1);
+  assert.deepEqual(funnel(), { "sent/delivery": 2, "opened/delivery": 1, "imported/delivery": 1, "sent/link": 1, "opened/link": 2, "imported/link": 1,
+    "sent/file": 1, "imported/file": 1 }, "nothing reached enabled, applied or corrected by itself");
+  resetCapsuleShareMetrics();
+});
+
+test("a run that opened the mounted file of an enabled received pack's method is that pack applied by the channel it came by, and the researcher's correction of it is corrected", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("先看数据再下结论。", "每个结论都附区间。");
+  await sharing.deliver(author, capsule.id, { recipients: [alice] });
+  const deliveryId = (await shareNotices(alice))[0].source.id.split("/")[1];
+  const opened = await sharing.open(alice, deliveryId);
+  const pack = await keep(alice, await sharing.import(alice, deliveryId, { expectedDigest: opened.preview.archiveSha256, title: "收到的做法" }));
+  resetCapsuleShareMetrics(); // the first stages are another test's; this one is about what a run did with the pack
+  // What the runtime really mounts for this account: the directories the model is told to open.
+  const mounted = await selectCapsuleMethods(capsules, { userId: alice, projectId: null });
+  const received = mounted.filter((method) => method.capsuleId === pack.id);
+  assert.equal(received.length, 2, "both methods of the pack are mounted");
+  const read = (/** @type {string} */ directoryName) => ({ sessionId: "ses_run", transcript: { messages: [{ parts: [{ type: "tool", status: "completed", tool: "read", input: { path: `/runtime/capsule-methods/${directoryName}/SKILL.md` } }] }] } });
+
+  const packs = createReceivedPackOutcomes({ capsules });
+  const run = { id: "run_applied" };
+  assert.equal(await packs.afterRun({ project: { userId: alice }, run, sessions: [read(received[0].directoryName), read(received[1].directoryName)] }), 1);
+  assert.equal(await packs.afterRun({ project: { userId: alice }, run: { id: "run_untouched" }, sessions: [] }), 0);
+  assert.equal(await packs.afterRun({ project: { userId: bob }, run: { id: "run_not_theirs" }, sessions: [read(received[0].directoryName)] }), 0, "another account holds no such pack");
+  assert.deepEqual(funnel(), { "applied/delivery": 1 });
+  packs.onEvidence({ trigger: "learning-evidence", runId: "run_applied", detail: { evidence: "follow-up", verdict: "correction" } });
+  assert.deepEqual(funnel(), { "applied/delivery": 1, "corrected/delivery": 1 });
+  resetCapsuleShareMetrics();
 });
 
 test("an archive that carries anything but the declared text entries is refused by name, before any key is derived", options, async () => {

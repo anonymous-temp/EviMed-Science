@@ -4,7 +4,7 @@ import { productId } from "./productPersistence.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
 import { reachableAccounts } from "./capsuleRecipients.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
-import { recordShareDeclined, recordShareRefused, recordShared, recordTakedown } from "./capsuleShareMetrics.mjs";
+import { recordShareDeclined, recordShareOpened, recordShareRefused, recordShared, recordTakedown } from "./capsuleShareMetrics.mjs";
 
 /**
  * Handing a capsule to other accounts of this deployment, in the app (evidence-flywheel plan §7, F17a, 2026-10-05): a delivery to
@@ -215,7 +215,7 @@ export class CapsuleSharing {
     if (["withdrawn", "taken_down", "declined"].includes(row.state)) return { delivery: view(), preview: null };
     if (row.state === "delivered") {
       const opened = (await this.database.query("UPDATE evimed_share.deliveries SET state='opened', opened_at=clock_timestamp() WHERE id=$1 AND state='delivered' RETURNING *", [row.id])).rows[0];
-      if (opened) row = { ...opened, sender_name: row.sender_name, signed_as: row.signed_as };
+      if (opened) { row = { ...opened, sender_name: row.sender_name, signed_as: row.signed_as }; recordShareOpened("delivery"); }
     }
     let preview = null;
     try {
