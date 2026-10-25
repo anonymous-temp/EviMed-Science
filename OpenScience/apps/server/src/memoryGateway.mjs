@@ -1,7 +1,7 @@
 import { carriesPlatformContext, maskIdentifiers, unwrapUserWrappers } from "@evimed/domain";
 import {
   recordGatewayCommit, recordGatewayMasked, recordGatewayMessage, recordGatewayRefusal, recordGatewayRequest,
-  recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure,
+  recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure, recordRecallNote,
 } from "./nativeMemoryMetrics.mjs";
 import { DERIVED_INDEX_SEGMENT, OBSERVATIONS_SEGMENT, nativeMemoryFile } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
@@ -50,6 +50,9 @@ import { HttpError } from "./security.mjs";
  *     index itself stays unreachable on purpose: a file read from it could outlive the forgetting of the fact it was made from.
  *     Read-only by construction (nothing here writes a capsule), refused by the same admission (a paused account, a trial of someone
  *     else's capsule and a platform-started turn read nothing), and a capsule half that fails costs the search only itself.
+ * 10b. **What a recall returned is noted** (2026-10-25): the files a search or a read returned get a `last_recalled_at` and a count in
+ *     the overlay, so that a later decision about what to let go of can look at use. Never waited on, never a reason for a recall to
+ *     fail, and nothing acts on it yet (the retention period stays unset).
  * 10. **Never forwarded at all:** `stats/*` (account-wide counts), `admin/*`, `content/write`, `DELETE fs`, `pack/*`,
  *     `fs/attrs/*` — those are the memory page's, made by the control plane itself.
  *
@@ -334,6 +337,18 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   /** Accounts this process has already registered with the engine's admin routes. @type {Set<string>} */
   const registered = new Set();
 
+  /**
+   * The memory files a search or a read returned, noted in the overlay. Fire and forget: a recall never waits on, or fails by, this.
+   * @param {string} userId @param {readonly unknown[]} uris
+   */
+  function noteRecalled(userId, uris) {
+    if (!overlay?.configured) return;
+    const root = `${/** @type {any} */ (sessions)?.userRoot?.(userId) ?? ""}/memories`;
+    const files = [...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(uri, root))))];
+    if (!files.length) return;
+    void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
+  }
+
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
   function overLimit(windows, key, span, limit) {
     if (!limit) return false;
@@ -542,11 +557,17 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideNativeMemories(given.target_uri, ctx.userRoot))) {
         throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
       }
-      if (!context) return { status: 200, json: await scopedListSearch(sessions, ctx, given), outcome: "forwarded" };
+      if (!context) {
+        const found = await scopedListSearch(sessions, ctx, given);
+        noteRecalled(ctx.user.id, (found.result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+        return { status: 200, json: found, outcome: "forwarded" };
+      }
       if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
       const { purpose: _purpose, quotas: _quotas, peer_scope: _peerScope, ...rest } = given;
       const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : [], true) };
-      return { status: 200, json: await /** @type {any} */ (sessions).search(ctx.user.id, body), outcome: "forwarded" };
+      const answered = await /** @type {any} */ (sessions).search(ctx.user.id, body);
+      noteRecalled(ctx.user.id, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
+      return { status: 200, json: answered, outcome: "forwarded" };
     },
     async read(ctx) {
       const uri = String(ctx.query.get("uri") ?? "");
@@ -557,6 +578,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
       const text = await /** @type {any} */ (sessions).read(ctx.user.id, uri, { timeoutMs: /** @type {any} */ (sessions).fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
+      noteRecalled(ctx.user.id, [absolute(uri, ctx.userRoot)]);
       return { status: 200, json: ok(text), outcome: "forwarded" };
     },
     async list(ctx) {
@@ -630,12 +652,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10);
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
+            afterCall.set(message.id, async (answer) => { if (!answer?.error) noteRecalled(ctx.user.id, uris.map((/** @type {string} */ uri) => absolute(uri, ctx.userRoot))); });
           } else if (name === "list") {
             const uri = typeof args.uri === "string" && args.uri ? args.uri : `${ctx.userRoot}/memories`;
             if (isHidden(uri)) { local.push(toolText(message.id, "（空）")); continue; }
             local.push(toolText(message.id, JSON.stringify(await scopedMemoryList(sessions, ctx, uri, { recursive: args.recursive === true ? "true" : "false" }))));
           } else {
             const result = await scopedListSearch(sessions, ctx, args);
+            noteRecalled(ctx.user.id, (result.result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
             const content = [ { type: "text", text: JSON.stringify(result.result) } ];
             const query = String(args.query ?? "").slice(0, 2_000);
             const target = typeof args.target_uri === "string" && args.target_uri ? args.target_uri : `${ctx.userRoot}/memories`;

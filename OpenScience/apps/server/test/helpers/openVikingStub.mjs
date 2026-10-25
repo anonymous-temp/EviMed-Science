@@ -49,6 +49,10 @@ export class OpenVikingStub {
     this.users = new Map();
     /** @type {Set<string>} users being deleted */
     this.deleting = new Set();
+    /** @type {Set<string>} `${user}/${target}` privacy configurations a v0.5.2 engine keeps beside a session; an engine without any answers 404 to the delete, as v0.5.1.1 does */
+    this.privacyConfigs = new Set();
+    /** What `/health` says the engine is. */
+    this.version = "v0.5.1.1";
     /** @type {any[]} every request, in order */
     this.requests = [];
     this.taskSeq = 0;
@@ -108,7 +112,7 @@ export class OpenVikingStub {
       res.writeHead(status, { "content-type": contentType });
       res.end(typeof json === "string" ? json : JSON.stringify(json));
     };
-    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: "v0.5.1.1", auth_mode: "trusted", user_id: user || null });
+    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: this.version, auth_mode: "trusted", user_id: user || null });
     if (req.headers["x-api-key"] !== this.apiKey) return send(401, fail("UNAUTHENTICATED", "Invalid API key"));
     if (this.failWith) return send(this.failWith, fail("UNAVAILABLE", "stub: down"));
     const admin = /^\/api\/v1\/admin\/accounts\/([^/]+)\/users(?:\/([^/]+)(\/settings)?)?$/.exec(url.pathname);
@@ -120,6 +124,12 @@ export class OpenVikingStub {
     const own = `viking://user/${user}`;
     const within = (uri) => uri === own || uri.startsWith(`${own}/`) || uri === "viking://user" || uri.startsWith("viking://resources") || uri.startsWith("viking://agent");
 
+    const privacy = /^\/api\/v1\/privacy-configs\/session\/([^/]+)$/.exec(path);
+    if (privacy && req.method === "DELETE") {
+      const key = `${user}/${decodeURIComponent(privacy[1])}`;
+      if (!this.privacyConfigs.delete(key)) return send(404, fail("NOT_FOUND", "Privacy config not found"));
+      return send(200, ok({ deleted: true }));
+    }
     if (path === "/api/v1/sessions" && req.method === "POST") {
       const id = String(body?.session_id ?? `auto-${this.sessions.size + 1}`);
       if (this.#session(user, id)) return send(409, fail("ALREADY_EXISTS", `Session already exists: ${id}`));

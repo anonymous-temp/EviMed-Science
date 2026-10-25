@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { OPENVIKING_MEMORY_TYPES, nativeMemoryRoot, openVikingUserId, userRootUri } from "./openVikingLayout.mjs";
+import { recordPrivacyDelete } from "./nativeMemoryMetrics.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -29,6 +31,12 @@ import { HttpError } from "./security.mjs";
  *    request as that user stops answering 412.
  *  - **A failed commit is never retried** and its archive is not reachable through the session routes again; the
  *    messages stay readable as a file (`history/archive_NNN/messages.jsonl`) beside a `.failed.json`.
+ *  - **v0.5.2 keeps a session's privacy configuration after the session** (read from its source and docs, not yet measured on a running
+ *    engine): it replaces the credentials it finds in a session's messages with `{{ov_privacy:…}}` placeholders and stores the real values
+ *    in `viking://user/<id>/privacy/session/<target>/`, and deleting the session retains them. So a session's deletion is followed by
+ *    `DELETE /api/v1/privacy-configs/session/<target>`, the target being the session id when it is an engine identifier and
+ *    `_<sha256(id)[:24]>` when it is not (`session_privacy_target`). A 404 is the answer of a v0.5.1.1 engine (no such route) and of a
+ *    session with none, and is fine; any other failure is counted and never fails the deletion.
  *
  * Every call names the acting account by the platform's own user id; `OpenVikingClient.request` hashes it, writes
  * the three identity headers and owns the deadline and the error names (`OPENVIKING_REQUEST_ERROR_CODES`).
@@ -150,6 +158,19 @@ export function platformSessionOf(engineSessionId) {
 }
 
 const SESSION_ID = /^[A-Za-z0-9_.@-]{1,200}$/;
+/** The engine's own identifier rule (`OPENVIKING_IDENTIFIER` of the client): what a privacy target may be as it stands. */
+const ENGINE_IDENTIFIER = /^(?!\.{1,2}$)(?!.*@.*@)[A-Za-z0-9_.@-]{1,128}$/;
+
+/**
+ * Where v0.5.2 keeps a session's privacy configuration: the session id itself when it is a valid engine identifier, else `_` and the first
+ * 24 hex characters of its sha-256 (`session_privacy_target` upstream, read from the source at the tag; the lab probe in the contract README
+ * checks it on a running engine).
+ * @param {string} sessionId
+ */
+export function privacySessionTarget(sessionId) {
+  const id = sessionSegment(sessionId);
+  return ENGINE_IDENTIFIER.test(id) ? id : `_${createHash("sha256").update(id).digest("hex").slice(0, 24)}`;
+}
 
 /** @param {unknown} value */
 function sessionSegment(value) {
@@ -230,10 +251,25 @@ export class OpenVikingSessions {
   async deleteSession(userId, sessionId) {
     try {
       await this.client.request({ method: "DELETE", path: `/api/v1/sessions/${sessionSegment(sessionId)}`, userId, timeoutMs: this.timeoutMs });
+      await this.#deletePrivacyConfig(userId, sessionId);
       return true;
     } catch (error) {
-      if (/** @type {any} */ (error)?.code === "memory_index_not_found") return false;
+      if (/** @type {any} */ (error)?.code === "memory_index_not_found") { await this.#deletePrivacyConfig(userId, sessionId); return false; }
       throw error;
+    }
+  }
+
+  /**
+   * The privacy configuration v0.5.2 keeps beside a session, deleted with it. Best effort by design (it is an engine that may not have the
+   * route): the outcome is counted, and nothing here ever fails a deletion.
+   * @param {string} userId @param {string} sessionId
+   */
+  async #deletePrivacyConfig(userId, sessionId) {
+    try {
+      await this.client.request({ method: "DELETE", path: `/api/v1/privacy-configs/session/${privacySessionTarget(sessionId)}`, userId, timeoutMs: this.timeoutMs });
+      recordPrivacyDelete("deleted");
+    } catch (error) {
+      recordPrivacyDelete(/** @type {any} */ (error)?.code === "memory_index_not_found" ? "absent" : "failed");
     }
   }
 

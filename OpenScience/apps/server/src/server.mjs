@@ -1358,13 +1358,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
   // The memory page, the map and the account's own operations, and the worker that reads what the engine did into the overlay,
   // replays what failed and carries a changed source's label into the files that name it.
-  const nativeMemory = new NativeMemoryStore({ sessions: openVikingSessions, overlay: nativeMemoryOverlay,
+  // One judge of whether a line says what another says: it holds a line the engine wrote near one the person removed out (one call a
+  // commit) and finds the other lines that say what a line the person forgot said (`nativeMemoryRejections.mjs`, `nativeMemoryForgetEverywhere.mjs`).
+  const rejectionJudge = createRejectionJudge({ config, usageLedger });
+  const nativeMemory = new NativeMemoryStore({ sessions: openVikingSessions, overlay: nativeMemoryOverlay, rejectionJudge,
+    report: (line) => process.stderr.write(`${line}\n`),
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
   const nativeMemoryWorker = new NativeMemoryWorker({
     config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory,
-    // A line the engine writes that is near one the person removed is put to one model call a commit (`nativeMemoryRejections.mjs`).
-    rejectionJudge: createRejectionJudge({ config, usageLedger }),
+    rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
   });
   // 重读旧记忆 on the native engine: the engine's own memory consolidation, asked for now and then and read back into the overlay as
