@@ -134,6 +134,8 @@ test("the model's answer is closed: anything but a general verdict with a listed
     const f = build({ judge: async () => answer });
     const result = await f.promotion.consider(method("senior-1"));
     assert.deepEqual([result.state, result.reason], ["rejected", [reason]], JSON.stringify(answer));
+    // Whichever gate refused it, the record on the publisher keeps neither the method's words nor whose it was.
+    assert.deepEqual([records(f)[0].payload.text, records(f)[0].payload.derivedFrom], [null, null], JSON.stringify(answer));
   }
   /** @type {string[]} */ const reported = [];
   let calls = 0;
@@ -143,6 +145,7 @@ test("the model's answer is closed: anything but a general verdict with a listed
   assert.equal(records(f)[0].payload.status, "judge_pending");
   await f.promotion.tick();
   assert.deepEqual([records(f)[0].payload.status, records(f)[0].payload.reason, calls], ["rejected", ["judge_unavailable"], 3]);
+  assert.deepEqual([records(f)[0].payload.text, records(f)[0].payload.derivedFrom], [null, null]);
   assert.ok(reported.every((code) => code === "official_promotion_model_unavailable"));
 });
 

@@ -84,9 +84,11 @@ def release_of(host) -> str:
 
 
 def sweep(host, log=print) -> int:
-    """Delete `cl-*` accounts older than an hour (a crashed run's): their password was never kept, so it is replaced through the server's own
-    hash first, as the reference run did."""
-    rows = host.rows("select id from evimed_control.users where id like 'cl-%' and created_at < now() - interval '1 hour';")
+    """Delete the accounts a crashed run left, older than an hour: their password was never kept, so it is replaced through the server's own
+    hash first, as the reference run did. Only the exact names `Host.register` makes (`cl-<scenario><a|b>-<8 hex>`) and only local accounts:
+    a person who registered a name that merely starts with `cl-` is never touched."""
+    rows = host.rows("select id from evimed_control.users where id ~ '^cl-s[0-9]{1,2}[a-z]-[0-9a-f]{8}$' and auth_type='local' "
+                     "and created_at < now() - interval '1 hour';")
     removed = 0
     for (username,) in rows:
         password = secrets.token_urlsafe(18)

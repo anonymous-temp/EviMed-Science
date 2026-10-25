@@ -40,6 +40,7 @@
 
 import { PLATFORM_ACCOUNT_AUTH_TYPE, PLATFORM_PUBLISHER_NAME, PLATFORM_PUBLISHER_USER_ID, emptyLearning, foldApplied, methodHarmTest } from "@evimed/domain";
 import { OFFICIAL_PACKS_DIR, officialPack, readOfficialPackSources } from "./officialPackSources.mjs";
+import { createHash } from "node:crypto";
 
 /** The publisher's record of a published pack, of a method body's outcomes, and of a promoted method (`officialPromotion.mjs`). */
 export const OFFICIAL_PACK_RECORD = "official-pack";
@@ -407,11 +408,12 @@ export class OfficialPacks {
   /**
    * What became of one run that opened an official method, from the researcher's own next words (`methodAppliedOutcomes.mjs`): folded into
    * the method body's record, once per run, and read by the sequential harm test. A body the test finds harmful is stopped for every account
-   * (`status: stopped`, with the numbers it was stopped on) and the mount stops offering it within seconds.
-   * @param {{ key: string, sha: string, runId: string, outcome: "corrected" | "clean", at: string }} applied
+   * (`status: stopped`, with the numbers it was stopped on) and the mount stops offering it within seconds — but only once the corrections
+   * come from at least two accounts (`correctedBy`, one-way keys): a body every account is given is not stopped for all of them by one.
+   * @param {{ key: string, sha: string, runId: string, outcome: "corrected" | "clean", at: string, userId?: string }} applied
    * @returns {Promise<{ changed: boolean, stopped: boolean }>}
    */
-  async recordApplied({ key, sha, runId, outcome, at }) {
+  async recordApplied({ key, sha, runId, outcome, at, userId }) {
     const parsed = key.split(":");
     if (parsed[0] !== "official" || parsed.length !== 3 || !sha) return { changed: false, stopped: false };
     const id = `official-method:${parsed[1]}:${parsed[2]}:${String(sha).slice(0, 12)}`;
@@ -422,9 +424,12 @@ export class OfficialPacks {
       const learning = foldApplied(base.learning, { runId, outcome, at });
       if (learning === base.learning) return { changed: false, stopped: false };
       const trimmed = { ...learning, observations: (learning.observations ?? []).slice(-OBSERVATION_LIMIT) };
+      const who = userId ? createHash("sha256").update(`official-corrected\u0000${userId}`).digest("hex").slice(0, 16) : null;
+      const correctedBy = outcome === "corrected" && who && !(base.correctedBy ?? []).includes(who)
+        ? [...(base.correctedBy ?? []), who].slice(-50) : (base.correctedBy ?? []);
       const verdict = methodHarmTest(trimmed);
-      const stopped = verdict.state === "harm";
-      const payload = { ...base, learning: trimmed,
+      const stopped = verdict.state === "harm" && correctedBy.length >= 2;
+      const payload = { ...base, learning: trimmed, correctedBy,
         ...(stopped ? { status: "stopped", stopped: { at: this.now().toISOString(), reason: "harm", runs: verdict.runs, bad: verdict.bad, llr: verdict.llr } } : {}) };
       try {
         if (row) await this.documents.put(this.publisherId, "preferences", id, payload, { expectedRevision: row.revision, telemetry: !stopped });

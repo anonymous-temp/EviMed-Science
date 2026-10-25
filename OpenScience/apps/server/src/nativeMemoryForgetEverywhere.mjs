@@ -66,10 +66,30 @@ export async function duplicatesOf({ files, removed, judge = null, userId }) {
   if (!judge) { recordForgetDuplicates("judge_failed", asked.length); return found; }
   const verdict = await judge.same({ userId, candidates: asked.map((entry) => ({ text: normalisedStatement(entry.line), removed: entry.near })), said: [] });
   let kept = 0;
+  /** The lines only the judge called the same, as `uri NUL line`: a delete, which cannot be undone, takes none of them (`withoutJudged`). */
+  const judged = new Set();
   asked.forEach((entry, index) => {
-    if (verdict.same.has(index)) keep(entry.uri, entry.line); else kept += 1;
+    if (verdict.same.has(index)) { keep(entry.uri, entry.line); judged.add(`${entry.uri}\u0000${entry.line}`); } else kept += 1;
   });
+  Object.defineProperty(found, "judged", { value: judged });
   // A judge that returned nothing at all and a judge that said "different" are told apart by the rejection judge's own counters.
   recordForgetDuplicates("kept", kept);
   return found;
 }
+
+/**
+ * The part of a plan that code decided (a line that contains the removed words): what a delete takes with it. A line only the judge called the
+ * same is forgotten restorably by a forget and left where it is by a delete, because a model's judgement is never made irreversible.
+ * @param {Map<string, string[]> & { judged?: Set<string> }} plan @returns {Map<string, string[]>}
+ */
+export function withoutJudged(plan) {
+  const judged = plan.judged;
+  if (!judged?.size) return plan;
+  const certain = new Map();
+  for (const [uri, lines] of plan) {
+    const kept = lines.filter((line) => !judged.has(`${uri}\u0000${line}`));
+    if (kept.length) certain.set(uri, kept);
+  }
+  return certain;
+}
+

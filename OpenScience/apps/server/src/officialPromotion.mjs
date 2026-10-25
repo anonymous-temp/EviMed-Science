@@ -211,8 +211,11 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   const get = (id) => documents.get(publisher(), "preferences", id);
   /** @param {any} row @param {Record<string, any>} patch @returns {Promise<any>} */
   async function update(row, patch) {
+    // A rejected method keeps no text and names no account, whichever gate refused it: nothing about what was refused stays outside the
+    // account for longer than the decision (the account's own deletion and reset never reach the publisher's records).
+    const forgotten = patch.status === "rejected" ? { text: null, derivedFrom: null } : {};
     for (let attempt = 0, current = row; attempt < 3; attempt += 1) {
-      try { return await documents.put(publisher(), "preferences", current.id, { ...current.payload, ...patch, updatedAt: now().toISOString() }, { expectedRevision: current.revision }); }
+      try { return await documents.put(publisher(), "preferences", current.id, { ...current.payload, ...patch, ...forgotten, updatedAt: now().toISOString() }, { expectedRevision: current.revision }); }
       catch (error) {
         if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 2) throw error;
         current = await get(current.id) ?? current;
@@ -235,8 +238,9 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   async function corroborated(row) {
     const own = row.payload.contributor;
     const peers = (await all()).filter((other) => other.id !== row.id && other.payload.scopeId === row.payload.scopeId && other.payload.lessonClass === row.payload.lessonClass
-      && other.payload.contributor !== own && ["awaiting_corroboration", "candidate", "active"].includes(other.payload.status));
-    // A method that is already in the pack has no account left on its record, and it was a voice when it was let in.
+      && other.payload.contributor !== own && ["awaiting_corroboration", "candidate"].includes(other.payload.status));
+    // Two accounts arriving at a method of one kind independently. A method already in the pack is not a voice for the next one: if it
+    // were, the first promotion of a scope and class would let every later method of that pair through on the model's word alone.
     return peers.length > 0;
   }
 

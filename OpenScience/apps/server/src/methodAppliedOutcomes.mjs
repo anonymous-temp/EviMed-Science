@@ -149,7 +149,7 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
             const appliedAt = at || new Date(now()).toISOString();
             const { changed } = own
               ? await learning.recordApplied(userId, methodId, { runId, outcome, at: appliedAt }, payload.contentDigest)
-              : await /** @type {any} */ (official).recordApplied({ key: methodId, sha: /** @type {any} */ (platform).sha, runId, outcome, at: appliedAt });
+              : await /** @type {any} */ (official).recordApplied({ key: methodId, sha: /** @type {any} */ (platform).sha, runId, outcome, at: appliedAt, userId });
             if (changed) {
               result[outcome] += 1;
               try { onApplied?.(outcome); } catch { /* a counter never decides */ }

@@ -104,6 +104,15 @@ test("a line that contains the forgotten words goes by code alone, and a hard de
   assert.ok((await f.overlay.rejectedFingerprints(f.userId, "preferences")).size >= 1, "but the wording is on the rejection list");
 });
 
+test("a delete takes only what code decided says the same: a line only the judge called the same stays where it is", options, async (t) => {
+  const { f, held, preference } = await commute(t);
+  const target = await line(f, "我平时骑车通勤，单程约 40 分钟");
+  await f.store.remove(f.userId, target.id, { keepText: false });
+  assert.ok(held.asked.length >= 1, "the judge was asked");
+  assert.match(f.stub.files.get(preference), /骑自行车/, "a model's judgement is never made irreversible");
+  assert.deepEqual(await f.store.forgotten(f.userId), []);
+});
+
 test("a judge that cannot be reached leaves the other line where it is, and the forget itself stands", options, async (t) => {
   const { f, preference } = await commute(t, { judge: { same: async () => { throw new Error("model unreachable"); } } });
   const target = await line(f, "我平时骑车通勤，单程约 40 分钟");

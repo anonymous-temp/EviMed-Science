@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
-import { actOf, duplicatesOf } from "./nativeMemoryForgetEverywhere.mjs";
+import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates } from "./nativeMemoryMetrics.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
@@ -887,11 +887,12 @@ export class NativeMemoryStore {
       await this.#write(userId, file, next, { actor, reason: `${keepText ? "forgotten on the memory page" : "deleted on the memory page"}${actSuffix(act)}` });
       // A delete takes the line out of the history too; a forget keeps it for the undo.
       if (!keepText) await this.overlay.scrubLines(userId, file.uri, await this.#wordingsOf(userId, file.uri, line.raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")));
-      const also = await this.#forgetDuplicates(userId, plan, { act, keepText, actor });
+      const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor });
       return { removed: true, uri: file.uri, hash: contentHash(next), ...(also ? { alsoForgot: also } : {}) };
     }
     const forgotten = await this.forgetFile(userId, file, { keepText, actor, reason: act ? `${keepText ? "forgotten on the memory page" : "deleted"}${actSuffix(act)}` : "" });
-    const also = await this.#forgetDuplicates(userId, plan, { act, keepText, actor });
+    // A delete takes only what code decided says the same; a forget, which can be undone, also what the judge did (`withoutJudged`).
+    const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor });
     return { ...forgotten, ...(also ? { alsoForgot: also } : {}) };
   }
 

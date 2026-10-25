@@ -162,11 +162,13 @@ test("what runs say counts across accounts: a body that is corrected again and a
   const held = (await capsules.officialMethods(other)).find((method) => method.key === "official:review:pooling");
   assert.ok(held);
   const at = (/** @type {number} */ n) => new Date(Date.UTC(2026, 9, 25, 10, n)).toISOString();
-  // Three corrections are not yet a finding; the runs are of different accounts' and counted once each.
-  for (let n = 0; n < 3; n += 1) assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: `run_${n}`, outcome: "corrected", at: at(n) }), { changed: true, stopped: false });
-  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_0", outcome: "corrected", at: at(0) }), { changed: false, stopped: false }, "a run is counted once");
+  // Three corrections are not yet a finding; each run is counted once.
+  for (let n = 0; n < 3; n += 1) assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: `run_${n}`, outcome: "corrected", at: at(n), userId: person }), { changed: true, stopped: false });
+  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_0", outcome: "corrected", at: at(0), userId: person }), { changed: false, stopped: false }, "a run is counted once");
   assert.equal((await capsules.officialMethods(other)).some((method) => method.key === held.key), true);
-  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_3", outcome: "corrected", at: at(3) }), { changed: true, stopped: true });
+  // A fourth correction from the same account would be a finding, but one account does not stop a body every account is given.
+  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_3", outcome: "corrected", at: at(3), userId: person }), { changed: true, stopped: false });
+  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_4", outcome: "corrected", at: at(4), userId: other }), { changed: true, stopped: true });
   // Stopped for every account at once, with the numbers it was stopped on, and gone from the shelf's list of what a pack holds.
   assert.equal((await capsules.officialMethods(other)).some((method) => method.key === held.key), false);
   assert.equal((await capsules.officialMethods(person)).some((method) => method.key === held.key), false);

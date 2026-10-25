@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
-import { IMPORT_MAX_STATEMENTS, importLines, importRequestBody, parseImport, sharesASpan } from "../src/nativeMemoryImport.mjs";
+import { IMPORT_MAX_STATEMENTS, NativeMemoryImport, importLines, importRequestBody, parseImport, sharesASpan } from "../src/nativeMemoryImport.mjs";
 
 const PASTED = [
   "- 我是心内科医生，主要做房颤的临床研究",
@@ -77,3 +77,32 @@ test("anything but the one JSON shape is nothing, a tier outside the three is dr
   const parsed = parseImport(answer(many.map((text, index) => ({ line: index + 1, text, tier: "ordinary" }))), many);
   assert.equal(parsed.offered.length, IMPORT_MAX_STATEMENTS);
 });
+
+test("offers sent at once cannot all pass the hourly count, and two confirms at once hand the statements to the engine once", async () => {
+  /** @type {string[][]} */ const handed = [];
+  const offers = new Map();
+  let release = () => {};
+  const gate = new Promise((resolve) => { release = resolve; });
+  const overlay = {
+    importsSince: async () => 0,
+    createImport: async (_user, offer) => { offers.set(offer.id, { ...offer, state: "offered" }); },
+    importOffer: async (_user, id) => offers.get(id) ?? null,
+    markImportSaved: async (_user, id, saved) => { offers.set(id, { ...offers.get(id), state: "saved", saved }); },
+  };
+  const nativeMemory = { rememberImport: async (_user, { ordinary }) => { await gate; handed.push(ordinary); } };
+  let n = 0;
+  const importer = new NativeMemoryImport({
+    config: { memoryImportOffersPerHour: 1, memoryExtractionModel: "deepseek-v4-flash", deepseekProviderEnabled: true, deepseekApiKey: "k" },
+    overlay, nativeMemory, newId: () => `imp_${String(++n).padStart(24, "0")}`,
+    callModel: async () => ({ choices: [{ message: { content: answer([{ line: 5, text: "回答尽量简短", tier: "ordinary" }]) } }] }),
+  });
+  assert.equal(importer.available, true, "the stub has a model and a provider");
+  const results = await Promise.allSettled([1, 2, 3, 4, 5].map(() => importer.offer("u1", { text: PASTED })));
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 3, "the in-process count (three times the hourly limit) holds against requests sent at once");
+  const id = /** @type {any} */ (results.find((result) => result.status === "fulfilled")).value.id;
+  const both = Promise.all([importer.save("u1", id), importer.save("u1", id)]);
+  release();
+  assert.deepEqual(await both, [{ saved: 1 }, { saved: 1 }]);
+  assert.deepEqual(handed, [["回答尽量简短"]], "handed over once");
+});
+

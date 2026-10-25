@@ -135,6 +135,8 @@ export class NativeMemoryImport {
     this.perHour = Math.max(0, Math.trunc(Number(config.memoryImportOffersPerHour ?? 5)));
     /** The attempts of the last hour by account, failed ones too, in this process: a model that keeps failing is asked a bounded number of times. @type {Map<string, number[]>} */
     this.attempts = new Map();
+    /** Confirms being handed to the engine now, by account and offer. @type {Map<string, Promise<{ saved: number }>>} */
+    this.saving = new Map();
   }
 
   /** Whether a model can be asked here: a model and a provider. */
@@ -148,16 +150,21 @@ export class NativeMemoryImport {
   async offer(userId, { text }) {
     const pasted = String(text ?? "");
     if (!pasted.trim() || [...pasted].length > IMPORT_MAX_CHARS) throw new HttpError(400, "memory_payload_invalid", `The text to import must be 1 to ${IMPORT_MAX_CHARS} characters.`);
-    const settings = this.memorySettings ? await this.memorySettings.settings(userId) : null;
-    if (settings?.learningPaused) throw new HttpError(409, "memory_import_paused", "Memory is paused: nothing would be kept.");
+    // The attempt is taken before the first wait, so requests sent at once cannot all pass the count (each is a model call on the account).
     const at = this.now();
     const since = new Date(at.getTime() - 3_600_000);
     const recent = (this.attempts.get(userId) ?? []).filter((time) => time > since.getTime());
-    if (this.perHour < 1 || recent.length >= this.perHour * 3 || (await this.overlay.importsSince(userId, since)) >= this.perHour) {
+    if (this.perHour < 1 || recent.length >= this.perHour * 3) {
       recordImport("rate_limited");
       throw new HttpError(429, "memory_import_rate_limited", "Too many imports in an hour.");
     }
     this.attempts.set(userId, [...recent, at.getTime()]);
+    const settings = this.memorySettings ? await this.memorySettings.settings(userId) : null;
+    if (settings?.learningPaused) throw new HttpError(409, "memory_import_paused", "Memory is paused: nothing would be kept.");
+    if ((await this.overlay.importsSince(userId, since)) >= this.perHour) {
+      recordImport("rate_limited");
+      throw new HttpError(429, "memory_import_rate_limited", "Too many imports in an hour.");
+    }
     if (!this.available) { recordImport("model_failed"); throw new HttpError(503, "memory_import_unavailable", "The import cannot read the text now."); }
     const lines = importLines(pasted);
     const controller = new AbortController();
@@ -189,6 +196,17 @@ export class NativeMemoryImport {
    */
   async save(userId, id, { ids = null } = {}) {
     if (!/^imp_[a-f0-9]{24}$/.test(String(id))) throw new HttpError(404, "memory_import_expired", "This import is gone.");
+    // A second confirm while the first is still handing the statements over waits for it and answers the same, never hands them over twice.
+    const key = `${userId}\u0000${id}`;
+    const running = this.saving.get(key);
+    if (running) return running;
+    const saving = this.#save(userId, id, { ids }).finally(() => this.saving.delete(key));
+    this.saving.set(key, saving);
+    return saving;
+  }
+
+  /** @param {string} userId @param {string} id @param {{ ids?: readonly string[] | null }} choice */
+  async #save(userId, id, { ids = null }) {
     const offer = await this.overlay.importOffer(userId, id);
     if (!offer || offer.expired) throw new HttpError(404, "memory_import_expired", "This import is gone.");
     if (offer.state === "saved") return { saved: offer.saved };
