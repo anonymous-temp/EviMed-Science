@@ -3,9 +3,9 @@
 Which ranker puts the right memory in front of the model.
 
 This is the cheap gate for adopting a recall index. It
-is not the end-to-end question — `evals/method-quality/configs/memory-ablation-v1.json`
-asks whether memory changes a delivered package — but a provider that cannot win
-here cannot win there either.
+is not the end-to-end question (whether memory changes a delivered package, which
+the memory-ablation study of 2026-09 asked and git history keeps) — but a provider
+that cannot win here cannot win there either.
 
 The runner has two modes since 2026-10-25: `--mode capsule` (capsule facts, the lexical fallback against the index) and
 `--mode engine` (OpenViking's own memory engine, which every account's memory is on). The third, the platform's own records

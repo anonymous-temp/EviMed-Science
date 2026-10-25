@@ -3,8 +3,8 @@
  * Which ranker puts the right memory in front of the model?
  *
  * This is the gate for adopting a recall index. It is not the end-to-end
- * question — `evals/method-quality/configs/memory-ablation-v1.json` asks
- * whether memory changes a delivered package — but it is the cheap one, and a
+ * question (whether memory changes a delivered package, which the memory-ablation
+ * study of 2026-09 asked and git history keeps) — but it is the cheap one, and a
  * provider that cannot win here cannot win there either. Two modes remain
  * (the third, the platform's own records recall behind `memorySubstrate`, was deleted with the legacy
  * memory engine on 2026-10-25; its results are in git history).
