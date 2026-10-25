@@ -1849,3 +1849,95 @@ export async function setFrontierNotificationSwitch(key: FrontierNotificationSwi
 export function markFrontierEventRead(eventId: string, mark: Record<string, string>): Promise<unknown> {
   return productRequest(`/frontier/events/${id(eventId)}/read`, "POST", { mark });
 }
+
+/* ------------------------------------------------------------------- hot-event topics (c2-leads 2026-10-25) */
+
+/**
+ * A hot-event topic (contract §T): the general medical question a public event raised — its title is the question — the event
+ * in one attributed line, its field, and, when written, one overview citing the topic's items by number; `card` is the
+ * evidence programme's official card for it, when there is one. Never the names of the event's people.
+ */
+export type FrontierTopicSummary = {
+  id: string;
+  title: string;
+  question: string;
+  peg: { text: string; source: { name: string; url: string | null; date: string | null } } | null;
+  domain: string;
+  domainLabel: string;
+  surge: boolean;
+  firstSeenAt: string | null;
+  acceptedAt: string | null;
+  status: "active" | "closed";
+  itemCount: number;
+  overview: { text: string; refs: Array<{ n: number; itemId: string; title: string; sourceName: string }> } | null;
+  card: { id: string; title: string; href: string } | null;
+};
+
+/** What an item is to a topic: a report on the question, a piece of primary evidence, or background. */
+export type FrontierTopicRole = "report" | "evidence" | "background";
+
+export type FrontierTopicPage = { topic: FrontierTopicSummary; items: Array<{ role: FrontierTopicRole; item: FrontierItem }> };
+
+const TOPIC_ROLES: readonly FrontierTopicRole[] = ["report", "evidence", "background"];
+
+/** One topic as the server sends it, or null when it is not one. */
+export function parseFrontierTopic(value: unknown): FrontierTopicSummary | null {
+  const raw = record(value);
+  const topicId = text(raw?.id);
+  const title = text(raw?.title);
+  if (!raw || !topicId || !/^[a-z0-9]{12,32}$/.test(topicId) || !title) return null;
+  const peg = record(raw.peg);
+  const pegSource = record(peg?.source);
+  const overview = record(raw.overview);
+  const card = record(raw.card);
+  const href = text(card?.href);
+  return {
+    id: topicId,
+    title,
+    question: text(raw.question) ?? title,
+    peg: peg && text(peg.text) ? { text: String(peg.text), source: { name: text(pegSource?.name) ?? "", url: safeLink(pegSource?.url), date: text(pegSource?.date) } } : null,
+    domain: text(raw.domain) ?? "other",
+    domainLabel: text(raw.domainLabel) ?? "其他",
+    surge: raw.surge === true,
+    firstSeenAt: moment(raw.firstSeenAt),
+    acceptedAt: moment(raw.acceptedAt),
+    status: raw.status === "closed" ? "closed" : "active",
+    itemCount: count(raw.itemCount),
+    overview: overview && text(overview.text) ? {
+      text: String(overview.text),
+      refs: (Array.isArray(overview.refs) ? overview.refs : []).flatMap((entry) => {
+        const ref = record(entry);
+        const n = typeof ref?.n === "number" && Number.isInteger(ref.n) && ref.n > 0 ? ref.n : null;
+        const itemId = text(ref?.itemId);
+        return n && itemId ? [{ n, itemId, title: text(ref?.title) ?? "", sourceName: text(ref?.sourceName) ?? "" }] : [];
+      }),
+    } : null,
+    // Only an address inside the app is followed: a card is read on the evidence zone's own page.
+    card: card && text(card.id) && text(card.title) && href && href.startsWith("/app/frontier/zones/") ? { id: String(card.id), title: String(card.title), href } : null,
+  };
+}
+
+/**
+ * The topics 热榜 shows: the active ones (the default) or the recent ones, closed included. Null where the route does not
+ * exist yet or the module is off.
+ */
+export function fetchFrontierTopics(status: "active" | "recent" = "active", limit = 10): Promise<FrontierTopicSummary[] | null> {
+  return optional(async () => {
+    const raw = record(await productRequest<unknown>(`/frontier/topics?status=${status}&limit=${Math.min(30, Math.max(1, Math.floor(limit)))}`));
+    return (Array.isArray(raw?.topics) ? raw.topics : []).map(parseFrontierTopic).filter((topic): topic is FrontierTopicSummary => topic !== null);
+  });
+}
+
+/** One topic page: the topic and its items by role, each the feed's own item. */
+export async function fetchFrontierTopic(topicId: string): Promise<FrontierTopicPage> {
+  const raw = record(await productRequest<unknown>(`/frontier/topics/${id(topicId)}`));
+  const topic = parseFrontierTopic(raw?.topic);
+  if (!topic) throw new WebApiError("The frontier topic was malformed.", { status: 502 });
+  const items = (Array.isArray(raw?.items) ? raw.items : []).flatMap((entry) => {
+    const row = record(entry);
+    const item = parseFrontierItem(row?.item);
+    const role = TOPIC_ROLES.find((value) => value === row?.role);
+    return item && role ? [{ role, item }] : [];
+  });
+  return { topic, items };
+}
