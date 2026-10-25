@@ -19,7 +19,7 @@ import { useNarrow } from "@/lib/useMediaQuery";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
-import { allInstalledExtensions, catalogueOrigins, extensionAvailability, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl, visiblePlatformSkills } from "./catalogueModel";
+import { allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl, visiblePlatformSkills } from "./catalogueModel";
 import { inventoryIcon } from "./inventoryIcons";
 import { ExtensionDrawer } from "./ExtensionDrawer";
 import { InventoryList } from "./InventoryList";
@@ -91,8 +91,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   };
   const switchPlatform = (skill: PlatformSkill, enabled: boolean) => act(skill.id, async () => {
     if (!currentPolicy) return;
-    const disabled = currentPolicy.payload.disabled.filter(id => id !== skill.id);
-    const updated = await saveProjectPlatformSkills(projectId, currentPolicy.revision, enabled ? disabled : [...disabled, skill.id]);
+    const updated = await saveProjectPlatformSkills(projectId, currentPolicy.revision, nextDisabled(currentPolicy, skill.id, enabled));
     if (alive.current) { policy.replace(updated); selection.reload(true); builtinPlugins.reload(true); }
   });
   const switchPersonal = (skill: PersonalSkill, enabled: boolean) => act(skill.id, async () => {

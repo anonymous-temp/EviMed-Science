@@ -7,7 +7,7 @@ import { ProductDocuments } from "./productStore.mjs";
 import { migrateProductStore, productId, productInteger, productPayload } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
 import { nativeSkillSnapshotArchive } from "./nativeSkillCatalogue.mjs";
-import { normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins } from '@evimed/domain/platform-skill-policy';
+import { currentDisabledPlatformSkills, normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins } from '@evimed/domain/platform-skill-policy';
 
 /** @param {string} value */
 const sha256 = value => createHash("sha256").update(value).digest("hex");
@@ -585,16 +585,24 @@ export class SkillLibraryService {
       effectiveDisabled: effective ? effective.platformSkills?.disabled ?? [] : null,
       effectiveBuiltins: effective ? observation.builtins ?? Object.fromEntries(['annotation', 'mermaid'].map(id => [id, !(effective.platformSkills?.disabledPlugins ?? []).includes(id)])) : null };
   }
+  /** The ids of the platform skills this account is offered now, or null when the list cannot be read. @param {any} user */
+  async platformSkillIds(user) {
+    if (!this.platformCatalogue) return null;
+    try { return new Set((await this.platformCatalogue.list(user)).items.map((/** @type {any} */ item) => item.id)); }
+    catch { return null; }
+  }
   /** @param {any} user @param {any} project */
   async projectPlatform(user, project) {
     const selected = await this.projectSelections(user, project), catalogue = await this.listPlatform(user);
-    const disabled = selected.payload.disabledPlatformSkills ?? [];
+    const { disabled, stale } = currentDisabledPlatformSkills(selected.payload.disabledPlatformSkills ?? [], new Set(catalogue.items.map((/** @type {any} */ item) => item.id)));
     const { effectiveDisabled, effectiveBuiltins: _builtins, ...activation } = selected.activation;
-    return { id: selected.id, revision: selected.revision, payload: { disabled }, activation,
+    return { id: selected.id, revision: selected.revision, payload: { disabled }, staleDisabled: stale, activation,
       items: catalogue.items.map(item => ({ ...item, enabled: !disabled.includes(item.id),
         effective: effectiveDisabled === null ? null : !effectiveDisabled.includes(item.id) })) };
   }
-  /** Persist alongside personal selections, so a single immutable generation captures both.
+  /** Persist alongside personal selections, so a single immutable generation captures both. A stale id the project already
+   * held (`currentDisabledPlatformSkills`) is dropped rather than refused, so it never makes the project's switches unsaveable; only a
+   * newly named unknown or required id is refused.
    * @param {any} user @param {any} project @param {any} body */
   async saveProjectPlatform(user, project, body) {
     await this.requireProject(user, project);
@@ -603,15 +611,21 @@ export class SkillLibraryService {
     try { disabled = normalizeDisabledPlatformSkills(input.disabled); }
     catch { throw new HttpError(400, 'extension_contract_invalid', 'Invalid optional skill selection.'); }
     const catalogue = await this.listPlatform(user);
-    for (const id of disabled) {
-      const row = catalogue.items.find(item => item.id === id);
-      if (!row) throw new HttpError(404, 'skill_platform_not_found', 'This platform skill is unavailable.');
-      if (row.requirement.required) throw new HttpError(409, 'extension_contract_invalid', 'This method is required by the platform.');
-    }
     await this.withLibraryAccount(user, async () => {
       await this.requireProject(user, project);
       const selection = await this.projectSelections(user, project);
-      await this.documents.put(user.id, 'extension-defaults', selection.id, { ...selection.payload, disabledPlatformSkills: disabled }, {
+      const stored = selection.payload.disabledPlatformSkills ?? [];
+      const kept = [];
+      for (const id of disabled) {
+        const row = catalogue.items.find(item => item.id === id);
+        if (!row || row.requirement.required) {
+          if (stored.includes(id)) continue;
+          if (!row) throw new HttpError(404, 'skill_platform_not_found', 'This platform skill is unavailable.');
+          throw new HttpError(409, 'extension_contract_invalid', 'This method is required by the platform.');
+        }
+        kept.push(id);
+      }
+      await this.documents.put(user.id, 'extension-defaults', selection.id, { ...selection.payload, disabledPlatformSkills: kept }, {
         expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
       });
     });

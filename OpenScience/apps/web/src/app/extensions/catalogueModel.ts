@@ -26,6 +26,15 @@ export function skillActivationText(enabled: boolean, activation?: SkillActivati
   return enabled ? "已启用" : "已关闭";
 }
 
+/**
+ * The disabled list a switch sends: what the project holds, without the one being switched and without any id the page was
+ * not given a row for (a skill a release removed is not re-sent for the server to refuse).
+ */
+export function nextDisabled(policy: { payload: { disabled: string[] }; items: ReadonlyArray<{ id: string }> }, id: string, enabled: boolean): string[] {
+  const kept = policy.payload.disabled.filter(item => item !== id && policy.items.some(row => row.id === item));
+  return enabled ? kept : [...kept, id];
+}
+
 /** Private workflow methods and essential policies remain available in their owning surfaces. */
 export const visiblePlatformSkills = (items: readonly PlatformSkill[], geoGroup?: string) =>
   items.filter(item => !item.requirement?.required && !item.id.startsWith("geo-private:") && (!geoGroup || item.group !== geoGroup));

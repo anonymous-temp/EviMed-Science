@@ -109,3 +109,18 @@ test('optional builtin controls share project revision, preserve skills, and can
   assert.equal(unavailable.items.find(item => item.id === 'annotation').reason, 'deployment_disabled')
   assert.deepEqual(unavailable.payload.disabled, [])
 })
+
+test('a saved disabled id that left the catalogue never blocks a later save and is not sent back to the page', async () => {
+  const { service, documents } = fixture()
+  // A release removed the skill this project had switched off (and one became required by a workflow).
+  await documents.put(user.id, 'extension-defaults', 'skills:project:one', { skills: [], disabledPlatformSkills: ['community:retired-skill', 'core:domain-check', 'office:docx'] }, { expectedRevision: 0 })
+  const view = await service.projectPlatform(user, project)
+  assert.deepEqual(view.payload.disabled, ['office:docx'], 'the page is given only ids it can show and switch')
+  assert.deepEqual(view.staleDisabled, ['community:retired-skill', 'core:domain-check'])
+  // The page re-sends what it holds, or (an older page) the stale ids too: neither is refused.
+  const saved = await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['community:retired-skill', 'office:docx', 'office:pptx'] })
+  assert.deepEqual(saved.payload.disabled, ['office:docx', 'office:pptx'])
+  assert.deepEqual((await service.projectSelections(user, project)).payload.disabledPlatformSkills, ['office:docx', 'office:pptx'], 'the stale id is dropped from storage')
+  // A newly named unknown id is still refused.
+  await assert.rejects(service.saveProjectPlatform(user, project, { expectedRevision: 2, disabled: ['community:never-shipped'] }), { status: 404 })
+})

@@ -7227,16 +7227,21 @@ export class RuntimeManager {
     if (personal.length !== wanted.length || wanted.some(pin => !personal.some(item => item.name === pin.nativeName
       && item.modelInvocable === pin.invocation.modelInvocable && item.path === `${runtime.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR}/${pin.nativeName}/SKILL.md`))
       || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'extension_contract_invalid', 'Native skill discovery did not prove this generation.');
+    // A disabled id the runtime does not list at all names a skill this image no longer carries (a release removed or
+    // renamed it): there is nothing to restrict, so it is reported, never a reason the generation cannot be proven. Every
+    // skill the runtime does list must carry both invocation flags off.
+    /** @type {string[]} */ const absentDisabled = [];
     if (disabled.length) {
       const catalogue = await this.callKernel(runtime, project, 'evimedSkills/list', { sessionId: addressed.sessionId }, AbortSignal.timeout(10000));
       if (catalogue?.complete !== true || !Array.isArray(catalogue.items) || disabled.some(id => {
         const item = catalogue.items.find(candidate => candidate.name === id.split(':')[1]);
-        return !item || item.invocation?.userInvocable !== false || item.invocation?.modelInvocable !== false;
+        if (!item) { absentDisabled.push(id); return false; }
+        return item.invocation?.userInvocable !== false || item.invocation?.modelInvocable !== false;
       }) || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'extension_contract_invalid', 'Native skill policy did not prove this generation.');
     }
     const composite = proveComposite && runtime.extensionGeneration && this.markPersonalCompositeEffective
       ? { candidate: runtime.extensionGeneration, proof: await this.probeGeneration(project, runtime.extensionGeneration, false) } : null;
-    return { generation, pendingSession: false, ...(composite ? { composite } : {}) };
+    return { generation, pendingSession: false, ...(absentDisabled.length ? { absentDisabled } : {}), ...(composite ? { composite } : {}) };
   }
   /** The native skill consumer owns slash parsing and logged skill-invocation context.
    * @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string,recordPromptActor?:(request:any)=>Promise<void>}} request */

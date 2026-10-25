@@ -8,7 +8,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { copyPlatformSkill, readPlatformSkill, projectPlatformSkills, saveProjectPlatformSkills, type PersonalSkill, type PlatformSkill } from "@/lib/skillLibraryClient";
 import { productErrorMessage } from "@/lib/productClient";
-import { skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { nextDisabled, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { RepositoryLink } from "./CatalogueView";
 import { useLoad } from "./useLoad";
 
@@ -44,8 +44,7 @@ export function PlatformSkillDrawer({ skill, projectId, projectName, onClose, on
     if (!current || running.current) return;
     running.current = true; setSaving(true); setError(null);
     try {
-      const disabled = current.payload.disabled.filter(id => id !== skill.id);
-      const result = await saveProjectPlatformSkills(projectId, current.revision, checked ? disabled : [...disabled, skill.id]);
+      const result = await saveProjectPlatformSkills(projectId, current.revision, nextDisabled(current, skill.id, checked));
       if (alive.current) { policy.replace(result); onSelectionChanged(); }
     } catch (cause) { if (alive.current) { setError(productErrorMessage(cause)); policy.reload(true); } }
     finally { running.current = false; if (alive.current) setSaving(false); }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { personalSkillName } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
+import { currentDisabledPlatformSkills } from "@evimed/domain/platform-skill-policy";
 
 /** @param {string} value */
 const sha = value => createHash("sha256").update(value).digest("hex");
@@ -37,9 +38,14 @@ export async function selectPersonalSkillMounts({ service, user, project, maxSki
         ? error.code : "extension_contract_invalid" });
     }
   }
+  // A saved disabled id that no longer names a skill the platform ships (or one that became required) is published as
+  // nothing and reported: a generation never carries an id its runtime proof could not find to restrict.
+  const known = typeof service.platformSkillIds === "function" ? await service.platformSkillIds(user) : null;
+  const { disabled, stale } = currentDisabledPlatformSkills(selected.payload.disabledPlatformSkills ?? [], known);
+  for (const platformSkillId of stale) findings.push({ platformSkillId, code: "platform_skill_stale" });
   // Selection changes during asynchronous validation are not silently published under the earlier digest.
   const current = await service.projectSelections(user, project);
   if (current.revision !== selected.revision) throw new HttpError(409, "product_revision_conflict", "Project skills changed before preparation finished.");
   return { selectionRevision: selected.revision, skills, findings, instructionBytes: bytes,
-    platformSkills: { disabled: selected.payload.disabledPlatformSkills ?? [], disabledPlugins: selected.payload.disabledBuiltinPlugins ?? [] } };
+    platformSkills: { disabled, disabledPlugins: selected.payload.disabledBuiltinPlugins ?? [] } };
 }

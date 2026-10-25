@@ -92,6 +92,8 @@ export interface PlatformSkill {
 }
 export interface ProjectPlatformSkills {
   id: string; revision: number; payload: { disabled: string[] };
+  /** Saved ids that no longer name a skill that can be switched off (a release removed one); never re-sent. */
+  staleDisabled?: string[];
   items: Array<PlatformSkill & { enabled: boolean; effective: boolean | null }>;
   activation: SkillActivation;
 }

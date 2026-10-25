@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allInstalledExtensions, extensionAvailability, skillActivationText, skillPublisher, skillRepositoryUrl, visiblePlatformSkills } from "./catalogueModel";
+import { allInstalledExtensions, extensionAvailability, nextDisabled, skillActivationText, skillPublisher, skillRepositoryUrl, visiblePlatformSkills } from "./catalogueModel";
 import type { ExtensionInstallation, ExtensionSelection } from "@/lib/extensionsClient";
 import type { PlatformSkill } from "@/lib/skillLibraryClient";
 
@@ -60,4 +60,10 @@ it("loads installed pages completely and rejects a looping cursor without preten
   expect(result.items.map(item => item.id)).toEqual(["one", "two"]);
   expect(calls).toEqual([undefined, "next"]);
   await expect(allInstalledExtensions(async () => ({ items: [], nextCursor: "loop" }))).rejects.toThrow();
+});
+
+it("a switch never re-sends a disabled id the page has no row for", () => {
+  const policy = { payload: { disabled: ["community:gone", "office:docx"] }, items: [{ id: "office:docx" }, { id: "office:xlsx" }] };
+  expect(nextDisabled(policy, "office:xlsx", false)).toEqual(["office:docx", "office:xlsx"]);
+  expect(nextDisabled(policy, "office:docx", true)).toEqual([]);
 });
