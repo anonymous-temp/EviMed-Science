@@ -20,7 +20,7 @@ import { MEMORY_OVERVIEW_ADDRESS, memoryTabAddress, MemoryFrame, type MemoryPage
 import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
-import { factItems, factRowSummary, factRowTitle, factsOfProject, OTHER_PROJECT, practiceItems, projectScopeGroups, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
+import { factItems, factRowSummary, factsOfProject, OTHER_PROJECT, practiceItems, projectScopeGroups, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
 import { RememberDialog } from "@/components/memory/RememberDialog";
 import { useMemoryReads, type MemoryRead } from "@/components/memory/useMemoryReads";
 import { usePendingMemory } from "@/components/memory/usePendingMemory";
@@ -217,7 +217,6 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   // What 「记住这一条」 asked and is not written yet (about twelve seconds), and whether that is taking longer than it should.
   const pending = useMemo(() => data.profile?.pending ?? [], [data.profile]);
   const pendingState = usePendingMemory(pending, reload);
-  const native = data.profile?.engine === "native";
 
   // 关于你 is the first tab and, for most accounts early on, the empty one while 项目 and 做法 hold what was learned: landing on an
   // empty list reads as 「什么都没记住」. A tab whose read failed is not known to be empty, so the choice stops there. The choice is made as
@@ -275,7 +274,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const factRows = (rows: readonly FactItem[], label: string) => (
     <List label={label}>
       {rows.map((fact) => (
-        <MemoryListRow key={fact.key} title={factRowTitle(fact)} summary={factRowSummary(fact)} muted={fact.kind === "record" && fact.record.status === "superseded"} onOpen={() => setOpenKey(fact.key)} />
+        <MemoryListRow key={fact.key} title={fact.text} summary={factRowSummary(fact)} onOpen={() => setOpenKey(fact.key)} />
       ))}
     </List>
   );
@@ -376,7 +375,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
           onSettingsChanged={reloadOverview}
           onShare={() => setDrawer("share")}
           onForgotten={() => setDrawer("forgotten")}
-          onRemember={native ? () => setDrawer("remember") : undefined}
+          onRemember={() => setDrawer("remember")}
         />
       )}
       toolbar={{ label: "搜索记忆", search: { label: "搜索记忆", value: query, maxLength: 80, onChange: search.setDraft, onClear: search.clear, inputProps: search.composition } }}

@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { legacyProfile, legacySettings, nativeProfile, nativeSettings } from "@/components/memory/__fixtures__/memoryProfiles";
+import { nativeProfile, nativeSettings } from "@/components/memory/__fixtures__/memoryProfiles";
 import { MemoryHubPage } from "./MemoryHubPage";
 
 const api = vi.hoisted(() => ({
@@ -84,15 +84,9 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(document.body.textContent).not.toMatch(BACK_OFFICE);
   });
 
-  it("offers 记住这一条, and the older kind of account does not", async () => {
+  it("offers 记住这一条", async () => {
     open();
     expect(await screen.findByRole("button", { name: "记住这一条" })).toBeInTheDocument();
-    cleanup();
-    api.fetchMemoryProfile.mockResolvedValue(legacyProfile);
-    api.fetchMemorySettings.mockResolvedValue(legacySettings);
-    open();
-    await screen.findByRole("list", { name: "背景" });
-    expect(screen.queryByRole("button", { name: "记住这一条" })).not.toBeInTheDocument();
   });
 
   it("hands the words over, closes, and shows them as 正在记住 until the memory has written them", async () => {

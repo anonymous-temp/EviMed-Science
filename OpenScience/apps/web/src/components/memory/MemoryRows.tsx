@@ -12,7 +12,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
  * the rest are in the drawer the row opens, where the researcher can see what
  * they are acting on.
  */
-export function MemoryListRow({ title, summary, end, onOpen, highlighted = false, muted = false }: {
+export function MemoryListRow({ title, summary, end, onOpen, highlighted = false }: {
   title: string;
   /** A quiet line under the title: a method's one sentence. */
   summary?: string;
@@ -21,12 +21,10 @@ export function MemoryListRow({ title, summary, end, onOpen, highlighted = false
   onOpen: () => void;
   /** Named by an inbox notice: marked, and scrolled into view by its page. */
   highlighted?: boolean;
-  muted?: boolean;
 }) {
   return (
     <ListRow
       className={highlighted ? "bg-accent-soft" : undefined}
-      muted={muted}
       title={<span className="line-clamp-2 max-w-measure">{title}</span>}
       meta={summary ? <span className="line-clamp-2 max-w-measure">{summary}</span> : undefined}
       onOpen={onOpen}

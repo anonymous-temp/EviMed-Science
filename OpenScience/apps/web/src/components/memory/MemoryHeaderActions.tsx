@@ -43,9 +43,7 @@ export type HeaderDrawer = { kind: "share"; tab: ShareTab } | { kind: "forgotten
  * `onChanged` is what the page does when a switch, a reset, an import or a restore changed what it draws: it reads again. A page whose own
  * card opens one of the drawers (the overview's 收到的: 「导入一个胶囊」) holds which is open (`drawer`, `onDrawer`); the others leave it to this.
  */
-export function MemoryHeaderActions({ native, projectId, onChanged, drawer: held, onDrawer }: {
-  /** Whether the account's memory is the engine's own: only then can the person add a memory by hand. */
-  native: boolean;
+export function MemoryHeaderActions({ projectId, onChanged, drawer: held, onDrawer }: {
   /** The project 「本项目不使用记忆」 acts on, and where 「记住这一条」 files a memory; see `MemoryControls`. */
   projectId?: string | null;
   onChanged: () => void;
@@ -63,7 +61,7 @@ export function MemoryHeaderActions({ native, projectId, onChanged, drawer: held
         onSettingsChanged={onChanged}
         onShare={() => setDrawer({ kind: "share", tab: "export" })}
         onForgotten={() => setDrawer({ kind: "forgotten" })}
-        onRemember={native ? () => setDrawer({ kind: "remember" }) : undefined}
+        onRemember={() => setDrawer({ kind: "remember" })}
       />
       {drawer?.kind === "remember" && <RememberDialog projectId={projectId ?? null} onClose={() => setDrawer(null)} onAsked={onChanged} />}
       {drawer?.kind === "share" && <ShareDrawer initialTab={drawer.tab} onClose={() => setDrawer(null)} onImported={onChanged} />}

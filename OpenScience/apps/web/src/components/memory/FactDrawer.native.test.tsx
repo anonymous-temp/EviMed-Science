@@ -14,7 +14,7 @@ vi.mock("@/lib/apiClient", async () => ({
   deleteStructuredMemory: api.deleteStructuredMemory,
 }));
 const client = vi.hoisted(() => ({
-  announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(), settleMemoryConflict: vi.fn(),
+  announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(),
   retireCapsuleEntry: vi.fn(), undoCapsuleEntry: vi.fn(), fetchMemorySources: vi.fn(),
 }));
 vi.mock("@/lib/memoryClient", () => client);

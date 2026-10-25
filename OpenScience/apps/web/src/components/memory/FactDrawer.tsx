@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebMemoryCaveat, type WebStructuredMemory } from "@/lib/apiClient";
+import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
 import { formatDateTime, formatDay } from "@/lib/format";
 import { kindTitle } from "@/lib/memoryGroups";
 import { readerPath } from "@/lib/knowledgeNav";
 import {
-  announceMemoryChanged, archiveMemoryRecord, fetchMemorySources, retireCapsuleEntry, settleMemoryConflict, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
+  announceMemoryChanged, archiveMemoryRecord, fetchMemorySources, retireCapsuleEntry, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
 } from "@/lib/memoryClient";
 import { isMemoryConflict, MEMORY_CONFLICT_SENTENCE } from "@/lib/memoryErrors";
 import { memoryExcerpt } from "@/lib/memoryText";
@@ -22,18 +22,9 @@ import { Textarea } from "@/components/ui/Input";
 import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 import { RelatedSection } from "./RelatedSection";
-import { heldFrom, type FactItem } from "./memoryItems";
+import type { FactItem } from "./memoryItems";
 import { breath, fileTopic, isFileMemory, memoryText } from "./memoryNative";
 import { ValidityBar, validitySpan } from "./ValidityBar";
-
-/** Why a memory in force is uncertain, as a few small words. 「有冲突」 comes first, as it does in the control plane. */
-const CAVEAT_BADGE: Record<WebMemoryCaveat, string> = {
-  conflict: "有冲突",
-  source_retracted: "来源已撤回",
-  source_expired: "来源已过期",
-  source_changed: "来源已更改",
-  not_yet_valid: "尚未生效",
-};
 
 function when(value: string | null | undefined) {
   if (!value) return "";
@@ -75,12 +66,11 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * is a link in here and nowhere else, because opening a conversation can start
  * that project's runtime and a click on a row must never do that.
  *
- * Everything the old row did is here: a proposal an outside agent made waits to
- * be confirmed, and a sensitive one says what confirming does before it does it;
- * two memories that disagree each offer 「以这条为准」; the undo of the last change
- * and 「不再记这条」 are in the 「⋯」. 忘记 archives, as a revision the toast takes
- * back and 已忘记的内容 restores; 不再记这条 deletes and stops the extractor
- * inferring it again, so it is the one that asks first.
+ * Everything the old row did is here: a note an outside agent proposed waits to
+ * be confirmed; the undo of the last change and 「不再记这条」 are in the 「⋯」.
+ * 忘记 archives, as a revision the toast takes back and 已忘记的内容 restores;
+ * 不再记这条 deletes and stops the engine from learning it again, so it is the one
+ * that asks first.
  */
 export function FactDrawer({ item, projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord }: {
   item: FactItem;
@@ -104,7 +94,6 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(text);
   const [busy, setBusy] = useState(false);
-  const [confirmingSensitive, setConfirmingSensitive] = useState<null | { value?: string; status?: "active" }>(null);
   const [rejecting, setRejecting] = useState(false);
   useEffect(() => { if (!editing) setValue(text); }, [text, editing]);
   // 编辑 was a button a moment ago, so the field it opens takes the focus.
@@ -164,11 +153,6 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     // A line of the profile is named by its words: the edited line has a new name, and the drawer follows it.
     if (saved && saved.id !== record.id) onOpenRecord?.(saved.id);
   });
-  const confirmOrSave = (next: { value?: string; status?: "active" }) => {
-    // The truth, not a promise the code does not keep: a sensitive record is never recalled, whatever its status.
-    if (record?.status === "pending" && record.sensitive) setConfirmingSensitive(next);
-    else void saveRecord(next);
-  };
   const forgetRecord = () => run(async () => {
     if (!record) return;
     const archived = await archiveMemoryRecord(record.id, record.version);
@@ -186,17 +170,6 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     const result = await undoMemoryRecord(record.id, record.version);
     toast.success(result.undone === "removed" ? "已撤销这条记忆" : "已撤销上次改动");
     if (result.undone === "removed") onClose();
-  });
-  // 「以这条为准」: the researcher's own call between two statements that disagree. The loser is replaced and kept; the toast takes it back.
-  const settle = (keepId: string, otherId: string) => run(async () => {
-    const settled = await settleMemoryConflict(keepId, otherId);
-    toast.success("已按这条为准", {
-      action: {
-        label: "撤销",
-        onClick: () => void undoMemoryRecord(settled.superseded.id, settled.superseded.version)
-          .then(() => { announceMemoryChanged(); onChanged(); }, (reason) => toast.error(failed(reason))),
-      },
-    });
   });
   const reject = () => run(async () => {
     if (!record) return;
@@ -233,8 +206,8 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     if (result.undone === "removed") onClose();
   }, productErrorMessage);
 
-  // A note an outside agent proposed (the agent-memory API's `/note`) waits for the researcher like a pending memory does: the same
-  // tag, 确认 to take it, 不要 to put it away (retired, so 已忘记的内容 can bring it back).
+  // A note an outside agent proposed (the agent-memory API's `/note`) waits for the researcher: 确认 to take it, 不要 to put it away
+  // (retired, so 已忘记的内容 can bring it back).
   const candidate = entry?.payload.status === "candidate";
   const confirmEntry = () => run(async () => {
     if (!entry) return;
@@ -242,16 +215,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     toast.success("已确认");
   }, productErrorMessage);
   const since = formatDay(record?.createdAt ?? entry?.createdAt ?? null);
-  const former = record?.status === "superseded";
-  const pending = record?.status === "pending";
   const source = record ? memorySource(record) : null;
-  const conflicts = record?.relations?.conflicts ?? [];
-  const badges = record ? [
-    ...(former ? ["已被替代"] : []),
-    ...(record.relations?.caveats ?? []).map((caveat) => CAVEAT_BADGE[caveat]).filter(Boolean),
-  ] : [];
-  const settleable = record?.status === "active";
-  const formerly = item.kind === "record" ? item.formerly : [];
   const revisions = record ? [...record.revisions].reverse().slice(0, 5) : [];
   const undoable = record ? record.revisions.length > 0 : (entry?.revision ?? 1) > 1;
 
@@ -263,7 +227,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
   const sentence = memoryExcerpt(text, 4_000);
   const lines = record?.document ? siblings.filter((other) => other.document?.id === record.document?.id && other.id !== record.id) : [];
-  const save = () => (record ? confirmOrSave({ value, status: "active" }) : void saveEntry());
+  const save = () => (record ? void saveRecord({ value, status: "active" }) : void saveEntry());
 
   return (
     <>
@@ -294,7 +258,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
                   <MarkdownViewer className="text-ui text-text">{sentence}</MarkdownViewer>
                 </div>
               )
-              : <p className="whitespace-pre-wrap text-body text-text">{former ? `曾经如此：${sentence}${record ? heldFrom(record) : ""}` : sentence}</p>
+              : <p className="whitespace-pre-wrap text-body text-text">{sentence}</p>
           )}
 
           {lines.length > 0 && (
@@ -313,39 +277,13 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {record && <ValidityBar span={validitySpan(record)} />}
 
-          {(pending || candidate || badges.length > 0) && (
+          {candidate && (
             <div className="flex flex-wrap items-center gap-2">
-              {(pending || candidate) && <Tag>待确认</Tag>}
-              {badges.map((badge) => <Tag key={badge}>{badge}</Tag>)}
-              {pending && <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>}
-              {candidate && <Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmEntry()}>确认</Button>}
-              {candidate && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void forgetEntry()}>不要</Button>}
+              <Tag>待确认</Tag>
+              <Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmEntry()}>确认</Button>
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => void forgetEntry()}>不要</Button>
             </div>
           )}
-
-          {record && conflicts.map((side) => {
-            const sideText = side.sensitive ? "这是一条敏感记忆" : `“${memoryExcerpt(side.text, 120)}”`;
-            // Both sides are offered, each with the same words: the researcher decides which statement holds, so neither is the default.
-            const choosable = settleable && side.status === "active";
-            return (
-              <DrawerSection key={`conflict-${side.id}`} label="和另一条说法不一致">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-ui text-text-2">
-                  <p>这条：“{memoryExcerpt(record.summary || record.value, 120)}”</p>
-                  {choosable && (
-                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void settle(record.id, side.id)}
-                      aria-label={`以这条为准：${memoryExcerpt(record.summary || record.value, 40)}`}>以这条为准</Button>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 text-ui text-text-2">
-                  <p>另一条：{sideText}</p>
-                  {choosable && (
-                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void settle(side.id, record.id)}
-                      aria-label={`以这条为准：${side.sensitive ? "另一条" : memoryExcerpt(side.text, 40)}`}>以这条为准</Button>
-                  )}
-                </div>
-              </DrawerSection>
-            );
-          })}
 
           {record && (record.evidence.length > 0 || source || materials.length > 0) && (
             <DrawerSection label="出处">
@@ -372,12 +310,9 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {record && <RelatedSection recordId={record.id} onOpenRecord={onOpenRecord} canOpen={canOpenRecord} />}
 
-          {(formerly.length > 0 || revisions.length > 0) && (
+          {revisions.length > 0 && (
             <DrawerSection label="以前的版本">
               <ul className="space-y-1 text-ui text-text-2">
-                {formerly.map((earlier) => (
-                  <li key={`formerly-${earlier.id}`}>曾经如此：{memoryExcerpt(earlier.summary || earlier.value, 120)}{heldFrom(earlier)}</li>
-                ))}
                 {revisions.map((revision) => (
                   <li key={revision.version}>
                     {when(revision.changedAt)}
@@ -390,23 +325,12 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {!editing && (
             <div className="mt-auto flex gap-2">
-              {/* Saving an edit puts the memory in force, which a replaced fact is not. */}
-              {!former && <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>编辑</Button>}
+              <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>编辑</Button>
               <Button variant="text" destructive disabled={busy} onClick={() => void (record ? forgetRecord() : forgetEntry())}>忘记</Button>
             </div>
           )}
         </div>
       </Drawer>
-      {confirmingSensitive && (
-        <ConfirmDialog
-          title="确认这条敏感记忆？"
-          body={`确认后它保留为已生效，但敏感记忆不会被自动用于后续研究：${memoryExcerpt(confirmingSensitive.value || text, 120)}`}
-          confirmLabel="确认保留"
-          tone="primary"
-          onConfirm={() => { const next = confirmingSensitive; setConfirmingSensitive(null); void saveRecord(next); }}
-          onCancel={() => setConfirmingSensitive(null)}
-        />
-      )}
       {rejecting && (
         <ConfirmDialog
           title="不再记这条？"

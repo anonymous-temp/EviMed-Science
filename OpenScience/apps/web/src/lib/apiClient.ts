@@ -560,8 +560,6 @@ export interface WebMemorySettings {
   /** Projects where memory is neither written nor used. */
   pausedProjects: string[];
   updatedAt: string | null;
-  /** Which kind of account this is. The page behaves the same for both; it reads this only to leave out what one kind cannot do. */
-  engine?: "legacy" | "native";
 }
 
 export type WebStructuredMemoryKind =
@@ -628,11 +626,10 @@ export interface WebStructuredMemory {
     runId?: string;
   }>;
   /**
-   * Set on a memory the engine of an account keeps as a file (`memoryNative.ts` reads it). Such a memory has a topic as its
-   * `summary` and the file's text as its `value`; a line of the profile document has the line as its `value`. The server also
-   * sends the file's address and hash; the page has no use for them and the type leaves them out so nothing can show them.
+   * A memory is a file of the engine (`memoryNative.ts` reads it): a topic as its `summary` and the file's text as its `value`;
+   * a line of the profile document has the line as its `value`. The server also sends the file's address and hash; the page has
+   * no use for them and the type leaves them out so nothing can show them.
    */
-  engine?: "native";
   nativeType?: string;
   /** Present on a line of the profile document: the document the line belongs to. */
   document?: { id: string };
@@ -689,8 +686,6 @@ export interface WebMemoryProfile {
   conversations?: Record<string, string>;
   /** Per record id. A record with no entry has never been used. */
   usage?: Record<string, WebMemoryUsage>;
-  /** Kind of account; absent from a control plane older than the second engine. */
-  engine?: "legacy" | "native";
   /** What 「记住这一条」 asked and the engine has not written yet. */
   pending?: WebPendingMemory[];
 }
@@ -1691,7 +1686,8 @@ export async function updateStructuredMemory(
   if (!hasWebApi) throw new BackendUnavailableError("memory.record.update");
   // A memory kept as a file has no summary and no importance of its own: the control plane refuses them by name, so they are not sent.
   const fields = { ...update };
-  if (record.engine === "native") { delete fields.summary; delete fields.importance; }
+  delete fields.summary;
+  delete fields.importance;
   const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(record.id)}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
