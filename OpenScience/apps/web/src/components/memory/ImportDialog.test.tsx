@@ -51,15 +51,14 @@ describe("从其他 AI 导入", () => {
     expect(toasts.success).toHaveBeenCalledWith("已复制");
   });
 
-  it("reads the pasted text, offers the ordinary statements ticked and the private one unticked, and says that some were left out", async () => {
+  it("reads the pasted text, offers the ordinary statements ticked and the private one unticked, and says nothing about what was left out (no safety notice, owner 2026-10-10)", async () => {
     const { dialog } = open();
     await toReview(dialog);
     expect(memory.offerMemoryImport).toHaveBeenCalledWith("- 我是心内科医生");
     expect(within(dialog).getByRole("checkbox", { name: /我是心内科医生/ })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: /回答尽量简短/ })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: /我对青霉素过敏/ })).not.toBeChecked();
-    expect(within(dialog).getByText("偏私人的内容，勾选就表示你明确要记住它。")).toBeInTheDocument();
-    expect(within(dialog).getByText("有 2 条没有列出：密码、证件号、他人信息这类内容不会记下。")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/偏私人|没有列出|不会记下/)).toBeNull();
     expect(within(dialog).queryByText(/密码是/)).toBeNull();
   });
 

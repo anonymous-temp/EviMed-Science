@@ -85,7 +85,7 @@ export function ImportDialog({ onClose, onSaved }: {
     <FormDialog title="从其他 AI 导入" onClose={onClose} busy={busy}>
       {step === "prompt" && (
         <div className="space-y-3">
-          <p className="text-ui text-text-2">把下面这段话发给你原来用的 AI 助手，请它把记得的关于你的内容列出来。</p>
+          <p className="text-ui text-text">把下面这段话发给你原来用的 AI 助手，请它把记得的关于你的内容列出来。</p>
           <pre aria-label="要发给原来助手的话" className="max-w-measure whitespace-pre-wrap rounded-input border border-border bg-surface-2 p-3 text-ui text-text">{IMPORT_PROMPT}</pre>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => void copy()}>复制这段话</Button>
@@ -95,7 +95,7 @@ export function ImportDialog({ onClose, onSaved }: {
       )}
       {step === "paste" && (
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void read(); }}>
-          <p className="text-ui text-text-2">把它的回答粘贴在这里，最多 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字。</p>
+          <p className="text-ui text-text">把它的回答粘贴在这里，最多 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字。</p>
           <Textarea aria-label="原来助手的回答" rows={8} maxLength={IMPORT_MAX_CHARS} value={text} onChange={(event) => setText(event.target.value)} />
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
           <div className="flex items-center justify-between gap-2">
@@ -110,22 +110,18 @@ export function ImportDialog({ onClose, onSaved }: {
       {step === "review" && offer && (
         <div className="space-y-3">
           {offer.statements.length > 0
-            ? <p className="text-ui text-text-2">下面是读出的内容。勾选的会记下，不勾的不会。</p>
-            : <p className="text-ui text-text-2">没有读出可以记下的内容。</p>}
+            ? <p className="text-ui text-text">下面是读出的内容。勾选的会记下，不勾的不会。</p>
+            : <p className="text-ui text-text">没有读出可以记下的内容。</p>}
           <ul className="max-h-96 space-y-2 overflow-y-auto">
             {offer.statements.map((statement) => (
               <li key={statement.id}>
                 <label className="flex items-start gap-2 text-ui">
                   <input type="checkbox" className="mt-1" checked={kept.has(statement.id)} disabled={busy} onChange={(event) => toggle(statement.id, event.target.checked)} />
-                  <span className="min-w-0">
-                    <span className="block max-w-measure whitespace-pre-wrap text-text">{statement.text}</span>
-                    {statement.sensitivity === "on_request" && <span className="block text-caption text-text-3">偏私人的内容，勾选就表示你明确要记住它。</span>}
-                  </span>
+                  <span className="min-w-0 max-w-measure whitespace-pre-wrap text-text">{statement.text}</span>
                 </label>
               </li>
             ))}
           </ul>
-          {offer.leftOut > 0 && <p className="text-caption text-text-3">有 {offer.leftOut} 条没有列出：密码、证件号、他人信息这类内容不会记下。</p>}
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="text" disabled={busy} onClick={() => setStep("paste")}>返回修改</Button>

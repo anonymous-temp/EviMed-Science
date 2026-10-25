@@ -65,7 +65,7 @@ it("keeps the password beside the button that needs it, and a card-free column w
 it("says in one line that the capsule is the person's and can be taken along, and that a file cannot be taken back, in plain words",async()=>{
   const {container}=render(<ExportPanel capsule={capsule}/>);
   await screen.findByLabelText("文件密码");
-  expect(screen.getByText("这份记忆胶囊是你的，随时可以带走：加密文件能在别的账号里打开，“导出做法”能放进其他支持技能的工具。")).toBeInTheDocument();
+  expect(screen.getByText("这份记忆胶囊是你的，随时可以带走：加密文件能在别的账号里打开，导出的做法能放进其他支持技能的工具。")).toBeInTheDocument();
   expect(screen.getByText("文件交出去就由对方保管，收不回来；发给平台里的账号或用分享链接的，之后还可以撤回。")).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/快照|口令|\.evimedcap|Agent Skills|签名|校验|扫描|信任|后台/);
 });

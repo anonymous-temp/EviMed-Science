@@ -213,9 +213,6 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
     </div>}
     {notice && <p role="status" className="text-ui text-text-2">{notice}</p>}
 
-    {/* The one line about whose it is: a person's way of working is theirs to take along, to another account or another tool. */}
-    <p className="max-w-measure text-ui text-text-2">这份记忆胶囊是你的，随时可以带走：加密文件能在别的账号里打开，“导出做法”能放进其他支持技能的工具。</p>
-
     <div className="max-w-measure">
       <Input label="署名" value={signature} disabled={busy || !capsuleId} maxLength={CAPSULE_SIGNATURE_MAX_CHARS}
         onChange={event => { signatureTyped.current = true; setSignature(event.target.value); }} />
@@ -283,8 +280,9 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
     {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} card={signedCard} excludeEntryIds={unticked} />}
 
     {/* Not a share between accounts, so not behind its switch: the approved methods as a folder each, for other tools. */}
+    {/* The one line about whose it is: a person's way of working is theirs to take along, to another account or another tool. */}
     <section className="space-y-2" aria-label="导出做法">
-      <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void exportMethods()}>导出做法</Button>
+      <Note action={<Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void exportMethods()}>导出做法</Button>}>这份记忆胶囊是你的，随时可以带走：加密文件能在别的账号里打开，导出的做法能放进其他支持技能的工具。</Note>
     </section>
 
     {capsuleId && <section className="space-y-2" aria-label="导出的版本">
