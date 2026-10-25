@@ -61,6 +61,24 @@ it("keeps the password beside the button that needs it, and a card-free column w
   for(const gone of [/撤销仅对本服务上的快照生效/,/选择一个未删除的胶囊后可导出/,/整包收下/,/快照校验信息/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
 });
 
+// Portability (B-landscape 1.9): the capsule is the person's and can be taken along; and a file, unlike a link or a delivery, cannot be taken back.
+it("says in one line that the capsule is the person's and can be taken along, and that a file cannot be taken back, in plain words",async()=>{
+  const {container}=render(<ExportPanel capsule={capsule}/>);
+  await screen.findByLabelText("文件密码");
+  expect(screen.getByText("这份记忆胶囊是你的，随时可以带走：加密文件能在别的账号里打开，“导出做法”能放进其他支持技能的工具。")).toBeInTheDocument();
+  expect(screen.getByText("文件交出去就由对方保管，收不回来；发给平台里的账号或用分享链接的，之后还可以撤回。")).toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/快照|口令|\.evimedcap|Agent Skills|签名|校验|扫描|信任|后台/);
+});
+
+it("does not point to a link or a delivery where sharing between accounts is not switched on",async()=>{
+  share.value="off";
+  render(<ExportPanel capsule={capsule}/>);
+  await screen.findByLabelText("文件密码");
+  expect(screen.getByText("文件交出去就由对方保管，收不回来。")).toBeInTheDocument();
+  expect(screen.queryByText(/分享链接/)).not.toBeInTheDocument();
+  expect(screen.getByText(/随时可以带走/)).toBeInTheDocument();
+});
+
 it("says nothing of snapshots, passphrases or file extensions in what it shows",async()=>{
   vi.mocked(api.listCapsuleExports).mockResolvedValue({items:[snapshot()],nextCursor:null});
   const {container}=render(<ExportPanel capsule={capsule}/>);
