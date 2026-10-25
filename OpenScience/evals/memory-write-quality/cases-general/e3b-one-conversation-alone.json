@@ -1,0 +1,42 @@
+{
+  "id": "e3b-one-conversation-alone",
+  "class": "refuse-repetition-inside-one-conversation",
+  "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
+  "expected": "Nothing is kept: the same choice made twice inside one conversation is still one conversation. The promotion counts conversations (owner decision 6), so two requests in a row do not make a preference.",
+  "decidable": true,
+  "arms": [
+    "native"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "做个季度销售汇总，要带透视表。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，季度销售汇总已做好，带透视表。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "再把区域汇总也做了，也带透视表。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "好的，区域汇总也加了透视表。"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "透视表"
+    ],
+    "atMostRecords": 0
+  }
+}

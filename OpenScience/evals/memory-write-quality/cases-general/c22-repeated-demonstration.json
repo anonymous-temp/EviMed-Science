@@ -1,13 +1,14 @@
 {
   "id": "c22-repeated-demonstration",
-  "class": "refuse-repeated-demonstration",
-  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C22); every name, number and identifier is invented",
-  "expected": "Nothing is kept after either conversation: a choice shown in two tasks and never called a rule is not yet a preference (owner decision 3, principle 18); the case changes only if that decision does.",
+  "class": "keep-repeated-demonstration",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C22) and reversed on 2026-10-25 by owner decision 6; every name, number and identifier is invented",
+  "expected": "Kept after the second conversation, not after the first: the same choice (a pivot table in the summary) made in two different conversations and never called a rule is a preference (owner decision 6, 2026-10-25; this case used to assert that nothing is kept, under principle 18 as it stood).",
   "decidable": true,
   "arms": [
-    "native",
-    "legacy"
+    "native"
   ],
+  "judge": "Is the pivot-table choice written as a standing preference of the person's, in their words, and not as a fact about either spreadsheet?",
+  "pendingTemplate": "owner decision 6 (2026-10-25): a choice made in two different conversations, never stated as a rule, becomes a preference after the second. The shape it is written in is decided by the memory package's templates; until they carry E3 this fails, as c22 used to be asserted the other way round.",
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -39,9 +40,11 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "透视表"
+    "requireAnyKind": [
+      "preference"
     ],
-    "atMostRecords": 0
+    "requireTextContains": [
+      "透视表"
+    ]
   }
 }

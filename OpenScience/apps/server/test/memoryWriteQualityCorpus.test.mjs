@@ -241,7 +241,7 @@ const generalCases = await runner.loadCases(path.join(repoRoot, "evals/memory-wr
 const { generalCaseIssues, runsOnArm } = await import(pathToFileURL(path.join(repoRoot, "evals/memory-write-quality/caseShape.mjs")).href);
 
 test("the general corpus is validated by this arm too: one shape for both, and a misspelt or unfounded check is a shape error", () => {
-  assert.equal(generalCases.length, 38);
+  assert.equal(generalCases.length, 49);
   assert.deepEqual(generalCases.flatMap(generalCaseIssues), []);
   const base = generalCases.find((item) => item.id.startsWith("c17"));
   const shapeOf = (patch) => generalCaseIssues({ ...base, file: `${base.id}.json`, ...patch }).join("\n");

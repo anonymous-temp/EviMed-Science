@@ -103,6 +103,7 @@ jobs:
           pnpm test:judge-sites
           pnpm test:general-tasks
           pnpm test:memory-policy
+          pnpm test:memory-evals
           pnpm test:knowledge-product
           pnpm test:phi-masking
 

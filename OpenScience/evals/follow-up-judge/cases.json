@@ -1,0 +1,1456 @@
+{
+ "schemaVersion": 1,
+ "classes": [
+  "correction",
+  "preference",
+  "rejection",
+  "accept",
+  "none",
+  "adopt"
+ ],
+ "cases": [
+  {
+   "id": "fj-001",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "delivered": "一份五条的周报，每条两三句，共约 400 字，用了加粗。",
+   "message": "太长了，每条不要超过二十个字。",
+   "quote": "每条不要超过二十个字",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-002",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "delivered": "一份五条的周报，每条两三句，共约 400 字，用了加粗。",
+   "message": "太长了",
+   "quote": "太长了",
+   "ambiguous": false,
+   "tag": "very-short"
+  },
+  {
+   "id": "fj-003",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "短点",
+   "quote": "短点",
+   "ambiguous": false,
+   "tag": "very-short"
+  },
+  {
+   "id": "fj-004",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "第二个数字不对，P 值应该是 0.003，不是 0.03。",
+   "quote": "P 值应该是 0.003，不是 0.03",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-005",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "格式就按这个，内容再补两条",
+   "quote": "内容再补两条",
+   "ambiguous": false,
+   "tag": "near-miss:format-kept-content-changes"
+  },
+  {
+   "id": "fj-006",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "你写的「结果稳健」这句我没说过，删掉。",
+   "quote": "「结果稳健」这句我没说过，删掉",
+   "ambiguous": false,
+   "tag": "quotes-the-deliverable"
+  },
+  {
+   "id": "fj-007",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "语气太生硬了，客气一点。",
+   "quote": "语气太生硬了，客气一点",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-008",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "delivered": "四段摘要，约 250 字，结果段给了 HR 和置信区间。",
+   "message": "你漏了结论部分，补上。",
+   "quote": "你漏了结论部分，补上",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-009",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "delivered": "一张按中心汇总的表，列为中心、例数、平均年龄、事件数。",
+   "message": "列的顺序不对，中心应该放第一列。",
+   "quote": "中心应该放第一列",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-010",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我回这封邮件：对方问数据库什么时候锁库。我的情况：11 月 20 日锁库。",
+   "delivered": "一封五句话的回信，说明 11 月 20 日锁库。",
+   "message": "再正式一点。",
+   "quote": "再正式一点",
+   "ambiguous": false,
+   "tag": "very-short"
+  },
+  {
+   "id": "fj-011",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "delivered": "一份五条的周报，每条两三句，共约 400 字，用了加粗。",
+   "message": "别用加粗，用普通文本。",
+   "quote": "别用加粗，用普通文本",
+   "ambiguous": true,
+   "why": "About this deliverable, or a standing style? Both teach the same thing.",
+   "alsoAcceptable": [
+    "preference"
+   ]
+  },
+  {
+   "id": "fj-012",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "delivered": "一份 600 字的综述，列了五项试验，没有给出结论。",
+   "message": "呵呵，真是「简洁」啊，写了整整三页。",
+   "quote": "写了整整三页",
+   "ambiguous": false,
+   "tag": "sarcasm"
+  },
+  {
+   "id": "fj-013",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "delivered": "一个 40 行的脚本，用 pandas，写出 merged.xlsx。",
+   "message": "跑不通，第 12 行报 KeyError。",
+   "quote": "第 12 行报 KeyError",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-014",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "字太多了，每页不超过五行。",
+   "quote": "每页不超过五行",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-015",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "把「下周开始写方法部分」改成「下周开始写讨论」。",
+   "quote": "把「下周开始写方法部分」改成「下周开始写讨论」",
+   "ambiguous": false,
+   "tag": "quotes-the-deliverable"
+  },
+  {
+   "id": "fj-016",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "整理会议纪要：讨论了投稿期刊、经费分配两件事。",
+   "delivered": "一份两个议题的纪要，每个议题写了结论和负责人。",
+   "message": "漏了第三个议题，补一下。",
+   "quote": "漏了第三个议题，补一下",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-017",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "delivered": "一张按中心汇总的表，列为中心、例数、平均年龄、事件数。",
+   "message": "太啰嗦，去掉前面的客套话。",
+   "quote": "去掉前面的客套话",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-018",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "颜色太花了，换成蓝灰两色。",
+   "quote": "换成蓝灰两色",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-019",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "你把我的意思理解反了，我是要比较中心之间的差异，不是比较年份。",
+   "quote": "你把我的意思理解反了",
+   "ambiguous": true,
+   "why": "Asks for a change of this work, but 'understood backwards' also reads as throwing it away.",
+   "alsoAcceptable": [
+    "rejection"
+   ]
+  },
+  {
+   "id": "fj-020",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "谢谢，不过第三条可以再短一点。",
+   "quote": "第三条可以再短一点",
+   "ambiguous": false,
+   "tag": "mixed:thanks-then-correction"
+  },
+  {
+   "id": "fj-021",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "不对",
+   "quote": "不对",
+   "ambiguous": true,
+   "why": "One word; the gold is a correction, but nothing says what, or whether to redo it.",
+   "alsoAcceptable": [
+    "rejection"
+   ],
+   "tag": "very-short"
+  },
+  {
+   "id": "fj-022",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "写一条 SQL，统计每个科室每月的门诊量。",
+   "delivered": "一条带 GROUP BY 的 SQL。",
+   "message": "少了按科室排序。",
+   "quote": "少了按科室排序",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-023",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "delivered": "一份五条的周报，每条两三句，共约 400 字，用了加粗。",
+   "message": "Too long.",
+   "quote": "Too long.",
+   "ambiguous": false,
+   "tag": "very-short"
+  },
+  {
+   "id": "fj-024",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "Shorter please.",
+   "quote": "Shorter please.",
+   "ambiguous": false,
+   "tag": "very-short"
+  },
+  {
+   "id": "fj-025",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "The hazard ratio is wrong: it should be 0.78, not 0.87.",
+   "quote": "it should be 0.78, not 0.87",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-026",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Write the conference abstract: Background, Methods, Results, Conclusions.",
+   "delivered": "A 250-word structured abstract.",
+   "message": "You missed the conclusions paragraph.",
+   "quote": "You missed the conclusions paragraph.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-027",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "Can you make it more formal?",
+   "quote": "Can you make it more formal?",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-028",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "Change 'leads to' to 'is associated with'.",
+   "quote": "Change 'leads to' to 'is associated with'.",
+   "ambiguous": false,
+   "tag": "quotes-the-deliverable"
+  },
+  {
+   "id": "fj-029",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Great, another wall of text.",
+   "quote": "another wall of text",
+   "ambiguous": false,
+   "tag": "sarcasm"
+  },
+  {
+   "id": "fj-030",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "Please drop the apology in the first line.",
+   "quote": "drop the apology in the first line",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-031",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "记住我喜欢短的。",
+   "quote": "记住我喜欢短的",
+   "ambiguous": false,
+   "tag": "near-miss:remember-a-liking"
+  },
+  {
+   "id": "fj-032",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "delivered": "一张按中心汇总的表，列为中心、例数、平均年龄、事件数。",
+   "message": "我习惯用表格看数据。",
+   "quote": "我习惯用表格看数据",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-033",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "以后给我的邮件结尾都用「顺颂时祺」。",
+   "quote": "以后给我的邮件结尾都用「顺颂时祺」",
+   "ambiguous": false,
+   "tag": "states-a-rule-not-this-way"
+  },
+  {
+   "id": "fj-034",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "delivered": "一份 600 字的综述，列了五项试验，没有给出结论。",
+   "message": "我更喜欢先看结论，再看细节。",
+   "quote": "我更喜欢先看结论，再看细节",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-035",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "delivered": "一个 40 行的脚本，用 pandas，写出 merged.xlsx。",
+   "message": "代码注释请用英文。",
+   "quote": "代码注释请用英文",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-036",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "delivered": "四段摘要，约 250 字，结果段给了 HR 和置信区间。",
+   "message": "我一般用 Vancouver 格式引用参考文献。",
+   "quote": "我一般用 Vancouver 格式引用参考文献",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-037",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "报告里的数字我习惯保留两位小数。",
+   "quote": "数字我习惯保留两位小数",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-038",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "写给我的东西尽量别用 emoji。",
+   "quote": "尽量别用 emoji",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-039",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "我是做统计的，解释里不用讲基础概念。",
+   "quote": "解释里不用讲基础概念",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-040",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "以后图表都用灰度，我要黑白打印。",
+   "quote": "以后图表都用灰度，我要黑白打印",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-041",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "delivered": "一份五条的周报，每条两三句，共约 400 字，用了加粗。",
+   "message": "太长了，以后周报都控制在三条以内。",
+   "quote": "以后周报都控制在三条以内",
+   "ambiguous": true,
+   "why": "A complaint about this report and a standing rule in one sentence; both teach the same lesson.",
+   "alsoAcceptable": [
+    "correction"
+   ],
+   "tag": "near-miss:rule-stated-not-this-way"
+  },
+  {
+   "id": "fj-042",
+   "lang": "zh",
+   "class": "preference",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "以后都用表格",
+   "quote": "以后都用表格",
+   "ambiguous": false,
+   "tag": "near-miss:states-a-new-way"
+  },
+  {
+   "id": "fj-043",
+   "lang": "en",
+   "class": "preference",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "I prefer bullet points over paragraphs.",
+   "quote": "I prefer bullet points over paragraphs.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-044",
+   "lang": "en",
+   "class": "preference",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "From now on, always use British spelling.",
+   "quote": "always use British spelling",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-045",
+   "lang": "en",
+   "class": "preference",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "Please keep answers under 200 words for me.",
+   "quote": "keep answers under 200 words",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-046",
+   "lang": "en",
+   "class": "preference",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "I like to see the conclusion first.",
+   "quote": "I like to see the conclusion first.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-047",
+   "lang": "en",
+   "class": "preference",
+   "previousRequest": "Write an R script that fits a Cox model and plots the survival curves.",
+   "delivered": "A 35-line R script using survival and survminer.",
+   "message": "I usually use R, not Python.",
+   "quote": "I usually use R, not Python.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-048",
+   "lang": "en",
+   "class": "preference",
+   "previousRequest": "Write the conference abstract: Background, Methods, Results, Conclusions.",
+   "delivered": "A 250-word structured abstract.",
+   "message": "Keep Methods to one paragraph in the future.",
+   "quote": "Keep Methods to one paragraph in the future.",
+   "ambiguous": true,
+   "why": "A rule for the future, said in the voice of an instruction to this task.",
+   "alsoAcceptable": [
+    "correction"
+   ]
+  },
+  {
+   "id": "fj-049",
+   "lang": "zh",
+   "class": "rejection",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "delivered": "一份 600 字的综述，列了五项试验，没有给出结论。",
+   "message": "不对，重新来，按表格的形式做。",
+   "quote": "重新来，按表格的形式做",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-050",
+   "lang": "zh",
+   "class": "rejection",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "delivered": "一份五条的周报，每条两三句，共约 400 字，用了加粗。",
+   "message": "这个不行，换个思路重写。",
+   "quote": "换个思路重写",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-051",
+   "lang": "zh",
+   "class": "rejection",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "delivered": "一份 600 字的综述，列了五项试验，没有给出结论。",
+   "message": "整个推翻，我要的是综述不是新闻稿。",
+   "quote": "整个推翻",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-052",
+   "lang": "zh",
+   "class": "rejection",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "算了，这份不要了，我自己写。",
+   "quote": "这份不要了，我自己写",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-053",
+   "lang": "zh",
+   "class": "rejection",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "方向完全错了，从头来。",
+   "quote": "方向完全错了，从头来",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-054",
+   "lang": "zh",
+   "class": "rejection",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "谢谢啊，下次我还是自己做幻灯片吧。",
+   "quote": "下次我还是自己做幻灯片吧",
+   "ambiguous": true,
+   "why": "Politeness over a rejection; it could be read as a mild accept.",
+   "alsoAcceptable": [
+    "accept"
+   ],
+   "tag": "sarcasm"
+  },
+  {
+   "id": "fj-055",
+   "lang": "en",
+   "class": "rejection",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "Scrap this and start over with a different structure.",
+   "quote": "Scrap this and start over",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-056",
+   "lang": "en",
+   "class": "rejection",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "No, this isn't what I wanted at all. Redo it as a table.",
+   "quote": "this isn't what I wanted at all. Redo it as a table.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-057",
+   "lang": "en",
+   "class": "rejection",
+   "previousRequest": "Write an R script that fits a Cox model and plots the survival curves.",
+   "delivered": "A 35-line R script using survival and survminer.",
+   "message": "Let's throw this away and do it from scratch in Python instead of R.",
+   "quote": "throw this away and do it from scratch",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-058",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "好的谢谢",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:thanks"
+  },
+  {
+   "id": "fj-059",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "很好，就这样。",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-060",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "这次就这样吧。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:accept-not-adopt"
+  },
+  {
+   "id": "fj-061",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "可以，发给小王吧。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "builds-on-it"
+  },
+  {
+   "id": "fj-062",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "delivered": "四段摘要，约 250 字，结果段给了 HR 和置信区间。",
+   "message": "把这份转成 PDF。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "builds-on-it"
+  },
+  {
+   "id": "fj-063",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "delivered": "四段摘要，约 250 字，结果段给了 HR 和置信区间。",
+   "message": "不错，把它翻译成英文。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "builds-on-it"
+  },
+  {
+   "id": "fj-064",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "delivered": "一张按中心汇总的表，列为中心、例数、平均年龄、事件数。",
+   "message": "收到。",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-065",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "delivered": "一个 40 行的脚本，用 pandas，写出 merged.xlsx。",
+   "message": "行，我先用着。",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-066",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "👍",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-067",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "谢谢，这个够用了。",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-068",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "整理会议纪要：讨论了投稿期刊、经费分配两件事。",
+   "delivered": "一份两个议题的纪要，每个议题写了结论和负责人。",
+   "message": "好，下一步我自己来。",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-069",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "就这个版本，我转发给导师了。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "builds-on-it"
+  },
+  {
+   "id": "fj-070",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "就按这个来吧，发出去。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:this-version-now"
+  },
+  {
+   "id": "fj-071",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "好的，那就这样，我下周再看看效果。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:wait-and-see"
+  },
+  {
+   "id": "fj-072",
+   "lang": "en",
+   "class": "accept",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Thanks!",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-073",
+   "lang": "en",
+   "class": "accept",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "Looks good, thank you.",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-074",
+   "lang": "en",
+   "class": "accept",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "OK, that works for now.",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:for-now"
+  },
+  {
+   "id": "fj-075",
+   "lang": "en",
+   "class": "accept",
+   "previousRequest": "Write the conference abstract: Background, Methods, Results, Conclusions.",
+   "delivered": "A 250-word structured abstract.",
+   "message": "Great, now translate it into French.",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "builds-on-it"
+  },
+  {
+   "id": "fj-076",
+   "lang": "en",
+   "class": "accept",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Good. Send it to Anna.",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "builds-on-it"
+  },
+  {
+   "id": "fj-077",
+   "lang": "en",
+   "class": "accept",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Fine for this time.",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:accept-not-adopt"
+  },
+  {
+   "id": "fj-078",
+   "lang": "en",
+   "class": "accept",
+   "previousRequest": "Make a 8-slide deck for a journal club on SGLT2 inhibitors in heart failure.",
+   "delivered": "An 8-slide pptx with dense bullet text.",
+   "message": "Use this version for the meeting tomorrow.",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:this-version-now"
+  },
+  {
+   "id": "fj-079",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "顺便帮我查一下阿司匹林的半衰期。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:by-the-way"
+  },
+  {
+   "id": "fj-080",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "delivered": "一张按中心汇总的表，列为中心、例数、平均年龄、事件数。",
+   "message": "另外，明天上海天气怎么样？",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-081",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "帮我写一封请假邮件，下周一到周三。",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-082",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "delivered": "一张按中心汇总的表，列为中心、例数、平均年龄、事件数。",
+   "message": "再帮我把另一个文件 outcome.xlsx 的第二个 sheet 汇总一下。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "new-task-same-genre"
+  },
+  {
+   "id": "fj-083",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "你是谁？",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-084",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "我想问下 Cox 模型和 logistic 回归有什么区别？",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-085",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "今天几号？",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-086",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "整理会议纪要：讨论了投稿期刊、经费分配两件事。",
+   "delivered": "一份两个议题的纪要，每个议题写了结论和负责人。",
+   "message": "下周三的会议室订了吗？",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-087",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "delivered": "四段摘要，约 250 字，结果段给了 HR 和置信区间。",
+   "message": "「队列研究」用英语怎么说？",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-088",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "帮我把下面这段翻译成英文：本研究纳入了 4200 名患者。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "new-task"
+  },
+  {
+   "id": "fj-089",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "delivered": "一个 40 行的脚本，用 pandas，写出 merged.xlsx。",
+   "message": "pandas 里怎么按两列分组求均值？",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-090",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "delivered": "一份 600 字的综述，列了五项试验，没有给出结论。",
+   "message": "好，那我们换个话题：帮我想三个基金标题。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "change-of-subject"
+  },
+  {
+   "id": "fj-091",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "这个 HR 是调整后的吗？",
+   "quote": null,
+   "ambiguous": true,
+   "why": "A question about the delivered work, neither a complaint nor an approval; 'none' by the rubric ('says nothing about the work'), 'accept' if read as building on it.",
+   "alsoAcceptable": [
+    "accept"
+   ],
+   "tag": "question-about-the-work"
+  },
+  {
+   "id": "fj-092",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "为什么第二条放在最前面？",
+   "quote": null,
+   "ambiguous": true,
+   "why": "A question about a choice in the delivered work; it may be a veiled correction.",
+   "alsoAcceptable": [
+    "correction"
+   ],
+   "tag": "question-about-the-work"
+  },
+  {
+   "id": "fj-093",
+   "lang": "en",
+   "class": "none",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "By the way, what's the capital of Australia?",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "near-miss:by-the-way"
+  },
+  {
+   "id": "fj-094",
+   "lang": "en",
+   "class": "none",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "Can you also write an email to my landlord about the heating?",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "new-task"
+  },
+  {
+   "id": "fj-095",
+   "lang": "en",
+   "class": "none",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "What is the difference between HR and OR?",
+   "quote": null,
+   "ambiguous": false
+  },
+  {
+   "id": "fj-096",
+   "lang": "en",
+   "class": "none",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "Translate this paragraph into French: The study enrolled 4,200 patients.",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "new-task"
+  },
+  {
+   "id": "fj-097",
+   "lang": "en",
+   "class": "none",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Which dataset was this computed on?",
+   "quote": null,
+   "ambiguous": true,
+   "why": "A question about the delivered work; same hesitation as the Chinese one.",
+   "alsoAcceptable": [
+    "accept"
+   ],
+   "tag": "question-about-the-work"
+  },
+  {
+   "id": "fj-098",
+   "lang": "en",
+   "class": "none",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "Let's talk about something else: how should I prepare for a grant interview?",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "change-of-subject"
+  },
+  {
+   "id": "fj-099",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "下次再说吧。",
+   "quote": null,
+   "ambiguous": true,
+   "why": "Defers a decision without saying whether the work was good; could be a soft accept.",
+   "alsoAcceptable": [
+    "accept"
+   ]
+  },
+  {
+   "id": "fj-100",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "这个格式很好，以后周报都按这个来。",
+   "quote": "以后周报都按这个来",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-101",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "把刚才的做法存下来，以后写这类东西都这样。",
+   "quote": "把刚才的做法存下来，以后写这类东西都这样",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-102",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "以后每次写周报都照这个结构。",
+   "quote": "以后每次写周报都照这个结构",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-103",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "就按这个模板，下次直接用。",
+   "quote": "就按这个模板，下次直接用",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-104",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "delivered": "卡方检验结果和一张条形图，P=0.03。",
+   "message": "这样写很对，记住这个做法，以后都这样处理。",
+   "quote": "记住这个做法，以后都这样处理",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-105",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "delivered": "一封约两百字的邮件，开头有三句客套话，结尾约了周三下午。",
+   "message": "以后类似的邮件都按这个风格来。",
+   "quote": "以后类似的邮件都按这个风格来",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-106",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "整理会议纪要：讨论了投稿期刊、经费分配两件事。",
+   "delivered": "一份两个议题的纪要，每个议题写了结论和负责人。",
+   "message": "把这个流程固化下来吧，以后每次开完会都这样整理。",
+   "quote": "把这个流程固化下来吧，以后每次开完会都这样整理",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-107",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "delivered": "一份 10 页的 pptx，每页五到八行文字。",
+   "message": "这个版本的结构我很满意，以后组会汇报都用这个。",
+   "quote": "以后组会汇报都用这个",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-108",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "下次写月报也这样来。",
+   "quote": "下次写月报也这样来",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-109",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "delivered": "一个 40 行的脚本，用 pandas，写出 merged.xlsx。",
+   "message": "这个脚本的写法以后都沿用。",
+   "quote": "这个脚本的写法以后都沿用",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-110",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "delivered": "一张按中心汇总的表，列为中心、例数、平均年龄、事件数。",
+   "message": "以后汇总表都照这个格式做，记住。",
+   "quote": "以后汇总表都照这个格式做，记住",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-111",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "很好，以后都这样。",
+   "quote": "以后都这样",
+   "ambiguous": false,
+   "tag": "short"
+  },
+  {
+   "id": "fj-112",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "以后周报都按这个来。",
+   "quote": "以后周报都按这个来",
+   "ambiguous": false,
+   "tag": "short"
+  },
+  {
+   "id": "fj-113",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "delivered": "四段摘要，约 250 字，结果段给了 HR 和置信区间。",
+   "message": "这个摘要的写法就是我要的，存成我的默认做法。",
+   "quote": "存成我的默认做法",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-114",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "好，这个结构保留，以后都这样；不过第二条再短一点。",
+   "quote": "这个结构保留，以后都这样",
+   "ambiguous": true,
+   "why": "Keeps the way for the future and also asks for a small change to this report.",
+   "alsoAcceptable": [
+    "correction"
+   ],
+   "tag": "mixed:adopt-and-correction"
+  },
+  {
+   "id": "fj-115",
+   "lang": "zh",
+   "class": "adopt",
+   "previousRequest": "帮我回这封邮件：对方问数据库什么时候锁库。我的情况：11 月 20 日锁库。",
+   "delivered": "一封五句话的回信，说明 11 月 20 日锁库。",
+   "message": "回邮件就按这个路子，以后都先答问题再给时间。",
+   "quote": "以后都先答问题再给时间",
+   "ambiguous": true,
+   "why": "Names the way as a rule ('answer first, then the time') while pointing at the way just used.",
+   "alsoAcceptable": [
+    "preference"
+   ]
+  },
+  {
+   "id": "fj-116",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "From now on, do it like this.",
+   "quote": "From now on, do it like this.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-117",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Please keep this format for all my weekly reports.",
+   "quote": "keep this format for all my weekly reports",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-118",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "That's exactly how I want these written — use this approach every time.",
+   "quote": "use this approach every time",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-119",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Write the conference abstract: Background, Methods, Results, Conclusions.",
+   "delivered": "A 250-word structured abstract.",
+   "message": "Save this as the template for future abstracts.",
+   "quote": "Save this as the template for future abstracts.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-120",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Always structure these summaries like this one.",
+   "quote": "Always structure these summaries like this one.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-121",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "delivered": "A 200-word email with a long polite opening and a proposed time on Wednesday afternoon.",
+   "message": "Remember this approach for next time.",
+   "quote": "Remember this approach for next time.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-122",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Write an R script that fits a Cox model and plots the survival curves.",
+   "delivered": "A 35-line R script using survival and survminer.",
+   "message": "Could you remember this style for future scripts?",
+   "quote": "remember this style for future scripts",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-123",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "delivered": "A 120-word paragraph with the primary endpoint and its hazard ratio.",
+   "message": "Use this same approach whenever I ask for a summary like this.",
+   "quote": "Use this same approach whenever I ask for a summary like this.",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-124",
+   "lang": "en",
+   "class": "adopt",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "Good — make that the default way you write these.",
+   "quote": "make that the default way you write these",
+   "ambiguous": false
+  },
+  {
+   "id": "fj-125",
+   "lang": "zh",
+   "class": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "这个周报格式太死板了，三条不够，这周多写几条。",
+   "quote": "三条不够，这周多写几条",
+   "ambiguous": true,
+   "why": "About the learned weekly-report method (three items) rather than the report: a correction of the way, for this week.",
+   "alsoAcceptable": [
+    "preference"
+   ],
+   "methodsOpened": [
+    {
+     "id": "lm-weekly",
+     "title": "周报三条以内，结论先行",
+     "whenToUse": "When the researcher asks for a weekly report or a short status update."
+    }
+   ],
+   "concerns": [
+    "lm-weekly"
+   ]
+  },
+  {
+   "id": "fj-126",
+   "lang": "zh",
+   "class": "rejection",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "别再用这个三条的做法了，我要按项目分块写。",
+   "quote": "别再用这个三条的做法了，我要按项目分块写",
+   "ambiguous": true,
+   "why": "Rejects the learned method and states a new way; rejection or preference.",
+   "alsoAcceptable": [
+    "preference"
+   ],
+   "methodsOpened": [
+    {
+     "id": "lm-weekly",
+     "title": "周报三条以内，结论先行",
+     "whenToUse": "When the researcher asks for a weekly report or a short status update."
+    }
+   ],
+   "concerns": [
+    "lm-weekly"
+   ]
+  },
+  {
+   "id": "fj-127",
+   "lang": "zh",
+   "class": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "好的谢谢",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "method-opened:no-concern",
+   "methodsOpened": [
+    {
+     "id": "lm-weekly",
+     "title": "周报三条以内，结论先行",
+     "whenToUse": "When the researcher asks for a weekly report or a short status update."
+    }
+   ],
+   "concerns": []
+  },
+  {
+   "id": "fj-128",
+   "lang": "zh",
+   "class": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "delivered": "一份三条的周报，每条带一句依据，共约 120 字。",
+   "message": "另外帮我查一下下周的会议室。",
+   "quote": null,
+   "ambiguous": false,
+   "tag": "method-opened:no-concern",
+   "methodsOpened": [
+    {
+     "id": "lm-weekly",
+     "title": "周报三条以内，结论先行",
+     "whenToUse": "When the researcher asks for a weekly report or a short status update."
+    }
+   ],
+   "concerns": []
+  },
+  {
+   "id": "fj-129",
+   "lang": "en",
+   "class": "correction",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "delivered": "A five-bullet update of about 150 words with bold lead-ins.",
+   "message": "The three-item limit cut something I needed — add a fourth item this time.",
+   "quote": "add a fourth item this time",
+   "ambiguous": true,
+   "why": "Aimed at the method's limit, for this delivery.",
+   "alsoAcceptable": [
+    "preference"
+   ],
+   "methodsOpened": [
+    {
+     "id": "lm-status",
+     "title": "Status updates in three bullets",
+     "whenToUse": "When the researcher asks for a status update."
+    }
+   ],
+   "concerns": [
+    "lm-status"
+   ]
+  }
+ ]
+}

@@ -615,6 +615,58 @@
       },
       "command": "node evals/general-tasks/runner/run.mjs --tree <OpenScience checkout> --arm B --out <dir>",
       "note": "Not a capability: the general-task baseline of the 2026-10-12 course correction (general-agent.md GA30). Twenty-three general tasks and six medical controls against a real DSH kernel and DeepSeek through the real control plane; deterministic judges first, an offline model judge per task family second. It sits beside the capability rows because it answers the same kind of question for the platform as a whole: what a plain request gets today. Results are recorded under .evimed-local/acceptance/course-correction-20261012/live/eval/<arm>/."
+    },
+    {
+      "id": "capsule-longitudinal",
+      "evalHarness": "evals/capsule-longitudinal",
+      "caseCount": 11,
+      "kinds": {
+        "scenario": 11
+      },
+      "scenarios": {
+        "S1": "format preference and no invention",
+        "S2": "project connection",
+        "S3": "edit obedience",
+        "S4": "delete obedience",
+        "S5": "source shown",
+        "S6": "correction non-recurrence",
+        "S7": "cross-project leakage",
+        "S8": "explicit keep-this-way (needs the adopt verdict)",
+        "S9": "import from another assistant (needs the import route)",
+        "S10": "sharing",
+        "S11": "misconception"
+      },
+      "command": "python3 evals/capsule-longitudinal/run.py --key-file <deepseek key, for the model judge only>   # on the serving host",
+      "note": "Not a capability: the memory capsule measured end to end on the hosted path (2026-10-25, the memory-capsule next round). Eleven scenarios, each on its own throwaway account registered at the start and deleted at the end, every turn typed into the native composer of a real browser (the only path the follow-up judge, the turn commit and the learning evidence exist on). Answers the owner's four memory questions on the deployed product: remembers what was said, connects to the project, obeys edits and deletions, shows where a thing came from; and whether a learned or shared method is mounted. S8 and S9 report not_available on a tree without the adopt verdict or the import route. Results are written to evals/capsule-longitudinal/results/<date>-<release>.json; the controller runs it."
+    },
+    {
+      "id": "remembered-format",
+      "evalHarness": "evals/remembered-format",
+      "caseCount": 30,
+      "kinds": {
+        "pair": 30
+      },
+      "arms": {
+        "current": "the persona and the guidance of the tree under test (read from the checkout)",
+        "variant": "the same texts with the edits of a --variant-file (variants/pre-2026-10-24.json reproduces the guidance before the fix)"
+      },
+      "command": "python3 evals/remembered-format/run.py --key-file <path> --samples 3 [--arms current,pre-1024 --variant-file evals/remembered-format/variants/pre-2026-10-24.json]",
+      "note": "Not a capability: thirty paired cases (a remembered layout with every place's content given, and with some places' content not given) sent straight to DeepSeek as the runtime builds the request, scoring what the guidance costs (given items missing) against what it prevents (statements the person never gave, invented numbers, a place filled without a source). Extends the 2026-10-24 A/B that measured invented statements per report 3.6 to 0.75 on one genre."
+    },
+    {
+      "id": "follow-up-judge",
+      "evalHarness": "evals/follow-up-judge",
+      "caseCount": 129,
+      "kinds": {
+        "accept": 22,
+        "adopt": 25,
+        "correction": 32,
+        "none": 22,
+        "preference": 18,
+        "rejection": 10
+      },
+      "command": "node evals/follow-up-judge/run.mjs --key-file <path> [--instructions-file <txt>]",
+      "note": "Not a capability: the calibration set of the follow-up judge (apps/server/src/learningEvidence.mjs): labelled next-messages in Chinese and English over correction, preference, rejection, accept, none and adopt, sent through the module's own FollowUpJudge and followUpVerdictFrom. Reports per-class precision and recall, the confusion matrix, quotation validity and the precision of adopt on its own, because adopt makes a method out of one conversation. Fifteen cases are marked ambiguous with the labeller's reason for the controller to review."
     }
   ]
 }

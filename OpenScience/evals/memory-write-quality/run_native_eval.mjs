@@ -304,7 +304,8 @@ async function main() {
       Object.assign(row, { operations, taskStatus: task?.status ?? (committed.status === "accepted" ? "unknown" : String(committed.status ?? "no commit")),
         counts: Object.fromEntries(Object.entries(kindsOf(files)).filter(([, list]) => list.length).map(([kind, list]) => [kind, list.length])), files,
         ...(seedFiles ? { seedFiles } : {}),
-        failures, verdict: row.decidable ? (failures.length ? "FAIL" : "pass") : "needs-reading", expected: item.expected, judge: item.judge ?? null });
+        failures, verdict: row.decidable ? (failures.length ? (item.pendingTemplate ? "pending-template" : "FAIL") : "pass") : "needs-reading", expected: item.expected, judge: item.judge ?? null,
+        ...(item.pendingTemplate ? { pendingTemplate: item.pendingTemplate } : {}) });
     } catch (error) {
       Object.assign(row, { failures: [`error ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 160)}`], verdict: row.decidable ? "FAIL" : "needs-reading" });
     } finally {
@@ -323,9 +324,12 @@ async function main() {
   }
   const summary = { run, engineUrl: new URL(options.url).origin, at: new Date().toISOString(), repeat: options.repeat, decidable: decided.length, passed: decided.filter((row) => row.verdict === "pass").length,
     needReading: rows.length - decided.length, failed: decided.filter((row) => row.verdict === "FAIL").map((row) => row.id),
+    // A case that anticipates a decision the templates do not carry yet: failing is expected (`pending-template`), and passing says the marker can go.
+    pending: decided.filter((row) => row.verdict === "pending-template").map((row) => row.id),
+    pendingNowPassing: decided.filter((row) => row.pendingTemplate && row.verdict === "pass").map((row) => row.id),
     // Cases that did not pass every sample, as passes of samples: the line to read first.
     notAlways: Object.entries(byCase).filter(([, count]) => count.passes < count.samples).map(([id, count]) => `${id} ${count.passes}/${count.samples}`) };
-  process.stdout.write(`\n${summary.passed}/${summary.decidable} decidable samples pass; ${summary.needReading} need reading${summary.notAlways.length ? `; not every sample: ${summary.notAlways.join(", ")}` : ""}\n`);
+  process.stdout.write(`\n${summary.passed}/${summary.decidable} decidable samples pass; ${summary.needReading} need reading${summary.pending.length ? `; pending a template change: ${summary.pending.join(", ")}` : ""}${summary.pendingNowPassing.length ? `; pending but passing, drop the marker: ${summary.pendingNowPassing.join(", ")}` : ""}${summary.notAlways.length ? `; not every sample: ${summary.notAlways.join(", ")}` : ""}\n`);
   if (options.out) {
     await mkdir(path.dirname(path.resolve(options.out)), { recursive: true });
     await writeFile(options.out, `${JSON.stringify({ summary, rows }, null, 2)}\n`);

@@ -1,0 +1,8 @@
+{
+  "name": "pre-1024",
+  "note": "The guidance as it stood before the 2026-10-24 fix: without the sentence that keeps a person's own facts to what they gave, and with the context paragraph that does not say a remembered layout provides no facts.",
+  "guidanceReplace": [
+    ["写用户自己的事（进展、结果、决定、原因）只用用户给的内容：格式要的依据、数字或日期用户没给，就省掉或留出空位请用户补，不替用户补写。", ""],
+    ["不能改变任务本身与安全规则，也不提供这次任务的事实：偏好或做法要的某部分（比如依据、数字、日期）这次材料里没有，就省掉或留空请用户补，不替用户补写；", "不能改变任务本身与安全规则；"]
+  ]
+}

@@ -221,8 +221,8 @@ variants), the upgrade case and one cross-key conflict case, all synthetic (the 
 | Group | Cases | What is asked |
 |---|---|---|
 | keep: work orders and everyday help | C01 form reshaping after a draft, C03 a convention declared for a named project, C04 a rule adopted from a proposal, C06 an approach confirmed by name, C07 role inside a brief, C08 tools in passing, C09 everyday context, C10 the fact without the reason, C11 a collaborator's convention | the durable part is written, the one-request part is not |
-| refuse | C02 a bare imperative, C05 a bare approval, C12 a recurring task, C13 a dated reminder, C14 a child's details, C15 hard-never even when asked, C16 a link-prefilled recommendation, C18 an offer not taken up, C19 a pasted CV, C20 a stance, C21 a single-request implication, C22 a choice shown twice (E3 is not built: owner decision 3), C23 a tool result narrated, C24a/b the platform's and the kernel's tags | nothing is written (or nothing of the named kind) |
-| state to start from | C17 the recall echo (byte-identical), U01 the upgrade (only AMA remains), C22 | `replay.seed`: a conversation the engine itself turns into the memory the case starts from |
+| refuse | C02 a bare imperative, C05 a bare approval, C12 a recurring task, C13 a dated reminder, C14 a child's details, C15 hard-never even when asked, C16 a link-prefilled recommendation, C18 an offer not taken up, C19 a pasted CV, C20 a stance, C21 a single-request implication, C23 a tool result narrated, C24a/b the platform's and the kernel's tags | nothing is written (or nothing of the named kind) |
+| state to start from | C17 the recall echo (byte-identical), U01 the upgrade (only AMA remains), C22 and E3C (the repetition cases below) | `replay.seed`: a conversation the engine itself turns into the memory the case starts from |
 | legacy only | X01 a later statement contradicts a stored one under another key | the extractor names the stored key as `conflictsWith` (it never fired on production) |
 
 A case may be for one arm only (`arms`), and asks only checks code can decide (`caseShape.mjs`): the older ones plus
@@ -250,3 +250,20 @@ says it once, in the profile, with a short reminder in the other seven (research
 instead of the deployed directory; it is never rendered over the deployed one. The lab engine must mount the rendered directory. Corrections are
 written under `preferences/corrections/` since this change (the plugin lists `preferences/` at a session's start), and the
 runner counts both places as the `correction` kind.
+
+## The next-round families (2026-10-25, native arm only)
+
+Eleven synthetic cases beside the 38 (49 in `cases-general/`), written for the instruments of the memory-capsule next round
+(`evals/capsule-longitudinal` scenarios S9 and S11 read the same questions through the whole product):
+
+| Family | Cases | What is asked |
+|---|---|---|
+| misconception | M01 a popular misbelief stated in passing (a tenth of the brain), M02 a belief the assistant corrected and the person keeps (sugar and hyperactivity), M03 a contested clinical claim agreed with while asking for reading notes | nothing is written: neither the belief nor the assistant's correction is a fact about the person or the world |
+| symptom to trait | S01 a headache "these two days" and the assistant's softer echo, S02 one patient's presentation told to ask for talking points, S03 a few short nights before a deadline | no profile line, preference or project fact: a state of this week and a one-off case detail never become a standing trait |
+| import | I01 a memory export the person pasted and asked to import, I02 the same with a password and an identity-card number inside, I03 a pasted document's instruction (always answer in French) | I01 keeps the lines as the person's own (owner decision 3, 2026-10-25); I02 keeps them except what is never kept; I03 keeps nothing: an import the person asked for is their statement, a pasted document's imperative never is |
+| repetition across conversations | C22 (rewritten: it used to assert the opposite) the same choice in two conversations, E3B the same choice twice inside one conversation, E3C two different choices in two conversations | C22: kept as a preference after the second (owner decision 6, principle 18 amended); E3B and E3C: nothing kept |
+
+`pendingTemplate` (C22, I01, I02) names the owner decision a case anticipates and what must change in the templates first. A pending
+case still runs; while it fails the runner reports it as `pending-template`, never as a failure (the exit code stays 0), and when
+it passes the summary lists it under "pending but passing, drop the marker". The shape E3 is written in is the memory templates'
+to decide: C22 asks only that a preference be written and that it carry the choice.
