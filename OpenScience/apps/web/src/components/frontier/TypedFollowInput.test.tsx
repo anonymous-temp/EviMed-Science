@@ -63,7 +63,7 @@ describe("the input", () => {
   it("takes the words as the field's name where it is compact, and shows no visible label", () => {
     render(<TypedFollowInput held={[]} onAdded={vi.fn()} compact />);
     const input = screen.getByRole("textbox", { name: "关注一个药物、试验或问题" });
-    expect(input).toHaveAttribute("placeholder", "关注药物、试验或问题");
+    expect(input).toHaveAttribute("placeholder", "药物、试验或问题");
     expect(screen.queryByText("关注一个药物、试验或问题", { selector: "label" })).not.toBeInTheDocument();
   });
 

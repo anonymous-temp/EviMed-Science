@@ -85,12 +85,13 @@ export function FrontierFollows({ selected, onSelect, onChanged }: {
     {actionError && <p role="alert" className="text-caption text-error">{actionError}</p>}
     <DataTable label="我的关注" rows={rows} rowKey={(row) => row.id} state={loading ? "loading" : error ? "error" : "content"}
       errorMessage={error ?? undefined} onRetry={() => void load()} emptyText="还没有关注。" columns={[
-        { key: "label", header: "关注内容", rowHeader: true, cell: (row) => <div className="min-w-0">
+        { key: "label", header: "关注内容", rowHeader: true, cell: (row) => <div className="min-w-0 max-w-40 sm:max-w-xs">
           <Button size="sm" variant="text" aria-pressed={selected === row.id} disabled={row.muted} onClick={() => onSelect(row.id)}>{row.label}</Button>
+          {row.newItems ? <p className="text-caption tabular-nums text-text-3">{row.newItems >= 99 ? "99+" : row.newItems} 条新动态</p> : null}
           {followReadingText(row) && <p className="text-caption text-text-3">匹配：{followReadingText(row)}</p>}
         </div> },
         { key: "kind", header: "类型", cell: (row) => <Tag>{row.query ? `${KIND_WORDS[row.kind]} · ${READING_WORDS[row.query.kind]}` : KIND_WORDS[row.kind]}</Tag> },
-        { key: "state", header: "状态", cell: (row) => row.muted ? "已屏蔽" : row.newItems ? `关注中 · ${row.newItems >= 99 ? "99+" : row.newItems} 条新动态` : "关注中" },
+        { key: "state", header: "状态", cell: (row) => <span className="whitespace-nowrap">{row.muted ? "已屏蔽" : "关注中"}</span> },
         { key: "actions", header: "管理", cell: (row) => <div className="flex gap-2">
           {row.kind !== "query" && <Button size="sm" variant="text" disabled={pending} aria-label={`${row.muted ? "取消屏蔽" : "屏蔽"} ${row.label}`}
             onClick={() => void act(() => addFrontierFollow({ kind: row.kind, key: row.key, label: row.label, muted: !row.muted }), !row.muted ? row.id : undefined)}>{row.muted ? "取消屏蔽" : "屏蔽"}</Button>}

@@ -117,10 +117,11 @@ it("says how a typed follow was read and how many items are new, and offers no m
   const row = (await screen.findByRole("button", { name: "GLP-1 和胰腺炎" })).closest("tr")!;
   expect(within(row).getByText("匹配：GLP-1受体激动剂、司美格鲁肽 ＋ 胰腺炎、pancreatitis")).toBeInTheDocument();
   expect(within(row).getByText("关注词 · 问题")).toBeInTheDocument();
-  expect(within(row).getByText("关注中 · 3 条新动态")).toBeInTheDocument();
+  expect(within(row).getByText("3 条新动态")).toBeInTheDocument();
+  expect(within(row).getByText("关注中")).toBeInTheDocument();
   expect(within(row).queryByRole("button", { name: /屏蔽/ })).not.toBeInTheDocument();
   expect(within(row).getByRole("button", { name: "移除 GLP-1 和胰腺炎" })).toBeInTheDocument();
-  expect(screen.getByText("关注中 · 99+ 条新动态")).toBeInTheDocument();
+  expect(screen.getByText("99+ 条新动态")).toBeInTheDocument();
 });
 
 it("names the kind of each follow, and says where the followed zones are managed", async () => {

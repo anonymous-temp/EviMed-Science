@@ -179,6 +179,8 @@ export function FollowList({ state, choice, hrefFor, onManage, onPick, onAdded, 
         {item({ kind: "foryou" }, "与我相关")}
         {item({ kind: "all" }, "全部关注")}
       </ul>
+      {/* What the reader wants to hear about, in their own words, stays at the top: the list under it grows with every follow. */}
+      {onAdded && <TypedFollowInput held={state.topics} compact onAdded={onAdded} />}
       {KIND_GROUPS.map(([kind, word]) => {
         const follows = state.topics.filter((follow) => follow.kind === kind);
         if (follows.length === 0) return null;
@@ -195,7 +197,6 @@ export function FollowList({ state, choice, hrefFor, onManage, onPick, onAdded, 
           <ul className="space-y-0.5">{state.zones.map((zone) => item({ kind: "zone", id: zone.id }, zone.title))}</ul>
         </div>
       )}
-      {onAdded && <TypedFollowInput held={state.topics} compact onAdded={onAdded} />}
       <Button variant="text" size="sm" className="px-2" onClick={onManage}>
         <Plus size={16} aria-hidden="true" />添加关注 · 管理
       </Button>

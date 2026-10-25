@@ -84,7 +84,7 @@ describe("the typed follows in the list (c3-watch)", () => {
     expect(within(nav).getByRole("link", { name: /GLP-1 和胰腺炎/ })).toHaveAttribute("href", "/app/frontier?view=following&follow=21");
   });
 
-  it("ends in the one input when the page can open what is added, adds the words as a typed follow, and opens it", async () => {
+  it("puts the one input under the two fixed entries when the page can open what is added, adds the words as a typed follow, and opens it", async () => {
     const onAdded = vi.fn();
     client.addFrontierFollow.mockResolvedValue({ id: "30", kind: "query", key: "long covid", label: "long covid", muted: false });
     render(<MemoryRouter><FollowList state={state({ topics: [topic] })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} onAdded={onAdded} /></MemoryRouter>);

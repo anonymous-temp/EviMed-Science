@@ -61,7 +61,7 @@ export function TypedFollowInput({ held, onAdded, compact = false }: {
         {...(compact ? { "aria-label": label } : { label })}
         value={text}
         maxLength={FOLLOW_LABEL_MAX}
-        placeholder={compact ? "关注药物、试验或问题" : "例如：司美格鲁肽、SELECT 试验、GLP-1 和胰腺炎"}
+        placeholder={compact ? "药物、试验或问题" : "司美格鲁肽、SELECT 试验"}
         aria-describedby={message ? messageId : undefined}
         aria-busy={pending || undefined}
         onChange={(event) => { setText(event.target.value); setMessage(null); }}

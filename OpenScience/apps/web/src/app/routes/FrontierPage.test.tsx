@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
@@ -41,6 +41,7 @@ const client = vi.hoisted(() => ({
   fetchFrontierTag: vi.fn(),
   addFrontierFollow: vi.fn(),
   removeFrontierFollow: vi.fn(),
+  markFrontierFollowSeen: vi.fn(),
 }));
 // Partial: the vocabulary, the parsers and the error words stay real.
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
@@ -136,6 +137,7 @@ const location = () => screen.getByTestId("location").textContent ?? "";
 
 beforeEach(() => {
   Object.values(client).forEach((mock) => mock.mockReset());
+  client.markFrontierFollowSeen.mockResolvedValue(undefined);
   useToastStore.setState({ toasts: [] });
   client.useFrontierFeature.mockReturnValue("on");
   client.listFrontierFollows.mockResolvedValue([{ id: "7", kind: "topic", key: "obesity", label: "肥胖研究", muted: false }]);
@@ -1246,6 +1248,29 @@ describe("关注, the reader's own place (owner, 2026-10-25)", () => {
     feed = async () => page([]);
     renderPage("/app/frontier?view=following&follow=7");
     expect(await screen.findByText("没有结果")).toBeInTheDocument();
+  });
+
+  it("says what a typed follow is waiting for when nothing matched it yet — not 「没有结果」 — and keeps 「没有结果」 once a filter is set too", async () => {
+    client.listFrontierFollows.mockResolvedValue([{ id: "7", kind: "query", key: "长新冠", label: "长新冠", muted: false, query: { kind: "topic", concepts: [["长新冠"]] } }]);
+    feed = async () => page([]);
+    renderPage("/app/frontier?view=following&follow=7");
+    expect(await screen.findByText("暂时没有匹配“长新冠”的动态，有新的会出现在这里")).toBeInTheDocument();
+    expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
+    cleanup();
+    renderPage("/app/frontier?view=following&follow=7&lane=safety");
+    expect(await screen.findByText("没有结果")).toBeInTheDocument();
+  });
+
+  it("opening a follow's feed tells the server it was looked at, once, and not for 与我相关 or all follows", async () => {
+    client.listFrontierFollows.mockResolvedValue([{ id: "7", kind: "query", key: "长新冠", label: "长新冠", muted: false, newItems: 3 }]);
+    renderPage("/app/frontier?view=following&follow=7");
+    await waitFor(() => expect(client.markFrontierFollowSeen).toHaveBeenCalledWith("7"));
+    expect(client.markFrontierFollowSeen).toHaveBeenCalledTimes(1);
+    cleanup();
+    client.markFrontierFollowSeen.mockClear();
+    renderPage("/app/frontier?view=following&follow=all");
+    await screen.findByText("今天的一条 RCT");
+    expect(client.markFrontierFollowSeen).not.toHaveBeenCalled();
   });
 
   it("with only zones followed shows the zones and no feed block, no 「没有结果」, no filters", async () => {

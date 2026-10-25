@@ -291,3 +291,18 @@ test("the daily issue lists, for the reader alone, the typed follows with news a
   await service.markFollowSeen(alice, semaglutide.follow.id);
   assert.deepEqual((await service.issue(alice, "2026-10-25")).daily.followedQueries, [], "opened, it is no longer news");
 });
+
+test("全部关注 lists what typed follows matched beside what the other follows list, once, and 与我相关's reasons name the typed words", options, async () => {
+  const { follow } = await typed(alice, "司美格鲁肽 和胰腺炎");
+  await service.createFollow(alice, { kind: "topic", key: "heart failure", label: "heart failure" });
+  const both = await publish(-30, "Semaglutide and pancreatitis", { keys: ["drug:semaglutide", "disease:pancreatitis"] });
+  const topic = await publish(-20, "Heart failure registry");
+  await publish(-10, "Unrelated oncology report");
+  clock = new Date(at(5));
+  await watch.scan({ id: follow.id, userId: "alice", query: (await db.query("SELECT query FROM evimed_frontier.user_follows WHERE id = $1", [follow.id])).rows[0].query }, { since: new Date(at(-60)), until: clock });
+  const listed = (await service.listItems(alice, new URLSearchParams({ view: "all", follow: "all" }))).body.items.map((/** @type {any} */ row) => row.id);
+  assert.deepEqual(new Set(listed), new Set([both.publicId, topic.publicId]));
+  assert.equal(listed.length, 2, "an item two follows list is listed once");
+  const read = await service.subscriptions.read("alice");
+  assert.deepEqual(read.follows.filter((entry) => entry.kind === "query").map((entry) => entry.label), ["司美格鲁肽 和胰腺炎"]);
+});

@@ -182,7 +182,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const day = readDay(params.get("day"));
   const zoneScope = readZoneScope(params.get("scope"));
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
-  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || choice?.kind === "follow");
+  // A typed follow that has matched nothing (yet) is not a filter that excluded everything: it says what it is waiting for (c3-watch).
+  const typedFollow = choice?.kind === "follow" ? following.topics.find((entry) => entry.id === choice.id && entry.kind === "query") : undefined;
+  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || (choice?.kind === "follow" && !typedFollow));
   /** Where the list on screen is, as its events name it (frontierTracking): the feed, a search or the follows. */
   const listSurface: FrontierTrackSurface = q ? "search" : view === "following" ? "follows" : "feed";
   /** Where a card's star or hide is taken: 与我相关 or the list. */
@@ -783,7 +785,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       listing={listing && listing.key === key ? listing : null}
       error={listError}
       fresh={fresh?.count ?? 0}
-      empty={view === "following" ? "关注的内容暂时没有新动态" : undefined}
+      empty={view === "following" ? (typedFollow ? `暂时没有匹配“${typedFollow.label}”的动态，有新的会出现在这里` : "关注的内容暂时没有新动态") : undefined}
       firstRun={status ? status.lastPublishedAt === null : true}
       loadingMore={loadingMore}
       renderItem={card}
