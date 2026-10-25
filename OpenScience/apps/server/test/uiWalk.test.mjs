@@ -34,7 +34,7 @@ import {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -1483,9 +1483,14 @@ test("the studies and ids the walk opens are read from the lists, and a missing 
   assert.equal(geoAnswerSnapshot(null), null);
 
   const zones = { items: [{ id: "z1", kind: "user" }, { id: "z2", kind: "official" }] };
-  assert.deepEqual(frontierTargets({ zones, hot: { events: [{ id: "e1" }] } }), { zoneId: "z1", official: "z2", cardId: null, authorId: null, eventId: "e1" });
-  assert.deepEqual(frontierTargets({ cards: { items: [{ id: "c1" }] }, links: { author: { id: "a1" } } }), { zoneId: null, official: null, cardId: "c1", authorId: "a1", eventId: null });
-  assert.deepEqual(frontierTargets({}), { zoneId: null, official: null, cardId: null, authorId: null, eventId: null });
+  assert.deepEqual(frontierTargets({ zones, hot: { events: [{ id: "e1" }] } }), { zoneId: "z1", official: "z2", cardId: null, authorId: null, eventId: "e1", topicId: null });
+  assert.deepEqual(frontierTargets({ cards: { items: [{ id: "c1" }] }, links: { author: { id: "a1" } } }), { zoneId: null, official: null, cardId: "c1", authorId: "a1", eventId: null, topicId: null });
+  assert.deepEqual(frontierTargets({}), { zoneId: null, official: null, cardId: null, authorId: null, eventId: null, topicId: null });
+  // An official zone made empty at start (「热点求证」, c2 2026-10-25) does not hide the one that holds cards; a topic is walked when one exists.
+  const officials = { items: [{ id: "hot", kind: "official", evidenceCount: 0 }, { id: "af", kind: "official", evidenceCount: 4 }] };
+  assert.equal(frontierTargets({ zones: officials }).official, "af");
+  assert.equal(frontierTargets({ zones: { items: [{ id: "hot", kind: "official", evidenceCount: 0 }] } }).official, "hot");
+  assert.equal(frontierTargets({ topics: { topics: [{ id: "t1" }] } }).topicId, "t1");
 
   const runs = [
     { id: "run_old", deliverables: [{ id: "x", capability: "drug-evidence", status: "delivered" }] },
@@ -2019,7 +2024,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   assert.ok(report.pages["vcr-trial@2@desktop"] && report.pages["vcr-trial@desktop"], "the second study is reported as vcr-trial@2");
   for (const address of [
     "/app/geo/geo_1/answers/snap_1", "/app/frontier/zones/z_user", "/app/frontier/zones/z_official/evidence/card_1", "/app/frontier/authors/au_1",
-    "/app/frontier/events/ev_1", "/app/frontier?view=following", "/app/virtual-research?tab=models", "/app/virtual-research?tab=precedents",
+    "/app/frontier/events/ev_1", "/app/frontier?view=following&follow=all", "/app/virtual-research?tab=models", "/app/virtual-research?tab=precedents",
     "/app/virtual-research?tab=definitions", "/app/account?tab=notifications", "/app/ops", "/app/memory/shared/impeccable-audit-missing", "/app/extensions/plugins/impeccable-audit-missing",
     "/app/extensions/skills/impeccable-audit-missing", "/app/runs/run_1/files/deliverables/pkg/clinical-evidence-matrix.json", "/app/files/src_1",
   ]) assert.ok(visited.has(address), `walked ${address}`);
