@@ -19,7 +19,7 @@ import { ExtensionActorBindings } from './extensionActorBindings.mjs';
 export function createHostedExtensionIntegration({ config, database, store, agentRuns, runtimeManager, controller,
   extensions, plugins, pluginWorker, deployment, resolveProject, audit }) {
   const currentIdentity = async () => {
-    const image = await runtimeManager.inspectRuntimeImage();
+    const image = await (runtimeManager.generationImageIdentity ? runtimeManager.generationImageIdentity() : runtimeManager.inspectRuntimeImage());
     return deploymentGenerationIdentities(deployment, image.imageId);
   };
   const qualification = new ExtensionQualification({ root: deployment.qualificationRoot, secret: config.modelGatewaySigningSecret,

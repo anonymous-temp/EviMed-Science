@@ -12,6 +12,9 @@ test('AgentBay image identity and actual launch environment carry frozen skill a
   const manager = new RuntimeManager(config, { agentbayClient: {} })
   const identity = await personalSkillRuntimeIdentity(manager)
   assert.match(identity.baseRuntimeImageDigest, /^sha256:[a-f0-9]{64}$/)
+  // The provider-qualified identity is the generations' alone: every other reader of the image keeps its own answer.
+  assert.equal((await manager.generationImageIdentity()).imageId, identity.baseRuntimeImageDigest)
+  assert.equal(await manager.inspectRuntimeImage(), null)
   const provider = new AgentBayRuntimeProvider(manager, {})
   const policy = { disabled: ['office:docx'], disabledPlugins: ['annotation'] }
   const environment = provider.kernelEnvironment({ userId: 'owner' }, { gateways: {}, personalSkillGeneration: { platformSkills: policy }, pluginConfig: { revision: 0, enabled: true, settings: { timeoutMs: 15000 } } })

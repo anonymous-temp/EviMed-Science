@@ -67,12 +67,20 @@ test('AgentBay carries an owned native personal revision and binary resources in
     const result = await shell('/bin/sh', ['-c', translated])
     return { ok: true, exitCode: 0, stdout: result.stdout, stderr: result.stderr }
   }
-  await provider.syncPersonalGeneration(project, plan)
+  assert.deepEqual(await provider.syncPersonalGeneration(project, plan), { reused: false })
   const preserved = map(`${plan.personalSkillsRuntimeDir}/${skill.payload.nativeName}/resources/input.bin`)
   assert.deepEqual(await fs.readFile(preserved), binary)
   assert.equal((await fs.stat(preserved)).mode & 0o777, 0o444)
   assert.ok(commands.some(line => line.includes('chown 0:0') && line.includes('sha256sum')))
   assert.ok(commands.every(line => !line.includes('/workspace/')))
+  // A reattached session that already holds the generation is read back with one command, and nothing is written again.
+  const written = commands.length
+  assert.deepEqual(await provider.syncPersonalGeneration(project, plan), { reused: true })
+  assert.equal(commands.length, written + 1)
+  // One changed byte on the session is noticed, and the generation is written again.
+  await fs.chmod(preserved, 0o644); await fs.writeFile(preserved, Buffer.concat([binary, Buffer.from([1])]))
+  assert.deepEqual(await provider.syncPersonalGeneration(project, plan), { reused: false })
+  assert.deepEqual(await fs.readFile(preserved), binary)
   const env = provider.kernelEnvironment(project, plan)
   assert.deepEqual(JSON.parse(env.EVIMED_DISABLED_PLATFORM_SKILLS), ['curated:matplotlib'])
   assert.deepEqual(JSON.parse(env.EVIMED_DISABLED_CLIENT_BUNDLES), ['annotation', 'mermaid'])

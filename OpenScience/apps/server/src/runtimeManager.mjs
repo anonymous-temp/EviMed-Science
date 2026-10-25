@@ -4522,13 +4522,22 @@ export class RuntimeManager {
     process.stderr.write(`runtime start degraded: ${code}${cause ? ` (${cause})` : ""}\n`);
   }
 
-  async inspectRuntimeImage() {
+  /**
+   * The runtime image identity a personal-skill or extension generation is bound to. AgentBay exposes an immutable image
+   * identifier, not OCI bytes, so there it is the digest of the provider-qualified identifier; every other provider answers
+   * what the image inspection answers. Only the generation callers use it: every other reader of the image (循证进化's
+   * kernel proof, a result's lineage, the document renderer) keeps `inspectRuntimeImage`'s own answer.
+   */
+  async generationImageIdentity() {
     if (this.config.runtimeProvider === 'agentbay') {
       const providerImageId = String(this.config.agentbayImageId ?? '');
       if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,255}$/.test(providerImageId)) throw new HttpError(503, 'runtime_image_unavailable', 'The AgentBay image identity is unavailable.');
-      // AgentBay exposes an immutable image identifier, not OCI bytes. This is the digest of the provider-qualified identity.
       return { imageId: `sha256:${createHash('sha256').update(JSON.stringify({ provider: 'agentbay', imageId: providerImageId })).digest('hex')}`, providerImageId };
     }
+    return this.inspectRuntimeImage();
+  }
+
+  async inspectRuntimeImage() {
     if (this.runtimeController) return this.runtimeController.inspectRuntimeImage();
     if (this.config.runtimeSandboxMode !== 'docker') return null;
     const result = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', this.config.runtimeContainerImage], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
