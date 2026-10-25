@@ -94,7 +94,10 @@ class Ctx:
         """Type the steps into the account's native composer. Raises `ScenarioError` when a turn did not complete: a scenario about
         memory cannot say anything over a conversation that never happened, and the turns before it are kept in the error text."""
         self._plans += 1
-        plan = {"project": project, "newConversation": new_conversation, "steps": steps}
+        # A new conversation inside a project is the project row's own 「在“…”新建对话」: the sidebar's global 「新对话」 opens the general
+        # assistant outside every project (owner ruling 2026-10-20), so a turn sent after it is not in the project the scenario reads.
+        names = {pid: name for name, pid in getattr(account, "projects", {}).items()}
+        plan = {"project": project, "projectName": names.get(project) if project else None, "newConversation": new_conversation, "steps": steps}
         result = self.host.browse(account, plan, f"{self.name.lower()}-{self._plans}")
         turns = result.get("turns", [])
         done = [t for t in turns if t.get("status")]

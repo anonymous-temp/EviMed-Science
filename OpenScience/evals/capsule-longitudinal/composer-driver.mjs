@@ -7,7 +7,7 @@
 // carry the `automated` mark (the control plane learns of a native turn from the kernel's event stream, where no request header
 // exists): isolation is the throwaway account, which the caller deletes at the end, and what it learnt goes with it.
 //
-// Plan: { project: string | null, newConversation: boolean, stopRuntime?: boolean,
+// Plan: { project: string | null, projectName?: string | null, newConversation: boolean, stopRuntime?: boolean,
 //         steps: [{ op: "turn", label, text, newConversation?: boolean, beforeMs?: number, afterMs?: number, timeoutMs?: number }] }
 // Result: { turns: [{ label, text, sessionId, requestId, status, run, reply, toolNames, wallMs, error? }], error?, notes: [] },
 // rewritten after every turn so a failure leaves the turns before it.
@@ -79,7 +79,9 @@ try {
   const newConversation = async () => {
     await composer();
     const before = page.url();
-    await page.getByText("新对话", { exact: true }).first().click();
+    // Inside a project the project row's own button; the global 「新对话」 leaves every project (owner ruling 2026-10-20).
+    if (plan.projectName) await page.getByRole("button", { name: `在“${plan.projectName}”新建对话` }).first().click();
+    else await page.getByText("新对话", { exact: true }).first().click();
     await sleep(4000);
     say("new conversation", "url changed", page.url() !== before);
   };

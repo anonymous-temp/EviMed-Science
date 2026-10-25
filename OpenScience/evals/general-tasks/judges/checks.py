@@ -1058,7 +1058,13 @@ def _report_items(text: str) -> list[str]:
     if marked:
         return marked
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return lines[1:] if len(lines) > 1 and not re.search(r"[。！？.!?]$", lines[0]) else lines
+    items = lines[1:] if len(lines) > 1 and not re.search(r"[。！？.!?]$", lines[0]) else lines
+    # A closing line addressed to the person (「把方案告诉我就加上。」) is not an item: when the items carry no sentence-final
+    # punctuation and only the last line does, the last line is the note after the report. Shape, not wording.
+    final = re.compile(r"[。！？.!?]$")
+    if len(items) > 1 and final.search(items[-1]) and not any(final.search(item) for item in items[:-1]):
+        items = items[:-1]
+    return items
 
 
 def _reader_chars(text: str) -> int:
