@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allInstalledExtensions, extensionAvailability, nextDisabled, skillActivationText, platformSkillReadOnly, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { allInstalledExtensions, extensionAvailability, nextDisabled, skillActivationText, platformSkillReadOnly, skillAdapted, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import type { ExtensionInstallation, ExtensionSelection } from "@/lib/extensionsClient";
 import type { PlatformSkill } from "@/lib/skillLibraryClient";
 
@@ -75,4 +75,10 @@ it("an idle project's activation says when the saved choice takes effect, in pla
   expect(skillActivationText(true, { phase: "ready", savedRevision: 0, effectiveRevision: null, error: null, live: false })).toBe("已启用");
   expect(skillActivationText(true, { phase: "pending", savedRevision: 3, effectiveRevision: null, error: null, live: false })).toBe("下次对话生效");
   expect(skillActivationText(false, { phase: "deferred", savedRevision: 3, effectiveRevision: null, error: "runtime_composition_unavailable", live: true })).toBe("暂未生效，稍后会自动再试");
+});
+
+it("an upstream skill the platform edited is told apart from one it ships unedited", () => {
+  expect(skillAdapted({ provenance: { kind: "upstream-adapted" } } as PlatformSkill)).toBe(true);
+  expect(skillAdapted({ provenance: { kind: "upstream" } } as PlatformSkill)).toBe(false);
+  expect(skillAdapted({} as PlatformSkill)).toBe(false);
 });

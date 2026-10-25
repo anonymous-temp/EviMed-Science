@@ -22,7 +22,7 @@ import { useNarrow } from "@/lib/useMediaQuery";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
-import { SHARED_PROJECT_TEXT, allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, platformSkillReadOnly, projectChoicesNotApplicable, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { SHARED_PROJECT_TEXT, allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, platformSkillReadOnly, projectChoicesNotApplicable, skillActivationText, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { SKILL_LOOPX_ICON, SKILL_PACK_ICON } from "./extensionCopy";
 import { inventoryIcon } from "./inventoryIcons";
 import { ExtensionDrawer } from "./ExtensionDrawer";
@@ -156,7 +156,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     const chosen = currentPolicy?.items.find(item => item.id === skill.id);
     const enabled = chosen?.enabled ?? !currentPolicy?.payload.disabled.includes(skill.id);
     const icon = skill.group === platformData?.geoGroup ? SKILL_PACK_ICON : skill.group === platformData?.loopxGroup ? SKILL_LOOPX_ICON : undefined;
-    entries.push({ id: skill.id, title: skill.title, description: skill.use, publisher: skillPublisher(skill), type: "skills", group: skill.group, icon,
+    entries.push({ id: skill.id, title: skill.title, description: skill.use, publisher: skillAdapted(skill) ? `${skillPublisher(skill)} · 已改编` : skillPublisher(skill), type: "skills", group: skill.group, icon,
       origin: skillOrigin(skill), repository: skillOrigin(skill) === "third-party" ? skillRepositoryUrl(skill.provenance?.repository) : null,
       added: true, state: readOnly ? undefined : skillActivationText(enabled, currentPolicy?.activation), open: () => setOpen({ kind: "platform", skill }),
       action: readOnly || shared ? view === "installed" ? undefined : <Button size="sm" variant="text" onClick={() => setOpen({ kind: "platform", skill })}>查看</Button>

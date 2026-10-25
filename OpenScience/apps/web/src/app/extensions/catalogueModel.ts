@@ -70,6 +70,9 @@ export function skillOrigin(skill: PlatformSkill): CatalogueOrigin {
   return ["first-party", "first-party-derived", "proprietary"].includes(skill.provenance.kind) ? "first-party" : "third-party";
 }
 
+/** An upstream skill the platform edited for hosting (its review recorded the edits): said, so the upstream link is not read as the text that runs. */
+export const skillAdapted = (skill: PlatformSkill) => skill.provenance?.kind === "upstream-adapted";
+
 export function skillPublisher(skill: PlatformSkill): string {
   const source = skill.provenance;
   if (skillOrigin(skill) === "first-party") return "EviMed Science";
