@@ -1,5 +1,5 @@
 {
- "about": "Real published 前沿动态 items (production, 2026-10-10 to 10-24; ct/samples/items-by-kind.jsonl), three or four per genre, each with its expected genre (and the genres a careful editor could also name), its reader text (the full text, abstract or excerpt, at most 6,000 characters here; a trial record's excerpt is kept as its verified Chinese translation, textIsTranslation) and the fields production wrote before ct-write (before.summary / reason / lead). run_eval.mjs writes each with the shipped prompts on deepseek-flash and measures it in code. c2-style (2026-10-25) added 56 more real published items held out of the style distillation corpus (8 per genre in all, 104): WeChat items from HCP and industry accounts (production's own genre call, close genres accepted) and authority items (journals, regulators, registries, preprint servers, society posts); `round` marks them, `inCorpus` the six that were also read for the style statistics.",
+ "about": "Real published 前沿动态 items (production, 2026-10-10 to 10-24; ct/samples/items-by-kind.jsonl), three or four per genre, each with its expected genre (and the genres a careful editor could also name), its reader text (the full text, abstract or excerpt, at most 6,000 characters here; a trial record's excerpt is kept as its verified Chinese translation, textIsTranslation) and the fields production wrote before ct-write (before.summary / reason / lead). run_eval.mjs writes each with the shipped prompts on deepseek-flash and measures it in code. c2-style (2026-10-25) added 56 more real published items held out of the style distillation corpus (8 per genre in all, 104): WeChat items from HCP and industry accounts (production's own genre call, close genres accepted) and authority items (journals, regulators, registries, preprint servers, society posts); `round` marks them, `inCorpus` the six that were also read for the style statistics. Eight more (`sampleKind` summary-record) are records with no text, read as the platform reads them since c2-gaps G2: the entry's summary and the record's facts (`textSource` summary, 「来源摘要」), built from the plugin's own recorded openFDA (recalls, shortages, Drugs@FDA) and PREPARE answers; they hold that a thin record gets no advice and no sentence about what it lacks.",
  "cases": [
   {
    "id": "paper-519fe6559cbbf042",
@@ -3920,6 +3920,294 @@
    },
    "round": "c2-style",
    "inCorpus": true
+  },
+  {
+   "id": "safety-summary-0577b5f836eebe56",
+   "expectGenre": "safety",
+   "acceptGenres": [
+    "safety"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "0577b5f836eebe56",
+    "sourceName": "美国FDA 药品召回与短缺（openFDA）",
+    "sourceType": "regulator",
+    "lane": "safety",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "safety-notice",
+    "flags": [],
+    "lang": "en",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "Class II drug recall: Clindamycin Injection USP in 5% Dextrose (Baxter Healthcare Corporation)",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "Clindamycin Injection USP in 5% Dextrose, 900 mg per 50 mL (12 mg/mL) in GALAXY 50 mL Single Dose Container, Rx only, Sterile Nonpyrogenic, Baxter Healthcare Corporation, Deerfield, IL 60015 USA, NDC 0338-3814-50. Reason: CGMP Deviations. Status: Ongoing. Distribution: US Nationwide; Puerto Rico; and Chile. Recall D-0815-2026: Voluntary: Firm initiated.\n\nRecall class: Class II. FDA application: ANDA208084.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 409,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
+  },
+  {
+   "id": "safety-summary-08e70f6d5d09b7b7",
+   "expectGenre": "safety",
+   "acceptGenres": [
+    "safety"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "08e70f6d5d09b7b7",
+    "sourceName": "美国FDA 药品召回与短缺（openFDA）",
+    "sourceType": "regulator",
+    "lane": "safety",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "safety-notice",
+    "flags": [],
+    "lang": "en",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "Class II drug recall: Vasopressin (Baxter Healthcare Corporation)",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "Vasopressin, in 0.9% Sodium Chloride Injection, 20 units per 100 mL (0.2 units/mL), 100mL Single-Dose Container, Rx only, Sterile, Baxter Healthcare Corporation, Deerfield, IL, 60012 USA, NDC 0338-9640-12. Reason: CGMP Deviations. Status: Ongoing. Distribution: US Nationwide; Puerto Rico; and Chile. Recall D-0811-2026: Voluntary: Firm initiated.\n\nRecall class: Class II. FDA application: NDA217569.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 400,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
+  },
+  {
+   "id": "safety-summary-44551cbf2c450922",
+   "expectGenre": "safety",
+   "acceptGenres": [
+    "safety"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "44551cbf2c450922",
+    "sourceName": "美国FDA 药品短缺（openFDA shortages）",
+    "sourceType": "regulator",
+    "lane": "safety",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "safety-notice",
+    "flags": [],
+    "lang": "en",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "Drug shortage (To Be Discontinued): Rivastigmine Film, Extended Release — Mylan Pharmaceuticals Inc., a Viatris Company",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "Rivastigmine, Film, Extended Release, 4.6 mg/24 h (NDC 0378-9070-93) Status: To Be Discontinued. Therapeutic category: Neurology. Reason: Discontinuation of the manufacture of the drug.\n\nFDA application: ANDA205622.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 215,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
+  },
+  {
+   "id": "safety-summary-72daa13db428969c",
+   "expectGenre": "safety",
+   "acceptGenres": [
+    "safety"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "72daa13db428969c",
+    "sourceName": "美国FDA 药品短缺（openFDA shortages）",
+    "sourceType": "regulator",
+    "lane": "safety",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "safety-notice",
+    "flags": [],
+    "lang": "en",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "Drug shortage (Current): Lisdexamfetamine Dimesylate Capsule — Mylan Pharmaceuticals Inc., a Viatris Company",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "Lisdexamfetamine Dimesylate, Capsule, 70 mg (NDC 0378-6860-77) Status: Current. Therapeutic category: Psychiatry. Availability: Available.\n\nFDA application: ANDA202835.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 168,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
+  },
+  {
+   "id": "approval-summary-63d791ec00d4773d",
+   "expectGenre": "approval",
+   "acceptGenres": [
+    "approval"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "63d791ec00d4773d",
+    "sourceName": "openFDA Drugs@FDA 审批数据库",
+    "sourceType": "regulator",
+    "lane": "regulatory",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "regulatory-decision",
+    "flags": [],
+    "lang": "en",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "FDA approval: PRIMAQUINE PHOSPHATE — ANDA203924 SUPPL-2 (Labeling)",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "Sponsor: ALVOGEN. Products: PRIMAQUINE PHOSPHATE TABLET ORAL PRIMAQUINE PHOSPHATE EQ 15MG BASE. Review priority: STANDARD.\n\nFDA application: ANDA203924. Supplement: SUPPL-2.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 173,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
+  },
+  {
+   "id": "approval-summary-b6d8a212ea1c0a07",
+   "expectGenre": "approval",
+   "acceptGenres": [
+    "approval"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "b6d8a212ea1c0a07",
+    "sourceName": "openFDA Drugs@FDA 审批数据库",
+    "sourceType": "regulator",
+    "lane": "regulatory",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "regulatory-decision",
+    "flags": [],
+    "lang": "en",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "FDA approval: ITRACONAZOLE — ANDA206741 SUPPL-22 (Labeling)",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "Sponsor: ALEMBIC. Products: ITRACONAZOLE CAPSULE ORAL ITRACONAZOLE 100MG. Review priority: STANDARD.\n\nFDA application: ANDA206741. Supplement: SUPPL-22.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 152,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
+  },
+  {
+   "id": "guideline-summary-b1fa9321764bfdc4",
+   "expectGenre": "guideline",
+   "acceptGenres": [
+    "guideline"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "b1fa9321764bfdc4",
+    "sourceName": "国际实践指南注册与透明化平台 PREPARE",
+    "sourceType": "evidence-body",
+    "lane": "guideline",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "guideline",
+    "flags": [],
+    "lang": "zh",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "机器人辅助远程手术管理体系专家共识（2026版）",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "四川大学华西医院。 以保障患者诊疗安全、实现机器人辅助远程手术标准化为核心导向，构建涵盖术前评估、术中实施、术后随访的全周期标准化诊疗运行框架，并建立一体化闭环质量安全管理体系，为国内各级医疗机构开展机器人辅助远程手术提供统一、可落地的行业实施准则，推动远程手术安全、规范、标准化、同质化和可持续发展。 Type: expert_consensus; stage: published; version: original.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 212,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
+  },
+  {
+   "id": "guideline-summary-3163a5a140a34723",
+   "expectGenre": "guideline",
+   "acceptGenres": [
+    "guideline"
+   ],
+   "sampleKind": "summary-record",
+   "round": "c2-style",
+   "item": {
+    "publicId": "3163a5a140a34723",
+    "sourceName": "国际实践指南注册与透明化平台 PREPARE",
+    "sourceType": "evidence-body",
+    "lane": "guideline",
+    "channel": null,
+    "platform": null,
+    "evidenceType": "guideline",
+    "flags": [],
+    "lang": "zh",
+    "selected": null,
+    "scoreTotal": null,
+    "titleRaw": "甲产儿甲状腺功能异常管理专家共识",
+    "titleZh": null,
+    "journal": null,
+    "publicationTypes": [],
+    "url": null
+   },
+   "text": "中国医师协会新生儿科医师分会早产儿专业委员会。 通过明确筛查、诊断、治疗及监测的规范，减少临床实践的随意性，确保不同层级的医疗机构均能为早产儿甲状腺异常的管理提供安全、有效、同质化的医疗服务。 Type: expert_consensus; stage: published; version: original.",
+   "textSource": "summary",
+   "textIsTranslation": false,
+   "textChars": 157,
+   "before": {
+    "summary": null,
+    "reason": null,
+    "lead": null
+   }
   }
  ]
 }

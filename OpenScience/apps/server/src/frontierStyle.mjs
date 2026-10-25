@@ -52,14 +52,16 @@ export const FRONTIER_SENTENCE_RULE = "一句只讲一件事，一般不超过 6
 export const FRONTIER_TITLE_RULE = "写明主体（机构、监管部门、公司、学会，或药物、方案、试验名）和结果或决定；不用问句和感叹号，不用「重磅」「刚刚」「突发」「首个」「揭秘」「竟」这类词，不加【】丨｜这类栏目标签，不带网站或栏目名后缀。";
 
 /**
- * @typedef {{ title: string, lead: string, ref: string, source: string }} FrontierStyleExemplar
+ * @typedef {{ title: string, lead: string, ref: string, source: string, thin?: boolean }} FrontierStyleExemplar
  * @typedef {{ title: string, moves: readonly (keyof typeof FRONTIER_LEAD_MOVES)[], lead: string,
  *             exemplars: readonly FrontierStyleExemplar[] }} FrontierStyleCard
  */
 
 /**
  * One card per genre: the title formula (`title`), the 导读's move order (`moves`, and `lead`, the same order said for the model),
- * and two exemplars we wrote on real public items of the feed (`ref` is the item's public id) — each passes the number check
+ * and two exemplars we wrote on real public items of the feed (`ref` is the item's public id) — and, for safety and approval, a
+ * third on a record with no text (`thin`: an openFDA record as the plugin recorded it, `ref` a key of it; c2-gaps G2, 2026-10-25: on
+ * such records the model added advice the record does not state, and said what it lacks) — each passes the number check
  * against its source, shares no eight-character run of expression with the corpus (standard names excepted), and keeps the
  * sentence rule. The exemplars sit on topics unlike most inputs; the eval counts any of their eight-character runs in an output
  * that the output's own source does not contain (`leakage`).
@@ -111,7 +113,7 @@ export const FRONTIER_STYLE_CARDS = /** @type {Readonly<Record<import("@evimed/d
     ]),
   approval: card("监管机构＋决定的类型＋药品或器械（通用名）＋适应症",
     ["DECISION", "POPULATION", "FINDING", "HARM", "CHINA"],
-    "先写哪个监管机构对哪个药品或器械（通用名，原文有商品名和企业时带上）做了什么决定，用于什么适应症和人群；写清决定的类型：常规批准、加速批准、附条件批准、优先审评，欧洲 CHMP 的积极意见不等于批准，卫生技术评估机构接纳使用也不等于上市批准。再写关键研究的设计、样本量和主要结果，原文写明的剂量和附加条件。原文提到国内上市或在审情况时，最后写一句。",
+    "先写哪个监管机构对哪个药品或器械（通用名，原文有商品名和企业时带上）做了什么决定，用于什么适应症和人群；写清决定的类型：常规批准、加速批准、附条件批准、优先审评，欧洲 CHMP 的积极意见不等于批准，卫生技术评估机构接纳使用也不等于上市批准。再写关键研究的设计、样本量和主要结果，原文写明的剂量和附加条件。原文提到国内上市或在审情况时，最后写一句。原文只是一条审批记录时，写清是哪家企业的什么申请、批准的是哪类事项（新适应症、说明书修订、生产工艺等）即可；原文没有给出的适应症、研究和剂量整个不写，也不写原文没有给出。",
     [
       { title: "苏格兰SMC接纳deuruxolitinib用于成人重度斑秃",
         lead: "苏格兰药物联盟（SMC）经简化审评，接纳JAK抑制剂deuruxolitinib（Leqselvi）在NHS苏格兰用于成人重度斑秃。药品由Sun Pharmaceuticals提供，这一建议以患者用药可及方案的价格为前提。",
@@ -119,10 +121,13 @@ export const FRONTIER_STYLE_CARDS = /** @type {Readonly<Record<import("@evimed/d
       { title: "Perjeta的生物类似药Poherdy获欧盟批准，用于HER2阳性乳腺癌",
         lead: "Poherdy已在欧盟获批，它与已上市的Perjeta（帕妥珠单抗）高度相似，属于生物类似药，适用人群是成人HER2阳性乳腺癌。转移或局部复发且无法手术的患者，与曲妥珠单抗、多西他赛合用。复发风险高的早期患者，在手术前后与曲妥珠单抗及化疗合用。",
         ref: "8150652e44ddacc5", source: "欧洲药品管理局 全站更新 EMA What's New" },
+      { title: "FDA批准Micro Labs氯巴占片仿制药的一项生产工艺补充申请",
+        lead: "据FDA审批数据库，Micro Labs的氯巴占片仿制药申请（ANDA211711）有一项生产与质量控制类补充申请获批。涉及10 mg和20 mg片剂。",
+        ref: "4f5aa15bcb21608d", source: "openFDA Drugs@FDA 审批数据库", thin: true },
     ]),
   safety: card("机构＋产品＋风险＋措施",
     ["DECISION", "HARM", "POPULATION", "ABSOLUTE"],
-    "先写哪个机构就什么产品采取了什么措施（黑框警告、禁忌、说明书修订、召回、停用），风险是什么。再写医务人员最该做的那件事，以及涉及的产品、批号或人群。最后写依据的病例数或数据来源。",
+    "先写哪个机构就什么产品采取了什么措施（黑框警告、禁忌、说明书修订、召回、停用、短缺），风险或原因是什么。再写原文写明的、医务人员或患者要做的事，以及涉及的产品、批号或人群；原文没写要做什么，就不写这一步，不替原文出主意。最后写依据的病例数或数据来源。原文只是一条召回或短缺记录时，一两句写清是谁的什么产品、原因、范围和状态即可。",
     [
       { title: "英国MHRA提示：CRRT更换PAN滤器后，卡泊芬净等棘白菌素宜推迟给药",
         lead: "英国MHRA提醒，卡泊芬净等棘白菌素可吸附在连续肾脏替代治疗所用的聚丙烯腈（PAN）膜上，可能导致抗真菌治疗无效，危重患者有生命危险。新滤器或新管路刚开始使用时风险最高。条件允许时，应在启用PAN滤器或更换管路至少6小时后再给药。",
@@ -130,6 +135,9 @@ export const FRONTIER_STYLE_CARDS = /** @type {Readonly<Record<import("@evimed/d
       { title: "FDA早期警示：Edwards经导管二尖瓣输送系统球囊破裂，已致1例死亡",
         lead: "FDA发布早期警示，Edwards Lifesciences撤回用于SAPIEN M3经导管二尖瓣置换的部分批号Commander M输送系统。企业已收到3份球囊充气时破裂的报告，相关1例死亡、1例严重伤害。医疗机构应停用并退回受影响批号，其他批号可继续使用。",
         ref: "16dcd226384dd57e", source: "美国FDA MedWatch 安全警示 MedWatch Safety Alerts" },
+      { title: "百特召回达托霉素氯化钠注射液，原因为生产规范偏差（二类召回）",
+        lead: "百特（Baxter）在美国全国、波多黎各和智利召回一款1,000 mg/100 mL的达托霉素氯化钠注射液，原因是生产偏离了CGMP要求。这是企业自愿发起的二类召回，目前仍在进行。",
+        ref: "2f84f8f22cbeacaa", source: "美国FDA 药品召回（openFDA enforcement）", thin: true },
     ]),
   industry: card("公司＋事件＋金额或研发阶段",
     ["FINDING", "DEAL", "BACKGROUND", "NEXT"],

@@ -5,8 +5,9 @@
  * 「AI 要点」 — through the platform's own `FrontierEditor` on deepseek-flash, and measured in code against what production wrote
  * before (`before`). Nothing here is judged by a model.
  *
- *   node evals/frontier-writing/run_eval.mjs --key-file <path> [--only <case-id>] [--genre <genre>] [--limit N]
- *       [--concurrency 4] [--max-cny 3] [--skip-edit]
+ *   node evals/frontier-writing/run_eval.mjs --key-file <path> [--only <case-id>] [--genre <genre>] [--sample-kind <kind>] [--limit N]
+ *       [--concurrency 4] [--max-cny 3] [--skip-edit] [--out <file>]
+ *   node evals/frontier-writing/run_eval.mjs --rescore <run.json> [--out <file>]   (measure a run again, no model call)
  *
  * What is measured (`metricsOf`), per case and per genre, before and after:
  * - numbers: every number of a written text found in the source (`checkNumbers` over the title and the text — not the source's
@@ -34,7 +35,7 @@ import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION, FrontierEditor, isChi
 import { FRONTIER_LEAD_VERSION, buildLeadInput, frontierLeadLimit, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
 import { checkNumbers } from "../../apps/server/src/frontierNumbers.mjs";
 import { callModelForControlPlane } from "../../apps/server/src/modelGateway.mjs";
-import { RESULT_GENRES, givenUsed, leakage, proseStyle, scoreDistribution, styleRates, titleFeatures, titleHook } from "./style_metrics.mjs";
+import { RESULT_GENRES, adviceAdded, givenUsed, leakage, proseStyle, scoreDistribution, styleRates, titleFeatures, titleHook } from "./style_metrics.mjs";
 
 /** The style cards' exemplars (none before the cards exist), for the leakage count. */
 const EXEMPLARS = await import("../../apps/server/src/frontierStyle.mjs").then((module) => module.frontierStyleExemplarTexts(), () => []);
@@ -43,7 +44,7 @@ const EXEMPLARS = await import("../../apps/server/src/frontierStyle.mjs").then((
 export const FORMULA_OPENINGS = Object.freeze(["可了解", "可帮助", "可据此", "有助于", "帮助", "可为", "可供", "为临床", "提示", "了解"]);
 /** Sentences about what a source does not say (「原文仅…未列出…」). A metric, never a check. */
 export const ABSENCE_PHRASES = Object.freeze(["未提及", "未披露", "未说明", "未给出", "未列出", "未报告", "未公布", "尚不清楚", "原文仅", "材料中没有",
-  "没有提供", "未提供", "未明确", "仍需验证", "有待观察", "有待进一步"]);
+  "没有提供", "未提供", "未明确", "仍需验证", "有待观察", "有待进一步", "未涉及", "未包含", "未写明"]);
 /** The reference price of deepseek-flash, CNY per million tokens (`@evimed/domain` metering). */
 const PRICE = Object.freeze({ cacheHit: 0.04, cacheMiss: 2, output: 8 });
 
@@ -81,6 +82,7 @@ export function metricsOf(written, { source, limit, genre, titleRaw = "", chines
       numbersMissing: checkNumbers({ title: written.title }, `${titleRaw}\n${source}`).missing.map((entry) => entry.raw) } : null,
     givenUsed: RESULT_GENRES.includes(genre) ? givenUsed(source, [written.lead ?? "", briefText(written.brief)].join("\n")) : null,
     leakage: leakage([written.title, written.lead, written.summary, written.reason, briefText(written.brief)].filter(Boolean).join("\n"), `${titleRaw}\n${source}`, EXEMPLARS),
+    advice: adviceAdded([written.lead, written.summary, briefText(written.brief)].filter(Boolean).join("\n"), source),
   };
 }
 
@@ -96,6 +98,7 @@ async function main() {
       "key-file": { type: "string", default: resolve(here, "../../../.evimed-local/secrets/deepseek.api-key") },
       only: { type: "string" },
       genre: { type: "string" },
+      "sample-kind": { type: "string" },
       limit: { type: "string" },
       concurrency: { type: "string", default: "4" },
       "max-cny": { type: "string", default: "3" },
@@ -145,7 +148,8 @@ async function main() {
   const editor = new FrontierEditor({ deepseekProviderEnabled: true, deepseekApiKey: apiKey, deepseekBaseUrl: "https://api.deepseek.com",
     frontierModel: "deepseek-flash" }, { owner: { userId: "eval", projectId: "eval" }, callModel });
   const { cases } = JSON.parse(await readFile(join(here, "cases.json"), "utf8"));
-  const wanted = cases.filter((/** @type {any} */ entry) => (!values.only || entry.id === values.only) && (!values.genre || entry.expectGenre === values.genre))
+  const wanted = cases.filter((/** @type {any} */ entry) => (!values.only || entry.id === values.only) && (!values.genre || entry.expectGenre === values.genre)
+    && (!values["sample-kind"] || entry.sampleKind === values["sample-kind"]))
     .slice(0, values.limit ? Number(values.limit) : undefined);
   /** @type {any[]} */
   const results = [];
@@ -186,7 +190,9 @@ async function runCase(editor, entry, skipEdit) {
       // As the pipeline shows it: the source's kind beside its name (「媒体」「期刊」「监管」).
       sourceTypeLabel: /** @type {Record<string, string>} */ (FRONTIER_SOURCE_TYPE_LABELS_ZH)[item.sourceType] ?? undefined,
       allowedLanes: FRONTIER_LANES.filter((lane) => lane !== "mixed"), journal: item.journal ?? null, publicationTypes: item.publicationTypes ?? [],
-      abstract: kind === "abstract" ? entry.text : null, bodyExcerpt: kind === "abstract" ? null : entry.text.slice(0, 12_000),
+      // A record with no text is edited from its entry's summary, as the pipeline does (c2-gaps G2, `textSource` summary).
+      abstract: kind === "abstract" ? entry.text : null, summary: kind === "summary" ? entry.text : null,
+      bodyExcerpt: kind === "abstract" || kind === "summary" ? null : entry.text.slice(0, 12_000),
       glossary: [], genreFixed: ["safety", "social", "trial", "preprint", "roundup"].includes(fallback) ? fallback : null,
       defaults: { lane: item.lane, specialties: [] },
     }, { singleAttempt: false });
@@ -232,6 +238,7 @@ export function summarize(results) {
       absoluteGivenUsed: `${count((m) => m.givenUsed?.absoluteGiven && m.givenUsed.absoluteUsed)}/${count((m) => m.givenUsed?.absoluteGiven)}`,
       harmGivenUsed: `${count((m) => m.givenUsed?.harmGiven && m.givenUsed.harmUsed)}/${count((m) => m.givenUsed?.harmGiven)}`,
       leakageCases: count((m) => (m.leakage?.length ?? 0) > 0),
+      adviceAdded: count((m) => (m.advice?.length ?? 0) > 0),
     };
   };
   /** @type {Record<string, any>} */
@@ -242,7 +249,8 @@ export function summarize(results) {
   }
   const dropped = /** @type {Record<string, number>} */ ({});
   for (const row of results) for (const part of row.after?.briefDropped ?? []) dropped[part.reason] = (dropped[part.reason] ?? 0) + 1;
-  return { all: { before: tally(results, "before"), after: tally(results, "after"),
+  const thin = results.filter((row) => row.textSource === "summary");
+  return { thinRecords: thin.length ? { after: tally(thin, "after") } : null, all: { before: tally(results, "before"), after: tally(results, "after"),
     scores: scoreDistribution(results.filter((row) => row.after).map((row) => ({ genre: row.after.genre, scores: row.after.scores }))),
     scoresRaw: scoreDistribution(results.filter((row) => row.after).map((row) => ({ genre: row.after.genre, scores: row.after.scoresRaw }))),
     genreAccepted: `${results.filter((row) => row.genreAccepted).length}/${results.length}`, errors: results.filter((row) => row.error).length, briefDropped: dropped },

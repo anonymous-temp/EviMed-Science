@@ -186,16 +186,16 @@ const TITLE_GUIDE_LINE = FRONTIER_GENRES.map((genre) => `${FRONTIER_GENRE_LABELS
  * @type {Readonly<Record<import("@evimed/domain").FrontierGenre, string>>}
  */
 export const FRONTIER_SCORE_ANCHORS_ZH = Object.freeze({
-  paper: "大样本随机试验或关键研究的主要结果 impact 可到 25 以上，单中心、小样本、回顾性研究和动物、细胞研究 impact 一般不超过 15",
+  paper: "大样本随机试验或关键研究的主要结果 impact 可到 25 以上，单中心、小样本、回顾性研究和动物、细胞研究 impact 一般不超过 20",
   preprint: "按同类论文的刻度打分",
   guideline: "主要学会的全国性或国际指南的重大更新 impact 可到 25 以上，地方、单个专科小范围或单一技术的专家共识 impact 一般不超过 15、novelty 不超过 10",
-  policy: "全国性的强制要求 impact 可到 25 以上，地方性、征求意见或一般性通知不超过 15",
-  approval: "首个获批或改变治疗选择的批准 impact 可到 25 以上，新增规格、仿制药、生物类似药和受理不超过 15",
-  safety: "新增黑框警告、撤市或高风险召回 impact 可到 25 以上，一般说明书修订和低风险召回不超过 15",
+  policy: "全国性的强制要求 impact 可到 25 以上，地方性、征求意见或一般性通知不超过 20",
+  approval: "首个获批或改变治疗选择的批准 impact 可到 25 以上，新增规格、仿制药、生物类似药和受理不超过 20",
+  safety: "新增黑框警告、撤市或高风险召回 impact 可到 25 以上，一般说明书修订、短缺和低风险召回不超过 20",
   industry: "按交易或研发进展对靶点格局和药物可及性的影响打分",
-  conference: "主要会议上的大型随机试验结果 impact 可到 25 以上，单臂、早期或亚组结果不超过 15，会前预告不超过 10",
+  conference: "主要会议上的大型随机试验结果 impact 可到 25 以上，单臂、早期或亚组结果不超过 20，会前预告不超过 10",
   trial: "只有登记、尚无结果的试验 impact 一般不超过 15",
-  commentary: "按它在原始研究之外补充的内容打分，impact 一般不超过 15",
+  commentary: "按它在原始研究之外补充的内容打分，不高于被解读的研究本身",
   news: "按报道所依据的研究或事件打分",
   social: "帖子按它本身给出的信息打分，只是转述一篇论文、一份指南或一个会议结果时 impact 不超过 15、novelty 不超过 10",
   roundup: "合集 impact 不超过 10、novelty 不超过 10",
@@ -239,7 +239,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "",
   "字段要求：",
   "- genre：这条消息的类型，从类型词表里选一个键，按内容而不是按渠道选：公众号转述的审批是 approval，公众号对一篇论文的解读是 commentary，媒体对一项研究的报道是 news 而不是 paper。条目注明「类型：…（已由程序确定）」时照填。",
-  `- title_zh：中文标题，不超过 40 个字，陈述事实。${FRONTIER_TITLE_RULE}按类型写：${TITLE_GUIDE_LINE}。条目注明「中文信源：是」时：原标题已经写明主体和结果、也没有上面这些毛病，就原样照抄；原标题是悬念、钩子、问句、感叹，或带网站、栏目名后缀时，按同样的写法改写，只用原文里有的事实和数字。`,
+  `- title_zh：中文标题，不超过 40 个字，陈述事实。${FRONTIER_TITLE_RULE}按类型写：${TITLE_GUIDE_LINE}。条目注明「中文信源：是」时：原标题已经写明主体和结果、也没有上面这些毛病，就原样照抄，不要只为换个说法而改写；原标题是悬念、钩子、问句、感叹，或带网站、栏目名后缀时，按同样的写法改写，只用原文里有的事实和数字。`,
   // The answer-first 导读 follows AIHOT's rules-answer-first-summary.md (MIT, KKKKhazix/AIHOT 47531fa).
   `- summary_zh：导读，两三句，不超过 200 个字，答案前置：第一句直接说清这条消息的核心——谁做了什么、主要结果或决定是什么，不先铺背景，不用「研究显示」「本文介绍」之类的转述套话开头；后面只补一到两个最重要的事实或数字及其不确定性；只写原文有的内容，不夸大。${FRONTIER_SENTENCE_RULE}条目注明「正文：无」时给空字符串，不要复述标题。第一句按类型写：研究写发现（人群、干预、主要结果）；指南写机构和最重要的推荐；政策写发文部门、措施和对象；审批写机构、药品和适应症；安全警示写产品、风险和措施；行业动态写公司、事件和金额；会议报道写会议、研究和结果；临床试验写设计、人群和干预；解读评论写被解读的研究和结论。`,
   // The reason follows AIHOT's editorialJudgment rule in content-understanding.md (MIT, KKKKhazix/AIHOT 47531fa), for clinicians.
@@ -249,7 +249,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "- specialties：0 到 2 个专科键，按相关程度排列。按专科说明选：药学只给药学实践本身（合理用药、相互作用、处方审核等），全科与基层只给基层与家庭医学的内容，写到某个药、某种常见病不等于药学或全科。",
   "- evidence_type：证据类型键。条目已注明证据类型的，照填。研究设计不在词表里的（卫生经济学评价、决策分析、建模、方法学研究、问卷调查、病例报告）一律填 other，不要套用最接近的设计。",
   "- entities：drugs（药物，中文通用名）、trials（试验名称，保留原文）、orgs（机构，中文简称）、diseases（疾病，中文规范名），每类最多 5 个，没有就给空数组。",
-  `- scores：三项都给整数，impact 最高 30，novelty 和 relevance 最高 20，超出刻度的数不算。impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。满分只留给少见的条目，多数条目落在中段；impact 25 以上只给会直接改变处方、诊疗路径或必须执行的政策的条目，novelty 18 以上只给首次报告的关键结果或首个获批，relevance 18 以上只给国内已上市或在审的药物、国内政策和指南、中国人群的数据。按类型：${SCORE_ANCHOR_LINE}。`,
+  `- scores：三项都给整数，impact 最高 30，novelty 和 relevance 最高 20，超出刻度的数不算。impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。满分只留给少见的条目；impact 25 以上只给会直接改变处方、诊疗路径或必须执行的政策的条目，novelty 18 以上只给首次报告的关键结果或首个获批，relevance 18 以上只给国内已上市或在审的药物、国内政策和指南、中国人群的数据。按类型：${SCORE_ANCHOR_LINE}。`,
   "- flags：只有两种情况才填。来源明确是一篇企业新闻稿、且明确说明顶线结果尚未发表时含 \"press-release\"（注册记录或没有论文链接不触发）；监管机构的安全公告明确说某药品新增、加强或要求加框警告（黑框警告，boxed warning）时含 \"boxed-warning\"（已有的、放宽或取消的黑框警告不算）。都不是就给 []。",
   "",
   `栏目词表：${LANE_LINE}。`,

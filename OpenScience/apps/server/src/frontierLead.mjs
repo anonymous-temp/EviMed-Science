@@ -37,7 +37,7 @@ const LEAD_CORE = [
   "3. 之后按下面这一类消息的写法，只补充原文有的内容；原文没有的就跳过。",
   "4. 挑重点，不罗列：结果只写主要终点，最多再加一个最重要的次要终点或安全性数字；不要把原文的所有终点、亚组和统计量都搬进来。原文给出事件数或两组各自的发生率时，优先写这些绝对数；原文写明了安全性问题时，写最重要的一条。研究同时给出 ITT 结果时以 ITT 为准；无对照研究不写比较性疗效结论；观察性研究写「相关」，不写因果。",
   `5. 句子：${FRONTIER_SENTENCE_RULE}`,
-  "6. 只写原文里有的事实，不补充背景、结论和推测。不写原文缺了什么：导读里不能有一句在说原文没有给出什么，不用「原文仅」「原文未列出」「未披露」「未提及」「尚不清楚」「材料中没有」「仍需验证」「有待观察」这类话；原文没有的就不写。一切数量用阿拉伯数字，与原文完全一致，不四舍五入、不换算、不自行计算；原文没有的年份和日期不写。",
+  "6. 只写原文里有的事实，不补充背景、结论和推测。不写原文缺了什么：导读里不能有一句在说原文没有给出什么，不用「原文仅」「原文未列出」「未披露」「未提及」「尚不清楚」「材料中没有」「仍需验证」「有待观察」这类话；原文没有的就不写。原文没有写明的建议和措施（例如停用、退回、核对批号、与医生沟通）不写，不替原文出主意。一切数量用阿拉伯数字，与原文完全一致，不四舍五入、不换算、不自行计算；原文没有的年份和日期不写。",
   "7. 药物名称以原文实际实体范围为准，拿不准时保留英文；试验名称缩写、基因和蛋白符号保留原文。",
   "8. 不出现链接或网址，不用感叹号和营销用语，不写「值得关注」「意义重大」「引发关注」这类空话。",
   "9. 正文只有标题、宣传口号或几乎没有事实时，输出 {\"lead_zh\":\"\"}。",
@@ -58,7 +58,7 @@ export const FRONTIER_LEAD_GUIDES = Object.freeze(Object.fromEntries(FRONTIER_GE
  */
 function exemplarLines(genre) {
   return ["示例（我们写的，只学顺序和句子的写法，不要照抄其中的事实、名称和措辞）：",
-    ...FRONTIER_STYLE_CARDS[genre].exemplars.map((exemplar) => `- ${exemplar.lead}`)].join("\n");
+    ...FRONTIER_STYLE_CARDS[genre].exemplars.map((exemplar) => `- ${exemplar.thin ? "（原文只是一条记录时）" : ""}${exemplar.lead}`)].join("\n");
 }
 
 /**
@@ -100,13 +100,13 @@ export function frontierLeadLimit(text) {
   return Math.max(FRONTIER_LEAD_LIMITS.min, Math.min(FRONTIER_LEAD_LIMITS.chars, Math.round(equivalent)));
 }
 
-const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选" });
+const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要" });
 
 /**
  * What one call shows the model: the source, the date, the title (and its Chinese when there is one), and the reader text, its
  * head when longer than `FRONTIER_LEAD_LIMITS.input`.
  * @param {{ sourceName: string, date?: string | null, titleRaw: string, titleZh?: string | null, text: string,
- *           kind: "body" | "abstract" | "excerpt", post?: boolean }} input
+ *           kind: "body" | "abstract" | "excerpt" | "summary", post?: boolean }} input
  */
 export function buildLeadInput({ sourceName, date = null, titleRaw, titleZh = null, text, kind, post = false }) {
   const body = String(text ?? "").trim();

@@ -12,10 +12,13 @@
  *   (【】丨｜) 0.83×, a named organisation 1.18× and a result verb 1.2×; held-out pairs kept "names the organisation, regulator or
  *   company" (68% of 140 pairs), "names the drug or regimen" (65% of 96) and "no question" / "no exclamation" (64% / 65%). The
  *   policy rules (NHC 2025 negative list item 8) add the hype words and a site's name after the title.
- * - **Absolute numbers and harms** (`givenUsed`): when the source gives event counts or an absolute risk, or reports harms, does
- *   what the reader sees (导读 and 要点) carry one (HealthNewsReview criteria 2–3; Schwartz et al., BMJ 2012).
+ * - **Absolute numbers and harms** (`givenUsed`): when the source gives event counts, an absolute risk or each group's own rate,
+ *   or reports harms, does what the reader sees (导读 and 要点) carry one — not only a hazard ratio (HealthNewsReview criteria 2–3;
+ *   Schwartz et al., BMJ 2012).
  * - **Exemplar leakage** (`leakage`): an eight-character run of a style card's exemplar (four Chinese characters at least, the
  *   phrase a preprint's 导读 is asked for masked) in an output that the item's own source does not contain.
+ * - **Advice added** (`adviceAdded`): an action a reader is told to take (stop, return, check a lot, talk to the prescriber…) that
+ *   the source does not state — on records with no text the safety guide had the model invent one (c2-gaps G2, 2026-10-25).
  * - **Scores** (`scoreDistribution`): the edit's three sub-scores per genre, and how many sit at the top of every scale (the
  *   2026-10-25 review: 258 of 510 精选 items had impact 30, novelty 20 and relevance 20).
  */
@@ -90,8 +93,8 @@ export function titleFeatures(title) {
 /** Whether a title is a hook by the features the policy forbids. @param {ReturnType<typeof titleFeatures>} f */
 export const titleHook = (f) => f.question || f.exclamation || f.hype || f.siteSuffix;
 
-const ABSOLUTE_GIVEN = /\b\d+\s*\/\s*\d+\b|\b\d+\s+of\s+\d+\b|absolute (?:risk|difference|reduction)|risk difference|number needed to|\bNNT\b|绝对风险|风险差|需治疗人数|\d+\s*例[^，。；]{0,12}(?:发生|出现|死亡|事件)|events? (?:occurred|in \d)/i;
-const ABSOLUTE_USED = /\d+\s*\/\s*\d+|绝对风险|风险差|需治疗|\d+\s*例[^，。；]{0,14}(?:发生|出现|死亡|事件|患者中)/;
+const ABSOLUTE_GIVEN = /\b\d+\s*\/\s*\d+\b|\b\d+\s+of\s+\d+\b|absolute (?:risk|difference|reduction)|risk difference|number needed to|\bNNT\b|绝对风险|风险差|需治疗人数|\d+\s*例[^，。；]{0,12}(?:发生|出现|死亡|事件)|events? (?:occurred|in \d)|\d+(?:\.\d+)?%[^.;。；]{0,40}?(?:vs\.?|versus|compared with|and)\s*\d+(?:\.\d+)?%|\d+(?:\.\d+)?%[^。；]{0,30}?(?:对|比|和)\s*\d+(?:\.\d+)?%/i;
+const ABSOLUTE_USED = /\d+\s*\/\s*\d+|绝对风险|风险差|需治疗|\d+\s*例[^，。；]{0,14}(?:发生|出现|死亡|事件|患者中)|\d+(?:\.\d+)?%[^。；]{0,30}?(?:对|vs\.?|比|和|降到|降至|升至|高于|低于|，[^。；]{0,14}(?:组|为))[^。；]{0,14}?\d+(?:\.\d+)?%/;
 const HARM_GIVEN = /adverse event|adverse reaction|serious adverse|toxicit|side effect|treatment-related death|bleeding|hemorrhage|haemorrhage|不良事件|不良反应|毒性|严重不良|出血|副作用|治疗相关死亡/i;
 const HARM_USED = /不良|毒性|安全性|出血|副作用|死亡|耐受/;
 /** The genres whose sources report results with absolute numbers and harms. */
@@ -150,4 +153,17 @@ export function scoreDistribution(rows) {
   const all = rows.filter((row) => row.scores && Number.isInteger(row.scores.impact));
   return { all: { n, allMax, impactMax, impact: mean(all.map((row) => row.scores.impact)), novelty: mean(all.map((row) => row.scores.novelty)),
     relevance: mean(all.map((row) => row.scores.relevance)) }, byGenre: out };
+}
+
+/** Actions a reader may be told to take, and the source's words that state one (closed lists; a metric only). */
+const ADVICE = Object.freeze(["停用", "停止使用", "暂停使用", "退回", "核对", "检查批号", "隔离", "沟通", "咨询", "联系", "告知患者", "就医", "监测", "避免使用", "不要使用", "替代", "改用"]);
+const ACTION_IN_SOURCE = /\b(?:should|must|do not|stop|discontinue|return|quarantine|check|contact|consult|advise|monitor|avoid|switch)\b|停用|停止|退回|隔离|核对|检查|联系|咨询|告知|建议|应当|应|不要|避免|监测|改用/i;
+
+/**
+ * The actions an output tells a reader to take when its source states none: empty when the source states an action itself.
+ * @param {string} output @param {string} source
+ */
+export function adviceAdded(output, source) {
+  if (ACTION_IN_SOURCE.test(String(source ?? ""))) return [];
+  return ADVICE.filter((word) => String(output ?? "").includes(word));
 }
