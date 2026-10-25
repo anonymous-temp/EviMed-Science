@@ -2034,35 +2034,37 @@ test("native HTTP and mux freeze context only for admitted prompts without rewri
   assert.deepEqual(frozen[1].request, steer.payload.args.request);
 });
 
-test("native attendance is committed before HTTP or mux forwarding independently of optional context", async t => {
+test("native attendance is committed before HTTP or mux forwarding, and a receipt that cannot be written never refuses the prompt", async t => {
   let unavailable = true;
   const receipts = [], forwarded = [];
   const f = await fixture(t, {}, {}, {
     recordPromptAttendance: async (user, project, request) => {
       assert.equal(user.id, f.user.id); assert.equal(project.id, 'default');
       if (unavailable) throw new HttpError(503, 'runtime_prompt_rejected', 'Attendance receipt could not be mirrored.');
-      receipts.push(request.requestId);
+      receipts.push({ requestId: request.requestId, forwardedBefore: forwarded.length + f.received.length });
     },
     preparePrompt: async () => { throw new Error('Optional enrichment unavailable'); },
     recordPromptActor: async () => { throw new Error('Optional extension binding unavailable'); },
   });
   f.manager.proxy = async (req, res) => { forwarded.push(req.__openScienceProxyBody.toString('utf8')); res.writeHead(200); res.end('{}'); };
   const request = { requestId: 'attendance-http', sessionId: 'ordinary', mode: 'queue', content: [{ type: 'text', text: 'Question' }] };
-  const post = () => fetch(`${f.base}/api/session/prompt`, { method: 'POST', headers: { cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'client-request', rpcId: 'transport', method: 'session/prompt', payload: { args: { request } } }) });
-  assert.equal((await post()).status, 503);
-  assert.equal(forwarded.length, 0);
-  const c = f.connect(); assert.equal(await c.opened, 101);
-  c.send(open('attendance-failed', 'session/prompt', { request }));
-  assert.equal((await c.next()).type, 'error');
-  assert.equal((await c.next()).type, 'end');
-  assert.equal(f.received.length, 0);
-  unavailable = false;
+  const post = (body = request) => fetch(`${f.base}/api/session/prompt`, { method: 'POST', headers: { cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: 'transport', method: 'session/prompt', payload: { args: { request: body } } }) });
+  // A disk or mirror that cannot take the receipt costs the turn its proof of a person, never the person's message (review F5).
   assert.equal((await post()).status, 200);
-  c.send(open('attendance-ok', 'session/prompt', { request: { ...request, requestId: 'attendance-mux' } }));
+  assert.equal(forwarded.length, 1);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('attendance-failed', 'session/prompt', { request: { ...request, requestId: 'attendance-mux-failed' } }));
   assert.equal((await c.next()).type, 'item');
-  assert.deepEqual(receipts, ['attendance-http', 'attendance-mux']);
-  assert.equal(forwarded.length, 1); assert.equal(f.received.length, 1);
+  assert.equal(f.received.length, 1);
+  unavailable = false;
+  assert.equal((await post({ ...request, requestId: 'attendance-http-ok' })).status, 200);
+  const d = f.connect(); assert.equal(await d.opened, 101);
+  d.send(open('attendance-ok', 'session/prompt', { request: { ...request, requestId: 'attendance-mux' } }));
+  assert.equal((await d.next()).type, 'item');
+  // Written before forwarding whenever it can be written.
+  assert.deepEqual(receipts, [{ requestId: 'attendance-http-ok', forwardedBefore: 2 }, { requestId: 'attendance-mux', forwardedBefore: 3 }]);
+  assert.equal(forwarded.length, 2); assert.equal(f.received.length, 2);
 });
 
 test("failed native supplemental context never refuses an otherwise authorized prompt", async t => {

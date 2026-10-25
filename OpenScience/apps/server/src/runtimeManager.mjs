@@ -3755,6 +3755,8 @@ export class RuntimeManager {
     /** Workload tokens this process refused, by what the check was doing when it did
      *  (`noteWorkloadTokenRefusal`). */
     this.workloadTokenRefusals = { token: 0, runtime: 0, superseded: 0, unreadable: 0 };
+    /** Attendance receipts that could not be written, by where the prompt came from (`open_science_attendance_receipt_write_failures_total`). */
+    this.attendanceReceiptWriteFailures = { native: 0, dispatch: 0 };
     /** When each retired background runtime was retired, by project key: what
      *  names a prompt refused behind that stop (`dispatchAdmittedPrompt`) as the
      *  platform's own doing rather than a fault. Dropped when the project's next
@@ -6083,7 +6085,7 @@ export class RuntimeManager {
       });
       dispatchedUnattended = authority?.unattended ?? dispatchedUnattended;
     }
-    await this.writePromptAttendance(project, { sessionId, requestId }, { runId, unattended: dispatchedUnattended });
+    await this.writePromptAttendance(project, { sessionId, requestId }, { runId, unattended: dispatchedUnattended, origin: "dispatch" });
     await this.enforceProjectQuota(project);
     if(runId&&this.config.evolutionEnabled===true&&isEvolutionProject(project.id))await this.captureRunEgressProof({project,runId,phase:'start'});
     this.beginProxy(project);
@@ -6278,19 +6280,32 @@ export class RuntimeManager {
 
   /** Authenticate the exact prompt before it can be claimed by a runtime, independently of optional enrichment.
    * Remote providers receive the same bytes before the prompt is forwarded.
+   *
+   * Best effort, never a refusal of the prompt (review F5): a receipt only ever lifts a restriction, and a turn whose receipt is
+   * missing is treated as unattended by the runtime's run policy (a native turn is still recognised by its route snapshot). So a full
+   * disk, a read-only remount, a remote mirror that did not answer or a request id that names no file costs at most one attended
+   * turn treated as unattended, and is counted (`open_science_attendance_receipt_write_failures_total{origin}`).
    * @param {Record<string,any>} project @param {{sessionId:string,requestId:string}} request
-   * @param {{unattended:boolean,runId?:string|null}} options */
-  async writePromptAttendance(project, request, { unattended, runId = null }) {
+   * @param {{unattended:boolean,runId?:string|null,origin?:"native"|"dispatch"}} options
+   * @returns {Promise<boolean>} whether the receipt was written */
+  async writePromptAttendance(project, request, { unattended, runId = null, origin = "dispatch" }) {
     const signingSecret = this.config.modelGatewaySigningSecret;
-    if (!signingSecret) return;
-    const relative = runContextAuthorityFileFor(request.sessionId, request.requestId);
-    const index = { protocol: RUN_CONTEXT_PROTOCOL, sessionId: request.sessionId, contextRevision: request.requestId,
-      runId: runId || `native_${createHash("sha256").update(request.requestId).digest("hex").slice(0, 32)}`, unattended };
-    const text = `${JSON.stringify({ ...index, attendanceAuthority: signRunContextAuthority(index, {
-      signingSecret, userId: String(project.userId), projectId: String(project.id),
-    }) })}\n`;
-    await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), text, { encoding: "utf8", mode: 0o444 });
-    await this.mirrorWorkspaceWrite(project, relative, text, true);
+    if (!signingSecret) return false;
+    try {
+      const relative = runContextAuthorityFileFor(request.sessionId, request.requestId);
+      const index = { protocol: RUN_CONTEXT_PROTOCOL, sessionId: request.sessionId, contextRevision: request.requestId,
+        runId: runId || `native_${createHash("sha256").update(request.requestId).digest("hex").slice(0, 32)}`, unattended };
+      const text = `${JSON.stringify({ ...index, attendanceAuthority: signRunContextAuthority(index, {
+        signingSecret, userId: String(project.userId), projectId: String(project.id),
+      }) })}\n`;
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), text, { encoding: "utf8", mode: 0o444 });
+      await this.mirrorWorkspaceWrite(project, relative, text, true);
+      return true;
+    } catch {
+      const key = origin === "native" ? "native" : "dispatch";
+      this.attendanceReceiptWriteFailures[key] = (this.attendanceReceiptWriteFailures[key] ?? 0) + 1;
+      return false;
+    }
   }
 
   /**
@@ -6496,6 +6511,7 @@ export class RuntimeManager {
       // it (running and starting), the share it may hold while nobody needs
       // the room, and how often a researcher's start took one back.
       workloadTokenRefusals: { ...this.workloadTokenRefusals },
+      attendanceReceiptWriteFailures: { ...this.attendanceReceiptWriteFailures },
       background: {
         active: this.backgroundRuntimeCount(),
         limit: backgroundRuntimeLimit(positiveLimit(this.config.maxRunningRuntimes), positiveLimit(this.config.maxRunningRuntimesPerUser)),

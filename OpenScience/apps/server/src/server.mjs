@@ -8897,9 +8897,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ? (await agentRuns.list(project).catch(() => [])).find((run) => run.sessionId === sessionId && run.status === "running") : null;
       await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
+    // Best effort and counted inside (`open_science_attendance_receipt_write_failures_total{origin="native"}`): a receipt that could
+    // not be written makes the turn read as unattended at worst, and never refuses the person's message.
     recordPromptAttendance: async (_user, project, request) => {
-      try { await runtimeManager.writePromptAttendance(project, request, { unattended: false }); }
-      catch { throw new HttpError(503, "runtime_prompt_rejected", "The conversation context could not be saved. Please retry."); }
+      await runtimeManager.writePromptAttendance(project, request, { unattended: false, origin: "native" });
     },
     recordPromptActor: recordExtensionPromptActor,
     prepareGeoPlan: async (user, project, request) => {
@@ -10514,6 +10515,13 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
     "Workload tokens the control plane refused, by what the check was doing: the token itself, the runtime it names, whether it was the token the file holds now (superseded by a rewrite while in flight), or reading that file.",
     "counter",
     Object.entries(runtimeStats.workloadTokenRefusals ?? {}).map(([reason, value]) => ({ value: Number(value) || 0, labels: { reason } })),
+  );
+  addMetric(
+    lines,
+    "open_science_attendance_receipt_write_failures_total",
+    "Signed attendance receipts that could not be written (or mirrored to a remote runtime) before a prompt was forwarded, by where the prompt came from. The prompt is forwarded anyway; its turn reads as unattended unless its native route proves a person.",
+    "counter",
+    Object.entries(runtimeStats.attendanceReceiptWriteFailures ?? {}).map(([origin, value]) => ({ value: Number(value) || 0, labels: { origin } })),
   );
   addMetric(
     lines,

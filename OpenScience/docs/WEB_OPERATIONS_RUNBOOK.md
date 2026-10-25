@@ -1131,6 +1131,11 @@ refusals fell in the half hour the acceptance runs deleted their throwaway accou
 yielded, none in seven hours of researchers' use. A refusal with `reason` other than `runtime`, or a burst while no runtime
 is stopping, is not this and is worth a look.
 
+`open_science_attendance_receipt_write_failures_total{origin="native"|"dispatch"}` counts the signed attendance receipts
+(`.evimed-brief/attendance/`) the control plane could not write, or mirror to a remote runtime, before forwarding a prompt.
+The prompt is forwarded anyway; the turn reads as unattended (no question to the person, no task changes) unless its native
+route snapshot proves a person. A steady rise means the workspace disk or the AgentBay file API is failing, not the receipts.
+
 ### NCBI's file server refuses a public GEO file
 
 `gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,

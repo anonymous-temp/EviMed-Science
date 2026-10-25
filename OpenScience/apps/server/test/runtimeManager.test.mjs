@@ -2515,6 +2515,24 @@ test("native attendance proof does not depend on optional learning and is mirror
   assert.equal(mirrored[0].required, true);
 });
 
+test("an attendance receipt that cannot be written is counted and never refuses the prompt", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });
+  manager.config.modelGatewaySigningSecret = "only-the-control-plane-knows-this-fixture-secret";
+  await manager.start(project);
+  // An AgentBay file API that did not answer, a full disk: every remote mirror write fails.
+  manager.provider.mirrorWrite = async () => { throw Object.assign(new Error("mirror unavailable"), { code: "agentbay_file_unavailable" }); };
+  assert.equal(await manager.writePromptAttendance(project, { sessionId: "native_human", requestId: "native-request" }, { unattended: false, origin: "native" }), false);
+  assert.equal(await manager.writePromptAttendance(project, { sessionId: "native_human", requestId: "bad\nid" }, { unattended: false, origin: "native" }), false);
+  const sent = [];
+  const callKernel = manager.callKernel.bind(manager);
+  manager.callKernel = async (runtime, target, method, args, ...rest) => { sent.push({ method, args }); return callKernel(runtime, target, method, args, ...rest); };
+  const sessionId = "ses_receipt_down";
+  await manager.dispatchPrompt(project, sessionId, { text: "a person's question", runId: "run_receipt_down", requestId: "req_receipt_down", unattended: false });
+  assert.ok(sent.some((call) => call.method === "session/prompt" && call.args.request.requestId === "req_receipt_down"), "the prompt went out");
+  assert.deepEqual(manager.statsAll().attendanceReceiptWriteFailures, { native: 2, dispatch: 1 });
+});
+
 test("a reserved session receives strict context before its first DSH create", async (t) => {
   const { rootDir, project, manager } = await dshDispatchFixture();
   t.after(async () => {

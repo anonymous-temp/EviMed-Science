@@ -280,6 +280,12 @@ function assertNativeModelSelection(config, payload) {
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
+  /** The person's signed attendance receipt, written before the prompt is forwarded and never a reason to refuse it (review F5):
+   * a missing receipt makes the turn read as unattended at worst. The writer counts its own failures
+   * (`open_science_attendance_receipt_write_failures_total`). @param {any} user @param {any} project @param {any} request */
+  const attend = async (user, project, request) => {
+    try { await recordPromptAttendance?.(user, project, request); } catch { /* isolated: open_science_attendance_receipt_write_failures_total */ }
+  };
   const delegatedPolicies = new Map();
   function pruneDelegatedPolicies() {
     for (const [id, value] of delegatedPolicies) if (value.expiresAt <= Date.now()) { value.policy.dispose(); delegatedPolicies.delete(id); }
@@ -857,7 +863,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         const current = await resolveFrame(snapshot, null);
         if (current.scoped) await current.scoped.recordInput(promptBody?.payload?.args?.request);
         await bindNativeResult(current.user, current.project, promptBody?.payload);
-        await recordPromptAttendance?.(current.user, current.project, promptBody?.payload?.args?.request);
+        await attend(current.user, current.project, promptBody?.payload?.args?.request);
         await recordNativeActor(current.user, current.project, promptBody?.payload);
         await prepareNativeContext(project, promptBody?.payload);
         // A journaled input's words reach the run from its receipt; any other is recorded here, as on the owner's own frame.
@@ -981,7 +987,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           if (endpoint === "session/prompt") {
             if (currentActor.scoped) await currentActor.scoped.recordInput(payload?.args?.request);
             await bindNativeResult(currentActor.user, currentActor.project, payload);
-            await recordPromptAttendance?.(currentActor.user, currentActor.project, payload?.args?.request);
+            await attend(currentActor.user, currentActor.project, payload?.args?.request);
             await recordNativeActor(currentActor.user, currentActor.project, payload);
             await prepareNativeContext(project, payload);
           }
