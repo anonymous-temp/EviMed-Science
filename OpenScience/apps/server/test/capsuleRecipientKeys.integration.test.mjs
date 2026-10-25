@@ -16,6 +16,7 @@ import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
@@ -48,7 +49,7 @@ async function account(prefix = "rcpt") {
 }
 /** @param {string} user @param {number} [entries] @param {number} [size] */
 async function capsuleWith(user, entries = 1, size = 40) {
-  const capsule = await capsules.create(user, { title: "Recipient methods" });
+  const capsule = await makeCapsule(capsules, user, { title: "Recipient methods" });
   for (let index = 0; index < entries; index += 1) {
     await capsules.addEntry(user, capsule.id, { factKind: "preference", layer: "profile", content: `${String(index).padStart(3, "0")} ${"x".repeat(size)}` });
   }
@@ -65,7 +66,7 @@ test("a refused export makes no key files for the accounts it named", options, a
   await assert.rejects(transfers.export(sender, capsule.id, { recipients: [named, `nobody_${randomUUID()}`] }), { code: "capsule_recipient_unknown" });
   assert.ok(!(await keyFiles()).includes(keyFileOf(named)), "no key was made for an account that was only named");
   // Nothing to share: the pack is empty, so it is refused, and nobody is given a key for it.
-  const empty = await capsules.create(sender, { title: "Nothing yet" });
+  const empty = await makeCapsule(capsules, sender, { title: "Nothing yet" });
   await assert.rejects(transfers.export(sender, empty.id, { recipients: [named] }), { code: "capsule_export_empty" });
   assert.ok(!(await keyFiles()).includes(keyFileOf(named)));
   // Too much to share: refused before anything is sealed for anyone.

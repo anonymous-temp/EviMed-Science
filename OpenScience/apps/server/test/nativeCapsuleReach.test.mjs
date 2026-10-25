@@ -14,6 +14,7 @@ import { capsuleSearchText } from "../src/memoryGateway.mjs";
 import { createNativeCapsuleSearch } from "../src/capsuleGateway.mjs";
 import { ResidentProfiles } from "../src/residentProfile.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
+import { makePack } from "./helpers/capsuleFixtures.mjs";
 
 const USER = "u_native";
 const PROJECT = "p_notes";
@@ -34,10 +35,10 @@ async function world() {
   const note = await service.note(USER, PROJECT, { factKind: "preference", content: "引用一律用 AMA 格式，页码写全" });
   const profileNote = await service.note(USER, PROJECT, { factKind: "profile", content: "心内科临床药师，做真实世界研究" });
   // A pack someone else wrote, enabled as a reference.
-  const pack = await service.create(USER, { title: "王老师的队列研究做法" });
+  const pack = await makePack(service, USER, { title: "王老师的队列研究做法" });
   await service.addEntry(USER, pack.id, { factKind: "method_preference", layer: "methods", content: "队列研究先写目标试验，再写分析计划", origin: "explicit" });
   await service.addEntry(USER, pack.id, { factKind: "profile", layer: "profile", content: "王老师，流行病学教授", origin: "explicit" });
-  await service.activate(USER, pack.id, { mode: "guest" });
+  await service.activate(USER, pack.id);
   return { documents, service, note, profileNote, pack };
 }
 

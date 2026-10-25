@@ -17,6 +17,7 @@ import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
+import { makePack } from "./helpers/capsuleFixtures.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -159,8 +160,7 @@ test("a reset clears every kind the memory page shows — memories, learned meth
     await app.capsuleService.updateEntry(owner, capsule.id, forgotten.id, { status: "retired", expectedRevision: forgotten.revision });
     const document = await app.capsuleService.addEntry(owner, capsule.id, { factKind: "project_fact", layer: "sources", origin: "inferred", content: "据资料：抗凝前查肾功能",
       derivedFrom: { sourceId: `src_${"a".repeat(32)}`, projectId: "default" } });
-    const received = await app.capsuleService.create(owner, { title: "李主任的工作方式" });
-    await documents.put(owner, "capsule", received.id, { ...received.payload, imported: true }, { expectedRevision: received.revision });
+    const received = await makePack(app.capsuleService, owner, { title: "李主任的工作方式" });
     const shared = await app.capsuleService.addEntry(owner, received.id, { factKind: "method_preference", layer: "methods", content: "别人的做法" });
     return { method, note, document, shared, received };
   };
@@ -356,9 +356,8 @@ test("erasing an account never waits on the index: the account goes and its copi
 test("an index that cannot answer a capsule recall is visible in readiness and in the degraded gauge, and clears when it answers", options, async (t) => {
   const index = slowIndex();
   const { app, base, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index, operatorMetricsToken: "metrics-secret" });
-  const capsule = await app.capsuleService.create(user.id, { title: "Index outage" });
+  const capsule = await app.capsuleService.ownCapsule(user.id, { create: true });
   await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "preference", layer: "profile", content: "Prefer forest plots." });
-  await app.capsuleService.activate(user.id, capsule.id, { mode: "own" });
   const account = (await app.store.userById(user.id)).accountCreatedAt;
   const readiness = async () => (await (await fetch(`${base}/api/ready`)).json()).data.checks.memoryIndex;
   const gauge = async () => (await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer metrics-secret" } })).text())

@@ -148,17 +148,6 @@ export class CapsuleService {
     catch { recordCapsuleRuntimeRefresh("failed"); }
   }
 
-  /** @param {string} userId @param {Record<string,any>} input */
-  async create(userId, input) {
-    return this.documents.put(userId, "capsule", randomUUID(), {
-      title: text(input.title, "title", 150), description: text(input.description, "description", 2000, false),
-      activationMode: "own", imported: false,
-    }, { expectedRevision: 0 });
-  }
-
-  /** @param {string} userId @param {Record<string,any>} options */
-  async list(userId, options = {}) { return this.documents.list(userId, "capsule", options); }
-
   /**
    * 「我的记忆胶囊」 — the one capsule a person has (owner ruling 2026-09-19:
    * one per person, 「新建」 folded away).
@@ -280,21 +269,6 @@ export class CapsuleService {
     return value;
   }
 
-  /** @param {string} userId @param {string} capsuleId @param {Record<string,any>} input */
-  async update(userId, capsuleId, input) {
-    const current = await this.get(userId, capsuleId);
-    const payload = { ...current.payload };
-    if (input.title !== undefined) payload.title = text(input.title, "title", 150);
-    if (input.description !== undefined) payload.description = text(input.description, "description", 2000, false);
-    return this.documents.put(userId, "capsule", capsuleId, payload, { expectedRevision: input.expectedRevision });
-  }
-
-  /** @param {string} userId @param {string} capsuleId @param {number} revision */
-  async remove(userId, capsuleId, revision) { await this.get(userId, capsuleId); return this.documents.remove(userId, "capsule", capsuleId, revision); }
-
-  /** @param {string} userId @param {string} capsuleId @param {number} revision */
-  async restore(userId, capsuleId, revision) { return this.documents.restore(userId, "capsule", capsuleId, revision); }
-
   /** @param {string} userId @param {string} capsuleId @param {Record<string,any>} options */
   async entries(userId, capsuleId, options = {}) {
     await this.get(userId, capsuleId);
@@ -394,23 +368,18 @@ export class CapsuleService {
   }
 
   /**
-   * Put a capsule in force: the researcher's own first (their words come before anyone's), then the packs they enabled, the one
-   * enabled last ahead of the ones enabled before it — where two packs disagree the later one is read first (build spec §9.4 #6).
-   * Making a capsule one's own no longer turns every pack off: that was a side effect nothing asked for; `clearGuests` says it.
-   * A capsule is in force for the account and so in every project: there is no list of a project's own.
-   * @param {string} userId @param {string} capsuleId @param {{ mode?: string, clearGuests?: boolean }} options
+   * Put a received pack in force: after the researcher's own capsule (their words come before anyone's), the pack enabled last
+   * ahead of the ones enabled before it — where two packs disagree the later one is read first (build spec §9.4 #6). The
+   * researcher's own capsule is put in force by `ownCapsule`, which makes it, and never by this. A capsule is in force for the
+   * account and so in every project: there is no list of a project's own.
+   * @param {string} userId @param {string} capsuleId
    */
-  async activate(userId, capsuleId, { mode: requested = "own", clearGuests = false } = {}) {
+  async activate(userId, capsuleId) {
     assertNotTakenDown(await this.get(userId, capsuleId));
-    // `blend` is accepted and stored as what it always meant.
-    const mode = capsuleActivationMode(requested);
-    if (!mode) throw new HttpError(400, "capsule_payload_invalid", "Invalid activation mode.");
     for (let attempt = 0; attempt < 3; attempt++) {
       const current = await this.active(userId);
       const others = current.items.filter((x) => x.capsuleId !== capsuleId);
-      const items = mode === "own"
-        ? [{ capsuleId, mode }, ...(clearGuests === true ? others.filter((x) => x.mode === "own") : others)]
-        : [...others.filter((x) => x.mode === "own"), { capsuleId, mode }, ...others.filter((x) => x.mode !== "own")];
+      const items = [...others.filter((x) => x.mode === "own"), { capsuleId, mode: "guest" }, ...others.filter((x) => x.mode !== "own")];
       if (items.length > ACTIVE_CAPSULE_LIMIT) throw new HttpError(400, "capsule_activation_limit", "At most eight capsules may be active together.");
       try {
         return await this.documents.put(userId, "preferences", ACTIVATION_KEY, { items }, { expectedRevision: current.record?.revision ?? 0 });
@@ -542,7 +511,7 @@ export class CapsuleService {
       return (await this.received(userId)).find((pack) => pack.id === capsuleId) ?? null;
     }
     await this.#scannedPack(userId, capsuleId, projectId);
-    await this.activate(userId, capsuleId, { mode: "guest" });
+    await this.activate(userId, capsuleId);
     await this.#keep(userId, capsuleId, true);
     await this.#activationChanged(userId, capsuleId, "enabled");
     return (await this.received(userId)).find((pack) => pack.id === capsuleId) ?? null;

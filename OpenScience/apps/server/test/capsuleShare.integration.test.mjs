@@ -22,6 +22,7 @@ import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -72,7 +73,7 @@ after(async () => {
 
 /** A capsule of the author's own with `contents` as approved methods. @param {string[]} contents */
 async function authored(...contents) {
-  const capsule = await capsules.create(author, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, author, { title: "我的记忆胶囊" });
   const entries = [];
   for (const content of contents) entries.push(await capsules.addEntry(author, capsule.id, { factKind: "method_preference", layer: "methods", content }));
   return { capsule, entries };
@@ -156,7 +157,7 @@ test("a recipient is never told a sender's login id or e-mail address, in the li
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$1,'development'),($2,'someone@example.invalid','development')", [plain, mailed]);
   try {
     for (const sender of [plain, mailed]) {
-      const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
+      const capsule = await makeCapsule(capsules, sender, { title: "我的记忆胶囊" });
       await capsules.addEntry(sender, capsule.id, { factKind: "method_preference", layer: "methods", content: `Meta 分析先报 GRADE（${sender === plain ? "甲" : "乙"}）。` });
       const made = await sharing.deliver(sender, capsule.id, { recipients: [dave] });
       assert.equal(made.delivered, 1);

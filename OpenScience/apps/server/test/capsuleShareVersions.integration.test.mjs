@@ -15,6 +15,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -61,7 +62,7 @@ after(async () => {
 
 /** A capsule of the sender's own holding `contents` as approved methods. @param {string[]} contents */
 async function authored(...contents) {
-  const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, sender, { title: "我的记忆胶囊" });
   const entries = [];
   for (const content of contents) entries.push(await capsules.addEntry(sender, capsule.id, { factKind: "method_preference", layer: "methods", content }));
   return { capsule, entries };
@@ -177,7 +178,7 @@ test("what the sender unticked is not in the pack, at export, in a delivery and 
 test("the preview says, per reason and in one plain sentence, what is not in the pack: the assistant's notes, a document's yield, what is sensitive, what was shared with the person", options, async () => {
   const owner = sender;
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'notes','Notes',1048576) ON CONFLICT DO NOTHING", [owner]);
-  const capsule = await capsules.create(owner, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, owner, { title: "我的记忆胶囊" });
   await capsules.addEntry(owner, capsule.id, { factKind: "preference", layer: "profile", content: "报告一律用中文。" });
   // The assistant's own notes, in force at once in the project's notes capsule, that the person never confirmed or changed (two).
   await capsules.note(owner, "notes", { factKind: "preference", content: "助手觉得对方喜欢短句。" });

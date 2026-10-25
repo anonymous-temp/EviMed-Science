@@ -17,7 +17,7 @@ async function bodyOf(req, limit, allowed) {
  *
  * The routes are the ones a page, the evaluation harness or an integrator reads or writes through, and no others (2026-10-25: the
  * generic create, list, read, rename, delete, restore, history, activate, recall and entry add-and-list routes had no caller and were
- * deleted with their tests; the service methods under them stay where something else calls them): the person's one capsule
+ * deleted with their tests and with the service methods that only they called): the person's one capsule
  * (`/mine`, its entries' edit and undo), the packs received (`/received`, `/:id/enable|disable|trial`), the file transfer
  * (`/transfers/*`, `/:id/exports*`) and sharing below.
  *

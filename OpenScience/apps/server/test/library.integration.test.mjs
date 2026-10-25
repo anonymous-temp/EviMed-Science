@@ -5,6 +5,7 @@ import test from "node:test";
 import { LIBRARY_ITEM_STATUSES } from "@evimed/domain";
 import { userLibraryDir } from "../src/libraryService.mjs";
 import { databaseUrl, ingestCorpus, signedIn, titleOf } from "./helpers/knowledgeBaseApp.mjs";
+import { makePack } from "./helpers/capsuleFixtures.mjs";
 
 const GUIDELINE = "房颤抗凝指南.pdf";
 const skip = !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured";
@@ -169,8 +170,8 @@ test("understanding a document writes its summary and key claims into the resear
     await assert.rejects(publish(), (error) => error?.code === "library_understanding_missing");
 
     // A reference capsule already active for the account stays active beside the one made.
-    const reference = await app.capsuleService.create(user.id, { title: "同事的胶囊" });
-    await app.capsuleService.activate(user.id, reference.id, { mode: "guest" });
+    const reference = await makePack(app.capsuleService, user.id, { title: "同事的胶囊" });
+    await app.capsuleService.activate(user.id, reference.id);
     await giveUnderstanding(app, user, source, { statement: "利伐沙班推荐 20 mg 每日一次，随餐服用", quote: "推荐剂量为20 mg，每日一次，随餐服用" });
     // This is what the source worker calls when an understanding is published:
     // no route, no button, and the researcher is not asked.
