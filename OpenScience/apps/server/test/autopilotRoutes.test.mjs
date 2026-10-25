@@ -4,6 +4,7 @@ import test from "node:test";
 import { taskBudgetRefusal } from "../src/agendaBudget.mjs";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
+import { knownErrorCodeMessage } from "@evimed/domain";
 
 async function fixture(t, digestProjectId = "owned-project", { stopRun = null, enabled = true } = {}) {
   const calls = [];
@@ -229,8 +230,10 @@ test("disabled scheduling preserves reads and stop operations while refusing exe
   assert.equal((await fetch(`${base}/api/autopilot/agendas?projectId=owned-project`, { headers })).status, 200);
   for (const suffix of ["", "/agenda-one/start", "/agenda-one/run-now", "/agenda-one/schedule", "/agenda-one/follow-ups"]) {
     const response = await fetch(`${base}/api/autopilot/agendas${suffix}`, { method: "POST", headers, body: "{}" });
-    assert.equal(response.status, 503); assert.equal((await response.json()).code, "task_tools_disabled");
+    assert.equal(response.status, 503); assert.equal((await response.json()).code, "autopilot_scheduling_disabled");
   }
+  // The page says what is true on the page itself, not the conversation tool's sentence that sends the researcher here.
+  assert.equal(knownErrorCodeMessage("autopilot_scheduling_disabled"), "定时执行暂不可用，已保存的任务和历史结果仍可查看。");
   assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one/stop`, { method: "POST", headers, body: JSON.stringify({ expectedRevision: 2 }) })).status, 200);
   assert.equal(calls.some(call => ["create", "start", "runNow", "schedule", "followUp"].includes(call.method)), false);
 });

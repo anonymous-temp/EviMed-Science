@@ -90,7 +90,7 @@ export function TaskList({ agendas, available = true, episodes, selectedId, sear
     <PageHeader
       title="定时任务"
       documentTitle={false}
-      scope={<span className="block max-w-56 truncate text-caption text-text-3"><span>当前项目 · </span><span>{projectName ?? "当前项目"}</span></span>}
+      scope={<span className="block max-w-56 truncate text-caption text-text-3"><span>当前项目</span>{projectName ? <><span> · </span><span>{projectName}</span></> : null}</span>}
       actions={<IconButton icon={Plus} label="新建" disabled={!available} onClick={onCreate} />}
       className={cn("shrink-0 pb-3 pt-5", inset && "px-4")}
     />

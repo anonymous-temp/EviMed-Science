@@ -1296,6 +1296,9 @@ const autopilotMaterialErrorCodes = Object.freeze([
   'autopilot_agenda_not_found',
   'autopilot_episode_not_found',
   'autopilot_cancellation_failed',
+  // 2026-10-25: the deployment's scheduler is off. The page's own code, so it is not the conversation tool's sentence that sends the
+  // researcher to the very page they are on; saved tasks and their results stay readable.
+  'autopilot_scheduling_disabled',
 ])
 
 /**
@@ -2798,6 +2801,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   autopilot_agenda_not_found: '找不到这个定时任务。它可能已被删除，回到任务列表刷新后再看。',
   autopilot_episode_not_found: '找不到这次执行。它可能已被清理，刷新任务页后再看。',
   autopilot_cancellation_failed: '任务计划已暂停或删除，但部分运行尚未停止。请重试停止。',
+  autopilot_scheduling_disabled: '定时执行暂不可用，已保存的任务和历史结果仍可查看。',
   autopilot_daily_budget_spent:
     '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
     + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',

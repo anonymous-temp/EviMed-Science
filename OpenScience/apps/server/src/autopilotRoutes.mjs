@@ -29,7 +29,7 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes, enabled = 
     const method = req.method ?? "GET";
     const admitsWork = method === "POST" && parts[0] === "agendas" && (parts.length === 1
       || (parts.length === 3 && ["start", "run-now", "follow-ups", "schedule"].includes(parts[2])));
-    if (!enabled && admitsWork) throw new HttpError(503, "task_tools_disabled", "Scheduled tasks are unavailable on this deployment.");
+    if (!enabled && admitsWork) throw new HttpError(503, "autopilot_scheduling_disabled", "Scheduled execution is unavailable on this deployment; saved tasks and their results remain readable.");
     const reply = (value, status = 200) => { sendJson(res, status, { data: value }); return true; };
     const requireProject = async (projectId) => { assertClientProject(projectId); await store.requireProject(user, projectId); return projectId; };
     const cancellationOptions = async agenda => {

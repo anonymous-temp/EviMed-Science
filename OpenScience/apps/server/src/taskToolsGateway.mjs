@@ -148,6 +148,8 @@ export function createTaskToolsGateway({ config, runtimeManager, store, service,
   const refusal = (error) => {
     if (!(error instanceof HttpError)) return error;
     if (error.code === "autopilot_revision_conflict") return new HttpError(409, "task_revision_conflict", "The task changed while it was being updated; call again.");
+    // The page's code for a scheduler that is off is the tool's `task_tools_disabled`, which the tool says in a plain sentence.
+    if (error.code === "autopilot_scheduling_disabled") return new HttpError(503, "task_tools_disabled", "Scheduling a task from a conversation is switched off for this deployment.");
     if (error.code === "autopilot_agenda_not_found" || error.code === "autopilot_episode_not_found" || error.code === "autopilot_archived") {
       return new HttpError(404, "task_not_found", "No such task in this project.");
     }

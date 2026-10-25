@@ -548,7 +548,7 @@ export class AutopilotService {
 
   /** The worker's operational switch also governs internal execution admission. Settlement and retained records remain available. */
   assertSchedulingEnabled() {
-    if (!this.enabled) throw new HttpError(503, "task_tools_disabled", "Scheduled tasks are unavailable on this deployment.");
+    if (!this.enabled) throw new HttpError(503, "autopilot_scheduling_disabled", "Scheduled execution is unavailable on this deployment; saved tasks and their results remain readable.");
   }
 
   /** Only recorded continuation bindings acquire source authority; ordinary agendas are unchanged. */

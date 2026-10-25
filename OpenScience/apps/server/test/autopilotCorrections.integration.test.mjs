@@ -163,10 +163,10 @@ test("disabled direct timer and evolution admission leave the PostgreSQL occurre
   const agenda=await active({prompt:"Disabled direct admission"});
   const disabled=new AutopilotService({documents,jobs,enabled:false,now:()=>new Date("2026-10-25T13:00:00Z")});
   const before=await service.get(owner,agenda.id);
-  await assert.rejects(disabled.scheduleDue(owner,agenda.id),{code:"task_tools_disabled",status:503});
+  await assert.rejects(disabled.scheduleDue(owner,agenda.id),{code:"autopilot_scheduling_disabled",status:503});
   assert.equal((await service.get(owner,agenda.id)).revision,before.revision);assert.equal((await service.get(owner,agenda.id)).payload.lastScheduledOccurrence,null);
   const paused=await documents.put(owner,"agenda",agenda.id,{...before.payload,enabled:false,status:"paused",plannerStop:{kind:"needs_input"},evolutionWaiting:{sourceEpisodeId:"waiting-source"}},{expectedRevision:before.revision,projectId:before.projectId});
-  await assert.rejects(disabled.wakeForEvolution({userId:owner,agendaId:agenda.id,sourceEpisodeId:"waiting-source",event:{id:"ready-resource"}}),{code:"task_tools_disabled",status:503});
+  await assert.rejects(disabled.wakeForEvolution({userId:owner,agendaId:agenda.id,sourceEpisodeId:"waiting-source",event:{id:"ready-resource"}}),{code:"autopilot_scheduling_disabled",status:503});
   const held=await service.get(owner,agenda.id);assert.equal(held.revision,paused.revision);assert.equal(held.payload.status,"paused");assert.equal(held.payload.lastEvolutionWake,undefined);
   const count=await database.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'agendaId'=$2",[owner,agenda.id]);assert.equal(count.rows[0].n,0);
 });
@@ -177,7 +177,7 @@ test("disabled platform research admission cannot enqueue an internal programme 
   const created=await service.create(publisher,{...input,projectId,prompt:"Internal programme",taskTypes:["evidence-update"]});
   const agenda=await service.start(publisher,created.id,{expectedRevision:created.revision});let plans=0,admissions=0;
   const disabled=new AutopilotService({documents,jobs,enabled:false,planner:{decide:async()=>{plans++;return{action:"run",taskType:"evidence-update"};}},programme:{owns:()=>true,assertAdmitted:async()=>{admissions++;}},now:()=>at});
-  await assert.rejects(disabled.runNow(publisher,agenda.id,{requestId:"programme-day"}),{code:"task_tools_disabled",status:503});
+  await assert.rejects(disabled.runNow(publisher,agenda.id,{requestId:"programme-day"}),{code:"autopilot_scheduling_disabled",status:503});
   assert.equal(plans,0);assert.equal(admissions,0);assert.equal((await documents.list(publisher,"episode",{projectId})).items.length,0);
   assert.equal((await service.get(publisher,agenda.id)).revision,agenda.revision);
 });

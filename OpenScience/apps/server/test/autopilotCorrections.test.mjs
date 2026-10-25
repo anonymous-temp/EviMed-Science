@@ -207,7 +207,7 @@ test("the disabled service refuses every execution entrypoint before changing ta
     ()=>disabled.followUp("u",row.id,{requestId:"disabled-followup",note:"Look again"}),()=>disabled.schedule("u",row.id,{date:"2026-10-25"}),
     ()=>disabled.scheduleDue("u",row.id),()=>disabled.scheduleActive({query:async()=>{scans++;return{rows:[]};}}),
     ()=>disabled.createScheduledTask("u",{...f.input,prompt:"Disabled active creation"},{maxTasks:10})];
-  for(const attempt of attempts)await assert.rejects(attempt,{code:"task_tools_disabled",status:503});
+  for(const attempt of attempts)await assert.rejects(attempt,{code:"autopilot_scheduling_disabled",status:503});
   assert.equal(scans,0);assert.equal(f.queue.length,0);assert.equal((await f.service.get("u",row.id)).revision,before.revision);
   const edited=await disabled.update("u",row.id,{expectedRevision:before.revision,title:"Still editable"});
   assert.equal(edited.payload.title,"Still editable");await disabled.stop("u",row.id,{expectedRevision:edited.revision});
@@ -220,7 +220,7 @@ test("disabled evolution wake retains its exact paused authorization and existin
   const current=await f.service.get("u",row.id);
   const paused=await f.documents.put("u","agenda",row.id,{...current.payload,enabled:false,status:"paused",plannerStop:{kind:"needs_input"},evolutionWaiting:{sourceEpisodeId:"source-episode"}},{expectedRevision:current.revision,projectId:current.projectId});
   const disabled=new AutopilotService({documents:f.documents,jobs:f.jobs,enabled:false,now:()=>new Date("2026-10-25T13:00:00Z")});
-  await assert.rejects(disabled.wakeForEvolution({userId:"u",agendaId:row.id,sourceEpisodeId:"source-episode",event:{id:"resource-ready"}}),{code:"task_tools_disabled",status:503});
+  await assert.rejects(disabled.wakeForEvolution({userId:"u",agendaId:row.id,sourceEpisodeId:"source-episode",event:{id:"resource-ready"}}),{code:"autopilot_scheduling_disabled",status:503});
   const held=await disabled.get("u",row.id);assert.equal(held.revision,paused.revision);assert.equal(held.payload.status,"paused");assert.equal(held.payload.lastEvolutionWake,undefined);
   await disabled.completeRun("u",{projectId:"p",runId:"accepted-before-disabled",status:"succeeded",claims:[],artifacts:[]});
   assert.equal((await disabled.getEpisode("u",execution.episode.id)).payload.status,"merged");

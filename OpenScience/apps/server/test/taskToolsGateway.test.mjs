@@ -480,6 +480,10 @@ test("scheduler availability denies mutations", async (t) => {
   const off = await fixture(t, { autopilotEnabled: false });
   const refused = await off.schedule({ instruction: said, schedule: weekly });
   assert.deepEqual([refused.status, refused.body.code], [503, "task_tools_disabled"]);
+  // A scheduler that is off below the gateway answers the page's code; the tool still hears its own.
+  const below = await fixture(t, { service: new AutopilotService({ documents: new MemoryDocuments(), jobs, enabled: false, now: () => NOW }) });
+  const refusedBelow = await below.schedule({ instruction: said, schedule: weekly });
+  assert.deepEqual([refusedBelow.status, refusedBelow.body.code], [503, "task_tools_disabled"]);
 });
 
 test("another automated run of the project (a LoopX goal, an evaluation driver) never refuses an attended conversation's task tools", async (t) => {
