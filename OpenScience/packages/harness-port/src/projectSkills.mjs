@@ -16,7 +16,7 @@ import { loadHarnessModule } from '../index.mjs'
 export async function registerProjectSkillProvider(ctx, config) {
   /** @type {Set<string>} */ let disabled
   try { disabled = new Set(normalizeDisabledPlatformSkills(config.disabledSkills ?? []).filter(id => !platformSkillRequirement(id).required)) }
-  catch (error) {
+  catch (/** @type {any} */ error) {
     ctx.logger?.warn?.(`evimed project skills: the project's skill policy could not be read (${error?.message ?? error}); every skill stays available`)
     disabled = new Set()
   }
