@@ -43,9 +43,12 @@ export function nextDisabled(policy: { payload: { disabled: string[] }; items: R
   return enabled ? kept : [...kept, id];
 }
 
-/** Private workflow methods and essential policies remain available in their owning surfaces. */
-export const visiblePlatformSkills = (items: readonly PlatformSkill[], geoGroup?: string) =>
-  items.filter(item => !item.requirement?.required && !item.id.startsWith("geo-private:") && (!geoGroup || item.group !== geoGroup));
+/**
+ * A skill a project cannot switch: one the platform requires (a standing method, one a professional workflow loads by name,
+ * the long task's, the 循证 GEO method pack's). It is listed like the rest, with no control.
+ */
+export const platformSkillReadOnly = (skill: PlatformSkill) =>
+  skill.requirement?.required === true || skill.id.startsWith("geo-private:") || skill.id.startsWith("loopx:");
 
 export type CatalogueOrigin = "first-party" | "third-party" | "personal";
 export const catalogueOrigins: ReadonlyArray<{ value: CatalogueOrigin; label: string }> = [

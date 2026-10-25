@@ -35,13 +35,12 @@ beforeEach(() => {
   api.listWebPlugins.mockResolvedValue([]);
   api.listWebResearchAgents.mockResolvedValue([{ id: "peer-review", title: "审稿工具" }]);
 });
-it("opens discovery with publisher-visible cards, without a creation-first empty library or duplicated workflows", async () => {
+it("opens discovery with publisher-visible cards, without a creation-first empty library", async () => {
   open();
   expect(await screen.findByRole("tab", { name: /发现/ })).toHaveAttribute("aria-selected", "true");
   expect(await screen.findByText("K-Dense")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "科学绘图" })).toBeInTheDocument();
   expect(screen.queryByText(/还没有自己的技能/)).not.toBeInTheDocument();
-  expect(api.listWebResearchAgents).not.toHaveBeenCalled();
 });
 
 it("separates authored methods from upstream packages and exposes only the upstream GitHub link", async () => {
@@ -102,15 +101,18 @@ it("distinguishes a deployment catalogue that is unavailable from a successful e
   open("/app/extensions/discover?type=plugins");
   expect(await screen.findByText("暂未提供可添加的插件，已有功能仍可使用。")).toBeInTheDocument();
 });
-it("hides required and module-private skills from discovery", async () => {
+it("lists required and module skills under their groups with no control and no word about it", async () => {
   skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group, "循证 GEO"], geoGroup: "循证 GEO", items: [skill,
     { ...skill, id: "core:guard", title: "必需校验", requirement: { required: true, reason: "system" } },
-    { ...skill, id: "geo-private:internal", title: "内部方法", group: "循证 GEO" },
+    { ...skill, id: "geo-private:internal", title: "内部方法", group: "循证 GEO", requirement: { required: true, reason: "private-workflow" } },
   ] });
-  open();
-  await screen.findByRole("button", { name: "科学绘图" });
-  expect(screen.queryByRole("button", { name: "必需校验" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "内部方法" })).not.toBeInTheDocument();
+  open("/app/extensions/installed");
+  const guard = (await screen.findByRole("button", { name: "必需校验" })).closest("li")!;
+  expect(within(guard).queryByRole("switch")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "内部方法" })).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: /内部方法/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("switch", { name: /科学绘图/ })).toBeInTheDocument();
+  expect(screen.queryByText(/始终开启|系统提供/)).not.toBeInTheDocument();
 });
 it("uses the selected project's effective plugin state", async () => {
   const coordinate = { kind: "npm", name: "sample-plugin", version: "1.0.0" };

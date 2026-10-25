@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allInstalledExtensions, extensionAvailability, nextDisabled, skillActivationText, skillPublisher, skillRepositoryUrl, visiblePlatformSkills } from "./catalogueModel";
+import { allInstalledExtensions, extensionAvailability, nextDisabled, skillActivationText, platformSkillReadOnly, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import type { ExtensionInstallation, ExtensionSelection } from "@/lib/extensionsClient";
 import type { PlatformSkill } from "@/lib/skillLibraryClient";
 
@@ -21,13 +21,15 @@ describe("extension activation belongs to the selected project", () => {
   });
 });
 
-it("keeps required and module-private methods out of the selectable catalogue", () => {
+it("a required, long-task or module-pack skill is listed without a control; the rest can be switched", () => {
   const rows = [
-    { id: "office:docx", group: "办公文档" },
+    { id: "curated:plot", group: "数据与图表" },
     { id: "core:guard", requirement: { required: true, reason: "system" } },
+    { id: "office:docx", requirement: { required: true, reason: "workflow" } },
     { id: "geo-private:method", group: "循证 GEO" },
+    { id: "loopx:loopx", group: "长任务" },
   ] as PlatformSkill[];
-  expect(visiblePlatformSkills(rows, "循证 GEO").map(row => row.id)).toEqual(["office:docx"]);
+  expect(rows.filter(row => !platformSkillReadOnly(row)).map(row => row.id)).toEqual(["curated:plot"]);
 });
 
 it("keeps publisher and adaptation identity instead of relabeling every package as built-in", () => {
