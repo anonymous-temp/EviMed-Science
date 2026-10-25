@@ -70,7 +70,10 @@ for (const learning of ['disabled','paused','enabled']) test(`native GEO selecti
   const reader=new NativeHandbookContext({route:async()=>{throw new Error('Read frozen routes only');},select:async()=>null,budget:()=>0,allowed:async()=>false});
   if(learning==='paused') await app.researchMemory.updateSettings(user.id,{learningPaused:true,recallPaused:true});
   const stage=async(requestKey)=>app.geo.service.planContexts.stage(user,id,{requestKey,sessionId,mode:'strategy'});
-  const send=async(request)=>{const response=await fetch(`${ui}${prefix}api/session/prompt`,{method:'POST',headers:{cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',method:'session/prompt',payload:{args:{request}}})});assert.equal(response.status,200,await response.text());return forwarded.at(-1);};
+  // The selection is bound inside the prompt's admission transaction, which commits just after the prompt is forwarded; the
+  // response can reach this test first under load. Wait for the bound row (what the runtime's first read, a model turn later, sees).
+  const boundSelection=async(referenceId)=>{for(let i=0;i<100;i+=1){const row=await app.geo.service.planContexts.documents.get(user.id,'geo-plan-context',referenceId);if(row?.payload.state==='bound')return row;await new Promise(resolve=>setTimeout(resolve,50));}assert.fail('the selection was never bound');};
+  const send=async(request)=>{const response=await fetch(`${ui}${prefix}api/session/prompt`,{method:'POST',headers:{cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',method:'session/prompt',payload:{args:{request}}})});assert.equal(response.status,200,await response.text());if(request.geoPlanContext)await boundSelection(request.geoPlanContext.referenceId);return forwarded.at(-1);};
   const prompt=(requestId,text,selected=null)=>({requestId,sessionId,mode:'queue',content:[{type:'text',text}],...(selected?{geoPlanContext:{referenceId:selected.referenceId}}:{})});
   const selected=await stage('strategy');const original='Please produce the selected implementation strategy.';
   const wire=await send(prompt('strategy',original,selected));
