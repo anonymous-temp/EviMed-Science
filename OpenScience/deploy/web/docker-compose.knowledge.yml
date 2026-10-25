@@ -116,6 +116,11 @@ services:
       # and how many a Shanghai day are accepted. A WeChat article among them is bought within the Dajiala cap above.
       KNOWLEDGE_PLUGIN_LEADS: ${KNOWLEDGE_PLUGIN_LEADS:-1}
       KNOWLEDGE_PLUGIN_LEADS_DAILY: ${KNOWLEDGE_PLUGIN_LEADS_DAILY:-300}
+      # Contract 1.7.0 (c2-leads): the public hot lists (GET /v1/hot-lists) — read or not (0), how often, and which boards (a
+      # comma list of baidu, toutiao, weibo, wikipedia-en, google-trends; empty is every board). The last two go through the relay.
+      KNOWLEDGE_PLUGIN_HOT_LISTS: ${KNOWLEDGE_PLUGIN_HOT_LISTS:-1}
+      KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S: ${KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S:-1800}
+      KNOWLEDGE_PLUGIN_HOT_LISTS_BOARDS: ${KNOWLEDGE_PLUGIN_HOT_LISTS_BOARDS:-}
       # The platform's own evidence feed (flywheel F09), read as one more ordinary source. Its address is the deployment's own
       # public one, <public url><evidence base path>/feed.json: the platform links every card on OPEN_SCIENCE_PUBLIC_URL and the
       # plugin keeps only the cards on the host it read the feed from, so the feed is read where its cards live. (A compose-internal

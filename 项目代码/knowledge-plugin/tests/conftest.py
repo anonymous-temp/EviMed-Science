@@ -22,7 +22,8 @@ from knowledge_plugin.settings import Settings
 SERVER_URL = os.environ.get("KNOWLEDGE_PLUGIN_TEST_DATABASE_URL", "postgresql://postgres@127.0.0.1:55433")
 TABLES = ("fetches", "entry_texts", "entries", "seen_keys", "sources", "host_counters", "host_state", "meta",
           "source_candidates", "discovery_daily", "source_lifecycle", "source_screening",
-          "media", "media_failures", "provider_calls", "leads", "lead_sources")
+          "media", "media_failures", "provider_calls", "leads", "lead_sources",
+          "hot_lists", "hot_list_boards")
 FIXED_NOW = datetime(2026, 9, 22, 8, 0, 0, tzinfo=timezone.utc)
 
 

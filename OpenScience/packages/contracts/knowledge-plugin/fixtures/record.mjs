@@ -48,7 +48,8 @@
  *
  * `--platform-source` records only what contract 1.3.0 changed (`recordPlatformSource` below) and keeps the rest; `--host-budget`
  * does the same for 1.4.0 (`recordHostBudget`), `--social` for 1.5.0 (`recordSocial`), `--patch` for 1.5.1 (`recordPatch`: the health
- * answer and the manifest only), `--leads` for 1.6.0 (`recordLeads`: the health answer, the manifest and two posts to `/v1/leads`).
+ * answer and the manifest only), `--leads` for 1.6.0 (`recordLeads`: the health answer, the manifest and two posts to `/v1/leads`),
+ * `--hot-lists` for 1.7.0 (`recordHotLists`: the health answer, the manifest, the hot lists and a refused `since`).
  */
 
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -578,6 +579,58 @@ export async function recordLeads({ baseUrl, token, outDir = here, serverRole = 
   return recordings.map(({ name, status }) => ({ name, status }));
 }
 
+/**
+ * Contract 1.7.0 (2026-10-25, c2-leads): `GET /v1/hot-lists`, `Health.hot_lists` and `Manifest.capabilities.hot_lists`. The
+ * health answer and the manifest are recorded again off a live plugin of 1.7.0 (they name the contract and carry the new
+ * fields), the hot lists it read live once before (`python -m knowledge_plugin hot-lists`; the relay boards fail where no relay
+ * is configured, and health says so), and its refusal of a `since` that is no date-time. The 1.6.0 health answer, which counted
+ * the two recorded lead posts, and its manifest are kept under their version's name; every other recording stays as it was made.
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string }} options
+ */
+export async function recordHotLists({ baseUrl, token, outDir = here, serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off) over a scratch database, after one live round of the hot lists (python -m knowledge_plugin hot-lists)" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+    await exchange(base, { name: "hot-lists.json", path: "/v1/hot-lists", ...signed }),
+    await exchange(base, { name: "error-hot-lists-since.json", path: "/v1/hot-lists?since=soon", ...signed }),
+  ];
+  const [health, manifest, hotLists, refused] = recordings;
+  for (const recorded of [health, manifest, hotLists]) expectStatus(recorded, 200);
+  expectStatus(refused, 400);
+  const [healthBody, manifestBody, listsBody] = [health, manifest, hotLists].map(json);
+  if (manifestBody.contract?.version !== "1.7.0") throw new Error(`the plugin serves contract ${manifestBody.contract?.version}, not 1.7.0`);
+  if (healthBody.contract !== manifestBody.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  if (manifestBody.capabilities?.hot_lists !== true || !healthBody.hot_lists) throw new Error("the plugin does not serve hot lists");
+  if (!Array.isArray(listsBody.boards) || !listsBody.boards.length) throw new Error("the plugin holds no hot list: run `python -m knowledge_plugin hot-lists` first");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  for (const name of ["health", "manifest"]) {
+    if (provenance.fixtures[`${name}.json`] && !provenance.fixtures[`${name}-1.6.0.json`]) {
+      await writeFile(path.join(outDir, `${name}-1.6.0.json`), await readFile(path.join(outDir, `${name}.json`)));
+      provenance.fixtures[`${name}-1.6.0.json`] = { ...provenance.fixtures[`${name}.json`] };
+    }
+  }
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifestBody.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifestBody.plugin, contractVersion: manifestBody.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.7.0 adds GET /v1/hot-lists (the public hot lists the plugin reads on its own pacing and keeps 72 hours: ranks, titles, heat, the board's description and link), Health.hot_lists and Manifest.capabilities.hot_lists: the health answer and the manifest name the new contract and carry the new fields, the hot lists are the snapshots a live round read, and a since that is no date-time records the refusal. Every other recording is the earlier plugins', still valid.",
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
 /** One image off `GET /v1/media/{id}`, recorded like any exchange but asking for an image. @param {string} base @param {string} id @param {string} token */
 async function mediaExchange(base, id, token) {
   const recordedHeaders = { accept: "image/*" };
@@ -603,7 +656,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exitCode = 1;
   } else {
     const serverRole = argument("server-role");
-    const recorded = process.argv.includes("--leads")
+    const recorded = process.argv.includes("--hot-lists")
+      ? await recordHotLists({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
+      : process.argv.includes("--leads")
       ? await recordLeads({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
       : process.argv.includes("--patch")
       ? await recordPatch({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}), ...(argument("version") ? { version: argument("version") } : {}) })

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EviMed Knowledge Source Plugin
-  version: "1.6.0"
+  version: "1.7.0"
   summary: The one interface through which the EviMed platform reads knowledge sources.
   description: |
     The plugin owns everything between the outside world and the platform for *knowledge*
@@ -58,6 +58,14 @@ info:
        registered source of that site, account or journal, else under a lead source of its own
        (`access: lead`, never polled) named and owned by the site — and proposes the site as a
        discovery candidate (line `lead`). Idempotent on the address; a daily cap bounds it.
+    11. **Hot lists (1.7.0).** The plugin reads the public hot lists of the boards it is configured
+       for (`GET /v1/hot-lists`: Baidu's realtime board, Toutiao's hot board, Weibo's hot search,
+       English Wikipedia's most-viewed articles of the last day, Google Trends' US trending
+       searches — the last two through the relay egress) on its own pacing, every 30 minutes by
+       default, and keeps each snapshot 72 hours: ranks, titles, heat, the board's one-line
+       description and its link, never a post or a person's account. The platform reads them to
+       find the public events that raise a medical question; the plugin judges nothing and makes
+       no model call, and rule 6 holds (the platform pulls).
   contact:
     name: EviMed knowledge plugin team
   license:
@@ -216,6 +224,31 @@ paths:
               schema: { $ref: "#/components/schemas/LeadReceipt" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/hot-lists:
+    get:
+      tags: [discovery]
+      operationId: listHotLists
+      summary: The hot-list snapshots the plugin took since a time
+      description: |
+        Added in 1.7.0 (rule 11). Every snapshot taken after `since` (at most 72 hours back; the
+        default is 72 hours back), the oldest first, at most 300 snapshots an answer — ask again
+        from the last one's `fetched_at` for the rest. A board that could not be read at a round
+        has no snapshot for it (`Health.hot_lists` says why); the others are unaffected.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: The snapshots, the oldest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HotListPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "501": { $ref: "#/components/responses/CapabilityUnavailable" }
 
   /v1/entries:
     get:
@@ -530,6 +563,7 @@ components:
               items: { type: string }
               description: Capability ids served by POST /v1/lookups/{capability}.
             leads: { type: boolean, description: "POST /v1/leads is served. Added in 1.6.0; absent is false." }
+            hot_lists: { type: boolean, description: "GET /v1/hot-lists is served. Added in 1.7.0; absent is false." }
         vocabularies:
           type: object
           description: The values this build actually uses; the platform logs any it does not know.
@@ -654,6 +688,44 @@ components:
                 failed: { type: integer, minimum: 0 }
                 refused: { type: integer, minimum: 0 }
             queued: { type: integer, minimum: 0 }
+        hot_lists:
+          type: object
+          description: "Each configured board's last read: when it last gave a snapshot, and the outcome of its last attempt when that failed. Added in 1.7.0; absent when this build reads no hot lists."
+          additionalProperties:
+            type: object
+            required: [last_ok_at, last_error]
+            properties:
+              last_ok_at: { type: [string, "null"], format: date-time }
+              last_error: { type: [string, "null"], maxLength: 200 }
+
+    HotBoard:
+      type: string
+      enum: [baidu, toutiao, weibo, wikipedia-en, google-trends]
+      description: "A public hot list (1.7.0). Unknown values are ignored by the consumer."
+
+    HotListEntry:
+      type: object
+      required: [rank, title, heat, desc, url]
+      properties:
+        rank: { type: integer, minimum: 1, description: "The entry's place on the board at the snapshot, 1 first; pinned and sponsored entries are left out." }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        heat: { type: [number, "null"], minimum: 0, description: "The board's own heat or traffic figure; scales differ by board and hour." }
+        desc: { type: [string, "null"], maxLength: 300, description: "The board's one-line description of the entry (Baidu; a Google Trends entry's first news headline)." }
+        url: { type: [string, "null"], maxLength: 2048, description: "The board's own link for the entry (a search or topic page)." }
+
+    HotList:
+      type: object
+      required: [board, fetched_at, entries]
+      properties:
+        board: { $ref: "#/components/schemas/HotBoard" }
+        fetched_at: { type: string, format: date-time }
+        entries: { type: array, maxItems: 60, items: { $ref: "#/components/schemas/HotListEntry" } }
+
+    HotListPage:
+      type: object
+      required: [boards]
+      properties:
+        boards: { type: array, maxItems: 300, items: { $ref: "#/components/schemas/HotList" } }
 
     LeadBatch:
       type: object

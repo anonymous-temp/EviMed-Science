@@ -424,3 +424,21 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.lead_sources (
   created_at    timestamptz(3) NOT NULL,
   last_entry_at timestamptz(3)
 );
+
+-- c2-leads 2026-10-25
+-- hot_lists: the public hot lists read every round (GET /v1/hot-lists, contract 1.7.0, `hotlists.py`): one row per board
+-- and round, the ranked entries (rank, title, heat, the board's description and link; never a post or an account), kept
+-- 72 hours. hot_list_boards: each board's last attempt, its last snapshot and why its last attempt failed (Health.hot_lists).
+CREATE TABLE IF NOT EXISTS evimed_knowledge.hot_lists (
+  board      text NOT NULL CHECK (char_length(board) BETWEEN 1 AND 40),
+  fetched_at timestamptz(3) NOT NULL,
+  entries    jsonb NOT NULL,
+  PRIMARY KEY (board, fetched_at)
+);
+CREATE INDEX IF NOT EXISTS knowledge_hot_lists_fetched_idx ON evimed_knowledge.hot_lists (fetched_at);
+CREATE TABLE IF NOT EXISTS evimed_knowledge.hot_list_boards (
+  board           text PRIMARY KEY CHECK (char_length(board) BETWEEN 1 AND 40),
+  last_attempt_at timestamptz(3),
+  last_ok_at      timestamptz(3),
+  last_error      text CHECK (char_length(last_error) <= 200)
+);

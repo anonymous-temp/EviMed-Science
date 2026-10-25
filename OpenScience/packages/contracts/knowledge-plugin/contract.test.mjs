@@ -68,7 +68,7 @@ const REPLAYED = ["health.json", "manifest.json", "sources-page-1.json", "source
   "identity-reg.json", "identity-fda.json", "identity-url.json", "text-available.json", "text-pending.json", "lookups.json",
   "lookup-unavailable.json", "error-unauthorized.json", "error-not-found.json", "error-invalid-cursor.json",
   "entry-x.json", "text-x.json", "entry-wechat.json", "text-wechat.json", "media-x.jpg", "health-1.5.1.json", "manifest-1.5.1.json",
-  "leads-accepted.json", "leads-duplicate.json"];
+  "leads-accepted.json", "leads-duplicate.json", "health-1.6.0.json", "manifest-1.6.0.json", "hot-lists.json", "error-hot-lists-since.json"];
 
 /** A recorded answer as the plugin gave it: its status, its content type and the body bytes. @param {string} name */
 async function recorded(name) {
@@ -166,13 +166,19 @@ test("a contract minor is recorded again only where it changed, and provenance s
   // 1.5.0 added social posts and `Health.providers`: the manifest, the health answer, one X post, one WeChat article, their
   // texts and one stored image were recorded off a plugin that read them live; the stream stands as it was.
   const partials = provenance.partialRecordings ?? [];
-  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0", "1.5.1", "1.6.0"], "every minor since the stream was recorded names its partial recording, in order");
+  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0", "1.5.1", "1.6.0", "1.7.0"], "every minor since the stream was recorded names its partial recording, in order");
   // 1.5.1 widened EntryText.fetched_from and named the `## ` heading rule: the manifest and the health answer only.
   // 1.6.0 (ct-mix) added POST /v1/leads, the read method `lead`, Health.leads and Manifest.capabilities.leads: the manifest, the
   // health answer and two posts to /v1/leads, off a plugin over an empty database; the 1.5.1 health answer, which named the paid
   // providers with the calls a live run made, is kept under its version's name (`health-1.5.1.json`).
-  const [platformProduced, hostBudget, social, patch, leads] = partials;
+  // 1.7.0 (c2-leads) added GET /v1/hot-lists, Health.hot_lists and Manifest.capabilities.hot_lists: the manifest, the health
+  // answer, the hot lists a live round read and a refused `since`; the 1.6.0 health answer, which counted the recorded lead
+  // posts, and its manifest are kept under their version's name.
+  const [platformProduced, hostBudget, social, patch, leads, hotLists] = partials;
   assert.deepEqual(leads.fixtures.slice().sort(), ["health.json", "leads-accepted.json", "leads-duplicate.json", "manifest.json"]);
+  assert.deepEqual(hotLists.fixtures.slice().sort(), ["error-hot-lists-since.json", "health.json", "hot-lists.json", "manifest.json"]);
+  assert.ok(provenance.fixtures["health-1.6.0.json"] && provenance.fixtures["manifest-1.6.0.json"], "the 1.6.0 health answer and manifest are kept, with their provenance");
+  assert.ok(Date.parse(provenance.fixtures["health-1.6.0.json"].recordedAt) >= Date.parse(leads.recordedAt) - 60_000, "…as 1.6.0 recorded it");
   assert.ok(provenance.fixtures["health-1.5.1.json"] && provenance.fixtures["manifest-1.5.1.json"], "the 1.5.1 health answer and manifest are kept, with their provenance");
   assert.ok(Date.parse(provenance.fixtures["health-1.5.1.json"].recordedAt) >= Date.parse(patch.recordedAt) - 60_000, "…as 1.5.1 recorded it");
   assert.equal(partials.at(-1).contractVersion, pin.version, "the last partial recording is the pin's");
@@ -547,9 +553,10 @@ test("contract 1.6.0: leads posted to the recorded plugin are read as it answere
     assert.deepEqual(answer.results.map((row) => [row.status, row.reason]), [["duplicate", "received"], ["refused", "not_a_public_address"]]);
     assert.deepEqual([answer.duplicate, answer.refused], [again.duplicate, again.refused]);
   });
-  const manifest = await fixture("manifest.json");
+  // The 1.6.0 recording's own health answer and manifest (1.7.0 recorded them again off a plugin no lead was posted to).
+  const manifest = await fixture("manifest-1.6.0.json");
   assert.equal(manifest.capabilities.leads, true);
-  const health = await fixture("health.json");
+  const health = await fixture("health-1.6.0.json");
   assert.deepEqual(Object.keys(health.leads.today).sort(), ["failed", "fetched", "queued", "refused", "stale"]);
   assert.equal(health.leads.queued, LEAD_POSTS.length, "the recording's own two addresses wait to be read (its crawler is off)");
   const yaml = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8"));
@@ -558,4 +565,43 @@ test("contract 1.6.0: leads posted to the recorded plugin are read as it answere
   assert.ok(FRONTIER_ACCESSES.includes("lead"), "the platform knows the read method");
   assert.deepEqual(yaml.components.schemas.Lead.required, ["url", "trigger"]);
   assert.equal(yaml.components.schemas.LeadBatch.properties.leads.maxItems, 50);
+});
+
+test("contract 1.7.0: the hot lists the recorded plugin read are read as it served them; a bad since is refused by name; health says how each board read", async () => {
+  const { FRONTIER_HOT_BOARDS } = await import("@evimed/domain");
+  const lists = await fixture("hot-lists.json");
+  assert.ok(lists.boards.length >= 3, "a live round read at least the three direct boards");
+  await withPlugin({ [`GET ${recordedPath("hot-lists.json")}`]: await recorded("hot-lists.json") }, async ({ client, seen }) => {
+    const answer = await client.hotLists();
+    assert.equal(seen[0].url, "/v1/hot-lists", "no since: the plugin's own 72 hours");
+    assert.equal(seen[0].headers.authorization, `Bearer ${TOKEN}`);
+    assert.deepEqual(answer.boards.map((board) => board.board), lists.boards.map((board) => board.board), "every recorded board survives the shape check");
+    for (const [index, board] of answer.boards.entries()) {
+      assert.ok(FRONTIER_HOT_BOARDS.includes(board.board));
+      assert.equal(board.fetchedAt, new Date(lists.boards[index].fetched_at).toISOString());
+      assert.equal(board.entries.length, lists.boards[index].entries.length, `${board.board}: every entry survives`);
+      assert.deepEqual(board.entries.map((entry) => entry.rank), board.entries.map((_, rank) => rank + 1));
+      for (const entry of board.entries) assert.ok(entry.title && (entry.heat === null || entry.heat >= 0) && (entry.url === null || /^https:\/\//.test(entry.url)));
+    }
+    assert.ok(answer.boards.some((board) => board.entries.some((entry) => entry.desc)), "Baidu's description survives");
+  });
+  await withPlugin({ [`GET ${recordedPath("error-hot-lists-since.json")}`]: await recorded("error-hot-lists-since.json") }, async ({ client }) => {
+    // The recorded refusal of a since that is no date-time, served to the one request the client can send (a date-time).
+    await assert.rejects(client.hotLists({ since: "not a time" }), { code: "knowledge_plugin_request_invalid" }, "the client refuses it before asking");
+    const body = await fixture("error-hot-lists-since.json");
+    assert.deepEqual([body.code, body.details], ["invalid_params", { field: "since" }]);
+  });
+  const health = await fixture("health.json");
+  assert.equal(health.contract, "1.7.0");
+  assert.deepEqual(Object.keys(health.hot_lists).sort(), [...FRONTIER_HOT_BOARDS].sort(), "every configured board says how it read");
+  assert.ok(Object.values(health.hot_lists).some((row) => row.last_error === "blocked:egress_unavailable"), "a relay board without a relay fails by name");
+  await withPlugin({ "GET /v1/health": await recorded("health.json") }, async ({ client }) => {
+    const read = await client.health();
+    assert.deepEqual(Object.keys(read.hot_lists).sort(), [...FRONTIER_HOT_BOARDS].sort());
+  });
+  assert.equal((await fixture("manifest.json")).capabilities.hot_lists, true);
+  const yaml = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8"));
+  assert.ok(yaml.paths["/v1/hot-lists"]?.get, "GET /v1/hot-lists");
+  assert.deepEqual(yaml.components.schemas.HotBoard.enum, [...FRONTIER_HOT_BOARDS], "the platform's boards are the contract's");
+  assert.deepEqual(yaml.components.schemas.HotListEntry.required, ["rank", "title", "heat", "desc", "url"]);
 });

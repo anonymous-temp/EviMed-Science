@@ -9,9 +9,9 @@ data and makes no content-generating model call (plan `docs/superpowers/specs/20
 
 ## The contract
 
-`contract/knowledge-plugin-openapi.yaml` (v1.6.0, normative; a vendored copy of the plan's file,
+`contract/knowledge-plugin-openapi.yaml` (v1.7.0, normative; a vendored copy of the plan's file,
 kept byte-identical by a test while this lives in the monorepo). Paths: `/v1/manifest`,
-`/v1/health` (no token), `/v1/sources[/{id}]`, `POST /v1/leads` (1.6.0), `/v1/entries?after=<seq>` (the stream, ascending
+`/v1/health` (no token), `/v1/sources[/{id}]`, `POST /v1/leads` (1.6.0), `/v1/hot-lists` (1.7.0), `/v1/entries?after=<seq>` (the stream, ascending
 `seq`), `/v1/entries/{id}`, `/v1/entries/{id}/text` (on-demand abstract and enrichment),
 `POST /v1/entries/{id}/refresh`, `/v1/media/{id}` (1.5.0: a stored image's bytes), `/v1/lookups` (empty in batch 1;
 `POST` answers 501).
@@ -73,6 +73,9 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES` | `120` | article pages the outbound line reads a day to find the sites they link to |
 | `KNOWLEDGE_PLUGIN_LEADS` | `1` | `0` reads no leads and answers `POST /v1/leads` 501 (contract 1.6.0, `leads.py`) |
 | `KNOWLEDGE_PLUGIN_LEADS_DAILY` | `300` | addresses `POST /v1/leads` accepts a Shanghai day; past it, `capped` |
+| `KNOWLEDGE_PLUGIN_HOT_LISTS` | `1` | `0` reads no hot lists and answers `GET /v1/hot-lists` 501 (contract 1.7.0, `hotlists.py`) |
+| `KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S` | `1800` | seconds between two rounds of the hot lists (300–86400) |
+| `KNOWLEDGE_PLUGIN_HOT_LISTS_BOARDS` | unset | the boards read, a comma list of `baidu`, `toutiao`, `weibo`, `wikipedia-en`, `google-trends`; unset is every board, an unknown name refuses to start |
 | `KNOWLEDGE_PLUGIN_PORT` / `KNOWLEDGE_PLUGIN_HOST` | `8080` / `0.0.0.0` | listen address |
 | `KNOWLEDGE_PLUGIN_REGISTRY` | `registry/sources.json` | the runtime registry file (watched; re-synced on change) |
 | `KNOWLEDGE_PLUGIN_CONCURRENCY` / `KNOWLEDGE_PLUGIN_TEXT_CONCURRENCY` | `4` / `2` | parallel polls / enrichments |
@@ -146,6 +149,20 @@ within 30 days. An entry goes under the registered source of its site, account o
 (`evimed_knowledge.lead_sources`, access `lead`, never polled, named and owned by the site), and the site, account or journal
 becomes a discovery candidate of line `lead` unless `registry/discovery.json` excludes it. `/v1/health` `leads` counts today's
 addresses by what came of them. The plugin still never calls the platform and makes no model call.
+
+## Hot lists (contract 1.7.0)
+
+The platform's hot-event trigger looks at what the public is reading — a war, an economic or policy decision, a public figure's
+stated illness, a disaster — for the events that raise a general medical question. `hotlists.py`'s loop reads five public boards
+every `KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S` (1800 s): Baidu's realtime board (`top.baidu.com/api/board?platform=pc`, which gives
+each entry a one-line description and a heat score), Toutiao's hot board, Weibo's hot search (`weibo.com/ajax/side/hotSearch`
+with a Referer; the owner decided on 2026-10-25 to read it directly), English Wikipedia's most-viewed articles of the last day and
+Google Trends' US trending searches — the last two through the relay egress. Each is read as an API through the protected fetch
+(the host's pacing and budgets; robots.txt is not consulted), and its ranked entries — rank (pinned and sponsored entries left out),
+title, heat, description and the board's link, never a post or an account — are kept 72 hours (`evimed_knowledge.hot_lists`) and
+served at `GET /v1/hot-lists?since=<date-time>`, the oldest first, at most 300 snapshots an answer. A board that fails is
+recorded (`/v1/health` `hot_lists`: each board's last good read and its last error) and the others go on. The plugin judges
+nothing: which entries are events and whether one raises a medical question is the platform's model's call.
 
 ## The paper text chain (contract 1.5.1)
 

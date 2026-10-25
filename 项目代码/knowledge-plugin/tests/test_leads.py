@@ -111,7 +111,7 @@ class FakeCollector:
 
 def test_the_contract_and_the_vocabulary_name_the_lead_access_and_line():
     spec = yaml.safe_load(open("contract/knowledge-plugin-openapi.yaml", encoding="utf-8"))
-    assert CONTRACT_VERSION == spec["info"]["version"] == "1.6.0"
+    assert CONTRACT_VERSION == spec["info"]["version"] == "1.7.0"
     assert "lead" in ACCESSES and "lead" in IMPLEMENTED_ACCESSES and "lead" in UNPOLLED_ACCESSES
     assert spec["components"]["schemas"]["Access"]["enum"] == list(ACCESSES)
     assert "/v1/leads" in spec["paths"]
