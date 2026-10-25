@@ -16,9 +16,8 @@
  * one on a subdirectory the runtime controller never mounts, and fail every
  * upload after locking the project (2026-09-21, reproduced live).
  *
- * The paired evaluation creates its own project through the public API
- * (`evals/method-quality/configs/*.json`, `eval-method-*`); it is the platform
- * measuring itself and is hidden the same way.
+ * An evaluation harness creates its own project through the public API
+ * (`eval-*`); it is the platform measuring itself and is hidden the same way.
  *
  * @module internalProjects
  */
@@ -111,8 +110,8 @@ const SELF_MEASUREMENT_PROJECT = /^(?:acceptance|audit)-[a-z0-9-]+$/;
  * runtime (`RuntimeManager.makeRoomFor`), and what a prompt refused behind that
  * stop is named. The owner of the work reads it as "ask again later", never as
  * a failure of the work: the learning loop's job and the source worker's job
- * wait and resume, and the paired evaluation excludes the cell instead of
- * scoring it (`evals/method-quality/run_paired.py`).
+ * wait and resume, and an evaluation harness excludes the cell instead of
+ * scoring it.
  */
 export const RUNTIME_YIELDED_CODE = "runtime_yielded";
 

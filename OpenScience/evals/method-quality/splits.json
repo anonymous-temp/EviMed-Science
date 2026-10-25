@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "registryVersion": "method-quality/splits/1",
   "recordedAt": "2026-09-07",
-  "purpose": "Which briefs a paired method evaluation may read, and which it may not. Plan 2026-09-07 §6.3.5, release criteria §7.",
+  "purpose": "Which briefs a paired method evaluation may read, and which it may not. Plan 2026-09-07 §6.3.5, release criteria §7. The runner that read it was deleted on 2026-10-25 (no method is withheld from a run to measure it); the registry stays as the record of the split the early method evaluations were run under, and the acceptance ledger cites it.",
   "idAssignment": {
     "briefIdFormat": "<capability-prefix>-<nnn>-<slug>",
     "prefixes": {
@@ -14,7 +14,7 @@
       "topic": "research-topic-selection (evals/research-topic-quality/briefs.json ships three legacy ids without the prefix; they keep the ids they were authored with)"
     },
     "uniqueness": "A brief id is unique across the whole corpus, not per capability, because this registry and the ledger both key on the bare id.",
-    "generatedBriefs": "scripts/dev/generate-briefs.mjs (§6.3.3) writes `generated: {tdgVersion, chain, stages, seed}` and must mint ids in the same format; a generated id carries the capability prefix of the capability its chain belongs to.",
+    "generatedBriefs": "None: the brief generator planned for §6.3.3 (scripts/dev/generate-briefs.mjs) was deleted on 2026-10-23 without ever having produced a brief. A brief minted some other way keeps the id format above.",
     "splitRule": "bucket = int(sha256('method-quality/splits/1:' + briefId).hexdigest()[:8], 16) % 100; bucket < 40 -> holdout, else dev. The rule and its salt are pre-registered so a split cannot be re-drawn after a candidate has been seen. Adding a brief never moves an existing one.",
     "precedence": "A brief pinned into `regression` is in `dev` regardless of its bucket, because a regression brief has to be runnable on every candidate cycle. Every such pin is listed in regression.pinned with the reason, so moving a brief out of the holdout is a recorded act rather than a silent one.",
     "recompute": "python3 -c \"import hashlib,sys;print(int(hashlib.sha256(('method-quality/splits/1:'+sys.argv[1]).encode()).hexdigest()[:8],16)%100)\" <briefId>"
@@ -22,8 +22,8 @@
   "policy": {
     "margin": 0.02,
     "marginNote": "Pre-registered non-inferiority margin, 2 percentage points (§7). An interval that spans the margin is inconclusive, never a pass.",
-    "holdoutUse": "The holdout is read once per decisive comparison and never during candidate development. run_paired.py refuses a config that names a holdout brief unless --use-holdout is passed with --holdout-reason.",
-    "distillationInput": "A brief id that appears in a `distillation-input.json` (§6.2) must not be in the holdout: a method distilled from a brief cannot be evaluated on it. apps/server tests and test_run_paired.py both assert this.",
+    "holdoutUse": "The holdout is read once per decisive comparison and never during candidate development. The deleted runner refused a config that named a holdout brief unless `--use-holdout` was passed with `--holdout-reason`.",
+    "distillationInput": "A brief id that appears in a `distillation-input.json` (§6.2) must not be in the holdout: a method distilled from a brief cannot be evaluated on it. apps/server tests asserted this while the runner existed.",
     "corpusSize": "21 briefs is a development corpus, not a decision corpus. §6.3.3 grows it to 100-200 briefs over 8-12 task families; until then a holdout of 3 briefs supports finding problems, not claiming a win (§7: twenty cases find problems, they do not make claims)."
   },
   "dev": {
@@ -149,7 +149,7 @@
     "limit": "A brief edited after its first commit keeps the earlier date. That is deliberate — the id is what the ledger keys on and re-dating an edited brief would let a split be re-drawn after a candidate was seen — but it means a substantially rewritten brief is dated by its original."
   },
   "unregistered": {
-    "note": "Briefs that exist in the repository but are deliberately not in any split, with the reason. run_paired.py refuses to run a brief that is in neither a split nor this list.",
+    "note": "Briefs that exist in the repository but are deliberately not in any split, with the reason. The deleted runner refused to run a brief that was in neither a split nor this list.",
     "briefs": [
       {
         "id": "sop",

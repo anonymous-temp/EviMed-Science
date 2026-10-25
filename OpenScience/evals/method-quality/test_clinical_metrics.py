@@ -1,6 +1,6 @@
 import unittest
 import clinical_metrics as m
-import run_paired as runner
+import evaluation_isolation as runner
 from pathlib import Path
 
 class ClinicalMetricsTests(unittest.TestCase):

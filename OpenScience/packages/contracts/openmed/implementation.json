@@ -275,7 +275,7 @@
       "acceptance": "Runs resume by input/configuration digest, score archived predictions offline and report timeout/unknown cases. Gold is inaccessible to the prediction path. No local checkpoint or extra provider key is placed in the research runtime.",
       "owner": "Evaluation engineering",
       "nativeIntegrationPoints": [
-        "OpenScience/evals/method-quality/run_paired.py",
+        "OpenScience/evals/method-quality/evaluation_isolation.py",
         "OpenScience/evals/vcr-matching",
         "OpenScience/apps/server/src/vcrMatching.mjs"
       ],
@@ -438,14 +438,14 @@
       ],
       "status": "implemented",
       "evidence": [
-        "evals/method-quality/run_paired.py",
+        "evals/method-quality/evaluation_isolation.py",
         "evals/method-quality/test_clinical_metrics.py",
         "apps/server/src/evaluationIsolation.mjs"
       ],
       "acceptance": "Deliberate gold leaks are detected before dispatch; variants of the same case stay in one split. Evaluation inputs never automatically populate global memory or disease packs. Aggregate reports remain re-creatable without exposing hidden labels to the agent.",
       "owner": "Evaluation engineering",
       "nativeIntegrationPoints": [
-        "OpenScience/evals/method-quality/run_paired.py",
+        "OpenScience/evals/method-quality/evaluation_isolation.py",
         "OpenScience/apps/server/src/vcrCorrectionCases.mjs",
         "OpenScience/evals"
       ],
@@ -488,7 +488,7 @@
       "owner": "Evaluation / VCR",
       "nativeIntegrationPoints": [
         "OpenScience/evals/vcr-matching",
-        "OpenScience/evals/method-quality/run_paired.py",
+        "OpenScience/evals/method-quality/evaluation_isolation.py",
         "OpenScience/scripts/vcr/live-acceptance.mjs"
       ],
       "upstreamCapabilityIds": [
