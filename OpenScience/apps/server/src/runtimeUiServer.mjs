@@ -859,7 +859,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         await bindNativeResult(current.user, current.project, promptBody?.payload);
         await recordNativeActor(current.user, current.project, promptBody?.payload);
         await prepareNativeContext(project, promptBody?.payload);
-        if (!current.scoped?.nativeInputs) await recordSteer(project, promptBody?.payload);
+        // A journaled input's words reach the run from its receipt; any other is recorded here, as on the owner's own frame.
+        if (!current.scoped?.journals(promptBody?.payload?.args?.request)) await recordSteer(project, promptBody?.payload);
         req.__openScienceProxyBody = Buffer.from(JSON.stringify(promptBody));
         req.headers["content-length"] = String(req.__openScienceProxyBody.length);
         return forward();
@@ -985,7 +986,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         };
         const observe = async (endpoint, payload = null) => {
           if (endpoint === "session/prompt") {
-            if (!currentActor.scoped?.nativeInputs) await recordSteer(project, payload);
+            if (!currentActor.scoped?.journals(payload?.args?.request)) await recordSteer(project, payload);
           } else if (endpoint === "session/cancel") {
             await recordStop(project, payload);
           }

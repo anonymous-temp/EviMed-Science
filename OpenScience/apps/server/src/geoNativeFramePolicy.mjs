@@ -140,6 +140,8 @@ export class GeoNativeFramePolicy {
     return result.value;
   }
   inputDisposition(request) { return this.nativeInputs?.disposition(request) ?? 'unknown'; }
+  /** Whether the input journal holds this input: not for a project its owner works in alone (`GeoNativeInputs.prepare`). */
+  journals(request) { return Boolean(this.nativeInputs?.journals(request)); }
   beforeInputForward(request) { return this.nativeInputs ? this.nativeInputs.beforeForward(request) : Promise.resolve(); }
   observeInput(request, observation) { this.nativeInputs?.observe(request, observation); }
   observeHttpInput(request, rpcId, response) { this.nativeInputs?.observeHttp(request, rpcId, response); return Promise.resolve(); }
