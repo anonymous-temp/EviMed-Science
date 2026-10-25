@@ -2685,16 +2685,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // The project's own conversation: the native authority's primary (`geoNativeAuthority.primary`), the one a GEO frame is issued
       // for. A project whose conversation was recorded on it before that pointer existed (`conversation_session_id`, 2026-10-24) keeps
       // that one while `researchSessions.get` still finds it; one the person deleted gives way to the oldest one no programme step
-      // opened (`personalConversationSessionId`). The owner's read adopts it as the primary, so the next explicit open lands in it
-      // instead of beginning another; a member reads only what is already the primary. Null when there is none: the page begins one.
-      conversationSessionId: async (user, geoId) => {
-        if (!geoNativeAuthority) return null;
-        const identity = await geoNativeAuthority.identity(user, geoId, { ability: "read" });
-        const primary = await geoNativeAuthority.primary(identity);
-        if (primary || String(user.id) !== identity.geo.userId) return primary;
-        const kept = await existingGeoConversation(identity);
-        return kept ? geoNativeAuthority.registerPrimary(identity.geo, kept) : null;
-      },
+      // opened (`personalConversationSessionId`). The owner's read adopts it as the primary when the running kernel still lists it,
+      // under the same lock as an open (`GeoNativeAuthority.readPrimary`), so the next explicit open lands in it instead of beginning
+      // another; a member reads only what is already the primary. Null when there is none: the page's open settles it.
+      conversationSessionId: async (user, geoId) => geoNativeAuthority ? geoNativeAuthority.readPrimary(user, geoId) : null,
       openConversation: async (user, geoId, target) => geoNativeAuthority.descriptor(user, geoId, target),
       conversationRead: async (user, geoId, sessionId, action, body = undefined) => {
         const resolved = await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: geoId, sessionId }, { ability: action === "start" || body ? "run" : "read" });
@@ -2892,6 +2886,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       results: null, runs: async project => { const owner = await store.userById(project.userId); return owner ? agentRuns.list(await store.requireProject(owner, project.projectId)) : []; },
       createSession: project => runtimeManager.createRuntimeSession(project, { opening: true }),
       adoptSession: (/** @type {any} */ identity) => existingGeoConversation(identity),
+      // A read never starts a runtime: a session is listed only by the runtime already running, and any failure reads as "not now".
+      sessionListed: async (project, sessionId) => authorizeOwnedNativeSession(await store.userById(project.userId), project, sessionId).then(() => true, () => false),
       ensureSession: async (project, sessionId) => {
         await runtimeManager.ensureContextPolicyGeneration(project);
         await runtimeManager.start(project, { opening: true });
@@ -3161,13 +3157,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /**
    * The conversation a GEO project already has, for one whose primary conversation was never registered (made before GEO
    * conversations were delegated, 2026-10-25): its recorded conversation while that still exists, else the oldest of the person's.
-   * Registered as the primary on the owner's read (`conversationSessionId`) and on any first open (`GeoNativeAuthority.descriptor`),
-   * so the project keeps opening the conversation it was worked in instead of a new, empty one.
+   * Registered as the primary on the owner's read (`conversationSessionId`) and the owner's first open (`GeoNativeAuthority.descriptor`)
+   * once the kernel is seen to have it, so the project keeps opening the conversation it was worked in instead of a new, empty one.
+   * A failed read is not an absence: the pointer is written once, and falling through to the oldest conversation on a transient error
+   * would make that one the project's for good.
    * @param {{ geo: any, project: any }} identity
    */
   async function existingGeoConversation(identity) {
     const recorded = typeof identity.geo?.conversationSessionId === "string" && identity.geo.conversationSessionId ? identity.geo.conversationSessionId : null;
-    if (recorded && await researchSessions.get(identity.project, recorded).catch(() => null)) return recorded;
+    const binding = recorded ? await researchSessions.get(identity.project, recorded).catch((/** @type {any} */ error) => {
+      if (error?.code === "invalid_id") return null;
+      throw error;
+    }) : null;
+    if (binding) return recorded;
     return personalConversationSessionId(identity.project);
   }
   async function personalConversationSessionId(project) {

@@ -136,3 +136,75 @@ test('module header is side-effect free; owner/editor exact descriptors and fram
   assert.equal(f.creates(),1,'disabled module cannot commission a session');
   assert.equal(await f.app.nativeMemoryContexts.proveCapture(memoryContext,'dsh-forged'),null);
 });
+
+/** A GEO project with an editor, and the owner's own conversations in its control project and in the kernel's inventory. */
+async function geoWithEditor(f, brandName = 'Adoption fixture') {
+  const created = await f.call('owner', 'POST', '/api/geo/projects', { brandName });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const geo = created.body.data;
+  assert.equal((await f.call('owner', 'POST', `/api/geo/projects/${geo.id}/members`, { userId: 'editor', role: 'editor' })).status, 201);
+  const project = await f.app.store.requireProject(await f.app.store.userById('owner'), geo.projectId);
+  const key = f.app.runtimeManager.key(project);
+  const listed = id => f.sessions.set(key, [...(f.sessions.get(key) ?? []), { sessionId: id }]);
+  const conversation = id => f.app.researchSessions.put(project, id, { mode: 'open-domain' });
+  const open = user => f.call(user, 'POST', `/api/geo/projects/${geo.id}/conversation/open`, { target: { kind: 'primary' } });
+  return { geo, project, key, listed, conversation, open };
+}
+
+test('an editor\'s first open begins the shared conversation; only the owner\'s open keeps the owner\'s own', options, async t => {
+  const f = await fixture(t);
+  const first = await geoWithEditor(f);
+  await first.conversation('owner-private'); first.listed('owner-private');
+  const opened = await first.open('editor');
+  assert.equal(opened.status, 200, JSON.stringify(opened.body));
+  assert.notEqual(opened.body.data.sessionId, 'owner-private'); assert.equal(f.creates(), 1);
+  assert.equal((await f.call('editor', 'GET', `/api/geo/projects/${first.geo.id}/conversation/owner-private/history`)).status, 404);
+  assert.equal((await f.call('owner', 'GET', `/api/geo/projects/${first.geo.id}`)).body.data.sessionId, opened.body.data.sessionId);
+  const second = await geoWithEditor(f, 'Owner fixture');
+  await second.conversation('owner-worked-in'); second.listed('owner-worked-in');
+  assert.equal((await second.open('owner')).body.data.sessionId, 'owner-worked-in'); assert.equal(f.creates(), 1);
+  assert.equal((await second.open('editor')).body.data.sessionId, 'owner-worked-in');
+});
+
+test('a failed read of the recorded conversation registers nothing in its place', options, async t => {
+  const f = await fixture(t);
+  const g = await geoWithEditor(f);
+  await g.conversation('older-chat'); g.listed('older-chat');
+  await g.conversation('recorded-chat'); g.listed('recorded-chat');
+  assert.equal(await f.app.geo.store.setConversationSession(g.geo.id, 'recorded-chat'), 'recorded-chat');
+  const read = f.app.store.getResearchSession.bind(f.app.store);
+  let failing = true;
+  f.app.store.getResearchSession = async (project, sessionId) => {
+    if (failing && sessionId === 'recorded-chat') { failing = false; throw new Error('transient read failure'); }
+    return read(project, sessionId);
+  };
+  const failed = await g.open('owner');
+  assert.ok(failed.status >= 500, JSON.stringify(failed.body));
+  const opened = await g.open('owner');
+  assert.equal(opened.status, 200, JSON.stringify(opened.body)); assert.equal(opened.body.data.sessionId, 'recorded-chat');
+});
+
+test('a conversation the kernel no longer has is never registered, and a missing primary is replaced by its owner', options, async t => {
+  const f = await fixture(t);
+  const g = await geoWithEditor(f);
+  await g.conversation('stale-chat');
+  const opened = await g.open('owner');
+  assert.equal(opened.status, 200, JSON.stringify(opened.body)); assert.equal(opened.body.data.sessionId, 'native-1');
+  f.sessions.set(g.key, []);
+  const member = await g.open('editor');
+  assert.equal(member.status, 404); assert.equal(member.body.error?.code ?? member.body.code, 'runtime_session_not_found');
+  const repaired = await g.open('owner');
+  assert.equal(repaired.status, 200, JSON.stringify(repaired.body)); assert.equal(repaired.body.data.sessionId, 'native-2');
+  assert.equal((await g.open('editor')).body.data.sessionId, 'native-2');
+});
+
+test('the owner\'s read registers a kept conversation only while the running kernel lists it', options, async t => {
+  const f = await fixture(t);
+  const g = await geoWithEditor(f);
+  await g.conversation('owner-chat'); g.listed('owner-chat');
+  const header = () => f.call('owner', 'GET', `/api/geo/projects/${g.geo.id}`);
+  assert.equal((await header()).body.data.sessionId, null, 'a read starts no runtime and so proves nothing yet');
+  await f.app.runtimeManager.start(g.project);
+  assert.equal((await header()).body.data.sessionId, 'owner-chat');
+  assert.equal((await g.open('editor')).body.data.sessionId, 'owner-chat'); assert.equal(f.creates(), 0);
+});
