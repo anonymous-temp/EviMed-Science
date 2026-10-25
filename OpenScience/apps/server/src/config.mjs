@@ -464,6 +464,9 @@ function frontierSettings(overrides) {
     // grouping call and a topic call on deepseek-flash under purpose `frontier` and the module's budget, topics with their
     // searches (0.15 of the leads' day) and overview. On with the leads; false makes no topic (the stop rule is in the module).
     frontierOutsideEventEnabled: overrides.frontierOutsideEventEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_OUTSIDE_EVENT_ENABLED", true),
+    // The re-clustering sweep (c3-cluster 2026-10-25, frontierRecluster.mjs): pairs of events it asks the model about in one run
+    // (every ten minutes, only while the day's budget is ok, deepseek-flash under purpose `frontier`); 0 makes none.
+    frontierReclusterMaxPairs: integer("frontierReclusterMaxPairs", "OPEN_SCIENCE_FRONTIER_RECLUSTER_MAX_PAIRS", 40, 0, 400),
     // Events one reader's page may report a minute (frontierInteractions.mjs FRONTIER_EVENTS_PER_MINUTE_DEFAULT, with the reasoning):
     // a resource limit on the events route, past which the page keeps its queue and tries again.
     frontierEventsPerMinute: integer("frontierEventsPerMinute", "OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE", 300, 10, 10_000),

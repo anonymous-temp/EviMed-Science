@@ -49,7 +49,7 @@ const DAY = 24 * HOUR;
  * pairs, which stands in for it only where an event has no vector (the placement's own rule) and only for titles of at least
  * `minTokens` tokens, since a short title is contained in any long one; `drugMaxEvents`: a drug named by more events than this in the window proposes no pair (pembrolizumab is in a fifth of
  * oncology); `batchPairs`: pairs in one call; `shown` / `shownSecondLook`: reports shown per event; `anchorLimit`: events checked in
- * one run; `maxMergesPerRun`: a valve against a bad day of the model.
+ * one run; `maxPairs`: pairs asked about in one run unless the deployment says otherwise; `maxMergesPerRun`: a valve against a bad day of the model.
  */
 export const FRONTIER_RECLUSTER = Object.freeze({
   recentMs: 72 * HOUR,
@@ -63,6 +63,7 @@ export const FRONTIER_RECLUSTER = Object.freeze({
   shown: 10,
   shownSecondLook: 14,
   anchorLimit: 60,
+  maxPairs: 40,
   maxMergesPerRun: 20,
 });
 /** The relations a pair may be judged to have. */
@@ -173,7 +174,7 @@ export function frontierReclusterPairs({ anchors, pool, cosines = new Map(), lin
   for (const pair of ranked.slice(Math.max(0, max))) {
     for (const event of [pair.a, pair.b]) if (anchorIds.has(String(event.id))) truncated.add(String(event.id));
   }
-  return { pairs: chosen.map(({ anchorId, ...pair }) => pair), truncated, candidates: ranked.length };
+  return { pairs: chosen.map((pair) => ({ a: pair.a, b: pair.b, score: pair.score, signals: pair.signals })), truncated, candidates: ranked.length };
 }
 
 // ───────────────────────── what the model is asked ─────────────────────────
@@ -371,34 +372,34 @@ const PAIR_TIMEOUT_MS = 60_000;
 export async function judgeReclusterPairs({ callJson, pairs, timeZone = DISPLAY_TIME_ZONE, allow = () => true, stats = { calls: 0, failures: 0, secondLooks: 0, secondAgreed: 0 } }) {
   /** @type {Array<FrontierReclusterVerdict | null>} */
   const verdicts = new Array(pairs.length).fill(null);
-  /** @type {"budget" | "refused" | null} */
-  let stopped = null;
+  /** @type {{ stopped: "budget" | "refused" | null }} */
+  const run = { stopped: null };
   /** @param {Array<{ role: string, content: string }>} messages @param {{ maxTokens: number, timeoutMs: number }} limits */
   const call = async (messages, limits) => {
-    if (!(await allow())) { stopped = "refused"; return undefined; }
+    if (!(await allow())) { run.stopped = "refused"; return undefined; }
     stats.calls += 1;
     try {
       return await callJson(messages, limits);
     } catch (error) {
-      if (/** @type {any} */ (error)?.code === "usage_budget_exceeded") { stopped = "budget"; return undefined; }
+      if (/** @type {any} */ (error)?.code === "usage_budget_exceeded") { run.stopped = "budget"; return undefined; }
       stats.failures += 1;
       return null;
     }
   };
-  for (let start = 0; start < pairs.length && !stopped; start += FRONTIER_RECLUSTER.batchPairs) {
+  for (let start = 0; start < pairs.length && !run.stopped; start += FRONTIER_RECLUSTER.batchPairs) {
     const slice = pairs.slice(start, start + FRONTIER_RECLUSTER.batchPairs);
     /** @type {Array<{ relation: any, confidence: number, reason: string } | null>} */
     const slots = new Array(slice.length).fill(null);
-    for (let round = 0; round < 2 && !stopped && slots.some((slot) => !slot); round += 1) {
+    for (let round = 0; round < 2 && !run.stopped && slots.some((slot) => !slot); round += 1) {
       const missing = slots.map((slot, index) => (slot ? -1 : index)).filter((index) => index >= 0);
       const answer = await call([{ role: "system", content: FRONTIER_RECLUSTER_INSTRUCTIONS },
         { role: "user", content: buildReclusterInput(missing.map((index) => slice[index]), { timeZone }) }], { maxTokens: BATCH_TOKENS, timeoutMs: BATCH_TIMEOUT_MS });
       const read = answer ? validateReclusterAnswer(missing.length, answer) : null;
       if (read) missing.forEach((index, at) => { if (read[at]) slots[index] = read[at]; });
     }
-    for (let at = 0; at < slice.length && !stopped; at += 1) {
+    for (let at = 0; at < slice.length && !run.stopped; at += 1) {
       const slot = slots[at];
-      if (!slot) { if (!stopped) verdicts[start + at] = { relation: null, confidence: 0, reason: "", second: null, secondMade: false, confirmed: false }; continue; }
+      if (!slot) { if (!run.stopped) verdicts[start + at] = { relation: null, confidence: 0, reason: "", second: null, secondMade: false, confirmed: false }; continue; }
       /** @type {FrontierReclusterVerdict} */
       const verdict = { ...slot, second: null, secondMade: false, confirmed: false };
       verdicts[start + at] = verdict;
@@ -415,7 +416,7 @@ export async function judgeReclusterPairs({ callJson, pairs, timeZone = DISPLAY_
       }
     }
   }
-  return { verdicts, stopped };
+  return { verdicts, stopped: run.stopped };
 }
 
 /**

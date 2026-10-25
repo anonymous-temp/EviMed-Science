@@ -15,7 +15,7 @@ function fixture({ failing = null } = {}) {
     if (failing === name) throw Object.assign(new Error(name), { code: `test_${name}_failed` });
     return { name };
   };
-  const events = { clusterPending: step("cluster"), computeHot: step("hot"), writeDigests: step("digests"), status: () => ({ counters: {} }) };
+  const events = { clusterPending: step("cluster"), reclusterSweep: step("recluster"), computeHot: step("hot"), writeDigests: step("digests"), status: () => ({ counters: {} }) };
   const daily = { state: { missing: false, day: "2026-09-22" }, runDue: step("daily"), pushDue: step("push"), status: () => ({}) };
   const profiles = { refreshDue: step("profiles"), status: () => ({ state: "off" }) };
   const reports = [];
@@ -32,7 +32,8 @@ function fixture({ failing = null } = {}) {
 test("the first tick runs every loop, the editorial ones in order; later ticks only what is due", async () => {
   const { composer, calls, advance } = fixture();
   await composer.tick();
-  assert.deepEqual(calls.filter((name) => ["cluster", "hot", "digests"].includes(name)), ["cluster", "hot", "digests"]);
+  assert.deepEqual(calls.filter((name) => ["cluster", "recluster", "hot", "digests"].includes(name)), ["cluster", "recluster", "hot", "digests"],
+    "the sweep follows the clustering and precedes the hot list that reads the events it folds");
   assert.deepEqual(calls.filter((name) => ["daily", "push"].includes(name)), ["daily", "push"], "the push follows the day's issue");
   assert.ok(calls.includes("profiles"));
   calls.length = 0;
@@ -49,7 +50,7 @@ test("the first tick runs every loop, the editorial ones in order; later ticks o
   calls.length = 0;
   advance(FRONTIER_COMPOSER_CADENCES.hot);
   await composer.tick();
-  assert.deepEqual(calls.sort(), ["cluster", "daily", "digests", "hot", "profiles", "push"]);
+  assert.deepEqual(calls.sort(), ["cluster", "daily", "digests", "hot", "profiles", "push", "recluster"]);
   const status = composer.status();
   assert.equal(status.loops.hot.runs, 2);
   assert.equal(status.loops.cluster.dueInMs, FRONTIER_COMPOSER_CADENCES.cluster);
@@ -102,7 +103,7 @@ test("D-01: a slow editorial chain holds back no other chain — the notices run
   const gate = new Promise((resolve) => { release = resolve; });
   let now = new Date("2026-09-22T00:00:00Z");
   let noticeFailure = false;
-  const events = { clusterPending: async () => { calls.push("cluster"); await gate; }, computeHot: async () => { calls.push("hot"); }, writeDigests: async () => { calls.push("digests"); }, status: () => ({ counters: {} }) };
+  const events = { clusterPending: async () => { calls.push("cluster"); await gate; }, reclusterSweep: async () => { calls.push("recluster"); }, computeHot: async () => { calls.push("hot"); }, writeDigests: async () => { calls.push("digests"); }, status: () => ({ counters: {} }) };
   const notifications = { queueWeekly: async () => { calls.push("weeklyPush"); }, scanSafety: async () => { calls.push("safety"); },
     deliverDue: async () => { calls.push("notices"); if (noticeFailure) throw Object.assign(new Error("notices"), { code: "test_notices_failed" }); return { delivered: 0 }; }, status: () => ({ counters: {} }) };
   const daily = { state: { missing: false, day: "2026-09-22" }, runDue: async () => { calls.push("daily"); }, pushDue: async () => { calls.push("push"); }, status: () => ({}) };
