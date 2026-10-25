@@ -53,7 +53,6 @@ files with the office skills and this page.
 - `mcp__evimed__geo_read` — `project`, `claims`, `questions`, `metrics`, `snapshots`,
   `errors`, `sources`, `strategy`, `targets`, `articles`, `orders`,
   `monitoring`. Nothing else is a source of numbers.
-- `geo_write step` when the package is done.
 - No measurement, no evidence retrieval, no marketplace: the package reports
   what the project holds.
 

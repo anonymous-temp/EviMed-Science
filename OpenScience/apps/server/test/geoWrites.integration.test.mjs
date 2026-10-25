@@ -6,13 +6,15 @@
 // platform's record rather than the run's word.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import { GEO_AUDIENCES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { brandRegistry } from "../src/geoParse.mjs";
 import { GeoService } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
-import { GEO_MEASURED_RANGE, GEO_WRITE_LIMITS, geoArticleGateBound, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { GEO_MEASURED_RANGE, GEO_RUN_STEPS, GEO_WRITE_LIMITS, geoArticleGateBound, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -368,6 +370,17 @@ test("locking retains small and incomplete sets with coverage notices, and prote
   assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done");
   const again = await write(program, "lock_questions", { data: { version: fullSetWritten.version } });
   assert.equal(again.alreadyLocked, true, "locking twice is a no-op");
+});
+
+// 2026-10-25: the proposal skill said "geo_write step when the package is done", and no step is a proposal run's to mark — the platform
+// refuses monitoring and distribution, and content or sources would be marked by a run that did neither.
+test("only a capability whose run marks a step is told to write one, and only a step a run may mark", () => {
+  const owns = /** @type {Record<string, string[]>} */ ({ "geo-insight": ["evidence", "journey"], "geo-strategy": ["sources"], "geo-content": ["content"], "geo-proposal": [] });
+  for (const [id, steps] of Object.entries(owns)) {
+    for (const step of steps) assert.ok(GEO_RUN_STEPS.includes(step), `${id}: ${step}`);
+    const skill = readFileSync(fileURLToPath(new URL(`../../../capability-skills/${id}/SKILL.md`, import.meta.url)), "utf8");
+    assert.equal(/geo_write step|`step`/.test(skill), steps.length > 0, `${id} is ${steps.length ? "" : "not "}told to write its step`);
+  }
 });
 
 test("a set is minimal only when the program asked for a later step and not for the questions", () => {
