@@ -250,8 +250,9 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
     diagnosisEmpty(project, { roundId }) {
       return send(project, "diagnosis_done", {
         title: `${geoProductName(project)}：诊断没有测到回答`,
-        body: "这一轮没有从任何 AI 引擎拿到有效回答，已通知管理员检查探测通道。处理好后，在诊断页点“让 AI 做”重新测。",
-        severity: "attention", source: source(project.id, "diagnosis"), idempotencyKey: `geo:${project.id}:diagnosis-empty:${roundId}`,
+        // The way to measure again is the overview's 「需要你」 row of the failed step (「接着做」): the notice opens there and names it.
+        body: "这一轮没有从任何 AI 拿到有效回答，平台已在处理。测量恢复后，在项目总览的“需要你”里点“接着做”重新测一轮。",
+        severity: "attention", source: source(project.id, "overview"), idempotencyKey: `geo:${project.id}:diagnosis-empty:${roundId}`,
       }, HEARD_BY.progress);
     },
 
