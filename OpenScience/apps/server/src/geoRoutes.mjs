@@ -520,7 +520,6 @@ export function createGeoRoutes(dependencies) {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
-      if (tab === "analysis" && parts[3] === "members") return reply(await service.analysisMembers(user,id,geoScopeFromQuery(url.searchParams,GEO_ANALYSIS_FIELDS)));
       if (tab === "analysis") return reply(await service.analysis(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
       if (tab === "monitoring") return reply(await service.monitoring(user, id, geoScopeFromQuery(url.searchParams, [])));
       // 「AI 运行」: what the programme did in the project's own sessions, apart from the person's conversation — a read-only record, each
@@ -575,6 +574,11 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 4 && method === "GET" && tab === "distribution" && ["orders", "ledger"].includes(parts[3])) {
       const input = Object.fromEntries(url.searchParams);
       return reply(parts[3] === "orders" ? await service.distributionOrders(user, id, input) : await service.distributionLedger(user, id, input));
+    }
+    // The members behind one aggregate cell of the analysis page: a four-part path, so it cannot sit in the three-part block above (it
+    // answered 404 there). The service holds the read ability and the digest check.
+    if (parts.length === 4 && method === "GET" && tab === "analysis" && parts[3] === "members") {
+      return reply(await service.analysisMembers(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
     }
     if (parts.length === 4 && method === "GET" && tab === "orders") return reply(await service.distributionOrder(user, id, parts[3], Object.fromEntries(url.searchParams)));
     if (parts.length === 4 && method === "POST" && tab === "source-ownership" && parts[3] === "read") {

@@ -1,6 +1,7 @@
 import type {GeoAnalysisChartCell,GeoAnalysisRow} from "@/lib/geoAnalysisClient";
 import {ChartCard} from "@/components/ui/ChartCard";
 import {Button} from "@/components/ui/Button";
+import {Note} from "@/components/ui/Note";
 import {HeatGrid} from "@/components/charts/HeatGrid";
 
 export interface GeoHistoryTimeline {
@@ -49,7 +50,7 @@ export function GeoHistoryVisual({rows,columns,cells,timeline,trend=[],errorHist
     </ChartCard>
     <ChartCard title="实际事件与采样时间" state={times.length||trend.length?"content":"empty"} emptyText="所选范围暂无可定位到日期的记录。"
       footnote={`事件标记显示最早的 ${events.length} / ${timeline.dated} 条有日期记录；${timeline.undated} 条时间未知记录保留在表格明细。每轮读数汇总所选样本区间，标在最后一次观察；虚线标示观察区间，未知读数或时间不定位，点之间不补算。先后关系不表示因果。`}>
-      {!times.length&&<p role="status" className="text-caption text-text-2">观察时间未完整保留，图中留空；已知读数和精确样本仍可查看。</p>}
+      {!times.length&&!!trend.length&&<Note result={[{n:trend.length}," 条读数没有可定位的观察时间，图中留空；读数仍可在下方逐条打开。"]}/>}
       {!!times.length&&<svg role="img" aria-label="实际业务事件与采样读数时间轴" viewBox="0 0 780 200" className="w-full">
         <line x1="40" x2="740" y1="150" y2="150" className="stroke-border"/>
         {!!numeric.length&&<><text x="4" y="22" className="fill-current text-text-2 text-caption">{maximum}</text><text x="4" y="110" className="fill-current text-text-2 text-caption">{minimum}</text></>}
@@ -59,7 +60,7 @@ export function GeoHistoryVisual({rows,columns,cells,timeline,trend=[],errorHist
         {events.map((event,index)=><circle key={event.id} cx={x(event.at)} cy={150+(index%3-1)*6} r="3" className="fill-current text-text-2"><title>{event.at} · {event.label}</title></circle>)}
         {!!times.length&&<><text x="40" y="185" className="fill-current text-text-2 text-caption">{new Date(low).toLocaleDateString("zh-CN",{timeZone})}</text><text x="740" y="185" textAnchor="end" className="fill-current text-text-2 text-caption">{new Date(high).toLocaleDateString("zh-CN",{timeZone})}</text></>}
       </svg>}
-      {!!trend.length&&<p className="text-caption text-text-2">{readingLabel}：{numeric.length} 条有日期的可用读数；{trend.length-numeric.length} 条读数或时间未知，完整状态见表格。</p>}
+      {!!times.length&&!!trend.length&&<Note result={[`${readingLabel}：`,{n:numeric.length}," 条有日期的可用读数；",{n:trend.length-numeric.length}," 条读数或时间未知。"]}/>}
       <ul aria-label="实测读数精确成员">{visibleCells.filter(cell=>cell.columnKey==="reading"&&cell.state!=="not_applicable").map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{rowName.get(cell.rowKey)??cell.label} · {readingLabel} · {cell.value??"未知"}</Button></li>)}</ul>
       <ol aria-label="业务事件发生时间">{events.map(event=><li key={event.id} className="text-caption text-text-2"><time dateTime={event.at}>{event.at}</time> · {event.label}</li>)}</ol>
     </ChartCard>

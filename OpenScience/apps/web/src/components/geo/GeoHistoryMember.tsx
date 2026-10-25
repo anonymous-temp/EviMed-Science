@@ -26,7 +26,7 @@ export interface GeoHistoryMemberItem {
   beforeContract?:{samplingMode?:string;repeats?:number;engines?:string[]}|null;afterContract?:{samplingMode?:string;repeats?:number;engines?:string[]}|null;
   targets?:Array<{type:string;id:string;label?:string|null;version?:number|string|null}>;
 }
-const stateWords:Readonly<Record<string,string>>={open:"待处理",acting:"处理中",awaiting_remeasure:"等待再次观察",closed:"已关闭",active:"有效",withdrawn:"已撤回",ignored:"已忽略",pending:"待处理",started:"已开始",processing:"处理中",completed:"任务完成",failed_recoverable:"可继续处理",unknown:"未知"};
+const stateWords:Readonly<Record<string,string>>={open:"待处理",acting:"正在处理",awaiting_remeasure:"等待再次观察",closed:"已关闭",active:"有效",withdrawn:"已撤回",ignored:"已忽略",pending:"待处理",started:"已开始",processing:"正在处理",completed:"任务完成",failed_recoverable:"可继续处理",unknown:"未知"};
 
 /** Historical material is rendered from this exact member response, not reloaded from current content. */
 export function GeoHistoryMember({geoId,item,selectionRef,openPublication}:{geoId:string;item:GeoHistoryMemberItem;selectionRef?:string;openPublication?(version:string,digest:string):Promise<void>}) {
@@ -54,7 +54,7 @@ export function GeoHistoryMember({geoId,item,selectionRef,openPublication}:{geoI
     if(item.kind==="judgment_changed"){
       rows.push({label:"变更前判定版本",value:item.receipt.previousAssessmentVersion??"未保留"});
       rows.push({label:"变更后判定版本",value:item.receipt.assessmentVersion??"未保留"});
-      rows.push({label:"当时主张版本",value:item.receipt.claimVersion==null?"未保留":String(item.receipt.claimVersion)});
+      rows.push({label:"当时结论版本",value:item.receipt.claimVersion==null?"未保留":String(item.receipt.claimVersion)});
     }
   }
   if(item.kind==="sampling_mode_changed"){
@@ -73,19 +73,17 @@ export function GeoHistoryMember({geoId,item,selectionRef,openPublication}:{geoI
     if(item.preservedMemberLinks.targets)rows.push({label:"当时关联材料",value:String(item.preservedMemberLinks.targets)});
   }
   if(item.unit==="history_target_refs"){
-    rows.push({label:"关联材料",value:item.label??({article:"内容",claim:"主张",finding:"发现"} as Record<string,string>)[item.type??""]??"保留材料"});
+    rows.push({label:"关联材料",value:item.label??({article:"内容",claim:"结论",finding:"发现"} as Record<string,string>)[item.type??""]??"保留材料"});
     rows.push({label:"当时版本",value:item.materialVersion==null?"未保留":String(item.materialVersion)});
   }
+  if(item.publicationBasis)rows.push({label:"发布依据",value:"用户登记；未核对外部页面"});
   const execution=item.currentExecutionState??item.executionState;
   if(execution)rows.push({label:"当前任务执行",value:stateWords[execution]??"未知"});
   return <article className="flex min-w-0 flex-col gap-2">
     {item.title&&<p className="text-ui">{item.title}</p>}
     <FactList rows={rows}/>
-    {item.kind==="task_attempt"&&<p className="text-caption text-text-2">任务执行结果单独记录；是否仍有错误需查看后续观察。</p>}
-    {item.kind==="sampling_mode_changed"&&<p className="text-caption text-text-2">标记使用本轮完成时间，表示两轮记录的采样约定不同；设置切换的准确时刻未单独记录。</p>}
     {item.kind==="sampling_mode_changed"&&item.roundId&&<Link className="text-accent" to={link("questions",{diagnosisRound:item.roundId})}>查看本轮采集设置与记录</Link>}
     {["question_set_created","question_set_locked"].includes(item.kind??"")&&item.questionVersion!=null&&<Link className="text-accent" to={link("questions",{},item.questionVersion)}>查看事件关联的问题集版本</Link>}
-    {item.publicationBasis&&<p className="text-caption text-text-2">这是用户登记的线上版本，未由本分析核验外部页面。</p>}
     {item.resultVersionId&&item.digest&&openPublication&&<Button size="sm" variant="text" onClick={()=>void openPublication(item.resultVersionId!,item.digest!)}>打开事件关联的内容版本</Button>}
     {item.signalId&&<Link className="text-accent" to={link("overview",{signal:item.signalId})}>查看线索与处理记录</Link>}
     {item.errorId&&<Link className="text-accent" to={link("accuracy",{error:item.fingerprint?.trim()||item.errorId})}>查看此错误的当前处置</Link>}
@@ -111,7 +109,7 @@ function PreservedTargets({targets}:{targets:NonNullable<GeoHistoryMemberItem["t
   const [offset,setOffset]=useState(0);
   return <section aria-label="事件记录的关联材料" className="flex flex-col gap-2">
     <p className="text-ui">当时关联的材料 · {targets.length} 项</p>
-    <ul>{targets.slice(offset,offset+20).map((target,index)=><li key={target.type+":"+target.id+":"+index} className="text-caption text-text-2">{target.label??({article:"内容",claim:"主张",finding:"发现"} as Record<string,string>)[target.type]??"关联材料"} · {target.version==null?"版本未保留":"版本 "+target.version}</li>)}</ul>
+    <ul>{targets.slice(offset,offset+20).map((target,index)=><li key={target.type+":"+target.id+":"+index} className="text-caption text-text-2">{target.label??({article:"内容",claim:"结论",finding:"发现"} as Record<string,string>)[target.type]??"关联材料"} · {target.version==null?"版本未保留":"版本 "+target.version}</li>)}</ul>
     {targets.length>20&&<div className="flex gap-2"><Button size="sm" variant="text" disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-20))}>关联材料上一页</Button><Button size="sm" variant="text" disabled={offset+20>=targets.length} onClick={()=>setOffset(offset+20)}>关联材料下一页</Button></div>}
   </section>;
 }

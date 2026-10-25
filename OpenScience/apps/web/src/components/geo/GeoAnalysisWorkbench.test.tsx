@@ -198,15 +198,15 @@ it('V21 stages an unsent next-steps draft with exact row, metric and frozen gaps
  expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_opportunity'}}),'Unsent exact group plan');
  expect(screen.getByRole('link',{name:'登记自有发布地址'})).toBeTruthy();
  expect(screen.getByRole('link',{name:'https://shared.example/a?id=1'})).toHaveAttribute('href','https://shared.example/a?id=1');
- fireEvent.click(screen.getByRole('button',{name:/article-old.*001/}));expect(navigation.publication).toHaveBeenCalledWith('001','a'.repeat(64));
- fireEvent.click(screen.getByText(/claim-1.*1/));expect(screen.getByText('Preserved source quote')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:/稿件 1 · 查看发布版本/}));expect(navigation.publication).toHaveBeenCalledWith('001','a'.repeat(64));
+ fireEvent.click(screen.getByText('依据 1 · 第 1 版'));expect(screen.getByText('Preserved source quote')).toBeTruthy();
 });
 
 it('switches evidence perspectives while retaining the selected question scope',async()=>{
  read.mockResolvedValue({view:{viewId:'V16',evidenceKind:'claims'},selection:{reference:'gsel_evidence'},digest:'evidence',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}});
  render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V16" embedded/></MemoryRouter>);
  await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V16',dimension:'project'},0,undefined));
- fireEvent.click(screen.getByRole('button',{name:'证据视角：主张与来源'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'发现表达'}));
+ fireEvent.click(screen.getByRole('button',{name:'证据视角：结论与来源'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'发现表达'}));
  await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V16',dimension:'project',evidenceKind:'findings'},0,undefined));
 });
 
@@ -261,4 +261,89 @@ it('keeps an exact historical plan descriptor for export and native explanation'
  await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({view,mode:'analysis',selectionRef:'gsel_current',expectedDigest:'historical-digest'})));
  fireEvent.click(screen.getByRole('button',{name:'方案版本：方案版本 3'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'所选范围最新方案'}));
  await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V26',strategyVersion:undefined,targetVersion:undefined},0,undefined));
+});
+
+const ready = (extra: Record<string, unknown> = {}) => ({
+  view: { viewId: 'V01', dimension: 'project' }, selection: { reference: 'gsel_words' }, digest: 'words-digest',
+  columns: [], rows: [], page: { total: 0, shown: 0, nextOffset: null }, availability: { status: 'ready' }, ...extra,
+});
+/** The text nodes of a tree that read exactly as a bare number; a `{n && <X/>}` with n = 0 leaves one. */
+const bareZeros = (root: HTMLElement) => {
+  const found: string[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) if (node.textContent?.trim() === '0') found.push(node.textContent);
+  return found;
+};
+
+describe('what the analysis says about its own availability', () => {
+  it('draws nothing, and in particular no stray 0, when a complete view has no reasons to give', async () => {
+    read.mockReset().mockResolvedValue(ready({ availability: { status: 'ready', reasons: [] }, rows: [{ key: 'row', label: '品牌', metricId: null, dimensions: {}, values: {} }], page: { total: 1, shown: 1, nextOffset: null } }));
+    const { container } = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} embedded /></MemoryRouter>);
+    await screen.findByText('品牌');
+    // the row count is the only sentence on the page: no availability note, and no bare 0 where `reasons.length &&` would leave one
+    expect([...container.querySelectorAll('[data-note]')].map((note) => note.textContent)).toEqual(['共 1 行，当前显示 1 行。']);
+    expect(bareZeros(container)).toEqual([]);
+  });
+
+  it('words the reasons it has and says one neutral sentence, once, for the codes it has not', async () => {
+    read.mockReset().mockResolvedValue(ready({ availability: { status: 'partial', reasons: ['no_selected_records', 'no_linked_error_records', 'recommendation_coverage_incomplete', 'a_code_added_later', 'another_code_added_later'] } }));
+    const { container } = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} embedded /></MemoryRouter>);
+    const note = (await screen.findByText(/这个范围暂无可用记录/)).closest('[data-note]') as HTMLElement;
+    expect(note).toHaveTextContent('这个范围暂无与之关联的错误记录');
+    expect(note).toHaveTextContent('推荐覆盖不完整');
+    expect(note.textContent?.split('部分数据暂不可用')).toHaveLength(2);
+    for (const code of ['no_selected_records', 'no_linked_error_records', 'recommendation_coverage_incomplete', 'a_code_added_later']) expect(container.textContent).not.toContain(code);
+  });
+});
+
+describe('the source search', () => {
+  const sourceRow = { key: 'source-a', label: 'Source A', metricId: null, dimensions: { sourceType: 'news', domain: 'a.example' }, values: {} };
+  const sourceView = (extra: Record<string, unknown> = {}) => ready({ view: { viewId: 'V17' }, rows: [sourceRow], page: { total: 1, shown: 1, nextOffset: null }, ...extra });
+
+  it('asks once after the person pauses, not once per keystroke', async () => {
+    read.mockReset().mockResolvedValue(sourceView());
+    render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V17" embedded /></MemoryRouter>);
+    const search = await screen.findByRole('searchbox', { name: '搜索引用来源' });
+    await screen.findByText('Source A');
+    const before = read.mock.calls.length;
+    for (const value of ['n', 'ne', 'new', 'news']) fireEvent.change(search, { target: { value } });
+    // the box follows every keystroke at once; nothing has been asked yet
+    expect(search).toHaveValue('news');
+    expect(read.mock.calls.length).toBe(before);
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', { round: 'old' }, expect.objectContaining({ viewId: 'V17', sourceSearch: 'news' }), 0, undefined));
+    expect(read.mock.calls.length).toBe(before + 1);
+  });
+
+  it('keeps the rows on screen while the next read is on its way, and does not flip back to the skeleton', async () => {
+    read.mockReset().mockResolvedValueOnce(sourceView());
+    const { container } = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V17" embedded /></MemoryRouter>);
+    const search = await screen.findByRole('searchbox', { name: '搜索引用来源' });
+    await screen.findByText('Source A');
+    let finish: (value: unknown) => void = () => {};
+    read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    fireEvent.change(search, { target: { value: 'b' } });
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Source A')).toBeVisible();
+    expect(container.querySelector('.animate-pulse')).toBeNull();
+    finish(sourceView({ rows: [{ ...sourceRow, key: 'source-b', label: 'Source B' }] }));
+    expect(await screen.findByText('Source B')).toBeVisible();
+    expect(screen.queryByText('Source A')).toBeNull();
+  });
+});
+
+describe('the analysis rows carry words, not ids', () => {
+  it('names the sampling surface of a page observation and never prints the question id', async () => {
+    read.mockReset().mockResolvedValue(ready({ view: { viewId: 'V22', sourceLevel: 'page' }, rows: [{ key: 'history', label: 'Page · r3', metricId: null, dimensions: { kind: 'source_history', sourceKey: 'news.example/page', roundLabel: '第 3 轮', setVersion: 1, questionId: 'q_internal_77', mode: 'web' }, values: {} }], page: { total: 1, shown: 1, nextOffset: null } }));
+    const { container } = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V22" embedded /></MemoryRouter>);
+    expect(await screen.findByText(/第 3 轮 · 问题版本 1 · 网页端/)).toBeVisible();
+    expect(container.textContent).not.toContain('q_internal_77');
+  });
+
+  it('lists the rounds behind a cited page by their kind, not their id', async () => {
+    read.mockReset().mockResolvedValue(ready({ view: { viewId: 'V18', sourceLevel: 'page' }, rows: [{ key: 'page', label: 'Actual page', metricId: null, dimensions: { sourceType: 'news', sourceKey: 'news.example/s', domain: 'news.example', originalUrls: ['https://news.example/s'], history: [{ roundId: 'round_internal_9', kind: 'weekly', citedAnswers: 2 }] }, values: {} }], page: { total: 1, shown: 1, nextOffset: null } }));
+    const { container } = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V18" embedded /></MemoryRouter>);
+    fireEvent.click(await screen.findByText('原始引用地址与所选轮次'));
+    expect(screen.getByText('每周复测 · 2 个引用回答')).toBeVisible();
+    expect(container.textContent).not.toContain('round_internal_9');
+  });
 });

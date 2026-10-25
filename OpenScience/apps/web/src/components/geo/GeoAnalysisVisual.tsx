@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { BarList } from "@/components/charts/BarList";
 import { HeatGrid } from "@/components/charts/HeatGrid";
 import { GeoLineChart, chartScale } from "./tabs/GeoCharts";
-import { engineName } from "./geoText";
+import { engineName, poolName } from "./geoText";
 import { GeoFinanceVisual } from "./GeoFinanceVisual";
 
 const reasonWords: Readonly<Record<string, string>> = {
@@ -53,7 +53,7 @@ function unavailableReason(cell: GeoAnalysisChartCell): string {
     : "尚无可用读数，可在下表查看明细。");
 }
 function platformLabel(cell: GeoAnalysisChartCell): string {
-  return [engineName(cell.engine ?? ""), cell.pool].filter(Boolean).join(" · ");
+  return [engineName(cell.engine ?? ""), cell.pool ? poolName(cell.pool) : null].filter(Boolean).join(" · ");
 }
 
 /** Geometry only: every value, display dimension and exact member comes from the full server aggregate. */
@@ -73,7 +73,7 @@ export function GeoAnalysisVisual({ data, onSelect }: {
     const events=chart.timeline?.events??[],dates=events.map(event=>Date.parse(event.at)),low=Math.min(...dates),high=Math.max(...dates);
     return <>
       <ChartCard title={chart.kind==="publication_coverage"?"内容与发布覆盖":"投放与发布状态"} state={rows.length?"content":"empty"} emptyText="这个范围尚无内容或发布记录。"
-        footnote="各列独立计数；一篇内容可有多个版本和发布记录。登记发布不等于外部核验。业务记录按日期筛选；只选采样轮次时，这些关联记录不代表该轮当时状态。">
+        footnote="各列独立计数；一篇内容可有多个版本和发布记录。登记发布不等于已核对外部页面。业务记录按日期筛选；只选采样轮次时，这些关联记录不代表该轮当时状态。">
         <HeatGrid label="内容、版本与发布记录" columns={data.columns.map(column=>({key:column.key,header:column.label}))} rows={rows}/>
         <ul aria-label="内容与发布精确明细">{cells.map(cell=><li key={`${cell.rowKey}:${cell.columnKey}`}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{cell.label} · {data.columns.find(column=>column.key===cell.columnKey)?.label} · {cell.value??"未知"}</Button></li>)}</ul>
       </ChartCard>
@@ -105,9 +105,9 @@ export function GeoAnalysisVisual({ data, onSelect }: {
       return {value:cell?.state==="known"?cell.value:null,text:cell?.state==="partial"?`${cell.knownSubtotal??cell.value??"未知"} 已核实；${cell.unknownCandidates??"未知"} 待核实`:cell?.value==null?"未知":String(cell.value)};
     })}));
     const findings=data.view.evidenceKind==="findings";
-    return <ChartCard title={findings?"发现表达覆盖":"主张与来源覆盖"} state={rows.length?"content":"empty"} emptyText="尚无所选范围的已保存判定。"
-      footnote={findings?"展示当前页的表达记录；是否表达给定结论与医学来源是否支持该结论分别判断。":"展示当前页的精确主张、条件与来源；依据缺失保持未知，当前来源变更与采样时的回答分别保留。"}>
-      <HeatGrid label={findings?"发现表达覆盖矩阵":"主张条件与来源覆盖矩阵"} columns={data.columns.map(column=>({key:column.key,header:column.label}))} rows={rows}/>
+    return <ChartCard title={findings?"发现表达覆盖":"结论与来源覆盖"} state={rows.length?"content":"empty"} emptyText="尚无所选范围的已保存判定。"
+      footnote={findings?"展示当前页的表达记录；是否表达给定结论与医学来源是否支持该结论分别判断。":"展示当前页的精确结论、条件与来源；依据缺失保持未知，当前来源变更与采样时的回答分别保留。"}>
+      <HeatGrid label={findings?"发现表达覆盖矩阵":"结论条件与来源覆盖矩阵"} columns={data.columns.map(column=>({key:column.key,header:column.label}))} rows={rows}/>
       <ul aria-label="证据覆盖精确明细">{cells.map(cell=><li key={`${cell.rowKey}:${cell.columnKey}`}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{cell.label} · {data.columns.find(column=>column.key===cell.columnKey)?.label} · {cell.value??"未知"}{cell.state==="partial"?`（另有 ${cell.unknownCandidates??"未知"} 条待核实）`:""}</Button></li>)}</ul>
     </ChartCard>;
   }
@@ -117,7 +117,7 @@ export function GeoAnalysisVisual({ data, onSelect }: {
       ? `${cell.knownSubtotal ?? cell.value ?? "未知"}（已核实小计；${cell.unknownCandidates == null ? "待核实数量未知" : `另有 ${cell.unknownCandidates} 条待核实`}）` : cell.value == null ? "未知" : String(cell.value);
     return <ChartCard title="旅程与需求覆盖" state={cells.length?"content":"empty"} emptyText="尚无所选问题定义。" footnote="各类数量有独立单位；同一对象可关联多个需求，不能相加为漏斗或人群比例。未采样问题仍保留。">
       <Toolbar filters={[{kind:"select",label:"覆盖数量",value:selected?.key??"questions",options:columns.map(column=>({value:column.key,label:column.label})),onChange:value=>{if(value)setJourneyColumn(value);}}]} />
-      <HeatGrid label="旅程与需求覆盖矩阵" columns={[{key:selected?.key??"questions",header:selected?.label??"原始问题"}]} rows={cells.map(cell=>({key:cell.rowKey,header:cell.label,cells:[{value:cell.state === "known" ? cell.value : null,text:word(cell),hint:cell.state !== "known" ? "部分主张缺少核实依据；已核实小计与待核实数量分别保留。" : selected?.label}]}))} />
+      <HeatGrid label="旅程与需求覆盖矩阵" columns={[{key:selected?.key??"questions",header:selected?.label??"原始问题"}]} rows={cells.map(cell=>({key:cell.rowKey,header:cell.label,cells:[{value:cell.state === "known" ? cell.value : null,text:word(cell),hint:cell.state !== "known" ? "部分结论缺少核实依据；已核实小计与待核实数量分别保留。" : selected?.label}]}))} />
       <ul aria-label="需求覆盖明细">{cells.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{cell.label} · {selected?.label} {word(cell)}</Button></li>)}</ul>
     </ChartCard>;
   }

@@ -206,7 +206,7 @@ it('evidence coverage keeps unknown, partial subtotal and known zero separate on
  cells[0].members={selectionRef:'gsel_evidence',view:{viewId:'V16',evidenceKind:'claims'},rowKey:'known',columnKey:'supported',expectedDigest:'digest',unit:'statement_assessments',total:0,exact:true};
  const selected=vi.fn(),data={view:{viewId:'V16',evidenceKind:'claims'},rows:[{key:'known',label:'Adult'},{key:'unknown',label:'Child'}],columns:[{key:'supported',label:'依据已核实且表达一致'}],chart:{kind:'evidence',labels:[],series:[],cells}} as unknown as GeoAnalysisView;
  render(<GeoAnalysisVisual data={data} onSelect={selected}/>);
- expect(screen.getByRole('table',{name:'主张条件与来源覆盖矩阵'})).toBeVisible();
+ expect(screen.getByRole('table',{name:'结论条件与来源覆盖矩阵'})).toBeVisible();
  expect(screen.getByText('未知')).toBeVisible();expect(screen.getByText('0')).toBeVisible();expect(screen.queryByText('Not on this page')).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:/Adult.*表达一致/}));expect(selected).toHaveBeenCalledWith(cells[0]);
  expect(screen.getByRole('button',{name:/Child.*未知/})).toBeDisabled();

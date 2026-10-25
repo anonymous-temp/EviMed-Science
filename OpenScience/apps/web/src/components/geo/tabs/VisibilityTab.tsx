@@ -38,7 +38,7 @@ import {
   trendConclusion,
   withCoverageMarker,
 } from "../geoOverviewModel";
-import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, type GeoUnit } from "../geoText";
+import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, poolName, type GeoUnit } from "../geoText";
 import { geoSectionId } from "../geoTabs";
 import { metricName, metricUnit, roundKindWord } from "./geoTabText";
 import { CellLink, TabError, TabSkeleton } from "./geoTabKit";
@@ -478,13 +478,20 @@ function MoreMetrics({ geoId, diagnosis }: { geoId: string; diagnosis: GeoDiagno
   );
 }
 
+/** A pool-qualified competitor's name with its pool in words: the read names it "name · P2", and a pool id is not a word. */
+function rivalTitle(rival: NonNullable<GeoMonitoring["rivals"]>[number]): string {
+  const suffix = ` · ${rival.pool}`;
+  const base = rival.label ? (rival.label.endsWith(suffix) ? rival.label.slice(0, -suffix.length) : rival.label) : rival.name;
+  return `${base} · ${poolName(rival.pool)}`;
+}
+
 /** Pool-qualified competitors use their own paired denominator, never the global mention curve. */
 function PoolRivalTrends({project,rivals}:{project:GeoProject;rivals:GeoMonitoring["rivals"]}) {
  return <>{(rivals??[]).filter(rival=>rival.pool&&rival.ownPoints).map(rival=>{
   const points=rival.points,own=rival.ownPoints??[],labels=points.map(point=>monthDay(point.date)??point.date),known=points.some(point=>point.value!==null)||own.some(point=>point.value!==null);
-  return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rival.label??`${rival.name} · ${rival.pool}`} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。">
-   <TrendChart label={`${rival.name} ${rival.pool} 同口径趋势`} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
-   <DataTable label={`${rival.name} ${rival.pool} 同口径读数`} rows={points} rowKey={point=>point.date} columns={[
+  return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rivalTitle(rival)} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。">
+   <TrendChart label={`${rivalTitle(rival)} 同口径趋势`} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
+   <DataTable label={`${rivalTitle(rival)} 同口径读数`} rows={points} rowKey={point=>point.date} columns={[
     {key:"date",header:"实测日期",rowHeader:true,cell:point=>point.date},
     {key:"own",header:"本品提及率",cell:point=>{const ownPoint=own.find(item=>item.date===point.date);return ownPoint?.value==null?"未知或样本不足":`${ownPoint.value}%`; }},
     {key:"rival",header:"竞品提及率",cell:point=>point.value==null?"未知或样本不足":`${point.value}%`},

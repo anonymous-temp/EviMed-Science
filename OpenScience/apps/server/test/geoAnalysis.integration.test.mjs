@@ -142,6 +142,32 @@ test('selected export route returns a format validation error without creating c
   assert.equal(inspected,0);
 });
 
+test('the members of an aggregate cell are read over HTTP by the path the page calls', options, async () => {
+  const { Readable } = await import('node:stream');
+  const { createGeoRoutes } = await import('../src/geoRoutes.mjs');
+  const routes = createGeoRoutes({ store: { ensureSessionUser: async () => ({ user }), assertCsrf: async () => {} }, service, config: { geoEnabled: true, geoAudience: 'all' }, maxJsonBytes: 65536 });
+  const get = async (url) => {
+    const res = { status: 0, body: '', writeHead(status) { this.status = status; return this; }, end(chunk = '') { this.body = String(chunk); } };
+    await routes(Object.assign(Readable.from([]), { method: 'GET', url, headers: {} }), res);
+    return { status: res.status, data: JSON.parse(res.body).data };
+  };
+  const view = await service.analysis(user, project.id, { viewId: 'V06', from: '2026-10-02', to: '2026-10-02', limit: 1 });
+  const { freezeSelectedGeoAnalysis } = await import('../src/geoAnalysis.mjs');
+  const full = await freezeSelectedGeoAnalysis(store, project, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest });
+  let compared = 0;
+  for (const row of full.rows) for (const [columnKey, cell] of Object.entries(row.values)) if (cell.members) {
+    // The page's own query leaves a null descriptor field out (geoAnalysisClient.analysisQuery).
+    const query = new URLSearchParams(Object.entries({ selectionRef: cell.members.selectionRef, ...view.view, rowKey: row.key, columnKey, expectedDigest: view.digest, limit: 50 })
+      .filter(([, value]) => value != null).map(([key, value]) => [key, String(value)]));
+    const answer = await get(`/api/geo/projects/${project.id}/analysis/members?${query}`);
+    assert.equal(answer.status, 200);
+    assert.deepEqual(answer.data, JSON.parse(JSON.stringify(await service.analysisMembers(user, project.id, { ...Object.fromEntries(query), limit: 50 }))));
+    assert.equal(answer.data.total, cell.members.total);
+    compared += 1;
+  }
+  assert.ok(compared > 0, 'the view has at least one cell with members, so the route was exercised');
+});
+
 test('Batch B full aggregates, paginated typed members, five formats and shared native scope retain parity',options,async()=>{
   await store.query("UPDATE evimed_geo.questions SET original_group=CASE WHEN id='q1' THEN 'A, B' ELSE NULL END, original_id=CASE WHEN id='q1' THEN '0007' ELSE '0008' END,original_row_index=4,client_tags=ARRAY['one','two'] WHERE geo_project_id=$1",[project.id]);
   await store.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) VALUES('planned-only',$1,$2,'weekly','queued',1,'{kimi}','2026-10-02','{"mode":"web"}')`,[user.id,project.id]);

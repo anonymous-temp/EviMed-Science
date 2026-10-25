@@ -44,6 +44,16 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...client,
 }));
 
+// 行动 embeds the selected-data analysis under its articles and placing; its read is the analysis workbench's own (GeoAnalysisWorkbench.test.tsx),
+// so here it answers an empty view and a failed read of the articles is the only alert on the page.
+vi.mock("@/lib/geoAnalysisClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoAnalysisClient")>()),
+  getGeoAnalysis: vi.fn(async () => ({
+    view: { viewId: "V23", dimension: "project" }, selection: { reference: "gsel_actions" }, digest: "0".repeat(64),
+    columns: [], rows: [], page: { total: 0, shown: 0, nextOffset: null }, availability: { status: "empty" },
+  })),
+}));
+
 const store = vi.hoisted(() => ({
   select: vi.fn(async (_projectId: string, land?: () => void) => { land?.(); }),
   load: vi.fn(async () => undefined),
