@@ -75,7 +75,7 @@ async def candidates(pool, kinds: list[str], *, since: datetime, before: datetim
         rows = await (await conn.execute(
             f"""SELECT {', '.join('e.' + column.strip() for column in ENTRY_COLUMNS.split(','))},
                        s.access AS source_access, s.egress AS source_egress, s.source_type AS source_type,
-                       s.config AS source_config, t.attempts, t.paid_attempts, t.fetched_from,
+                       s.config AS source_config, s.authority AS source_authority, t.attempts, t.paid_attempts, t.fetched_from,
                        t.body_text AS stored_body, t.body_excerpt AS stored_excerpt, t.abstract AS stored_abstract
                   FROM evimed_knowledge.entries e
                   JOIN evimed_knowledge.entry_texts t USING (entry_id)

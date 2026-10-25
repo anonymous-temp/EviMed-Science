@@ -7,8 +7,8 @@ plan's (10.2.2), checked against each provider's published rules on 2026-09-21:
 host                        conc  min interval   daily cap  basis
 ==========================  ====  =============  =========  ==========================================
 api.crossref.org            1     1.2 s          3,000      anonymous list pool 1 req/s (Jul 2026 rules)
-eutils.ncbi.nlm.nih.gov     1     0.4 s / 0.15   2,000      3 req/s per IP without key, 10 with; shared
-www.ebi.ac.uk (Europe PMC)  1     1 s            1,500
+eutils.ncbi.nlm.nih.gov     1     0.4 s / 0.15   2,000 (a)  3 req/s per IP without key, 10 with; shared
+www.ebi.ac.uk (Europe PMC)  1     1 s            1,500 (a)
 api.fda.gov                 1     1 s            300 / 800  1,000/day per IP anonymous, SHARED with the
                                                             research runs and the drug-safety engine
 clinicaltrials.gov          1     1.5 s          500        no published limit: self-restraint
@@ -21,6 +21,10 @@ doi.org                     1     0.5 s          10,000     the handle API namin
 api.elsevier.com            1     1 s            2,000      only with a key (KNOWLEDGE_PLUGIN_ELSEVIER_KEY_FILE)
 anything else               1     1.5 s          none       and the site's robots.txt crawl-delay
 ==========================  ====  =============  =========  ==========================================
+
+(a) A fifth of the cap is kept for the requests marked ``priority="high"`` (``RequestSpec.priority``: the text chain's lookups for a
+top journal's research paper): every other request is refused (``host-budget`` / ``daily_cap``) once the day has used the
+other four fifths. The cap is spent first-come, so a day of low-tier journal streams used to leave the NEJM paper nothing.
 
 A 429 (or a 503 with ``Retry-After``) pauses the whole host, not just the source that met it; the
 pause and the day's count are persisted (``host_state``, ``host_counters``), because a restart that
@@ -58,6 +62,9 @@ class HostRule:
     daily_cap: int | None
     concurrency: int = 1
     timeout_s: float | None = None
+    # The share of ``daily_cap`` only a "high" priority request may spend (``RequestSpec.priority``): the cap is spent
+    # first-come, and a day's low-tier journal streams used to leave nothing for the top journals' papers (c3-primary).
+    reserved: float = 0.0
 
 
 DEFAULT_RULE = HostRule(1.5, None)
@@ -66,8 +73,9 @@ DEFAULT_RULE = HostRule(1.5, None)
 def host_rules(*, ncbi_key: bool, openfda_key: bool) -> dict[str, HostRule]:
     return {
         "api.crossref.org": HostRule(1.2, 3000),
-        "eutils.ncbi.nlm.nih.gov": HostRule(0.15 if ncbi_key else 0.4, 2000),
-        "www.ebi.ac.uk": HostRule(1.0, 1500),
+        # A fifth of the day is kept for the top journals' research papers (``RequestSpec.priority``).
+        "eutils.ncbi.nlm.nih.gov": HostRule(0.15 if ncbi_key else 0.4, 2000, reserved=0.2),
+        "www.ebi.ac.uk": HostRule(1.0, 1500, reserved=0.2),
         "api.fda.gov": HostRule(1.0, 800 if openfda_key else 300),
         "clinicaltrials.gov": HostRule(1.5, 500),
         "www.federalregister.gov": HostRule(1.5, 200),
@@ -260,7 +268,7 @@ class HostBudget:
         return worst
 
     @asynccontextmanager
-    async def slot(self, host: str, *, robots: bool = False) -> AsyncIterator[None]:
+    async def slot(self, host: str, *, robots: bool = False, priority: str = "normal") -> AsyncIterator[None]:
         """Hold ``host``'s request slot for one request; raises ``FetchError('host-budget', …)``.
 
         A robots.txt fetch (``robots=True``) keeps only the host's base spacing and does not take
@@ -283,7 +291,10 @@ class HostBudget:
             if wait > self._max_wait_s:
                 raise FetchError("host-budget", "host_busy", retry_after_s=wait)
             today = self._clock().date()
-            if not await self._store.reserve(host, today, rule.daily_cap):
+            cap = rule.daily_cap
+            if cap is not None and rule.reserved and priority != "high":
+                cap = max(1, int(cap * (1.0 - rule.reserved)))
+            if not await self._store.reserve(host, today, cap):
                 midnight = next_utc_midnight(self._clock())
                 raise FetchError("host-budget", "daily_cap", retry_after_s=(midnight - self._clock()).total_seconds())
             if wait > 0:

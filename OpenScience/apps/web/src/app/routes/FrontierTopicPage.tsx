@@ -17,11 +17,12 @@ import {
   type FrontierTopicRole,
   type FrontierTopicSummary,
 } from "@/lib/frontierClient";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { PageTitle } from "@/components/layout/PageTitle";
-import { buttonClasses } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
 import { StateScreen } from "@/components/ui/StateScreen";
@@ -29,7 +30,7 @@ import { Tag } from "@/components/ui/Tag";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
-import { EXTERNAL, INLINE_ACTION, ago } from "@/components/frontier/frontierText";
+import { EXTERNAL, INLINE_ACTION, ago, topicAskDraft } from "@/components/frontier/frontierText";
 
 type TopicState =
   | { kind: "loading" }
@@ -140,6 +141,7 @@ function TopicFrame({ title, actions, facts, children }: { title: string; action
 function TopicBody({ page, onItem }: { page: FrontierTopicPageData; onItem: (item: FrontierItem) => void }) {
   const { topic, items } = page;
   const location = useLocation();
+  const navigate = useNavigate();
   const update = async (item: FrontierItem, action: "star" | "hide") => {
     try {
       const state = await (action === "hide" ? hideFrontierItem(item.id) : item.state.starred ? unstarFrontierItem(item.id) : starFrontierItem(item.id));
@@ -147,11 +149,18 @@ function TopicBody({ page, onItem }: { page: FrontierTopicPageData; onItem: (ite
     } catch (caught) { toast.error(frontierErrorMessage(caught)); }
   };
   const found = ago(topic.acceptedAt);
+  // 就此提问: the topic's own question, in the composer for the reader to send or rewrite (a topic is no conversation origin).
+  const ask = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(topicAskDraft(topic)) } });
   return (
     <TopicFrame
       title={topic.title}
-      actions={topic.card ? <Link to={topic.card.href} state={{ evidenceFrom: { to: `${location.pathname}${location.search}`, label: topic.title } }}
-        className={buttonClasses({ variant: "secondary" })}>查看证据卡片</Link> : undefined}
+      actions={(
+        <>
+          {topic.card && <Link to={topic.card.href} state={{ evidenceFrom: { to: `${location.pathname}${location.search}`, label: topic.title } }}
+            className={buttonClasses({ variant: "secondary" })}>查看证据卡片</Link>}
+          <Button variant="secondary" onClick={ask}>就此提问</Button>
+        </>
+      )}
       facts={(
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-3">
           <Tag>{topic.domainLabel}</Tag>

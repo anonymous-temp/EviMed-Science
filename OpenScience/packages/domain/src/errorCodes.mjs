@@ -258,6 +258,12 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "frontier_search_response_too_large",
   "frontier_search_gateway_token_missing",
   "frontier_search_gateway_token_invalid",
+  // An item the conversation was opened from that the feed no longer holds (withdrawn, or an id nobody published): the run goes on
+  // with the link it was given.
+  "frontier_search_item_not_found",
+  // The service's own name for it, which the gateway reads and answers as the line above: classified the same, so it is never fatal
+  // should it reach a run unchanged.
+  "frontier_item_not_found",
   // 「循证 GEO」's runtime tools (geo_platform.py → geoGateway.mjs) not
   // answering: the module off or not open to this account, a conversation
   // outside a GEO project, the social channel not configured, an outage. The
@@ -636,6 +642,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "frontier_search_window_invalid",
   "frontier_search_mode_invalid",
   "frontier_search_limit_invalid",
+  "frontier_search_id_invalid",
   "frontier_search_request_invalid",
   "frontier_search_request_too_large",
   // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a
@@ -1993,6 +2000,8 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  // c3-ask: the feed holds no such item (withdrawn, or an id nobody published) — a reader's page, or the run asked by id.
+  frontier_item_not_found: '这条动态已不再提供。',
   vcr_split_invalid: '请为验证指定患者、时间或中心划分，并检查日期顺序。',
   vcr_history_perturbation_invalid: '请指定要省略的事件代码或有效的历史起始日期。',
   vcr_benchmark_invalid: '请按试验效果模板提供比较记录和已有证据的引用。',

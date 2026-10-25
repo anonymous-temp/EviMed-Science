@@ -101,7 +101,7 @@ test("a list answer carries its listId and each entry its slot, and the serve re
   assert.deepEqual(safety.items.map((item) => [item.id, item.slot]), [[items.alert.publicId, "must-see"]]);
   const serve = (await database.query("SELECT user_id, surface, policy, editorial, entries FROM evimed_frontier.list_serves WHERE list_id = $1", [selected.listId])).rows[0];
   assert.deepEqual([serve.user_id, serve.surface, serve.policy], [accounts.reader, "feed", "feed:selected:timeline"]);
-  assert.match(serve.editorial, /threshold:82$/);
+  assert.match(serve.editorial, /threshold:64$/, "the default line (c3-select 2026-10-25: 64, was 82)");
   assert.deepEqual(serve.entries.map((entry) => entry.item), selected.items.map((item) => item.id), "in the order served");
   assert.equal(serve.entries[0].slot, "editorial");
   const kinds = (await database.query("SELECT surface, policy FROM evimed_frontier.list_serves WHERE list_id = ANY($1::uuid[]) ORDER BY surface", [[all.listId, safety.listId]])).rows;

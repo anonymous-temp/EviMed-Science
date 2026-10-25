@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { FRONTIER_PREPRINT_LANE_SOURCE_TYPES, FRONTIER_SCORE_MAXIMA, frontierAuthorityScore } from "@evimed/domain";
+import { FRONTIER_PREPRINT_LANE_SOURCE_TYPES, FRONTIER_SCORE_MAXIMA, frontierAuthorityScore, frontierScoreCeilings } from "@evimed/domain";
 import {
   FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT,
   FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT,
   FRONTIER_SELECT_THRESHOLD_DEFAULT,
+  FRONTIER_PRIMARY_GIVE_UP_MS,
   FRONTIER_TEXT_GIVE_UP_MS,
   FRONTIER_TEXT_AFTER_ATTEMPT_MS,
   FRONTIER_TEXT_HOLD_MS,
@@ -194,7 +195,12 @@ test("the text step: take it when it is there, wait for it while it may come, an
   assert.deepEqual(decide("unavailable", fresh, smallJournal), { action: "drop", holdMs: 0 });
   assert.deepEqual(decide("pending", old, smallJournal), { action: "drop", holdMs: 0 }, "after fourteen days it is not waited for");
   assert.deepEqual(decide("pending", fresh, journal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a top journal's paper waits for its text too");
-  assert.deepEqual(decide("pending", old, journal), { action: "drop", holdMs: 0 });
+  // c3-primary: a top journal's paper (authority 4-5) is waited for twenty-one days, the plugin's horizon for it; the others fourteen.
+  assert.equal(FRONTIER_PRIMARY_GIVE_UP_MS, 21 * 24 * HOUR);
+  assert.deepEqual(decide("pending", old, journal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "fourteen days is not the end of a top journal's paper");
+  const older = { ...fresh, first_seen_at: new Date(now.getTime() - FRONTIER_PRIMARY_GIVE_UP_MS).toISOString() };
+  assert.deepEqual(decide("pending", older, journal), { action: "drop", holdMs: 0 });
+  assert.deepEqual(decide("pending", older, smallJournal), { action: "drop", holdMs: 0 });
   // A safety feed's notice goes out on its title; a whole feed summary is enough to go on; a published item keeps asking.
   assert.deepEqual(decide("pending", fresh, safety), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
   assert.deepEqual(decide("unavailable", fresh, safety), { action: "promote", holdMs: 0 });
@@ -345,38 +351,42 @@ test("selection: safety alerts always; verified items at the threshold while the
 });
 
 test("F12b: the lane's classes cannot reach the selection line by arithmetic, which is why they have a lane", () => {
-  // The editor gives at most 30 + 20 + 20; the rest of a total is the authority term, which a preprint discounts (x0.6) and a newsroom
-  // fixes to a press release (x0.5). The registry gives all 52 such sources authority 2 (review B, D-08: ceilings 77 and 76); even a
-  // grade more, and the best design for a preprint, leaves them under the line - and the selection rule agrees.
+  // On the scoring of 2026-10-25 a preprint's impact is capped at 18 and its novelty at 14, a company release's impact at 20
+  // (`frontier-selection.json`); the authority term is a preprint's x0.6 and a newsroom's press-release x0.5. The registry gives all 52
+  // such sources authority 2; even a grade more leaves them under the line - and the selection rule agrees.
   assert.deepEqual([...FRONTIER_PREPRINT_LANE_SOURCE_TYPES], ["preprint", "company"]);
-  const editorial = FRONTIER_SCORE_MAXIMA.impact + FRONTIER_SCORE_MAXIMA.novelty + FRONTIER_SCORE_MAXIMA.relevance;
-  const ceilings = {
-    preprint: [2, 3].map((authority) => frontierAuthorityScore({ authority, evidenceType: "rct", preprint: true }) + editorial),
-    company: [2, 3].map((authority) => frontierAuthorityScore({ authority, evidenceType: "press-release" }) + editorial),
+  const model = { impact: FRONTIER_SCORE_MAXIMA.impact, novelty: FRONTIER_SCORE_MAXIMA.novelty, relevance: FRONTIER_SCORE_MAXIMA.relevance };
+  const best = (/** @type {{ authority: number, evidenceType: string, preprint?: boolean, genre?: string }} */ input) => {
+    const authority = frontierAuthorityScore({ authority: input.authority, evidenceType: input.evidenceType, preprint: input.preprint });
+    const { parts } = frontierScoreCeilings({ parts: { authority, ...model }, genre: input.genre ?? null, evidenceType: input.evidenceType, evidenceFixed: true, preprint: input.preprint });
+    return parts.authority + parts.impact + parts.novelty + parts.relevance;
   };
-  assert.deepEqual(ceilings, { preprint: [77, 81], company: [76, 79] });
+  const ceilings = {
+    preprint: [2, 3].map((authority) => best({ authority, evidenceType: "rct", preprint: true, genre: "preprint" })),
+    company: [2, 3].map((authority) => best({ authority, evidenceType: "press-release" })),
+  };
   for (const ceiling of Object.values(ceilings).flat()) assert.ok(ceiling < FRONTIER_SELECT_THRESHOLD_DEFAULT, `${ceiling} is under the line`);
-  for (const [source, scoreTotal] of [[preprint, 81], [company, 79]]) {
+  for (const [source, scoreTotal] of [[preprint, Math.max(...ceilings.preprint)], [company, Math.max(...ceilings.company)]]) {
     const decided = frontierSelectionDecision({ safetyAlert: false, verification: "passed", scoreTotal, demoted: false, flags: [], source, selectedToday: 0,
       threshold: FRONTIER_SELECT_THRESHOLD_DEFAULT });
     assert.deepEqual(decided, { selected: false, rule: null }, `${source.source_type}: the best it can score is not selected`);
   }
   // And a journal of the same grade does reach it, so the lane is for the classes, not for a grade.
-  assert.ok(frontierAuthorityScore({ authority: 3, evidenceType: "rct" }) + editorial >= FRONTIER_SELECT_THRESHOLD_DEFAULT);
+  assert.ok(best({ authority: 3, evidenceType: "rct", genre: "paper" }) >= FRONTIER_SELECT_THRESHOLD_DEFAULT);
 });
 
-test("F12b: the lane's two numbers are read from the config, and the defaults are two a day from a total of 60", () => {
+test("F12b: the lane's two numbers are read from the config, and the defaults are two a day from a total of 50", () => {
   assert.equal(FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT, 2);
-  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, 60);
+  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, 50);
   assert.equal(frontierPreprintLanePerDay({}), 2);
   assert.equal(frontierPreprintLanePerDay(null), 2);
-  assert.equal(frontierPreprintLaneMinScore({}), 60);
+  assert.equal(frontierPreprintLaneMinScore({}), 50);
   assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: 5 }), 5);
   assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: 0 }), 0, "0 is no lane, not the default");
   assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: 70 }), 70);
   assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: 0 }), 0);
   for (const bad of ["", null, undefined, "x", -1, 1.5]) assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: bad }), 2, `per day ${String(bad)}`);
-  for (const bad of ["", null, undefined, "x"]) assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: bad }), 60, `floor ${String(bad)}`);
+  for (const bad of ["", null, undefined, "x"]) assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: bad }), 50, `floor ${String(bad)}`);
 });
 
 test("near-duplicate titles compare without case, spacing or punctuation", () => {

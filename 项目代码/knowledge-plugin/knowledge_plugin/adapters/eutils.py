@@ -201,6 +201,7 @@ def parse_pubmed_xml(body: bytes) -> list[dict[str, Any]]:
             "pmid": pmid,
             "doi": doi,
             "pmcid": pmcid,
+            "citation_status": citation.get("Status"),     # c3-primary: "Publisher" / "In-Process" (an abstract may still come) / "MEDLINE" (it will not)
             "title": _text(art.find("ArticleTitle")) or _text(art.find("VernacularTitle")),
             "abstract": "\n".join(parts) or None,      # one section a line; the summary folds it, /text keeps it
             "publication_types": [t for t in (_text(n) for n in art.iter("PublicationType")) if t],

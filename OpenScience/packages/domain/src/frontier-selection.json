@@ -1,0 +1,79 @@
+{
+  "$comment": "What the platform knows about an item that the editor model does not decide, as data an editor extends without touching a line of logic (c3-select, 2026-10-25). Read whole by frontierSelection.mjs. `republishers`: sources that republish others' writing (a digest with another feed's 「AI 评分 / AI 导读」 chrome, a rewrite of a press release); keyed by the registry source id; each has its authority grade capped at `authorityCap` and never takes a floor place (`floors: false`). `ceilings`: the most a model-scored part may be for a fact the platform holds - the genre, the evidence type, a preprint, the study design c3-faith reads from the text, a registry-class source. A ceiling is the prompt's own anchor made certain, never a new opinion: the prompt says it, the model usually keeps to it, and code keeps it when the model does not. Parts are impact (0-30), novelty (0-20) and relevance (0-20).",
+  "republishers": {
+    "discovered-29e04956f24c862b4024": {
+      "name": "BD HUB",
+      "reason": "its texts carry another feed's AI score and AI summary",
+      "authorityCap": 1,
+      "floors": false
+    },
+    "discovered-25304a7756bda9fd5b80": {
+      "name": "Medxy AI",
+      "reason": "rewrites other outlets' reports",
+      "authorityCap": 1,
+      "floors": false
+    }
+  },
+  "ceilings": {
+    "genre": {
+      "trial": {
+        "impact": 12
+      },
+      "preprint": {
+        "impact": 18,
+        "novelty": 14
+      }
+    },
+    "evidenceType": {
+      "review-opinion": {
+        "impact": 16,
+        "novelty": 12
+      },
+      "press-release": {
+        "impact": 14
+      }
+    },
+    "sourceClass": {
+      "guideline-registry": {
+        "sources": [
+          "prepare-guideline-registry"
+        ],
+        "impact": 12,
+        "novelty": 10
+      }
+    },
+    "design": {
+      "case-report": {
+        "impact": 8,
+        "novelty": 10
+      },
+      "basic": {
+        "impact": 10,
+        "novelty": 12
+      },
+      "animal": {
+        "impact": 10,
+        "novelty": 12
+      },
+      "protocol": {
+        "impact": 10,
+        "novelty": 10
+      },
+      "case-series": {
+        "impact": 14
+      },
+      "cross-sectional": {
+        "impact": 16
+      }
+    },
+    "smallStudy": {
+      "below": 100,
+      "designs": [
+        "rct",
+        "cohort",
+        "case-control"
+      ],
+      "impact": 16
+    }
+  }
+}

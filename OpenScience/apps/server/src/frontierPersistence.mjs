@@ -570,7 +570,7 @@ ${FRONTIER_EVENT_READING_SQL}
 CREATE TABLE IF NOT EXISTS evimed_frontier.user_follows (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id    text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
-  kind       text NOT NULL CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag')),
+  kind       text NOT NULL CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag', 'query')),
   key        text NOT NULL,
   label      text NOT NULL,
   muted      boolean NOT NULL DEFAULT false,
@@ -734,6 +734,75 @@ CREATE INDEX IF NOT EXISTS frontier_topic_items_item_idx ON evimed_frontier.topi
 -- c2-base 2026-10-25: why a reader hid an item, when they said (@evimed/domain FRONTIER_HIDE_REASONS); null = no reason given.
 ALTER TABLE evimed_frontier.user_state ADD COLUMN IF NOT EXISTS hidden_reason text
   CHECK (hidden_reason IN ('not-relevant', 'already-seen', 'low-quality', 'promotional', 'not-my-specialty', 'source'));
+-- c3-base 2026-10-25: 精选 calibration, study facts, ask questions, trackers, typed watches, congress recaps (round c3).
+-- A rare practice-changing label with its one-line reason, admitted in code (c3-select).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS practice_changing boolean NOT NULL DEFAULT false;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS practice_zh text CHECK (char_length(practice_zh) <= 200);
+-- What a study item's source says (design, size, population, comparator, primary endpoint and its direction), each field anchored
+-- by a verbatim quote that code found in the source (c3-faith); read by the faithfulness check and the score ceilings.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS study_facts jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS study_facts_version text;
+-- Up to three questions a reader may ask about the item, each opening the conversation with the item as its origin (c3-ask).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_zh jsonb;
+-- The tracker record of an approval or a guideline (agency, drug, indication, kind; body, key recommendations), anchored like
+-- study_facts (c3-track).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS track_facts jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS track_facts_version text;
+-- When the re-clustering sweep last compared an event with its neighbours (c3-cluster).
+ALTER TABLE evimed_frontier.events ADD COLUMN IF NOT EXISTS recluster_checked_at timestamptz(3);
+-- A reader may follow something they typed (a drug, a trial, a question): kind query, its parsed form in query, and when the
+-- reader last opened that follow, which the new-item counts are counted from (c3-watch).
+ALTER TABLE evimed_frontier.user_follows ADD COLUMN IF NOT EXISTS query jsonb;
+ALTER TABLE evimed_frontier.user_follows ADD COLUMN IF NOT EXISTS seen_at timestamptz(3);
+DO $frontier_follow_kinds_query$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.user_follows'::regclass AND conname = 'user_follows_kind_check'
+             AND pg_get_constraintdef(oid) NOT LIKE '%''query''%') THEN
+    ALTER TABLE evimed_frontier.user_follows DROP CONSTRAINT user_follows_kind_check;
+    ALTER TABLE evimed_frontier.user_follows ADD CONSTRAINT user_follows_kind_check
+      CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag', 'query'));
+  END IF;
+END
+$frontier_follow_kinds_query$;
+-- The published items a typed follow matched, once each, with the score that matched them (c3-watch).
+CREATE TABLE IF NOT EXISTS evimed_frontier.follow_matches (
+  follow_id  bigint NOT NULL REFERENCES evimed_frontier.user_follows(id) ON DELETE CASCADE,
+  item_id    bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+  score      real,
+  matched_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (follow_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS frontier_follow_matches_follow_idx ON evimed_frontier.follow_matches (follow_id, matched_at DESC);
+CREATE INDEX IF NOT EXISTS frontier_follow_matches_item_idx ON evimed_frontier.follow_matches (item_id);
+-- c3-watch 2026-10-25
+-- How far a typed follow's items have been looked at (a scan starts a little before it), and when a daily notice named a match.
+ALTER TABLE evimed_frontier.user_follows ADD COLUMN IF NOT EXISTS matched_through timestamptz(3);
+ALTER TABLE evimed_frontier.follow_matches ADD COLUMN IF NOT EXISTS notified_at timestamptz(3);
+CREATE INDEX IF NOT EXISTS frontier_user_follows_query_idx ON evimed_frontier.user_follows (matched_through NULLS FIRST) WHERE kind = 'query';
+-- One congress day's recap (@evimed/domain frontier-congresses.json ids), written from that day's items with numbers checked (c3-track).
+CREATE TABLE IF NOT EXISTS evimed_frontier.congress_recaps (
+  congress_id  text NOT NULL CHECK (congress_id ~ '^[a-z0-9-]{3,80}$'),
+  day          date NOT NULL,
+  recap_zh     text CHECK (char_length(recap_zh) <= 2000),
+  refs         jsonb NOT NULL DEFAULT '[]'::jsonb,
+  item_ids     bigint[] NOT NULL DEFAULT '{}',
+  model        text,
+  cost_cny     numeric(10, 4),
+  generated_at timestamptz(3),
+  PRIMARY KEY (congress_id, day)
+);
+-- c3-primary 2026-10-25: a top journal's research paper with no text of its own is read through the published reports of it. The text
+-- is the reports' words under their source names (item_texts.reader_reports, the last of the reader texts), the reports it was made
+-- from are listed in reader_reports_refs, and items.primary_checked_at is when the paper was last looked at for reports.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_reports text CHECK (char_length(reader_reports) <= 12000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_reports_refs jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS primary_checked_at timestamptz(3);
+
+-- c3-ask 2026-10-25: the text (its settled hash) and the instructions the questions were written from, and when, so a changed text
+-- or a changed prompt writes them again and an item with no good question is not asked about twice.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_basis text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_version text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_at timestamptz(3);
 
 ${FRONTIER_INTERACTIONS_SQL}
 `;

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler, frontierGatewayProviderUrl } from "../src/frontierGateway.mjs";
+import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler, frontierGatewayProviderUrl, itemText } from "../src/frontierGateway.mjs";
 
 const runtimeManager = {
   assertActiveModelGatewayToken(token) {
@@ -324,4 +324,145 @@ test('card judging receives the active runtime project and rejects caller-suppli
   assert.deepEqual(calls[0].context, { projectId: 'project-1', runId: null });
   assert.equal((await call({ q: 'stroke', projectId: 'another-tenant' })).status, 400);
   assert.equal(calls.length, 1);
+});
+
+/** A reader detail as `FrontierService.getItem` serves it: the card, and the 导读, 要点 and text the platform holds. */
+function detailItem(overrides = {}) {
+  return pageItem({
+    lead: "司美格鲁肽使射血分数保留的心衰患者的心衰事件风险降低。",
+    brief: { genre: "paper", points: [
+      { key: "design", label: "设计与对象", text: "随机对照试验。" },
+      { key: "results", label: "主要结果", items: ["事件 7.2% 对 8.8%（HR 0.82）。", "  "] },
+      { key: "empty", label: "空", text: " " },
+    ], quote: { key: "conclusion", label: "作者结论", text: "Semaglutide reduced heart failure events." } },
+    body: { zh: null, original: "Background: HFpEF.\n\nResults: events fell to 7.2% from 8.8%.", zhKind: null, complete: true, source: "abstract" },
+    abstract: "Background: HFpEF. Results: events fell.", abstractZh: null,
+    state: { starred: true, hidden: false, read: true },
+    ...overrides,
+  });
+}
+
+/** A service that serves one item by its public id, as the page's detail route does. */
+function itemService({ items = { k7q2m9x4t1b8: detailItem() }, fail = null } = {}) {
+  const calls = [];
+  return {
+    calls,
+    allows: () => true,
+    async listItems() { throw new Error("a read of one item never lists"); },
+    async getItem(user, id) {
+      calls.push({ user, id });
+      if (fail) throw fail;
+      const item = items[id];
+      if (!item) throw Object.assign(new Error("No such item."), { code: "frontier_item_not_found", status: 404 });
+      return { status: 200, etag: "W/\"1\"", body: { item } };
+    },
+  };
+}
+
+test("an id reads that one item for the account the token names: the lead, the points, the text the platform holds and where the original is", async (t) => {
+  const service = itemService();
+  const { call } = await withGateway(t, { service });
+  const answer = await call({ id: "k7q2m9x4t1b8" });
+  assert.equal(answer.status, 200);
+  assert.deepEqual(service.calls, [{ user: { id: "user-1" }, id: "k7q2m9x4t1b8" }]);
+  const { data } = answer.body;
+  assert.deepEqual(data.query, { id: "k7q2m9x4t1b8" });
+  assert.ok(Number.isFinite(Date.parse(data.asOf)));
+  assert.equal("items" in data, false, "one item is not a list");
+  assert.equal(data.item.lead, "司美格鲁肽使射血分数保留的心衰患者的心衰事件风险降低。");
+  assert.deepEqual(data.item.points, {
+    points: [{ label: "设计与对象", text: "随机对照试验。" }, { label: "主要结果", items: ["事件 7.2% 对 8.8%（HR 0.82）。"] }],
+    quote: { label: "作者结论", text: "Semaglutide reduced heart failure events." },
+  });
+  assert.equal(data.item.text, "Background: HFpEF.\n\nResults: events fell to 7.2% from 8.8%.");
+  assert.equal(data.item.textKind, "abstract");
+  assert.equal(data.item.textTruncated, false);
+  assert.equal(data.item.textLanguage, "en");
+  // The same lead the search gives: the original's address and identifiers, the source and the dates; never the reader's marks.
+  assert.equal(data.item.url, "https://www.nejm.org/doi/full/10.1056/NEJMoa0000001");
+  assert.equal(data.item.doi, "10.1056/NEJMoa0000001");
+  assert.deepEqual(data.item.source, { name: "NEJM", type: "journal", typeLabel: "期刊" });
+  assert.equal(data.item.publishedAt, "2026-09-20T00:00:00.000Z");
+  for (const field of ["state", "levels", "entities", "event", "alsoReportedBy", "specialties"]) assert.equal(field in data.item, false, field);
+});
+
+test("an item with no stored text falls back to its abstract, then to none, and says which kind of text it read", async (t) => {
+  const service = itemService({ items: {
+    aaaaaaaaaaaa: detailItem({ body: null }),
+    bbbbbbbbbbbb: detailItem({ body: null, abstract: null, lead: null, brief: null }),
+    cccccccccccc: detailItem({ body: { original: "The full text of the paper.", source: "body", zh: null, zhKind: null, complete: true } }),
+  } });
+  const { call } = await withGateway(t, { service });
+  const abstract = (await call({ id: "aaaaaaaaaaaa" })).body.data.item;
+  assert.equal(abstract.text, "Background: HFpEF. Results: events fell.");
+  assert.equal(abstract.textKind, "abstract");
+  const none = (await call({ id: "bbbbbbbbbbbb" })).body.data.item;
+  for (const field of ["text", "textKind", "textTruncated", "textLength"]) assert.equal(field in none, false, field);
+  assert.equal(none.lead, null);
+  assert.equal(none.points, null);
+  assert.equal(none.title, "司美格鲁肽降低射血分数保留心衰患者的心衰事件", "the lead of the search is still there");
+  assert.equal((await call({ id: "cccccccccccc" })).body.data.item.textKind, "body");
+});
+
+test("a long text is cut at 6,000 characters on a paragraph or a sentence, and says how long it was", () => {
+  const paragraph = `${"甲".repeat(2_000)}。`;
+  const text = [paragraph, paragraph, paragraph, paragraph].join("\n\n");
+  const cut = itemText(text);
+  assert.equal(cut.truncated, true);
+  assert.equal(cut.length, [...text].length);
+  assert.equal(cut.text, [paragraph, paragraph].join("\n\n"), "the last whole paragraph that fits");
+  assert.ok([...cut.text].length <= 6_000);
+  const run = itemText("乙".repeat(9_000));
+  assert.deepEqual([[...run.text].length, run.truncated, run.length], [6_000, true, 9_000], "no boundary to cut at: the limit itself");
+  const sentences = itemText(`${"The trial enrolled patients. ".repeat(400)}`);
+  assert.ok(sentences.text.endsWith("patients."), "a sentence end");
+  assert.deepEqual(itemText("  short  \r\nline "), { text: "short  \nline", truncated: false, length: 12 });
+  // Two astral characters are two characters of the budget, not four.
+  assert.equal(itemText("𠀀".repeat(6_000)).truncated, false);
+});
+
+test("an item the feed no longer holds is a named answer, and the id is checked before the service is asked", async (t) => {
+  const service = itemService();
+  const { call } = await withGateway(t, { service });
+  const gone = await call({ id: "zzzzzzzzzzzz" });
+  assert.equal(gone.status, 404);
+  assert.equal(gone.body.code, "frontier_search_item_not_found");
+  assert.match(gone.body.error, /original/);
+  for (const [body, code] of [
+    [{ id: "short" }, "frontier_search_id_invalid"],
+    [{ id: "K7Q2M9X4T1B8" }, "frontier_search_id_invalid"],
+    [{ id: 42 }, "frontier_search_id_invalid"],
+    [{ id: "k7q2m9x4t1b8/../x" }, "frontier_search_id_invalid"],
+    [{ id: "k7q2m9x4t1b8", q: "x" }, "frontier_search_request_invalid"],
+    [{ id: "k7q2m9x4t1b8", limit: 3 }, "frontier_search_request_invalid"],
+  ]) {
+    const answer = await call(body);
+    assert.equal(answer.status, 400, JSON.stringify(body));
+    assert.equal(answer.body.code, code, JSON.stringify(body));
+  }
+  assert.equal(service.calls.length, 1, "only the well-formed id reached the service");
+});
+
+test("reading an item answers like the search when the module is off, the account is outside the audience, or the service fails", async (t) => {
+  const off = await withGateway(t, { config: { frontierEnabled: false }, service: itemService() });
+  assert.equal((await off.call({ id: "k7q2m9x4t1b8" })).body.code, "frontier_disabled");
+  const reported = [];
+  const broken = await withGateway(t, { report: (code) => reported.push(code),
+    service: itemService({ fail: Object.assign(new Error("connection to 10.0.0.5 refused"), { code: "ECONNREFUSED" }) }) });
+  const failed = await broken.call({ id: "k7q2m9x4t1b8" });
+  assert.equal(failed.status, 503);
+  assert.equal(failed.body.code, "frontier_search_unavailable");
+  assert.doesNotMatch(JSON.stringify(failed.body), /10\.0\.0\.5/);
+  assert.deepEqual(reported, ["ECONNREFUSED"]);
+});
+
+test("an evaluation run is frozen like its searches: what its filter takes out of the item is not read", async (t) => {
+  const evaluationIsolation = { async isEvaluation() { return true; }, async filter(_identity, gateway, value) {
+    assert.equal(gateway, "frontier-knowledge-plugin");
+    return { ...value, item: undefined };
+  } };
+  const { call } = await withGateway(t, { service: itemService(), evaluationIsolation });
+  const answer = await call({ id: "k7q2m9x4t1b8" });
+  assert.equal(answer.status, 200);
+  assert.equal(answer.body.data.item, undefined, "the tool reads this as an item that is not there");
 });

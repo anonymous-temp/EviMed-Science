@@ -1,4 +1,5 @@
-import { FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, frontierEventEvidenceCounts } from '@evimed/domain';
+import { FRONTIER_FOLLOW_KINDS, FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, frontierEventEvidenceCounts } from '@evimed/domain';
+import { FRONTIER_SOURCE_STREAM_COLUMNS, frontierSourceStreamColumns } from "./frontierSourceColumns.mjs";
 import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
@@ -8,23 +9,26 @@ import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
 import { frontierMonthlyMarkdown } from "./frontierMonthly.mjs";
 import { createHash } from "node:crypto";
 import {
-  FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
+  FRONTIER_ACCESSES, FRONTIER_AGENCY_REGIONS, FRONTIER_APPROVAL_KIND_LABELS_ZH, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAG_LABELS_ZH, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH,
-  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, frontierScoreLevel, frontierSourceDisplayName, frontierSpecialtyKey,
+  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, FRONTIER_SCORE_TIERS, frontierIsStreamSource, frontierScoreLevel, frontierScoreTier, frontierSourceDisplayName, frontierSpecialtyKey,
 } from "@evimed/domain";
 import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.mjs";
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
 import { FRONTIER_FALLBACKS } from "./frontierIngest.mjs";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
 import { frontierItemGenre, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { servedAsk } from "./frontierAsk.mjs";
 import { frontierBriefView } from "./frontierBrief.mjs";
 import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
 import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
 import { HttpError } from "./security.mjs";
 import { FrontierSubscriptions, frontierFollowPredicate, frontierTagPredicate } from "./frontierSubscriptions.mjs";
+import { FRONTIER_FOLLOW_QUERY_MAX, followQueryView, typedFollowKey, typedFollowLabel, typedFollowQuery } from "./frontierFollowQuery.mjs";
 import { FRONTIER_ITEM_TAG_LIMIT, FrontierTagStore } from "./frontierTags.mjs";
 import { frontierTopicSummary } from "./frontierTopics.mjs";
+import { FrontierTrack } from "./frontierTrack.mjs";
 
 /**
  * What a reader of 「前沿动态」 is served (plan §7.3, §10.5).
@@ -63,8 +67,8 @@ import { frontierTopicSummary } from "./frontierTopics.mjs";
  *   as `kbIndex.mjs`). `mode` says which ran. Searching 精选 searches 全部 and
  *   marks what was selected (§4.2).
  * - A card carries the AI score, `score` (0–100), the tier it is drawn in,
- *   `scoreBand` (`high` from 85, `medium` from 70, `low` below — owner
- *   2026-10-23, after AIHOT's pill), and its four parts, `scoreParts` (out of
+ *   `scoreBand` (`high` from 76, `medium` from 60, `low` below — owner
+ *   2026-10-23, after AIHOT's pill, the lines moved with the score on 2026-10-25), and its four parts, `scoreParts` (out of
  *   `FRONTIER_SCORE_MAXIMA`: a lone number told a reader nothing); a safety
  *   alert carries none of them — it is selected whatever it scored. `levels`
  *   stay as the parts' bands for older clients.
@@ -128,7 +132,8 @@ const AXES = Object.freeze(["timeline", "published"]);
 const SORTS = Object.freeze(["relevance", "time"]);
 /** The hot rankings a reader may ask for (`GET /hot?window=`). */
 export const FRONTIER_HOT_WINDOWS = Object.freeze(["current", ...Object.keys(FRONTIER_HOT_PERIODS)]);
-const FOLLOW_KINDS = Object.freeze(["topic", "specialty", "drug", "source", "event", "tag"]);
+/** What a reader may follow: the six kinds picked from an item and `query`, something they typed (c3-watch; the domain's list). */
+const FOLLOW_KINDS = /** @type {readonly string[]} */ (FRONTIER_FOLLOW_KINDS);
 
 /** An item's channel (contract 1.4.0), the plugin's vocabulary. */
 export const FRONTIER_CHANNELS = Object.freeze(["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"]);
@@ -185,17 +190,26 @@ export function frontierAuthor(value) {
   return { name, handle, url, role };
 }
 
-/** The tiers the 「AI 评分」 pill is drawn in (owner, 2026-10-23, after AIHOT's `Score`): from 85, from 70, below. */
-export const FRONTIER_SCORE_TIERS = Object.freeze({ high: 85, medium: 70 });
+/**
+ * The 「可能改变实践」 label of a 精选 item: `{ reason }` once the mix admitted it (`practice_changing`) and a reason is held; otherwise null.
+ * A proposal that was not admitted is never served.
+ * @param {{ practice_changing?: unknown, practice_zh?: unknown, selected?: unknown }} row @returns {{ reason: string } | null}
+ */
+export function frontierPracticeLabel(row) {
+  const reason = typeof row?.practice_zh === "string" ? row.practice_zh.replace(/\s+/g, " ").trim() : "";
+  // A label of 精选 only: an item a later rule took out of it (a safety alert of its event, one pick an event, a merge) shows none.
+  return row?.practice_changing === true && row?.selected === true && reason ? { reason } : null;
+}
+
+/** The tiers the 「AI 评分」 pill is drawn in (`@evimed/domain` `FRONTIER_SCORE_TIERS`: 76 / 60 on the score of 2026-10-25, from 85 / 70). */
+export { FRONTIER_SCORE_TIERS };
 
 /**
- * The tier an AI score reads in: `high` from 85, `medium` from 70, `low` below; null without a score.
+ * The tier an AI score reads in: `high` from 76, `medium` from 60, `low` below; null without a score.
  * @param {unknown} score @returns {"high" | "medium" | "low" | null}
  */
 export function frontierScoreBand(score) {
-  if (score == null || score === "" || !Number.isFinite(Number(score))) return null;
-  const value = Number(score);
-  return value >= FRONTIER_SCORE_TIERS.high ? "high" : value >= FRONTIER_SCORE_TIERS.medium ? "medium" : "low";
+  return frontierScoreTier(score);
 }
 
 /** A score part as a number, or null. @param {unknown} value */
@@ -464,12 +478,12 @@ export function frontierCardFacts(raw) {
 // owner entity — its latest mention — and never the card's own institution
 // under another feed. `mention_count` is how many there are; `mentions` names
 // the five latest.
-const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.tags, i.lang, i.lane, i.source_type, i.identity_key,
+const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.practice_changing, i.practice_zh, i.tags, i.lang, i.lane, i.source_type, i.identity_key,
   i.channel, i.platform, i.author, i.media,
   i.evidence_type, i.evidence_basis, i.specialties, i.entities, i.flags, i.doi, i.pmid, i.registry_ids, i.canonical_url,
   i.published_at, i.date_precision, i.timeline_at, i.visible_at, i.selected, i.selected_rule, i.safety_alert, i.verification, i.editor_diagnostics,
   i.score_authority, i.score_impact, i.score_novelty, i.score_relevance, i.score_total, i.primary_source_id,
-  s.name AS source_name, s.owner_entity AS source_owner, s.homepage AS source_homepage, s.platform_produced AS source_platform_produced,
+  s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}, s.homepage AS source_homepage, s.platform_produced AS source_platform_produced,
   t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url, t.enrichment - '{${CARD_HIDDEN_ENRICHMENT.join(",")}}'::text[] AS card_enrichment,
   CASE WHEN e.report_count > 1 THEN e.public_id END AS event_public_id, e.title_zh AS event_title,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceId', r.source_id, 'sourceName', r.name, 'ownerEntity', r.owner_entity, 'url', r.url)
@@ -514,7 +528,7 @@ export class FrontierService {
    *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, monthly?: any, profiles?: any, actions?: any,
    *   tags?: import("./frontierTags.mjs").FrontierTagStore | null, tagUpkeep?: import("./frontierTagUpkeep.mjs").FrontierTagUpkeep | null,
    *   interactions?: import("./frontierInteractions.mjs").FrontierInteractions | null,
-   *   topics?: import("./frontierTopics.mjs").FrontierTopics | null }} options
+   *   topics?: import("./frontierTopics.mjs").FrontierTopics | null, watch?: import("./frontierFollowMatches.mjs").FrontierFollowWatch | null }} options
    *   The second wave's readers, each optional (a route without its module
    *   answers 404 `not_found`, which the page reads as 「还在准备」):
    *   `events` a `FrontierEvents` (hot list, event pages), `daily` a
@@ -524,7 +538,7 @@ export class FrontierService {
    */
   constructor({ database, config, vocabulary, policies = createModuleEvolutionPolicies(), ingest = null, embedder = null, budget = null, now = () => new Date(),
     dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, monthly = null, profiles = null, actions = null,
-    tags = null, tagUpkeep = null, interactions = null, topics = null }) {
+    tags = null, tagUpkeep = null, interactions = null, topics = null, watch = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
     this.policies = policies;
     this.database = database;
@@ -549,6 +563,10 @@ export class FrontierService {
     this.interactions = interactions;
     /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): 热榜's 「热点话题」, the topic page and `frontier_search`; null serves none. */
     this.topics = topics;
+    /** 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the approval and guideline records and the congress hubs, read. */
+    this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai") });
+    /** Typed follows (`FrontierFollowWatch`, c3-watch): their reading, matches and counts; null stores a typed follow by its words and counts none. */
+    this.watch = watch;
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
@@ -650,6 +668,8 @@ export class FrontierService {
       summary: row.summary_zh ?? null,
       // The 推荐理由 is the reader's, for selected and near-line items only (frontierEditor.mjs: why it was retired, and came back).
       reason: frontierReaderWorthy(row, this.selectThreshold) ? row.reason_zh ?? null : null,
+      // 「可能改变实践」 (c3-select, contract §P): the label and its one-line reason, only once the day's mix admitted it; content, not provenance.
+      practice: frontierPracticeLabel(row),
       // What the item is as a reader names it (ct-write 2026-10-24): the stored genre, else code's from the item's fields — never null.
       genre: frontierItemGenre(row),
       genreLabel: FRONTIER_GENRE_LABELS_ZH[frontierItemGenre(row)],
@@ -672,8 +692,11 @@ export class FrontierService {
       entities: { drugs: stringList(entities.drugs), trials: stringList(entities.trials), orgs: stringList(entities.orgs), diseases: stringList(entities.diseases) },
       // `platformProduced`: the source's content is EviMed's own (contract 1.3.0) — the label 「EviMed 出品」, and the reason such
       // an item is never counted as another institution's report of anything.
-      source: { id: row.primary_source_id, name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }),
-        homepage: row.source_homepage ?? null, platformProduced: row.source_platform_produced === true },
+      source: { id: row.primary_source_id, name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }),
+        homepage: row.source_homepage ?? null, platformProduced: row.source_platform_produced === true,
+        // A stream (a PubMed or OpenAlex query) is named by the item's journal, but a follow or a mute acts on the whole stream: such a
+        // source is not offered to follow or mute by that name (c3-select's journal names).
+        followable: !frontierIsStreamSource({ id: row.primary_source_id, access: row.source_access }) },
       url: row.canonical_url,
       doi: row.doi ?? null,
       pmid: row.pmid ?? null,
@@ -1006,7 +1029,7 @@ export class FrontierService {
       // whether or not the column exists yet.
       const row = (await client.query(`SELECT ${ITEM_COLUMNS}, i.quoted, i.metrics, t.abstract_raw, t.abstract_zh, t.publication_types, t.mesh, t.journal,
           t.authors_short, t.enrichment, t.body_text, t.body_excerpt, t.body_zh, t.body_zh_kind, t.body_zh_source, t.body_complete, t.quoted_zh, t.reader_tidy,
-          i.lead_zh, i.insight_zh, i.insight_refs, i.brief,
+          i.lead_zh, i.insight_zh, i.insight_refs, i.brief, i.ask_zh,
           (to_jsonb(i)->>'same_event_item_id') AS same_event_item_id
         FROM ${ITEM_FROM} WHERE i.public_id=$1 AND i.state = 'published' AND s.enabled`, [publicId])).rows[0];
       if (!row) throw failure(404, "frontier_item_not_found", "No such item.");
@@ -1019,6 +1042,8 @@ export class FrontierService {
           item: {
             ...card,
             ...(await this.#reader(client, row)),
+            // The questions a reader may put to the assistant about this item (frontierAsk.mjs); the reader's detail only, never a list card.
+            ask: servedAsk(row.ask_zh),
             state: marks.get(String(row.id)) ?? { starred: false, hidden: false, read: false },
             abstract: row.abstract_raw ?? null,
             abstractZh: row.abstract_zh ?? null,
@@ -1067,14 +1092,14 @@ export class FrontierService {
     if (!text) return null;
     const cited = Array.isArray(row.insight_refs) ? row.insight_refs.filter((ref) => Number.isSafeInteger(ref?.n) && /^\d{1,19}$/.test(String(ref?.item_id ?? ""))) : [];
     const found = cited.length ? (await client.query(`SELECT i.id, i.public_id, coalesce(i.title_zh, i.title_raw) AS title, i.timeline_at,
-        i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner
+        i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.id = ANY($1::bigint[]) AND i.state = 'published'`, [cited.map((ref) => String(ref.item_id))])).rows : [];
     const byId = new Map(found.map((/** @type {any} */ item) => [String(item.id), item]));
     const refs = cited.flatMap((ref) => {
       const item = byId.get(String(ref.item_id));
       return item ? [{ n: ref.n, publicId: String(item.public_id), title: String(item.title),
-        source: frontierSourceDisplayName({ id: item.primary_source_id, name: item.source_name, ownerEntity: item.source_owner }),
+        source: frontierSourceDisplayName({ id: item.primary_source_id, name: item.source_name, ownerEntity: item.source_owner, access: item.source_access, journal: item.item_journal }),
         at: new Date(item.timeline_at).toISOString() }] : [];
     });
     return { text, refs };
@@ -1139,7 +1164,7 @@ export class FrontierService {
     const external = /** @type {any} */ (frontierEventReading).frontierItemFollowups;
     if (typeof external === "function") return (await external(client, rowId, { limit: 8 })) ?? null;
     const rows = (await client.query(`SELECT e.public_id AS event_id, o.public_id, coalesce(o.title_zh, o.title_raw) AS title, s.id AS source_id,
-        s.name AS source_name, s.owner_entity, o.timeline_at
+        s.name AS source_name, s.owner_entity, ${frontierSourceStreamColumns("o")}, o.timeline_at
       FROM evimed_frontier.event_items me
       JOIN evimed_frontier.events e ON e.id = me.event_id AND e.merged_into IS NULL
       JOIN evimed_frontier.event_items oe ON oe.event_id = me.event_id AND oe.item_id <> me.item_id
@@ -1151,7 +1176,7 @@ export class FrontierService {
     return {
       eventId: rows[0].event_id,
       rows: rows.slice(0, 8).map((/** @type {any} */ other) => ({ itemId: other.public_id, title: other.title,
-        sourceName: frontierSourceDisplayName({ id: other.source_id, name: other.source_name, ownerEntity: other.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: other.source_id, name: other.source_name, ownerEntity: other.owner_entity, access: other.source_access, journal: other.item_journal }),
         at: /** @type {string} */ (iso(other.timeline_at)), relation: /** @type {const} */ ("same-event") })),
       more: rows.length > 8,
     };
@@ -1281,6 +1306,8 @@ export class FrontierService {
         evidenceUpkeep: this.config.evidenceUpkeepEnabled === true,
         // Hot-event topics (c2-leads 2026-10-25): 热榜's 「热点话题」 and the topic pages.
         topics: Boolean(this.topics),
+        // 追踪 (c3-track 2026-10-25): approvals, guideline updates and congresses.
+        track: true,
       },
       versions: {
         content: String(metaNumber(read.meta[FRONTIER_META_KEYS.contentVersion])),
@@ -1419,16 +1446,76 @@ export class FrontierService {
     return { state: { starred: state.starred, hidden: state.hidden, read: state.read } };
   }
 
-  /** @param {Record<string, any>} row */
-  #follow(row) {
-    return { id: String(row.id), kind: row.kind, key: row.key, label: row.label, muted: row.muted === true, createdAt: iso(row.created_at) };
+  /**
+   * A follow as the page reads it. `fresh` is how many published items arrived since the reader last opened it (c3-watch): absent
+   * when it could not be counted, and then no number is shown. A typed follow also says how its words were read.
+   * @param {Record<string, any>} row @param {number} [fresh]
+   */
+  #follow(row, fresh) {
+    return {
+      id: String(row.id), kind: row.kind, key: row.key, label: row.label, muted: row.muted === true, createdAt: iso(row.created_at),
+      ...(row.kind === "query" ? { query: followQueryView(row.query) } : {}),
+      ...(row.seen_at ? { seenAt: iso(row.seen_at) } : {}),
+      ...(fresh === undefined ? {} : { newItems: fresh }),
+    };
   }
 
   /** @param {{ id: string }} user */
   async listFollows(user) {
-    const rows = await this.#transaction(async (client) => (await client.query(`SELECT id, kind, key, label, muted, created_at
+    const rows = await this.#transaction(async (client) => (await client.query(`SELECT id, kind, key, label, muted, created_at, query, seen_at
       FROM evimed_frontier.user_follows WHERE user_id=$1 ORDER BY created_at DESC, id DESC`, [user.id])).rows);
-    return { follows: rows.map((/** @type {any} */ row) => this.#follow(row)) };
+    const counts = await this.#newCounts(user.id, rows);
+    return { follows: rows.map((/** @type {any} */ row) => this.#follow(row, counts.get(String(row.id)))) };
+  }
+
+  /**
+   * How many items each follow has had since it was last opened (`FrontierFollowWatch#newCounts`). A count that cannot be read is
+   * no count — the list of follows is still the list.
+   * @param {string} userId @param {Array<Record<string, any>>} rows
+   * @returns {Promise<Map<string, number>>}
+   */
+  async #newCounts(userId, rows) {
+    if (!this.watch || !rows.length) return new Map();
+    try {
+      const { follows } = await this.subscriptions.read(userId);
+      const since = new Map(rows.map((row) => [String(row.id), new Date(row.seen_at ?? row.created_at)]));
+      return await this.watch.newCounts(userId, follows, since);
+    } catch {
+      return new Map();
+    }
+  }
+
+  /**
+   * The typed follows of a reader that have items since they last opened them: `{ id, label, newItems }`, the busiest first. A
+   * count that cannot be read leaves the list empty — the page is still the page.
+   * @param {string} userId
+   */
+  async #queryFollowsWithNews(userId) {
+    if (!this.watch) return [];
+    try {
+      const rows = await this.#transaction(async (client) => (await client.query(`SELECT id, kind, key, label, muted, created_at, seen_at
+        FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query' AND NOT muted ORDER BY created_at DESC, id DESC`, [userId])).rows);
+      if (!rows.length) return [];
+      const counts = await this.#newCounts(userId, rows);
+      return rows.map((/** @type {any} */ row) => ({ id: String(row.id), label: String(row.label), newItems: counts.get(String(row.id)) ?? 0 }))
+        .filter((entry) => entry.newItems > 0).sort((left, right) => right.newItems - left.newItems);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * The reader opened a follow's feed: what arrived before now is no longer new (c3-watch).
+   * @param {{ id: string }} user @param {string} followId
+   */
+  async markFollowSeen(user, followId) {
+    if (!/^\d{1,18}$/.test(String(followId ?? ""))) throw failure(404, "frontier_follow_not_found", "No such follow.");
+    await this.ready();
+    const row = (await this.database.query(`UPDATE evimed_frontier.user_follows SET seen_at = $3::timestamptz WHERE user_id=$1 AND id=$2
+      RETURNING id, kind, key, label, muted, created_at, query, seen_at`, [user.id, followId, this.now().toISOString()])).rows[0];
+    if (!row) throw failure(404, "frontier_follow_not_found", "No such follow.");
+    this.counters.writes += 1;
+    return { follow: this.#follow(row, 0) };
   }
 
   /**
@@ -1488,6 +1575,7 @@ export class FrontierService {
   async createFollow(user, body) {
     const kind = String(body.kind ?? "");
     if (!FOLLOW_KINDS.includes(kind)) throw failure(400, "frontier_follow_invalid", "The follow kind is invalid.");
+    if (kind === "query") return this.#createQueryFollow(user, body);
     if (body.muted != null && typeof body.muted !== "boolean") throw failure(400, "frontier_follow_invalid", "muted must be a boolean.");
     let key;
     if (kind === "specialty") {
@@ -1537,6 +1625,45 @@ export class FrontierService {
     });
     this.counters.writes += 1;
     return { follow: this.#follow(row) };
+  }
+
+  /**
+   * Follow something the reader typed (c3-watch): its words read once into a query (`FrontierFollowWatch#parse` — a model call that
+   * can fail without refusing anyone: the words themselves are the fallback), stored with the follow, and the last seven days
+   * matched at once. The same words again are the same follow.
+   * @param {{ id: string }} user @param {{ key?: unknown, label?: unknown, muted?: unknown }} body
+   */
+  async #createQueryFollow(user, body) {
+    if (body.muted != null && body.muted !== false) throw failure(400, "frontier_follow_invalid", "A typed follow cannot be muted.");
+    const label = typedFollowLabel(body.label ?? body.key);
+    if (!label) throw failure(400, "frontier_follow_invalid", "The words to follow are empty or too long.");
+    const key = typedFollowKey(label);
+    await this.ready();
+    const columns = "id, kind, key, label, muted, created_at, query, seen_at";
+    const held = (await this.database.query(`SELECT ${columns} FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query' AND key=$2`, [user.id, key])).rows[0];
+    if (held) return { follow: this.#follow(held, 0) };
+    const typed = Number((await this.database.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query'", [user.id])).rows[0].n);
+    if (typed >= FRONTIER_FOLLOW_QUERY_MAX) throw failure(409, "frontier_follow_limit", `At most ${FRONTIER_FOLLOW_QUERY_MAX} typed follows per account.`);
+    // Read outside the transaction: a model call must not hold a connection. It does not throw.
+    const parsed = this.watch ? await this.watch.parse(user.id, label) : { query: typedFollowQuery(label, null) };
+    const row = await this.#transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`frontier-follows:${user.id}`]);
+      const count = Number((await client.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1", [user.id])).rows[0].n);
+      if (count >= MAX_FOLLOWS) throw failure(409, "frontier_follow_limit", `At most ${MAX_FOLLOWS} follows per account.`);
+      // The typed cap again under the lock: two requests read the count above at once (c3 review). A follow of the same words is one.
+      const again = (await client.query(`SELECT count(*) FILTER (WHERE kind='query')::integer AS n, bool_or(kind='query' AND key=$2) AS held
+        FROM evimed_frontier.user_follows WHERE user_id=$1`, [user.id, key])).rows[0];
+      if (!again.held && Number(again.n) >= FRONTIER_FOLLOW_QUERY_MAX) throw failure(409, "frontier_follow_limit", `At most ${FRONTIER_FOLLOW_QUERY_MAX} typed follows per account.`);
+      const saved = (await client.query(`INSERT INTO evimed_frontier.user_follows AS f (user_id, kind, key, label, muted, query, created_at) VALUES ($1,'query',$2,$3,false,$4::jsonb,$5::timestamptz)
+        ON CONFLICT (user_id, kind, key) DO UPDATE SET label = EXCLUDED.label RETURNING ${columns}`, [user.id, key, label, JSON.stringify(parsed.query), this.now().toISOString()])).rows[0];
+      await this.#bumpState(client, user.id);
+      await client.query("UPDATE evimed_frontier.user_profiles SET for_you_at=NULL WHERE user_id=$1", [user.id]);
+      return saved;
+    });
+    // The seven days, after the commit: a failure leaves the follow without its scan and the sweep does it.
+    await this.watch?.backfill({ id: row.id, userId: user.id, query: parsed.query });
+    this.counters.writes += 1;
+    return { follow: this.#follow(row, 0) };
   }
 
   /** @param {{ id: string }} user @param {string} followId */
@@ -1690,6 +1817,7 @@ export class FrontierService {
     const event = read.event;
     const baseline = (await this.database.query('SELECT report_marks FROM evimed_frontier.event_reads WHERE user_id = $1 AND event_id = $2', [user.id, publicId])).rows?.[0]?.report_marks ?? null;
     const reading = frontierEventChanges(read.members, baseline);
+    const ask = await this.#eventAsk(read.members);
     return {
       event: {
         id: event.public_id,
@@ -1722,8 +1850,31 @@ export class FrontierService {
         // The other events of its story, each by its representative report (`follows` links): `position` says whether it came
         // before this event or after.
         developments: read.developments ?? [],
+        // The questions of the event's first-hand item (c3-ask), with that item: the event page offers them under 「就此提问」.
+        ask,
       },
     };
+  }
+
+  /**
+   * The questions a reader may ask about an event: those of its first first-hand report that has any (members come in the event's
+   * own order), with that item's public id and title, or null when no first-hand report is published with questions. A primary item
+   * is what the event is about; the questions of a commentary on it would be about the commentary.
+   * @param {Array<{ rowId: string | number, role: string }>} members
+   * @returns {Promise<{ itemId: string, title: string, questions: string[] } | null>}
+   */
+  async #eventAsk(members) {
+    const primary = members.filter((member) => member.role === "primary").map((member) => String(member.rowId));
+    if (!primary.length) return null;
+    const rows = (await this.database.query(`SELECT id, public_id, coalesce(title_zh, title_raw) AS title, ask_zh FROM evimed_frontier.items
+      WHERE id = ANY($1::bigint[]) AND state = 'published' AND ask_zh IS NOT NULL`, [primary])).rows;
+    const byId = new Map(rows.map((/** @type {any} */ row) => [String(row.id), row]));
+    for (const id of primary) {
+      const row = byId.get(id);
+      const questions = row ? servedAsk(row.ask_zh) : [];
+      if (row && questions.length) return { itemId: String(row.public_id), title: String(row.title), questions };
+    }
+    return null;
   }
 
   // ───────────────────────── c2-leads 2026-10-25: hot-event topics (contract §T) ─────────────────────────
@@ -1805,6 +1956,114 @@ export class FrontierService {
       if (found) card = { id: found.id, title: found.title, href: `/app/frontier/zones/${encodeURIComponent(found.zone_id)}/evidence/${encodeURIComponent(found.id)}` };
     }
     return frontierTopicSummary(row, { refs, card });
+  }
+
+  // ───────────────────────── c3-track 2026-10-25: 追踪 (contract §T) ─────────────────────────
+
+  /**
+   * The cards of a page of tracked rows, each the feed's own (the reader's marks overlaid), and the rows a reader hid or whose
+   * item left (withdrawn, hidden source) left out.
+   * @param {{ id: string }} user @param {Array<{ rowId: string }>} rows
+   */
+  async #trackCards(user, rows) {
+    const items = await this.hydrate(user, { rowIds: rows.map((row) => row.rowId) });
+    return items;
+  }
+
+  /**
+   * 审批 (`GET /api/frontier/track/approvals?from&agency&kind&cursor`): the approvals of the last 90 days (or from `from`), each
+   * with the card and the fields of its record, the agencies they come from with their counts (a filter's options) and the year's
+   * count by agency. `listId` names what was served (surface `track`).
+   * @param {{ id: string }} user @param {URLSearchParams} params
+   */
+  async trackApprovals(user, params) {
+    const from = params.get("from");
+    if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) throw failure(400, "frontier_query_invalid", "The from parameter is invalid.");
+    const agency = params.get("agency");
+    if (agency && !/^[a-z-]{2,20}$/.test(agency)) throw failure(400, "frontier_query_invalid", "The agency parameter is invalid.");
+    const kind = params.get("kind");
+    if (kind && !Object.hasOwn(FRONTIER_APPROVAL_KIND_LABELS_ZH, kind)) throw failure(400, "frontier_query_invalid", "The kind parameter is invalid.");
+    const cursor = params.get("cursor");
+    if (cursor && cursor.length > 200) throw failure(400, "frontier_cursor_invalid", "The cursor is invalid.");
+    const read = await this.trackReader.approvals({ from, agency, kind, cursor });
+    const cards = await this.#trackCards(user, read.rows);
+    const rows = read.rows.flatMap((row) => {
+      const item = cards.get(row.rowId);
+      if (!item || item.state?.hidden) return [];
+      return [{ item, at: row.at, approval: row.facts.approval, approvalLabel: FRONTIER_APPROVAL_KIND_LABELS_ZH[/** @type {keyof typeof FRONTIER_APPROVAL_KIND_LABELS_ZH} */ (row.facts.approval)],
+        agency: row.facts.agency, drug: row.facts.drug.text, indication: row.facts.indication?.text ?? null, date: row.facts.date ?? null }];
+    });
+    const listId = await this.#serve(user, "track", `track:approvals:${agency || "all"}`, rows.map((row) => ({ item: row.item.id, slot: null, score: row.item.score })));
+    return { items: rows, nextCursor: read.next, from: read.from,
+      agencies: read.agencies.map((entry) => ({ ...entry, regionLabel: FRONTIER_AGENCY_REGIONS.find((region) => region.key === entry.region)?.label ?? "其他" })),
+      ytd: read.ytd, listId };
+  }
+
+  /**
+   * 指南 (`GET /api/frontier/track/guidelines?specialty&cursor`): the guideline records newest first, each with the card and up to
+   * five key recommendations with their grade, and the specialties they carry.
+   * @param {{ id: string }} user @param {URLSearchParams} params
+   */
+  async trackGuidelines(user, params) {
+    const specialty = params.get("specialty");
+    if (specialty && !Object.hasOwn(this.vocabulary.specialties, specialty)) throw failure(400, "frontier_query_invalid", "The specialty parameter is invalid.");
+    const cursor = params.get("cursor");
+    if (cursor && cursor.length > 200) throw failure(400, "frontier_cursor_invalid", "The cursor is invalid.");
+    const read = await this.trackReader.guidelines({ specialty, cursor });
+    const cards = await this.#trackCards(user, read.rows);
+    const rows = read.rows.flatMap((row) => {
+      const item = cards.get(row.rowId);
+      if (!item || item.state?.hidden) return [];
+      return [{ item, at: row.at, body: row.facts.body?.text ?? null, scope: row.facts.scope?.text ?? null,
+        recommendations: row.facts.recommendations.map((/** @type {any} */ entry) => ({ text: entry.text, grade: entry.grade })) }];
+    });
+    const listId = await this.#serve(user, "track", `track:guidelines:${specialty || "all"}`, rows.map((row) => ({ item: row.item.id, slot: null, score: row.item.score })));
+    return { items: rows, nextCursor: read.next, listId,
+      specialties: read.specialties.filter((entry) => Object.hasOwn(this.vocabulary.specialties, entry.key)).map((entry) => ({ key: entry.key, label: this.vocabulary.specialties[entry.key], count: entry.count })) };
+  }
+
+  /**
+   * 会议 (`GET /api/frontier/track/congresses`): the congresses on now, coming in the next 60 days and ended within the last 30,
+   * each with its dates, city, specialty, status and the count of its items.
+   */
+  async trackCongresses() {
+    const congresses = await this.trackReader.congresses();
+    return { congresses: congresses.map((congress) => ({ ...congress,
+      specialtyLabel: congress.specialty && Object.hasOwn(this.vocabulary.specialties, congress.specialty) ? this.vocabulary.specialties[congress.specialty] : null })) };
+  }
+
+  /**
+   * One congress's hub (`GET /api/frontier/track/congresses/:id`): its days, newest first, each with its recap (its references
+   * resolved to items) and its items as the feed's cards, the selected ones first, a conference result with its design caveat.
+   * `listId` names what was served (surface `congress`). 404 `frontier_congress_not_found` for an id the calendar does not have.
+   * @param {{ id: string }} user @param {string} id
+   */
+  async trackCongress(user, id) {
+    if (!/^[a-z0-9-]{3,80}$/.test(String(id ?? ""))) throw failure(404, "frontier_congress_not_found", "No such congress.");
+    const read = await this.trackReader.congress(id);
+    if (!read) throw failure(404, "frontier_congress_not_found", "No such congress.");
+    const cards = await this.#trackCards(user, read.days.flatMap((day) => day.items));
+    const refIds = [...new Set(read.days.flatMap((day) => (day.recap?.refs ?? []).map((/** @type {any} */ ref) => String(ref.itemId))).filter((refId) => PUBLIC_ID.test(refId)))];
+    const titles = new Map(refIds.length ? (await this.database.query(`SELECT i.public_id, coalesce(nullif(i.title_zh, ''), i.title_raw) AS title, s.name AS source_name
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+      WHERE i.public_id = ANY($1::text[]) AND i.state = 'published'`, [refIds])).rows.map((/** @type {any} */ row) => [row.public_id, row]) : []);
+    const days = read.days.map((day) => ({
+      day: day.day,
+      recap: day.recap ? { text: day.recap.text, at: day.recap.at,
+        refs: day.recap.refs.flatMap((/** @type {any} */ ref) => {
+          const found = titles.get(String(ref.itemId));
+          return found ? [{ n: Number(ref.n), itemId: String(ref.itemId), title: String(found.title ?? ""), sourceName: String(found.source_name ?? "") }] : [];
+        }) } : null,
+      items: day.items.flatMap((entry) => {
+        const item = cards.get(entry.rowId);
+        return item && !item.state?.hidden ? [{ item, caveat: entry.caveat }] : [];
+      }),
+    }));
+    const served = days.flatMap((day) => day.items.map((entry) => ({ item: entry.item.id, slot: null, score: entry.item.score })));
+    const listId = await this.#serve(user, "congress", `congress:${read.congress.id}`, served);
+    return { congress: { ...read.congress,
+      specialtyLabel: read.congress.specialty && Object.hasOwn(this.vocabulary.specialties, read.congress.specialty) ? this.vocabulary.specialties[read.congress.specialty] : null },
+    itemCount: days.reduce((sum, day) => sum + day.items.length, 0), days, listId };
   }
 
   /** Persist only the exact visible versions acknowledged by the reader; newer reports remain unseen.
@@ -1954,6 +2213,8 @@ export class FrontierService {
         // The one part of an issue that is the reader's own (flywheel F10): the cards of the zones they follow that
         // were published or changed in this issue's window. Read now, never part of the issue's text or Markdown.
         followedZones: typeof producer.followedZones === "function" ? await producer.followedZones(user.id, issue).catch(() => []) : [],
+        // Likewise theirs alone (c3-watch): the things they typed to follow that have news, each a link to its feed.
+        followedQueries: weekly ? [] : await this.#queryFollowsWithNews(user.id),
         aiMinute: issue.aiMinute, markdown,
         itemCount: new Set(shown.map((item) => item.id)).size,
         readingMinutes: frontierReadingMinutes([leadText, issue.aiMinute, ...shown.flatMap((item) => [item.title, item.summary])]),
@@ -2293,6 +2554,16 @@ export function frontierMetricFamilies(enabled, snapshot) {
     add("lead_held_total", "Lead search results not handed over, by why (stale, refused-host, social-network, own-site, not-chinese).", "counter",
       Object.entries(leads.counters.held ?? {}).map(([reason, value]) => ({ labels: { reason }, value: Number(value) })));
   }
+  // c3-track 2026-10-25: 追踪 — records written by kind, fields dropped by reason, congress recaps by outcome.
+  const track = worker.track;
+  if (track?.counters) {
+    add("track_total", "What the tracker step did since this process started: items asked, records written by kind, calls that failed.", "counter",
+      ["asked", "approvals", "guidelines", "none", "failed"].map((kind) => ({ labels: { kind }, value: Number(track.counters[kind] ?? 0) })));
+    add("track_dropped_total", "Tracker fields refused by the quotation and number checks, by field and reason.", "counter",
+      Object.entries(track.counters.droppedFields ?? {}).map(([name, value]) => ({ labels: { field: name.split(":")[0], reason: name.split(":")[1] ?? "" }, value: Number(value) })));
+    add("track_recaps_total", "Congress daily recaps by outcome (asked, written, empty, dropped, failed).", "counter",
+      ["recapsAsked", "recapsWritten", "recapsEmpty", "recapsDropped", "recapsFailed"].map((kind) => ({ labels: { outcome: kind.slice(6).toLowerCase() }, value: Number(track.counters[kind] ?? 0) })));
+  }
   // c2-leads 2026-10-25: the hot-event topics — rounds and candidates, accepted by field, refused by reason, items joined, overviews.
   const topics = worker.topics;
   if (topics?.counters) {
@@ -2396,7 +2667,11 @@ export function frontierMetricFamilies(enabled, snapshot) {
         "deferred", "hotRuns", "hotChanges", "digestsWritten", "digestsDropped",
         // fr-events 2026-10-22: the grouping calls, their second looks, the relations they found, the links and the gate.
         "groupCalls", "secondLooks", "secondLooksAgreed", "sameOccurrence", "sameStory", "followsLinks", "sameEventUnselected", "lexicalRecalls",
-        "regrouped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
+        "regrouped",
+        // c3-cluster 2026-10-25: the re-clustering sweep.
+        "reclusterRuns", "reclusterAnchors", "reclusterPairs", "reclusterSame", "reclusterRelated", "reclusterDifferent", "reclusterUnjudged",
+        "reclusterSecondLooks", "reclusterSecondAgreed", "reclusterMerged", "reclusterLinks", "reclusterPicksUnselected", "reclusterVetoed",
+        "reclusterStale", "reclusterStopped", "reclusterFailures"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
     const profiles = composer.profiles ?? null;
     add("personalization_state", "「与你相关」 as /status reports it (1 = current).", "gauge",
       ["available", "unavailable", "off"].map((state) => ({ labels: { state }, value: (profiles?.state ?? "off") === state ? 1 : 0 })));

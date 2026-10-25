@@ -61,7 +61,7 @@ const TOPICS_CHECK_MS = 15 * 60_000;
  *  for the status and the metrics. A key it does not report stays 0. */
 export const PIPELINE_OUTCOMES = Object.freeze(["claimed", "promoted", "published", "merged", "screenedOut", "held", "failed",
   "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane", "genreFloor", "zhTarget", "eventPrimary", "translated", "tidied",
-  "tidyDropped", "leads", "insights", "retagged"]);
+  "tidyDropped", "leads", "insights", "retagged", "studyFacts", "faithChecked", "faithMismatched", "faithRepaired", "faithTrimmed", "faithUnchecked"]);
 
 /**
  * The internal project the feed's model calls are billed to, under the first
@@ -353,6 +353,8 @@ export class FrontierWorker {
       evidence: this.evidence?.status?.() ?? null,
       leads: this.leads?.status?.() ?? null,
       topics: this.topics?.status?.() ?? null,
+      // 追踪 (c3-track 2026-10-25): the approval and guideline records and the congress recaps the pipeline writes.
+      track: this.pipeline?.track?.status?.() ?? null,
     };
   }
 

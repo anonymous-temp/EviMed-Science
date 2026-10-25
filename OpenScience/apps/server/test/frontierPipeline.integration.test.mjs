@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, FRONTIER_SCORE_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
+import { frontierAuthorityScore } from "@evimed/domain";
 import { FrontierDaily } from "../src/frontierDaily.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -90,6 +91,7 @@ const SOURCES = [
   { id: "c-novo", name: "Novo Nordisk newsroom", lane: "pipeline", source_type: "company", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "Novo", region: "DK" },
   { id: "p-medrxiv", name: "medRxiv", lane: "evidence", source_type: "preprint", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "medRxiv", region: "US" },
   { id: "p-biorxiv", name: "bioRxiv", lane: "evidence", source_type: "preprint", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "bioRxiv", region: "US" },
+  { id: "discovered-29e04956f24c862b4024", name: "BD HUB", lane: "mixed", source_type: "media", access: "rss", egress: "direct", authority: 3, safety_feed: false, owner_entity: "BD HUB", region: "CN" },
   { id: "t-ctgov", name: "ClinicalTrials.gov", lane: "pipeline", source_type: "evidence-body", access: "json-api", egress: "api", authority: 4, safety_feed: false, owner_entity: "NLM", region: "US" },
 ];
 
@@ -205,10 +207,13 @@ function fakeEditor(provider = { balanceSpent: false }) {
         model: "deepseek-flash", editorVersion: FRONTIER_EDITOR_VERSION, fieldDiagnostics: { title_zh: ["passed"], summary_zh: ["passed"] } };
       if (item.titleRaw.includes("[pending]")) return { ...base, verification: "pending", output: null, error: "model_gateway_timeout" };
       if (provider.balanceSpent) return { ...base, verification: "pending", output: null, error: "model_gateway_payment_required" };
-      const share = Number(marker(item.titleRaw, "score") ?? 30);
-      const impact = Math.min(30, share);
-      const novelty = Math.min(20, share - impact);
-      const relevance = Math.min(20, share - impact - novelty);
+      // [score:n]: the model's share of the total, spent on impact first; [parts:i-n-r]: the three parts written out (c3-select: the
+      // pipeline now lowers a part under the ceilings the platform holds, so a test that needs a total says its parts).
+      const written = marker(item.titleRaw, "parts")?.split("-").map(Number);
+      const share = written ? written[0] + written[1] + written[2] : Number(marker(item.titleRaw, "score") ?? 30);
+      const impact = written ? written[0] : Math.min(30, share);
+      const novelty = written ? written[1] : Math.min(20, share - impact);
+      const relevance = written ? written[2] : Math.min(20, share - impact - novelty);
       const lane = marker(item.titleRaw, "lane");
       return { ...base, verification: "passed", output: {
         genre: marker(item.titleRaw, "genre"),
@@ -217,9 +222,10 @@ function fakeEditor(provider = { balanceSpent: false }) {
         lane: lane && item.allowedLanes.includes(lane) ? lane : item.allowedLanes[0],
         specialties: ["cardiology"], evidenceType: item.evidenceFixed?.type ?? "observational",
         entities: { drugs: ["司美格鲁肽"], trials: [], orgs: [], diseases: [] },
-        scores: { impact, novelty, relevance }, flags: marker(item.titleRaw, "flag") ? [marker(item.titleRaw, "flag")] : [],
+        scores: { impact, novelty, relevance }, practice: marker(item.titleRaw, "practice") ? { changing: true, reasonZh: "首个口服药获批，成人患者多了一线选择。" } : null,
+        flags: marker(item.titleRaw, "flag") ? [marker(item.titleRaw, "flag")] : [],
         // c2-style S9: the model's own numbers ride beside the scored ones and are kept in the diagnostics only.
-        scoresRaw: { impact: share, novelty: share - impact, relevance: share - impact - novelty },
+        scoresRaw: written ? { impact, novelty, relevance } : { impact: share, novelty: share - impact, relevance: share - impact - novelty },
       } };
     },
   };
@@ -602,14 +608,39 @@ test("selection: three a day per source, and a genre group short of its floor ta
   assert.equal(pipeline.status().mix.groups.policy.after, 1, "the operators see today's mix");
 });
 
+test("c3 review: a total the scoring of 2026-10-25 did not write is not weighed against the line until it is scored again", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const round = async (/** @type {string} */ doi) => {
+    const delivered = await deliver({ source_id: "j-small", doi, title: `A paper of the day ${doi} [score:20]`, summary: "P".repeat(200) });
+    plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+    await pipeline.processBatch();
+    return Number((await entry(delivered.id)).item_id);
+  };
+  const old = await round("10.1000/scale.1");
+  // As production holds an item before the rescore: a total from the old prompts, high on today's line, no scoreVersion.
+  await database.query(`UPDATE evimed_frontier.items SET score_total = 90, selected = false, selected_rule = NULL, selected_at = NULL,
+    editor_diagnostics = editor_diagnostics - 'scoreVersion' WHERE id = $1`, [old]);
+  await round("10.1000/scale.2");
+  assert.equal((await item(old)).selected, false, "an old-scale 90 is no pick: selection is sticky, and the old scale fills the day");
+  await database.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb) || jsonb_build_object('scoreVersion', $2::text)
+    WHERE id = $1`, [old, FRONTIER_SCORE_VERSION]);
+  await round("10.1000/scale.3");
+  assert.deepEqual([(await item(old)).selected, (await item(old)).selected_rule], [true, "threshold"], "scored again, it is weighed like any other");
+});
+
 test("c2-fixes: a floor place under the line asks the genre's own 80th percentile of the last 30 days, read once a round from the published scores", options, async () => {
   await reset();
   const clock = new Date("2026-09-22T12:00:00Z");
   const { pipeline, plugin } = pipelineWith({ now: () => clock });
-  // Thirty newsroom releases (行业动态 by code's genre) that the clinical score keeps under 60: the model's share runs 20 to 49.
+  // Thirty newsroom releases (行业动态 by code's genre) that the clinical score keeps under the line: totals run 42 to 60 (authority 6, impact 14: a release's ceiling).
   const releases = [];
   for (const [index, topic] of DISTINCT_TOPICS.entries()) {
-    releases.push(await deliver({ source_id: "c-novo", title: `${topic} [score:${20 + index}]`, summary: "N".repeat(200) }));
+    const total = 42 + Math.round((index * 18) / 29);
+    const rest = total - 6 - 14;
+    const relevance = Math.min(20, Math.floor(rest / 2));
+    releases.push(await deliver({ source_id: "c-novo", title: `${topic} [parts:14-${rest - relevance}-${relevance}]`, summary: "N".repeat(200) }));
   }
   for (const delivered of releases) plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
   for (let round = 0; round < 6; round += 1) await pipeline.processBatch();
@@ -617,14 +648,14 @@ test("c2-fixes: a floor place under the line asks the genre's own 80th percentil
   for (const delivered of releases) rows.push(await item(Number((await entry(delivered.id)).item_id)));
   const scores = rows.map((row) => Number(row.score_total));
   assert.equal(rows.every((row) => row.state === "published" && [null, "industry"].includes(row.genre)), true, "published, and of the genre code gives a newsroom (the column is the editor's when it names one)");
-  assert.ok(Math.max(...scores) < 60, `the clinical score keeps industry under the absolute floor of 60 (${Math.max(...scores)})`);
+  assert.ok(Math.max(...scores) < 68, `the clinical score keeps industry under the line (${Math.max(...scores)})`);
   const sorted = [...scores].sort((a, b) => a - b);
   const position = 0.8 * (sorted.length - 1);
   const p80 = sorted[Math.floor(position)] + (sorted[Math.ceil(position)] - sorted[Math.floor(position)]) * (position - Math.floor(position));
-  assert.ok(p80 >= 45 && p80 < 60, `the genre's 80th percentile is the bar (${p80})`);
+  assert.ok(p80 >= 56 && p80 < 60, `the genre's 80th percentile is the bar, held between 56 and the absolute floor of 60 (${p80})`);
   const selected = rows.filter((row) => row.selected);
   assert.deepEqual(selected.map((row) => row.selected_rule), ["genre-floor"], "industry's floor of one place in a day of 20 is filled");
-  assert.equal(Number(selected[0].score_total), Math.max(...scores), "with the genre's best, which is under 60");
+  assert.equal(Number(selected[0].score_total), Math.max(...scores), "with the genre's best, which is under the line");
   assert.ok(Number(selected[0].score_total) >= p80);
   const mix = pipeline.status().mix;
   assert.ok(Math.abs(mix.genreFloors.industry - Math.round(p80 * 100) / 100) < 0.011, `the operators see the bar a place asked: ${JSON.stringify(mix.genreFloors)}`);
@@ -681,8 +712,8 @@ async function selections(named) {
 /**
  * The preprint lane's first day (2026-09-22), inside the genre mix (ct-mix 2026-10-24): the research group's floor is short of
  * candidates above the line, but a preprint under it comes in only by the lane's places; the newsroom's release is 行业动态 and
- * takes the industry group's floor. A preprint's total is the editor's share plus 6 (authority 2, discounted), and so is a
- * newsroom's: the line is 82, and none of them can reach it.
+ * takes the industry group's floor. A preprint's total is the editor's parts plus 6 (authority 2, discounted), a newsroom's plus 6:
+ * the line is 82 here, and none of them can reach it.
  * @param {Record<string, any>} [config]
  */
 async function laneDay(config = {}) {
@@ -691,12 +722,13 @@ async function laneDay(config = {}) {
   const { pipeline, plugin } = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 82, ...config } });
   const named = await deliverNamed(plugin, {
     journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 24 + 60 = 84
-    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 19 + 70 = 89
-    a: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[2]} [score:62]` }, // 68
-    b: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[3]} [score:58]` }, // 64
-    c: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[4]} [score:52]` }, // 58: under the floor
-    d: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[5]} [score:66]` }, // 72
-    e: { source_id: "c-novo", title: `${DISTINCT_TOPICS[6]} [score:60]` }, // 66, a newsroom
+    trial: { source_id: "j-nejm", doi: "10.1000/lane.journal2", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 24 + 70 = 94
+    // A preprint's impact is capped at 18 and its novelty at 14 (frontier-selection.json), authority 2 gives it 6: 58 at the very best.
+    a: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[2]} [parts:18-12-16]` }, // 52
+    b: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[3]} [parts:18-11-15]` }, // 50
+    c: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[4]} [parts:18-8-14]` }, // 46: under the floor
+    d: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[5]} [parts:18-14-17]` }, // 55
+    e: { source_id: "c-novo", title: `${DISTINCT_TOPICS[6]} [parts:14-20-20]` }, // 60, a newsroom (authority 6; a release's impact is capped at 14)
   });
   const summary = await pipeline.processBatch();
   return { pipeline, plugin, named, summary, clock };
@@ -706,9 +738,9 @@ test("F12b: the preprint lane selects the day's best two preprints above the flo
   const { pipeline, plugin, named, summary } = await laneDay();
   assert.deepEqual(await selections(named), {
     journal: [true, "threshold"], trial: [true, "threshold"],
-    d: [true, "preprint-lane"], a: [true, "preprint-lane"], // the two highest totals (72, 68)
-    b: [false, null], // 64 clears the floor and finds the places taken; the research floor does not take a preprint under the line
-    c: [false, null], // 58 is under it
+    d: [true, "preprint-lane"], a: [true, "preprint-lane"], // the two highest totals (55 and 52)
+    b: [false, null], // 50 clears the floor and finds the places taken; the research floor does not take a preprint under the line
+    c: [false, null], // 47 is under it
     e: [true, "genre-floor"], // a newsroom's release is 行业动态: the industry group's floor, no longer a preprint-lane place
   });
   assert.equal(summary.preprintLane, 2, "counted in the round's summary...");
@@ -717,7 +749,7 @@ test("F12b: the preprint lane selects the day's best two preprints above the flo
   const taken = (await database.query(`SELECT source_type, flags, evidence_type, verification, lane, state, score_total FROM evimed_frontier.items
     WHERE selected_rule = 'preprint-lane' ORDER BY score_total DESC`)).rows;
   assert.deepEqual(taken.map((row) => [row.source_type, row.flags.includes("preprint"), row.state, row.verification, row.score_total]),
-    [["preprint", true, "published", "passed", 72], ["preprint", true, "published", "passed", 68]]);
+    [["preprint", true, "published", "passed", 55], ["preprint", true, "published", "passed", 52]]);
   const lanePick = await item(Number((await entry(named.d.id)).item_id));
   assert.deepEqual(await changes(Number(lanePick.id)), ["published", "selected"]);
   assert.equal(lanePick.selected_at.toISOString(), "2026-09-22T12:00:00.000Z");
@@ -729,7 +761,7 @@ test("F12b: the preprint lane selects the day's best two preprints above the flo
   for (const id of await publicIds(["journal", "trial", "a", "d"])) assert.ok(issued.has(id), id);
 
   // The same day, a better preprint arrives: the places are taken, and selection is sticky.
-  const later = await deliverNamed(plugin, { f: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[7]} [score:68]` } }); // 74
+  const later = await deliverNamed(plugin, { f: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[7]} [parts:18-14-20]` } }); // 58
   await pipeline.processBatch();
   assert.deepEqual(await selections(later), { f: [false, null] });
   assert.equal((await selections(named)).d[1], "preprint-lane");
@@ -738,12 +770,12 @@ test("F12b: the preprint lane selects the day's best two preprints above the flo
 test("F12b: a new day has its own places, and yesterday's stand", options, async () => {
   const { plugin, named } = await laneDay();
   assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
-  // 2026-09-23: the lane takes the day's best two above the floor (66, 61) and leaves 60 out.
+  // 2026-09-23: the lane takes the day's best two above the floor (56, 52) and leaves 44 out.
   const { pipeline: next } = pipelineWith({ now: () => new Date("2026-09-23T12:00:00Z"), plugin, config: { frontierSelectThreshold: 82 } });
   const day = await deliverNamed(plugin, {
-    g: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[8]} [score:54]` }, // 60
-    i: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[9]} [score:60]` }, // 66
-    j: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[10]} [score:55]` }, // 61
+    g: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[8]} [parts:18-8-12]` }, // 44
+    i: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[9]} [parts:18-14-18]` }, // 56
+    j: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[10]} [parts:18-12-16]` }, // 52
   });
   const summary = await next.processBatch();
   assert.deepEqual(await selections(day), { g: [false, null], i: [true, "preprint-lane"], j: [true, "preprint-lane"] });
@@ -752,9 +784,9 @@ test("F12b: a new day has its own places, and yesterday's stand", options, async
   assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
 });
 
-test("F12b: the floor and the number are the operator's: a floor of 70 takes the one that reaches it, 0 a day is no lane, 3 a day is three", options, async () => {
+test("F12b: the floor and the number are the operator's: a floor of 55 takes the one that reaches it, 0 a day is no lane, 3 a day is three", options, async () => {
   for (const [config, expected] of /** @type {Array<[Record<string, number>, string[]]>} */ ([
-    [{ frontierPreprintLaneMinScore: 70 }, ["d"]],
+    [{ frontierPreprintLaneMinScore: 55 }, ["d"]],
     [{ frontierPreprintLanePerDay: 0 }, []],
     [{ frontierPreprintLanePerDay: 3 }, ["a", "b", "d"]],
   ])) {
@@ -772,15 +804,15 @@ test("F12b: only a verified, unretracted, summarised article of an enabled sourc
   const off = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 82, frontierPreprintLanePerDay: 0 } });
   const named = await deliverNamed(off.plugin, {
     journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 84
-    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 89
-    retracted: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[11]} [score:70]` }, // 76
-    letter: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[12]} [score:68]` }, // 74
-    hidden: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[13]} [score:66]` }, // 72
-    silent: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[14]} [score:64]` }, // 70
-    waiting: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[15]} [pending] [score:62]` }, // published as it came, edit still owed
-    good1: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[16]} [score:60]` }, // 66
-    good2: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[17]} [score:59]` }, // 65
-    good3: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[18]} [score:58]` }, // 64
+    trial: { source_id: "j-nejm", doi: "10.1000/lane.journal2", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 94
+    retracted: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[11]} [parts:18-14-20]` }, // 58
+    letter: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[12]} [parts:18-14-19]` }, // 57
+    hidden: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[13]} [parts:18-14-18]` }, // 56
+    silent: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[14]} [parts:18-14-17]` }, // 55
+    waiting: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[15]} [pending] [parts:18-14-16]` }, // published as it came, edit still owed
+    good1: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[16]} [parts:18-14-16]` }, // 54
+    good2: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[17]} [parts:18-14-15]` }, // 53
+    good3: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[18]} [parts:18-14-13]` }, // 51
   });
   await off.pipeline.processBatch();
   assert.deepEqual(Object.entries(await selections(named)).filter(([, [selected]]) => selected).map(([name]) => name), ["journal", "trial"], "no lane, no place");
@@ -795,8 +827,106 @@ test("F12b: only a verified, unretracted, summarised article of an enabled sourc
   await on.pipeline.processBatch();
   const verdicts = await selections(named);
   assert.deepEqual(Object.entries(verdicts).filter(([, [, rule]]) => rule === "preprint-lane").map(([name]) => name),
-    ["good1", "good2"], "the best two that are eligible: 66 and 65, then the lane is full");
+    ["good1", "good2"], "the best two that are eligible: 54 and 53, then the lane is full");
   assert.deepEqual(verdicts.waiting, [false, null], "a title-only item has no total to be taken by");
+});
+
+test("c3-select: the score a card shows is the model's under the ceilings the platform holds, a republisher's authority is capped, and the model's own numbers stay", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const named = await deliverNamed(plugin, {
+    // A preprint (genre preprint, code's own): its impact is held to 18 and its novelty to 14 whatever the model gave.
+    registry: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[0]} [parts:22-15-15]` },
+    // A feed that rewrites another feed (frontier-selection.json): authority 3 reads as 1.
+    hub: { source_id: "discovered-29e04956f24c862b4024", title: `${DISTINCT_TOPICS[1]} [parts:22-15-15]` },
+    // Nothing the platform holds lowers a paper of a journal of authority 5.
+    paper: { source_id: "j-nejm", doi: "10.1000/c3.paper", title: `${DISTINCT_TOPICS[2]} [parts:22-15-15]` },
+  });
+  await pipeline.processBatch();
+  const rows = {};
+  for (const [name, delivered] of Object.entries(named)) rows[name] = await item(Number((await entry(delivered.id)).item_id));
+  const parts = (/** @type {any} */ row) => [row.score_authority, row.score_impact, row.score_novelty, row.score_relevance, row.score_total];
+  assert.equal(rows.registry.genre, "preprint");
+  assert.deepEqual(parts(rows.registry).slice(1, 4), [18, 14, 15], "impact 22 -> 18, novelty 15 -> 14; the rest is the model's");
+  assert.equal(rows.registry.score_total, rows.registry.score_authority + 18 + 14 + 15);
+  assert.equal(rows.hub.score_authority, frontierAuthorityScore({ authority: 1, evidenceType: "observational" }), "BD HUB at authority 3 is graded 1, the table's cap");
+  assert.equal(rows.hub.score_total, rows.hub.score_authority + 22 + 15 + 15);
+  assert.deepEqual(parts(rows.paper).slice(1, 4), [22, 15, 15], "no ceiling applies");
+  // The model's numbers and what lowered them are kept with the item, for the operator and for fitting a ceiling.
+  assert.deepEqual(rows.registry.editor_diagnostics.scoresRaw, { impact: 22, novelty: 15, relevance: 15 });
+  assert.deepEqual(rows.registry.editor_diagnostics.capped, ["genre:preprint"]);
+  assert.deepEqual(rows.hub.editor_diagnostics.capped, ["republisher"]);
+  assert.equal(rows.paper.editor_diagnostics.capped, undefined, "nothing lowered, nothing named");
+  assert.equal(pipeline.counters.scoreCeilings, 2);
+});
+
+test("c3-select: the practice proposal waits in practice_zh; the day's mix admits the best of the selected ones that may carry it, up to the day's cap", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 60 } });
+  const regulatory = (/** @type {string} */ id) => ({ source_id: "r-ema", identity_key: `fda:${id}`, canonical_url: `https://example.org/fda/${id}` });
+  const named = await deliverNamed(plugin, {
+    // Three approvals over the line, all proposed: the day has three selected items, so the cap is one (5 % of three, never fewer than one).
+    low: { ...regulatory("a"), title: `${DISTINCT_TOPICS[0]} [practice:1] [score:65]` },
+    best: { ...regulatory("b"), title: `${DISTINCT_TOPICS[1]} [practice:1] [score:75]` },
+    third: { ...regulatory("c"), title: `${DISTINCT_TOPICS[2]} [score:70]` },
+    // Proposed but not a decision or a result: a company's news is never admitted, selected or not.
+    news: { source_id: "c-novo", title: `${DISTINCT_TOPICS[3]} [practice:1] [score:80]` },
+    // Proposed but not selected: under the line, a label is not given.
+    quiet: { source_id: "r-ema", identity_key: "fda:d", canonical_url: "https://example.org/fda/d", title: `${DISTINCT_TOPICS[4]} [practice:1] [score:20]` },
+  });
+  await pipeline.processBatch();
+  const rows = {};
+  for (const [name, delivered] of Object.entries(named)) rows[name] = await item(Number((await entry(delivered.id)).item_id));
+  assert.deepEqual(Object.fromEntries(Object.entries(rows).map(([name, row]) => [name, row.practice_changing])),
+    { low: false, best: true, third: false, news: false, quiet: false });
+  assert.equal(rows.best.practice_zh, "首个口服药获批，成人患者多了一线选择。");
+  assert.equal(rows.third.practice_zh, null, "no proposal, no reason");
+  assert.equal(rows.quiet.practice_zh, "首个口服药获批，成人患者多了一线选择。", "the proposal is held; it is just not admitted");
+  assert.equal(rows.best.selected, true);
+  assert.equal(pipeline.counters.practiceAdmitted, 1);
+  assert.ok((await changes(Number(rows.best.id))).includes("practice"), "a reader's list sees the change");
+  // A later round does not give the cap again: the admitted one stays and counts.
+  await pipeline.processBatch();
+  assert.equal(pipeline.counters.practiceAdmitted, 1);
+});
+
+test("c3-select: a safety alert takes the place of an arithmetic pick of its own event", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const named = await deliverNamed(plugin, {
+    // The recall as an X post of a media account, picked by the line first...
+    post: { source_id: "j-nejm", doi: "10.1000/c3.post", title: `${DISTINCT_TOPICS[0]} [score:60]` },
+    // ...and the regulator's own notice, which the safety bypass selects when it is published.
+    alert: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[1]} [score:50]`, facts: { recall_class: "Class I" } },
+  });
+  await pipeline.processBatch();
+  const id = async (/** @type {string} */ name) => Number((await entry(named[name].id)).item_id);
+  const [post, alert] = [await item(await id("post")), await item(await id("alert"))];
+  assert.equal(post.selected, true, "the line selected the post");
+  assert.equal(alert.selected_rule, "safety-bypass");
+  // They are one event, clustered after both were published.
+  const event = (await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, report_count)
+    VALUES ($2, '召回', 'safety', $1, $1, 2) RETURNING id`, [clock, `c3ev${randomUUID().slice(0, 8)}`])).rows[0].id;
+  for (const row of [post, alert]) {
+    await database.query("INSERT INTO evimed_frontier.event_items (event_id, item_id, role, joined_by) VALUES ($1, $2, 'report', 'model')", [event, row.id]);
+    await database.query("UPDATE evimed_frontier.items SET event_id = $1 WHERE id = $2", [event, row.id]);
+  }
+  await database.query("UPDATE evimed_frontier.items SET visible_at = visible_at WHERE id = $1", [post.id]);
+  // The next round hands the day to the mix again (an item re-scored, or published).
+  const more = await deliverNamed(plugin, { starter: { source_id: "m-stat", title: `${DISTINCT_TOPICS[5]} [score:20]` } });
+  await pipeline.processBatch();
+  const after = await item(await id("post"));
+  assert.equal(after.selected, false, "the arithmetic pick gave its place to the alert");
+  assert.equal(after.selected_rule, null);
+  assert.equal(String(after.same_event_item_id), String(alert.id), "and points at it");
+  assert.equal((await item(await id("alert"))).selected, true);
+  assert.ok((await changes(Number(post.id))).includes("same-event"));
+  assert.equal(pipeline.counters.supersededBySafety, 1);
+  void more;
+  await database.query("DELETE FROM evimed_frontier.events WHERE id = $1", [event]);
 });
 
 test("F12c: a published Class I recall carries class-i-recall, a safety notice the editor found to add a boxed warning carries boxed-warning, and nothing else does", options, async () => {

@@ -227,13 +227,13 @@ export function frontierBriefInstructions(genre) {
 export const FRONTIER_BRIEF_VERSION = `frontier-brief-2.${createHash("sha256")
   .update(`${BRIEF_CORE}\n${JSON.stringify(FRONTIER_BRIEF_FIELDS)}`).digest("hex").slice(0, 12)}`;
 
-const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要" });
+const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要", reports: "媒体报道摘编" });
 
 /**
  * What one call shows the model: the source, the date, the title (and its Chinese), and the reader text, its head when longer
  * than `FRONTIER_BRIEF_LIMITS.input`.
  * @param {{ sourceName: string, date?: string | null, titleRaw: string, titleZh?: string | null, text: string,
- *           kind: "body" | "abstract" | "excerpt" | "summary", post?: boolean }} input
+ *           kind: "body" | "abstract" | "excerpt" | "summary" | "reports", post?: boolean }} input
  */
 export function buildBriefInput({ sourceName, date = null, titleRaw, titleZh = null, text, kind, post = false }) {
   const body = String(text ?? "").trim();
@@ -410,4 +410,29 @@ export async function frontierWriteBrief(editor, input) {
 /** Every genre has a row (a genre added to the domain without one fails here, at import, not on a reader's page). */
 for (const genre of FRONTIER_GENRES) {
   if (!FRONTIER_BRIEF_FIELDS[genre]) throw new Error(`frontierBrief: no fields for genre ${genre}`);
+}
+
+/**
+ * The repair hook of the faithfulness check (c3-faith F2, `frontierFaith.mjs`): a brief already written, sent back to the writer
+ * once with what a comparison with the study's facts found named line by line, through the writer's own instructions and the
+ * checks of `verifyBrief`. The new brief when it has any field left, null when it does not (the caller then removes the fields that
+ * mismatch). Throws with the call's code when the call itself fails.
+ * @param {{ callJson: Function }} editor @param {Parameters<typeof buildBriefInput>[0] & { genre: string }} input
+ * @param {FrontierBrief} draft the brief as stored @param {string[]} lines what is wrong with it, one line each
+ * @returns {Promise<FrontierBrief | null>}
+ */
+export async function frontierRepairBrief(editor, input, draft, lines) {
+  const instructions = frontierBriefInstructions(input.genre);
+  if (!instructions) return null;
+  const modelInput = buildBriefInput(input);
+  const points = Object.fromEntries((draft.points ?? []).map((point) => [point.key, point.items ?? point.text ?? ""]));
+  const written = { points, ...(draft.quote ? { quote: { text: draft.quote.text, ...(draft.quote.zh ? { zh: draft.quote.zh } : {}) } } : {}) };
+  const answer = await editor.callJson([
+    { role: "system", content: instructions },
+    { role: "user", content: modelInput },
+    { role: "assistant", content: JSON.stringify(written) },
+    { role: "user", content: ["你上面的要点与原文对照后发现下面这些问题：", ...lines,
+      "请只修正这些问题，其余字段照旧；修正时仍遵守上面的全部规则；改不了的内容删去。重新输出完整的 JSON 对象，格式不变。"].join("\n") },
+  ], { maxTokens: BRIEF_MAX_TOKENS, timeoutMs: BRIEF_TIMEOUT_MS });
+  return verifyBrief(answer, { genre: input.genre, input: modelInput }).brief;
 }

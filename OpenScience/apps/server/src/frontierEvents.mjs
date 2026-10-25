@@ -111,6 +111,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import {
   DISPLAY_TIME_ZONE,
   FRONTIER_HEAT_BILINGUAL_FACTOR,
@@ -137,11 +138,22 @@ import {
   FRONTIER_GROUP_PAIR_INSTRUCTIONS,
   buildGroupInput,
   buildGroupPairInput,
+  frontierTextOverlap,
+  frontierTextTokens,
   validateGroupAnswer,
   validateGroupPair,
   verifyEventDigest,
 } from "./frontierEventGrouping.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
+import {
+  FRONTIER_RECLUSTER,
+  frontierMergeSelection,
+  frontierReclusterPairKey,
+  frontierReclusterPairs,
+  frontierReclusterPlan,
+  judgeReclusterPairs,
+  reclusterPlanEntry,
+} from "./frontierRecluster.mjs";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -197,6 +209,14 @@ const PAIR_MAX_TOKENS = 400;
 const PAIR_TIMEOUT_MS = 45_000;
 /** A round of clustering starts no new item after this long: the hot list waits behind it on the same chain. */
 const CLUSTER_ROUND_MS = 2 * MINUTE;
+/** The re-clustering sweep (`reclusterSweep`): its time, the events it reads, the reports of each it reads for candidates and for the model, and the pairs it remembers. */
+const RECLUSTER_ROUND_MS = 3 * MINUTE;
+const RECLUSTER_POOL = 3_000;
+const RECLUSTER_POOL_MEMBERS = 30_000;
+const RECLUSTER_DETAIL_MEMBERS = 40;
+const RECLUSTER_ANCHOR_VECTORS = 2;
+const RECLUSTER_NEIGHBOURS = 100;
+const RECLUSTER_SEEN_MAX = 5_000;
 /** The lexical stand-in reads at most this many of the window's items, newest first. */
 const LEXICAL_POOL = 20_000;
 /** Vector candidates read per item before they are folded into events. */
@@ -211,7 +231,7 @@ const PUBLIC_ID = /^[a-z0-9]{12,32}$/;
 /** What clustering reads of an item it places. */
 const PENDING_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.lang,
   i.source_type, i.evidence_type, i.identity_key, i.registry_ids, i.entity_keys, i.published_at, i.timeline_at, i.visible_at,
-  i.doi AS doi, i.pmid AS pmid, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS owner_entity,
+  i.doi AS doi, i.pmid AS pmid, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS owner_entity, ${FRONTIER_SOURCE_STREAM_COLUMNS},
   s.platform_produced AS platform_produced`;
 const CLUSTER_LOCK = "evimed-frontier-cluster";
 /** How an item link reads as an edge between the two items' events: the direction is from → to. */
@@ -688,37 +708,8 @@ export function otherWork(item, other) {
   return Boolean(pmid[0] && pmid[1] && pmid[0] !== pmid[1]);
 }
 
-/**
- * The words and character pairs two texts are compared by when there is no vector (AIHOT `lexicalSimilarity`, which compares
- * character pairs only — enough for Chinese text, but any two English sentences share most of their letter pairs): a run of
- * Chinese characters gives its character pairs, a run of Latin letters or digits gives itself as one word, lower-cased.
- * @param {unknown} text @returns {Set<string>}
- */
-export function frontierTextTokens(text) {
-  const tokens = new Set();
-  for (const run of String(text ?? "").toLowerCase().match(/[\u3400-\u9fff\uf900-\ufaff]+|[a-z0-9]+/g) ?? []) {
-    if (/^[a-z0-9]+$/.test(run)) {
-      if (run.length >= 2) tokens.add(run);
-      continue;
-    }
-    const characters = [...run];
-    if (characters.length === 1) tokens.add(run);
-    for (let index = 0; index + 1 < characters.length; index += 1) tokens.add(characters[index] + characters[index + 1]);
-  }
-  return tokens;
-}
-
-/**
- * How much of the shorter of two token sets the other holds (0–1; AIHOT's overlap over the smaller set).
- * @param {Set<string>} left @param {Set<string>} right
- */
-export function frontierTextOverlap(left, right) {
-  if (!left.size || !right.size) return 0;
-  const [small, large] = left.size <= right.size ? [left, right] : [right, left];
-  let shared = 0;
-  for (const token of small) if (large.has(token)) shared += 1;
-  return shared / small.size;
-}
+/** The words and character pairs two texts are compared by, and the overlap of two such sets (`frontierEventGrouping.mjs`, where the sweep reads them too). */
+export { frontierTextOverlap, frontierTextTokens };
 
 /** The text an item is compared by without a vector: its title and the start of its summary (AIHOT `reportText`). @param {any} item */
 export function frontierRecallText(item) {
@@ -789,7 +780,7 @@ export function frontierGroupPlan(candidates, decisions) {
  */
 function groupReport(row, { text = null } = {}) {
   return {
-    sourceName: frontierSourceDisplayName({ id: row.source_id ?? row.primary_source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+    sourceName: frontierSourceDisplayName({ id: row.source_id ?? row.primary_source_id, name: row.source_name, ownerEntity: row.owner_entity, access: row.source_access, journal: row.item_journal }),
     primary: frontierEventRole({ sourceType: row.source_type, evidenceType: row.evidence_type, platformProduced: row.platform_produced === true }) === "primary",
     titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, publishedAt: row.published_at ?? row.timeline_at,
     doi: row.doi, pmid: row.pmid, registryIds: row.registry_ids, evidenceType: row.evidence_type, milestone: frontierMilestone(row.identity_key), text,
@@ -921,7 +912,17 @@ export class FrontierEvents {
       lexicalRecalls: 0, regrouped: 0,
       // ct-mix 2026-10-24: news rewrites and X posts of a paper the merge rules unselected; Chinese 解读 the gate left beside the paper.
       mergeUnselected: 0, besidePaper: 0,
+      // c3-cluster 2026-10-25: the re-clustering sweep — runs, events it checked, pairs it asked about and what the model said, the
+      // second looks, what the code did (events folded in, links, picks that left 精选, merges refused because an event changed
+      // or a verdict vetoed them), and why a run ended early.
+      reclusterRuns: 0, reclusterAnchors: 0, reclusterPairs: 0, reclusterSame: 0, reclusterRelated: 0, reclusterDifferent: 0,
+      reclusterUnjudged: 0, reclusterSecondLooks: 0, reclusterSecondAgreed: 0, reclusterMerged: 0, reclusterLinks: 0,
+      reclusterPicksUnselected: 0, reclusterVetoed: 0, reclusterStale: 0, reclusterStopped: 0, reclusterFailures: 0,
     };
+    /** @type {Map<string, string>} pair key → the two events' report counts when it was judged: the sweep does not ask again until one changes */
+    this.reclusterSeen = new Map();
+    /** @type {Record<string, unknown> | null} */
+    this.lastRecluster = null;
     /** @type {{ at: string, ranking: any[] } | null} */
     this.lastHot = null;
     /** @type {string | null} */
@@ -1651,6 +1652,311 @@ export class FrontierEvents {
     }
   }
 
+  // ───────────────────────── re-clustering ─────────────────────────
+
+  /**
+   * The re-clustering sweep (c3-cluster 2026-10-25, `frontierRecluster.mjs` for the decisions): events whose last report is
+   * recent and that changed since they were last compared are paired with their neighbours — by code: a shared trial, identifier
+   * or drug, title words, vector similarity — and the model is asked, a batch of pairs at a time, whether each pair is one thing
+   * (`SAME`), related, or different; a `SAME` is asked once more on the pair alone. A confirmed `SAME` folds the newer event into
+   * the older through `#mergeInto`; the survivor then keeps one selected report (`#keepOnePick`), its digest is stale, its
+   * heat is counted again and the hot list is recomputed. A related pair is recorded as the `related` event link.
+   *
+   * Only while the day's budget is `ok`; every model call is made with no transaction and no lock held, and the merge is applied
+   * afterwards under the clustering lock, refused for an event that gained or lost a report (or was folded elsewhere) since the
+   * model read it. An event is stamped (`recluster_checked_at`) only when every pair it was in was judged; one with pairs beyond
+   * the cap, or ones the run ended before, is looked at first next time. A merged survivor is left unstamped: it is a new event.
+   * @param {{ maxPairs?: number }} [options] `maxPairs` pairs asked about in one run (`OPEN_SCIENCE_FRONTIER_RECLUSTER_MAX_PAIRS`; 0 is off)
+   */
+  async reclusterSweep({ maxPairs = Number(this.config.frontierReclusterMaxPairs ?? FRONTIER_RECLUSTER.maxPairs) } = {}) {
+    const summary = { anchors: 0, candidates: 0, pairs: 0, same: 0, related: 0, different: 0, unjudged: 0, merged: 0, links: 0, unselected: 0,
+      stopped: /** @type {string | null} */ (null) };
+    if (!(maxPairs > 0)) return { ...summary, stopped: "off" };
+    const capabilities = await this.ready();
+    if (!(await this.#modelAllowed())) { this.counters.reclusterStopped += 1; return { ...summary, stopped: "budget" }; }
+    const now = this.now();
+    const started = Date.now();
+    const deadline = started + RECLUSTER_ROUND_MS;
+    this.counters.reclusterRuns += 1;
+    try {
+      const anchorIds = ((await this.database.query(`SELECT e.id FROM evimed_frontier.events e
+        WHERE e.merged_into IS NULL AND e.last_at >= $1::timestamptz
+          AND (e.recluster_checked_at IS NULL OR (e.recluster_checked_at < $2::timestamptz AND EXISTS
+            (SELECT 1 FROM evimed_frontier.event_items ei WHERE ei.event_id = e.id AND ei.joined_at > e.recluster_checked_at)))
+        ORDER BY e.recluster_checked_at NULLS FIRST, e.last_at DESC, e.id LIMIT $3`,
+      [new Date(now.getTime() - FRONTIER_RECLUSTER.recentMs), new Date(now.getTime() - FRONTIER_RECLUSTER.recheckMs), FRONTIER_RECLUSTER.anchorLimit])).rows ?? [])
+        .map((row) => String(row.id));
+      summary.anchors = anchorIds.length;
+      this.counters.reclusterAnchors += anchorIds.length;
+      if (!anchorIds.length) return this.#reclusterDone(summary);
+      const poolEvents = (await this.database.query(`SELECT id, public_id, title_zh, digest_zh, first_at, last_at, entity_keys
+        FROM evimed_frontier.events WHERE merged_into IS NULL AND last_at >= $1::timestamptz ORDER BY last_at DESC, id LIMIT $2`,
+      [new Date(now.getTime() - FRONTIER_RECLUSTER.recentMs - FRONTIER_RECLUSTER.windowMs), RECLUSTER_POOL])).rows ?? [];
+      const poolIds = poolEvents.map((row) => String(row.id));
+      for (const id of anchorIds) if (!poolIds.includes(id)) poolIds.push(id);
+      const events = await this.#reclusterEvents(poolIds, poolEvents);
+      const byId = new Map(events.map((event) => [event.id, event]));
+      /** How many reports each event had when it was read: what a verdict is about (the detail read below holds more of a large event). */
+      const reportCounts = new Map(events.map((event) => [event.id, event.members.length]));
+      const anchors = anchorIds.map((id) => byId.get(id)).filter(/** @returns {event is NonNullable<typeof event>} */ (event) => Boolean(event));
+      const vectors = Boolean(capabilities.vector && this.embedder?.configured);
+      const { cosines, withVectors } = vectors ? await this.#reclusterCosines(anchorIds, poolIds, String(this.embedder.modelKey), now) : { cosines: new Map(), withVectors: null };
+      // Pairs not to ask: those with a link already, and those judged before when neither event has changed since.
+      const skip = new Set((await this.database.query(`SELECT from_event_id, to_event_id FROM evimed_frontier.event_links
+        WHERE from_event_id = ANY($1::bigint[]) OR to_event_id = ANY($1::bigint[])`, [anchorIds])).rows
+        ?.map((row) => frontierReclusterPairKey(row.from_event_id, row.to_event_id)) ?? []);
+      for (const [key, signature] of this.reclusterSeen) {
+        const [x, y] = key.split(":");
+        if (byId.has(x) && byId.has(y) && signature === `${reportCounts.get(x)}:${reportCounts.get(y)}`) skip.add(key);
+      }
+      const found = frontierReclusterPairs({ anchors, pool: events, cosines, linked: skip, vectors: withVectors, max: maxPairs });
+      summary.candidates = found.candidates;
+      const pairs = found.pairs;
+      summary.pairs = pairs.length;
+      this.counters.reclusterPairs += pairs.length;
+      /** Anchors with every pair judged, by the end. */
+      const checked = new Set(anchorIds.filter((id) => !found.truncated.has(id)));
+      if (pairs.length) {
+        await this.#reclusterDetail(pairs);
+        const stats = { calls: 0, failures: 0, secondLooks: 0, secondAgreed: 0 };
+        let checkedAt = 0;
+        let allowed = true;
+        const allow = async () => {
+          if (Date.now() > deadline) return false;
+          if (Date.now() - checkedAt > 20_000) { allowed = await this.#modelAllowed(); checkedAt = Date.now(); }
+          return allowed;
+        };
+        const { verdicts, stopped } = await judgeReclusterPairs({ callJson: (messages, limits) => this.editor.callJson(messages, limits), pairs,
+          timeZone: this.timeZone, allow, stats });
+        this.counters.reclusterSecondLooks += stats.secondLooks;
+        this.counters.reclusterSecondAgreed += stats.secondAgreed;
+        this.counters.reclusterFailures += stats.failures;
+        if (stopped) { summary.stopped = stopped; this.counters.reclusterStopped += 1; }
+        const known = new Set(anchorIds);
+        pairs.forEach((pair, index) => {
+          const verdict = verdicts[index];
+          const relation = verdict?.relation ?? null;
+          if (!relation) {
+            summary.unjudged += 1;
+            this.counters.reclusterUnjudged += 1;
+            for (const event of [pair.a, pair.b]) if (known.has(event.id)) checked.delete(event.id);
+            return;
+          }
+          if (relation === "SAME") { summary.same += 1; this.counters.reclusterSame += 1; }
+          else if (relation === "RELATED") { summary.related += 1; this.counters.reclusterRelated += 1; }
+          else { summary.different += 1; this.counters.reclusterDifferent += 1; }
+          // A SAME whose second look could not be made is asked again; every other verdict stands until an event changes.
+          if (relation === "SAME" && !verdict?.secondMade) { for (const event of [pair.a, pair.b]) if (known.has(event.id)) checked.delete(event.id); return; }
+          const key = frontierReclusterPairKey(pair.a.id, pair.b.id);
+          const [x, y] = key.split(":");
+          this.reclusterSeen.set(key, `${reportCounts.get(x)}:${reportCounts.get(y)}`);
+        });
+        if (this.reclusterSeen.size > RECLUSTER_SEEN_MAX) {
+          for (const key of [...this.reclusterSeen.keys()].slice(0, this.reclusterSeen.size - RECLUSTER_SEEN_MAX)) this.reclusterSeen.delete(key);
+        }
+        const plan = frontierReclusterPlan(pairs.map((pair, index) => reclusterPlanEntry(pair, verdicts[index])));
+        this.counters.reclusterVetoed += plan.vetoed;
+        if (plan.merges.length || plan.links.length) {
+          const applied = await this.#reclusterApply(plan, reportCounts, now);
+          Object.assign(summary, { merged: applied.merged, links: applied.links, unselected: applied.unselected });
+          for (const id of applied.survivors) checked.delete(id);
+        }
+      }
+      if (checked.size) {
+        await this.database.query(`UPDATE evimed_frontier.events SET recluster_checked_at = $2 WHERE id = ANY($1::bigint[]) AND merged_into IS NULL`,
+          [[...checked], now]);
+      }
+      // The hot list is counted again at once when events were folded: it is what a reader sees first (`computeHot` takes the lock itself).
+      if (summary.merged) await this.computeHot();
+      return this.#reclusterDone(summary);
+    } catch (error) {
+      this.lastError = codeOf(error);
+      this.counters.reclusterFailures += 1;
+      throw error;
+    }
+  }
+
+  /** @param {Record<string, any>} summary */
+  #reclusterDone(summary) {
+    this.lastRecluster = { at: this.now().toISOString(), ...summary };
+    return summary;
+  }
+
+  /**
+   * The events of the pool as the sweep reads them: the row, and its visible reports in the order they came.
+   * @param {string[]} ids @param {any[]} rows the event rows already read (others are read here)
+   * @returns {Promise<import("./frontierRecluster.mjs").FrontierReclusterEvent[]>}
+   */
+  async #reclusterEvents(ids, rows) {
+    const have = new Set(rows.map((row) => String(row.id)));
+    const missing = ids.filter((id) => !have.has(id));
+    const eventRows = missing.length ? [...rows, ...((await this.database.query(`SELECT id, public_id, title_zh, digest_zh, first_at, last_at, entity_keys
+      FROM evimed_frontier.events WHERE id = ANY($1::bigint[]) AND merged_into IS NULL`, [missing])).rows ?? [])] : rows;
+    const members = await this.#reclusterMembers(eventRows.map((row) => String(row.id)), { summaries: false, limit: RECLUSTER_POOL_MEMBERS });
+    return eventRows.map((row) => ({ id: String(row.id), publicId: row.public_id, title: row.title_zh, digest: row.digest_zh ?? null,
+      firstAt: row.first_at, lastAt: row.last_at, entityKeys: row.entity_keys ?? [], members: members.get(String(row.id)) ?? [] }));
+  }
+
+  /**
+   * The visible reports of events, oldest first, as the sweep describes them.
+   * @param {string[]} ids @param {{ summaries: boolean, limit?: number, perEvent?: number }} options `limit` rows in all, `perEvent` per event (the oldest)
+   * @returns {Promise<Map<string, import("./frontierRecluster.mjs").FrontierReclusterMember[]>>}
+   */
+  async #reclusterMembers(ids, { summaries, limit = Infinity, perEvent = Infinity }) {
+    /** @type {Map<string, any[]>} */
+    const byEvent = new Map();
+    if (!ids.length) return byEvent;
+    const rows = (await this.database.query(`SELECT * FROM (
+      SELECT ei.event_id, ei.role, i.id, i.title_zh, i.title_raw, ${summaries ? "i.summary_zh" : "NULL::text AS summary_zh"},
+        i.published_at, i.timeline_at, i.doi, i.pmid, i.registry_ids, i.identity_key, i.source_type, s.id AS source_id, s.name AS source_name,
+        s.owner_entity, s.platform_produced,
+        row_number() OVER (PARTITION BY ei.event_id ORDER BY i.timeline_at, i.id) AS rn
+      FROM evimed_frontier.event_items ei
+      JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+      JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+      WHERE ei.event_id = ANY($1::bigint[])) t
+      WHERE rn <= $2 ORDER BY timeline_at, id LIMIT ${Number.isFinite(limit) ? limit : 100_000}`, [ids, Number.isFinite(perEvent) ? perEvent : 1_000_000])).rows ?? [];
+    for (const row of rows) {
+      const list = byEvent.get(String(row.event_id)) ?? [];
+      list.push({ id: String(row.id), titleZh: row.title_zh, titleRaw: row.title_raw, summaryZh: row.summary_zh,
+        sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+        primary: row.role === "primary",
+        publishedAt: row.published_at ?? row.timeline_at, doi: row.doi, pmid: row.pmid,
+        registryIds: frontierClusterKeys(row).map((key) => key.slice(4)) });
+      byEvent.set(String(row.event_id), list);
+    }
+    return byEvent;
+  }
+
+  /**
+   * The cosine between two events: the best of their reports', for the pairs at 0.6 or more (what a candidate rule reads). The
+   * anchor side is its two newest reports, each asking the vector index for its nearest neighbours; the pool side is whichever of
+   * those belong to the pool's events published in the window.
+   * @param {string[]} anchorIds @param {string[]} poolIds @param {string} modelKey @param {Date} now
+   * @returns {Promise<{ cosines: Map<string, number>, withVectors: Set<string> }>}
+   */
+  async #reclusterCosines(anchorIds, poolIds, modelKey, now) {
+    const since = new Date(now.getTime() - FRONTIER_RECLUSTER.recentMs - FRONTIER_RECLUSTER.windowMs - DAY);
+    // Each anchor report asks the vector index for its nearest neighbours (an index scan per report, not a distance to every vector
+    // of the pool: that cross product took 30–60 s on 9,000 reports), and the neighbours are kept when they belong to a pool event.
+    // The index returns what its search list holds, so recall is bounded by `hnsw.ef_search`; the other candidate rules do not depend on it.
+    const rows = await this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query(`SET LOCAL hnsw.ef_search = ${RECLUSTER_NEIGHBOURS}`);
+      return (await client.query(`WITH a AS (
+          SELECT event_id, embedding FROM (
+            SELECT ei.event_id, v.embedding, row_number() OVER (PARTITION BY ei.event_id ORDER BY i.timeline_at DESC, i.id DESC) AS rn
+            FROM evimed_frontier.event_items ei
+            JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+            JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
+            WHERE ei.event_id = ANY($1::bigint[])) t WHERE rn <= ${RECLUSTER_ANCHOR_VECTORS})
+        SELECT a.event_id AS a_id, ei.event_id AS b_id, max(n.cosine) AS cosine
+        FROM a
+        CROSS JOIN LATERAL (
+          SELECT v.item_id, 1 - (v.embedding <=> a.embedding) AS cosine FROM evimed_frontier.item_vectors v
+          WHERE v.model_key = $2 ORDER BY v.embedding <=> a.embedding LIMIT ${RECLUSTER_NEIGHBOURS}) n
+        JOIN evimed_frontier.event_items ei ON ei.item_id = n.item_id
+        JOIN evimed_frontier.items i ON i.id = n.item_id AND i.state = 'published' AND i.visible_at >= $4::timestamptz
+        WHERE ei.event_id = ANY($3::bigint[]) AND ei.event_id <> a.event_id AND n.cosine >= 0.6
+        GROUP BY a.event_id, ei.event_id`,
+      [anchorIds, modelKey, poolIds, since])).rows ?? [];
+    });
+    /** @type {Map<string, number>} */
+    const cosines = new Map();
+    for (const row of rows) {
+      const key = frontierReclusterPairKey(row.a_id, row.b_id);
+      cosines.set(key, Math.max(cosines.get(key) ?? -1, Number(row.cosine)));
+    }
+    const withVectors = new Set(((await this.database.query(`SELECT DISTINCT ei.event_id FROM evimed_frontier.event_items ei
+      JOIN evimed_frontier.item_vectors v ON v.item_id = ei.item_id AND v.model_key = $2 WHERE ei.event_id = ANY($1::bigint[])`,
+    [poolIds, modelKey])).rows ?? []).map((row) => String(row.event_id)));
+    return { cosines, withVectors };
+  }
+
+  /**
+   * Give the events of the chosen pairs everything the model is shown: all their reports, with summaries (a pair is asked about
+   * once, so the more costly read is made for these only).
+   * @param {Array<{ a: any, b: any }>} pairs
+   */
+  async #reclusterDetail(pairs) {
+    const ids = [...new Set(pairs.flatMap((pair) => [pair.a.id, pair.b.id]))];
+    const detail = await this.#reclusterMembers(ids, { summaries: true, perEvent: RECLUSTER_DETAIL_MEMBERS });
+    for (const pair of pairs) for (const event of [pair.a, pair.b]) {
+      const members = detail.get(event.id);
+      if (members?.length) event.members = members;
+    }
+  }
+
+  /**
+   * Apply a plan under the clustering lock: each merge group folds into its oldest event unless an event of it changed since the
+   * model read it; the survivor keeps one pick, is counted again and is unstamped; each link is written once.
+   * @param {{ merges: Array<{ survivor: string, absorbed: string[] }>, links: Array<{ from: string, to: string }> }} plan
+   * @param {Map<string, number>} expected report counts the model was shown, by event @param {Date} now
+   * @returns {Promise<{ merged: number, links: number, unselected: number, survivors: string[] }>}
+   */
+  async #reclusterApply(plan, expected, now) {
+    const named = [...new Set([...plan.merges.flatMap((merge) => [merge.survivor, ...merge.absorbed]), ...plan.links.flatMap((link) => [link.from, link.to])])];
+    return this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [CLUSTER_LOCK]);
+      const resolved = await this.#resolveEvents(client, named);
+      const live = (await this.#members(client, [...new Set([...resolved.values()].map((event) => event.id))]));
+      const counts = (/** @type {string} */ id) => live.get(id)?.length ?? 0;
+      const same = (/** @type {string} */ id) => resolved.get(id)?.id === id && counts(id) === expected.get(id);
+      const result = { merged: 0, links: 0, unselected: 0, survivors: /** @type {string[]} */ ([]) };
+      for (const merge of plan.merges) {
+        const group = [merge.survivor, ...merge.absorbed];
+        if (!group.every(same)) { this.counters.reclusterStale += 1; continue; }
+        for (const absorbed of merge.absorbed) await this.#mergeInto(client, merge.survivor, absorbed, now);
+        this.counters.reclusterMerged += merge.absorbed.length;
+        result.merged += merge.absorbed.length;
+        const unselected = await this.#applyMergeRules(client, merge.survivor) + await this.#keepOnePick(client, merge.survivor);
+        result.unselected += unselected;
+        const rows = (await this.#members(client, [merge.survivor])).get(merge.survivor) ?? [];
+        if (rows.length) {
+          await client.query("UPDATE evimed_frontier.events SET latest_zh = $2, recluster_checked_at = NULL WHERE id = $1", [merge.survivor, latestText(rows[rows.length - 1])]);
+        }
+        await this.#refresh(client, [merge.survivor], now);
+        result.survivors.push(merge.survivor);
+      }
+      for (const link of plan.links) {
+        const [from, to] = [resolved.get(link.from)?.id, resolved.get(link.to)?.id];
+        if (!from || !to || from === to) continue;
+        const inserted = await client.query(`INSERT INTO evimed_frontier.event_links (from_event_id, to_event_id, relation, asserted_by)
+          SELECT $1, $2, 'related', 'model' WHERE NOT EXISTS (SELECT 1 FROM evimed_frontier.event_links
+            WHERE (from_event_id = $1 AND to_event_id = $2) OR (from_event_id = $2 AND to_event_id = $1))
+          ON CONFLICT DO NOTHING`, [from, to]);
+        result.links += inserted.rowCount ?? 0;
+      }
+      this.counters.reclusterLinks += result.links;
+      if (result.merged || result.links || result.unselected) await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
+      return result;
+    });
+  }
+
+  /**
+   * One selected report an event keeps (`frontierMergeSelection`): the others that an arithmetic rule selected leave 精选, each
+   * naming the one that stays, with an `item_changes` row. The caller holds the clustering lock and moves the content version.
+   * @param {any} client @param {string} eventId @returns {Promise<number>} how many left
+   */
+  async #keepOnePick(client, eventId) {
+    const rows = (await client.query(`SELECT i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert,
+        i.lane, i.lang, i.title_raw, i.selected, i.selected_rule, i.score_total
+      FROM evimed_frontier.event_items ei
+      JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+      JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+      WHERE ei.event_id = $1 ORDER BY i.id`, [eventId])).rows ?? [];
+    const picks = rows.map((row) => ({ id: String(row.id), genre: frontierMixGenre(row), evidenceType: row.evidence_type ?? null,
+      zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw), selected: row.selected === true, rule: row.selected_rule ?? null,
+      safety: row.safety_alert === true, score: row.score_total == null ? null : Number(row.score_total) }));
+    const { unselect } = frontierMergeSelection(picks);
+    for (const { id, namedId } of unselect) {
+      await client.query(`UPDATE evimed_frontier.items SET selected = false, selected_rule = NULL, selected_at = NULL, same_event_item_id = $2,
+          updated_at = clock_timestamp() WHERE id = $1 AND selected`, [id, namedId]);
+      await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'same-event')", [id]);
+    }
+    this.counters.reclusterPicksUnselected += unselect.length;
+    return unselect.length;
+  }
+
   // ───────────────────────── hot list ─────────────────────────
 
   /**
@@ -1972,7 +2278,7 @@ export class FrontierEvents {
 
   /** The reports a digest is written from, primary sources first. @param {string} eventId */
   async #digestReports(eventId) {
-    const rows = (await this.database.query(`SELECT ei.role, s.id AS source_id, s.name AS source_name, s.owner_entity, s.source_type,
+    const rows = (await this.database.query(`SELECT ei.role, s.id AS source_id, s.name AS source_name, s.owner_entity, ${FRONTIER_SOURCE_STREAM_COLUMNS}, s.source_type,
         i.published_at, i.timeline_at, i.title_raw, i.title_zh, i.summary_zh, t.abstract_raw, t.body_excerpt
       FROM evimed_frontier.event_items ei
       JOIN evimed_frontier.items i ON i.id = ei.item_id
@@ -1982,7 +2288,7 @@ export class FrontierEvents {
       ORDER BY (ei.role = 'primary') DESC, i.timeline_at DESC, i.id DESC LIMIT ${DIGEST_REPORTS}`, [eventId])).rows ?? [];
     return rows.map((row) => ({
       // The digest is prose a reader reads: the institution, never the feed (plan 2026-09-23 §6.5 #5).
-      role: row.role, sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+      role: row.role, sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity, access: row.source_access, journal: row.item_journal }),
       sourceTypeLabel: null, publishedAt: iso(row.published_at ?? row.timeline_at),
       titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, text: row.abstract_raw || row.body_excerpt || null,
     }));
@@ -2075,7 +2381,7 @@ export class FrontierEvents {
       const row = frontierRepresentative(reports.get(id) ?? []);
       return row ? [{
         eventId: String(row.event_public_id), itemId: String(row.public_id), title: String(row.title_zh || row.title_raw),
-        sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity, access: row.source_access, journal: row.item_journal }),
         at: new Date(row.timeline_at).toISOString(), relation: /** @type {const} */ ("follows"),
         position: /** @type {"earlier" | "later"} */ (new Date(row.event_first_at).getTime() < new Date(event.first_at).getTime() ? "earlier" : "later"),
       }] : [];
@@ -2085,6 +2391,6 @@ export class FrontierEvents {
   }
 
   status() {
-    return { lastError: this.lastError, lastHot: this.lastHot, counters: { ...this.counters } };
+    return { lastError: this.lastError, lastHot: this.lastHot, lastRecluster: this.lastRecluster, counters: { ...this.counters } };
   }
 }

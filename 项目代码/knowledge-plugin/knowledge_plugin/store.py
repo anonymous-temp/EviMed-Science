@@ -34,7 +34,7 @@ from datetime import datetime, timedelta
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 
-from . import policy
+from . import policy, text_policy
 from .db import lock_seq
 from .model import (ENRICHMENT_TYPES, FETCHED_FROM, NEUTRAL_DETAILS, OPEN_ACCESS, TEXT_KINDS, TRIAL_FACT_TYPES,
                     EntryTextResult)
@@ -302,16 +302,16 @@ TEXT_REFRESH_GRACE = timedelta(days=1)
 _COUNTRY = re.compile(r"^[A-Z]{2}$")
 TEXT_RETRY_DEFAULT_S = 6 * 3600
 TEXT_RETRY_MIN_S = 15 * 60
-TEXT_RETRY_MAX_S = 12 * 3600
+TEXT_RETRY_MAX_S = 24 * 3600      # a top journal's paper older than a week is asked daily (``text_policy.retry_delay_s``)
 
 
 def text_deadline(job: dict, now: datetime) -> datetime:
     """When enrichment stops retrying: fourteen days after the entry was first seen (plan 10.3.4 — the
     same clock the readers' own rule uses; five until 2026-10-22), or a day after an operator's refresh of an older
-    entry."""
+    entry. A top journal's research paper waits twenty-one days (``text_policy``)."""
     first_seen = job.get("first_seen_at") or now
     requested = job.get("text_requested_at") or now
-    return max(first_seen + TEXT_HORIZON, requested + TEXT_REFRESH_GRACE)
+    return max(first_seen + text_policy.horizon(job, TEXT_HORIZON), requested + TEXT_REFRESH_GRACE)
 
 
 async def entry_row(conn: AsyncConnection, entry_id: str) -> dict | None:
@@ -353,21 +353,24 @@ async def claim_texts(conn: AsyncConnection, limit: int, now: datetime, lease_s:
             """WITH due AS (
                  SELECT t.entry_id FROM evimed_knowledge.entry_texts t
                    JOIN evimed_knowledge.entries e ON e.entry_id = t.entry_id
+                   JOIN evimed_knowledge.sources s ON s.id = e.source_id
                   WHERE (e.text_status = 'pending'
                          OR (e.text_status = 'available' AND (e.doi IS NOT NULL OR e.pmid IS NOT NULL)))
                     AND t.next_attempt_at <= %s
-                  ORDER BY t.next_attempt_at LIMIT %s FOR UPDATE OF t SKIP LOCKED)
+                  ORDER BY (s.source_type = 'journal' AND s.authority >= %s) DESC, t.next_attempt_at LIMIT %s FOR UPDATE OF t SKIP LOCKED)
                UPDATE evimed_knowledge.entry_texts t SET next_attempt_at = %s
                  FROM due WHERE t.entry_id = due.entry_id
                RETURNING t.entry_id, t.attempts, t.paid_attempts""",
-            (now, limit, now + timedelta(seconds=lease_s)),
+            (now, text_policy.MIN_AUTHORITY, limit, now + timedelta(seconds=lease_s)),
         )).fetchall()
     jobs = []
     for row in rows:
         joined = await (await conn.execute(
             f"""SELECT {', '.join('e.' + c.strip() for c in ENTRY_COLUMNS.split(','))},
                        s.access AS source_access, s.egress AS source_egress, s.source_type AS source_type,
-                       s.config AS source_config
+                       s.config AS source_config, s.authority AS source_authority,
+                       (SELECT t.enrichment->'publication_types' FROM evimed_knowledge.entry_texts t
+                         WHERE t.entry_id = e.entry_id) AS known_publication_types
                   FROM evimed_knowledge.entries e JOIN evimed_knowledge.sources s ON s.id = e.source_id
                  WHERE e.entry_id = %s""",
             (row["entry_id"],),
@@ -456,6 +459,37 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
         )
         await conn.execute("UPDATE evimed_knowledge.entries SET text_status = %s WHERE entry_id = %s", (status, job["entry_id"]))
     return status
+
+
+async def reopen_top_journal_texts(conn: AsyncConnection, now: datetime, *, limit: int = 500) -> int:
+    """Ask again the top journals' papers the 14-day rule gave up on (c3-primary, 2026-10-25): an entry that ended
+    ``unavailable`` on ``text_horizon_passed`` and is still inside the longer horizon (``text_policy``) goes back to
+    ``pending`` and is due at once, once — its next ending carries the note again but is past the longer horizon, so the
+    sweep does not take it again. Not one PubMed typed as something with no abstract, nor one whose PubMed record is final.
+    Returns how many were reopened."""
+    rows = await (await conn.execute(
+        """WITH due AS (
+             SELECT e.entry_id FROM evimed_knowledge.entries e
+               JOIN evimed_knowledge.entry_texts t ON t.entry_id = e.entry_id
+               JOIN evimed_knowledge.sources s ON s.id = e.source_id
+              WHERE e.text_status = 'unavailable' AND s.source_type = 'journal' AND s.authority >= %(authority)s
+                AND (e.doi IS NOT NULL OR e.pmid IS NOT NULL)
+                AND e.first_seen_at > %(since)s AND e.first_seen_at <= %(until)s
+                AND t.last_error LIKE %(ended)s AND t.last_error NOT LIKE %(complete)s
+                AND t.abstract IS NULL AND t.body_text IS NULL AND t.body_excerpt IS NULL
+                AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(coalesce(t.enrichment->'publication_types', '[]'::jsonb)) x
+                                 WHERE lower(x) = ANY(%(types)s))
+              ORDER BY e.first_seen_at DESC LIMIT %(limit)s FOR UPDATE OF t, e SKIP LOCKED)
+           UPDATE evimed_knowledge.entry_texts t SET next_attempt_at = %(now)s
+             FROM due WHERE t.entry_id = due.entry_id RETURNING t.entry_id""",
+        {"authority": text_policy.MIN_AUTHORITY, "since": now - text_policy.EXTENDED_HORIZON, "until": now - TEXT_HORIZON,
+         "ended": "%text_horizon_passed%", "complete": "%pubmed_record_complete%",
+         "types": sorted(text_policy.NON_RESEARCH_TYPES), "limit": limit, "now": now},
+    )).fetchall()
+    ids = [row["entry_id"] for row in rows]
+    if ids:
+        await conn.execute("UPDATE evimed_knowledge.entries SET text_status = 'pending' WHERE entry_id = ANY(%s)", (ids,))
+    return len(ids)
 
 
 async def text_failure(conn: AsyncConnection, job: dict, code: str, now: datetime, *, retry_s: int = 3600) -> str:

@@ -2183,6 +2183,11 @@ def _dispatch(name, arguments, execution_context=None):
                 stop_reason, next_action = "invalid_input", "Correct the named field and call again, or answer without the feed."
             elif error.retryable:
                 stop_reason, next_action = "retry", "Retry once, then answer without the feed."
+            elif error.code == "frontier_search_item_not_found":
+                # The conversation was opened from an item the feed has since withdrawn: its link is still the way to the original.
+                stop_reason, next_action = "unsupported", (
+                    "Read the original from the link the conversation has, or search the feed by keyword."
+                )
             else:
                 stop_reason, next_action = "unsupported", (
                     "Answer without the feed: use the literature, guideline and regulatory tools, or settled knowledge."

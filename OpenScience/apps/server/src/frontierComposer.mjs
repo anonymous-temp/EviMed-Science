@@ -6,6 +6,7 @@
  * this module decides which of its loops are due and runs them:
  *
  *   cluster   every 30 s   newly published items into events
+ *   recluster every 10 min events that are one thing, folded together (c3-cluster)
  *   hot       every 10 min the hot list: heat, counts, snapshot, hot_version
  *   digests   every 2 min  owed event digests (at most three a round)
  *   daily     every minute today's issue once the daily time has passed
@@ -14,6 +15,7 @@
  *   weeklyPush every minute bounded recipient queue
  *   monthly   every 10 min the last complete month, once (frontierMonthly.mjs)
  *   safety    every 30 s   bounded change scan
+ *   follows   every minute typed follows scan the items published since their last scan (frontierFollowMatches.mjs)
  *   notices   every 10 s   leased inbox deliveries
  *   profiles  every 5 min  readers' profiles (a day old) and rankings (6 h old)
  *
@@ -32,7 +34,8 @@
  * - **Loops are ordered where one reads another.** The digests read the hot
  *   list, which reads the events clustering just made, so those three run in
  *   that order in one chain; the daily, the push and the profiles run beside
- *   them, each chain on its own. The push follows the daily, so the minute an issue is written is
+ *   them, each chain on its own. The re-clustering sweep follows the clustering and precedes the hot list, which
+ *   reads the events it folds together. The push follows the daily, so the minute an issue is written is
  *   the minute the first readers are told.
  * - **Each loop is bounded and fails alone.** A loop that fails is recorded
  *   with its named code and tried at its next due time; the others go on. The
@@ -52,6 +55,7 @@ const MINUTE = 60 * SECOND;
 /** How often each loop runs (plan §6.4: the hot list every ten minutes). */
 export const FRONTIER_COMPOSER_CADENCES = Object.freeze({
   cluster: 30 * SECOND,
+  recluster: 10 * MINUTE,
   hot: 10 * MINUTE,
   digests: 2 * MINUTE,
   daily: MINUTE,
@@ -61,6 +65,7 @@ export const FRONTIER_COMPOSER_CADENCES = Object.freeze({
   weeklyPush: MINUTE,
   monthly: 10 * MINUTE,
   safety: 30 * SECOND,
+  follows: MINUTE,
   notices: 10 * SECOND,
 });
 const LOOPS = Object.freeze(Object.keys(FRONTIER_COMPOSER_CADENCES));
@@ -79,18 +84,20 @@ function codeOf(error) {
 
 export class FrontierComposer {
   /**
-   * @param {{ events?: any, daily?: any, profiles?: any, weekly?: any, monthly?: any, notifications?: any, canRun?: () => boolean, now?: () => Date,
+   * @param {{ events?: any, daily?: any, profiles?: any, weekly?: any, monthly?: any, notifications?: any, follows?: any, canRun?: () => boolean, now?: () => Date,
    *           report?: (loop: string, code: string) => void, cadences?: Partial<Record<string, number>> }} dependencies
    *   `events` a `FrontierEvents`, `daily` a `FrontierDaily`, `profiles` a
    *   `FrontierProfiles`; each optional — an absent one's loops never run.
    */
-  constructor({ events = null, daily = null, profiles = null, weekly = null, monthly = null, notifications = null, canRun = () => true, now = () => new Date(), report = () => {}, cadences = {} } = {}) {
+  constructor({ events = null, daily = null, profiles = null, weekly = null, monthly = null, notifications = null, follows = null, canRun = () => true, now = () => new Date(), report = () => {}, cadences = {} } = {}) {
     this.events = events;
     this.daily = daily;
     this.profiles = profiles;
     this.weekly = weekly;
     this.monthly = monthly;
     this.notifications = notifications;
+    /** The typed follows' matcher (`FrontierFollowWatch`, c3-watch); its `sweep` is the `follows` loop. */
+    this.follows = follows;
     this.canRun = canRun;
     this.now = now;
     this.report = report;
@@ -141,6 +148,8 @@ export class FrontierComposer {
     /** @type {unknown[]} */
     const failures = [];
     if (this.events && this.#due("cluster")) failures.push(await this.#run("cluster", () => this.events.clusterPending()));
+    // Before the hot list, which it recounts when it folded events together (c3-cluster 2026-10-25).
+    if (this.events && this.#due("recluster")) failures.push(await this.#run("recluster", () => this.events.reclusterSweep()));
     if (this.events && this.#due("hot")) failures.push(await this.#run("hot", () => this.events.computeHot()));
     if (this.events && this.#due("digests")) failures.push(await this.#run("digests", () => this.events.writeDigests()));
     return failures.find(Boolean) ?? null;
@@ -166,6 +175,7 @@ export class FrontierComposer {
     if (this.monthly && this.#due("monthly")) failures.push(await this.#run("monthly", () => this.monthly.runDue()));
     if (this.notifications && this.#due("weeklyPush")) failures.push(await this.#run("weeklyPush", () => this.notifications.queueWeekly()));
     if (this.notifications && this.#due("safety")) failures.push(await this.#run("safety", () => this.notifications.scanSafety()));
+    if (this.follows && this.#due("follows")) failures.push(await this.#run("follows", () => this.follows.sweep()));
     if (this.notifications && this.#due("notices")) failures.push(await this.#run("notices", () => this.notifications.deliverDue()));
     return failures.find(Boolean) ?? null;
   }
@@ -237,6 +247,7 @@ export class FrontierComposer {
       weekly: this.weekly?.status?.() ?? null,
       monthly: this.monthly?.status?.() ?? null,
       notifications: this.notifications?.status?.() ?? null,
+      follows: this.follows?.status?.() ?? null,
     };
   }
 }
