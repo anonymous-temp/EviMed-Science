@@ -28,7 +28,7 @@ test("X-Subject is an opaque identifier: printable, bounded, and never a name", 
   }
 });
 
-test("an institution's doctors are deleted index first, with the account hooks, and nothing that is not a subject is touched", async () => {
+test("an institution's doctors are deleted engine first, then the index, with the account hooks, and nothing that is not a subject is touched", async () => {
   const steps = [];
   const accounts = new Map([
     ["subj_a", { id: "subj_a", authType: "subject" }],
@@ -50,7 +50,7 @@ test("an institution's doctors are deleted index first, with the account hooks, 
         steps.push(["deleteUser", user.id]);
       },
     },
-    memorySubstrate: { async forgetUser(id) { steps.push(["forgetIndex", id]); } },
+    nativeMemory: { async erase(id) { steps.push(["eraseEngine", id]); } },
     memoryIndexing: {
       async lockAccountDeletion(id) { steps.push(["lockIndex", id]); },
       async prepareAccountDeletion(id, generation) { steps.push(["purgeIndex", id, generation]); },
@@ -63,7 +63,7 @@ test("an institution's doctors are deleted index first, with the account hooks, 
   assert.equal(deleted, 1);
   assert.deepEqual(steps, [
     ["list", "hospital-a"],
-    ["forgetIndex", "subj_a"],
+    ["eraseEngine", "subj_a"],
     ["lockIndex", "subj_a"],
     ["purgeIndex", "subj_a", "g1"],
     ["prepareCapsules", "subj_a"],

@@ -5,48 +5,35 @@
  * This is the gate for adopting a recall index. It is not the end-to-end
  * question — `evals/method-quality/configs/memory-ablation-v1.json` asks
  * whether memory changes a delivered package — but it is the cheap one, and a
- * provider that cannot win here cannot win there either.
+ * provider that cannot win here cannot win there either. Two modes remain
+ * (the third, the platform's own records recall behind `memorySubstrate`, was deleted with the legacy
+ * memory engine on 2026-10-25; its results are in git history).
  *
- * Both arms answer the same twelve queries over the same three hundred
- * records. The `builtin` arm is the shipped term matcher and needs nothing
- * deployed. The `openviking` arm needs a reachable server; it is seeded from
- * this same corpus first, so neither arm sees anything the other does not.
+ * `--mode capsule` (the default) asks the question of capsule facts, whose fallback is not a term matcher but the lexical
+ * PostgreSQL search `ProductDocuments.search` runs — a whole-query substring match, so it answers nothing at all to a
+ * reworded question. The arms are the two call paths, not two servers: `builtin` is that lexical search, `openviking` the
+ * index, seeded through the real capsule URI layout so that what is measured is what production would recall. The same
+ * twelve questions are asked over the same corpus in both.
  *
- *   node evals/memory-recall/run_recall_eval.mjs --arm builtin
- *   node evals/memory-recall/run_recall_eval.mjs --arm openviking --url http://127.0.0.1:1933 --seed-index
- *
- * The `native` arm is OpenViking's own engine (2026-10-13): the corpus is stored the way a conversation stores it — the records
- * stated in the person's words, a session per group, a commit, the engine's extraction writing the files — and recalled the way
- * the memory plugin recalls, through the memory gateway's `search` (`mode: context`, the gateway rewriting the request). The
- * engine merges and rewrites, so a hit is a returned entry whose text carries the gold record's statement whole; the run
- * reports how many gold records the engine kept verbatim beside the recall, because a record the write policy left out
- * cannot be recalled by any ranker. `--seed-index` stores the corpus first (about one extraction per twelve thousand
- * characters); `--user` names the throwaway account, and `--key-file` the engine's root key.
- *
- * `--seed-mode files` writes each record straight into the engine as a memory file instead, so that only the engine's retrieval
- * is measured and its write policy is not: this corpus is the legacy store's (292 of its 300 records are analysis findings no
- * person said about themselves), which the engine's templates rightly decline to keep. The files have no memory type and no
- * tags, as every file written this way does (`lab/memory/RESULTS.md` §3); retrieval does not read them.
- *
- *   node evals/memory-recall/run_recall_eval.mjs --arm native --url http://127.0.0.1:19330 --key-file <root key file> \
- *     --seed-index --label native-v0.5.0 --out evals/memory-recall/results/$(date +%F)-native.json
- *
- * `--label` names a run in its own results, because the arm no longer says
- * what was measured: two `openviking` runs against servers configured with
- * different embedders are different arms, and a comparison whose rows are both
- * called `openviking` is one nobody can read a month later.
- *
- *   node evals/memory-recall/run_recall_eval.mjs --arm openviking --url ... --label qwen
- *
- * `--mode capsule` asks the same question of the other recall path: capsule
- * facts, whose fallback is not the term matcher but the lexical PostgreSQL
- * search `ProductDocuments.search` runs — a whole-query substring match, so it
- * answers nothing at all to a reworded question. The arms are the two call
- * paths, not two servers, and the index arm goes through the real capsule URI
- * layout so that what is measured is what production would recall.
- *
+ *   node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm builtin
  *   node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm openviking \
  *     --url http://127.0.0.1:1933 --seed-index --label qwen-capsule
+ *
+ * `--mode engine` is OpenViking's own memory engine (2026-10-13), the arm a native account's memory runs on: the three hundred
+ * records of `corpus.json` are written into the engine as memory files (`--seed-index`; the files have no memory type and no
+ * tags, as every file written this way does, and retrieval does not read them), and the same twelve questions are asked the
+ * way the memory plugin asks, through the memory gateway's `search` (`mode: context`, the gateway rewriting the request). The
+ * engine merges and rewrites, so a hit is a returned entry whose text carries the gold record's statement whole. `--user`
+ * names the throwaway account, and `--key-file` the engine's root key. (Until 2026-10-25 the corpus could also be stored the way
+ * a conversation stores it, through a migration planner that went with the legacy engine; the corpus is that engine's, which is
+ * why 292 of its 300 records are analysis findings no person said about themselves.)
+ *
+ *   node evals/memory-recall/run_recall_eval.mjs --mode engine --url http://127.0.0.1:19330 --key-file <root key file> \
+ *     --seed-index --label native-v0.5.0 --out evals/memory-recall/results/$(date +%F)-native.json
+ *
+ * `--label` names a run in its own results, because the arm no longer says what was measured: two `openviking` runs against
+ * servers configured with different embedders are different arms, and a comparison whose rows are both called `openviking` is
+ * one nobody can read a month later.
  *
  * The key, if the server needs one, comes from OPEN_SCIENCE_OPENVIKING_API_KEY
  * or its _FILE form. It is never written to the results.
@@ -60,11 +47,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../..");
 const serverSrc = path.join(repoRoot, "apps/server/src");
 
-const { OpenVikingClient, capsuleMemoryRoot, capsuleFactUri, memoryUri, parseCapsuleFactUri } =
+const { OpenVikingClient, capsuleMemoryRoot, capsuleFactUri, parseCapsuleFactUri } =
   await import(path.join(serverSrc, "openVikingClient.mjs"));
-const { MemorySubstrate } = await import(path.join(serverSrc, "memorySubstrate.mjs"));
 const { MemoryRerank } = await import(path.join(serverSrc, "memoryRerank.mjs"));
-const { DURABLE_RECALL_KINDS, recallContent, searchTokens } = await import(path.join(serverSrc, "memoryRecallPolicy.mjs"));
 
 /** The control-plane reranker, or nothing.
  *
@@ -86,7 +71,7 @@ async function buildRerank(options) {
 }
 
 function parseArguments(argv) {
-  const options = { mode: "record", arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "", rerank: false, keyFile: "", seedMode: "conversation" };
+  const options = { mode: "capsule", arm: "", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "", rerank: false, keyFile: "" };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
@@ -97,7 +82,6 @@ function parseArguments(argv) {
     else if (flag === "--limit") { options.limit = Number(value); index += 1; }
     else if (flag === "--user") { options.user = value; index += 1; }
     else if (flag === "--key-file") { options.keyFile = value; index += 1; }
-    else if (flag === "--seed-mode") { options.seedMode = value; index += 1; }
     else if (flag === "--out") { options.out = value; index += 1; }
     else if (flag === "--seed-index") options.seedIndex = true;
     // The third arm. Reranking happens in the control plane, not in the index,
@@ -107,11 +91,14 @@ function parseArguments(argv) {
     else if (flag === "--rerank") options.rerank = true;
     else throw new Error(`unknown argument ${flag}`);
   }
-  if (!["record", "capsule"].includes(options.mode)) throw new Error(`unknown mode ${options.mode}`);
-  if (!["builtin", "openviking", "native"].includes(options.arm)) throw new Error(`unknown arm ${options.arm}`);
+  if (!["capsule", "engine"].includes(options.mode)) throw new Error(`unknown mode ${options.mode}`);
+  // The engine mode has one arm, the engine itself; the capsule mode has the two call paths.
+  if (options.mode === "engine") {
+    if (options.arm && options.arm !== "native") throw new Error("--mode engine measures the engine: --arm native");
+    options.arm = "native";
+  } else if (!options.arm) options.arm = "builtin";
+  if (options.mode === "capsule" && !["builtin", "openviking"].includes(options.arm)) throw new Error(`unknown arm ${options.arm}`);
   if (options.arm !== "builtin" && !options.url) throw new Error(`--url is required for the ${options.arm} arm`);
-  if (options.arm === "native" && options.mode !== "record") throw new Error("the native arm recalls research memory: --mode record");
-  if (!["conversation", "files"].includes(options.seedMode)) throw new Error(`unknown seed mode ${options.seedMode}`);
   if (options.rerank && options.arm !== "openviking") throw new Error("--rerank reorders index candidates, so it needs --arm openviking");
   // Free-form on purpose: what distinguishes two runs of one arm is whatever
   // the operator changed, and a closed list here would have to be edited before
@@ -215,115 +202,18 @@ async function runCapsuleMode() {
   return { corpusSize: facts.length, queries: gold.queries, recall, provider: options.arm, active: options.arm === "openviking" };
 }
 
-/** Research-memory recall: the shipped term matcher against the index, over
- *  the same three hundred records and the same twelve questions. */
-async function runRecordMode() {
-  const corpus = JSON.parse(await readFile(path.join(here, "corpus.json"), "utf8"));
-  const gold = JSON.parse(await readFile(path.join(here, "queries.json"), "utf8"));
-
-  const records = corpus.records.map((row) => ({
-    ...row,
-    scope: "user",
-    scopeId: "",
-    key: row.id,
-    summary: "",
-    origin: "inferred",
-    status: "active",
-    confidence: 0.8,
-    importance: 0.6,
-    sensitive: false,
-    expiresAt: "",
-    updatedAt: "2026-09-01T00:00:00Z",
-  }));
-  const byId = new Map(records.map((row) => [row.id, row]));
-
-  /** The shipped term matcher, scored exactly as the research-memory client does. */
-  function builtinRecall(query, limit) {
-    const terms = searchTokens(query);
-    return records
-      .map((record) => {
-        const content = recallContent(record);
-        const haystack = `${record.key} ${content}`.toLowerCase();
-        const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
-        const durable = DURABLE_RECALL_KINDS.has(record.kind);
-        return {
-          id: record.id,
-          recallable: durable || matches > 0,
-          score: matches + (durable ? 0.75 : 0) + record.importance + record.confidence * 0.5,
-        };
-      })
-      .filter((row) => row.recallable)
-      .sort((left, right) => right.score - left.score)
-      .slice(0, limit)
-      .map((row) => row.id);
-  }
-
-  /** A store that answers only what the substrate is allowed to ask of it. */
-  const store = {
-    async getRecord(_userId, id) {
-      const found = byId.get(id);
-      if (!found) throw Object.assign(new Error("not found"), { code: "memory_not_found" });
-      return found;
-    },
-    async listAllRecords() { return records; },
-    async list() { return []; },
-    async relevant(_userId, query) {
-      return builtinRecall(query, options.limit).map((id) => ({ id: `record:${id}`, content: recallContent(byId.get(id)), kind: byId.get(id).kind }));
-    },
-  };
-
-  const config = {
-    memoryIndexProvider: options.arm,
-    openVikingUrl: options.url,
-    openVikingApiKey: await readKey(),
-    openVikingAccount: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT ?? "evimed",
-    openVikingRequestTimeoutMs: 120_000,
-    memoryContextLimit: options.limit,
-    memoryContextMaxChars: 20_000,
-  };
-  const client = options.arm === "openviking" ? new OpenVikingClient(config) : null;
-  const substrate = new MemorySubstrate(config, { store, openViking: client, rerank: await buildRerank(options) });
-
-  if (options.seedIndex) {
-    if (!substrate.active) throw new Error("nothing to seed: the index provider is not active");
-    const health = await client.status();
-    if (!health.connected) throw new Error(`the index is not reachable: ${health.code}`);
-    let written = 0;
-    for (const record of records) {
-      await client.write(options.user, memoryUri(options.user, {
-        scope: record.scope, scopeId: record.scopeId, kind: record.kind, recordId: record.id,
-      }), recallContent(record), { wait: true, timeoutSeconds: 120 });
-      written += 1;
-      if (written % 25 === 0) process.stderr.write(`seeded ${written}/${records.length}\n`);
-    }
-    process.stderr.write(`seeded ${written}/${records.length}\n`);
-  }
-
-  const recall = async (query) =>
-    (await substrate.recall(options.user, query, {})).map((row) => String(row.id).replace("record:", ""));
-  return {
-    corpusSize: records.length,
-    queries: gold.queries,
-    recall,
-    provider: substrate.provider,
-    active: substrate.active,
-    lastError: () => substrate.lastError,
-  };
-}
-
 /** Whitespace-collapsed, lower-cased, without bullets and dates: what a statement and the engine's rendering of it share. */
 const flat = (text) => String(text ?? "").replace(/[（(](?:as of )?\d{4}-\d{2}-\d{2}[)）]/gi, " ").replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "").replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
- * Research-memory recall on the native engine: the same three hundred records stated to the engine, the same twelve questions
- * asked through the memory gateway. See the header for what a hit is.
+ * Memory recall on the engine: the three hundred records written to it as files, the same twelve questions asked through the
+ * memory gateway. See the header for what a hit is.
  */
 async function runNativeMode() {
   const corpus = JSON.parse(await readFile(path.join(here, "corpus.json"), "utf8"));
   const gold = JSON.parse(await readFile(path.join(here, "queries.json"), "utf8"));
   const { OpenVikingSessions } = await import(path.join(serverSrc, "openVikingSessions.mjs"));
   const { createMemoryGatewayHandler } = await import(path.join(serverSrc, "memoryGateway.mjs"));
-  const { planMigration } = await import(path.join(serverSrc, "nativeMemoryMigration.mjs"));
   const { createServer } = await import("node:http");
   const { once } = await import("node:events");
   const client = new OpenVikingClient({
@@ -334,7 +224,7 @@ async function runNativeMode() {
   const byId = new Map(records.map((row) => [row.id, row]));
   let stored = null;
 
-  if (options.seedIndex && options.seedMode === "files") {
+  if (options.seedIndex) {
     await sessions.register(options.user).catch(() => false);
     let written = 0;
     for (const record of records) {
@@ -342,29 +232,6 @@ async function runNativeMode() {
         body: { uri: `${sessions.memoryRoot(options.user)}/project_facts/${record.id}.md`, content: `- ${record.value}`, mode: "create", wait: true } });
       written += 1;
       if (written % 25 === 0) process.stderr.write(`written ${written}/${records.length}\n`);
-    }
-  } else if (options.seedIndex) {
-    await sessions.register(options.user).catch(() => false);
-    const plan = planMigration(records, { now: new Date("2026-10-13T00:00:00Z") });
-    let commits = 0;
-    for (const session of plan.sessions) {
-      // A group is committed in parts of three messages: one extraction call reads and writes a bounded amount.
-      for (let from = 0; from < session.messages.length; from += 3) {
-        const name = `${session.session}-${from / 3}`;
-        await sessions.createSession(options.user, name, { timeoutMs: 60_000 });
-        for (const message of session.messages.slice(from, from + 3)) await sessions.addMessage(options.user, name, { role: "user", parts: [{ type: "text", text: message.text }] });
-        const committed = (await sessions.commit(options.user, name, { timeoutMs: 60_000 }))?.result ?? {};
-        if (committed.status !== "accepted" || !committed.task_id) throw new Error(`the commit of ${name} was not accepted`);
-        const deadline = Date.now() + 600_000;
-        for (;;) {
-          const task = await sessions.task(options.user, committed.task_id);
-          if (task && ["completed", "failed", "cancelled"].includes(String(task.status))) { if (task.status !== "completed") throw new Error(`the extraction of ${name} ${task.status}`); break; }
-          if (Date.now() > deadline) throw new Error(`the extraction of ${name} did not finish`);
-          await new Promise((resolve) => setTimeout(resolve, 2_000));
-        }
-        commits += 1;
-      }
-      process.stderr.write(`stored ${session.kind}${session.projectId ? `/${session.projectId}` : ""}: ${session.records} records, ${commits} commits so far\n`);
     }
   }
 
@@ -415,7 +282,7 @@ async function runNativeMode() {
   return { corpusSize: records.length, queries: gold.queries, recall, provider: "native", active: true, stored: () => stored };
 }
 
-const plan = options.mode === "capsule" ? await runCapsuleMode() : options.arm === "native" ? await runNativeMode() : await runRecordMode();
+const plan = options.mode === "capsule" ? await runCapsuleMode() : await runNativeMode();
 
 const rows = [];
 for (const { query, expected } of plan.queries) {
@@ -463,6 +330,6 @@ if (options.out) {
   await writeFile(options.out, text);
   process.stderr.write(`wrote ${options.out}\n`);
 }
-// The native arm leaves a gateway listening for its queries; the run is over, so it does not keep the process.
-if (options.arm === "native") process.stdout.write(text, () => process.exit(0));
+// The engine mode leaves a gateway listening for its queries; the run is over, so it does not keep the process.
+if (options.mode === "engine") process.stdout.write(text, () => process.exit(0));
 else process.stdout.write(text);

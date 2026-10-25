@@ -1194,15 +1194,22 @@ beside the plugin's listing. `open_science_memory_resident_card_total{outcome}` 
 
 ### Memory, the capsule and the learning loop: what to read after the 2026-10-23/24 rectification
 
+The legacy memory engine (2026-10-25). Every account's memory is OpenViking's, and a deployment without OpenViking has memory off (`/api/ready`
+`checks.memory.engine` is `off`; a status, never a fallback). The first start after the release runs `legacyMemoryRetirement.mjs` once,
+under an advisory lock, and says what it did in one `legacy memory:` log line and in `open_science_legacy_memory_retirement_total{outcome}`:
+`dropped` (the five record tables and the two engine columns of `evimed_memory.settings` were empty and are gone), `kept_records` or
+`kept_legacy_accounts` (a table or an account row still holds legacy data: nothing is dropped, the account export carries the records as
+`legacyRecords`, and a person decides), `absent` (nothing to do), `index_withdrawals_queued` (the index's copies of the retired records,
+`memories/evimed/{user,project,session}` of every account, were queued once for withdrawal through the ledger the index worker drains;
+the capsule's own tree is never named), `jobs_deleted` (queued `memory-record-index` jobs, which nothing claims any more) and `failed`
+(the next start asks again). Rows that exist are never deleted by it.
+
 Native memory. `node scripts/ops/native-commit-report.mjs --user <id> --since <date> --text` says why a commit wrote nothing
 (`proposed_nothing`: the model proposed nothing; `only_skipped`: the engine refused, with its reason codes; `--backfill` writes the facts
 onto ledger rows settled before the column existed; the engine's task records are kept about a day, the diff's own
-`skipped_operations` answers after that). `node scripts/ops/memory-engine.mjs --user <id> --to native --migrate` is a report, `--apply`
-moves the account and always carries its records (`--leave-records` is refused; for an account that is already native `--migrate`
-replays what was left and sets `migrated_at`). `node scripts/ops/native-silent-zero-audit.mjs --days 14 --min-commits 1` lists the accounts
+`skipped_operations` answers after that). `node scripts/ops/native-silent-zero-audit.mjs --days 14 --min-commits 1` lists the accounts
 whose commits all extracted nothing (report only). Counters: `open_science_native_memory_commit_operations_total{outcome}`
 (`wrote`, `wrote_and_skipped`, `only_skipped`, `proposed_nothing`), `…_skipped_operations_total{reason}`,
-`…_runtime_without_gateway_total{at}` (stays flat after a switch), `…_runtime_engine_switch_total{outcome}`,
 `…_rejection_judge_total{outcome}` (`over_budget` above 0 means `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS`, 40 per account
 per UTC day, is too low) and `…_consolidation_total{outcome}`. A removed line's normalised words (at most 400 characters) are kept on its
 rejection row so that a reworded repeat is caught; they are never shown and go with the rejection (the person's restatement, a reset,

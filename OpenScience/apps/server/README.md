@@ -88,7 +88,7 @@ not mounted and the rest of the platform is unaffected.
 | Autopilot (proactive research) | `autopilot*.mjs` | `OPEN_SCIENCE_AUTOPILOT_ENABLED` (on in production) |
 | Learning loop | `learning*.mjs`, `method*.mjs`, `handbook*.mjs` | `OPEN_SCIENCE_LEARNING_ENABLED` (on) |
 | Research evolution | `evolution*.mjs` | `OPEN_SCIENCE_EVOLUTION_ENABLED` (on) |
-| Memory and recall (two engines per account) | `memory*.mjs`, `memorySettings.mjs`; native: `nativeMemory*.mjs`, `memoryGateway.mjs` | `OPEN_SCIENCE_MEMORY_ENABLED` (on), `OPEN_SCIENCE_MEMORY_RECALL_ENABLED`, `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED` (on with the engine) |
+| Memory and recall (OpenViking's engine; one engine for every account) | `memorySettings.mjs` (switches, pauses, conversation state), `nativeMemory*.mjs`, `memoryGateway.mjs`, `memoryAdmission.mjs` | `OPEN_SCIENCE_MEMORY_ENABLED` (on), `OPEN_SCIENCE_MEMORY_RECALL_ENABLED`; the engine itself is on exactly when OpenViking is configured (`config.memoryEngineEnabled`, derived, not a lever) |
 | Data semantics, result versions | `dataSemantics*.mjs`, `result*.mjs` | `OPEN_SCIENCE_DATA_SEMANTICS_ENABLED`, `OPEN_SCIENCE_RESULTS_ENABLED` (on) |
 | Frontier feed | `frontier*.mjs` | `OPEN_SCIENCE_FRONTIER_ENABLED` (off) |
 | Evidence-based GEO | `geo*.mjs` | `OPEN_SCIENCE_GEO_ENABLED` (off) |

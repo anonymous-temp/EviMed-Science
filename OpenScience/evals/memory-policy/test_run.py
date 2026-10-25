@@ -232,7 +232,7 @@ class FakeServer:
         if path == "/api/agent-runs":
             return {"data": [{"id": rid, "status": "succeeded", "effectiveRouteReason": "matched", "effectiveAgentId": "open-domain-answer"} for rid in self.runs]}
         if path == "/api/memory/profile":
-            return {"data": {"engine": None, "records": self.records}}
+            return {"data": {"records": self.records}}
         if path.endswith("/overview"):
             return {"data": {"card": []}}
         if path == "/api/autopilot/agendas":
@@ -255,7 +255,7 @@ class WholeRun(unittest.TestCase):
                 self.assertEqual(rows["N01-secret-in-passing"]["result"], "pass")
                 self.assertEqual(rows["T01-routine-task-instruction"]["result"], "skipped", "a deployment without scheduled tasks skips them, it does not fail them")
                 self.assertEqual((report["scored"], report["passed"]), (2, 2))
-                self.assertEqual(report["engine"], "legacy")
+                self.assertEqual(report["engine"], "native")
                 self.assertEqual(report["settle"]["reason"], "settled")
                 # separate conversations, one per case, and every project and the account deleted afterwards
                 self.assertEqual(len([call for call in server.calls if call[1] == "/api/runtime/sessions"]), 2)
@@ -264,7 +264,7 @@ class WholeRun(unittest.TestCase):
                 # outputs are written, and neither the password nor a cookie is in anything the runner prints or writes
                 password = list(server.users.values())[0]
                 written = "".join(open(os.path.join(out, name), encoding="utf-8").read() for name in os.listdir(out))
-                self.assertEqual(sorted(os.listdir(out)), ["memory-policy-legacy-A.json", "memory-policy-legacy-A.md"])
+                self.assertEqual(sorted(os.listdir(out)), ["memory-policy-native-A.json", "memory-policy-native-A.md"])
                 self.assertNotIn(password, written + "\n".join(lines))
                 self.assertIn("| K01-programmer-code-style | keep | general | pass |", written)
         finally:
