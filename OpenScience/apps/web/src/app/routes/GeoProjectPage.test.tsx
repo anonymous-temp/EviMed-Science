@@ -249,7 +249,10 @@ describe("a GEO project's page", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(1); });
       const before = client.getGeoMonitoring.mock.calls.length;
       expect(before).toBeGreaterThan(0);
+      // A quiet poll leaves views read a moment ago alone; data that moves without the project row is read again once it is old.
       await act(async () => { await vi.advanceTimersByTimeAsync(30_001); });
+      expect(client.getGeoMonitoring.mock.calls.length).toBe(before);
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_001); });
       expect(client.getGeoMonitoring.mock.calls.length).toBeGreaterThan(before);
     } finally { visible.mockRestore(); vi.useRealTimers(); }
   });
@@ -895,18 +898,23 @@ describe("a saved selection whose data changed", () => {
 });
 
 describe("watching a project", () => {
-  it("reads the shared views again only when a step or the project moved, not on every poll", async () => {
-    renderProject();
-    await waitFor(() => expect(client.getGeoMonitoring).toHaveBeenCalled());
-    await waitFor(() => expect(client.getGeoProject).toHaveBeenCalledTimes(1));
-    const before = client.getGeoMonitoring.mock.calls.length;
-    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
-    await waitFor(() => expect(client.getGeoProject).toHaveBeenCalledTimes(2));
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
-    expect(client.getGeoMonitoring.mock.calls.length).toBe(before);
-    client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, updatedAt: "2099-01-01T00:00:00.000Z" });
-    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
-    await waitFor(() => expect(client.getGeoMonitoring.mock.calls.length).toBeGreaterThan(before));
+  it("re-reads the shared views on a poll only when a step or the project moved, or when they are old", async () => {
+    vi.useFakeTimers();
+    const visible = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    try {
+      const steps = Object.fromEntries(Object.keys(GEO_PROJECT.steps).map(key => [key, { status: "done" }]));
+      const quiet = { ...GEO_PROJECT, steps, overview: { ...GEO_PROJECT.overview, steps } };
+      client.getGeoProject.mockResolvedValue(quiet);
+      renderProject("/app/geo/geo_masi/actions");
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      const before = client.getGeoMonitoring.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_001); });
+      expect(client.getGeoProject).toHaveBeenCalledTimes(2);
+      expect(client.getGeoMonitoring.mock.calls.length).toBe(before);
+      client.getGeoProject.mockResolvedValue({ ...quiet, updatedAt: "2099-01-01T00:00:00.000Z" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_001); });
+      expect(client.getGeoMonitoring.mock.calls.length).toBeGreaterThan(before);
+    } finally { visible.mockRestore(); vi.useRealTimers(); }
   });
 });
 

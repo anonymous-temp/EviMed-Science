@@ -96,6 +96,11 @@ type Loaded =
 const WATCHED_STEPS: readonly GeoStepKey[] = GEO_STEP_KEYS;
 const WATCH_MS = 10_000;
 const IDLE_WATCH_MS = 30_000;
+/**
+ * Articles, orders and placing can change without touching the project row. A poll that finds the work where it was re-reads only the
+ * views on screen that are older than this, instead of every view on every poll.
+ */
+const QUIET_REFRESH_MS = 120_000;
 
 /** The statuses of the steps that end, as one word: when it changes, a step began or finished and what the tabs read is stale. */
 function stepsState(project: GeoProject): string {
@@ -151,6 +156,8 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const reading = useRef(false);
   const reloadQueued = useRef(false);
   const readEpoch = useRef(0);
+  // The person came back to the page: the next read refreshes every view on screen, whatever it finds.
+  const freshRead = useRef(false);
 
   useEffect(() => {
     // An address that named a step is rewritten to where that step is read now, in place, so the reader leaves with a link that
@@ -182,7 +189,11 @@ function GeoProjectView({ geoId }: { geoId: string }) {
         // on every poll: each read of them is a set of requests of its own, every 10 s while a step runs. A view's own reads keep
         // their freshness (`STALE_MS`) and every write that changes one asks for it.
         const state = stepsState(project);
-        if (shown.current !== null && shown.current !== state && document.visibilityState !== "hidden") data.invalidate();
+        if (shown.current !== null && document.visibilityState !== "hidden") {
+          if (shown.current !== state || freshRead.current) data.invalidate();
+          else data.refreshOlderThan(QUIET_REFRESH_MS);
+        }
+        if (document.visibilityState !== "hidden") freshRead.current = false;
         shown.current = state;
         setLoaded({ kind: "ready", project, scopeKey });
       },
@@ -221,9 +232,10 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   useEffect(() => {
     if (loaded.kind !== "ready") return undefined;
     const refreshVisible = () => { if (document.visibilityState !== "hidden") reload(); };
+    const returned = () => { if (document.visibilityState !== "hidden") { freshRead.current = true; reload(); } };
     const timer = window.setInterval(refreshVisible, watching ? WATCH_MS : IDLE_WATCH_MS);
-    document.addEventListener("visibilitychange", refreshVisible);
-    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refreshVisible); };
+    document.addEventListener("visibilitychange", returned);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", returned); };
   }, [loaded.kind, watching, reload]);
 
   const openPanel = useCallback((next: GeoPanel) => {

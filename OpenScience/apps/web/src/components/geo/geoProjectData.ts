@@ -140,6 +140,12 @@ export class GeoDataCache {
     if (entry) this.#read(entry);
   }
 
+  /** What a tab is showing and was read longer than `ms` ago is read again behind itself; the rest is left as it is. */
+  refreshOlderThan(ms: number): void {
+    const now = this.#now();
+    for (const entry of this.#entries.values()) if (entry.watchers > 0 && now - entry.loadedAt > ms) this.#read(entry);
+  }
+
   /** Everything is stale: what a tab is showing is read again behind itself, the rest the next time a tab asks. */
   invalidate(): void {
     for (const entry of this.#entries.values()) {
