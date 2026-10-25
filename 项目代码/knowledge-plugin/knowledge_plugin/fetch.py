@@ -530,7 +530,7 @@ class ProtectedFetcher:
                 self._budget.observe_crawl_delay(host, delay)
                 if not allowed:
                     raise FetchError("robots-denied", "robots_unreachable" if unreachable else "robots_disallow")
-            async with self._budget.slot(host, robots=robots_file):
+            async with self._budget.slot(host, robots=robots_file, priority=spec.priority):
                 response_status, response_headers, content, final_url = await self._counted(
                     egress, exchange(method, url, headers, body, host, api=spec.api))
             if host == EVIMED_API_HOST and (parts.path or "").startswith(EVIMED_API_PREFIX):

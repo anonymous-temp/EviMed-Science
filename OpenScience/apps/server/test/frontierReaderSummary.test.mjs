@@ -80,9 +80,9 @@ test("only what the publish gate admits without a text has a summary text, and a
   assert.match(String(prose), /^A new rule takes effect on 1 January for 40 hospitals in the region, per the notice at today\.\n\nA second paragraph/);
 });
 
-test("the summary is the reader's last text: below the body, the abstract and the excerpt, and never one a translation is made from", () => {
+test("the summary is the reader's text below the body, the abstract and the excerpt, and never one a translation is made from; the reports of a paper come after it", () => {
   assert.deepEqual([...FRONTIER_READER_SOURCES], ["body", "abstract", "excerpt"]);
-  assert.deepEqual([...FRONTIER_READER_TEXT_SOURCES], ["body", "abstract", "excerpt", "summary"]);
+  assert.deepEqual([...FRONTIER_READER_TEXT_SOURCES], ["body", "abstract", "excerpt", "summary", "reports"]);
   const summaryOnly = { reader_summary: "Sponsor: UCB INC. Products: ZILBRYSQ.\n\nFDA application: NDA216834." };
   assert.deepEqual(frontierReaderText(summaryOnly), { source: "summary", text: "Sponsor: UCB INC. Products: ZILBRYSQ.\n\nFDA application: NDA216834." });
   assert.equal(frontierReaderText({ ...summaryOnly, body_excerpt: "A page's text." })?.source, "excerpt");

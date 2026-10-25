@@ -71,6 +71,14 @@ its text arrives, so answering ``available`` without an abstract would let the p
 is never re-edited once PubMed indexes the abstract (77 % of 0–1-day-old articles are not in PubMed yet, plan 10.1).
 ``now`` is the clock the horizon is measured against (the current time when omitted; tests pass it).
 
+**Top journals' research papers wait longer and are asked on a decaying schedule** (``text_policy.py``, c3-primary
+2026-10-25): an entry of a journal of authority 4 or 5 that PubMed has not typed as an editorial, a letter, news and the like
+is asked for 21 days instead of 14 — every hour on the first half day, every 3 hours to the second day, every 8 hours to the
+end of the week, daily after — and its PubMed and Europe PMC lookups are made as ``priority="high"`` requests, which may
+spend the fifth of those hosts' daily caps (``budget.HostRule.reserved``) no other request may. A PubMed record that is final
+(``MEDLINE`` / ``PubMed-not-MEDLINE``) and has no abstract ends the extension (note ``pubmed_record_complete``): an abstract
+that was not written will not come.
+
 Every enrichment value is deterministic data from the named upstream; the plugin makes no model
 call here (contract rule 8).
 """
@@ -86,6 +94,7 @@ from typing import Any, Callable
 
 from ..adapters.common import registry_ids
 from ..adapters.json_api import family_for
+from .. import text_policy
 from ..model import EntryTextResult
 from ..social.wechat import is_article as is_wechat_article
 from . import crossref as crossref_step
@@ -116,6 +125,7 @@ PAGE_4XX_NOT_FINAL = frozenset({408, 425, 429})
 TEXT_HORIZON = timedelta(days=14)
 MIN_RETRY_S = 60
 LANDING_EVERY = 4                 # attempts: the first, then about every two days at the 12-hour cadence
+LANDING_EVERY_EXTENDED = 6        # a top journal's paper is asked far more often (``text_policy``): its page about as often in time
 ENTRY_CONCURRENCY = 4
 BATCH_DEADLINE_S = 300.0          # the scheduler gives a batch 360 s (``ENRICH_TIMEOUT_S * 2``)
 OPEN_STATUSES = frozenset({"gold", "green", "bronze", "unknown"})     # not known to be closed
@@ -216,6 +226,7 @@ class _Found:
     body_from: str | None = None
     pmcid: str | None = None
     licenses: list[str] = field(default_factory=list)
+    pubmed_complete: bool = False          # PubMed's record is final (MEDLINE / PubMed-not-MEDLINE)
 
     def take_abstract(self, text: str | None, source: str, at: datetime | None = None) -> None:
         if text and not self.abstract:
@@ -251,6 +262,7 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
         enrichment.update(pubmed_step.record_enrichment(record))
         found.take_abstract(record.get("abstract"), "pubmed", record.get("fetched_at"))
         found.pmcid = record.get("pmcid")
+        found.pubmed_complete = str(record.get("citation_status") or "").lower() in text_policy.COMPLETE_CITATION_STATUSES
     result = epmc.get(doi) if doi else None
     if result:
         known = True
@@ -323,7 +335,8 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
         found.take_abstract(jats_abstract, "europepmc-fulltext")
         if body:
             found.body, found.body_from = body, "europepmc-fulltext"
-    landing_due = not found.abstract and int(row.get("attempts") or 0) % LANDING_EVERY == 0
+    landing_every = LANDING_EVERY_EXTENDED if text_policy.is_primary_candidate(row, enrichment.get("publication_types")) else LANDING_EVERY
+    landing_due = not found.abstract and int(row.get("attempts") or 0) % landing_every == 0
     # An open work's whole text: its page says its licence when no index knows the work yet (a paper published today
     # is in none of them, and its answer is final once an abstract is found). Without an abstract the page waits for
     # its turn (``landing_due``); its whole text, when open, comes with that read.
@@ -366,7 +379,8 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
     # no abstract yet: pending under the text rule (``apply_text_rule`` decides pending / unavailable)
     return EntryTextResult(status="pending", enrichment=enrichment,
                            retry_after_s=RETRY_TRANSIENT_S if trace.transient else RETRY_NOT_INDEXED_S,
-                           notes=trace.notes + (["indexed_without_abstract"] if known else ["not_indexed_yet"]))
+                           notes=trace.notes + (["indexed_without_abstract"] if known else ["not_indexed_yet"])
+                           + (["pubmed_record_complete"] if found.pubmed_complete else []))
 
 
 async def _trial(row: dict, fetcher: Any, endpoints: Endpoints) -> EntryTextResult:
@@ -462,18 +476,33 @@ def _as_datetime(value: Any) -> datetime | None:
 
 def apply_text_rule(row: dict, result: EntryTextResult, now: datetime) -> EntryTextResult:
     """The text rule (module docstring) on one journal-like entry's result; other entries pass unchanged. An available
-    answer keeps a ``retry_after_s`` only when it is provisional and the horizon is not reached (the upgrade)."""
+    answer keeps a ``retry_after_s`` only when it is provisional and the horizon is not reached (the upgrade). A top journal's
+    research paper (``text_policy``) has the longer horizon and the decaying schedule, unless PubMed's record of it is final."""
     if not is_journal_like(row):
         return result
     first_seen = _as_datetime(row.get("first_seen_at")) or now
-    left = (first_seen + TEXT_HORIZON - now).total_seconds()
+    extended = text_policy.is_primary_candidate(row, result.enrichment.get("publication_types")) \
+        and "pubmed_record_complete" not in result.notes
+    horizon = text_policy.horizon(row, TEXT_HORIZON, result.enrichment.get("publication_types")) if extended else TEXT_HORIZON
+    left = (first_seen + horizon - now).total_seconds()
+    age_s = max(0.0, (now - first_seen).total_seconds())
+
+    def cadence(wanted: int | None) -> int | None:
+        """The delay to the next ask. An extended entry's is the schedule's; one shorter than the usual twelve hours is a
+        failed ask to be repeated soon (``RETRY_TRANSIENT_S``) and stays."""
+        if not extended:
+            return wanted
+        scheduled = text_policy.retry_delay_s(age_s)
+        return min(wanted, scheduled) if wanted and wanted < RETRY_NOT_INDEXED_S else scheduled
+
     if result.abstract or result.body_excerpt or (row.get("upgrade") and result.status == "available"):
-        upgrade_in = int(max(MIN_RETRY_S, min(result.retry_after_s, left))) if result.retry_after_s and left > 0 else None
+        wanted = cadence(result.retry_after_s) if result.retry_after_s else None      # a final text is not asked again
+        upgrade_in = int(max(MIN_RETRY_S, min(wanted, left))) if wanted and left > 0 else None
         return replace(result, status="available", retry_after_s=upgrade_in)
     if left <= 0:
         return replace(result, status="unavailable", text_kind="none", retry_after_s=None,
                        notes=result.notes + ["text_horizon_passed"])
-    wanted = result.retry_after_s or RETRY_NOT_INDEXED_S
+    wanted = cadence(result.retry_after_s or RETRY_NOT_INDEXED_S)
     return replace(result, status="pending", text_kind="none", retry_after_s=int(max(MIN_RETRY_S, min(wanted, left))))
 
 
@@ -515,18 +544,30 @@ async def enrich_batch(entry_rows: list[dict], fetcher: Any, settings: Any, *,
     pubmed_trace = Trace()
     pubmed_records: dict = {}
     indexed = [row for row in articles if not is_preprint(row)]
+    # A top journal's research paper asks PubMed and Europe PMC as a "high" priority request (``text_policy``): the lookups of
+    # a batch are made once for those entries and once for the others, so the reserved part of the hosts' daily caps goes to them.
+    priority_rows = [row for row in articles if text_policy.is_primary_candidate(row)]
+    priority_ids = {id(row) for row in priority_rows}
     if indexed:
-        pubmed_records = await pubmed_step.lookup(
-            fetcher, endpoints, dois=[row["doi"] for row in indexed if row.get("doi") and not row.get("pmid")],
-            pmids=[str(row["pmid"]) for row in indexed if row.get("pmid")], trace=pubmed_trace)
-    need_epmc = []
+        for high in (True, False):
+            group = [row for row in indexed if (id(row) in priority_ids) is high]
+            if not group:
+                continue
+            pubmed_records.update(await pubmed_step.lookup(
+                fetcher, endpoints, dois=[row["doi"] for row in group if row.get("doi") and not row.get("pmid")],
+                pmids=[str(row["pmid"]) for row in group if row.get("pmid")], trace=pubmed_trace,
+                priority="high" if high else "normal"))
+    need_epmc: dict[bool, list[str]] = {True: [], False: []}
     for row in articles:
         doi = (row.get("doi") or "").lower()
         record = pubmed_records.get(f"pmid:{row.get('pmid')}") or pubmed_records.get(f"doi:{doi}")
         if doi and (is_preprint(row) or not (record and record.get("abstract"))):
-            need_epmc.append(doi)
+            need_epmc[id(row) in priority_ids].append(doi)
     epmc_trace = Trace()
-    epmc = await europepmc_step.by_dois(fetcher, endpoints, need_epmc, epmc_trace) if need_epmc else {}
+    epmc: dict = {}
+    for high, dois in need_epmc.items():
+        if dois:
+            epmc.update(await europepmc_step.by_dois(fetcher, endpoints, dois, epmc_trace, "high" if high else "normal"))
     batch_trace = Trace(notes=pubmed_trace.notes + epmc_trace.notes,
                         transient=pubmed_trace.transient or epmc_trace.transient)
     gate = asyncio.Semaphore(ENTRY_CONCURRENCY)

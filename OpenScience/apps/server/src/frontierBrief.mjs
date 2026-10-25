@@ -227,13 +227,13 @@ export function frontierBriefInstructions(genre) {
 export const FRONTIER_BRIEF_VERSION = `frontier-brief-2.${createHash("sha256")
   .update(`${BRIEF_CORE}\n${JSON.stringify(FRONTIER_BRIEF_FIELDS)}`).digest("hex").slice(0, 12)}`;
 
-const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要" });
+const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要", reports: "媒体报道摘编" });
 
 /**
  * What one call shows the model: the source, the date, the title (and its Chinese), and the reader text, its head when longer
  * than `FRONTIER_BRIEF_LIMITS.input`.
  * @param {{ sourceName: string, date?: string | null, titleRaw: string, titleZh?: string | null, text: string,
- *           kind: "body" | "abstract" | "excerpt" | "summary", post?: boolean }} input
+ *           kind: "body" | "abstract" | "excerpt" | "summary" | "reports", post?: boolean }} input
  */
 export function buildBriefInput({ sourceName, date = null, titleRaw, titleZh = null, text, kind, post = false }) {
   const body = String(text ?? "").trim();

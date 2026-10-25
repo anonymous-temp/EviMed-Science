@@ -23,7 +23,13 @@ article pages answer this crawler with a challenge (OUP, JAMA) or a 403 (the Els
   (``looks_truncated``) is an ``abstract``; shorter or cut is an ``excerpt``; shorter than ``EXCERPT_MIN`` is nothing,
   and so is a description that does not end as a sentence does (``SENTENCE_ENDS``): OUP's advance-articles feed gives
   some items their keywords run together as the description ("anogenital cancerantiretroviral therapy (ART)cancer
-  prevention…"), JAMA Network Open some their subject ("Global Health").
+  prevention…"), JAMA Network Open some their subject ("Global Health"). A real abstract's own reference marks do not make
+  it end otherwise: Gastroenterology's and Mayo Clinic Proceedings' feeds give the opening paragraph with its citation
+  numbers after the last full stop ("…limiting assessment of temporality.5,6"), and BMJ Open's and Gut's the author-written
+  key-points box whose last line is the next box's heading ("HOW THIS STUDY MIGHT AFFECT RESEARCH, PRACTICE OR POLICY"):
+  both are read without those tails (``without_tail``), measured on 2026-10-25 on the held top-journal items — 6 of the 36
+  feed items that matched and said nothing were of these two kinds, the others a subject label, keywords run together or "no
+  abstract.".
 """
 
 from __future__ import annotations
@@ -51,6 +57,11 @@ _DOI_FIELDS = ("prism_doi", "dc_identifier", "id", "guid", "link")
 _TAIL_SUFFIXES = (".full", ".abstract", ".short", ".full-text", ".pdf")
 _VERSION = re.compile(r"v[0-9]{1,2}$")
 _HWP_ID = re.compile(r"hwp:master-id:[^;]+;(\S+)", re.I)
+# Reference marks after the last full stop ("temporality.5,6", "population.1–3", "CT imaging.3") and a closing line that is only
+# a heading in capitals (BMJ's key-points boxes). Format only: digits, commas and dashes right after a sentence end that follows a
+# letter (never a decimal: "3.5"); a line of capitals and spaces with no sentence end of its own.
+_TRAILING_MARKS = re.compile(r"(?<=[A-Za-z)%\u3400-\u9fff][.!?。！？])[0-9][0-9,\u2013\u2014\u2010\- ]*$")
+_HEADING_LINE = re.compile(r"^[A-Z][A-Z0-9 ,;:&/()\u2019'\-]{8,}$")
 _ISSUE_CITATION = re.compile(r"^[^.]{5,160}, Volume [0-9]+, Issue [0-9A-Za-z-]+(?:, Pages? [^,]{1,20})?, [A-Z][a-z]+ [0-9]{4}\.\s*")
 
 
@@ -100,6 +111,15 @@ def item_text(value: str) -> str:
     off its first line."""
     text = structured_abstract(_BOX_TITLE.sub(lambda m: f"<h4>{m.group(1)}</h4>", value or ""))
     return _ISSUE_CITATION.sub("", text, count=1)
+
+
+def without_tail(text: str) -> str:
+    """``text`` without its trailing reference marks and, after them, a last line that is only a heading in capitals."""
+    text = _TRAILING_MARKS.sub("", text.rstrip()).rstrip()
+    lines = text.split("\n")
+    if len(lines) > 1 and _HEADING_LINE.match(lines[-1].strip()):
+        text = "\n".join(lines[:-1]).rstrip()
+    return text
 
 
 def _tail(link: str | None) -> str | None:
@@ -180,7 +200,7 @@ async def feed_text(fetcher: Any, row: dict, doi: str, trace: Trace,
         item = match(items or [], doi)
         if item is None:
             continue
-        text = item.text
+        text = without_tail(item.text)
         if not text.rstrip().endswith(SENTENCE_ENDS):
             trace.notes.append("feed_item_without_text")
             return None
@@ -193,4 +213,4 @@ async def feed_text(fetcher: Any, row: dict, doi: str, trace: Trace,
     return None
 
 
-__all__ = ["CACHE", "FeedCache", "FeedItem", "feed_text", "feed_urls", "item_text", "match", "parse_items", "read_feed"]
+__all__ = ["CACHE", "FeedCache", "FeedItem", "feed_text", "feed_urls", "item_text", "match", "parse_items", "read_feed", "without_tail"]

@@ -24,9 +24,10 @@
 
 import { createHash } from "node:crypto";
 import { frontierParagraphs } from "./frontierEditor.mjs";
+import { frontierReportsSha } from "./frontierPrimaryReports.mjs";
 
 /** The texts a verdict is kept for, as `item_texts.reader_tidy.source` names them. */
-export const FRONTIER_TIDY_SOURCES = Object.freeze(/** @type {const} */ (["body", "abstract", "excerpt", "summary"]));
+export const FRONTIER_TIDY_SOURCES = Object.freeze(/** @type {const} */ (["body", "abstract", "excerpt", "summary", "reports"]));
 
 /**
  * What one call is shown and what an answer may take out: at most `paragraphs` paragraphs (the rest are kept unjudged),
@@ -64,13 +65,17 @@ const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex")
 
 /**
  * The text a verdict was made for: the column `source` names, hashed as stored.
- * @param {any} texts an `item_texts` row @param {"body" | "abstract" | "excerpt" | "summary"} source
+ * The hash of a reports text carries a prefix (`frontierReportsSha`), so the 导读 and 要点 written from it name that basis.
+ * @param {any} texts an `item_texts` row @param {"body" | "abstract" | "excerpt" | "summary" | "reports"} source
  */
 export function frontierTidyBasis(texts, source) {
   const text = source === "body" ? texts?.body_text : source === "abstract" ? texts?.abstract_raw
-    : source === "summary" ? texts?.reader_summary : texts?.body_excerpt;
-  return typeof text === "string" && text.trim() ? { text, sha: sha256(text) } : null;
+    : source === "summary" ? texts?.reader_summary : source === "reports" ? texts?.reader_reports : texts?.body_excerpt;
+  return typeof text === "string" && text.trim() ? { text, sha: tidySha(text, source) } : null;
 }
+
+/** The hash a text is settled under: its sha256, prefixed for reports. @param {string} text @param {string} source */
+const tidySha = (text, source) => (source === "reports" ? frontierReportsSha(text) : sha256(text));
 
 /**
  * What one call is shown: the title, the source and the paragraphs, each long one by its head and tail; null when the text
@@ -186,11 +191,11 @@ export async function frontierTidyVerdict(editor, input) {
 /**
  * The paragraphs a reader is shown of a text: `frontierParagraphs`, a structured abstract laid out by section first, and the
  * stored verdict's paragraphs taken out (`frontierTidyDrops`) when it was made for exactly this text.
- * @param {string} text @param {"body" | "abstract" | "excerpt" | "summary"} source @param {any} [tidy] `item_texts.reader_tidy`
+ * @param {string} text @param {"body" | "abstract" | "excerpt" | "summary" | "reports"} source @param {any} [tidy] `item_texts.reader_tidy`
  */
 export function frontierSettledParagraphs(text, source, tidy = null) {
   const paragraphs = frontierParagraphs(source === "abstract" ? frontierAbstractLayout(text) : text);
-  if (!tidy || tidy.source !== source || tidy.sha !== sha256(text) || !Array.isArray(tidy.drop) || !tidy.drop.length) return paragraphs;
+  if (!tidy || tidy.source !== source || tidy.sha !== tidySha(text, source) || !Array.isArray(tidy.drop) || !tidy.drop.length) return paragraphs;
   const drop = new Set(frontierTidyDrops(paragraphs, new Set(tidy.drop)));
   const kept = paragraphs.filter((_, index) => !drop.has(index));
   return kept.length ? kept : paragraphs;

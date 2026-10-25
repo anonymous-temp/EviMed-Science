@@ -17,6 +17,7 @@ from typing import Any
 from ..model import FetchError, FetchResult, RequestSpec
 
 TRANSIENT_OUTCOMES = frozenset({"timeout", "http-error", "host-budget"})
+RETRYABLE_4XX = frozenset({408, 425, 429})
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,15 @@ class Attempt:
 
     @property
     def transient(self) -> bool:
-        return self.error is not None and self.error.outcome in TRANSIENT_OUTCOMES
+        """Worth asking again soon: a timeout, the plugin's own budget, a 5xx or the host's pacing (408, 425, 429), a request
+        that never got an answer. A 4xx other than those is the host's answer (c3-primary 2026-10-25: Unpaywall's 422 for a
+        request without a contact address made every entry of a recording retry hourly)."""
+        error = self.error
+        if error is None or error.outcome not in TRANSIENT_OUTCOMES:
+            return False
+        if error.outcome != "http-error" or error.status is None:
+            return True
+        return not 400 <= error.status < 500 or error.status in RETRYABLE_4XX     # a 200 that could not be read is a failed ask too
 
     def note(self, step: str) -> str:
         if self.error is None:
@@ -80,10 +89,10 @@ class Trace:
 
 async def get(fetcher: Any, url: str, *, api: bool = True, source_id: str | None = None, egress: str = "direct",
               method: str = "GET", body: bytes | None = None, headers: dict | None = None,
-              allowed_hosts: list[str] | None = None) -> Attempt:
+              allowed_hosts: list[str] | None = None, priority: str = "normal") -> Attempt:
     """One request through the core's protected fetcher; a ``FetchError`` is returned, not raised. ``allowed_hosts``
     is passed only when given (the browser exit's route list)."""
-    spec = RequestSpec(url=url, method=method, body=body, headers=dict(headers or {}), conditional=False, api=api)
+    spec = RequestSpec(url=url, method=method, body=body, headers=dict(headers or {}), conditional=False, api=api, priority=priority)
     extra = {"allowed_hosts": allowed_hosts} if allowed_hosts else {}
     try:
         result = await fetcher.fetch(spec, source_id=source_id, egress=egress, **extra)
