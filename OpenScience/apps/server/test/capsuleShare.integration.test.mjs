@@ -7,7 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { packCapsule } from "../src/capsuleContainer.mjs";
-import { CapsuleService } from "../src/capsuleService.mjs";
+import { ACTIVATION_KEY, CapsuleService } from "../src/capsuleService.mjs";
 import { selectCapsuleMethods } from "../src/capsuleMethods.mjs";
 import { createReceivedPackOutcomes } from "../src/capsuleShareOutcomes.mjs";
 import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
@@ -461,7 +461,8 @@ test("an author's take-down of one snapshot disables every recipient's copy and 
     assert.ok(!(await capsules.active(userId)).items.some((item) => item.capsuleId === copy.id), "out of every list");
     await assert.rejects(capsules.enableReceived(userId, copy.id), { code: "capsule_pack_taken_down" });
     await assert.rejects(capsules.prepareTrial(userId, copy.id, {}), { code: "capsule_pack_taken_down" });
-    const told = (await shareNotices(userId)).find((item) => /下架/.test(item.title));
+    const told = (await shareNotices(userId)).find((item) => /撤回了「撤稿做法」/.test(item.title));
+    assert.match(told.title, /已停用/, "the author's word for it is 撤回, and the notice says the copy is stopped");
     assert.match(told.body, /这条做法有误/, "one sentence saying why");
     assert.equal((await capsules.recall(userId, { query: "撤稿", projectId: null })).items.length, 0, "nothing of it is recalled");
   }
@@ -475,7 +476,68 @@ test("an author's take-down of one snapshot disables every recipient's copy and 
   assert.ok(wide.snapshots >= 2);
   const operatorNotice = (await shareNotices(carol)).find((item) => /平台/.test(item.title));
   assert.ok(operatorNotice, "a delivery nobody opened is withdrawn with a notice naming who took it down");
+  assert.match(operatorNotice.title, /下架/, "what the platform does is 下架, and says who");
   await assert.rejects(transfers.snapshotArchive(author, one.snapshot.id), { code: "capsule_snapshot_revoked" });
+});
+
+// Takedown reaches the recipient (platform brief P4): whichever way a pack arrived, once its author takes it down the runtimes that are up
+// drop its methods, a conversation that begins afterwards mounts none of it, the shelf says it was withdrawn, and nothing more is imported.
+test("a take-down stops a pack mounting at the recipients' next dispatch, whichever channel it came by, and the shelf says it was withdrawn", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("先看撤稿再引用。", "区间和样本量写在同一句里。");
+  const refreshed = [];
+  capsules.onActivationChanged = async ({ userId, capsuleId, change }) => { refreshed.push({ userId, capsuleId, change }); };
+  try {
+    // One snapshot of the capsule reaches three accounts by three channels: a delivery, a link and a file made for one of them.
+    const toAlice = await sharing.deliver(author, capsule.id, { recipients: [alice] });
+    const aliceDelivery = (await shareNotices(alice)).find((item) => /delivery\//.test(item.source.id)).source.id.split("/")[1];
+    const aliceOpened = await sharing.open(alice, aliceDelivery);
+    const aliceCopy = await keep(alice, await sharing.import(alice, aliceDelivery, { expectedDigest: aliceOpened.preview.archiveSha256, title: "撤稿做法" }));
+    const link = await sharing.createLink(author, capsule.id, { maxUses: 5 });
+    const bobLook = await sharing.openLink(bob, link.token);
+    const bobCopy = await keep(bob, await sharing.importLink(bob, link.token, { expectedDigest: bobLook.preview.archiveSha256, title: "撤稿做法" }));
+    const waiting = await sharing.openLink(carol, link.token);
+    const file = await transfers.export(author, capsule.id, { password: "test-only-takedown-password", scopes: ["workstyle"] });
+    const read = await transfers.preview(dave, { archive: file.archive, password: "test-only-takedown-password" });
+    const daveCopy = await keep(dave, await transfers.import(dave, { archive: file.archive, password: "test-only-takedown-password", expectedDigest: read.archiveSha256, confirmed: true, title: "撤稿做法" }));
+    assert.deepEqual([aliceCopy, bobCopy, daveCopy].map((copy) => copy.payload.transfer.channel), ["delivery", "link", "file"]);
+    // A snapshot of the same capsule made for each channel is a different snapshot: take every one of them down, as 撤回 of each version does.
+    const snapshots = (await transfers.history(author, capsule.id)).items.map((item) => item.id);
+    assert.ok(snapshots.length >= 3);
+
+    const mountedFor = async (userId) => (await selectCapsuleMethods(capsules, { userId, projectId: null })).map((method) => method.capsuleId);
+    for (const [userId, copy] of [[alice, aliceCopy], [bob, bobCopy], [dave, daveCopy]]) {
+      assert.deepEqual([...new Set(await mountedFor(userId))], [copy.id], "mounted before the take-down");
+    }
+    refreshed.length = 0;
+    const done = [];
+    for (const id of snapshots) done.push(await sharing.takeDown({ authorId: author, snapshotId: id, by: "author", reason: "这条做法有误" }));
+    assert.equal(done.reduce((sum, item) => sum + item.copies, 0), 3, "every copy, whichever way it came");
+    assert.deepEqual(refreshed.map((item) => [item.userId, item.change]).sort(), [[alice, "disabled"], [bob, "disabled"], [dave, "disabled"]],
+      "each recipient's running runtimes were asked to drop the pack now, not at their next restart");
+
+    for (const [userId, copy] of [[alice, aliceCopy], [bob, bobCopy], [dave, daveCopy]]) {
+      assert.deepEqual(await mountedFor(userId), [], "a conversation that begins now mounts nothing of it");
+      // Even if a stale list still named it: the mount reads the copy, not only the list.
+      await capsules.documents.put(userId, "preferences", ACTIVATION_KEY, { items: [{ capsuleId: copy.id, mode: "guest" }] },
+        { expectedRevision: (await capsules.active(userId)).record?.revision ?? 0 });
+      assert.deepEqual(await mountedFor(userId), [], "and a list that still names it mounts nothing of it either");
+      const shelf = (await capsules.received(userId)).find((pack) => pack.id === copy.id);
+      assert.equal(shelf.takenDown.by, "author", "the shelf reads it as withdrawn by its author");
+      assert.equal(shelf.takenDown.reason, "这条做法有误");
+      await assert.rejects(capsules.enableReceived(userId, copy.id), { code: "capsule_pack_taken_down" });
+    }
+
+    // Nothing more is imported from it: a link that was opened and not taken in, a delivery, and a file made before.
+    await assert.rejects(sharing.importLink(carol, link.token, { expectedDigest: waiting.preview.archiveSha256 }), { code: "capsule_share_link_revoked" });
+    await assert.rejects(sharing.openLink(carol, link.token), { code: "capsule_share_link_revoked" });
+    await assert.rejects(transfers.import(carol, { archive: file.archive, password: "test-only-takedown-password", expectedDigest: read.archiveSha256, confirmed: true }),
+      { code: "capsule_snapshot_revoked" }, "a file made here and not yet taken in is refused where the platform can tell");
+    assert.equal((await sharing.sent(author, { capsuleId: capsule.id })).find((row) => row.snapshotId === toAlice.snapshot.id)?.state, "imported", "the sender still sees what happened to the delivery");
+  } finally {
+    capsules.onActivationChanged = null;
+    resetCapsuleShareMetrics();
+  }
 });
 
 test("a share is corroborated only by other accounts that kept it enabled for the period without disabling it", options, async () => {
