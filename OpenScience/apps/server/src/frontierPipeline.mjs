@@ -99,6 +99,7 @@ import { FrontierTagStore } from "./frontierTags.mjs";
 import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasis, frontierTidyVerdict, FRONTIER_TIDY_LIMITS } from "./frontierReaderTidy.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "./frontierLead.mjs";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "./frontierBrief.mjs";
+import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead, frontierStudyFactsWanted } from "./frontierFaithStep.mjs";
 import { FRONTIER_INSIGHT_LIMITS, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight } from "./frontierInsight.mjs";
 import { frontierItemFollowups } from "./frontierEventReading.mjs";
 import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
@@ -235,6 +236,9 @@ const LEAD_BATCH = 8;
 const INSIGHT_BATCH = 4;
 /** 「AI 要点」 written a round, all at once (frontierBrief.mjs). */
 const BRIEF_BATCH = 6;
+/** Study facts made a round (c3-faith: one call each, at once), and the genres whose items have them. */
+const STUDY_FACTS_BATCH = 12;
+const STUDY_FACTS_GENRES = ["paper", "preprint", "trial", "conference"];
 /** Open-access PDFs read a round (each a download and a parse), and how long one may take. */
 const FULLTEXT_BATCH = 2;
 /** Published items whose summary text is made a round (`#readerSummaries`: a read of the entry, no model). */
@@ -828,7 +832,8 @@ function orderedFlags(flags) {
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
  *             preprintLane: number, genreFloor: number, zhTarget: number, eventPrimary: number, translated: number, tidied: number,
- *             tidyDropped: number, leads: number, insights: number, retagged: number }} FrontierBatchSummary
+ *             tidyDropped: number, leads: number, insights: number, retagged: number, studyFacts: number, faithChecked: number,
+ *             faithMismatched: number, faithRepaired: number, faithTrimmed: number, faithUnchecked: number }} FrontierBatchSummary
  */
 
 export class FrontierPipeline {
@@ -869,6 +874,10 @@ export class FrontierPipeline {
     this.threshold = frontierSelectThreshold(this.config);
     this.preprintLanePerDay = frontierPreprintLanePerDay(this.config);
     this.preprintLaneMinScore = frontierPreprintLaneMinScore(this.config);
+    // c3-faith: the study facts step and the check of a written 导读 / 要点 against them (OPEN_SCIENCE_FRONTIER_STUDY_FACTS_ENABLED,
+    // OPEN_SCIENCE_FRONTIER_FAITH_ENABLED). Off unless the config says on, so a pipeline made without a config asks no extra call.
+    this.studyFactsEnabled = this.config.frontierStudyFactsEnabled === true;
+    this.faithEnabled = this.config.frontierFaithEnabled === true && this.studyFactsEnabled;
     this.budgetCny = this.config.frontierDailyBudgetCny != null && this.config.frontierDailyBudgetCny !== "" && Number.isFinite(Number(this.config.frontierDailyBudgetCny))
       ? Number(this.config.frontierDailyBudgetCny) : FRONTIER_DAILY_BUDGET_CNY_DEFAULT;
     this.offpeak = this.config.frontierOffpeak === true;
@@ -890,6 +899,8 @@ export class FrontierPipeline {
       // The reader's 「AI 要点」 (frontierBrief.mjs): written, recorded as none (no fields survived, or a genre without fields), and the
       // fields its checks dropped, by why.
       briefs: 0, briefsEmpty: 0, briefFieldsDropped: /** @type {Record<string, number>} */ ({}),
+      // c3-faith: study facts written (and recorded empty), drafts checked, by outcome, and the rules that fired on a first reading.
+      studyFacts: 0, studyFactsEmpty: 0, faithOutcomes: /** @type {Record<string, number>} */ ({}), faithRules: /** @type {Record<string, number>} */ ({}),
       // Open-access PDFs read for a full text (`#fullText`): read and kept, read and too short or unreadable.
       fullTexts: 0, fullTextsMissed: 0, fullTextsRefused: 0,
       // The tag tree (`#retag`, `#score`): items tagged again, answers left without a usable row, calls that failed, candidates made.
@@ -977,7 +988,8 @@ export class FrontierPipeline {
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
       waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
-      translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0 };
+      translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0, studyFacts: 0, faithChecked: 0, faithMismatched: 0, faithRepaired: 0,
+      faithTrimmed: 0, faithUnchecked: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
       const now = this.now();
@@ -999,6 +1011,7 @@ export class FrontierPipeline {
       await this.#fullText(context);
       await this.#readerSummaries(context);
       await this.#tidy(context);
+      await this.#studyFacts(context);
       await this.#lead(context);
       await this.#brief(context);
       await this.#insight(context);
@@ -2593,7 +2606,7 @@ export class FrontierPipeline {
         FOR UPDATE OF i SKIP LOCKED)
       UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
       RETURNING i.id, i.title_raw, i.title_zh, i.platform, i.primary_source_id, i.published_at, i.lease_until,
-        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.selected, i.score_total`,
+        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.selected, i.score_total, i.lead_zh, i.study_facts`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", LEAD_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs)])).rows;
     if (!claimed.length) return;
@@ -2605,20 +2618,25 @@ export class FrontierPipeline {
       const sha = texts?.reader_tidy?.sha;
       if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
       const source = sources.get(item.primary_source_id);
-      const result = await frontierWriteLead(this.editor, {
+      const leadInput = {
         sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, titleZh: item.title_zh,
         text: reader.text, kind: reader.source, post: item.platform === "x", genre: frontierItemGenre(item),
         // Above an 「AI 要点」 (an item whose reader is read, of a genre with fields) the 导读 leaves the details to it.
-        briefed: frontierReaderWorthy(item, this.threshold) && frontierBriefWanted(frontierItemGenre(item)) });
+        briefed: frontierReaderWorthy(item, this.threshold) && frontierBriefWanted(frontierItemGenre(item)) };
+      const result = await frontierWriteLead(this.editor, leadInput);
       if (result.error && (frontierProviderUnavailable(result.error) || result.error === "usage_budget_exceeded" || result.error === "frontier_editor_unavailable")) {
         if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
         return false;
       }
-      const lead = result.verification === "passed" || result.verification === "repaired" ? result.lead : null;
+      let lead = result.verification === "passed" || result.verification === "repaired" ? result.lead : null;
+      // c3-faith: the written 导读 read against what the source says about the study (never a note on the page).
+      const faith = lead ? await this.#faith("lead", { item, texts, reader, sha, sourceName: leadInput.sourceName, draft: lead, previous: item.lead_zh ?? null, input: leadInput, context }) : null;
+      if (faith) lead = faith.draft;
       const written = await this.#writeUnderLease(item, async (client) => {
         await client.query(`UPDATE evimed_frontier.items SET lead_zh = $2, lead_basis = $3, lead_at = $4, lead_version = $5, lease_owner = NULL, lease_until = NULL
           WHERE id = $1`, [item.id, lead, sha, now, FRONTIER_LEAD_VERSION]);
+        if (faith) await this.#writeFaith(client, item.id, faith);
         if (lead) await bumpFrontierVersion(client);
       });
       if (written) {
@@ -2656,7 +2674,7 @@ export class FrontierPipeline {
         FOR UPDATE OF i SKIP LOCKED)
       UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
       RETURNING i.id, i.title_raw, i.title_zh, i.platform, i.primary_source_id, i.published_at, i.lease_until,
-        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane`,
+        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.brief, i.study_facts`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", BRIEF_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs), this.threshold - FRONTIER_READER_MARGIN])).rows;
     if (!claimed.length) return;
@@ -2671,22 +2689,29 @@ export class FrontierPipeline {
       const basis = `${sha}:${genre}`;
       /** @type {any} */
       let brief = null;
+      /** @type {any} */
+      let faith = null;
       if (frontierBriefWanted(genre)) {
         const source = sources.get(item.primary_source_id);
-        const result = await frontierWriteBrief(this.editor, {
+        const briefInput = {
           genre, sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
           date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, titleZh: item.title_zh,
-          text: reader.text, kind: reader.source, post: item.platform === "x" });
+          text: reader.text, kind: reader.source, post: item.platform === "x" };
+        const result = await frontierWriteBrief(this.editor, briefInput);
         if (result.error) {
           if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
           return false;
         }
         for (const { reason } of result.dropped) this.counters.briefFieldsDropped[reason] = (this.counters.briefFieldsDropped[reason] ?? 0) + 1;
         brief = result.brief;
+        // c3-faith: the written 要点 read against what the source says about the study (never a note on the page).
+        faith = brief ? await this.#faith("brief", { item, texts, reader, sha, sourceName: briefInput.sourceName, draft: brief, previous: item.brief ?? null, input: briefInput, context }) : null;
+        if (faith) brief = faith.draft;
       }
       const written = await this.#writeUnderLease(item, async (client) => {
         await client.query(`UPDATE evimed_frontier.items SET brief = $2::jsonb, brief_basis = $3, brief_at = $4, brief_version = $5,
             lease_owner = NULL, lease_until = NULL WHERE id = $1`, [item.id, brief ? JSON.stringify(brief) : null, basis, now, FRONTIER_BRIEF_VERSION]);
+        if (faith) await this.#writeFaith(client, item.id, faith);
         if (brief) await bumpFrontierVersion(client);
       });
       if (written) {
@@ -2695,6 +2720,129 @@ export class FrontierPipeline {
       }
       return written;
     })));
+  }
+
+  /**
+   * The study facts of study items (c3-faith F1, `frontierStudyFacts.mjs`): every published item of a study genre (paper, preprint,
+   * trial, conference) of the last `FRONTIER_LEAD_WINDOW_MS` whose settled reader text has no record made from it
+   * (`study_facts->>'basis'` = the text's hash), 精选, safety alerts and items near the selection line first, the rest while the
+   * budget is not throttled. One call each; a record each field of which is anchored to a quotation code found, or an empty
+   * marker for that text (a text asked about once). A call the provider or the budget prevented records nothing. Nothing a reader
+   * sees changes, so the content version is not moved.
+   * @param {any} context
+   */
+  async #studyFacts(context) {
+    const { now, budget, summary } = context;
+    if (!this.studyFactsEnabled || !this.editor.available || typeof this.editor.callJson !== "function" || budget.state === "exhausted" || this.#providerPause(now)) return;
+    const claimed = (await this.database.query(`WITH picked AS (
+        SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
+          AND i.genre = ANY($7::text[])
+          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
+          AND (i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha')
+          AND (NOT $3::boolean OR i.selected OR i.safety_alert OR i.score_total >= $8)
+        ORDER BY (i.selected OR i.safety_alert OR coalesce(i.score_total, 0) >= $8) DESC, i.visible_at DESC, i.id DESC
+        LIMIT $4
+        FOR UPDATE OF i SKIP LOCKED)
+      UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
+      RETURNING i.id, i.title_raw, i.platform, i.primary_source_id, i.published_at, i.lease_until, i.genre`,
+    [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", STUDY_FACTS_BATCH, this.workerId,
+      new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN])).rows;
+    if (!claimed.length) return;
+    const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
+    await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
+      if (this.#providerPause(now)) return false;
+      const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
+      const reader = frontierReaderText(texts);
+      const sha = texts?.reader_tidy?.sha;
+      if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
+      const source = sources.get(item.primary_source_id);
+      const ensured = await frontierEnsureStudyFacts(this.editor, { stored: null, sha, input: {
+        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+        date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, text: reader.text, kind: reader.source } });
+      if (ensured.error || !ensured.record) {
+        if (ensured.error && (frontierProviderUnavailable(ensured.error) || ensured.error === "usage_budget_exceeded" || ensured.error === "frontier_editor_unavailable")) {
+          if (frontierProviderUnavailable(ensured.error)) this.#pauseForProvider(now, ensured.error);
+        }
+        return false;
+      }
+      const written = await this.#writeUnderLease(item, async (client) => {
+        await client.query(`UPDATE evimed_frontier.items SET study_facts = $2::jsonb, study_facts_version = $3, lease_owner = NULL, lease_until = NULL
+          WHERE id = $1`, [item.id, JSON.stringify(ensured.record), FRONTIER_STUDY_FACTS_VERSION]);
+      });
+      if (written) {
+        summary.studyFacts += 1;
+        if (ensured.record.empty) this.counters.studyFactsEmpty += 1;
+      }
+      return written;
+    })));
+  }
+
+  /**
+   * The check of a written 导读 or 要点 against the study's facts (c3-faith F2, `frontierFaith.mjs`): the item's facts (stored for
+   * this very text, or asked for now), the draft read sentence by sentence, one repair by the writer with the mismatch named, the
+   * sentences that still mismatch removed — or the previous accepted text kept when nothing would be left. Null when the check does
+   * not apply (off, not a study genre, the provider paused or unable to answer): the writer's draft is stored as it came. The
+   * outcome is counters and `editor_diagnostics.faith`, never a note on the page.
+   * @param {"lead" | "brief"} kind
+   * @param {{ item: any, reader: { text: string, source: "body" | "abstract" | "excerpt" | "summary" }, sha: string, sourceName: string, draft: any,
+   *           previous: any, input: any, context: any, texts?: any }} work
+   * @returns {Promise<{ draft: any, facts: any | null, diagnostic: any | null, kind: "lead" | "brief" } | null>}
+   */
+  async #faith(kind, { item, reader, sha, sourceName, draft, previous, input, context }) {
+    const { now, summary } = context;
+    const genre = frontierItemGenre(item);
+    if (!this.faithEnabled || !frontierStudyFactsWanted(genre) || typeof this.editor.callJson !== "function" || this.#providerPause(now)) return null;
+    try {
+      const factsInput = { sourceName, date: input.date ?? null, titleRaw: item.title_raw, text: reader.text, kind: reader.source };
+      const ensured = await frontierEnsureStudyFacts(this.editor, { stored: item.study_facts, sha, input: factsInput });
+      if (ensured.error) {
+        if (frontierProviderUnavailable(ensured.error)) this.#pauseForProvider(now, ensured.error);
+        return null;
+      }
+      if (ensured.fresh) {
+        summary.studyFacts += 1;
+        if (ensured.record?.empty) this.counters.studyFactsEmpty += 1;
+      }
+      const stored = ensured.fresh ? ensured.record : null;
+      if (!ensured.view) return stored ? { draft, facts: stored, diagnostic: null, kind } : null;
+      const source = faithSource(factsInput);
+      const run = kind === "lead"
+        ? await frontierFaithCheckLead(this.editor, { facts: ensured.view, lead: draft, previous, input, source })
+        : await frontierFaithCheckBrief(this.editor, { facts: ensured.view, brief: draft, previous, input, source });
+      const result = run.result;
+      summary.faithChecked += 1;
+      if (result.first.length) summary.faithMismatched += 1;
+      if (result.outcome === "repaired") summary.faithRepaired += 1;
+      if (result.outcome === "trimmed" || result.outcome === "emptied") summary.faithTrimmed += 1;
+      if (result.outcome === "unchecked") summary.faithUnchecked += 1;
+      this.counters.faithOutcomes[result.outcome] = (this.counters.faithOutcomes[result.outcome] ?? 0) + 1;
+      for (const mismatch of result.first) this.counters.faithRules[mismatch.rule] = (this.counters.faithRules[mismatch.rule] ?? 0) + 1;
+      if (result.error && frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
+      return { draft: kind === "lead" ? /** @type {any} */ (run).lead : /** @type {any} */ (run).brief, facts: stored,
+        diagnostic: { [kind]: faithDiagnostic(result) }, kind };
+    } catch (error) {
+      // A check that cannot be made is not a reason to lose the draft: it is stored as the writer produced it.
+      this.lastError = codeOf(error);
+      return null;
+    }
+  }
+
+  /**
+   * The check's record in the write that stores the draft: the item's study facts when they were made now, and the closed
+   * outcome in `editor_diagnostics.faith` (merged, so the 导读's and the 要点's records sit side by side).
+   * @param {any} client @param {string} id @param {{ facts: any | null, diagnostic: any | null }} faith
+   */
+  async #writeFaith(client, id, faith) {
+    if (faith.facts) {
+      await client.query("UPDATE evimed_frontier.items SET study_facts = $2::jsonb, study_facts_version = $3 WHERE id = $1",
+        [id, JSON.stringify(faith.facts), FRONTIER_STUDY_FACTS_VERSION]);
+    }
+    if (faith.diagnostic) {
+      await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb)
+        || jsonb_build_object('faith', coalesce(editor_diagnostics->'faith', '{}'::jsonb) || $2::jsonb) WHERE id = $1`,
+      [id, JSON.stringify({ version: FRONTIER_FAITH_VERSION, at: this.now().toISOString(), ...faith.diagnostic })]);
+    }
   }
 
   /**
