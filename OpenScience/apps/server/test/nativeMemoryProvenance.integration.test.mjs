@@ -82,18 +82,18 @@ test("a line of the profile names the commit that brought that line, and a line 
   assert.deepEqual(document.evidence.map((item) => item.conversationId), ["session_cccc", "session_dddd"]);
 });
 
-test("what no platform conversation wrote has no source conversation: a migration, a replay, the page's own edit", options, async (t) => {
+test("what no platform conversation wrote has no source conversation: a replay, the page's own edit", options, async (t) => {
   const { userId, store, worker, commitConversation, seed, root } = await fixture(t, {
     extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/length.md`, memory_type: "preferences", after: "Short answers." }] }),
     conversationTitles: titlesFrom({}),
   });
-  // A migration session: an engine session the plugin did not derive from a conversation.
-  await commitConversation("", [{ role: "user", text: "x" }], { origin: "migration", engineSession: "evimed-migrate-abcdef0123456789" });
+  // A replayed session: an engine session the plugin did not derive from a conversation.
+  await commitConversation("", [{ role: "user", text: "x" }], { origin: "replay", engineSession: "evimed-replay-abcdef0123456789" });
   await worker.processCommits({ userId });
-  const migrated = (await store.profile(userId)).records.find((record) => record.uri === `${root}/preferences/length.md`);
-  assert.ok(migrated, "the engine wrote the file");
-  assert.deepEqual(migrated.evidence, []);
-  assert.equal(migrated.evidenceCount, 0);
+  const replayed = (await store.profile(userId)).records.find((record) => record.uri === `${root}/preferences/length.md`);
+  assert.ok(replayed, "the engine wrote the file");
+  assert.deepEqual(replayed.evidence, []);
+  assert.equal(replayed.evidenceCount, 0);
   // A file the person wrote on the page is theirs: no conversation either.
   seed("preferences/own.md", "Tables for comparisons.", { type: "preferences" });
   const own = (await store.records(userId)).find((record) => record.key === "preferences/own.md");

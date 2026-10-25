@@ -41,7 +41,8 @@ const MAX_VERSIONS = 40;
  * The memories a project's panel lists, as a predicate over a dependent row: in this project's scope or the account's own.
  * @param {string} projectId @returns {(row: any) => boolean}
  */
-const listedIn = (projectId) => (row) => row.scope === "user" || row.scope === "organization" || (row.scope === "project" && row.scopeId === projectId);
+const listedIn = (projectId) => (row) => ["active", "pending"].includes(row.status)
+  && (row.scope === "user" || row.scope === "organization" || (row.scope === "project" && row.scopeId === projectId));
 
 
 /** @param {any} error @returns {string} */

@@ -37,7 +37,7 @@ test("each trigger scenario comes out as the case says: the gate's repairs queue
       jobs, repairShare: scenario.shares.repair,
       agentRuns: { list: async () => [run], runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: scenario.run.inRunAttempts }] } }) },
     });
-    const result = await triggers.afterRun(project, run, scenario.memoryCorrections ? { corrections: scenario.memoryCorrections } : null);
+    const result = await triggers.afterRun(project, run);
     assert.deepEqual([...result.queued].sort(), [...scenario.expect.queued].sort(), `${scenario.name}: queued`);
     assert.deepEqual(result.sampledOut ?? [], scenario.expect.sampledOut, `${scenario.name}: sampled out`);
   }

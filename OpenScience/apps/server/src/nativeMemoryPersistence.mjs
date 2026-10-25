@@ -45,6 +45,8 @@ export const NATIVE_REVISION_CHANGES = Object.freeze(["added", "updated", "delet
 /** Who changed a memory: the engine's extraction, the person on the memory page, the conversation's `forget` tool, or a
  *  deterministic step of the platform (a check, a source label, a migration). */
 export const NATIVE_REVISION_ACTORS = Object.freeze(["engine", "user", "conversation", "platform"]);
+/** The states a memory file's link to a source can be in (what a check of the source gives it). */
+export const NATIVE_SOURCE_STATES = Object.freeze(["current", "changed", "retracted", "expired", "removed", "unknown"]);
 export const NATIVE_TEXT_LIMIT = 100_000;
 
 const quoted = (/** @type {readonly string[]} */ values) => values.map((value) => `'${value}'`).join(", ");
@@ -172,7 +174,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_sources (
   uri text NOT NULL CHECK (char_length(uri) BETWEEN 1 AND 600),
   source_type text NOT NULL CHECK (source_type IN ('knowledge_source', 'doi')),
   source_id text NOT NULL CHECK (char_length(source_id) BETWEEN 1 AND 300),
-  state text NOT NULL DEFAULT 'current' CHECK (state IN ('current', 'changed', 'retracted', 'expired', 'removed', 'unknown')),
+  state text NOT NULL DEFAULT 'current' CHECK (state IN (${quoted(NATIVE_SOURCE_STATES)})),
   state_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, uri, source_type, source_id)
 );

@@ -141,7 +141,7 @@ const BODIES_PER_ACCOUNT = 400;
  * The conversations a memory came out of, as the evidence the page's drawer already reads (`memorySource` takes the first one
  * for 「来源对话」): one per platform conversation whose commit the engine wrote the file in, oldest first — so the first is where
  * it began. The overlay holds what is needed and nothing more: each revision names the engine session (`dsh-<conversation>`) and
- * the archive of the commit; the ledger names the project. A session the platform did not derive (a migration, a replay, the
+ * the archive of the commit; the ledger names the project. A session the platform did not derive (a replay, the
  * page's own 「记住这一条」) is no conversation and is left out. There is no quotation: the engine keeps none, and none is made up.
  *
  * For one line of the profile (`line`), only the commit that brought that line counts, found by what the revision's text did to it

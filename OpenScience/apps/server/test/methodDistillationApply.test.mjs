@@ -301,7 +301,6 @@ test("the researcher's own corrections and edits open the input, before the tran
   const input = buildDistillationInput({
     run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "repair_accepted", transcript,
     repairIssues: [{ round: 1, code: "claim_quote_missing", message: "…" }],
-    correctionRecords: [{ recordId: "mem_1", key: "reporting.order", text: "先写结论再写证据" }],
   });
   const keys = Object.keys(input);
   assert.ok(keys.indexOf("corrections") < keys.indexOf("transcriptExcerpts"));
@@ -309,7 +308,6 @@ test("the researcher's own corrections and edits open the input, before the tran
   assert.ok(keys.indexOf("transcriptExcerpts") < keys.indexOf("repairIssues"), "the reviewer's findings come after the researcher");
   assert.deepEqual(input.corrections, [
     { source: "steered", sessionId: "root", seq: 3, text: "先报 GRADE 等级，再报效应量" },
-    { source: "memory", recordId: "mem_1", key: "reporting.order", text: "先写结论再写证据" },
   ], "their own words, unwrapped; a message carrying a patient's phone number is dropped whole");
   assert.equal(input.correctionsDropped.sensitive, 1);
   assert.equal(input.signal, "researcher");
@@ -318,24 +316,19 @@ test("the researcher's own corrections and edits open the input, before the tran
   assert.equal(lessonSignal({ trigger: "repair_accepted", feedback: [{ id: "fe" }] }), "researcher");
 });
 
-test("a distillation reads the correction memories its lesson names and hands them to the run first", async () => {
+test("a correction lesson hands the run the researcher's own typed words first, and reads no memory record for them", async () => {
   /** @type {any[]} */
   const dispatched = [];
-  /** @type {any[]} */
-  const asked = [];
   const distillation = new MethodDistillationRuns({
     learning: { ...fakeLearning(), async listMethods() { return { items: [] }; } },
     dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
     readResult: async () => ({ status: "running" }),
-    readCorrections: async (userId, ids) => { asked.push({ userId, ids }); return [{ recordId: "mem_1", key: "k", text: "不要用固定剂量" }]; },
   });
   const project = { id: "paper", rootDir: "/nonexistent", metaDir: "/nonexistent/.openscience" };
-  const result = await distillation.execute({ job: { userId: "u1", projectId: "paper", payload: { trigger: "correction", corrections: [{ recordId: "mem_1", key: "k" }] } },
+  const result = await distillation.execute({ job: { userId: "u1", projectId: "paper", payload: { trigger: "correction", steeredCorrections: 1 } },
     project, run: { id: "run_1" } });
   assert.equal(result.state, "pending");
-  assert.deepEqual(asked, [{ userId: "u1", ids: ["mem_1"] }]);
-  assert.deepEqual(dispatched[0].input.corrections, [{ source: "memory", recordId: "mem_1", key: "k", text: "不要用固定剂量" }]);
-  assert.equal(dispatched[0].input.signal, "researcher");
+  assert.deepEqual(dispatched[0].input.corrections, [], "with no transcript there are no words to quote; nothing is looked up by record id");
 });
 
 /** A project directory with a stored transcript per run, as `persistRunTranscript` leaves them.

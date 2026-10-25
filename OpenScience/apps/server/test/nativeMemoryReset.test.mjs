@@ -31,7 +31,7 @@ const admit = (runs, when, memorySettings = memoryDouble()) => createMemoryAdmis
 test("a message spoken before the reset is not learned from, whenever it arrives; one spoken after is", async () => {
   const ledger = [{ id: "r1", sessionId: SID, status: "running", startedAt: "2026-10-20T08:00:00.000Z" }];
   const before = await admit(ledger, at("2026-10-20T09:00:00.000Z"));
-  assert.deepEqual([before.learn, before.learnReason, before.native], [false, "before_reset", true]);
+  assert.deepEqual([before.learn, before.learnReason], [false, "before_reset"]);
   assert.equal(before.recall, true, "reading what is there is not what the reset forbids");
   assert.equal((await admit(ledger, at("2026-10-20T12:00:01.000Z"))).learn, true, "a turn that began before the reset and is still running is the person's now");
   assert.equal((await admit(ledger, at("2026-10-20T12:00:00.000Z"))).learn, true, "the reset's own instant is not before it");
@@ -62,7 +62,7 @@ function committer({ resetAt = RESET, memorySettings = null } = {}) {
   const instance = new NativeTurnCommit({
     config: { memoryEngineEnabled: true, memoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 8_000, nativeMemoryTurnCommitSettleMs: 0, nativeMemoryTurnCommitAttempts: 2 },
     memorySettings: memorySettings ?? memoryDouble({ resetAt }), sessions: { configured: true, readSession: async () => ({ result: { pending_tokens: 100, message_count: 2 } }) },
-    admission: { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: SID }) },
+    admission: { admit: async () => ({ learn: true, recall: true, learnReason: null, recallReason: null, sessionId: SID }) },
     conversations: { runsOf: async () => [] },
     commit: async (request) => { commits.push(request); return { commit: "accepted" }; },
     setTimer: (fn) => { const timer = { fn }; timers.add(timer); return timer; }, clearTimer: (timer) => timers.delete(timer), wait: async () => {},
