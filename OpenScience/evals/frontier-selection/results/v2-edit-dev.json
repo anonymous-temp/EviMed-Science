@@ -1,0 +1,2496 @@
+{
+ "at": "2026-10-25T13:07:52.370Z",
+ "label": "v2-edit-dev",
+ "mode": "edit",
+ "model": "deepseek-flash",
+ "editorVersion": "frontier-editor-1.9f064bbcdf14",
+ "usage": {
+  "calls": 143,
+  "cacheHit": 658176,
+  "cacheMiss": 76177,
+  "output": 36003,
+  "cny": 0.467
+ },
+ "results": [
+  {
+   "n": 1,
+   "id": "2a154b7845319a86",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "systematic-review",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 3,
+   "id": "04a98bcc228a7364",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 7
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 7
+   },
+   "evidenceType": "other",
+   "genre": "industry",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 5,
+   "id": "1942ca71b0ba49a2",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 7,
+   "id": "344314e2e4e35107",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 5,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 5,
+    "relevance": 14
+   },
+   "evidenceType": "review-opinion",
+   "genre": "commentary",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 9,
+   "id": "1f4e280aa3b5d228",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 10,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 10,
+    "relevance": 16
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 11,
+   "id": "fb4a1f98cda1cfa7",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 13,
+   "id": "b9e480664fd7cc88",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 6
+   },
+   "evidenceType": "other",
+   "genre": "industry",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 15,
+   "id": "72296d237895ced2",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 24,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 24,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "evidenceType": "rct",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 17,
+   "id": "2388e5a1c36c1306",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "observational",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 19,
+   "id": "1d48245bcbed1007",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "evidenceType": "other",
+   "genre": "conference",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 21,
+   "id": "2ad37e403328ba69",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 14,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 14,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 23,
+   "id": "2a14e1aa8e8fbac0",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "evidenceType": "real-world",
+   "genre": "conference",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 25,
+   "id": "795722946ecfa504",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "evidenceType": "safety-notice",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 27,
+   "id": "0d5e30fa0778814e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 29,
+   "id": "36d6b58131f61738",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 31,
+   "id": "808f0b5ff2c2b194",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 10,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 10,
+    "relevance": 8
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 33,
+   "id": "61f57ceae3df767b",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "evidenceType": "other",
+   "genre": "social",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 35,
+   "id": "62def1484df599f6",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 37,
+   "id": "351ab36070cb6ad8",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 39,
+   "id": "0f8d6ffac87f35e3",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 15,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 15,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 41,
+   "id": "08c7b3c547914075",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 6
+   },
+   "evidenceType": "press-release",
+   "genre": "industry",
+   "flags": [
+    "press-release"
+   ],
+   "practice": null
+  },
+  {
+   "n": 43,
+   "id": "f70461227939cfc4",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 24,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 24,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "approval",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 45,
+   "id": "f75b2cae055e759e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "evidenceType": "press-release",
+   "genre": "industry",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 47,
+   "id": "6dd4797ff8dafb9f",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 8
+   },
+   "evidenceType": "observational",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 49,
+   "id": "4e9ca231312e1524",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 27,
+    "novelty": 19,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 27,
+    "novelty": 19,
+    "relevance": 16
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "approval",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 51,
+   "id": "222e7d29f755cd18",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "observational",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 53,
+   "id": "a699d502a383b721",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 55,
+   "id": "76e99bd990aa034a",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 16
+   },
+   "evidenceType": "review-opinion",
+   "genre": "commentary",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 57,
+   "id": "f2e42bd388ed2655",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 13
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "policy",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 59,
+   "id": "1bc9220731781fc6",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "evidenceType": "systematic-review",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 61,
+   "id": "cf74f19008a2288a",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 10,
+    "relevance": 10
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 10,
+    "relevance": 10
+   },
+   "evidenceType": "other",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 63,
+   "id": "1aa242d411f3fb73",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 65,
+   "id": "4694fc541967a520",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "approval",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 67,
+   "id": "b16aaacaa882675a",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 13
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 69,
+   "id": "dbb9f2c01ec7cd21",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 11
+   },
+   "evidenceType": "observational",
+   "genre": "conference",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 71,
+   "id": "fa73a7529604895d",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 73,
+   "id": "fee31e24d4536450",
+   "mode": "edit",
+   "verification": "title-only",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 10
+   },
+   "scores": null,
+   "evidenceType": "other",
+   "genre": "social",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 75,
+   "id": "cd0288255d1ed28e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 77,
+   "id": "d6165feeea1298f3",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 79,
+   "id": "d28e08f0eb5e7bba",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 24,
+    "novelty": 17,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 24,
+    "novelty": 17,
+    "relevance": 16
+   },
+   "evidenceType": "other",
+   "genre": "conference",
+   "flags": [
+    "press-release"
+   ],
+   "practice": null
+  },
+  {
+   "n": 81,
+   "id": "9387b5573a61e7a9",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "evidenceType": "other",
+   "genre": "social",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 83,
+   "id": "1facdb7d17944195",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 85,
+   "id": "28e9d090fb2c602a",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 87,
+   "id": "b810f2023f47ddc6",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "policy",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 89,
+   "id": "d46de4fcd14341e6",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "evidenceType": "review-opinion",
+   "genre": "commentary",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 91,
+   "id": "a10e121893940ee9",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "evidenceType": "other",
+   "genre": "social",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 93,
+   "id": "1229bee7d5218c29",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 95,
+   "id": "b412e7097c560878",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 15,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 15,
+    "relevance": 8
+   },
+   "evidenceType": "other",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 97,
+   "id": "33091954de455075",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 6,
+    "novelty": 3,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 6,
+    "novelty": 3,
+    "relevance": 6
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 99,
+   "id": "abdf1b47a3ce7e08",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 6
+   },
+   "evidenceType": "other",
+   "genre": "industry",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 101,
+   "id": "a7b79f373fe5241a",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 15,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 15,
+    "relevance": 11
+   },
+   "evidenceType": "other",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 103,
+   "id": "15c1af59bc5c0417",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 18
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 18
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "policy",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 105,
+   "id": "7c474f930b7de41a",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 8
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 107,
+   "id": "7b54b3894dec175f",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 16,
+    "relevance": 17
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 16,
+    "relevance": 17
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 109,
+   "id": "8df4855a7038463c",
+   "mode": "edit",
+   "verification": "title-only",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": null,
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 111,
+   "id": "53fd593019228e38",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 7,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 7,
+    "relevance": 14
+   },
+   "evidenceType": "guideline",
+   "genre": "commentary",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 113,
+   "id": "6f5e3077c606ef17",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 115,
+   "id": "3a62d5f2b8d98a01",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 14,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 14,
+    "relevance": 8
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 117,
+   "id": "243199001b2c8a5d",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 13,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 13,
+    "relevance": 11
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 119,
+   "id": "5aee1ab4aa798d89",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 121,
+   "id": "442feecf7442562d",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 12
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 123,
+   "id": "f89d2109453932e3",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 25,
+    "novelty": 18,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 25,
+    "novelty": 18,
+    "relevance": 16
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "approval",
+   "flags": [],
+   "practice": {
+    "changing": true,
+    "reasonZh": "国内未接受过补体抑制剂治疗的成人PNH患者，现在可以用补体因子B抑制剂ciprocopan治疗。"
+   }
+  },
+  {
+   "n": 125,
+   "id": "1cda5be54deba408",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 127,
+   "id": "15d16bff35ebc674",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 15,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 15,
+    "relevance": 11
+   },
+   "evidenceType": "other",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 129,
+   "id": "e2da0f209013c4db",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "policy",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 131,
+   "id": "822ba5fdc9f256df",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 18,
+    "relevance": 18
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 18,
+    "relevance": 18
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "approval",
+   "flags": [],
+   "practice": {
+    "changing": true,
+    "reasonZh": "2-6岁、内耳严重畸形或蜗神经缺如、无法植入人工耳蜗的语前聋患儿，现在有了听觉脑干植入体这一选择。"
+   }
+  },
+  {
+   "n": 133,
+   "id": "5f8fd7e262b89211",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 135,
+   "id": "a139bc08d4957a03",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 12
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 137,
+   "id": "3b9c6a342a323545",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 12
+   },
+   "evidenceType": "guideline",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 139,
+   "id": "f6c08c0051434604",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 141,
+   "id": "a1938caeacd6bb50",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 143,
+   "id": "df0281bd360dedfb",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 16,
+    "novelty": 12,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 16,
+    "novelty": 12,
+    "relevance": 9
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 145,
+   "id": "46026b1794dee1bf",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 147,
+   "id": "63cda18afc50f733",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "evidenceType": "other",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 149,
+   "id": "8c82577d69397520",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 6
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 151,
+   "id": "06c5db43e9586ef3",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 6
+   },
+   "evidenceType": "press-release",
+   "genre": "industry",
+   "flags": [
+    "press-release"
+   ],
+   "practice": null
+  },
+  {
+   "n": 153,
+   "id": "a648cdd5fccc70d3",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 16,
+    "novelty": 14,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 16,
+    "novelty": 14,
+    "relevance": 13
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 155,
+   "id": "18004d1bb8d28fa3",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 157,
+   "id": "eaa0f05bc50620dc",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 159,
+   "id": "6ae570655d3c2c3e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 16
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 161,
+   "id": "db0ffb9478bffae3",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 25,
+    "novelty": 17,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 25,
+    "novelty": 17,
+    "relevance": 16
+   },
+   "evidenceType": "other",
+   "genre": "conference",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 163,
+   "id": "8e432a2e4a184894",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "evidenceType": "observational",
+   "genre": "conference",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 165,
+   "id": "783ea2e819d494ca",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 16
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 167,
+   "id": "6b5f9c2969a04e55",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 24,
+    "novelty": 17,
+    "relevance": 18
+   },
+   "scores": {
+    "impact": 24,
+    "novelty": 17,
+    "relevance": 18
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "approval",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 169,
+   "id": "0bbc90a918585141",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 171,
+   "id": "453d86f19aa8b10c",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 173,
+   "id": "9eefc7af36e6467e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 11
+   },
+   "evidenceType": "rct",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 175,
+   "id": "521274e4422952ec",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 25,
+    "novelty": 17,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 25,
+    "novelty": 17,
+    "relevance": 16
+   },
+   "evidenceType": "rct",
+   "genre": "conference",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 177,
+   "id": "598c3e71e9c6501a",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 179,
+   "id": "acc25731f0ce2299",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 181,
+   "id": "e69b845555fdf32e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "evidenceType": "other",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 183,
+   "id": "a2255dfbf9cbd2ac",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 185,
+   "id": "f05eb131984487cd",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 187,
+   "id": "efb2297c867fe01e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 189,
+   "id": "191d80ee0db5956f",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "evidenceType": "observational",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 191,
+   "id": "3c806987ed60f570",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 8
+   },
+   "evidenceType": "rct",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 193,
+   "id": "f65c90e218a55c69",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 195,
+   "id": "238246f6c74d1f7a",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 12,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 12,
+    "relevance": 8
+   },
+   "evidenceType": "other",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 197,
+   "id": "4bc1a466f5bf4c42",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 14
+   },
+   "evidenceType": "rct",
+   "genre": "social",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 199,
+   "id": "0b0fb0997c4c3915",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 5
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 5
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 201,
+   "id": "b58fab27aa296b52",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 203,
+   "id": "317afc14cef40522",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 12
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 205,
+   "id": "51bf22054a9315d1",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 11
+   },
+   "evidenceType": "other",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 207,
+   "id": "265e47ffa4eee5dd",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 209,
+   "id": "37914230f44108b8",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "evidenceType": "other",
+   "genre": "industry",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 211,
+   "id": "53cb2c77783b39e3",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 213,
+   "id": "e18b1a07d72d403f",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 9
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 215,
+   "id": "a69507590784b7af",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 16
+   },
+   "evidenceType": "other",
+   "genre": "policy",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 217,
+   "id": "8b8485d014979013",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "evidenceType": "observational",
+   "genre": "conference",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 219,
+   "id": "0cb3a1944a4d83ef",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "evidenceType": "safety-notice",
+   "genre": "safety",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 221,
+   "id": "2b96e0e501ed8949",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 25,
+    "novelty": 16,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 25,
+    "novelty": 16,
+    "relevance": 15
+   },
+   "evidenceType": "other",
+   "genre": "news",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 223,
+   "id": "bf948f72a6f6a4b8",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "evidenceType": "review-opinion",
+   "genre": "commentary",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 225,
+   "id": "a6912fcf7dd8060e",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 14
+   },
+   "evidenceType": "rct",
+   "genre": "social",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 227,
+   "id": "47c6cedd94a58123",
+   "mode": "edit",
+   "verification": "title-only",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 9
+   },
+   "scores": null,
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 229,
+   "id": "673fa58d5170d947",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 8
+   },
+   "evidenceType": "other",
+   "genre": "preprint",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 231,
+   "id": "cb4a6cedfca5e734",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 23,
+    "novelty": 16,
+    "relevance": 18
+   },
+   "scores": {
+    "impact": 23,
+    "novelty": 16,
+    "relevance": 18
+   },
+   "evidenceType": "rct",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 233,
+   "id": "b8a704cc6f9a0068",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "evidenceType": "guideline",
+   "genre": "guideline",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 235,
+   "id": "34d55a775c67ac07",
+   "mode": "edit",
+   "verification": "repaired",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "evidenceType": "other",
+   "genre": "trial",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 237,
+   "id": "2cdf12f304a0d405",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "evidenceType": "review-opinion",
+   "genre": "social",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 239,
+   "id": "4a4ccab57c3f972e",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "evidenceType": "review-opinion",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 241,
+   "id": "6291d2994b5d083b",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 14
+   },
+   "evidenceType": "guideline",
+   "genre": "roundup",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 243,
+   "id": "9017b359dd97f5fb",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 13,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 13,
+    "relevance": 14
+   },
+   "evidenceType": "other",
+   "genre": "policy",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 245,
+   "id": "ac8f39e6091c8df2",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "evidenceType": "observational",
+   "genre": "paper",
+   "flags": [],
+   "practice": null
+  },
+  {
+   "n": 247,
+   "id": "75ef7f37f1722fcc",
+   "mode": "edit",
+   "verification": "passed",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "evidenceType": "regulatory-decision",
+   "genre": "approval",
+   "flags": [],
+   "practice": null
+  }
+ ]
+}

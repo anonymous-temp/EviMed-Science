@@ -287,7 +287,8 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   `类型词表：${GENRE_LINE}。`,
   "",
   "输出格式（键名固定）：",
-  "{\"genre\":\"\",\"title_zh\":\"\",\"summary_zh\":\"\",\"reason_zh\":\"\",\"tags\":[],\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"practice\":{\"changing\":false,\"reason_zh\":\"\"},\"flags\":[]}",
+  "{\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"practice\":{\"changing\":false,\"reason_zh\":\"\"},\"genre\":\"\",\"title_zh\":\"\",\"summary_zh\":\"\",\"reason_zh\":\"\",\"tags\":[],\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"flags\":[]}",
+  "先给 scores 和 practice（只看条目本身的价值，不受后面写作的影响），再写其余字段。",
 ].join("\n");
 
 /**
