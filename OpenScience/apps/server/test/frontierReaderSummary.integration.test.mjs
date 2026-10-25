@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { FRONTIER_ASK_INSTRUCTIONS } from "../src/frontierAsk.mjs";
 import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { FrontierEvents } from "../src/frontierEvents.mjs";
@@ -112,6 +113,8 @@ function editorWith(behaviour = {}) {
         this.briefInputs.push(String(messages[1].content));
         return behaviour.brief ? behaviour.brief(String(messages[1].content)) : { points: {} };
       }
+      // The reader's 就此提问 questions (c3-ask) are another call of the same kind: none here, and not a judgement of the text.
+      if (instructions === FRONTIER_ASK_INSTRUCTIONS) return { questions: [] };
       this.tidyCalls += 1;
       return { drop: [] };
     },
