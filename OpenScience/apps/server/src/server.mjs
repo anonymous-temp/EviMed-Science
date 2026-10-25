@@ -2613,9 +2613,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
         return { sessionId, bound: true };
       },
-      // The conversation of a project made before its own was recorded on it: the oldest one no programme step opened (a step's
-      // session is the AI-run record's, never the header's 「对话」). Null when the project has none of the person's, and the page begins one.
-      conversationSessionId: async (user, projectId) => personalConversationSessionId(await store.requireProject(user, projectId)),
+      // The project's own conversation: the recorded one while it still exists; else (a project made before its own was recorded on it,
+      // or one whose recorded conversation the person deleted) the oldest one no programme step opened (a step's session is the AI-run
+      // record's, never the header's 「对话」). Null when the project has none of the person's, and the page begins one.
+      conversationSessionId: async (user, projectId, recorded = null) => {
+        const project = await store.requireProject(user, projectId);
+        if (recorded && await researchSessions.get(project, recorded).catch(() => null)) return recorded;
+        return personalConversationSessionId(project);
+      },
       // What the programme did in the background, newest first: a read-only record, never a destination.
       programmeRuns: async (userId, projectId) => {
         const owner = await store.userById(userId);

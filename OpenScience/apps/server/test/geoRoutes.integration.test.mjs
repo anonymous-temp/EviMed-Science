@@ -82,7 +82,9 @@ before(async () => {
     projects: {
       create: async (_user, name) => ({ id: `p-${++projectCounter}`, name }),
       bindSession: async () => ({ sessionId: "geo-session-1", bound: true }),
-      conversationSessionId: async (/** @type {any} */ user, /** @type {string} */ projectId) => (hooks.conversation ? hooks.conversation(user, projectId) : "geo-session-1"),
+      // Like the server's lookup: the recorded conversation while it exists (here: always, unless the test's hook says otherwise).
+      conversationSessionId: async (/** @type {any} */ user, /** @type {string} */ projectId, /** @type {string | null} */ recorded) =>
+        (hooks.conversation ? hooks.conversation(user, projectId, recorded) : recorded ?? "geo-session-1"),
       programmeRuns: async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => (hooks.programmeRuns ? hooks.programmeRuns(ownerId, projectId) : []),
     },
     get orchestrator() { return hooks.orchestrator; },
@@ -216,18 +218,23 @@ test("a project keeps the conversation it was made with; one made before that wa
   const page = async (/** @type {string} */ user = ALICE) => (await call("GET", `/api/geo/projects/${created.id}`, { user })).payload.data;
   try {
     // Another conversation of the project was touched last; the project's own is still the one it was made with.
-    hooks.conversation = async () => "geo-sibling-newest";
+    hooks.conversation = async (/** @type {any} */ _user, /** @type {string} */ _project, /** @type {string | null} */ recorded) => recorded ?? "geo-sibling-newest";
     assert.equal((await page()).sessionId, "geo-session-1");
     // A project made before the conversation was recorded: the lookup's answer (its oldest own conversation) is taken and kept.
     await database.query("UPDATE evimed_geo.projects SET conversation_session_id = NULL WHERE id = $1", [created.id]);
     hooks.conversation = async () => "geo-oldest-own";
     assert.equal((await page()).sessionId, "geo-oldest-own");
-    hooks.conversation = async () => "geo-sibling-newest";
+    hooks.conversation = async (/** @type {any} */ _user, /** @type {string} */ _project, /** @type {string | null} */ recorded) => recorded ?? "geo-sibling-newest";
     assert.equal((await page()).sessionId, "geo-oldest-own", "the owner's first read recorded it");
     assert.equal((await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id,
       "geo-oldest-own");
     // A second record does not move it.
     assert.equal(await service.recordConversation(created.id, "geo-other"), "geo-oldest-own");
+    // The person deleted the recorded conversation: the lookup answers the oldest they still have, and that is recorded in its place.
+    hooks.conversation = async () => "geo-oldest-left";
+    assert.equal((await page()).sessionId, "geo-oldest-left", "a deleted conversation is not opened");
+    assert.equal((await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id,
+      "geo-oldest-left");
   } finally {
     hooks.conversation = null;
   }

@@ -549,13 +549,15 @@ export class GeoStore {
 
   /**
    * Record the project's own conversation. Written once: a later call does not move it, so the page keeps opening the conversation
-   * the project was made with however many others the project gains. Returns the id the project holds after the call.
-   * @param {string} id @param {string} sessionId
+   * the project was made with however many others the project gains — unless it names the one it replaces (`replacing`, a
+   * conversation the person deleted), and that is still the one held. Returns the id the project holds after the call.
+   * @param {string} id @param {string} sessionId @param {string | null} [replacing]
    * @returns {Promise<string | null>}
    */
-  async setConversationSession(id, sessionId) {
+  async setConversationSession(id, sessionId, replacing = null) {
     await this.query(`UPDATE evimed_geo.projects SET conversation_session_id = $2
-      WHERE id = $1 AND deleted_at IS NULL AND conversation_session_id IS NULL`, [id, String(sessionId)]);
+      WHERE id = $1 AND deleted_at IS NULL AND (conversation_session_id IS NULL OR conversation_session_id = $3)`,
+    [id, String(sessionId), replacing == null ? null : String(replacing)]);
     const result = await this.query(`SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL`, [id]);
     return text(result.rows[0]?.conversation_session_id);
   }

@@ -649,11 +649,12 @@ export class GeoService {
   }
 
   /**
-   * Record the conversation found for a project made before its conversation was recorded (write-once; the first one stands).
-   * @param {string} geoId @param {string} sessionId @returns {Promise<string | null>} the conversation the project holds now
+   * Record the conversation found for a project made before its conversation was recorded, or in place of a recorded one the person
+   * deleted (`replacing`); otherwise the first one stands.
+   * @param {string} geoId @param {string} sessionId @param {string | null} [replacing] @returns {Promise<string | null>} the conversation the project holds now
    */
-  async recordConversation(geoId, sessionId) {
-    return this.store.setConversationSession(geoId, sessionId);
+  async recordConversation(geoId, sessionId, replacing = null) {
+    return this.store.setConversationSession(geoId, sessionId, replacing);
   }
 
   /**
