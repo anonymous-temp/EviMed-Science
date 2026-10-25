@@ -12,7 +12,7 @@
  *   not a refusal: the follow is stored with the typed words (`typedFollowQuery`), and matches by them.
  * - **A concept is one of its names.** An item satisfies a concept when it carries one of the concept's entity keys or the words of
  *   one of its names (every token of the name, in the item's search vector). A follow of one concept lists items about it; a follow
- *   of two ("GLP-1 和胰腺炎") lists items about both; of three, about the first and one of the others. This is the whole of the
+ *   of two or three ("GLP-1 和胰腺炎") lists items about all of them. This is the whole of the
  *   precision: a watch on a pair that matched either half would be the feed again.
  * - **Nothing here reads language by pattern.** The only closed lists are the five kinds, the four concept types and nine English
  *   connectives dropped from words the glossary did not name.
@@ -51,8 +51,9 @@ export const FRONTIER_FOLLOW_QUERY_INSTRUCTIONS = [
   "Return JSON {\"kind\": \"drug\"|\"trial\"|\"disease\"|\"topic\"|\"question\", \"concepts\": [{\"type\": \"drug\"|\"trial\"|\"disease\"|\"topic\", \"zh\": string[], \"en\": string[]}]}.",
   "kind: drug = one medicine or a drug class; trial = one named study; disease = one condition; topic = a subject made of several parts, a method or a field; question = typed as a question.",
   "concepts: the one to three things a news item must be about to belong here, the main one first. Do not add a concept the person did not type: 「GLP-1 和胰腺炎」 is two concepts, GLP-1 receptor agonists and pancreatitis; 「司美格鲁肽」 is one.",
+  "Use as few concepts as the typed words allow — two is the usual number, a third only when the person named a third distinct thing. A word that says what kind of coverage and not what an item is about (治疗, 进展, 研究, 影响, 风险, 会不会, 怎么办) is not a concept: leave it out unless it is part of a name (「免疫相关不良反应」 is one).",
   "A concept is ONE thing and its names are other names for that same thing, never different things: 「肥胖患者减重药物会影响心血管结局吗」 is three concepts (obesity, weight-loss drugs, cardiovascular outcomes), not three names of one. A name never joins two things: 「房颤抗凝」 is two concepts, atrial fibrillation and anticoagulation, each with its own names; there is no concept called 「房颤抗凝」.",
-  "zh and en: the names that appear in titles and abstracts, up to eight each — the usual name, the common synonyms and abbreviations as written (GLP-1, HER2, NSCLC); for a drug class its best-known members. Leave a list empty when the thing has no name in that language. Names only: no explanations, no sentences.",
+  "zh and en: the names that appear in titles and abstracts, up to eight each — the usual name, the common synonyms and abbreviations in each spelling they are written (GLP-1, GLP-1RA, HER2, NSCLC); for a drug class its best-known members. Leave a list empty when the thing has no name in that language. Names only: no explanations, no sentences.",
 ].join("\n");
 
 /** @param {unknown} value */
@@ -138,16 +139,16 @@ const chinese = (name) => /[\u3400-\u9fff]/u.test(name);
  */
 
 /**
- * Whether a concept's names are in the typed words: one of its names is part of them (or holds them), or keys as a thing the typed
- * words name. An invented concept is neither.
+ * Whether a concept's names are in the typed words: a name holds, or is held by, the typed words or one of the tokens they are
+ * searched by (「GLP-1」 is in 「GLP-1RA」, 「胰腺」 is in 「胰腺炎」), or the concept keys as a thing the typed words name. An invented
+ * concept is none of these.
  * @param {string} typed @param {string[]} names @param {string[]} keys @param {Set<string>} typedKeys
  */
 function grounded(typed, names, keys, typedKeys) {
-  const haystack = squash(typed);
-  if (names.some((name) => {
-    const needle = squash(name);
-    return needle.length >= 2 && (haystack.includes(needle) || (needle.includes(haystack) && haystack.length >= 2));
-  })) return true;
+  const whole = squash(typed);
+  const pieces = [whole, ...followNameTokens(typed).map(squash)].filter((piece) => piece.length >= 2);
+  const named = names.map(squash).filter((name) => name.length >= 2);
+  if (named.some((name) => pieces.some((piece) => name.includes(piece) || piece.includes(name)))) return true;
   return keys.some((key) => typedKeys.has(key));
 }
 

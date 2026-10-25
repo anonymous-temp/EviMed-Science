@@ -6,7 +6,7 @@
  *
  * - **Three legs, cheapest first, and the dearest only when the cheap ones have nothing to hold.** An item matches a concept by an
  *   entity key it carries (the glossary's, language-independent), or by the words of one of the concept's names in its search vector
- *   (title, 导读, entities, tags — not the body). A query of several concepts needs them together (`followMatchPredicate`). Only a
+ *   (title, 导读, entities, tags — not the body). A query of several concepts needs all of them together (`followMatchPredicate`). Only a
  *   query with no key at all — a question in the reader's words, a subject the glossary has never heard of — also takes the items
  *   whose embedding is near the typed words (cosine at or above `OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE`); a keyed query is not
  *   widened by it, because the keys are the precision.
@@ -52,8 +52,9 @@ export const FRONTIER_FOLLOW_NOTICE_WINDOW_MS = 3 * DAY;
 /**
  * The starting cosine for the embedding leg. Not measured on the production embedder (the box that built it holds no embedding
  * key); it sits above the 与我相关 floor (`FRONTIER_FOR_YOU_MIN_COSINE`, 0.4) because a watch is read for what is new and a wrong
- * hit costs a repeat reader, a missed one costs nothing the lexical legs did not already catch. Calibrate with
- * `scripts/ops/frontier-follow-cosines.mjs` against the live index before moving it.
+ * hit costs a repeat reader, a missed one costs nothing the lexical legs did not already catch. To re-read it on the live index: an
+ * embedding match is stored with its cosine in `follow_matches.score` (a key or word match is stored with 1.0), so the distribution
+ * of `score < 1` by follow, and what readers opened of it (`interactions`, `list_serves`), is the evidence for moving the line.
  */
 export const FRONTIER_FOLLOW_MIN_COSINE_DEFAULT = 0.55;
 
@@ -64,8 +65,8 @@ function codeOf(error) {
 }
 
 /**
- * The SQL that holds for an item (`i`) a query matches by its keys and words, or null when the query has nothing to look up. One
- * concept: it. Two: both. Three or more: the first and one of the others.
+ * The SQL that holds for an item (`i`) a query matches by its keys and words, or null when the query has nothing to look up. Every
+ * concept the reader named must be there (at most three): 「GLP-1 和胰腺炎」 lists what is about both, never what is about either.
  * @param {any} query @param {(value: unknown) => string} param
  * @returns {string | null}
  */
@@ -89,7 +90,7 @@ export function followMatchPredicate(query, param) {
     if (legs.length) parts.push(`(${legs.join(" OR ")})`);
   }
   if (!parts.length) return null;
-  return parts.length <= 2 ? parts.join(" AND ") : `${parts[0]} AND (${parts.slice(1).join(" OR ")})`;
+  return parts.join(" AND ");
 }
 
 /** Whether a query has no key to hold it, the one case the embedding leg is added. @param {any} query */

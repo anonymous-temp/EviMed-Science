@@ -728,6 +728,9 @@ export interface FrontierFollowedZone {
   cards: Array<{ id: string; title: string; summary: string; change: "new" | "updated"; revision: number; updatedAt: string | null }>;
 }
 
+/** One typed follow with news, as the daily page lists it. */
+export interface FrontierFollowedQuery { id: string; label: string; newItems: number }
+
 /**
  * `GET /api/frontier/dailies/:day`. The header reads 「9月23日 周三 · {itemCount} 条 · 约 {readingMinutes} 分钟」;
  * `previousDay` / `nextDay` are the nearest issues on either side (a quiet day has none), null at either end.
@@ -746,6 +749,8 @@ export interface FrontierDaily {
   safety: FrontierItem[];
   /** This reader's followed zones' new and changed cards; absent from a server that does not send it. */
   followedZones?: FrontierFollowedZone[];
+  /** The things this reader typed to follow that have items they have not opened (c3-watch): each links to its feed. Theirs alone. */
+  followedQueries?: FrontierFollowedQuery[];
   aiMinute: string | null;
   markdown: string;
   /** The items the issue shows now. */
@@ -1397,6 +1402,16 @@ function parseFollowedZones(value: unknown): FrontierFollowedZone[] {
   });
 }
 
+function parseFollowedQueries(value: unknown): FrontierFollowedQuery[] {
+  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+    const row = record(entry);
+    const followId = text(row?.id);
+    const label = text(row?.label);
+    const count = row?.newItems;
+    return followId && label && typeof count === "number" && Number.isInteger(count) && count > 0 ? [{ id: followId, label, newItems: count }] : [];
+  }).slice(0, 12);
+}
+
 function parseDaily(value: unknown): FrontierDaily | null {
   const raw = record(value);
   const day = text(raw?.day);
@@ -1427,6 +1442,7 @@ function parseDaily(value: unknown): FrontierDaily | null {
     sections,
     safety: parseItems(raw.safety),
     followedZones: parseFollowedZones(raw.followedZones),
+    followedQueries: parseFollowedQueries(raw.followedQueries),
     aiMinute: text(raw.aiMinute),
     markdown: typeof raw.markdown === "string" ? raw.markdown : "",
     itemCount: count(raw.itemCount),

@@ -1463,6 +1463,25 @@ export class FrontierService {
   }
 
   /**
+   * The typed follows of a reader that have items since they last opened them: `{ id, label, newItems }`, the busiest first. A
+   * count that cannot be read leaves the list empty — the page is still the page.
+   * @param {string} userId
+   */
+  async #queryFollowsWithNews(userId) {
+    if (!this.watch) return [];
+    try {
+      const rows = await this.#transaction(async (client) => (await client.query(`SELECT id, kind, key, label, muted, created_at, seen_at
+        FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query' AND NOT muted ORDER BY created_at DESC, id DESC`, [userId])).rows);
+      if (!rows.length) return [];
+      const counts = await this.#newCounts(userId, rows);
+      return rows.map((/** @type {any} */ row) => ({ id: String(row.id), label: String(row.label), newItems: counts.get(String(row.id)) ?? 0 }))
+        .filter((entry) => entry.newItems > 0).sort((left, right) => right.newItems - left.newItems);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * The reader opened a follow's feed: what arrived before now is no longer new (c3-watch).
    * @param {{ id: string }} user @param {string} followId
    */
@@ -2035,6 +2054,8 @@ export class FrontierService {
         // The one part of an issue that is the reader's own (flywheel F10): the cards of the zones they follow that
         // were published or changed in this issue's window. Read now, never part of the issue's text or Markdown.
         followedZones: typeof producer.followedZones === "function" ? await producer.followedZones(user.id, issue).catch(() => []) : [],
+        // Likewise theirs alone (c3-watch): the things they typed to follow that have news, each a link to its feed.
+        followedQueries: weekly ? [] : await this.#queryFollowsWithNews(user.id),
         aiMinute: issue.aiMinute, markdown,
         itemCount: new Set(shown.map((item) => item.id)).size,
         readingMinutes: frontierReadingMinutes([leadText, issue.aiMinute, ...shown.flatMap((item) => [item.title, item.summary])]),

@@ -347,10 +347,12 @@ export function frontierReadingMinutes(texts) {
  * The inbox item a day's issue is pushed as (plan 2026-09-23 C §1.13): the
  * title with the day and the selected count, the lead's title as the body,
  * and — the one count kept — how many safety alerts the issue holds. No
- * personal reason: the same text reaches a Feishu group chat. One exception, by
- * the owner's brief (c3-watch 2026-10-25): a line per typed follow with news
- * since the reader last looked (`follows`, `followNoticeLines`) — the words the
- * reader typed themselves, and a count; none when nothing is new.
+ * personal reason. One exception (c3-watch 2026-10-25): a line per typed follow
+ * with news since the reader last looked (`follows`, `followNoticeLines`) — the
+ * words the reader typed themselves, and a count; none when nothing is new.
+ * Where it goes: the reader's own inbox, and a Feishu push, which the adapter
+ * addresses to the account owner's own chat with the bot (`open_id`, never a
+ * group; the other channel adapters are stubs), so a reader's words reach nobody else.
  * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[], follows?: string[] }} issue
  */
 export function frontierDailyNotice({ day, lead, sections, safety, follows = [] }) {

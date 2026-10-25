@@ -82,6 +82,20 @@ test("a concept the typed words do not hold is dropped as invented; with none le
   assert.equal(verifyFollowQuery(null, "胰腺炎", glossary), null);
 });
 
+test("a concept is held by the typed words even when it is spelled otherwise and the glossary knows nothing of it", () => {
+  const query = verifyFollowQuery({ kind: "topic", concepts: [
+    { type: "drug", zh: ["GLP-1受体激动剂"], en: ["GLP-1RA", "GLP-1 receptor agonists"] }, { type: "disease", zh: ["胰腺炎"], en: ["pancreatitis"] },
+  ] }, "GLP-1 和胰腺炎", null);
+  assert.ok(query);
+  assert.equal(query.concepts.length, 2);
+  assert.deepEqual(query.keys, [], "no glossary, no keys: the names carry it");
+  // 「房颤抗凝」 is two things, each held by a bigram of the words.
+  const afib = verifyFollowQuery({ kind: "topic", concepts: [{ type: "disease", zh: ["心房颤动", "房颤"], en: [] }, { type: "topic", zh: ["抗凝治疗"], en: ["anticoagulation"] }] }, "房颤抗凝", null);
+  assert.equal(afib?.concepts.length, 2);
+  // Nothing in common with the words is invented.
+  assert.equal(verifyFollowQuery({ kind: "topic", concepts: [{ type: "disease", zh: ["糖尿病肾病"], en: [] }] }, "房颤抗凝", null), null);
+});
+
 test("a translation is in the typed words when the glossary says they are one thing", () => {
   const query = verifyFollowQuery({ kind: "drug", concepts: [{ type: "drug", zh: [], en: ["semaglutide"] }] }, "司美格鲁肽", glossary);
   assert.ok(query, "the English name keys as the drug the Chinese words name");
