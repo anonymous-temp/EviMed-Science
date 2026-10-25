@@ -74,6 +74,27 @@ test("the CSRF check is repeated, a path id is held to its shape, and creation w
   await assert.rejects(routes(request("GET", "/api/geo/market"), response()), { status: 403, code: "geo_operator_required" });
 });
 
+test("the members behind an analysis cell are a four-part GET, and the query reaches the service as the page sent it", async () => {
+  const reads = /** @type {any[]} */ ([]);
+  const service = {
+    allows: (/** @type {any} */ user) => geoAudienceAllows(config, user),
+    isOperator: () => false,
+    async analysisMembers(/** @type {any} */ user, /** @type {string} */ id, /** @type {any} */ input) { reads.push([user.id, id, input]); return { items: [], total: 0 }; },
+  };
+  const { routes } = fixture({ service });
+  const res = response();
+  assert.equal(await routes(request("GET", "/api/geo/projects/geo_abc/analysis/members?viewId=V02&rowKey=r1&columnKey=answers&offset=50&expectedDigest=" + "a".repeat(64)), res), true);
+  assert.equal(res.status, 200, "this path answered 404 when its branch sat inside the three-part block");
+  assert.deepEqual(res.json(), { data: { items: [], total: 0 } });
+  assert.equal(reads.length, 1);
+  assert.deepEqual(reads[0].slice(0, 2), ["reader", "geo_abc"]);
+  assert.equal(reads[0][2].rowKey, "r1");
+  assert.equal(reads[0][2].columnKey, "answers");
+  // Only a read: the same path with another verb is not found, and a longer path is not this route.
+  await assert.rejects(routes(request("POST", "/api/geo/projects/geo_abc/analysis/members", {}), response()), { status: 404 });
+  await assert.rejects(routes(request("GET", "/api/geo/projects/geo_abc/analysis/members/extra"), response()), { status: 404 });
+});
+
 test("every code the routes and the service answer with is registered", async () => {
   // The refusals a request can meet: an HttpError, directly or through the
   // service's `failure` helper. Readiness codes are the readiness board's.
