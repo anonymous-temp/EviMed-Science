@@ -32,8 +32,8 @@ export function SourceRelationship({ geoId, target, canEdit, onChanged }: { geoI
       <ul aria-label="关系变更记录" className="text-caption text-text-2">
         {data.history.items.map(row => <li key={row.revision}>{new Date(row.reviewedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })} · {row.active ? labels[row.relation] : '已移除标记'}{row.reason ? ` · ${row.reason}` : ''}</li>)}
       </ul>
-      {data.history.nextBeforeRevision && <Button size="sm" variant="text" onClick={() => setBefore(data.history.nextBeforeRevision!)}>更早记录</Button>}
-      {before && <Button size="sm" variant="text" onClick={() => setBefore(undefined)}>最新记录</Button>}
+      {data.history.nextBeforeRevision != null && <Button size="sm" variant="text" onClick={() => setBefore(data.history.nextBeforeRevision!)}>更早记录</Button>}
+      {before !== undefined && <Button size="sm" variant="text" onClick={() => setBefore(undefined)}>最新记录</Button>}
     </div>}
   </section>;
 }

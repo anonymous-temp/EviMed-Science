@@ -198,7 +198,7 @@ function OwnedDetail({ geoId, project, linkId, onClose }: { geoId: string; proje
           actions={receipt.resultVersionId && receipt.digest ? <Button size="sm" variant="text" onClick={() => void openPublication(receipt.resultVersionId!, receipt.digest!)}>查看这版稿件</Button> : undefined} />)}
       </List>
       {data.history.items.length === 0 && <p className="text-caption text-text-3">还没有版本更新记录。</p>}
-      <div className="flex gap-2">{data.history.nextBeforeRevision && <Button size="sm" variant="text" onClick={() => setBefore(data.history.nextBeforeRevision!)}>更早记录</Button>}{before && <Button size="sm" variant="text" onClick={() => setBefore(undefined)}>最新记录</Button>}</div>
+      <div className="flex gap-2">{data.history.nextBeforeRevision != null && <Button size="sm" variant="text" onClick={() => setBefore(data.history.nextBeforeRevision!)}>更早记录</Button>}{before !== undefined && <Button size="sm" variant="text" onClick={() => setBefore(undefined)}>最新记录</Button>}</div>
     </div>}
     {confirm && <ConfirmDialog tone="primary" title="该页面已更新为当前稿件？" body="此操作登记你已完成的线上更新，不会代你发布。原稿件版本与此前登记会继续保留。" confirmLabel="确认登记" busy={busy} onConfirm={() => void save()} onCancel={() => setConfirm(false)} />}
   </Drawer>;
