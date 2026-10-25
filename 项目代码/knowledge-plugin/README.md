@@ -114,13 +114,17 @@ Shanghai day:
    from the literature streams, then the NLM catalogue in rotation), `directory` (`registry/discovery.json`),
    `hot-origin` (the journals and sites of entries several publishers carried), `social` (quoted accounts, and the
    WeChat accounts our WeChat bodies credit as their origin — 「来源：…」, 「本文转载自…」, a closed marker list —,
-   `social/wechat_discovery.py`), `request` (the source-request manifest, any lane but `ai`), `parent-feed`
+   `social/wechat_discovery.py`: only a name two different accounts credit is proposed, and never a document or a database
+   (「…共识」, 「…数据库」), a department word, the owner-excluded CDE or a general news account such as 新华社 or 人民日报),
+   `request` (the source-request manifest, any lane but `ai`), `parent-feed`
    (`medical_discovery.py`), `readmit` (retired sources due for a re-check), `lead` (the sites, WeChat accounts and
    journals of the pages the platform's lead triggers handed over; see Leads below). A WeChat candidate of any line (also a
    lead's article link, `candidate_from_link`) is validated by one Dajiala call — `post_history` by its nickname (¥0.16)
    or by the link (¥0.14), at most 20 a Shanghai day across lines: Dajiala names exactly that account, its posts carry one
    `__biz` we do not read yet, and it posted within 30 days; it then goes on trial as an ordinary WeChat row (priority 4,
-   one read a day). X candidates wait without using the day's validations.
+   one read a day). A lead's account is keyed `wechat:biz:<biz>` and validated by its link; candidates an earlier build
+   keyed `wechat:<biz>` (asked for as a nickname: code 107) are moved to that key by each discovery run, once.
+   X candidates wait without using the day's validations.
 4. **Validate** within each line's daily cap: reachable (direct, then the relay), robots allows it, an existing adapter
    reads it, an item dated within 30 days, MEDLINE for a journal (and at least eight Crossref articles in 30 days). A
    valid candidate becomes an ordinary registry row on trial (`mixed` lane, every 6–24 hours; journals every 12–24).
@@ -137,8 +141,9 @@ in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days
 The platform decides when to go looking for material — a daily watch, a congress in its window, a genre 精选 is short of, an
 event that turned hot, a story without a Chinese report or without its primary source — searches through its own web-search
 gateway, and posts what it found to `POST /v1/leads` (at most 50 addresses a call). Each address is answered on its own:
-`accepted` (queued), `duplicate` (received before, or the stream holds it), `refused` (not a public address, or an owner-excluded
-host) or `capped` (`KNOWLEDGE_PLUGIN_LEADS_DAILY` a Shanghai day). `leads.py`'s loop then reads a few a minute under the plugin's
+`accepted` (queued), `duplicate` (received before, or the stream holds it), `refused` (not a public address, an owner-excluded
+host, or — reason `host_blocked` — a host whose lead reads robots.txt, a challenge page or a 401/403/451 refused within seven days
+and no page of it was read since) or `capped` (`KNOWLEDGE_PLUGIN_LEADS_DAILY` a Shanghai day). `leads.py`'s loop then reads a few a minute under the plugin's
 own rules — a page through the protected fetch (robots, pacing, the relay) with its main text and metadata, a WeChat article
 bought through Dajiala within the shared daily cap (never read as a page), a DOI through Crossref, a PMID through PubMed's summary,
 a trial number through ClinicalTrials.gov's API — and emits ordinary entries: a page or an article only when it carries a date
@@ -181,7 +186,8 @@ an identity key, polls in the fetch log, health by the same rule — but the sch
   to be its own, or, when the list has no such link (a Sogou temporary link is never kept) or the link answers a code
   that passes, by its nickname (`post_history`, ¥0.16, whose posts are then its first read) — and kept only when Dajiala
   names it as expected and, for a lookup by name, every post carries the account's `biz` from the list (anything else
-  parks it for 30 days); then read by its original id at most twice a day,
+  parks it for 30 days — and a change of that row reads it again at once, the park having been decided for the old row);
+  then read by its original id at most twice a day,
   highest priority first; each new post's text bought once. A text that could not be bought with its post (a failure
   that passes, such as Dajiala's code 20002 while the balance runs low, or the cap) is bought when the platform asks
   `/text` for it — never read as a page: mp.weixin.qq.com refuses robots — at most six calls per entry with a doubling

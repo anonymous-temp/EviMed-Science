@@ -134,3 +134,25 @@ def test_the_wechat_list_has_its_categories_and_tiers():
     assert groups["industry"] >= 30 and groups["clinical"] >= 40 and groups["society-journal"] >= 25
     assert groups["hospital"] >= 10 and groups["regulator"] >= 10
     assert sum(counts["wechat_by_priority"].values()) == counts["wechat"]
+
+
+def test_the_names_the_2026_10_25_review_could_not_read_are_the_nicknames_dajiala_answers_to():
+    """c2-fixes F5 (¥1.98 of live checks, ``live_checks`` of the research file): six accounts were renamed, one answers by its own
+    name and carries its biz, four are out of the list. The names Dajiala answered code 107 to are asked for no more."""
+    rows = {row.source.id: row.source for row in load_social_registry(SOCIAL)}
+    renamed = {"wx-cellpress": ("CellPress全科学", "MzU5MDcwNzg0MA=="), "wx-dxy-nephro": ("丁香园肾脏时间", "MzA3MjY5NzAxNA=="),
+               "wx-yxj-psych": ("医学界精神心理频道", "MzIyNjk1MjAwNQ=="), "wx-yaorongyun": ("摩熵医药", "MzkxMTM1MDMyMA=="),
+               "wx-liangyihui-hema": ("良医汇血液肿瘤资讯", "MzU4NjkzMDg4Mw=="), "wx-biopharma-xb": ("佰傲谷BioValley", "MzYzNjUxMjYzMw==")}
+    for source_id, (name, biz) in renamed.items():
+        source = rows[source_id]
+        assert (source.name, ask_name({"name": source.name, "config": source.config}), source.config["biz"]) == (name, name, biz), source_id
+    assert rows["wx-cjem"].config["biz"] == "MzA4ODYzMzg0Mg==" and rows["wx-cjem"].name == "中华内分泌代谢杂志"
+    for gone in ("wx-nature-portfolio", "wx-yxj-lab", "wx-healthai", "wx-yigu"):
+        assert gone not in rows, gone
+    asked = {ask_name({"name": source.name, "config": source.config}) for source in rows.values() if source.access == "dajiala"}
+    for code_107 in ("CellPress细胞科学", "丁香园肾内时间", "医学界精神病学频道", "药融云", "血液肿瘤资讯", "生物制药小编", "Nature Portfolio",
+                     "医学界检验频道", "医健AI掘金志", "肿瘤资讯"):
+        assert code_107 not in asked, code_107
+    research = json.loads((ROOT / "registry" / "research" / "wechat-accounts-2026-10-24.json").read_text(encoding="utf-8"))
+    assert {entry["id"] for entry in research["not_listed_2026_10_25"]} == {"wx-nature-portfolio", "wx-yxj-lab", "wx-healthai", "wx-yigu"}
+    assert all(entry["reason"] for entry in research["not_listed_2026_10_25"])

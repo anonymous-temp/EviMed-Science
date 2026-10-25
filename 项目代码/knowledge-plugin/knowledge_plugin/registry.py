@@ -258,7 +258,13 @@ ON CONFLICT (id) DO UPDATE SET
                 WHEN s.health = 'disabled' THEN (CASE WHEN s.last_ok_at IS NULL THEN 'new' ELSE 'healthy' END)
                 ELSE s.health END,
   next_poll_at = CASE WHEN s.health = 'disabled' AND (EXCLUDED.disabled_reason IS DISTINCT FROM 'owner_excluded' AND coalesce(s.operator_enabled, EXCLUDED.registry_enabled))
-                      THEN EXCLUDED.next_poll_at ELSE s.next_poll_at END,
+                      THEN EXCLUDED.next_poll_at
+                      -- c2-fixes 2026-10-25: a WeChat account parked for 30 days because the name or the biz it was read by answered another
+                      -- account (``cursor.mismatch``) is read again at once when its row changes: the park was decided for the old row,
+                      -- and the cursor is cleared by that change (above) — without this the corrected name waited out the old park.
+                      WHEN s.registry_sha256 IS DISTINCT FROM EXCLUDED.registry_sha256 AND (s.cursor -> 'mismatch') IS NOT NULL
+                      THEN EXCLUDED.next_poll_at
+                      ELSE s.next_poll_at END,
   retired_at = NULL, updated_at = EXCLUDED.updated_at, host = EXCLUDED.host, platform_produced = EXCLUDED.platform_produced
 WHERE s.registry_sha256 IS DISTINCT FROM EXCLUDED.registry_sha256
    OR s.host IS DISTINCT FROM EXCLUDED.host

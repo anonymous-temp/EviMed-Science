@@ -197,6 +197,31 @@ async def test_another_nickname_parks_it_and_no_posts_leave_it_unconfirmed(socia
 
 
 @pytest.mark.db
+async def test_a_parked_account_whose_row_changes_is_read_again_at_once_and_one_that_did_not_change_stays_parked(social_settings, pool):
+    """c2-fixes F5: 中华内分泌代谢杂志 was parked ``wechat_nickname_mismatch`` for thirty days; correcting its row (the biz written) must not
+    leave it waiting out the park decided for the old row. A row that is only parked by a pass-through failure keeps its own wait."""
+    await sync(pool, [row(), row("wx-quiet", "安静号", biz="MzQuiet==")])
+    fetcher, asked, details = fakes(lambda payload: {**live_answer(), "nickname": "医药魔方研究院"}
+                                    if payload["nickname"] == "医药魔方" else
+                                    {"code": 107, "msg": "", "cost_money": 0.02})
+    collector = SocialCollector(social_settings, pool, fetcher, clock=lambda: NOW)
+    assert (await collector.tick())["wechat"] == {"mismatch": 1, "failed": 1}
+    assert (await source(pool, "wx-pharmcube"))["next_poll_at"] == NOW + timedelta(days=30)
+    assert (await source(pool, "wx-quiet"))["next_poll_at"] == NOW + timedelta(days=3)
+    later = NOW + timedelta(hours=2)
+    async with pool.connection() as conn:
+        # Nothing changed: the same registry synced again leaves both waits alone.
+        await sync_registry(conn, parse_registry({"sources": [row(), row("wx-quiet", "安静号", biz="MzQuiet==")]}), later)
+    assert (await source(pool, "wx-pharmcube"))["next_poll_at"] == NOW + timedelta(days=30)
+    # Both rows change (a name added to the first, the second's biz written differently): only the mismatch park is lifted.
+    async with pool.connection() as conn:
+        await sync_registry(conn, parse_registry({"sources": [row(expected=["医药魔方", "医药魔方研究院"]), row("wx-quiet", "安静号", biz="MzQuiet2==")]}), later)
+    fixed = await source(pool, "wx-pharmcube")
+    assert fixed["next_poll_at"] == later and fixed["cursor"] == {}, "the cursor is cleared by the change and the park with it"
+    assert (await source(pool, "wx-quiet"))["next_poll_at"] == NOW + timedelta(days=3), "a 107's three days are its own, not a mismatch park"
+
+
+@pytest.mark.db
 async def test_the_name_lookup_respects_the_cap_and_the_balance(social_settings, pool):
     from dataclasses import replace
 
