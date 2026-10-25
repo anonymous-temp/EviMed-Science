@@ -4869,6 +4869,12 @@ export class RuntimeManager {
     try {
       const runtime = await started;
       if (creationSkipped) return runtime;
+      // A caller already inside its own transaction (a dispatch inside its
+      // admission, an apply's generation transaction) runs this start in place
+      // with a nested admission (`startRequest`), so the COMMIT that decides
+      // whether the start happened is that caller's and comes after this
+      // returns. If it fails, the runtime it created is closed the same way.
+      if (runtime === created) this.pluginService?.database?.afterRollback?.((/** @type {unknown} */ error) => this.closeRejectedStart(project, runtime, error));
       this.startFailures.delete(key);
       this.noteRoomFound(project);
       try {
@@ -7210,7 +7216,8 @@ export class RuntimeManager {
   }
 
   /**
-   * Close the runtime a start registered when that start fails afterwards.
+   * Close the runtime a start registered when that start fails afterwards, or
+   * when the transaction of the caller it started inside does not commit.
    *
    * The plugin admission's transaction commits after `create` has registered
    * the runtime, and a deferred foreign key is checked only there: a real

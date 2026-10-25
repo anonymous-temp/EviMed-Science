@@ -214,6 +214,8 @@ export class ControlPlaneDatabase {
     this.transactionClients = new AsyncLocalStorage();
     this.atomicTransactions = new AsyncLocalStorage();
     this.checkedOutClients = new WeakSet();
+    /** The outermost transaction a checked-out client is running: its `afterRollback` hooks. */
+    this.transactionOutcomes = new WeakMap();
     this.savepointSequence = 0;
     // An idle client losing its connection is routine — a TCP timeout, a
     // database restart, a network blip — and pg reports it by emitting "error"
@@ -331,17 +333,55 @@ export class ControlPlaneDatabase {
       return this.enqueueScoped(scoped, enclosing ?? scoped, run);
     }
     await this.migrate();
-    return this.withClient(async (client) => {
-      try {
-        await client.query("BEGIN");
-        const result = await operation(client);
-        await client.query(rollbackOnly ? "ROLLBACK" : "COMMIT");
-        return result;
-      } catch (error) {
-        await client.query("ROLLBACK").catch(() => {});
-        throw error;
+    /** @type {{ hooks: Array<(error: unknown) => unknown>, settled: boolean }} */
+    const outcome = { hooks: [], settled: false };
+    let committed = false, failure = null, result;
+    try {
+      result = await this.withClient(async (client) => {
+        this.transactionOutcomes.set(client, outcome);
+        try {
+          await client.query("BEGIN");
+          const value = await operation(client);
+          await client.query(rollbackOnly ? "ROLLBACK" : "COMMIT");
+          committed = !rollbackOnly;
+          return value;
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw error;
+        } finally {
+          outcome.settled = true;
+          this.transactionOutcomes.delete(client);
+        }
+      });
+    } catch (error) { failure = { error }; }
+    // After the client is back in the pool and outside every scope, and
+    // before the caller hears the failure: what was done for a transaction
+    // that did not commit is undone first.
+    if (!committed) {
+      for (const hook of outcome.hooks) {
+        // A hook records its own failure; the transaction's outcome stands.
+        try { await this.withoutTransactionClient(() => hook(failure?.error ?? null)); } catch { /* recorded by the hook */ }
       }
-    });
+    }
+    if (failure) throw failure.error;
+    return result;
+  }
+
+  /** Run `hook(error)` once the outermost transaction of the caller's scope
+   *  has rolled back or its COMMIT has failed — after its client is released
+   *  and outside every transaction, before that failure reaches the
+   *  transaction's caller. A commit runs nothing. Outside an open scope (or
+   *  in one whose transaction already ended) nothing is registered: false.
+   *
+   *  For effects a transaction cannot roll back: a runtime started by a caller
+   *  inside its own admission, whose COMMIT comes after the start returned
+   *  (`RuntimeManager.startAdmittedPrepared`).
+   *  @param {(error: unknown) => unknown} hook */
+  afterRollback(hook) {
+    const outcome = this.transactionClients.getStore()?.outcome;
+    if (!outcome || outcome.settled) return false;
+    outcome.hooks.push(hook);
+    return true;
   }
 
   /** Read-and-lock admission must end its locks before the caller's work.
@@ -386,7 +426,8 @@ export class ControlPlaneDatabase {
       if (existing.client !== client) throw new HttpError(409, "product_revision_conflict", "The database transaction client changed.");
       return this.trackScoped(existing, Promise.resolve().then(work));
     }
-    const scoped = { client, open: true, draining: false, borrowers: new Set(), serial: Promise.resolve() };
+    const scoped = { client, open: true, draining: false, borrowers: new Set(), serial: Promise.resolve(),
+      outcome: this.transactionOutcomes.get(client) ?? null };
     try { return await this.transactionClients.run(scoped, work); }
     finally {
       scoped.open = false; scoped.draining = true;

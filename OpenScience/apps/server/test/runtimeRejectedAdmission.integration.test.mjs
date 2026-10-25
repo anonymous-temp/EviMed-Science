@@ -151,3 +151,51 @@ for (const changed of ["generation", "guard"]) test(`a ${changed} change during 
   assert.equal(m.runtimes.size, 0); assert.equal(m.failedRuntimeStops.size, 0);
   assert.throws(() => m.assertActiveModelGatewayToken(token), "the credential minted for the failed attempt is withdrawn");
 });
+
+// A caller already inside its own admission runs the start in place with a
+// nested admission, so the COMMIT is the caller's and comes after the start
+// returned (the dispatch path, the generation workers).
+for (const outcome of ["rollback", "commit"]) test(`a runtime started inside a caller's own admission is ${outcome === "commit" ? "kept when that admission commits" : "closed when that admission's COMMIT fails"}`, options, async t => {
+  const f = await rejectedAdmissionFixture(t, `nested${outcome}`), m = f.m;
+  f.failCommit = false;
+  let runtime = null;
+  const outer = m.pluginService.withAdmission(f.project, async () => {
+    runtime = await m.start(f.project);
+    assert.equal(m.runtimes.get(f.key), runtime, "the nested start returned before the caller's COMMIT");
+    if (outcome === "rollback") await f.accounts.database.query("INSERT INTO p0_admission_child(parent_id) VALUES ('no-such-parent')");
+  });
+  if (outcome === "commit") {
+    await outer;
+    assert.deepEqual(f.closed, []); assert.equal(m.runtimes.get(f.key), runtime);
+    assert.doesNotThrow(() => m.assertActiveModelGatewayToken(runtime.modelGatewayToken));
+    assert.deepEqual(f.stopNotices, []);
+    return;
+  }
+  await assert.rejects(outer, { code: "23503" });
+  assert.deepEqual(f.closed, [runtime.child], "closed once the caller's transaction failed");
+  assert.equal(m.runtimes.size, 0); assert.equal(m.failedRuntimeStops.size, 0); assert.equal(m.runtimeStops.size, 0);
+  assert.throws(() => m.assertActiveModelGatewayToken(runtime.modelGatewayToken), "no credential stays registered");
+  assert.deepEqual(f.stopNotices, [{ status: "failed", errorCode: null }]);
+  const failures = (await ledger(f.project)).filter(row => row.event === "failed" || row.event.startsWith("cleanup_"));
+  assert.deepEqual(failures.map(row => [row.event, row.error, row.stage]), [["failed", "23503", "admission"]]);
+});
+
+test("a rollback hook runs after the client is released and outside the transaction, and a commit runs none", options, async t => {
+  const f = await rejectedAdmissionFixture(t, "rollbackhook"), database = f.accounts.database;
+  await database.query("CREATE TABLE p0_hook_effects(note text NOT NULL)");
+  const seen = [];
+  const within = (fails) => database.transaction(client => database.withTransactionClient(client, async () => {
+    assert.equal(database.afterRollback(async error => {
+      seen.push(error?.code ?? null);
+      // One pool connection: this would wait forever if the transaction still held it.
+      await database.query("INSERT INTO p0_hook_effects(note) VALUES ('after')");
+    }), true);
+    if (fails) await database.query("INSERT INTO p0_admission_child(parent_id) VALUES ('no-such-parent')");
+  }));
+  await within(false);
+  assert.deepEqual(seen, [], "a commit runs nothing");
+  await assert.rejects(within(true), { code: "23503" });
+  assert.deepEqual(seen, ["23503"]);
+  assert.deepEqual((await database.query("SELECT note FROM p0_hook_effects")).rows, [{ note: "after" }], "the hook's own write is not rolled back with the transaction");
+  assert.equal(database.afterRollback(() => assert.fail("never registered")), false, "outside a scope nothing is registered");
+});
