@@ -18,6 +18,7 @@ import {
   CARD_MAX_TAGS,
   INLINE_ACTION,
   PLATFORM_LABELS,
+  PRACTICE_LABEL,
   SCORE_LABEL,
   SCORE_NOTE,
   cardEyebrow,
@@ -186,6 +187,8 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
           {markSelected && item.selected && <span className="sr-only">精选</span>}
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
           {eyebrow && <Tag>{eyebrow}</Tag>}
+          {/* Content, not provenance: what the item may change, with the reason on hover or focus (a touch screen reads it in the reader). */}
+          {item.practice && <Tag tone="accent" title={item.practice.reason}>{PRACTICE_LABEL}</Tag>}
           {flags.map((flag) => (flag.key === "retracted"
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -107,6 +107,23 @@ describe("a card", () => {
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByRole("button", { name: "收藏" })).toBeInTheDocument();
     expect(within(row as HTMLElement).getByRole("button", { name: "更多操作" })).toBeInTheDocument();
+  });
+
+  it("carries 「可能改变实践」 only when the server sent it, as content with its reason on hover, never as a control or an alarm", async () => {
+    renderCard(scored());
+    expect(screen.queryByText("可能改变实践")).not.toBeInTheDocument();
+    cleanup();
+    renderCard(scored({ practice: { reason: "国内首个获批，改变一线用药选择。" } }));
+    const label = screen.getByText("可能改变实践");
+    expect(label).toHaveAttribute("data-tag", "");
+    expect(label).toHaveClass("bg-accent-soft", "text-accent");
+    expect(label.closest("a,button")).toBeNull();
+    await userEvent.hover(label);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("国内首个获批，改变一线用药选择。");
+    // A label with no reason is not shown: the parse drops it.
+    cleanup();
+    renderCard(scored({ practice: { reason: "  " } }));
+    expect(screen.queryByText("可能改变实践")).not.toBeInTheDocument();
   });
 
   it("draws no footer line when there is nothing for it", () => {

@@ -80,6 +80,9 @@ export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceT
 /** 「AI 评分」: one name everywhere — the card's pill, the reader's 推荐理由, a screen reader. */
 export const SCORE_LABEL = "AI 评分";
 
+/** 「可能改变实践」 (c3-select): the rare label of an item that could change what many clinicians do now; one name on the card and in the reader. */
+export const PRACTICE_LABEL = "可能改变实践";
+
 /** What 「AI 评分」 measures, under its breakdown. */
 export const SCORE_NOTE = "衡量对临床和科研读者的重要程度，不代表证据等级";
 
