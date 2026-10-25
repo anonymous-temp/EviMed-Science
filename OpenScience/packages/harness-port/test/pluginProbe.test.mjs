@@ -6,13 +6,18 @@ import { CITE_VERSION } from './helpers/pins.mjs'
 
 test('builtin integration proof reads actual native Loader state and refuses an enabled failed row', async () => {
   let failed = false
-  const ctx = { get: () => undefined, loader: { entries: () => [
+  const loader = { entries: () => [
     { id: 'dsh-annotation', parent: { tree: { ctx: {} } }, options: { name: '@changfenhuang/dsh-annotation' }, disabled: true },
     { id: 'ui-mermaid', parent: { tree: { ctx: {} } }, options: { name: 'dsh-mermaid' }, disabled: false, fiber: { state: failed ? 3 : 2 } },
-  ] } }
+  ] }
+  const ctx = { get: (/** @type {string} */ name) => name === 'loader' ? loader : undefined }
   assert.deepEqual(await builtinPluginState(ctx), { items: [{ id: 'annotation', enabled: false }, { id: 'mermaid', enabled: true }] })
   failed = true
   await assert.rejects(builtinPluginState(ctx), /extension_probe_config_invalid/)
+})
+
+test('a runtime without the loader service loses only the integration proof', async () => {
+  await assert.rejects(builtinPluginState({ get: () => undefined }), /extension_probe_unavailable/)
 })
 
 /** Every live registration a test made, disposed after it: the registry is

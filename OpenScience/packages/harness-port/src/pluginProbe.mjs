@@ -9,10 +9,14 @@ import SEAMS from '../seam-manifest.json' with { type: 'json' }
 const CITE_VERSION = SEAMS.plugins['dsh-cite']
 export const CITATION_TOOLS = Object.freeze(['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health'])
 /** Actual Loader state of the two admitted optional client integrations; no profile administration is exposed.
+ * The loader is read where this context has one (`ctx.get`), never injected: the probe also proves citations and
+ * extensions, and a runtime without the loader service loses only this one proof (`extension_probe_unavailable`).
  * @param {any} ctx */
 export async function builtinPluginState(ctx) {
+  const loader = typeof ctx.get === 'function' ? ctx.get('loader') : undefined
+  if (!loader || typeof loader.entries !== 'function') throw probeFailure('extension_probe_unavailable')
   const { readPluginInventory } = await loadHarnessModule('@deepseek-ai/dsh-host-plugin-inventory')
-  const inventory = await readPluginInventory(ctx)
+  const inventory = await readPluginInventory({ get: (/** @type {string} */ name) => ctx.get(name), loader })
   return { items: Object.entries({ annotation: 'dsh-annotation', mermaid: 'ui-mermaid' }).map(([id, rowId]) => {
     const rows = inventory.entries.filter((/** @type {any} */ entry) => entry.entryId === rowId)
     if (rows.length !== 1 || rows[0].enabled && rows[0].fiberPhase !== 'active') throw probeFailure('extension_probe_config_invalid')
