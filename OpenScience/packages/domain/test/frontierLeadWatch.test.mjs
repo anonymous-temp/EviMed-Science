@@ -3,6 +3,9 @@ import test from 'node:test'
 
 import {
   FRONTIER_CONGRESSES,
+  FRONTIER_LEAD_FRESH_DAYS,
+  FRONTIER_LEAD_REFUSED_DAYS,
+  FRONTIER_LEAD_REFUSED_LIMIT,
   FRONTIER_LEAD_GENRE_QUERIES,
   FRONTIER_LEAD_REGULATORY_WATCH,
   FRONTIER_LEAD_SHARES,
@@ -16,12 +19,16 @@ import {
   frontierLeadSkipHost,
 } from '../index.mjs'
 
-test('every trigger has a share, the shares make the whole day, and the watches are half of it', () => {
+test('every trigger has a share, the shares make the whole day: the watches 0.40, the outside events 0.15 (owner 2026-10-25)', () => {
   assert.deepEqual(Object.keys(FRONTIER_LEAD_SHARES).sort(), [...FRONTIER_LEAD_TRIGGERS].sort())
   const sum = Object.values(FRONTIER_LEAD_SHARES).reduce((a, b) => a + b, 0)
   assert.ok(Math.abs(sum - 1) < 1e-9, String(sum))
   const watches = ['hot-tag', 'specialty', 'congress', 'regulatory-watch'].reduce((total, key) => total + FRONTIER_LEAD_SHARES[/** @type {keyof typeof FRONTIER_LEAD_SHARES} */ (key)], 0)
-  assert.ok(Math.abs(watches - 0.5) < 1e-9)
+  assert.ok(Math.abs(watches - 0.4) < 1e-9)
+  assert.equal(FRONTIER_LEAD_SHARES['outside-event'], 0.15)
+  assert.deepEqual([FRONTIER_LEAD_SHARES['zh-report'], FRONTIER_LEAD_SHARES.specialty, FRONTIER_LEAD_SHARES['hot-tag']], [0.15, 0.13, 0.07])
+  assert.equal(FRONTIER_LEAD_TRIGGERS[0], 'outside-event', 'a tiny cap spends its first place on an outside event')
+  assert.equal(frontierLeadPlaces(120)['outside-event'], 18)
   const places = frontierLeadPlaces(120)
   assert.ok(Object.values(places).reduce((a, b) => a + b, 0) <= 120, 'never past the cap')
   assert.deepEqual(frontierLeadPlaces(0), Object.fromEntries(FRONTIER_LEAD_TRIGGERS.map((trigger) => [trigger, 0])))
@@ -85,4 +92,9 @@ test('a social network\'s page is never handed over, whatever its subdomain; a n
   assert.equal(frontierLeadSkipHost('x.com'), true)
   assert.equal(frontierLeadSkipHost('nmpa.gov.cn'), false)
   assert.equal(frontierLeadSkipHost('box.com'), false, 'a suffix that is not a whole label is no match')
+})
+
+test('what is not handed over is data: the plugin\'s freshness window and the refused-host rule', () => {
+  assert.equal(FRONTIER_LEAD_FRESH_DAYS, 30, 'the plugin\'s leads.py FRESH_DAYS')
+  assert.deepEqual([FRONTIER_LEAD_REFUSED_LIMIT, FRONTIER_LEAD_REFUSED_DAYS], [2, 7])
 })

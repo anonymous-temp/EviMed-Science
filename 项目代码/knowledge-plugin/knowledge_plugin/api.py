@@ -1,4 +1,4 @@
-"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.6.0), served exactly.
+"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.7.0), served exactly.
 
 Rules the handlers keep:
 
@@ -22,6 +22,8 @@ Rules the handlers keep:
   has evicted, is ``404 not_found`` — the entry keeps naming it, with its original address.
 - ``POST /v1/leads`` (1.6.0, ct-mix) receives the addresses the platform's lead triggers found and answers each one
   (``leads.submit``); reading them is the leads loop's (``leads.LeadReader``), never the request's.
+- ``GET /v1/hot-lists`` (1.7.0, c2-leads) answers the hot-list snapshots taken after ``since`` (``hotlists``); the
+  boards are read by the hot-list loop (``hotlists.HotListReader``), never by the request.
 """
 
 from __future__ import annotations
@@ -554,6 +556,14 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                     body["leads"] = await leads_health(conn, now)
             except Exception as error:
                 log.warning("leads health query failed: %s", type(error).__name__)
+            # Hot lists (c2-leads 2026-10-25, contract 1.7.0): each board's last read; a failure costs this block only.
+            if settings.hot_lists_enabled:
+                try:
+                    from .hotlists import hot_lists_health
+                    async with pool.connection() as conn:
+                        body["hot_lists"] = await hot_lists_health(conn)
+                except Exception as error:
+                    log.warning("hot lists health query failed: %s", type(error).__name__)
             body["backlog"] = {"due_sources": int(stats["due_sources"]), "pending_texts": int(stats["pending_texts"]),
                                "oldest_due_s": int((now - stats["oldest_due"]).total_seconds()) if stats["oldest_due"] else 0}
         except Exception as error:  # health must answer even when the database does not
@@ -592,7 +602,8 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
             "plugin": {"name": PLUGIN_NAME, "version": settings.version, "build": settings.build,
                        "started_at": state["started_at"].isoformat().replace("+00:00", "Z")},
             "contract": {"version": CONTRACT_VERSION},
-            "capabilities": {"stream": True, "text": True, "refresh": True, "lookups": [], "leads": settings.leads_enabled},
+            "capabilities": {"stream": True, "text": True, "refresh": True, "lookups": [], "leads": settings.leads_enabled,
+                             "hot_lists": settings.hot_lists_enabled},
             "vocabularies": {
                 "lane": sorted({r["lane"] for r in rows}), "source_type": sorted({r["source_type"] for r in rows}),
                 "egress": sorted({r["egress"] for r in rows}), "access": sorted({r["access"] for r in rows}),
@@ -718,6 +729,23 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
         async with pool_of().connection() as conn:
             excluded = await excluded_hosts(conn)
             body = await submit(conn, leads, clock(), daily_cap=settings.leads_daily, excluded=excluded)
+        return JSONResponse(body)
+
+    @app.get("/v1/hot-lists")
+    async def hot_lists(request: Request):
+        """The hot-list snapshots taken after ``since`` (contract 1.7.0, rule 11), the oldest first, at most 300."""
+        gate.check(request)
+        from .hotlists import list_snapshots, parse_since
+
+        if not settings.hot_lists_enabled:
+            raise ApiError(501, "capability_unavailable", "this build reads no hot lists (see /v1/manifest)")
+        raw = request.query_params.get("since")
+        try:
+            since = parse_since(raw, clock())
+        except (ValueError, TypeError):
+            raise ApiError(400, "invalid_params", "since must be a date-time", details={"field": "since"}) from None
+        async with pool_of().connection() as conn:
+            body = await list_snapshots(conn, since)
         return JSONResponse(body)
 
     # ---------------------------------------------------------------- stream

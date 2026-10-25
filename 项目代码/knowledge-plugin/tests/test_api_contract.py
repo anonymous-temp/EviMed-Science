@@ -175,7 +175,8 @@ async def test_manifest(client):
     assert_schema(body, "Manifest")
     assert body["contract"]["version"] == SPEC["info"]["version"]
     assert body["sources"]["total"] == SOURCE_COUNT and body["sources"]["enabled"] >= 256
-    assert body["capabilities"] == {"stream": True, "text": True, "refresh": True, "lookups": [], "leads": True}   # 1.6.0
+    assert body["capabilities"] == {"stream": True, "text": True, "refresh": True, "lookups": [], "leads": True,
+                                    "hot_lists": True}   # 1.6.0 leads; 1.7.0 hot lists
     assert body["oldest_seq_available"] == 1
     assert "doi" in body["fields"]["entry"] and "journal" in body["fields"]["facts"]
     assert set(body["vocabularies"]["access"]) <= set(SPEC["components"]["schemas"]["Access"]["enum"])

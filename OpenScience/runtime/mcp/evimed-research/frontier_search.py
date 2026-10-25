@@ -262,6 +262,33 @@ def _card(entry: dict) -> dict:
     return shown
 
 
+def _topic(entry: dict) -> dict:
+    """One hot-event topic as the model is shown it (c2-leads 2026-10-25): an index entry — the general medical question a
+    public event raised, its field, the attributed line on the event, its overview and the items it holds. The items are
+    what a run reads and cites; the instruction travels with every topic."""
+    shown = {"kind": "topic", "title": entry.get("title")}
+    for key in ("question", "domainLabel", "status"):
+        if entry.get(key):
+            shown[key] = entry[key]
+    peg = entry.get("peg") if isinstance(entry.get("peg"), dict) else None
+    if peg and peg.get("text"):
+        source = peg.get("source") if isinstance(peg.get("source"), dict) else {}
+        shown["event"] = peg["text"] + (" (%s)" % source["name"] if source.get("name") else "")
+    overview = entry.get("overview") if isinstance(entry.get("overview"), dict) else None
+    if overview and overview.get("text"):
+        shown["overview"] = overview["text"]
+    accepted = _minute(entry.get("acceptedAt"))
+    if accepted:
+        shown["since"] = accepted
+    items = []
+    for item in entry.get("items") or []:
+        if isinstance(item, dict) and item.get("title"):
+            items.append({key: item[key] for key in ("role", "title", "source", "url") if item.get(key)})
+    shown["items"] = items
+    shown["instruction"] = "EviMed's own index of a public event's medical question, not evidence: read the items' originals and cite those."
+    return shown
+
+
 def _scope(query: dict) -> str:
     """The filters an answer covers, in the words of its summary line."""
     parts = ["the editors' picks" if query.get("mode") == "selected" else "all collected items"]
@@ -278,6 +305,7 @@ def _answer(data: dict) -> dict:
     items = [_item(entry) for entry in entries]
     card_entries = [entry for entry in data.get("cards") or [] if isinstance(entry, dict)]
     cards = [_card(entry) for entry in card_entries]
+    topics = [_topic(entry) for entry in data.get("topics") or [] if isinstance(entry, dict)]
     scope = _scope(query)
     search_mode = data.get("searchMode")
     skipped = data.get("unselectedSkipped")
@@ -294,10 +322,13 @@ def _answer(data: dict) -> dict:
         )
     if data.get("cardsUnavailable"):
         warnings.append("Evidence cards could not be searched this time; the items are unaffected, and no card matching is not implied.")
+    if data.get("topicsUnavailable"):
+        warnings.append("Hot-event topics could not be searched this time; the items are unaffected.")
     if not items:
         summary = "No item in 前沿动态%s (%s)." % (subject, scope)
-        if cards:
-            summary = "No item in 前沿动态%s (%s); %d evidence card(s) match." % (subject, scope, len(cards))
+        if cards or topics:
+            summary = "No item in 前沿动态%s (%s)%s%s." % (subject, scope, "; %d evidence card(s) match" % len(cards) if cards else "",
+                                                         "; %d hot-event topic(s) match" % len(topics) if topics else "")
         else:
             warnings.append(
                 "An empty feed is not evidence that nothing happened: it holds only what its sources published in the window."
@@ -313,7 +344,7 @@ def _answer(data: dict) -> dict:
             "; %s search" % search_mode if query.get("q") and search_mode else "",
             "; more match" if data.get("more") else "",
             "; %d evidence card(s) match" % len(cards) if cards else "",
-        )
+        ) + ("" if not topics else " %d hot-event topic(s) match." % len(topics))
         next_actions.append(
             "These are leads: read the original through its url, doi or pmid before relying on an item, and cite that "
             "original, never this feed or its digest."
@@ -349,10 +380,18 @@ def _answer(data: dict) -> dict:
         body["cards"] = cards
         body["cardCount"] = len(cards)
         body["cardsMore"] = bool(data.get("cardsMore"))
+    if "topics" in data:
+        body["topics"] = topics
+        body["topicCount"] = len(topics)
+    if topics:
+        next_actions.append(
+            "Hot-event topics are EviMed's own index of a public event's medical question: read the items each lists and cite "
+            "their originals, never the topic; say nothing of the event's people beyond the attributed line."
+        )
     if isinstance(skipped, int):
         body["unselectedSkipped"] = skipped
     return {
-        "status": "success" if items or cards else "warning",
+        "status": "success" if items or cards or topics else "warning",
         "summary": summary,
         "data": body,
         "warnings": warnings,

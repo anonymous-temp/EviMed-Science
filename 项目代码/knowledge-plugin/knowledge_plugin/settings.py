@@ -102,6 +102,21 @@ def _crawl_url(env: dict) -> str | None:
     return raw
 
 
+def _boards(env: dict) -> tuple:
+    """``KNOWLEDGE_PLUGIN_HOT_LISTS_BOARDS``: a comma list of the boards ``hotlists.BOARDS`` reads; empty is every board, an
+    unknown name is refused by name."""
+    from .hotlists import BOARDS
+
+    raw = (env.get("KNOWLEDGE_PLUGIN_HOT_LISTS_BOARDS") or "").strip()
+    if not raw:
+        return ()
+    names = tuple(dict.fromkeys(part.strip() for part in raw.split(",") if part.strip()))
+    unknown = [name for name in names if name not in BOARDS]
+    if unknown:
+        raise SettingsError(f"KNOWLEDGE_PLUGIN_HOT_LISTS_BOARDS names unknown boards: {', '.join(unknown)} (known: {', '.join(BOARDS)})")
+    return names
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -139,6 +154,11 @@ class Settings:
     # c2-fixes 2026-10-25: 600 (was 300). On 2026-10-25 the 300 were spent by 10:12 CST and every specialty and genre-gap URL after it
     # answered ``capped`` while the platform kept searching; the plugin's own reads, not this cap, bound what is fetched.
     leads_daily: int = 600
+    # c2-leads 2026-10-25: the public hot lists (GET /v1/hot-lists, contract 1.7.0, ``hotlists.py``): read or not, how
+    # often, and which boards (a comma list of ``hotlists.BOARDS``; empty = every board).
+    hot_lists_enabled: bool = True
+    hot_lists_interval_s: int = 1800
+    hot_lists_boards: tuple = ()
     host: str = "0.0.0.0"
     port: int = 8080
     registry_path: str = str(PROJECT_ROOT / "registry" / "sources.json")
@@ -203,6 +223,9 @@ class Settings:
             discovery_outbound_pages=_int(env, "KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES", 120, 0, 2000),
             leads_enabled=_bool(env, "KNOWLEDGE_PLUGIN_LEADS", True),
             leads_daily=_int(env, "KNOWLEDGE_PLUGIN_LEADS_DAILY", 600, 0, 5000),
+            hot_lists_enabled=_bool(env, "KNOWLEDGE_PLUGIN_HOT_LISTS", True),
+            hot_lists_interval_s=_int(env, "KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S", 1800, 300, 86400),
+            hot_lists_boards=_boards(env),
             host=(env.get("KNOWLEDGE_PLUGIN_HOST") or "0.0.0.0").strip(),
             port=_int(env, "KNOWLEDGE_PLUGIN_PORT", 8080, 1, 65535),
             registry_path=registry_path,

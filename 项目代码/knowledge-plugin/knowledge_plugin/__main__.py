@@ -1,4 +1,4 @@
-"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|wechat-bodies|retext]``.
+"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|hot-lists|wechat-bodies|retext]``.
 
 ``serve`` (the default and the image's command) opens the pool, applies the schema, syncs the
 registry file into ``sources``, and — unless ``KNOWLEDGE_PLUGIN_CRAWL=0`` — starts the crawler in
@@ -10,6 +10,8 @@ and exits non-zero on a problem, without touching a database.
 with the counts by reason; it writes nothing (``lifecycle --apply`` retires them and syncs the registry, what the
 hourly discovery run does once a day). ``discover`` runs the discovery cycle once in the foreground and prints its
 report (``--lines journal,directory`` limits the gathering; ``--caps line=n,…`` overrides the day's caps).
+``hot-lists`` reads the configured hot lists once in the foreground (``hotlists.py``), keeps the snapshots, and prints
+what each board gave or why it failed.
 
 ``wechat-bodies`` prints, one JSON line each, the WeChat articles answered ``unavailable`` without their text in the last
 ``--days`` (default 7) and a last line with the count and what buying them would cost; it writes nothing and calls nobody.
@@ -165,6 +167,27 @@ async def _discover(settings: Settings, lines: list[str] | None, caps: str | Non
         await pool.close()
 
 
+async def _hot_lists(settings: Settings) -> int:
+    import json
+
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .fetch import ProtectedFetcher
+    from .hotlists import HotListReader
+
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        report = await HotListReader(settings, pool, fetcher).tick()
+        print(json.dumps(report, ensure_ascii=False, indent=1))
+        return 0 if report["read"] else 1
+    finally:
+        await fetcher.aclose()
+        await pool.close()
+
+
 async def _wechat_bodies(settings: Settings, days: int, apply: bool) -> int:
     import json
     from datetime import datetime, timezone
@@ -296,6 +319,8 @@ def main(argv: list[str] | None = None) -> int:
             elif flag == "--caps":
                 caps = value
         return asyncio.run(_discover(settings, lines, caps))
+    if command == "hot-lists":
+        return asyncio.run(_hot_lists(settings))
     if command == "wechat-bodies":
         days = 7
         for flag, value in zip(argv[1:], argv[2:]):
@@ -307,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_wechat_bodies(settings, days, apply="--apply" in argv[1:]))
     if command == "retext":
         return asyncio.run(_retext(settings, argv[1:], apply="--apply" in argv[1:]))
-    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover, wechat-bodies or retext",
+    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover, hot-lists, wechat-bodies or retext",
           file=sys.stderr)
     return 2
 

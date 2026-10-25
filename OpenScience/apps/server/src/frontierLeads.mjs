@@ -26,8 +26,20 @@
  *   held to the module's daily budget (the gateway's `createWebSearch`, `gatewaySpend.mjs`); no search is made while the
  *   day's budget is not `ok` (throttled or spent: leads are never urgent).
  * - **Dedupe.** A query is made once a day per trigger (`leads` is unique on day, trigger and the query's key); a result
- *   already in the feed (its canonical address, or its `url:` key) or already handed over (`lead_urls`) is not handed over
- *   again; the plugin is idempotent on the address besides.
+ *   already in the feed (its canonical address, or its `url:` key) or already answered by the plugin (`lead_urls`:
+ *   accepted, duplicate or refused) is not handed over again; one the plugin answered `capped`, or never answered, may be
+ *   handed over another day. The plugin is idempotent on the address besides.
+ * - **What is not handed over** (review 2026-10-25): a result dated before the plugin's freshness window
+ *   (`FRONTIER_LEAD_FRESH_DAYS`, the plugin's own `FRESH_DAYS`: it would only be answered `stale`) unless it names a work by its
+ *   identifier (a DOI, a PubMed record, a trial: read from its index whatever its age), and a result from a host
+ *   the plugin refused `FRONTIER_LEAD_REFUSED_LIMIT` times in `FRONTIER_LEAD_REFUSED_DAYS` days (robots, a challenge, an
+ *   owner exclusion: the next address there is refused too) — each recorded with why (`skipped: stale | refused-host`).
+ * - **The plugin's day cap ends the day's searching.** Once the plugin answers `capped` for any address of the feed's day,
+ *   nothing more is searched or handed over that day (a search whose results cannot be read is money spent on nothing:
+ *   174 addresses were capped on 2026-10-25 while the searches went on). The mark is the `capped` rows of `lead_urls`
+ *   themselves, so a restart does not search again; it clears with the day.
+ * - **The order** spends a tick's places on what is worth most first: the outside events' topic searches, then the
+ *   addresses (they cost no search), then the follow-ups, and from the watch hour the genre gaps before the other watches.
  * - **Nothing here is shown to a reader.** The tables and the counters (`status()`, the metrics) are for operators.
  * - **A failure degrades.** A search that fails records its code and the next query goes on; a plugin that does not answer
  *   leaves the results recorded and unsent (`outcome: unsent`), and they are not retried — tomorrow's watch searches again.
@@ -37,7 +49,10 @@
 
 import { createHash } from "node:crypto";
 import {
+  FRONTIER_LEAD_FRESH_DAYS,
   FRONTIER_LEAD_GENRE_QUERIES,
+  FRONTIER_LEAD_REFUSED_DAYS,
+  FRONTIER_LEAD_REFUSED_LIMIT,
   FRONTIER_LEAD_REGULATORY_WATCH,
   FRONTIER_LEAD_RESULTS_PER_QUERY,
   FRONTIER_MIX_COUNTED_RULES,
@@ -141,6 +156,25 @@ export function frontierLeadUrl(value) {
   return parsed.toString();
 }
 
+/**
+ * Whether an address names a work by its identifier — a DOI at doi.org, a PubMed record, a ClinicalTrials.gov study — which the
+ * plugin reads from its index whatever its age (its `leads.py` `lead_kind`): such a result is never held as stale. A format.
+ * @param {string} url
+ */
+export function frontierLeadIdentifierAddress(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return false; }
+  const host = parsed.hostname.toLowerCase();
+  if ((host === "doi.org" || host === "dx.doi.org") && /^\/10\.\d{4,9}\//.test(parsed.pathname)) return true;
+  if (host === "pubmed.ncbi.nlm.nih.gov" && /^\/\d{6,9}\/?$/.test(parsed.pathname)) return true;
+  return (host === "clinicaltrials.gov" || host === "www.clinicaltrials.gov") && /NCT\d{8}/i.test(parsed.pathname);
+}
+
+/** An address's host without `www.` (the family a refusal counts against), or null. @param {unknown} url */
+function hostFamily(url) {
+  try { return new URL(String(url)).hostname.toLowerCase().replace(/\.$/, "").replace(/^www\./, ""); } catch { return null; }
+}
+
 /** A title cut to a query's length at a character boundary. @param {unknown} text @param {number} limit */
 function clip(text, limit) {
   const value = String(text ?? "").replace(/\s+/g, " ").trim();
@@ -148,22 +182,24 @@ function clip(text, limit) {
 }
 
 /**
- * @typedef {{ trigger: string, kind: "search", query: string, language: string | null, timeRange: "day" | "week",
- *   subject: Record<string, unknown>, excludeHost?: string | null, chineseOnly?: boolean } | { trigger: string, kind: "address", url: string,
+ * @typedef {{ trigger: string, kind: "search", query: string, language: string | null, timeRange: "day" | "week" | "month" | "year",
+ *   subject: Record<string, unknown>, excludeHost?: string | null, chineseOnly?: boolean, dedupeKey?: string } | { trigger: string, kind: "address", url: string,
  *   subject: Record<string, unknown> }} FrontierLeadPlan
  *   `chineseOnly`: hand over only results whose title is written in Chinese (a `zh-report` looks for a Chinese report; the
  *   engines answer a Chinese query with English pages too — the trial searches of 2026-10-24).
+ *   `dedupeKey`: what the day's dedupe keys the search by instead of its query (a topic's wave searches its query again).
  */
 
 export class FrontierLeads {
   /**
    * @param {{ database: any, plugin: any, webSearch?: { search: (body: Record<string, unknown>, context: { caller: any }) => Promise<any> } | null,
    *   owner: () => ({ userId: string, projectId: string } | null), budget?: (() => Promise<{ state: string, budgetCny?: number }>) | null,
-   *   config?: Record<string, any>, now?: () => Date }} dependencies
+   *   config?: Record<string, any>, now?: () => Date, topics?: { duePlans: (now: Date) => Promise<Array<Record<string, any>>> } | null }} dependencies
    *   `plugin` offers `submitLeads(leads)` (`KnowledgePluginClient`); `webSearch` is the gateway's search (`createWebSearch`);
-   *   `owner` the feed's internal project the searches are booked to; `budget` the pipeline's day budget.
+   *   `owner` the feed's internal project the searches are booked to; `budget` the pipeline's day budget; `topics` the
+   *   hot-event topics (`FrontierTopics`), whose due searches lead the plan.
    */
-  constructor({ database, plugin, webSearch = null, owner, budget = null, config = {}, now = () => new Date() }) {
+  constructor({ database, plugin, webSearch = null, owner, budget = null, config = {}, now = () => new Date(), topics = null }) {
     if (!database) throw new TypeError("The frontier leads need the product database.");
     this.database = database;
     this.plugin = plugin;
@@ -172,6 +208,7 @@ export class FrontierLeads {
     this.budget = typeof budget === "function" ? budget : null;
     this.config = config ?? {};
     this.now = now;
+    this.topics = topics;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     this.enabled = this.config.frontierLeadsEnabled !== false;
     const cap = Number(this.config.frontierLeadsDailyQueries);
@@ -183,6 +220,8 @@ export class FrontierLeads {
       ticks: 0, searches: /** @type {Record<string, number>} */ ({}), addresses: 0, results: 0, newUrls: 0, sent: 0,
       plugin: /** @type {Record<string, number>} */ ({ accepted: 0, duplicate: 0, refused: 0, capped: 0, unsent: 0 }),
       failures: /** @type {Record<string, number>} */ ({}), skipped: /** @type {Record<string, number>} */ ({}),
+      /** Results left out before the hand-over, by why (stale, refused-host, social-network, own-site, not-chinese). */
+      held: /** @type {Record<string, number>} */ ({}),
     };
     /** @type {{ at: string, searched: number, sent: number, skipped?: string } | null} */
     this.lastTick = null;
@@ -219,24 +258,31 @@ export class FrontierLeads {
       await this.database.query("DELETE FROM evimed_frontier.leads WHERE made_at < $1", [new Date(now.getTime() - RETENTION_MS)]);
       this.retainedDay = day;
     }
+    // The plugin's day is spent: nothing more is searched or handed over until the feed's next day (module note).
+    if (await this.cappedToday(now)) return skip("plugin_capped");
     const plans = await this.plan(now);
     const budget = this.budget ? await this.budget().catch(() => ({ state: "unavailable" })) : { state: "ok" };
     const caller = { userId: owner.userId, projectId: owner.projectId, runId: null, purpose: "frontier", moduleLimit: this.budgetCny };
+    const refusedHosts = await this.refusedHosts(now);
     let searched = 0;
     let addresses = 0;
     let sent = 0;
+    let capped = false;
     for (const plan of plans) {
+      if (capped) break;
       if (plan.kind === "address") {
         const lead = await this.#claim(day, plan, plan.url);
         if (!lead) continue;
         addresses += 1;
         this.counters.addresses += 1;
-        sent += await this.#handOver(lead, plan.trigger, [{ url: plan.url, title: null, snippet: null, publishedDate: null }]);
+        const handed = await this.#handOver(lead, plan.trigger, [{ url: plan.url, title: null, snippet: null, publishedDate: null }], { now, refusedHosts });
+        sent += handed.accepted;
+        capped = handed.capped;
         continue;
       }
       if (searched >= LEADS_PER_TICK) break;
       if (budget.state !== "ok") { skip(`budget_${budget.state}`); break; }
-      const lead = await this.#claim(day, plan, plan.query);
+      const lead = await this.#claim(day, plan, plan.dedupeKey ?? plan.query);
       if (!lead) continue;
       searched += 1;
       this.counters.searches[plan.trigger] = (this.counters.searches[plan.trigger] ?? 0) + 1;
@@ -254,10 +300,40 @@ export class FrontierLeads {
       this.counters.results += rows.length;
       const engines = Array.isArray(answer?.data?.engines) ? answer.data.engines : [];
       await this.database.query("UPDATE evimed_frontier.leads SET status = 'searched', cost_cny = $2 WHERE id = $1", [lead.id, frontierLeadCost(engines)]);
-      sent += await this.#handOver(lead, plan.trigger, rows, { excludeHost: plan.excludeHost ?? null, chineseOnly: plan.chineseOnly === true });
+      const handed = await this.#handOver(lead, plan.trigger, rows, { excludeHost: plan.excludeHost ?? null, chineseOnly: plan.chineseOnly === true, now, refusedHosts });
+      sent += handed.accepted;
+      capped = handed.capped;
     }
-    this.lastTick = { at: now.toISOString(), searched, sent };
-    return { searched, addresses, sent };
+    if (capped) this.counters.skipped.plugin_capped = (this.counters.skipped.plugin_capped ?? 0) + 1;
+    this.lastTick = { at: now.toISOString(), searched, sent, ...(capped ? { skipped: "plugin_capped" } : {}) };
+    return { searched, addresses, sent, ...(capped ? { skipped: "plugin_capped" } : {}) };
+  }
+
+  /** Whether the plugin answered `capped` for an address of the feed's day (the persisted mark). @param {Date} [now] */
+  async cappedToday(now = this.now()) {
+    await migrateFrontierLeads(this.database);
+    const window = frontierDayWindow(now, this.timeZone);
+    const row = (await this.database.query("SELECT 1 FROM evimed_frontier.lead_urls WHERE outcome = 'capped' AND sent_at >= $1 AND sent_at < $2 LIMIT 1",
+      [window.start, window.end])).rows[0];
+    return Boolean(row);
+  }
+
+  /**
+   * The hosts (their family: `www.` dropped) the plugin refused `FRONTIER_LEAD_REFUSED_LIMIT` times or more in the last
+   * `FRONTIER_LEAD_REFUSED_DAYS` days.
+   * @param {Date} [now] @returns {Promise<Set<string>>}
+   */
+  async refusedHosts(now = this.now()) {
+    await migrateFrontierLeads(this.database);
+    const rows = (await this.database.query("SELECT url FROM evimed_frontier.lead_urls WHERE outcome = 'refused' AND sent_at >= $1",
+      [new Date(now.getTime() - FRONTIER_LEAD_REFUSED_DAYS * DAY)])).rows;
+    /** @type {Map<string, number>} */
+    const counts = new Map();
+    for (const row of rows) {
+      const host = hostFamily(row.url);
+      if (host) counts.set(host, (counts.get(host) ?? 0) + 1);
+    }
+    return new Set([...counts].filter(([, n]) => n >= FRONTIER_LEAD_REFUSED_LIMIT).map(([host]) => host));
   }
 
   /**
@@ -281,18 +357,23 @@ export class FrontierLeads {
     const room = (/** @type {string} */ trigger) => (places[trigger] ?? 0) - (used[trigger] ?? 0) - plans.filter((plan) => plan.trigger === trigger && plan.kind === "search").length;
     /** @param {FrontierLeadPlan} plan */
     const add = (plan) => {
-      const key = plan.kind === "search" ? frontierLeadQueryKey(plan.query) : plan.url;
+      const key = plan.kind === "search" ? frontierLeadQueryKey(plan.dedupeKey ?? plan.query) : plan.url;
       if (!key || done.has(`${plan.trigger}\u0000${key}`)) return;
       if (plan.kind === "search" && room(plan.trigger) < 1) return;
       done.add(`${plan.trigger}\u0000${key}`);
       plans.push(plan);
     };
     const since = new Date(now.getTime() - FOLLOW_UP_WINDOW_MS);
-    // Primary sources first: an identifier is an address, the rest a search for the item's own words.
-    for (const lead of await this.#primarySources(since)) add(lead);
+    // The order is the value (module note): the outside events' topic searches, the addresses (an identifier costs no
+    // search), the follow-ups, then the watches with the genre gaps first.
+    for (const lead of await this.#outsideEvents(now)) add(lead);
+    const primary = await this.#primarySources(since);
+    for (const lead of primary) if (lead.kind === "address") add(lead);
+    for (const lead of primary) if (lead.kind === "search") add(lead);
     for (const lead of await this.#hotEvents()) add(lead);
     for (const lead of await this.#chineseReports(since)) add(lead);
     if (watching) {
+      for (const lead of await this.#genreGaps(now)) add(lead);
       for (const entry of FRONTIER_LEAD_REGULATORY_WATCH) add({ trigger: "regulatory-watch", kind: "search", query: entry.query, language: "zh-CN", timeRange: "day", subject: { why: entry.why } });
       for (const congress of frontierActiveCongresses(window.day)) {
         for (const query of [congress.keywords_zh[0], congress.keywords_en[0]].filter(Boolean)) {
@@ -301,9 +382,22 @@ export class FrontierLeads {
       }
       for (const lead of await this.#hotTags(now)) add(lead);
       for (const lead of await this.#specialties(now)) add(lead);
-      for (const lead of await this.#genreGaps(now)) add(lead);
     }
     return plans;
+  }
+
+  /**
+   * `outside-event`: the searches the hot-event topics owe now (`frontierTopics.mjs` `FrontierTopics.duePlans`), when a
+   * topic module is composed. A topic module that fails costs its own plans only.
+   * @param {Date} now @returns {Promise<FrontierLeadPlan[]>}
+   */
+  async #outsideEvents(now) {
+    if (!this.topics || typeof this.topics.duePlans !== "function") return [];
+    try { return /** @type {FrontierLeadPlan[]} */ (await this.topics.duePlans(now)); } catch (error) {
+      const code = typeof (/** @type {any} */ (error))?.code === "string" ? /** @type {any} */ (error).code : "frontier_topics_plan_failed";
+      this.counters.failures[code] = (this.counters.failures[code] ?? 0) + 1;
+      return [];
+    }
   }
 
   /** Insert the lead's row, or nothing when another tick (or control plane) made it today. @param {string} day @param {FrontierLeadPlan} plan @param {string} key */
@@ -317,13 +411,16 @@ export class FrontierLeads {
 
   /**
    * The results the feed does not have, handed to the plugin: at most `FRONTIER_LEAD_RESULTS_PER_QUERY`, none from
-   * `excludeHost` (the report's own site) or a social network, none without a Chinese title when `chineseOnly`, none the
-   * feed already has or already handed over. Records every result with why it was left out, what the plugin answered for
-   * each handed over, and the lead's outcome. Returns how many were accepted.
+   * `excludeHost` (the report's own site) or a social network, none without a Chinese title when `chineseOnly`, none dated
+   * before the plugin's freshness window, none from a host it keeps refusing, none the feed already has or the plugin
+   * already answered. Records every result with why it was left out, what the plugin answered for each handed over, and
+   * the lead's outcome. Returns how many were accepted, and whether the plugin said its day is spent.
    * @param {{ id: string }} lead @param {string} trigger @param {any[]} rows
-   * @param {{ excludeHost?: string | null, chineseOnly?: boolean }} [rules]
+   * @param {{ excludeHost?: string | null, chineseOnly?: boolean, now?: Date, refusedHosts?: Set<string> }} [rules]
+   * @returns {Promise<{ accepted: number, capped: boolean }>}
    */
-  async #handOver(lead, trigger, rows, { excludeHost = null, chineseOnly = false } = {}) {
+  async #handOver(lead, trigger, rows, { excludeHost = null, chineseOnly = false, now = this.now(), refusedHosts = new Set() } = {}) {
+    const freshFrom = now.getTime() - FRONTIER_LEAD_FRESH_DAYS * DAY;
     /** @type {Array<{ url: string, title: string | null, snippet: string | null, publishedDate: string | null, skipped: string | null }>} */
     const fresh = [];
     const seen = new Set();
@@ -333,16 +430,21 @@ export class FrontierLeads {
       seen.add(url);
       const host = new URL(url).hostname;
       const title = typeof row.title === "string" ? row.title.slice(0, 300) : null;
+      const publishedDate = typeof row.publishedDate === "string" ? row.publishedDate : null;
+      const published = publishedDate ? Date.parse(publishedDate) : Number.NaN;
       const skipped = excludeHost && host.replace(/^www\./, "") === excludeHost ? "own-site"
-        : frontierLeadSkipHost(host) ? "social-network" : chineseOnly && !isChineseTitle(title) ? "not-chinese" : null;
-      fresh.push({ url, title, snippet: typeof row.snippet === "string" ? row.snippet.slice(0, 700) : null,
-        publishedDate: typeof row.publishedDate === "string" ? row.publishedDate : null, skipped });
+        : frontierLeadSkipHost(host) ? "social-network" : chineseOnly && !isChineseTitle(title) ? "not-chinese"
+        : Number.isFinite(published) && published < freshFrom && !frontierLeadIdentifierAddress(url) ? "stale"
+        : refusedHosts.has(hostFamily(url) ?? "") ? "refused-host" : null;
+      if (skipped) this.counters.held[skipped] = (this.counters.held[skipped] ?? 0) + 1;
+      fresh.push({ url, title, snippet: typeof row.snippet === "string" ? row.snippet.slice(0, 700) : null, publishedDate, skipped });
     }
     const urls = fresh.map((entry) => entry.url);
     const known = new Set();
     if (urls.length) {
+      // An address the plugin answered `capped`, or never answered, is not known to it: it may be handed over another day.
       for (const row of (await this.database.query(`SELECT canonical_url AS url FROM evimed_frontier.items WHERE md5(canonical_url) = ANY($1::text[])
-          UNION SELECT u.url FROM evimed_frontier.lead_urls u WHERE u.url_sha256 = ANY($2::text[])`,
+          UNION SELECT u.url FROM evimed_frontier.lead_urls u WHERE u.url_sha256 = ANY($2::text[]) AND u.outcome IN ('accepted', 'duplicate', 'refused')`,
       [urls.map((url) => createHash("md5").update(url).digest("hex")), urls.map(sha256)])).rows) known.add(row.url);
       for (const row of (await this.database.query("SELECT key FROM evimed_frontier.item_keys WHERE key = ANY($1::text[])", [urls.map(urlKey)])).rows) {
         const match = urls.find((url) => urlKey(url) === row.key);
@@ -370,15 +472,18 @@ export class FrontierLeads {
     }
     for (const [url, outcome] of outcomes) {
       this.counters.plugin[outcome] = (this.counters.plugin[outcome] ?? 0) + 1;
-      await this.database.query(`INSERT INTO evimed_frontier.lead_urls (url_sha256, url, lead_id, trigger, outcome) VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (url_sha256) DO NOTHING`, [sha256(url), url, lead.id, trigger, outcome]);
+      // Sent at the module's own clock: the day's capped mark and the refused-host window are read against it.
+      await this.database.query(`INSERT INTO evimed_frontier.lead_urls (url_sha256, url, lead_id, trigger, outcome, sent_at) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (url_sha256) DO UPDATE SET lead_id = EXCLUDED.lead_id, trigger = EXCLUDED.trigger, outcome = EXCLUDED.outcome, sent_at = EXCLUDED.sent_at
+        WHERE evimed_frontier.lead_urls.outcome IN ('capped', 'unsent')`, [sha256(url), url, lead.id, trigger, outcome, now]);
     }
     const accepted = [...outcomes.values()].filter((outcome) => outcome === "accepted").length;
+    const capped = [...outcomes.values()].includes("capped");
     const results = fresh.map((entry) => ({ url: entry.url, title: entry.title, publishedDate: entry.publishedDate,
       known: known.has(entry.url), ...(entry.skipped ? { skipped: entry.skipped } : {}), outcome: outcomes.get(entry.url) ?? null }));
     await this.database.query(`UPDATE evimed_frontier.leads SET status = $2, status_code = $3, results = $4::jsonb, sent = $5, accepted = $6 WHERE id = $1`,
       [lead.id, failure ? "failed" : handed.length ? "sent" : "empty", failure, JSON.stringify(results), failure ? 0 : handed.length, accepted]);
-    return accepted;
+    return { accepted, capped };
   }
 
   /**

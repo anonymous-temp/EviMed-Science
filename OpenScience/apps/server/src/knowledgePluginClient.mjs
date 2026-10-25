@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { FRONTIER_ENRICHMENT_KEYS } from "@evimed/domain";
+import { FRONTIER_ENRICHMENT_KEYS, FRONTIER_HOT_BOARDS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -491,8 +491,39 @@ function validateHealth(raw) {
     host_budget: hostBudget,
     providers,
     discovery,
+    hot_lists: hotListsHealth(value.hot_lists),
     latest_seq: integer(value.latest_seq, 0, Number.MAX_SAFE_INTEGER) ?? null,
   };
+}
+
+/**
+ * Contract 1.7.0 `Health.hot_lists`: each board's last good read and its last error, for the boards this build knows; null
+ * when the plugin reports none.
+ * @param {unknown} raw @returns {Record<string, { last_ok_at: string | null, last_error: string | null }> | null}
+ */
+function hotListsHealth(raw) {
+  if (!isObject(raw)) return null;
+  /** @type {Record<string, { last_ok_at: string | null, last_error: string | null }>} */
+  const boards = {};
+  for (const board of FRONTIER_HOT_BOARDS) {
+    const row = /** @type {any} */ (raw)[board];
+    if (isObject(row)) boards[board] = { last_ok_at: isoTime(row.last_ok_at), last_error: text(row.last_error, 200) ?? null };
+  }
+  return boards;
+}
+
+/**
+ * One hot-list entry as the contract states it (1.7.0 `HotListEntry`), or null when it does not.
+ * @param {unknown} raw @returns {{ rank: number, title: string, heat: number | null, desc: string | null, url: string | null } | null}
+ */
+function hotListEntry(raw) {
+  if (!isObject(raw)) return null;
+  const row = /** @type {any} */ (raw);
+  const rank = integer(row.rank, 1, 1000);
+  const title = text(row.title, 200);
+  if (!rank || !title) return null;
+  const heat = typeof row.heat === "number" && Number.isFinite(row.heat) && row.heat >= 0 ? row.heat : null;
+  return { rank, title, heat, desc: text(row.desc, 300) ?? null, url: httpUrl(row.url) ?? null };
 }
 
 /** The enrichment keys the contract names, each checked for its own type below. */
@@ -894,6 +925,30 @@ export class KnowledgePluginClient {
       .map((/** @type {any} */ row) => ({ url: row.url, status: row.status, reason: text(row.reason, 200) ?? null }));
     const count = (/** @type {string} */ name) => integer(body?.[name], 0, Number.MAX_SAFE_INTEGER) ?? 0;
     return { accepted: count("accepted"), duplicate: count("duplicate"), refused: count("refused"), capped: count("capped"), results };
+  }
+
+  /**
+   * The hot-list snapshots the plugin took after `since` (`GET /v1/hot-lists`, contract 1.7.0, c2-leads 2026-10-25): each a
+   * board, when it was read and its ranked entries, the oldest first, at most 300 an answer (ask again from the last one's
+   * `fetchedAt`). A board this build does not know is left out and an entry that fails the shape check is dropped; a plugin
+   * older than 1.7.0 answers 404, which is its own named error.
+   * @param {{ since?: string | Date | null }} [options]
+   * @returns {Promise<{ boards: Array<{ board: string, fetchedAt: string, entries: Array<{ rank: number, title: string, heat: number | null, desc: string | null, url: string | null }> }> }>}
+   */
+  async hotLists({ since = null } = {}) {
+    const at = since == null ? null : new Date(since);
+    if (at && !Number.isFinite(at.getTime())) throw pluginError(400, "knowledge_plugin_request_invalid", "since must be a date-time.");
+    const body = await this.#request("GET", "/v1/hot-lists", { query: at ? { since: at.toISOString() } : {} });
+    if (!isObject(body) || !Array.isArray(body.boards)) throw pluginError(502, "knowledge_plugin_response_invalid", "The plugin's hot lists are not a list.");
+    const boards = [];
+    for (const raw of body.boards.slice(0, 300)) {
+      if (!isObject(raw) || !FRONTIER_HOT_BOARDS.includes(raw.board)) continue;
+      const fetchedAt = isoTime(raw.fetched_at);
+      if (!fetchedAt || !Array.isArray(raw.entries)) continue;
+      const entries = raw.entries.slice(0, 60).map(hotListEntry).filter((entry) => entry !== null);
+      boards.push({ board: String(raw.board), fetchedAt, entries });
+    }
+    return { boards };
   }
 
   status() {

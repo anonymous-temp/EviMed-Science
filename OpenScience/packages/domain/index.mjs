@@ -1416,13 +1416,17 @@ export {
   frontierMixSelect,
   frontierMixSourceCap,
 } from './src/frontierMix.mjs'
-// frontierLeadWatch — 13 exports: what the frontier feed goes looking for and when (lead triggers): the triggers and their
+// frontierLeadWatch — 16 exports: what the frontier feed goes looking for and when (lead triggers): the triggers and their
 // shares of a day's searches, the congress calendar (`frontier-congresses.json`) and its windows, the Chinese regulatory
-// and industry watch, a genre group's gap queries, the identifiers a report names, and the key a query is deduplicated by.
+// and industry watch, a genre group's gap queries, the identifiers a report names, the key a query is deduplicated by, and
+// what is not handed over (a result older than the plugin reads, a host it keeps refusing).
 export {
   FRONTIER_CONGRESS_WINDOW_DAYS,
   FRONTIER_CONGRESSES,
+  FRONTIER_LEAD_FRESH_DAYS,
   FRONTIER_LEAD_GENRE_QUERIES,
+  FRONTIER_LEAD_REFUSED_DAYS,
+  FRONTIER_LEAD_REFUSED_LIMIT,
   FRONTIER_LEAD_REGULATORY_WATCH,
   FRONTIER_LEAD_RESULTS_PER_QUERY,
   FRONTIER_LEAD_SHARES,
@@ -1434,18 +1438,28 @@ export {
   frontierLeadPlaces,
   frontierLeadQueryKey,
 } from './src/frontierLeadWatch.mjs'
-// frontierTopics — 11 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
+// frontierTopics — 20 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
 // labels, the hot lists it is first seen on, a topic's states, its items' roles and origins, the evidence programme's states
-// for it, and the limits it lives within.
+// for it, the limits it lives within, and the outside-event trigger's pure decisions (a candidate, a surge, the title key,
+// an item's role, the names a text holds).
 export {
   FRONTIER_HOT_BOARDS,
+  FRONTIER_TOPIC_BACKGROUND_DAYS,
+  FRONTIER_TOPIC_CANDIDATE,
   FRONTIER_TOPIC_DOMAIN_LABELS_ZH,
   FRONTIER_TOPIC_DOMAINS,
+  FRONTIER_TOPIC_EVIDENCE_GENRES,
   FRONTIER_TOPIC_ITEM_ROLES,
   FRONTIER_TOPIC_ITEM_VIA,
   FRONTIER_TOPIC_LIMITS,
+  FRONTIER_TOPIC_MIN_CONFIDENCE,
   FRONTIER_TOPIC_PROGRAMME_STATES,
   FRONTIER_TOPIC_STATUSES,
+  FRONTIER_TOPIC_SURGE,
+  frontierHotTitleKey,
+  frontierTopicItemRole,
+  frontierTopicNamesIn,
+  frontierTopicSurge,
   isFrontierTopicDomain,
 } from './src/frontierTopics.mjs'
 /** @typedef {import('./src/frontierTopics.mjs').FrontierTopicDomain} FrontierTopicDomain */

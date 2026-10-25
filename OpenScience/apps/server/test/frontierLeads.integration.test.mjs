@@ -232,3 +232,71 @@ test("a Chinese report is looked for in Chinese: only results with a Chinese tit
   assert.deepEqual(zh.map((lead) => new URL(lead.url).hostname), ["www.familydoctor.cn"]);
   assert.ok(plugin.posts.flat().every((lead) => !lead.url.includes("linkedin.com")));
 });
+
+// c2-leads 2026-10-25 (review §R): the plugin's day cap ends the day's searching, results older than the plugin reads are
+// not handed over, a host it keeps refusing gets no more addresses, and a capped address may go another day.
+test("once the plugin answers capped, nothing more is searched that day — a restart included; a capped address goes again the next day", options, async () => {
+  await seedSelected();
+  /** A plugin whose day is spent after `room` addresses. */
+  const capping = (/** @type {number} */ room) => {
+    let accepted = 0;
+    /** @type {any[][]} */
+    const posts = [];
+    return { posts, configured: true, async submitLeads(/** @type {any[]} */ leads) {
+      posts.push(leads);
+      const results = leads.map((lead) => ({ url: lead.url, status: accepted < room ? (accepted += 1, "accepted") : "capped", reason: null }));
+      return { accepted: results.filter((r) => r.status === "accepted").length, duplicate: 0, refused: 0, capped: results.filter((r) => r.status === "capped").length, results };
+    } };
+  };
+  const first = leadsWith({ plugin: capping(1) });
+  const result = await first.leads.tick();
+  assert.equal(result.skipped, "plugin_capped");
+  assert.equal(first.search.calls.length, 1, "the search whose results were capped is the day's last");
+  assert.equal(first.leads.status().counters.skipped.plugin_capped, 1);
+  // A restart: a new module reads the mark from the table and searches nothing.
+  const restarted = leadsWith({ plugin: capping(10) });
+  assert.deepEqual(await restarted.leads.tick(), { searched: 0, addresses: 0, sent: 0, skipped: "plugin_capped" });
+  assert.equal(restarted.search.calls.length, 0);
+  // The next day the capped address is handed over again, and recorded as what the plugin answered then.
+  const capped = (await database.query("SELECT url FROM evimed_frontier.lead_urls WHERE outcome = 'capped' LIMIT 1")).rows[0].url;
+  const tomorrow = new Date(NOW.getTime() + 24 * 3_600_000);
+  const next = leadsWith({ now: tomorrow, plugin: capping(100), search: fakeSearch(() => [{ url: capped, title: "又一次", engine: "deepseek", publishedDate: "2026-10-25T01:00:00.000Z" }]) });
+  await next.leads.tick();
+  assert.ok(next.plugin.posts.flat().some((lead) => lead.url === capped), "a capped address is not known to the plugin");
+  assert.equal((await database.query("SELECT outcome FROM evimed_frontier.lead_urls WHERE url = $1", [capped])).rows[0].outcome, "accepted");
+});
+
+test("a result dated before the plugin's freshness window is held as stale; an undated one is handed over; a host refused twice in 7 days is held", options, async () => {
+  await seedSelected();
+  for (const [index, url] of ["https://blocked.example.cn/a", "https://www.blocked.example.cn/b"].entries()) {
+    await database.query("INSERT INTO evimed_frontier.lead_urls (url_sha256, url, trigger, outcome, sent_at) VALUES ($1, $2, 'zh-report', 'refused', $3)",
+      [createHash("sha256").update(url).digest("hex"), url, new Date(NOW.getTime() - (index + 1) * 86_400_000)]);
+  }
+  await database.query("INSERT INTO evimed_frontier.lead_urls (url_sha256, url, trigger, outcome, sent_at) VALUES ($1, $2, 'zh-report', 'refused', $3)",
+    [createHash("sha256").update("https://once.example.cn/a").digest("hex"), "https://once.example.cn/a", new Date(NOW.getTime() - 86_400_000)]);
+  const search = fakeSearch((body) => [
+    { url: `https://news.example.cn/${encodeURIComponent(body.query)}/old`, title: "旧闻", engine: "deepseek", publishedDate: "2026-08-01T00:00:00.000Z" },
+    { url: `https://news.example.cn/${encodeURIComponent(body.query)}/undated`, title: "无日期", engine: "searxng", publishedDate: null },
+    { url: `https://blocked.example.cn/${encodeURIComponent(body.query)}`, title: "被拒的站", engine: "deepseek", publishedDate: "2026-10-24T01:00:00.000Z" },
+    { url: `https://once.example.cn/${encodeURIComponent(body.query)}`, title: "拒过一次", engine: "deepseek", publishedDate: "2026-10-24T01:00:00.000Z" },
+  ]);
+  const { leads, plugin } = leadsWith({ search, now: EARLY });
+  await leads.tick();
+  const handed = plugin.posts.flat().map((lead) => lead.url);
+  assert.ok(handed.length > 0);
+  assert.ok(handed.every((url) => !url.endsWith("/old")), "older than 30 days: the plugin would answer stale");
+  assert.ok(handed.some((url) => url.endsWith("/undated")), "no date: the page may carry one");
+  assert.ok(handed.every((url) => !url.startsWith("https://blocked.example.cn/")), "refused twice in 7 days, www. or not");
+  assert.ok(handed.some((url) => url.startsWith("https://once.example.cn/")), "refused once is not yet a pattern");
+  const results = (await database.query("SELECT results FROM evimed_frontier.leads WHERE status = 'sent' LIMIT 1")).rows[0].results;
+  assert.deepEqual(results.filter((/** @type {any} */ row) => row.skipped).map((/** @type {any} */ row) => row.skipped).sort(), ["refused-host", "stale"]);
+  assert.ok(leads.status().counters.held.stale >= 1 && leads.status().counters.held["refused-host"] >= 1);
+});
+
+test("the platform's freshness window is the plugin's own FRESH_DAYS", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { FRONTIER_LEAD_FRESH_DAYS } = await import("@evimed/domain");
+  const source = await readFile(new URL("../../../../项目代码/knowledge-plugin/knowledge_plugin/leads.py", import.meta.url), "utf8").catch(() => null);
+  if (source === null) return;
+  assert.equal(Number(/^FRESH_DAYS = (\d+)/m.exec(source)?.[1]), FRONTIER_LEAD_FRESH_DAYS);
+});

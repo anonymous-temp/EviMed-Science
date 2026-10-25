@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.6.0",
+  "contractVersion": "1.7.0",
   "plugin": {
     "name": "evimed-knowledge-plugin",
     "version": "0.1.0",
@@ -32,11 +32,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "2756",
+        "content-length": "3133",
         "content-type": "application/json",
-        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
+        "date": "Sun, 25 Oct 2026 04:39:34 GMT"
       },
-      "recordedAt": "2026-10-24T17:19:34.772Z"
+      "recordedAt": "2026-10-25T04:39:34.477Z"
     },
     "manifest.json": {
       "request": {
@@ -49,11 +49,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1193",
+        "content-length": "1221",
         "content-type": "application/json",
-        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
+        "date": "Sun, 25 Oct 2026 04:39:34 GMT"
       },
-      "recordedAt": "2026-10-24T17:19:34.784Z"
+      "recordedAt": "2026-10-25T04:39:34.489Z"
     },
     "sources-page-1.json": {
       "request": {
@@ -565,6 +565,74 @@
         "date": "Sat, 24 Oct 2026 17:19:34 GMT"
       },
       "recordedAt": "2026-10-24T17:19:34.757Z"
+    },
+    "health-1.6.0.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/health",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "none"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "2756",
+        "content-type": "application/json",
+        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
+      },
+      "recordedAt": "2026-10-24T17:19:34.772Z"
+    },
+    "manifest-1.6.0.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/manifest",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "1193",
+        "content-type": "application/json",
+        "date": "Sat, 24 Oct 2026 17:19:34 GMT"
+      },
+      "recordedAt": "2026-10-24T17:19:34.784Z"
+    },
+    "hot-lists.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/hot-lists",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "43726",
+        "content-type": "application/json",
+        "date": "Sun, 25 Oct 2026 04:39:34 GMT"
+      },
+      "recordedAt": "2026-10-25T04:39:34.497Z"
+    },
+    "error-hot-lists-since.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/hot-lists?since=soon",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 400,
+      "headers": {
+        "content-length": "109",
+        "content-type": "application/json",
+        "date": "Sun, 25 Oct 2026 04:39:34 GMT"
+      },
+      "recordedAt": "2026-10-25T04:39:34.502Z"
     }
   },
   "partialRecordings": [
@@ -661,6 +729,25 @@
       ],
       "reason": "Contract 1.6.0 adds POST /v1/leads (the addresses the platform's lead triggers found, read under the plugin's own rules), the read method `lead`, Health.leads and Manifest.capabilities.leads: the health answer and the manifest name the new contract and carry the new fields, and two posts to /v1/leads record its answers (accepted; duplicate and refused). Every other recording is the earlier plugins', still valid.",
       "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off), over an empty scratch database"
+    },
+    {
+      "recordedAt": "2026-10-25T04:39:34.510Z",
+      "server": "http://127.0.0.1:49240",
+      "plugin": {
+        "name": "evimed-knowledge-plugin",
+        "version": "0.1.0",
+        "build": "c2-leads-local",
+        "started_at": "2026-10-25T04:39:21.591428Z"
+      },
+      "contractVersion": "1.7.0",
+      "fixtures": [
+        "health.json",
+        "manifest.json",
+        "hot-lists.json",
+        "error-hot-lists-since.json"
+      ],
+      "reason": "Contract 1.7.0 adds GET /v1/hot-lists (the public hot lists the plugin reads on its own pacing and keeps 72 hours: ranks, titles, heat, the board's description and link), Health.hot_lists and Manifest.capabilities.hot_lists: the health answer and the manifest name the new contract and carry the new fields, the hot lists are the snapshots a live round read, and a since that is no date-time records the refusal. Every other recording is the earlier plugins', still valid.",
+      "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off) over a scratch database, after one live round of the hot lists (python -m knowledge_plugin hot-lists)"
     }
   ]
 }

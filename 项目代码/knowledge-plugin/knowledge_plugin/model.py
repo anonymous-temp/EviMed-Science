@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-CONTRACT_VERSION = "1.6.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
+CONTRACT_VERSION = "1.7.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
                              # 1.2.0 (2026-09-22): Health.last_ok_fetch_at, Health.rate_limited_1h;
                              # 1.3.0 (2026-10-05): Source.platform_produced (flywheel F09);
                              # 1.4.0 (2026-10-10): Health.host_budget (today's use against each host's daily cap);
@@ -43,6 +43,8 @@ CONTRACT_VERSION = "1.6.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliat
                              #   europepmc-fulltext / elsevier, and body_text's section titles ("## Title");
                              # 1.6.0 (2026-10-24, ct-mix): POST /v1/leads (addresses the platform found, read under the
                              #   plugin's rules), the read method `lead` (a lead source, never polled), Health.leads
+                             # 1.7.0 (2026-10-25, c2-leads): GET /v1/hot-lists (the public hot lists' snapshots, kept
+                             #   72 hours), Health.hot_lists, Manifest.capabilities.hot_lists
 PLUGIN_NAME = "evimed-knowledge-plugin"
 
 # ---------------------------------------------------------------------------------------------

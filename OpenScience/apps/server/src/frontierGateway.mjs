@@ -46,6 +46,12 @@
 //   cards do not have, is asking about items. A card search that fails costs
 //   the run the cards and nothing else: the items stand, and the answer says
 //   `cardsUnavailable` rather than reading as "no card matched".
+// - Hot-event topics ride the same way (c2-leads 2026-10-25): an active or
+//   recent topic a query names is a result of kind `topic` — the general
+//   medical question a public event raised, its field, the attributed line
+//   on the event, its overview and the items to read — an index, never
+//   evidence, and never the names of the event's people. A topic search that
+//   fails costs the topics only (`topicsUnavailable`).
 
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES } from "@evimed/domain";
 import { CARD_SEARCH_MAX } from "./evidenceCardSearch.mjs";
@@ -257,6 +263,23 @@ async function cardPart(cards, user, request, report, context) {
 }
 
 /**
+ * The topics of a query (kind `topic`), or what it says when it could not read them: never a throw, like the cards.
+ * @param {{ search: (user: { id: string }, request: { q: string, limit: number }) => Promise<{ topics: any[] }> } | null} topics
+ * @param {{ id: string }} user @param {ReturnType<typeof validatedRequest>} request @param {(code: string) => void} report
+ */
+async function topicPart(topics, user, request, report) {
+  if (!topics) return {};
+  if (request.q == null || request.lane || request.specialty) return { topics: [] };
+  try {
+    const found = await topics.search(user, { q: request.q, limit: Math.min(3, request.limit) });
+    return { topics: Array.isArray(found?.topics) ? found.topics : [] };
+  } catch (error) {
+    report(typeof /** @type {any} */ (error)?.code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(/** @type {any} */ (error).code) ? /** @type {any} */ (error).code : "topics_unavailable");
+    return { topics: [], topicsUnavailable: true };
+  }
+}
+
+/**
  * The gateway's URL as the runtime may know it: empty when the module is off,
  * so the tool answers "disabled" without a request, exactly as when the
  * gateway itself refuses. Derived from the model gateway's address, as the
@@ -279,12 +302,12 @@ export function frontierGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ service: any, cards?: any, evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
+ * @param {{ service: any, cards?: any, topics?: any, evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
  *   or null when the module is off; `cards` the evidence-card search (`evidenceCardSearch.mjs`), absent where there are no cards;
  *   `report` hears the code of a failure the run is only told was one; `budgetMs`
  *   is the plan's five seconds everywhere but in a test that would otherwise wait them out
  */
-export function createFrontierGatewayHandler(config, runtimeManager, { service, cards = null, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
+export function createFrontierGatewayHandler(config, runtimeManager, { service, cards = null, topics = null, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
   const windows = new Map();
   return async function frontierGatewayHandler(req, res, onFailure) {
     try {
@@ -317,9 +340,13 @@ export function createFrontierGatewayHandler(config, runtimeManager, { service, 
       let timer;
       // An evaluation run is frozen at a date and kept from what the platform has written since: a card is
       // written after any such cutoff, and may be about the very paper being evaluated.
-      const cardsForRun = cards && !(evaluationIsolation && await evaluationIsolation.isEvaluation(identity)) ? cards : null;
+      const isolated = Boolean(evaluationIsolation && await evaluationIsolation.isEvaluation(identity));
+      const cardsForRun = cards && !isolated ? cards : null;
+      // A topic is written after any evaluation's cutoff too.
+      const topicsForRun = topics && !isolated ? topics : null;
       const result = await Promise.race([
-        Promise.all([search(service, user, request), cardPart(cardsForRun, user, request, report, { projectId: identity.projectId, runId: identity.runId ?? null })]).then(([items, found]) => ({ ...items, ...found })),
+        Promise.all([search(service, user, request), cardPart(cardsForRun, user, request, report, { projectId: identity.projectId, runId: identity.runId ?? null }),
+          topicPart(topicsForRun, user, request, report)]).then(([items, found, topicsFound]) => ({ ...items, ...found, ...topicsFound })),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(gatewayError(504, "frontier_search_timeout", "Frontier search timed out.")), budgetMs);
           timer.unref?.();

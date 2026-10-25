@@ -327,6 +327,31 @@ class FrontierSearchTests(_GatewayCase):
         self.assertLess(sizes["longest"][1], 11_000, sizes)
 
 
+    def test_a_hot_event_topic_is_an_index_entry_with_its_items_and_the_instruction(self):
+        # c2-leads 2026-10-25: frontier_search returns active and recent topics as results of kind `topic`.
+        topic = {
+            "kind": "topic", "id": "a1b2c3d4e5f6a7b8", "title": "运动会诱发心源性猝死吗？风险有多大",
+            "question": "健康成年人跑步等运动时发生心源性猝死的风险有多大？", "domain": "public-figure", "domainLabel": "公众人物",
+            "peg": {"text": "据讣告，一位知名教育博主因心源性猝死离世。", "source": {"name": "微博热搜", "url": None, "date": "2026-03-24"}},
+            "status": "active", "acceptedAt": "2026-03-24T14:20:00.000Z", "itemCount": 2,
+            "overview": {"text": "长跑比赛中心脏骤停的发生率约为每10万名参赛者0.60例[1]。", "refs": [{"n": 1, "itemId": "x", "title": "t", "sourceName": "JAMA"}]},
+            "items": [{"role": "evidence", "title": "Cardiac Arrest During Long-Distance Running Races", "source": "JAMA",
+                       "url": "https://pubmed.ncbi.nlm.nih.gov/40159341/"}],
+        }
+        _Gateway.answer = (200, gateway_answer([], topics=[topic]))
+        result = frontier_search.search({"q": "心源性猝死 跑步"})
+        self.assertEqual(result["status"], "success", "a topic alone is a finding")
+        [shown] = result["data"]["topics"]
+        self.assertEqual(shown["kind"], "topic")
+        self.assertEqual(shown["event"], "据讣告，一位知名教育博主因心源性猝死离世。 (微博热搜)")
+        self.assertEqual(shown["items"][0]["url"], "https://pubmed.ncbi.nlm.nih.gov/40159341/")
+        self.assertIn("cite those", shown["instruction"])
+        self.assertIn("1 hot-event topic(s) match", result["summary"])
+        self.assertNotIn("subjectNames", json.dumps(result, ensure_ascii=False))
+        _Gateway.answer = (200, gateway_answer([gateway_item()], topics=[], topicsUnavailable=True))
+        failed = frontier_search.search({"q": "心源性猝死"})
+        self.assertTrue(any("Hot-event topics could not be searched" in warning for warning in failed["warnings"]))
+
     def test_a_card_is_shown_as_an_index_entry_with_its_primary_sources_and_the_instruction(self):
         _Gateway.answer = (200, gateway_answer([gateway_item()], cards=[gateway_card()], cardsMore=False))
         result = frontier_search.search({"q": "司美格鲁肽 心衰"})

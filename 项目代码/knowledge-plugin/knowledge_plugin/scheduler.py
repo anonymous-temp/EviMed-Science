@@ -124,6 +124,7 @@ class Crawler:
         self.polls_total: Counter = Counter()
         self._social = None
         self._leads = None
+        self._hot_lists = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -146,6 +147,9 @@ class Crawler:
             asyncio.create_task(self._loop("social", self.collect_social, SOCIAL_EVERY_S, initial_delay=30.0)),
             # ct-mix 2026-10-24: the addresses the platform's lead triggers handed over (contract 1.6.0), a few a minute.
             asyncio.create_task(self._loop("leads", self.read_leads, LEADS_EVERY_S, initial_delay=45.0)),
+            # c2-leads 2026-10-25: the public hot lists (contract 1.7.0), every KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S.
+            asyncio.create_task(self._loop("hot-lists", self.read_hot_lists, float(self._settings.hot_lists_interval_s),
+                                           initial_delay=20.0)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
                  self._settings.concurrency, self._settings.text_concurrency, sorted(self._adapters) or "none")
@@ -825,6 +829,15 @@ class Crawler:
             from .leads import LeadReader
             self._leads = LeadReader(self._settings, self._pool, self._fetcher, collector=self.social(), clock=self._clock)
         return await self._leads.tick()
+
+    async def read_hot_lists(self) -> dict:
+        """One round of the hot-list loop (``hotlists.py``): each configured board read, its snapshot kept 72 hours."""
+        if not self._settings.hot_lists_enabled:
+            return {"status": "disabled"}
+        if self._hot_lists is None:
+            from .hotlists import HotListReader
+            self._hot_lists = HotListReader(self._settings, self._pool, self._fetcher, clock=self._clock)
+        return await self._hot_lists.tick()
 
     async def discover_medical_sources(self) -> dict:
         from .medical_discovery import run_daily_discovery
