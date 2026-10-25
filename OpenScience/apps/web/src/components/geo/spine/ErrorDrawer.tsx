@@ -18,13 +18,13 @@ import {
   GEO_ERROR_TYPE_WORDS,
   GEO_STABILITY_WORDS,
 } from "../geoText";
-import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { answerPath } from "../tabs/geoTabText";
 import { articleMeta, articleStatusLine, whatToDo } from "./actionModel";
 import { ClusterLink } from "./ClusterLink";
 import { StatusMark } from "./ActionRow";
 import { GEO_ACTION_PARAM, GEO_SOURCE_PARAM } from "./drawerParams";
-import { correctionBrief, errorTrace, ERROR_TRACE_WORDS, type ClaimRow } from "./errorModel";
+import { errorTrace, ERROR_TRACE_WORDS, type ClaimRow } from "./errorModel";
+import { useCorrectionHandoff } from "./useCorrectionHandoff";
 import { useArticleActions } from "./useArticleActions";
 
 /** The question group a question belongs to, from the question set. */
@@ -59,7 +59,7 @@ export function ErrorDrawer({
 }) {
   const path = useGeoPath();
   const destination = useGeoDestinationPath();
-  const open = useOpenGeoConversation();
+  const handoff = useCorrectionHandoff(geoId, project);
   const [busy, setBusy] = useState(false);
   const product = project.product?.brandName || project.product?.genericName || project.name;
   const abilities = project.access?.abilities;
@@ -69,7 +69,7 @@ export function ErrorDrawer({
 
   const correct = () => {
     setBusy(true);
-    void open({ projectId: project.projectId, sessionId: project.sessionId }, correctionBrief(claim, product)).finally(() => setBusy(false));
+    void handoff(claim, product).finally(() => setBusy(false));
   };
 
   return (

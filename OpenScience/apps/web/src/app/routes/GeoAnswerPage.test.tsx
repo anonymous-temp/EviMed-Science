@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
+import { useToastStore } from "@/lib/toast";
 import { answerFilled, evidenceFilled, geoProject } from "@/components/geo/__fixtures__/geoTabs";
 import { GeoFrameHarness } from "@/components/geo/__fixtures__/geoFrameHarness";
 import { actionFixture, actionsFilled, clustersFilled, clusterViewFixture, G_BRAND, questionSetFixture } from "@/components/geo/__fixtures__/geoSpine";
@@ -17,9 +18,12 @@ const client = vi.hoisted(() => ({
   getGeoClusters: vi.fn(),
   getGeoCluster: vi.fn(),
   getGeoArticles: vi.fn(),
+  stageGeoPlanContext: vi.fn(),
 }));
-const conversation = vi.hoisted(() => ({ open: vi.fn(async () => true) }));
+const conversation = vi.hoisted(() => ({ open: vi.fn(async (_target: unknown, _draft?: string) => true), ensure: vi.fn(async (_geoId: string, _projectId: string, sessionId?: string | null) => sessionId ?? "ses_primary") }));
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => conversation.open }));
+vi.mock("@/components/geo/geoConversationSession", () => ({ ensureGeoConversationSession: conversation.ensure }));
+const staged = { referenceId: `gpc_${"d".repeat(64)}`, sessionId: "ses_geo_1", draft: "server draft" };
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   ...client,
@@ -51,7 +55,10 @@ beforeEach(() => {
   client.getGeoClusters.mockReset().mockResolvedValue(clustersFilled);
   client.getGeoCluster.mockReset().mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   client.getGeoArticles.mockReset().mockResolvedValue({ articles: [] });
+  client.stageGeoPlanContext.mockReset().mockResolvedValue(staged);
   conversation.open.mockClear();
+  conversation.ensure.mockClear();
+  useToastStore.setState({ toasts: [] });
 });
 
 describe("one answer", () => {
@@ -221,13 +228,32 @@ describe("one answer", () => {
     expect(drawer.querySelector("[data-geo-error-basis]")).toBeNull();
   });
 
-  it("offers the correction as the page's action, with the brief in the conversation unsent", async () => {
+  it("offers the correction as the page's action: the records are staged as the conversation's context and the composer holds the sentence, unsent", async () => {
     renderAnswer();
     await userEvent.click(await screen.findByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
-    const [target, brief] = conversation.open.mock.calls[0] as unknown as [{ projectId: string; sessionId: string | null }, string];
-    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: "ses_geo_1" });
+    const [target, brief] = conversation.open.mock.calls[0] as unknown as [Record<string, unknown>, string];
+    expect(target).toEqual({ projectId: "prj_geo_1", geoId: "geo_1", sessionId: staged.sessionId, geoPlanContext: { referenceId: staged.referenceId } });
     expect(brief).toContain("它需要每天注射一次");
+    // The identity of every record rides in the staged context, never in the person's words.
+    const errorIds = answerFilled.errors.map((row) => row.id);
+    expect(client.stageGeoPlanContext).toHaveBeenCalledTimes(1);
+    expect(client.stageGeoPlanContext.mock.calls[0][0]).toBe("geo_1");
+    expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({ mode: "strategy", sessionId: "ses_geo_1" });
+    expect(client.stageGeoPlanContext.mock.calls[0][1].errorIds.length).toBeGreaterThan(0);
+    for (const id of errorIds) expect(brief).not.toContain(id);
+    for (const machinery of ["snapshotId", "errorId", "claimVersion", "applicability", "originalContextState", "{", "}", staged.referenceId]) expect(brief).not.toContain(machinery);
+  });
+
+  it("says so in a toast and opens nothing when the correction's context cannot be staged, then gives the button back", async () => {
+    client.stageGeoPlanContext.mockRejectedValueOnce(new Error("network"));
+    renderAnswer();
+    const button = await screen.findByRole("button", { name: "写纠错稿" });
+    await userEvent.click(button);
+    await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(conversation.open).not.toHaveBeenCalled();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).not.toHaveAttribute("aria-busy");
   });
 
   it("with nothing wrong in the answer, the one action is to talk it over", async () => {
