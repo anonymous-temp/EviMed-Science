@@ -12,7 +12,7 @@ const sha = value => createHash("sha256").update(value).digest("hex");
 export async function selectPersonalSkillMounts({ service, user, project, maxSkills = 64, maxInstructionBytes = 1024 * 1024 }) {
   if (!service || !user?.id || !project?.id || project.userId !== user.id) throw new HttpError(404, "project_not_found", "Project not found.");
   await service.requireProject(user, project);
-  const selected = await service.projectSelections(user, project);
+  const selected = await service.projectSelections(user, project, { activation: false });
   if (!Array.isArray(selected.payload.skills) || selected.payload.skills.length > maxSkills) throw new HttpError(400, "extension_contract_invalid", "Invalid project skill inventory.");
   const skills = [], findings = [], seen = new Set(); let bytes = 0;
   for (const wanted of selected.payload.skills) {
@@ -44,7 +44,7 @@ export async function selectPersonalSkillMounts({ service, user, project, maxSki
   const { disabled, stale } = currentDisabledPlatformSkills(selected.payload.disabledPlatformSkills ?? [], known);
   for (const platformSkillId of stale) findings.push({ platformSkillId, code: "platform_skill_stale" });
   // Selection changes during asynchronous validation are not silently published under the earlier digest.
-  const current = await service.projectSelections(user, project);
+  const current = await service.projectSelections(user, project, { activation: false });
   if (current.revision !== selected.revision) throw new HttpError(409, "product_revision_conflict", "Project skills changed before preparation finished.");
   return { selectionRevision: selected.revision, skills, findings, instructionBytes: bytes,
     platformSkills: { disabled, disabledPlugins: selected.payload.disabledBuiltinPlugins ?? [] } };

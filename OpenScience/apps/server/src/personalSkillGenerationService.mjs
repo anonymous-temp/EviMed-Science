@@ -237,7 +237,7 @@ export class PersonalSkillGenerationService {
    * @param {any} user @param {any} project @param {number} selectionRevision */
   async recordFailure(user, project, selectionRevision) {
     await this.skills.requireProject(user, project)
-    const selection = await this.skills.projectSelections(user, project)
+    const selection = await this.skills.projectSelections(user, project, { activation: false })
     if (selection.revision !== selectionRevision) return
     const current = await this.current(project)
     return this.documents.put(user.id, 'extension-generation', stateId(project), {
@@ -396,7 +396,7 @@ export class PersonalSkillGenerationService {
    * reconciles a desired generation that has no reference). Best effort: a failure to record never fails the start.
    * @param {any} user @param {any} project @param {number} selectionRevision @param {string} code */
   async recordUnavailable(user, project, selectionRevision, code) {
-    const selection = await this.skills.projectSelections(user, project)
+    const selection = await this.skills.projectSelections(user, project, { activation: false })
     if (selection.revision !== selectionRevision) return null
     const current = await this.current(project)
     if (current?.payload.desired?.selectionRevision === selectionRevision && !current.payload.desired.reference && current.payload.error === code) return current
@@ -415,7 +415,7 @@ export class PersonalSkillGenerationService {
   async prepareForRuntime(project) {
     const user = await this.resolveUser(project)
     let state = await this.current(project)
-    const selection = await this.skills.projectSelections(user, project)
+    const selection = await this.skills.projectSelections(user, project, { activation: false })
     const identity = await this.identities(project).catch(() => null)
     /** @param {string|null} code what kept the saved choice out of this start, recorded for the page; null when the state already says it */
     const baseline = async code => {
@@ -452,7 +452,7 @@ export class PersonalSkillGenerationService {
   async requireInvocation(project, skillId, revision) {
     const user = await this.resolveUser(project)
     const source = await this.skills.atRevision(user, skillId, revision)
-    const desired = await this.skills.projectSelections(user, project)
+    const desired = await this.skills.projectSelections(user, project, { activation: false })
     if (!desired.payload.skills.some(pin => pin.skillId === skillId && pin.revision === revision && pin.digest === source.payload.digest)) throw fail()
     if (source.payload.invocation.userInvocable !== true) throw new HttpError(403, 'extension_access_denied', 'This skill cannot be invoked by a user.')
     return source.payload

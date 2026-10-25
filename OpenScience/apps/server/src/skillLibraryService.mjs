@@ -564,12 +564,15 @@ export class SkillLibraryService {
       });
     });
   }
-  /** @param {any} user @param {any} project */
-  async projectSelections(user, project) {
+  /** The project's saved selection, and (for a reader) whether it is in effect. A caller that needs only what was saved — the
+   * generation's publication, the apply worker's guard, a save's own read — passes `{ activation: false }` and is spared the
+   * generation-state, runtime and context-policy reads behind the activation.
+   * @param {any} user @param {any} project @param {{activation?:boolean}} [options] */
+  async projectSelections(user, project, { activation = true } = {}) {
     await this.requireProject(user, project);
     const selection = await this.documents.get(user.id, "extension-defaults", `skills:project:${project.id}`)
       ?? { id: `skills:project:${project.id}`, revision: 0, payload: { skills: [] } };
-    return { ...selection, activation: await this.activation(user, project, selection) };
+    return activation ? { ...selection, activation: await this.activation(user, project, selection) } : selection;
   }
   /**
    * Saved choices and worker readback are distinct facts, and so are the two readbacks: proven on the live runtime, and
@@ -638,7 +641,7 @@ export class SkillLibraryService {
     const catalogue = await this.listPlatform(user);
     await this.withLibraryAccount(user, async () => {
       await this.requireProject(user, project);
-      const selection = await this.projectSelections(user, project);
+      const selection = await this.projectSelections(user, project, { activation: false });
       const stored = selection.payload.disabledPlatformSkills ?? [];
       const kept = [];
       for (const id of disabled) {
@@ -674,7 +677,7 @@ export class SkillLibraryService {
     catch { throw new HttpError(400, 'extension_contract_invalid', 'Invalid optional integration selection.'); }
     await this.withLibraryAccount(user, async () => {
       await this.requireProject(user, project);
-      const selection = await this.projectSelections(user, project);
+      const selection = await this.projectSelections(user, project, { activation: false });
       await this.documents.put(user.id, 'extension-defaults', selection.id, { ...selection.payload, disabledBuiltinPlugins: disabled }, {
         expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
       });
@@ -688,7 +691,7 @@ export class SkillLibraryService {
     return this.withLibraryAccount(user, async () => {
       await this.requireProject(user, project);
       const skills = await this.selections(user, input.skills);
-      const previous = await this.projectSelections(user, project);
+      const previous = await this.projectSelections(user, project, { activation: false });
       return this.documents.put(user.id, "extension-defaults", `skills:project:${project.id}`, { ...previous.payload, skills }, {
         expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
       });
@@ -728,7 +731,7 @@ export class SkillLibraryService {
     productId(input.sessionId); productId(input.idempotencyKey);
     const row = await this.atRevision(user, skillId, input.revision);
     if (row.payload.invocation?.userInvocable !== true) throw new HttpError(403, "extension_access_denied", "This skill does not permit user invocation.");
-    const desired = await this.projectSelections(user, project);
+    const desired = await this.projectSelections(user, project, { activation: false });
     if (!desired.payload.skills.some(item => item.skillId === skillId && item.revision === input.revision && item.digest === row.payload.digest)) {
       throw new HttpError(409, "extension_contract_invalid", "Enable this skill revision in the project before using it.");
     }

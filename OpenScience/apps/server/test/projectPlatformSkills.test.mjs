@@ -161,3 +161,18 @@ test('a 循证 GEO project on its shared context reads every project choice as n
   service.projectActivation = async () => ({ state: null, runtimeGeneration: null, captured: null, sharedContext: null })
   assert.equal((await service.projectPlatform(user, project)).activation.phase, 'pending')
 })
+
+test('only a reader is given the activation: a save, a publication and the apply worker read the selection alone', async () => {
+  const { service } = fixture()
+  let observed = 0
+  service.projectActivation = async () => { observed++; return { state: null, runtimeGeneration: null, captured: null } }
+  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['curated:matplotlib'] })
+  assert.equal(observed, 1, 'the save reads its own selection without one, and answers the view with one')
+  observed = 0
+  assert.equal((await service.projectSelections(user, project, { activation: false })).activation, undefined)
+  const { selectPersonalSkillMounts } = await import('../src/personalSkillMount.mjs')
+  await selectPersonalSkillMounts({ service, user, project })
+  assert.equal(observed, 0)
+  assert.ok((await service.projectSelections(user, project)).activation)
+  assert.equal(observed, 1)
+})

@@ -63,7 +63,7 @@ export class PersonalSkillGenerationWorker {
             if (lost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) throw new HttpError(409, 'product_job_lease_lost', 'Generation ownership expired.')
             const latest = await this.service.current(project)
             const user = await this.service.resolveUser(project)
-            const selected = await this.service.skills.projectSelections(user, project)
+            const selected = await this.service.skills.projectSelections(user, project, { activation: false })
             if ((latest?.payload.desired?.reference?.generationHash ?? null) !== (candidate.reference?.generationHash ?? null) || selected.revision !== candidate.selectionRevision) {
               throw new HttpError(409, 'product_revision_conflict', 'Project skills changed.')
             }
