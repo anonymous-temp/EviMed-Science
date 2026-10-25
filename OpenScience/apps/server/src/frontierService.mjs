@@ -2406,6 +2406,16 @@ export function frontierMetricFamilies(enabled, snapshot) {
     add("lead_held_total", "Lead search results not handed over, by why (stale, refused-host, social-network, own-site, not-chinese).", "counter",
       Object.entries(leads.counters.held ?? {}).map(([reason, value]) => ({ labels: { reason }, value: Number(value) })));
   }
+  // c3-track 2026-10-25: 追踪 — records written by kind, fields dropped by reason, congress recaps by outcome.
+  const track = worker.track;
+  if (track?.counters) {
+    add("track_total", "What the tracker step did since this process started: items asked, records written by kind, calls that failed.", "counter",
+      ["asked", "approvals", "guidelines", "none", "failed"].map((kind) => ({ labels: { kind }, value: Number(track.counters[kind] ?? 0) })));
+    add("track_dropped_total", "Tracker fields refused by the quotation and number checks, by field and reason.", "counter",
+      Object.entries(track.counters.droppedFields ?? {}).map(([name, value]) => ({ labels: { field: name.split(":")[0], reason: name.split(":")[1] ?? "" }, value: Number(value) })));
+    add("track_recaps_total", "Congress daily recaps by outcome (asked, written, empty, dropped, failed).", "counter",
+      ["recapsAsked", "recapsWritten", "recapsEmpty", "recapsDropped", "recapsFailed"].map((kind) => ({ labels: { outcome: kind.slice(6).toLowerCase() }, value: Number(track.counters[kind] ?? 0) })));
+  }
   // c2-leads 2026-10-25: the hot-event topics — rounds and candidates, accepted by field, refused by reason, items joined, overviews.
   const topics = worker.topics;
   if (topics?.counters) {

@@ -87,3 +87,23 @@ test("a congress is found by its keywords and by its code with its year in eithe
   const ama = frontierCongressPatterns(frontierCongressById("aha-2026"));
   assert.equal(ama.some((pattern) => new RegExp(pattern, "i").test("Aha! a new finding")), false);
 });
+
+test("the tracker's counters are metrics: records by kind, fields refused by reason, recaps by outcome", async () => {
+  const { frontierMetricFamilies } = await import("../src/frontierService.mjs");
+  const counters = { asked: 10, approvals: 4, guidelines: 3, none: 2, failed: 1, droppedFields: { "agency:alias": 2, "date:stale": 1 },
+    recapsAsked: 3, recapsWritten: 2, recapsEmpty: 1, recapsDropped: 0, recapsFailed: 0 };
+  const families = frontierMetricFamilies(true, {
+    tables: null, composer: null, actions: null, editor: null, budget: { spentCny: 0, budgetCny: 10, state: "ok" },
+    worker: { pipeline: {}, loops: {}, track: { counters } }, client: { counters: { requests: 0, retries: 0, failures: 0 } },
+    service: { lists: 0, notModified: 0, cacheHits: 0, invalidCursors: 0, searches: 0, searchFailures: 0 },
+    plugin: { state: "ok", contract: "1.7.0", compatibility: "compatible", lastError: null, cursor: 1, latestSeq: 1, lag: 0, lastPullOkAt: null, lastMirrorAt: null,
+      gaps: { count: 0, entries: 0 }, unknownVocabulary: {}, counters: { pulls: 1, pullFailures: 0, inserted: 0, duplicates: 0, dropped: 0, invalid: 0, placeholders: 0 }, pluginHealthDetail: null },
+  });
+  const named = (/** @type {string} */ name) => families.find((entry) => entry.name === name);
+  assert.deepEqual(named("open_science_frontier_track_total")?.series.map((entry) => [entry.labels?.kind, entry.value]),
+    [["asked", 10], ["approvals", 4], ["guidelines", 3], ["none", 2], ["failed", 1]]);
+  assert.deepEqual(named("open_science_frontier_track_dropped_total")?.series.map((entry) => [entry.labels?.field, entry.labels?.reason, entry.value]),
+    [["agency", "alias", 2], ["date", "stale", 1]]);
+  assert.deepEqual(named("open_science_frontier_track_recaps_total")?.series.map((entry) => [entry.labels?.outcome, entry.value]),
+    [["asked", 3], ["written", 2], ["empty", 1], ["dropped", 0], ["failed", 0]]);
+});

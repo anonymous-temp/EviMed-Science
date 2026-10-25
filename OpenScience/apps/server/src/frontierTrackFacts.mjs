@@ -84,9 +84,9 @@ ${SHARED_RULES}
  "scope": {"text": "...", "quote": "..."},
  "recommendations": [{"text": "...", "grade": "..." | null, "quote": "..."}]}
 
-body.text 是发布或制定该指南的学会、机构或工作组，照原文写；原文没写就设为 null。
+body.text 是发布或制定该指南的学会、机构或工作组，照原文写；它是机构的名字，不是指南或文件的标题；原文没写就设为 null。
 scope.text 是指南针对的疾病、人群和场景，用中文一句话，不超过 60 个字。
-recommendations 至多 5 条，是原文明确写出的最重要的推荐，按重要程度排序。每条 text 用中文一句话（不超过 80 个字），quote 是原文里该推荐的原话（至少 12 个字符）；grade 是原文紧挨着该推荐写出的推荐强度或证据等级，逐字照抄（如“强推荐”“1A”“Class I, Level A”“证据等级 B”），原文没有就设为 null，不要按你的知识补等级。原文没有写出具体推荐（只有概述或摘要）时 recommendations 是空数组 []——不要根据常识补推荐。`;
+recommendations 至多 5 条，是原文明确写出的最重要的推荐，按重要程度排序。推荐是原文以「推荐、建议、应当、不建议、recommend、should」的口吻写给实践者的要求；研究发现、背景陈述和对现状的描述不是推荐。每条 text 用中文一句话（不超过 80 个字），quote 是原文里该推荐的原话（至少 12 个字符）；grade 是原文紧挨着该推荐写出的推荐强度或证据等级，逐字照抄（如“强推荐”“1A”“Class I, Level A”“证据等级 B”），原文没有就设为 null，不要按你的知识补等级。原文没有写出具体推荐（只有概述或摘要）时 recommendations 是空数组 []——不要根据常识补推荐。`;
 
 /**
  * The instructions of a genre, or null when the genre has no record.

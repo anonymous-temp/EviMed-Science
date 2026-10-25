@@ -353,6 +353,8 @@ export class FrontierWorker {
       evidence: this.evidence?.status?.() ?? null,
       leads: this.leads?.status?.() ?? null,
       topics: this.topics?.status?.() ?? null,
+      // 追踪 (c3-track 2026-10-25): the approval and guideline records and the congress recaps the pipeline writes.
+      track: this.pipeline?.track?.status?.() ?? null,
     };
   }
 
