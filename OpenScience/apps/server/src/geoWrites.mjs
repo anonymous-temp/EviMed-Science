@@ -821,6 +821,12 @@ export const GEO_NOT_STORED = Object.freeze({
   "actions[]": Object.freeze({
     target: "the target is the chosen tier's row for the group's pool (the targets table); a number typed here would be a second one",
   }),
+  // The files a GEO deliverable holds that the run-end import does not read (`GEO_IMPORTED_FILES` are the ones it does).
+  "deliverable files": Object.freeze({
+    "question-map.json": "the run's record of its question map; the map is what it wrote and locked through geo_write questions and lock_questions, and locking is the run's act, never an import's",
+    "journey.md": "the reader's account of the decision journey; the journey's stored record is the geo_write journey the run made",
+    "proposal-package.json": "the index of the files handed over to the client, opened as files; the data they were built from is the platform's own",
+  }),
   "articles.json": Object.freeze({
     minimal: "whether a step is minimal is the step's status",
     assumptions: "the run's assumptions about the batch are in its report; an assumption of the strategy is stored with the strategy",
@@ -1381,11 +1387,15 @@ export function geoArticleItemOfFile(entry, { deliverableId, runId = null, claim
   const keys = Array.isArray(source.claimKeys) ? source.claimKeys.filter((key) => typeof key === "string") : [];
   const claimIds = Array.isArray(source.claimIds) && source.claimIds.length ? source.claimIds
     : keys.map((key) => claimIdByKey.get(key)).filter((id) => typeof id === "string");
-  const safety = isObject(source.safety) ? source.safety.status : source.safety;
+  // Clear only when the file says clear — `safety: { status: "clear" }`, as the content skill writes every article, or the bare word.
+  // No safety at all, or a word of the run's own, is a finding nobody has cleared, and the article waits for a person's 放行
+  // (2026-10-25: every value but "open" was read as clear, so a stop the run wrote another way could be placed with nobody releasing it).
+  const said = isObject(source.safety) ? source.safety.status : source.safety;
+  const safety = said === "clear" ? "clear" : "open";
   const errorIds = [...(Array.isArray(source.errorIds) ? source.errorIds : []), ...(typeof source.errorId === "string" ? [source.errorId] : [])];
   return {
     path: source.path, ...(deliverableId ? { deliverableId } : {}), ...(runId ? { runId } : {}), layer: source.layer, title: source.title,
-    ...(source.groupId ? { groupId: source.groupId } : {}), claimIds, safety: safety === "open" ? "open" : "clear",
+    ...(source.groupId ? { groupId: source.groupId } : {}), claimIds, safety,
     contentSha256: source.contentSha256 ?? contentSha256, ...(errorIds.length ? { errorIds } : {}),
     ...(source.channel != null ? { channel: source.channel } : {}), ...(source.audience != null ? { audience: source.audience } : {}),
   };

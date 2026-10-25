@@ -195,9 +195,11 @@ Inside this deliverable's `deliverables/<id>/` directory:
   the assumptions. It carries no article text.
 - `articles.json` — `{ minimal, articles: [...], assumptions }`. Each article:
   `id`, `layer` (`deep|card|popular|qa|correction`), `title`, `question`,
-  `groupKey`, `claimKeys`, `path` (`articles/<id>.md`), `recordPath`
-  (`records/<id>.md`), `audience`, `channel`, `author`, `reviewer`,
-  `updatedAt`, `safety: { status: "clear"|"open", findings }`.
+  `groupId` (the question group's id from `geo_read questions`, as the
+  registration names it), `groupKey`, `claimKeys`, `path` (`articles/<id>.md`),
+  `recordPath` (`records/<id>.md`), `audience`, `channel`, `author`,
+  `reviewer`, `updatedAt`, `safety: { status: "clear"|"open", findings }` —
+  every article states its safety; one that does not waits for a person.
 - `articles/<id>.md` — the article, exactly as it would be published.
 - `records/<id>.md` — its work record: the clinical path, each key sentence's
   claim, what the medical review changed, and the protected-span comparison.
