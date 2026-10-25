@@ -78,7 +78,11 @@ probe host, a social crawler or a marketplace.
   step that is done and not stale); `mcp__evimed__geo_write` to register what you produce —
   `product`, `claims`, `journey`, `questions`, then `lock_questions`, then
   `step`. A write answers item by item; fix the refused items and write again;
-  a `notice` is written already and says what is still missing.
+  a `notice` is written already and says what is still missing. A `questions`
+  write adds its groups to the latest map — a group of the same name and pool
+  replaces that group, the others stay as they are — and `replace: true` writes
+  the whole map; a question is measured by `isMeasured: true`, and one written
+  without a `kind` is `typical`.
   `product` is the identity every answer is counted by, so preserve what is known:
   `brandName`, `genericName`, `aliases` (the other names an answer uses for the
   product), `misspellings` (how people misspell it), `approvalNo` (批准文号),

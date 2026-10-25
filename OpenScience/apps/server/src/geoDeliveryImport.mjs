@@ -92,11 +92,23 @@ export function fillStrategy(stored, data) {
  * the tool, so nothing the tool would refuse gets in. Idempotent: claims are
  * upserted by key, and an unchanged statement is not a new version.
  *
- * Which deliverables: the run's own geo-insight ones, and any deliverable
- * folder of the project that looks like one (`claims.json` beside
- * `question-map.json`) — so a run that ended before this import existed, or
- * whose end was missed by a restart, is picked up when the project's next run
- * ends.
+ * Which deliverables: the run's own geo-insight ones, and every deliverable
+ * folder whose `claims.json` the run's record lists among the files it wrote
+ * (`geoRunInsightFolders`) — so a finished insight run whose claims.json is not
+ * one of its declared deliverables is still read. It used to be every folder of
+ * the project that looked like an insight pack, read again at the end of every
+ * run of the project, a chat turn included, and that laid old libraries over
+ * new ones (production, 2026-10-25): a claim corrected by a later insight run
+ * was written back to what the older folder said, or minted two versions a
+ * run, depending only on the order the directory listed the two folders. A
+ * run whose end a restart missed is the orchestrator's fold to ask again for
+ * (D-24, below), never the next run's.
+ *
+ * And a claim the project holds in a version written after the file was last
+ * changed is left as it stands: the file is older than what the platform knows
+ * (`fileTime`), whichever run wrote the newer version — the run itself, through
+ * `geo_write`, after it wrote its file, or a later run when the fold's ask comes
+ * after a restart.
  *
  * Build to delete: once runs register every claim themselves (the write now
  * ignores extra fields instead of refusing the item), this import only
@@ -119,6 +131,11 @@ export function fillStrategy(stored, data) {
  */
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "cancelled"]);
+/**
+ * The files of a GEO deliverable this import reads into the project. Every other data file a GEO capability delivers is declined by
+ * name, with its reason, in `GEO_NOT_STORED["deliverable files"]` — a test holds the capabilities' manifests to the two lists.
+ */
+export const GEO_IMPORTED_FILES = Object.freeze(["claims.json", "geo-value.json", "strategy.json", "articles.json"]);
 /** Below the write's 256 KB body limit, with room for the envelope. */
 const CHUNK_BYTES = 200 * 1024;
 /** Attempts at one run's import in a process: the first, and one more for a write that failed. */
@@ -187,19 +204,43 @@ async function deliverableFolders(workspaceDir) {
   }
 }
 
+/** The lists of a run's record that name files it wrote: accepted, unchecked, changed in the workspace while it ran, handed over. */
+const RUN_FILE_LISTS = Object.freeze(["artifacts", "unverifiedArtifacts", "outputFiles", "presentedFiles"]);
+
 /**
- * The project's deliverable folders that hold an insight pack.
- * @param {string} workspaceDir
- * @returns {Promise<string[]>}
+ * The deliverable folders whose claim library this run wrote: its geo-insight deliverables (and those it declared with no
+ * capability), and each folder whose `claims.json` its record lists among its files — unless the run declared that folder as
+ * another capability's deliverable.
+ * @param {Record<string, any>} run
+ * @returns {string[]}
  */
-async function insightFolders(workspaceDir) {
-  /** @type {string[]} */
-  const found = [];
-  for (const name of await deliverableFolders(workspaceDir)) {
-    const names = await fs.readdir(resolveScopedPath(workspaceDir, deliverableDir(name))).catch(() => []);
-    if (names.includes("claims.json") && names.includes("question-map.json")) found.push(name);
+export function geoRunInsightFolders(run) {
+  const deliverables = /** @type {any[]} */ (run?.deliverables ?? run?.progress?.deliverables ?? []);
+  const declared = new Map(deliverables.filter((deliverable) => typeof deliverable?.id === "string")
+    .map((deliverable) => [String(deliverable.id), typeof deliverable.capability === "string" ? deliverable.capability : null]));
+  const folders = [...declared].filter(([, capability]) => !capability || capability === "geo-insight").map(([id]) => id);
+  for (const list of RUN_FILE_LISTS) {
+    for (const file of Array.isArray(run?.[list]) ? run[list] : []) {
+      const id = typeof file === "string" ? deliverableIdOfPath(file) : null;
+      if (!id || file !== `${deliverableDir(id)}/claims.json`) continue;
+      const capability = declared.get(id);
+      if (capability && capability !== "geo-insight") continue;
+      folders.push(id);
+    }
   }
-  return found;
+  return [...new Set(folders)];
+}
+
+/**
+ * When a workspace file was last changed, in epoch milliseconds, or null when that cannot be read. The link is not followed.
+ * @param {string} workspaceDir @param {string} relative
+ */
+export async function workspaceFileTime(workspaceDir, relative) {
+  try {
+    return (await fs.lstat(resolveScopedPath(workspaceDir, relative))).mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -242,20 +283,21 @@ const codeOf = (error, fallback) => (typeof /** @type {any} */ (error)?.code ===
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
  *   audit?: ((event: string, status: string, details: Record<string, any>) => Promise<unknown> | unknown) | null,
  *   readFile?: (rootDir: string, file: string) => Promise<Buffer | string>,
- *   listInsightFolders?: (workspaceDir: string) => Promise<string[]>,
+ *   fileTime?: (rootDir: string, file: string) => Promise<number | null>,
  *   listDeliverableFolders?: (workspaceDir: string) => Promise<string[]>,
  *   capabilityOutputs?: (id: string) => Promise<string[]>,
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>) | null,
  *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null,
  *   refreshCards?: ((geoProject: any, controlProject: any) => Promise<{ cards: unknown[], held: unknown[], failed: unknown[] } | null>) | null,
  *   checkReferences?: ((geoProject: any, article: any, text: string) => Promise<unknown>) | null }} deps
+ *   `fileTime` says when a workspace file last changed (`workspaceFileTime`): a claim stored in a version newer than its file is kept.
  *   `audit` is where an attempt that lost a write is recorded for an operator (`geo.import`, failed). `refreshCards` writes the
  *   project's verified claims into its product zone as cards (geoCards.mjs); what it refuses (no named
  *   producer, no reviewer) or fails to write is reported and never ends the import. `checkReferences` reads the claim references of
  *   each popular, question-and-answer and correction article against the cards and records the finding on the article; an
  *   article whose text is the one it last read is not read again.
  */
-export function createGeoDeliveryImport({ store, report = () => {}, audit = null, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
+export function createGeoDeliveryImport({ store, report = () => {}, audit = null, readFile = readWorkspaceFile, fileTime = workspaceFileTime,
   listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null, refreshCards = null, checkReferences = null, capabilityOutputs = async () => [] }) {
   /** Runs this process has imported whole (or has given up on: `MAX_TRIES`); the writes are idempotent either way. */
   const done = new Set();
@@ -280,19 +322,25 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
   const importOne = async (project, run, geoProject, failed) => {
     failed.push(...(await importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs })).failed);
     const deliverables = /** @type {any[]} */ (run.deliverables ?? run.progress?.deliverables ?? []);
-    const ids = new Set(deliverables
-      .filter((deliverable) => typeof deliverable?.id === "string" && (!deliverable.capability || deliverable.capability === "geo-insight"))
-      .map((deliverable) => String(deliverable.id)));
-    for (const folder of await listInsightFolders(project.workspaceDir)) ids.add(folder);
-    let imported = 0;
-    let issues = 0;
+    const ids = geoRunInsightFolders(run);
+    // Each library with the time its file last changed, the oldest first: within the run the newest file is the one that stands.
+    /** @type {Array<{ id: string, parsed: any, changedAt: number | null }>} */
+    const libraries = [];
     for (const id of ids) {
-      let parsed;
+      const file = `${deliverableDir(id)}/claims.json`;
       try {
-        parsed = JSON.parse(String(await readFile(project.workspaceDir, `${deliverableDir(id)}/claims.json`)));
+        libraries.push({ id, parsed: JSON.parse(String(await readFile(project.workspaceDir, file))), changedAt: await fileTime(project.workspaceDir, file).catch(() => null) });
       } catch {
         continue;
       }
+    }
+    libraries.sort((left, right) => (left.changedAt ?? 0) - (right.changedAt ?? 0));
+    // When each claim's latest version was written, as the project held it before this import.
+    const storedAt = libraries.length ? new Map((await store.listClaims(geoProject.id)).map((claim) => [claim.claimKey, Date.parse(String(claim.createdAt ?? ""))])) : new Map();
+    let imported = 0;
+    let issues = 0;
+    let newer = 0;
+    for (const { parsed, changedAt } of libraries) {
       // The competitors the run named, when the project has none yet: the
       // parser recognises a rival only by a registered name, so without them
       // share of voice and the rival cells are never computed (production,
@@ -310,7 +358,12 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
           report(code);
         }
       }
-      const claims = Array.isArray(parsed?.claims) ? parsed.claims : Array.isArray(parsed) ? parsed : [];
+      const all = Array.isArray(parsed?.claims) ? parsed.claims : Array.isArray(parsed) ? parsed : [];
+      const claims = all.filter((entry) => {
+        const at = entry && typeof entry === "object" && typeof entry.claimKey === "string" ? storedAt.get(entry.claimKey.trim()) : undefined;
+        return changedAt == null || at == null || !Number.isFinite(at) || at <= changedAt;
+      });
+      newer += all.length - claims.length;
       for (const chunk of claimChunks(claims)) {
         try {
           const result = await geoRuntimeWrite({ store, project: geoProject, what: "claims", body: { items: chunk } });
@@ -324,11 +377,14 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       }
     }
     if (imported || issues) report(`claims imported ${imported}, refused ${issues}`);
+    if (newer) report(`claims kept as stored ${newer}: the project holds a version newer than the file`);
     // The claims a card's own ruler verifies become cards of the project's product zone (flywheel F21). The claim table stays as
     // it is; a refusal here — nobody named as producer, no reviewing doctor — is one named code and changes nothing else. The
     // project's page says the same thing (`cards.blockedBy`), and saving the producer or the reviewing doctor writes the cards (D-28).
     let carded = 0;
-    if (refreshCards && (imported > 0 || ids.size > 0)) {
+    // Every run's end, when the project holds claims: a claim another capability added through `geo_write claims` becomes a card at
+    // its run's end too (the write is idempotent by content; this used to ride on the workspace holding any insight folder at all).
+    if (refreshCards && (imported > 0 || (await store.claimIds(geoProject.id)).size > 0)) {
       try {
         const written = await refreshCards(geoProject, project);
         carded = written?.cards.length ?? 0;

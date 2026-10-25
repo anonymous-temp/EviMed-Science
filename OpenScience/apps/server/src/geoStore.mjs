@@ -831,11 +831,15 @@ export class GeoStore {
     }));
   }
 
-  /** The groups of one set version, each with its questions. @param {string} geoId @param {number} version */
-  async questionMap(geoId, version) {
-    const groups = (await this.query(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND set_version = $2
+  /**
+   * The groups of one set version, each with its questions.
+   * @param {string} geoId @param {number} version @param {any} [client] a transaction to read inside, for a write that builds on it
+   */
+  async questionMap(geoId, version, client = null) {
+    const read = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => (client ? client.query(sql, values) : this.query(sql, values));
+    const groups = (await read(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND set_version = $2
       ORDER BY pool NULLS LAST, position, id`, [geoId, version])).rows.map(questionGroupFromRow);
-    const questions = (await this.query(`SELECT * FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2
+    const questions = (await read(`SELECT * FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2
       ORDER BY position, id`, [geoId, version])).rows.map(questionFromRow);
     const byGroup = new Map(groups.map((group) => [group.id, /** @type {ReturnType<typeof questionFromRow>[]} */ ([])]));
     for (const question of questions) byGroup.get(question.groupId)?.push(question);
@@ -849,13 +853,27 @@ export class GeoStore {
   }
 
   /**
-   * Write a new, unlocked set version from validated groups.
+   * Write a new, unlocked set version from validated groups — or, with `merge`, from what `merge` makes of the latest set's groups
+   * (read in the same transaction, under the set's lock, so two writes that add to one map cannot lose each other's groups).
    * @param {string} userId @param {string} geoId
-   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null }} input
-   * @returns {Promise<{ version: number, groupIds: string[], questionIds: string[][] }>}
+   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null,
+   *   merge?: ((current: Array<Record<string, any> & { questions: Array<Record<string, any>> }>) => Array<Record<string, any> & { questions: Array<Record<string, any>> }> | null) | null }} input
+   *   `merge` answers null to write nothing
+   * @returns {Promise<{ version: number, groupIds: string[], questionIds: string[][] } | null>} null when `merge` wrote nothing
    */
-  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null }) {
-    return this.transaction(async (client) => this.#insertSet(client, userId, geoId, { groups, note, runId, lockedAt: null, measuredCount: null }));
+  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null, merge = null }) {
+    return this.transaction(async (client) => {
+      let written = groups;
+      if (merge) {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
+        const latest = Number((await client.query(`SELECT coalesce(max(version), 0) AS version FROM evimed_geo.question_sets WHERE geo_project_id = $1`,
+          [geoId])).rows[0].version);
+        const merged = merge(latest ? await this.questionMap(geoId, latest, client) : []);
+        if (!merged) return null;
+        written = merged;
+      }
+      return this.#insertSet(client, userId, geoId, { groups: written, note, runId, lockedAt: null, measuredCount: null });
+    });
   }
 
   /**

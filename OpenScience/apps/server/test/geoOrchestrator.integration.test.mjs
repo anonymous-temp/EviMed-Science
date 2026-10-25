@@ -1033,8 +1033,7 @@ async function endedInsightRun({ importDelivery = null, importRun = null }) {
 }
 
 test("a run the process never heard end is imported before the fold reads what the import writes (D-24)", options, async () => {
-  const importDelivery = createGeoDeliveryImport({ store, readFile: workspaceOf({ "deliverables/geo-insight/claims.json": DELIVERED_CLAIMS }),
-    listInsightFolders: async () => [] });
+  const importDelivery = createGeoDeliveryImport({ store, readFile: workspaceOf({ "deliverables/geo-insight/claims.json": DELIVERED_CLAIMS }) });
   const { project, world } = await endedInsightRun({ importDelivery });
   // The state change that would have started the import died with the process: the fold meets the ended run cold.
   await world.orchestrator.advance(project.id);
@@ -1047,7 +1046,7 @@ test("the fold waits for the import the state change started instead of reading 
   let release = () => {};
   const gate = new Promise((resolve) => { release = () => resolve(null); });
   let reads = 0;
-  const importDelivery = createGeoDeliveryImport({ store, listInsightFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store, 
     readFile: async (_root, file) => {
       if (file !== "deliverables/geo-insight/claims.json") throw Object.assign(new Error("missing"), { code: "ENOENT" });
       reads += 1;
@@ -1076,7 +1075,7 @@ test("a write that failed is imported again when the fold asks; a second failure
   };
   /** @type {any[]} */
   const audits = [];
-  const importDelivery = createGeoDeliveryImport({ store: flaky, listInsightFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store: flaky, 
     readFile: workspaceOf({ "deliverables/geo-insight/geo-value.json": JSON.stringify({ findings: [{ id: "f1", statement: "每周一次给药减轻注射负担" }] }) }),
     audit: async (event, status, details) => { audits.push({ event, status, ...details }); } });
   const { project, control, world, run } = await endedInsightRun({ importDelivery });
@@ -1097,7 +1096,7 @@ test("an import that keeps failing is recorded twice and no more, and it never k
   flaky.writeValue = async () => { throw Object.assign(new Error("down"), { code: "ECONNRESET" }); };
   /** @type {any[]} */
   const audits = [];
-  const importDelivery = createGeoDeliveryImport({ store: flaky, listInsightFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store: flaky, 
     readFile: workspaceOf({ "deliverables/geo-insight/geo-value.json": JSON.stringify({ findings: [{ id: "f1", statement: "x" }] }) }),
     audit: async (event, status, details) => { audits.push({ event, status, ...details }); } });
   const { project, control, world, run } = await endedInsightRun({ importDelivery });

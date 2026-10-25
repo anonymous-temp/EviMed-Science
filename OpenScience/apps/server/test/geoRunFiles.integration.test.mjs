@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
+import { createGeoDeliveryImport, GEO_IMPORTED_FILES } from "../src/geoDeliveryImport.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { GEO_TABLES, migrateGeo } from "../src/geoPersistence.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -66,7 +66,7 @@ async function projectWithBaseline() {
 /** An importer that reads from an in-memory workspace. @param {Map<string, string>} files @param {Record<string, any>} [extra] */
 function importerOf(files, extra = {}) {
   const reports = /** @type {string[]} */ ([]);
-  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code), listInsightFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code),
     readFile: async (_root, file) => {
       if (!files.has(file)) throw Object.assign(new Error("missing"), { code: "ENOENT" });
       return files.get(file) ?? "";
@@ -302,6 +302,48 @@ test("an articles file enriches the articles the run registered with their chann
   assert.equal(second?.files?.enriched, 0);
   assert.equal(second?.files?.registered, 0);
   assert.equal((await store.listArticles(geo.id)).length, all.length);
+});
+
+// Production, 2026-10-25: every word but "open" was read as clear, so an article whose run said its stop another way — or said nothing —
+// was registered clear and, with a passed gate, publishable without the person's 放行 the safety stop exists for.
+test("an article the run did not register is clear only when its file says clear; any other word, or none, waits for a person", options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  await database.query(`INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name) VALUES ($1, $2, $3, 1, 'P2', 'g')`,
+    [`gs-${geo.id}`, USER, geo.id]);
+  const said = /** @type {Record<string, any>} */ ({ clear: { status: "clear" }, word: "clear", open: { status: "open" }, none: undefined,
+    own: { status: "待复核" }, method: undefined });
+  const files = new Map([["deliverables/geo-content/articles.json", JSON.stringify({ articles: Object.entries(said).map(([name, safety]) => ({
+    id: name, layer: "popular", title: name, groupId: `gs-${geo.id}`, claimKeys: [], path: `articles/${name}.md`,
+    ...(safety === undefined ? {} : { safety }), ...(name === "method" ? { release_status: "held_safety" } : {}) })) })]]);
+  for (const name of Object.keys(said)) files.set(`deliverables/geo-content/articles/${name}.md`, `# ${name}\n`);
+  const { importDelivery } = importerOf(files, { articleGate: async () => "passed" });
+  const result = await importDelivery(control, { id: "run_s", status: "succeeded", deliverables: [{ id: "geo-content", capability: "geo-content" }] });
+  assert.equal(result?.files?.registered, 6);
+  const byTitle = new Map((await store.listArticles(geo.id)).map((article) => [article.title, [article.safety, article.status]]));
+  assert.deepEqual(Object.fromEntries(byTitle), {
+    clear: ["clear", "publishable"], word: ["clear", "publishable"], open: ["open", "draft"], none: ["open", "draft"], own: ["open", "draft"], method: ["open", "draft"],
+  });
+});
+
+test("the articles file the content capability describes names each article's group by the id the registration takes", () => {
+  const skill = readFileSync(fileURLToPath(new URL("../../../capability-skills/geo-content/SKILL.md", import.meta.url)), "utf8");
+  const bullet = skill.slice(skill.indexOf("- `articles.json`"), skill.indexOf("- `articles/<id>.md`"));
+  const named = [...bullet.slice(bullet.indexOf("Each article:")).matchAll(/`([A-Za-z]+)`/g)].map((match) => match[1]);
+  assert.ok(named.includes("groupId"), "an article names its question group by its id: the method's own groupKey is not stored on a group");
+  const entry = Object.fromEntries(named.map((field) => [field, field === "safety" ? { status: "clear", findings: [] } : "x"]));
+  assert.deepEqual(geoArticlesFileCoverage({ minimal: false, assumptions: [], articles: [entry] }).dropped, [], "every field described is stored, mapped or declined");
+});
+
+test("every data file a GEO capability delivers is imported at the run's end or declined by name", () => {
+  const manifests = ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"].map((id) =>
+    JSON.parse(readFileSync(fileURLToPath(new URL(`../../../deploy/runtime-dsh/capabilities/${id}.json`, import.meta.url)), "utf8")));
+  const declined = GEO_NOT_STORED["deliverable files"] ?? {};
+  for (const manifest of manifests) {
+    for (const output of manifest.produces.flatMap((/** @type {any} */ entry) => entry.outputs)) {
+      if (["report", "work"].includes(output.role)) continue;
+      assert.ok(GEO_IMPORTED_FILES.includes(output.path) || Object.hasOwn(declined, output.path), `${manifest.id}: ${output.path} is neither imported nor declined`);
+    }
+  }
 });
 
 test("an articles file's own fields are stored, mapped or declined by name", () => {
