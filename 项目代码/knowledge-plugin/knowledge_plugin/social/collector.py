@@ -498,11 +498,15 @@ class SocialCollector:
             return {"skipped": "not_yet"}
         rows = {(row["config"] or {}).get("crawl_platform"): row for row in await self._rows("social-crawl")}
         platforms = [name for name in crawl_mod.PLATFORMS if name in rows]
-        pair = crawl_mod.next_pair(self.watch, platforms, state.get("last") or {})
+        parked = dict(state.get("parked") or {})
+        pair = crawl_mod.next_pair(self.watch, platforms, state.get("last") or {}, parked=parked, now=now)
         if pair is None:
+            if platforms and all(crawl_mod.parked_until(parked, name, now) for name in platforms):
+                return {"skipped": "all_parked"}
             return {"skipped": "no_platform"}
         term, platform = pair
         row = rows[platform]
+        pace = crawl_mod.interval(self._settings.social_crawl_daily)
         try:
             answer = await self.crawler.crawl(term, platform)
         except SpendCapReached as capped:
@@ -511,13 +515,25 @@ class SocialCollector:
             await self._finish(row, now, outcome="host-budget", detail="daily_cap", next_at=capped.retry_at, host=None)
             return {"capped": True}
         except ProviderError as error:
-            busy = error.kind == "rate-limited"
-            wait = crawl_mod.BUSY_WAIT if busy else crawl_mod.FAILURE_WAIT
-            state["next_at"] = (now + wait).isoformat()
+            if error.kind == "rate-limited":      # GEO's own queue is busy: every platform waits, none is parked
+                state["next_at"] = (now + crawl_mod.BUSY_WAIT).isoformat()
+                await self._save_crawl_state(state)
+                await self._finish(row, now, outcome="host-budget", detail="geo_busy", next_at=now + crawl_mod.BUSY_WAIT,
+                                   host=None)
+                return {"busy": error.detail}
+            # A failure of this platform: the attempt is recorded for the pair and the platform is parked, so the round
+            # robin goes on with the platforms it has not asked (2026-10-25 review G1: xhs answered 500 for three days
+            # and the other five were never tried).
+            until = now + crawl_mod.park_for(int(row["consecutive_failures"] or 0) + 1)
+            last = dict(state.get("last") or {})
+            last[f"{term}|{platform}"] = now.isoformat()
+            parked[platform] = {"until": until.isoformat(), "reason": error.detail[:60]}
+            state.update(last=last, parked=parked, next_at=(now + pace).isoformat())
             await self._save_crawl_state(state)
-            await self._finish(row, now, outcome="host-budget" if busy else "http-error",
-                               detail=("geo_busy" if busy else f"crawl_{error.detail}")[:100], next_at=now + wait, host=None)
-            return {"busy" if busy else "failed": error.detail}
+            await self._finish(row, now, outcome="http-error", detail=f"crawl_{error.detail}"[:100], next_at=until, host=None)
+            self.counters["crawl_parked"] += 1
+            log.warning("social crawl %s parked until %s: %s", platform, until.isoformat(), error.detail)
+            return {"failed": error.detail, "platform": platform, "parked_until": until.isoformat()}
         posts = answer.get("posts") if isinstance(answer.get("posts"), list) else []
         candidates = [crawl_mod.build_entry(post, platform, now=now) for post in posts]
         candidates = [entry for entry in candidates if entry is not None]
@@ -525,12 +541,16 @@ class SocialCollector:
         result = await self._store(row, [entry for entry in candidates if entry.external_key not in known], now)
         last = dict(state.get("last") or {})
         last[f"{term}|{platform}"] = now.isoformat()
-        state.update(last=last, next_at=(now + crawl_mod.interval(self._settings.social_crawl_daily)).isoformat())
+        parked.pop(platform, None)
+        state.update(last=last, next_at=(now + pace).isoformat())
+        if parked:
+            state["parked"] = parked
+        else:
+            state.pop("parked", None)
         await self._save_crawl_state(state)
         status = str((answer.get("meta") or {}).get("collection_status") or "")
         await self._finish(row, now, outcome="ok" if candidates else "empty", result=result, host=None,
-                           detail=f"term={term[:40]} status={status[:20]}",
-                           next_at=now + crawl_mod.interval(self._settings.social_crawl_daily))
+                           detail=f"term={term[:40]} status={status[:20]}", next_at=now + pace)
         return {"term": term, "platform": platform, "posts": len(candidates), "new": result.new}
 
     async def _save_crawl_state(self, state: dict) -> None:

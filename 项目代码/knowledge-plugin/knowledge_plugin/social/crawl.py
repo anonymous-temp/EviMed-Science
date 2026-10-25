@@ -11,6 +11,11 @@ one platform, newest first, five detailed posts, no comments asked for, no provi
 - **Pacing.** ``KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY`` requests a day (120), spread evenly (one every twelve minutes),
   one at a time. The crawler is the GEO module's and serves one request at a time: a busy answer (429/503) is GEO's, and
   the monitor waits at least ten minutes before it asks again — never a retry inside those ten minutes.
+- **One failing platform never holds the other five.** A request that failed for a reason of its own (an HTTP 500, a
+  timeout, an answer that is not JSON) records the attempt for that term × platform and parks that platform for a few
+  hours (``park_for``: three hours, doubled by every failure in a row, at most twelve), so the round robin moves on to the
+  platforms it has not asked yet; a parked platform comes back by itself when its time is up, and its first success clears
+  the record. A platform that keeps failing reads ``degraded`` and then ``unreadable`` as a source, like any other.
 - **What is kept of a post.** Its address, its title or first line, an excerpt of at most 300 characters and the counts
   the platform states (likes, shares, the comment count when stated — never the length of a comment sample). Never the
   author: a post on these platforms is a member of the public's, and personal data does not pass the adapter (contract
@@ -31,7 +36,8 @@ PLATFORMS = {"xhs": "xiaohongshu", "douyin": "douyin", "zhihu": "zhihu", "weibo"
 EXCERPT_MAX = 300
 TITLE_MAX = 100
 BUSY_WAIT = timedelta(minutes=10)
-FAILURE_WAIT = timedelta(minutes=30)
+PARK_BASE = timedelta(hours=3)
+PARK_MAX = timedelta(hours=12)
 STATE_KEY = "social_crawl_state"
 _TIME_KEYS = ("publish_time", "create_time", "created_at", "publish_at", "time", "pub_time", "date")
 
@@ -54,8 +60,27 @@ def interval(daily: int) -> timedelta:
     return timedelta(seconds=86400 / max(1, daily))
 
 
-def next_pair(terms: list[str], platforms: list[str], last: dict[str, str]) -> tuple[str, str] | None:
-    """The (term, crawler platform) searched longest ago; never searched comes first, in list order."""
+def park_for(failures: int) -> timedelta:
+    """How long a platform that failed ``failures`` times in a row is left alone: three hours, doubled each time, at most twelve."""
+    return min(PARK_MAX, PARK_BASE * 2 ** max(0, min(failures, 8) - 1))
+
+
+def parked_until(parked: dict | None, platform: str, now: datetime) -> datetime | None:
+    """When a parked platform may be asked again, or ``None`` when it is not parked (a record past its time is not a park)."""
+    record = (parked or {}).get(platform)
+    try:
+        until = datetime.fromisoformat(record["until"]) if isinstance(record, dict) else None
+    except (KeyError, TypeError, ValueError):
+        return None
+    return until if until is not None and until > now else None
+
+
+def next_pair(terms: list[str], platforms: list[str], last: dict[str, str], *, parked: dict | None = None,
+              now: datetime | None = None) -> tuple[str, str] | None:
+    """The (term, crawler platform) asked longest ago; never asked comes first, in list order. A platform parked at ``now``
+    (``parked``: platform → ``{"until": iso, …}``) is passed over; with every platform parked there is no pair."""
+    if parked and now is not None:
+        platforms = [platform for platform in platforms if parked_until(parked, platform, now) is None]
     best, best_at = None, None
     for term in terms:
         for platform in platforms:
