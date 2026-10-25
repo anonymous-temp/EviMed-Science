@@ -19,6 +19,7 @@ import { GeoStore } from "../src/geoStore.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { createGeoRoutes } from "../src/geoRoutes.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { brandRegistry, GEO_PARSER_VERSION, registryKey } from "../src/geoParse.mjs";
 import { sendError } from "../src/security.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -83,9 +84,10 @@ before(async () => {
     projects: {
       create: async (_user, name) => ({ id: `p-${++projectCounter}`, name }),
       bindSession: async () => ({ sessionId: "geo-session-1", bound: true }),
-      // Like the server's lookup: the recorded conversation while it exists (here: always, unless the test's hook says otherwise).
-      conversationSessionId: async (/** @type {any} */ user, /** @type {string} */ projectId, /** @type {string | null} */ recorded) =>
-        (hooks.conversation ? hooks.conversation(user, projectId, recorded) : recorded ?? "geo-session-1"),
+      // The composition's lookup of the project's conversation for this reader (`GeoNativeAuthority.readPrimary`): here the one the
+      // project was made with, unless the test's hook answers otherwise.
+      conversationSessionId: async (/** @type {any} */ user, /** @type {string} */ geoId, /** @type {unknown[]} */ ...rest) =>
+        (hooks.conversation ? hooks.conversation(user, geoId, ...rest) : "geo-session-1"),
       programmeRuns: async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => (hooks.programmeRuns ? hooks.programmeRuns(ownerId, projectId) : []),
     },
     get orchestrator() { return hooks.orchestrator; },
@@ -252,28 +254,30 @@ test("creating a project makes the control-plane project, its GEO row and a boun
   refused(await call("POST", "/api/geo/projects", { body: { brandName: "a", tier: "1" } }), 400, "geo_payload_invalid");
 });
 
-test("a project keeps the conversation it was made with; one made before that was recorded finds its oldest and keeps it", options, async () => {
+test("the page's conversation is the composition's answer for the reader and the GEO project; the route records nothing and a failed lookup is none", options, async () => {
+  // Which conversation a project keeps (B6) is the GEO authority's (`GeoNativeAuthority.readPrimary`, its recorded or oldest own
+  // conversation registered once as the primary): geoNativeComposition.integration.test.mjs holds it. The route only asks.
   const created = (await call("POST", "/api/geo/projects", { body: { brandName: "替尔泊肽" } })).payload.data;
-  const page = async (/** @type {string} */ user = ALICE) => (await call("GET", `/api/geo/projects/${created.id}`, { user })).payload.data;
+  const row = async () => (await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id;
+  const recorded = await row();
+  /** @type {any[]} */ const asked = [];
   try {
-    // Another conversation of the project was touched last; the project's own is still the one it was made with.
-    hooks.conversation = async (/** @type {any} */ _user, /** @type {string} */ _project, /** @type {string | null} */ recorded) => recorded ?? "geo-sibling-newest";
-    assert.equal((await page()).sessionId, "geo-session-1");
-    // A project made before the conversation was recorded: the lookup's answer (its oldest own conversation) is taken and kept.
-    await database.query("UPDATE evimed_geo.projects SET conversation_session_id = NULL WHERE id = $1", [created.id]);
-    hooks.conversation = async () => "geo-oldest-own";
-    assert.equal((await page()).sessionId, "geo-oldest-own");
-    hooks.conversation = async (/** @type {any} */ _user, /** @type {string} */ _project, /** @type {string | null} */ recorded) => recorded ?? "geo-sibling-newest";
-    assert.equal((await page()).sessionId, "geo-oldest-own", "the owner's first read recorded it");
-    assert.equal((await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id,
-      "geo-oldest-own");
-    // A second record does not move it.
-    assert.equal(await service.recordConversation(created.id, "geo-other"), "geo-oldest-own");
-    // The person deleted the recorded conversation: the lookup answers the oldest they still have, and that is recorded in its place.
-    hooks.conversation = async () => "geo-oldest-left";
-    assert.equal((await page()).sessionId, "geo-oldest-left", "a deleted conversation is not opened");
-    assert.equal((await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id,
-      "geo-oldest-left");
+    hooks.conversation = async (/** @type {any} */ user, /** @type {string} */ geoId, /** @type {unknown} */ ...rest) => {
+      asked.push([user.id, geoId, rest.length]);
+      return user.id === ALICE ? "geo-primary" : null;
+    };
+    assert.equal((await call("GET", `/api/geo/projects/${created.id}`)).payload.data.sessionId, "geo-primary");
+    assert.deepEqual(asked, [[ALICE, created.id, 0]], "asked for the reader and the GEO project, and nothing the route read itself");
+    assert.equal(await row(), recorded, "the read writes nothing on the project's row");
+    // Another account is refused before the lookup is asked.
+    refused(await call("GET", `/api/geo/projects/${created.id}`, { user: MALLORY }), 404, "geo_project_not_found");
+    assert.equal(asked.length, 1);
+    // A lookup that fails is no conversation, never a failed page: the next open settles it.
+    hooks.conversation = async () => { throw Object.assign(new Error("inventory unavailable"), { status: 503, code: "product_state_unavailable" }); };
+    const page = await call("GET", `/api/geo/projects/${created.id}`);
+    assert.equal(page.status, 200, JSON.stringify(page.payload));
+    assert.equal(page.payload.data.sessionId, null);
+    assert.equal(page.payload.data.name, "替尔泊肽");
   } finally {
     hooks.conversation = null;
   }
@@ -605,19 +609,21 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
   hooks.exporter = null;
 });
 
-test("the AI-run record lists the programme's runs by what they were, newest as the hook gives them, to anyone who may read the project", options, async () => {
+test("the AI-run record lists the programme's runs by what they were, newest first, a page at a time, to anyone who may read the project", options, async () => {
   const { project } = await seededProject();
   const id = project.id;
   // Nothing composed: an empty record, not an error.
-  assert.deepEqual((await call("GET", `/api/geo/projects/${id}/runs`)).payload.data, { runs: [] });
+  assert.deepEqual((await call("GET", `/api/geo/projects/${id}/runs`)).payload.data, { runs: [], total: 0, nextCursor: null });
   /** @type {any[]} */ const asked = [];
   hooks.programmeRuns = async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => {
     asked.push([ownerId, projectId]);
+    // In no particular order, one of them twice: the record orders them itself and lists a run once.
     return [
-      { sessionId: "s-4", runId: "run-4", reason: "geo:content", status: "running", startedAt: "2026-10-16T08:00:00.000Z" },
-      { sessionId: "s-3", runId: "run-3", reason: "geo:export-weekly", status: "succeeded", startedAt: "2026-10-15T08:00:00.000Z" },
       { sessionId: "s-2", runId: "run-2", reason: "geo:evidence", status: "failed", startedAt: "2026-10-14T08:00:00.000Z" },
       { sessionId: "s-1", runId: "run-1", reason: "geo:somewhere-new", status: "canceled", startedAt: null },
+      { sessionId: "s-4", runId: "run-4", reason: "geo:content", status: "running", startedAt: "2026-10-16T08:00:00.000Z" },
+      { sessionId: "s-3", runId: "run-3", reason: "geo:export-weekly", status: "succeeded", startedAt: "2026-10-15T08:00:00.000Z" },
+      { sessionId: "s-4", runId: "run-4", reason: "geo:content", status: "running", startedAt: "2026-10-16T08:00:00.000Z" },
     ];
   };
   try {
@@ -628,9 +634,22 @@ test("the AI-run record lists the programme's runs by what they were, newest as 
       ["s-3", "生成周报", "finished", "2026-10-15T08:00:00.000Z"],
       ["s-2", "整理产品证据", "stopped", "2026-10-14T08:00:00.000Z"],
       ["s-1", "推进项目", "stopped", null],
-    ], "a sentence from the route reason (old runs and new), a closed state word, and a time");
+    ], "a sentence from the route reason (old runs and new), a closed state word, and a time; newest first, an undated run last");
+    assert.deepEqual([record.total, record.nextCursor], [4, null], "one page holds them all");
     // No row carries the instruction a run was sent with, a route reason or an id the page would print.
     assert.equal(JSON.stringify(record).includes("geo:"), false);
+    // A page at a time: the cursor names where the next starts, and following it reaches every run once.
+    const first = (await call("GET", `/api/geo/projects/${id}/runs?limit=3`)).payload.data;
+    assert.deepEqual([first.runs.map((/** @type {any} */ run) => run.runId), first.total], [["run-4", "run-3", "run-2"], 4]);
+    assert.equal(typeof first.nextCursor, "string");
+    const next = (await call("GET", `/api/geo/projects/${id}/runs?limit=3&cursor=${encodeURIComponent(first.nextCursor)}`)).payload.data;
+    assert.deepEqual([next.runs.map((/** @type {any} */ run) => run.runId), next.total, next.nextCursor], [["run-1"], 4, null]);
+    // A page that cannot be read is refused by name: a limit out of range, a field the page does not take, a cursor of another project.
+    for (const query of ["limit=0", "limit=101", "limit=x", "limit=2&limit=3", "offset=2", `cursor=${"x".repeat(12)}`]) {
+      refused(await call("GET", `/api/geo/projects/${id}/runs?${query}`), 400, "geo_payload_invalid");
+    }
+    const other = (await seededProject()).project;
+    refused(await call("GET", `/api/geo/projects/${other.id}/runs?limit=3&cursor=${encodeURIComponent(first.nextCursor)}`), 400, "geo_payload_invalid");
     // The ability is reading; another account's project, or none, is a 404 like every other route.
     refused(await call("GET", `/api/geo/projects/${id}/runs`, { user: MALLORY }), 404, "geo_project_not_found");
     refused(await call("GET", `/api/geo/projects/gp_nothing/runs`), 404, "geo_project_not_found");
@@ -743,52 +762,105 @@ test("the marketplace account is an operator's: others get 403, top-ups are conf
   hooks.market = null;
 });
 
-test("a rival's mention rate over full measurements is a series of its own; the risk pool's issue is never 漏提; sources read full measurements only", options, async () => {
+test("a rival's mention rate over full measurements is a series of its own, judged against each round's frozen evaluation basis; the risk pool's issue is never 漏提; sources read full measurements only", options, async () => {
   const { project } = await seededProject();
   const id = project.id;
   const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
-  const round = (/** @type {string} */ rid, /** @type {string} */ kind, /** @type {string} */ day) => insert(`INSERT INTO evimed_geo.rounds (id, user_id,
-      geo_project_id, kind, set_version, engines, status, planned, done, sample_date, finished_at)
-    VALUES ($1, $2, $3, $4, 1, ARRAY['deepseek','qianwen'], 'done', 10, 10, $5::date, $6::timestamptz)`, [rid, ALICE, id, kind, day, `${day}T12:00:00Z`]);
-  await round(`rw1-${id}`, "baseline", "2026-09-21");
-  await round(`rw2-${id}`, "weekly", "2026-09-28");
-  await round(`rs-${id}`, "sentinel", "2026-09-29");
+  // What a round freezes when it starts (`startRound`): the product and competitors the answers are counted by, and the sites that are ours.
+  const basis = await new GeoMeasureStore(database).evaluationBasis(id);
+  assert.ok(basis);
+  const registry = brandRegistry(basis.product, basis.competitors);
+  const registered = registryKey(registry, basis.owned);
+  const ours = registry.find((entry) => entry.ours)?.name;
+  const rival = registry.find((entry) => !entry.ours)?.name;
+  assert.equal(rival, "替尔泊肽");
+  const engines = ["deepseek", "kimi", "qianwen"];
+  const round = (/** @type {string} */ rid, /** @type {string} */ kind, /** @type {string} */ day, /** @type {boolean} */ frozen) => insert(`INSERT INTO evimed_geo.rounds (id, user_id,
+      geo_project_id, kind, set_version, engines, status, planned, done, sample_date, finished_at, ref)
+    VALUES ($1, $2, $3, $4, 1, $5::text[], 'done', 36, 36, $6::date, $7::timestamptz, $8::jsonb)`,
+  [rid, ALICE, id, kind, engines, day, `${day}T12:00:00Z`, JSON.stringify(frozen ? { evaluationBasis: basis } : {})]);
+  // The unknown control is a full round of the same answers that froze no basis (a round measured before rounds froze one): the
+  // rival's rate over it is not 0, it is not known.
+  await round(`ru-${id}`, "weekly", "2026-09-14", false);
+  await round(`rw1-${id}`, "baseline", "2026-09-21", true);
+  await round(`rw2-${id}`, "weekly", "2026-09-28", true);
+  await round(`rs-${id}`, "sentinel", "2026-09-29", true);
+  // Risk questions only (P4): every engine answers each of them and none of the answers names us, which is the aim there. The rival is
+  // named in the first `mentions` answers of each engine, and the engine looked something up in the first `retrieved`. 千问's sources
+  // come back as titles without a link: its citations cannot be traced (G8). The project's 12 risk questions are widened to 36, so that
+  // an engine alone (not only the three together) has more than the 30 answers a rate needs.
+  const [riskGroup] = (await store.questionMap(id, 1)).filter((group) => group.pool === "P4");
+  await insert(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, pool, text, is_measured)
+    SELECT 'extra-' || $4::text || '-' || n, $1, $2, $3, 1, 'P4', '补充风险问句 ' || n, true FROM generate_series(1, 24) n`, [ALICE, id, riskGroup.id, run]);
+  const p4 = (await store.questionMap(id, 1)).filter((group) => group.pool === "P4").flatMap((group) => group.questions);
+  assert.equal(p4.length, 36);
+  const link = JSON.stringify([{ url: "https://www.example.org/a", domain: "www.example.org", title: "某页" }]);
+  const answers = async (/** @type {string} */ rid, /** @type {string} */ day, /** @type {string[]} */ asking, /** @type {number} */ questions,
+    /** @type {number} */ mentions, /** @type {number} */ retrieved) => {
+    const asked = p4.slice(0, questions).map((question) => question.id);
+    await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
+      SELECT $1::text || '-' || e.engine || '-' || q.n, $2, $1, $3, q.id, e.engine, $4::timestamptz, 'valid', '不推荐自行使用。',
+        CASE WHEN e.engine = 'qianwen' THEN '[{"url":"","domain":"","title":"某百科"}]'::jsonb ELSE $5::jsonb END
+      FROM unnest($6::text[]) WITH ORDINALITY AS q(id, n) CROSS JOIN unnest($7::text[]) AS e(engine)`,
+    [rid, ALICE, id, `${day}T09:00:00Z`, link, asked, asking]);
+    await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours, judged_at, brands, retrieval_triggered, checks,
+        registry_key, parser_version)
+      SELECT s.id, s.user_id, s.geo_project_id, 'omitted', false, now(),
+        jsonb_build_array(jsonb_build_object('name', $2::text, 'ours', true, 'count', 0),
+          jsonb_build_object('name', $3::text, 'competitor', true, 'count', CASE WHEN q.n <= $4 THEN 1 ELSE 0 END)),
+        q.n <= $5, '{"judgementCoverage":{"status":"complete"}}'::jsonb, $6, $7
+      FROM evimed_geo.snapshots s JOIN unnest($8::text[]) WITH ORDINALITY AS q(id, n) ON q.id = s.question_id WHERE s.round_id = $1`,
+    [rid, ours, rival, mentions, retrieved, registered, GEO_PARSER_VERSION, asked]);
+  };
+  // 36 questions × 3 engines = 108 answers a round: 27 of them name the rival in the first round, 54 in the second (9 and 18 of each
+  // engine's 36), and the engines looked something up in 27 of their 36 answers in the weekly.
+  await answers(`ru-${id}`, "2026-09-14", engines, 36, 9, 9);
+  await answers(`rw1-${id}`, "2026-09-21", engines, 36, 9, 9);
+  await answers(`rw2-${id}`, "2026-09-28", engines, 36, 18, 27);
+  // A sentinel's sliver (10 answers, the rival named in every one, a lookup in every one) is not a full measurement and never draws a point.
+  await answers(`rs-${id}`, "2026-09-29", ["deepseek", "kimi"], 5, 5, 5);
+  // The retrieval rate of each engine as the end of a round stores it, which the sources page reads beside the answers: the full
+  // rounds', never the sentinel's.
   const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
       round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at, method_version)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
   [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null,
     row.value ?? null, row.status ?? "ok", row.at, GEO_MEASUREMENT_METHOD_VERSION]);
-  await metric("r1", { round: `rw1-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 31, n: 100, value: 31, at: "2026-09-21T10:00:00Z" });
-  await metric("r2", { round: `rw2-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 34, n: 100, value: 34, at: "2026-09-28T10:00:00Z" });
-  // A sentinel's sliver never draws a point.
-  await metric("r3", { round: `rs-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 9, n: 10, value: 90, at: "2026-09-29T10:00:00Z" });
-  // The retrieval rate the sources page reads: the full rounds', never the sentinel's.
-  await metric("t1", { round: `rw2-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 99, n: 100, value: 99, at: "2026-09-28T10:00:00Z" });
+  await metric("t1", { round: `rw2-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 27, n: 36, value: 75, at: "2026-09-28T10:00:00Z" });
   await metric("t2", { round: `rs-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 5, n: 5, value: 100, status: "insufficient",
     at: "2026-09-29T10:00:00Z" });
-  // 千问's sources come back as titles without a link: its citations cannot be traced (G8).
-  const [group] = (await store.questionMap(id, 1)).filter((entry) => entry.pool === "P4");
-  await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
-    VALUES ($1, $2, $3, $4, $5, 'qianwen', '2026-09-28T09:00:00Z', 'valid', '不推荐自行使用。', $6::jsonb)`,
-  [`sq-${id}`, ALICE, `rw2-${id}`, id, group.questions[0].id, JSON.stringify([{ url: "", domain: "", title: "某百科" }])]);
-  await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours) VALUES ($1, $2, $3, 'omitted', false)`,
-    [`sq-${id}`, ALICE, id]);
 
-  const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
-  // The first full round has no answer to name a coverage from (null: not equal to anything); the second heard from 千问 on a risk question.
-  assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [
-    { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34,
-      coverage: null }] }]);
+  // The rate is read over a date range of the rounds' own answers, the rival's and, over the same eligible answers, ours.
+  const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring?from=2026-09-14&to=2026-09-29`)).payload.data;
+  assert.equal(monitoring.rivals.length, 1, "one rival, one pool: the sentinel's pool is the same");
+  const [series] = monitoring.rivals;
+  assert.deepEqual([series.name, series.entityKey, series.pool], ["替尔泊肽", "替尔泊肽", "P4"]);
+  const reading = (/** @type {any[]} */ points) => points.map((point) => [point.date, point.value, point.k, point.n, point.status]);
+  assert.deepEqual(reading(series.points), [
+    ["2026-09-14", null, null, null, "unknown"], ["2026-09-21", 25, 27, 108, "known"], ["2026-09-28", 50, 54, 108, "known"],
+  ], "the round without a frozen basis is unknown, not 0; the sentinel's day draws nothing");
+  // Ours, over the same eligible answers, has no rate on a risk pool (its mention rate is not defined for P4: not being named there is
+  // the aim), which is a different thing from the unknown of a round that froze no basis.
+  assert.deepEqual(reading(series.ownPoints), [
+    ["2026-09-14", null, null, null, "unknown"], ["2026-09-21", null, null, null, "no_data"], ["2026-09-28", null, null, null, "no_data"],
+  ]);
+  // The key of a point is its pool and the registry it was judged under: the two frozen rounds share it, the unknown one does not.
+  assert.equal(typeof series.points[1].coverage, "string");
+  assert.equal(series.points[1].coverage, series.points[2].coverage);
+  assert.notEqual(series.points[0].coverage, series.points[1].coverage);
+  // The latest round alone (no range) is the weekly's reading.
+  const latest = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  assert.deepEqual(reading(latest.rivals[0].points), [["2026-09-28", 50, 54, 108, "known"]]);
 
   const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
   const deepseek = sources.expectations.find((/** @type {any} */ row) => row.engine === "deepseek");
-  assert.deepEqual([deepseek?.retrieval.value, deepseek?.retrieval.status], [99, "ok"], "the weekly's 99 %, not the sentinel's five answers");
+  assert.deepEqual([deepseek?.retrieval.value, deepseek?.retrieval.status], [75, "ok"], "the weekly's 27 of 36, not the sentinel's five of five");
   assert.deepEqual(sources.linklessEngines, ["qianwen"]);
 
   const diagnosis = (await call("GET", `/api/geo/projects/${id}/diagnosis?round=rw2-${id}`)).payload.data;
   assert.deepEqual(diagnosis.round.linklessEngines, ["qianwen"]);
-  const p4 = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P4");
-  assert.equal(p4.mainIssue, null, "not being named on a risk question is the aim, not an issue (G19)");
+  const p4Reading = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P4");
+  assert.equal(p4Reading.mainIssue, null, "not being named on a risk question is the aim, not an issue (G19)");
 });
 
 test("composed marketplace read hooks expose local records over guarded HTTP without a configured vendor", options, async () => {
@@ -1014,7 +1086,15 @@ test("every point of a trend carries the coverage key of its round, and a change
     await metric(`g${index}`, { round, metricId: "M-19", value: 50 - index * 3, n: 100, k: 50, at });
     await metric(`m${index}`, { round, metricId: "M-01S", value: 30 - index, n: 100, k: 30, at });
     await metric(`k${index}`, { round, scope: "engine", engine: "kimi", metricId: "M-01", value: 20 + index, n: 100, k: 20, at });
-    await metric(`r${index}`, { round, metricId: "M-16", rival: "替尔泊肽", value: 31 + index, n: 100, k: 31, at });
+  }
+  // A rival's rate is read from the answers of the rounds, each judged against the evaluation basis it froze when it started: the first
+  // three froze the registry as it is, the fourth one with a competitor more.
+  const basis = await new GeoMeasureStore(database).evaluationBasis(id);
+  assert.ok(basis);
+  const widened = { ...basis, competitors: [...basis.competitors, { brandName: "司美格鲁肽" }] };
+  for (const [index, round] of rounds.entries()) {
+    await insert(`UPDATE evimed_geo.rounds SET ref = coalesce(ref, '{}'::jsonb) || jsonb_build_object('evaluationBasis', $2::jsonb) WHERE id = $1`,
+      [round, JSON.stringify(index === 3 ? widened : basis)]);
   }
   const keys = (/** @type {any[]} */ points) => points.map((point) => point.coverage);
   const shape = (/** @type {string[]} */ list) => list.map((key, index) => (index === 0 ? 0 : key === list[index - 1] ? 0 : 1)).join("");
@@ -1030,7 +1110,18 @@ test("every point of a trend carries the coverage key of its round, and a change
   const watch = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "gvi").points)), "0010");
   assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "mention").points)), "0010");
-  assert.equal(shape(keys(watch.rivals[0].points)), "0010", "a rival's reading is over the same round");
+  // A rival's reading is of its pool and the registry its round froze (the engines are the other readings' part of the key): joining
+  // the engine set at the third round does not move it, a registry that changed at the fourth does.
+  const ranged = (await call("GET", `/api/geo/projects/${id}/monitoring?from=2026-09-07&to=2026-09-28`)).payload.data;
+  assert.equal(ranged.rivals.length, 1);
+  assert.deepEqual(ranged.rivals[0].points.map((/** @type {any} */ point) => point.date), ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"]);
+  assert.ok(ranged.rivals[0].points.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage));
+  assert.equal(shape(keys(ranged.rivals[0].points)), "0001", "a rival's reading moves where the registry did, not where the engine set did");
+  assert.deepEqual(keys(ranged.rivals[0].ownPoints), keys(ranged.rivals[0].points), "ours, over the same answers, is under the same key");
+  // Read over the range, the headline and mention series are the answers' own and keep the engines in their key: it moves once, where the set did.
+  for (const key of ["gvi", "mention"]) assert.equal(shape(keys(ranged.series.find((/** @type {any} */ line) => line.key === key).points)), "0010", key);
+  const rangedGvi = ranged.series.find((/** @type {any} */ line) => line.key === "gvi").points;
+  assert.ok(rangedGvi[0].coverage.includes("|deepseek,kimi|") && rangedGvi[3].coverage.includes("|deepseek,doubao,kimi|"));
   // An engine's own series is of that engine alone: the others joining the sample is not a change of what it covers.
   const kimi = watch.byEngine.find((/** @type {any} */ line) => line.engine === "kimi");
   assert.equal(shape(keys(kimi.points)), "0000");

@@ -39,7 +39,8 @@ async function fixture(t,{projectItem=null,preparePrompt=null}={}){
   const post=(id,request=f.request(id))=>fetch(base+'/api/session/prompt',{method:'POST',headers:{cookie,Origin:origin,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:`rpc-${id}`,method:'session/prompt',payload:{args:{request}}})});
   return {...f,manager,upstream,wss,peers,connect,post};
 }
-async function eventually(check){for(let i=0;i<50;i++){if(await check())return;await delay(10);}assert.fail('Expected transport outcome within 500ms');}
+// Bounded well inside the test's timeout: a 500 ms bound failed on a loaded machine while the outcome arrived correctly a moment later.
+async function eventually(check,ms=5000){const until=Date.now()+ms;while(Date.now()<until){if(await check())return;await delay(10);}assert.fail(`Expected transport outcome within ${ms}ms`);}
 
 for (const field of ['nativeOperation','questionProof']) test(`client ${field} cannot replace prompt provenance on HTTP or MUX`,options,async t=>{
   const f=await fixture(t,{preparePrompt:async(_project,request)=>{request.content.push({type:'text',text:'Unpreviewed content.'});}});
@@ -85,8 +86,10 @@ test('raw MUX split accepted item/end settles through occupied response projecti
   c.ws.send(JSON.stringify({type:'open',streamId:'occupied',endpoint:'session/list',payload:{args:{_request:{}}}}));await projectionEntered;
   c.ws.send(JSON.stringify({type:'open',streamId:'prompt',endpoint:'session/prompt',payload:{args:{request:f.request('mux-accepted')}}}));
   try{
-    await delay(50);
-    const row=await f.journal.receipt(f.project,f.policy.namespace.id,'root','mux-accepted');assert.equal(row?.payload.state,'accepted');
+    // The accepted item settles the receipt while the occupied projection is still held (released only below).
+    const receipt=()=>f.journal.receipt(f.project,f.policy.namespace.id,'root','mux-accepted');
+    await eventually(async()=>(await receipt())?.payload.state==='accepted');
+    const row=await receipt();assert.equal(row?.payload.state,'accepted');
     assert.equal((await f.db.query('SELECT count(*)::int AS n FROM evimed_product.plugin_prompt_admissions')).rows[0].n,0);
     assert.equal(c.messages.length,0,'the occupied projection has not completed');
   }finally{release();}

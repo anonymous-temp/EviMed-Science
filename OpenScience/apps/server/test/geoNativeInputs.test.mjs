@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { observeNativeHttpInput, nativeInputCandidate, normalizeInputAttribution, mergeInputAttribution } from '../src/geoNativeInputs.mjs';
+import { GeoNativeInputs, observeNativeHttpInput, nativeInputCandidate, normalizeInputAttribution, mergeInputAttribution } from '../src/geoNativeInputs.mjs';
 
 test('only a literal accepted result in the matching native envelope proves acceptance', () => {
   const response = value => ({status:200,contentType:'application/json',body:Buffer.from(JSON.stringify({type:'server-response',rpcId:'rpc',result:{ok:true,value}}))});
@@ -50,4 +50,36 @@ test('older snapshots cannot erase contributors or hide unresolved canonical que
   const merged=mergeInputAttribution(current,older);
   assert.equal(merged.count,2);assert.equal(merged.throughSeq,3);assert.equal(merged.complete,false);assert.equal(merged.unresolvedCount,1);
   assert.deepEqual(merged.inputs.map(item=>item.sourceRequestId),['a','b']);
+});
+
+test('an owned project\'s input passes through its frame unjournaled, for its owner and its frame\'s session only, and settles its admission', async () => {
+  const owner = { id: 'owner' }, project = { userId: 'owner', id: 'control' }, claims = { frameId: 'frame', delegation: { rootSessionId: 'root' } };
+  const journal = new GeoNativeInputs({ database: {}, documents: { get: async () => assert.fail('an owned input writes no receipt') },
+    authority: {}, policies: { forProject: async () => ({ kind: 'owned', ownerId: 'owner', controlProjectId: 'control' }) } });
+  const request = () => ({ requestId: 'r', sessionId: 'root', content: [{ type: 'text', text: 'Hi' }] });
+  const authority = operation => operation();
+  const accepted = request();
+  assert.deepEqual(await journal.prepare({ user: owner, project, claims, request: accepted }), { referenceId: null, state: 'owned', replay: false });
+  assert.equal(journal.journals(accepted), false);
+  assert.equal(journal.disposition(accepted), 'pending');
+  await journal.beforeForward(accepted);
+  assert.deepEqual(await journal.execute(accepted, authority, async () => 'sent'), { value: 'sent', error: null, disposition: 'accepted' });
+  // A definitive refusal releases the admission; a failure whose outcome is unknown keeps its fence, as the plugin admission's own rule does.
+  for (const [error, disposition] of [[Object.assign(new Error('refused'), { status: 503, definitivelyRejected: true }), 'refused'],
+    [Object.assign(new Error('bad'), { status: 400 }), 'refused'], [new Error('socket lost'), 'unknown']]) {
+    const failing = request();
+    await journal.prepare({ user: owner, project, claims, request: failing });
+    const result = await journal.execute(failing, authority, async () => { throw error; });
+    assert.equal(result.error, error); assert.equal(result.disposition, disposition); assert.equal(journal.disposition(failing), disposition);
+  }
+  const unadmitted = request();
+  await journal.prepare({ user: owner, project, claims, request: unadmitted });
+  await journal.afterAdmission(unadmitted, Object.assign(new Error('locked'), { status: 423 }));
+  assert.equal(journal.disposition(unadmitted), 'refused');
+  // Nobody but the owner, and no session but the frame's own, passes through.
+  await assert.rejects(journal.prepare({ user: { id: 'someone' }, project, claims, request: request() }), { code: 'geo_native_input_conflict' });
+  await assert.rejects(journal.prepare({ user: owner, project, claims, request: { ...request(), sessionId: 'elsewhere' } }), { code: 'geo_native_input_conflict' });
+  await assert.rejects(journal.prepare({ user: owner, project, claims, request: null }), { code: 'geo_native_input_conflict' });
+  // Another input is journaled as before: it is not one of these.
+  assert.equal(journal.journals(request()), true);
 });

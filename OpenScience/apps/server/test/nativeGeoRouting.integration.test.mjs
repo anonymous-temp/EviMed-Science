@@ -35,13 +35,30 @@ for (const learning of ['disabled','paused','enabled']) test(`native GEO selecti
   const headers={cookie:loginCookie,'content-type':'application/json','x-open-science-csrf':auth.data.csrfToken};
   const created=await fetch(`${base}/api/geo/projects`,{method:'POST',headers,body:JSON.stringify({brandName:'Verified Brand'})});
   const envelope=await created.json();assert.equal(created.status,201,JSON.stringify(envelope));
-  const {id,projectId,sessionId}=envelope.data;assert.ok(sessionId);
+  const {id,projectId}=envelope.data;assert.equal(envelope.data.sessionId,null,'creation begins no conversation');
   const user=await app.store.userById('native-owner');const project=await app.store.requireProject(user,projectId);
-  const before=await app.researchSessions.get(project,sessionId);assert.equal(before.agentId,'geo-insight');
   const manager=app.runtimeManager;
   const runtime={modelGatewayTokenJti:'native-fixture-generation'};manager.runtimes.set(manager.key(project),runtime);
-  manager.callKernel=async()=>[{sessionId}];
+  manager.start=async()=>runtime;
+  const kernelSessions=[];
+  manager.callKernel=async(_runtime,_project,method)=>{
+    if(method!=='session/create')return {items:kernelSessions};
+    const created={sessionId:`routing-primary-${kernelSessions.length+1}`};kernelSessions.push(created);return created;
+  };
   manager.assertPersonalSkillPromptGeneration=async()=>{};
+  // The project's conversation is the owner's explicit open of its primary: begun in the kernel and registered with the GEO authority,
+  // the authority every selection below is bound under. It is an ordinary conversation until a capability is chosen for it.
+  const opened=await fetch(`${base}/api/geo/projects/${id}/conversation/open`,{method:'POST',headers,body:JSON.stringify({target:{kind:'primary'}})});
+  const descriptor=await opened.json();assert.equal(opened.status,200,JSON.stringify(descriptor));
+  const {sessionId}=descriptor.data;assert.deepEqual(kernelSessions,[{sessionId}]);
+  const capability=async()=>(await (await fetch(`${base}/api/geo/projects/${id}/conversation/${sessionId}/capability`,{headers})).json()).data.capabilityId;
+  assert.equal(await capability(),null);
+  // The owner chooses 洞察 for it in the composer (the picker's own route), so the conversation is bound and sticky from here on.
+  const insight=(await app.agentRegistry).get('geo-insight');
+  const bound=await fetch(`${base}/api/research-sessions/${sessionId}`,{method:'PUT',headers:{...headers,'x-open-science-project':projectId},
+    body:JSON.stringify({mode:'specialist',agentId:insight.id,agentVersion:insight.version})});
+  assert.equal(bound.status,200,await bound.text());
+  const before=await app.researchSessions.get(project,sessionId);assert.equal(before.agentId,'geo-insight');assert.equal(await capability(),'geo-insight');
   const forwarded=[];
   manager.proxy=async(req,res)=>{forwarded.push(JSON.parse(req.__openScienceProxyBody.toString()).payload.args.request);res.writeHead(200,{'content-type':'application/json'});res.end('{}');};
   // The frame API exercises the same authenticated login and CSRF admission as the browser.

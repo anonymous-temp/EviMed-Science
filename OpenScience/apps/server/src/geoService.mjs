@@ -691,15 +691,6 @@ export class GeoService {
   }
 
   /**
-   * Record the conversation found for a project made before its conversation was recorded, or in place of a recorded one the person
-   * deleted (`replacing`); otherwise the first one stands.
-   * @param {string} geoId @param {string} sessionId @param {string | null} [replacing] @returns {Promise<string | null>} the conversation the project holds now
-   */
-  async recordConversation(geoId, sessionId, replacing = null) {
-    return this.store.setConversationSession(geoId, sessionId, replacing);
-  }
-
-  /**
    * `PATCH /api/geo/projects/:id`. A `name` renames the project the module sits on: the name lives on that project (the one
    * the sidebar lists), never on the GEO row, and it belongs to the project's owner whoever with the right to edit asks — so the
    * rename is the owner's act, made through the hook the composition gives (`renameControlProject`).

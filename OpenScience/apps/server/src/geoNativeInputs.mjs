@@ -11,6 +11,9 @@ const conflict = () => new HttpError(409, 'geo_native_input_conflict', 'This inp
 const unavailable = () => new HttpError(503, 'geo_native_context_unavailable', 'The shared input context is unavailable.');
 const requestIdValid = value => typeof value === 'string' && value.length > 0 && value.length <= 512 && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const hashValid = value => typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value);
+/** The plugin admission's own rule for an outcome it is not told (`PluginService.withAdmission`): a send that returned or a definitive
+ * refusal settles the prompt; any other failure keeps the apply fence. */
+const settled = error => !error ? 'accepted' : error.definitivelyRejected === true || error.status >= 400 && error.status < 500 ? 'refused' : 'unknown';
 const immutableReceipt = value => Object.fromEntries(Object.entries(value).filter(([key]) => !['observedAt', 'state', 'forwarding', 'outcome', 'consumption', 'incidents'].includes(key)));
 const nativeRequest = request => Object.fromEntries(Object.entries(request).filter(([key]) => !['geoPlanContext', 'evimedResultRevision'].includes(key)));
 const normalized = content => normalizeTranscript('candidate', [{ type: 'user/message', seq: 0, data: { content } }]).messages[0]?.parts ?? [];
@@ -84,6 +87,8 @@ export class GeoNativeInputs {
   // Only prepareOperation can establish an internal RPC. Browser object fields
   // cannot grant this provenance or replace the request being hashed.
   #nativeOperations = new WeakMap();
+  // Inputs of a project its owner works in alone, passed through without a receipt (`prepare`), with the outcome of their admission.
+  #owned = new WeakMap();
   constructor({ database, documents, authority, policies, resolveLaunchedContext, proveSession, contexts = null, revisions = null, previewContext = null, previewSelections = null, now = () => new Date() }) {
     this.database = database; this.documents = documents; this.authority = authority; this.policies = policies;
     this.resolveLaunchedContext = resolveLaunchedContext; this.proveSession = proveSession;
@@ -141,6 +146,17 @@ export class GeoNativeInputs {
   }
   async prepare({ user, project, claims, request, operation = 'prompt' }) {
     if (this.database.transactionScope?.()) throw new HttpError(409, 'geo_native_prepare_in_transaction', 'Prepare the shared input before admission.');
+    // A GEO project with no member is its owner's (owner ruling 2026-10-25: `GeoSharedContext.forProject` answers `owned`). It has no
+    // shared namespace or context launch to journal an input under, and its frame is issued to its owner alone, whose input is their
+    // own as in their own frame of the project: it passes through under the frame's authority. Decided per input, so the first member
+    // added or the last one removed takes effect at the next one. Journaled regardless, every prompt of such a project's
+    // conversation was refused as a conflict and none reached the kernel.
+    const policy = await this.policies.forProject(project);
+    if (policy.kind !== 'geo-project') {
+      if (!request || user.id !== project.userId || request.sessionId !== claims.delegation.rootSessionId) throw conflict();
+      this.#owned.set(request, { state: 'pending' });
+      return { referenceId: null, state: 'owned', replay: false };
+    }
     if (!request || !requestIdValid(request.requestId) || request.sessionId !== claims.delegation.rootSessionId
       || !['prompt', 'question-answer', 'stop'].includes(operation)) throw conflict();
     if ('nativeOperation' in request || 'questionProof' in request) throw conflict();
@@ -204,7 +220,9 @@ export class GeoNativeInputs {
     await this.prepare({ user, project, claims, request, operation: answer ? 'question-answer' : 'stop' });
     return request;
   }
-  disposition(request) { return this.operations.get(request)?.row.payload.state ?? 'unknown'; }
+  disposition(request) { return this.#owned.get(request)?.state ?? this.operations.get(request)?.row.payload.state ?? 'unknown'; }
+  /** Whether this input is journaled here; an owned project's is not, and the frame records it as the owner's own frame would. */
+  journals(request) { return !this.#owned.has(request); }
   observe(request, observation) {
     const operation = this.operations.get(request);
     if (!operation) return;
@@ -230,6 +248,7 @@ export class GeoNativeInputs {
     });
   }
   async beforeForward(request) {
+    if (this.#owned.has(request)) return;
     const operation = this.operations.get(request);
     if (!operation || operation.phase !== 'admitted') throw conflict();
     const scope = await this.scope(operation.user, operation.project, operation.claims, operation.row.payload.contextPolicy);
@@ -249,6 +268,17 @@ export class GeoNativeInputs {
   }
   /** Returns through membership before surfacing errors, so its same-client evidence commits. */
   async execute(request, withAuthority, business) {
+    const owned = this.#owned.get(request);
+    if (owned) {
+      try {
+        const value = await withAuthority(business);
+        owned.state = settled(null);
+        return { value, error: null, disposition: owned.state };
+      } catch (error) {
+        owned.state = settled(error);
+        return { value: null, error, disposition: owned.state };
+      }
+    }
     const operation = this.operations.get(request);
     if (!operation) throw unavailable();
     if (operation.replay) throw new HttpError(409, 'geo_native_input_already_submitted', 'This input was already submitted; its recorded outcome is retained.');
@@ -283,6 +313,8 @@ export class GeoNativeInputs {
     }
   }
   async afterAdmission(request, error) {
+    const owned = this.#owned.get(request);
+    if (owned) { if (owned.state === 'pending') owned.state = settled(error); return; }
     const operation = this.operations.get(request);
     if (!operation || operation.replay) return;
     if (this.database.transactionScope?.()) throw unavailable();

@@ -73,22 +73,46 @@ async function call(role, method, route, body) {
 /** @param {string} sql @param {unknown[]} values */
 const rows = async (sql, values) => (await context.app.store.database.query(sql, values)).rows;
 
-test("a new GEO project is a real control-plane project, bound as far as this build's registry allows, and listed", options, async () => {
+test("a new GEO project is a real control-plane project with no conversation until it is opened, then keeps the one it opened, and is listed", options, async () => {
   const created = await call("preview", "POST", "/api/geo/projects", { brandName: "Wegovy", coverageDays: 60 });
   assert.equal(created.status, 201, JSON.stringify(created.body));
   const { id, projectId, sessionId, bound } = created.body.data;
   const [control] = await rows("SELECT id, name FROM evimed_control.projects WHERE user_id = $1 AND id = $2", [accounts.preview, projectId]);
   assert.deepEqual(control, { id: projectId, name: "Wegovy" });
   assert.equal(projectId, "wegovy", "derived from the name the way POST /api/projects derives it");
-  const registry = await context.app.agentRegistry;
-  const capability = registry?.get?.("geo-insight") ?? null;
-  assert.equal(bound, Boolean(capability), "bound to geo-insight exactly when this build's registry has it");
-  const page = await call("preview", "GET", `/api/geo/projects/${id}`);
-  assert.equal(page.body.data.sessionId, bound ? sessionId : null, "the latest conversation is the bound one, or none yet");
-  assert.equal(page.body.data.coverageDays, 60);
+  // Creating the project begins no conversation and starts no runtime: the primary is made when the person opens it.
+  assert.deepEqual([sessionId, bound], [null, false]);
   const project = await context.app.store.requireProject(await context.app.store.userById(accounts.preview), projectId);
-  const sessions = await context.app.researchSessions.list(project);
-  assert.equal(sessions.some((/** @type {any} */ entry) => entry.sessionId === sessionId && entry.agentId === "geo-insight"), bound);
+  assert.equal(context.app.runtimeManager.runtimes.has(context.app.runtimeManager.key(project)), false, "creation never starts a runtime");
+  assert.deepEqual(await context.app.researchSessions.list(project), [], "and binds no session");
+  const page = await call("preview", "GET", `/api/geo/projects/${id}`);
+  assert.equal(page.body.data.sessionId, null, "none yet: the page's read never begins one");
+  assert.equal(page.body.data.coverageDays, 60);
+  // The owner's explicit open begins the project's conversation (in the mock kernel); the page and every later open keep that one.
+  // The native inventory is proven against the runtime's generation, which a real runtime gets with its model-gateway token and the
+  // mock one does not: the runtime this test starts carries one, as the composition fixtures' do.
+  const manager = context.app.runtimeManager, start = manager.start;
+  manager.start = async (/** @type {any[]} */ ...args) => {
+    const runtime = await start.apply(manager, args);
+    if (typeof runtime.modelGatewayTokenJti !== "string") runtime.modelGatewayTokenJti = "geo-app-generation";
+    return runtime;
+  };
+  try {
+    const opened = await call("preview", "POST", `/api/geo/projects/${id}/conversation/open`, { target: { kind: "primary" } });
+    assert.equal(opened.status, 200, JSON.stringify(opened.body));
+    assert.equal(opened.body.data.projectId, projectId);
+    assert.deepEqual(opened.body.data.scope, { kind: "geo", geoProjectId: id, sessionId: opened.body.data.sessionId });
+    assert.match(opened.body.data.sessionId, /^[A-Za-z0-9_-]{1,128}$/);
+    assert.equal((await call("preview", "GET", `/api/geo/projects/${id}`)).body.data.sessionId, opened.body.data.sessionId);
+    assert.equal((await call("preview", "POST", `/api/geo/projects/${id}/conversation/open`, { target: { kind: "primary" } })).body.data.sessionId,
+      opened.body.data.sessionId, "a second open keeps the project's conversation");
+    // Another account that sees the module opens nothing of it, and begins no conversation in it.
+    const foreign = await call("operator", "POST", `/api/geo/projects/${id}/conversation/open`, { target: { kind: "primary" } });
+    assert.deepEqual([foreign.status, foreign.body.code], [404, "geo_project_not_found"], JSON.stringify(foreign.body));
+    assert.equal((await call("preview", "GET", `/api/geo/projects/${id}`)).body.data.sessionId, opened.body.data.sessionId);
+  } finally {
+    manager.start = start;
+  }
   // The same account naming a second project alike gets its own id.
   const second = await call("preview", "POST", "/api/geo/projects", { brandName: "Wegovy" });
   assert.equal(second.body.data.projectId, "wegovy-2");

@@ -4,7 +4,6 @@ import { createServer } from 'node:http';
 import { mkdtemp,rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket,{WebSocketServer} from 'ws';
 import { RuntimeManager } from '../src/runtimeManager.mjs';
 import { GeoNativeFramePolicy } from '../src/geoNativeFramePolicy.mjs';
@@ -42,7 +41,18 @@ async function fixture(t,{projectItem=null,preparePrompt=null}={}){
   const post=(id,request=f.request(id))=>fetch(base+'/api/session/prompt',{method:'POST',headers:{cookie,Origin:origin,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:`rpc-${id}`,method:'session/prompt',payload:{args:{request}}})});
   return {...f,manager,upstream,wss,peers,connect,post};
 }
-async function eventually(check){for(let i=0;i<50;i++){if(await check())return;await delay(10);}assert.fail('Expected transport outcome within 500ms');}
+// The outcome is whichever frame the stream ends with. Waited for as an event, bounded well inside the test's timeout: a fixed
+// 500 ms poll failed on a loaded machine while the same stream ended correctly a moment later.
+function outcome({ws,messages},match,ms=5000){
+  if(messages.some(match))return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const done=()=>{clearTimeout(timer);ws.off('message',listener);ws.off('close',closed);};
+    const listener=()=>{if(messages.some(match)){done();resolve();}};
+    const closed=()=>{done();reject(new assert.AssertionError({message:'The transport closed before its outcome'}));};
+    const timer=setTimeout(()=>{done();reject(new assert.AssertionError({message:`Expected transport outcome within ${ms}ms`}));},ms);
+    ws.on('message',listener);ws.on('close',closed);
+  });
+}
 
 
 for(const transport of ['http','mux'])for(const mode of ['implicit','modify-existing'])test(`${transport} prepares ${mode} before pool1 admission and forwards its exact frozen candidate`,options,async t=>{
@@ -66,7 +76,7 @@ for(const transport of ['http','mux'])for(const mode of ['implicit','modify-exis
       sent=frame.payload.args.request;peer.send(JSON.stringify({type:'item',streamId:frame.streamId,value:{accepted:true}}));peer.send(JSON.stringify({type:'end',streamId:frame.streamId}));
     }});
     c.ws.send(JSON.stringify({type:'open',streamId:'prompt',endpoint:'session/prompt',payload:{args:{request}}}));
-    await eventually(()=>c.messages.some(item=>item.type==='end'||item.type==='error'));
+    await outcome(c,item=>item.type==='end'||item.type==='error');
     assert.equal(c.messages.find(item=>item.type==='error'),undefined);
   }
   assert.ok(sent);

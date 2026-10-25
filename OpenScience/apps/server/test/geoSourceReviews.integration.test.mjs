@@ -49,15 +49,26 @@ test('actual captured review bytes need an exact bound request and accepted targ
   const [articleId] = await store.registerArticles(user.id, project.id, [{ path: before.path, layer: 'popular', title: 'Original', claimIds: [], gate: 'unverified', safety: 'open', contentSha256: before.digest, runId: 'old' }]);
   await store.linkArticleVersion(project.id, articleId, { version: before });
   const finding = { id: 'finding', statement: 'Original finding '.repeat(600), sourceRef: 'source' };
-  await store.writeValue(user.id, project.id, { findings: [finding] }, 'old');
+  // Every finding a signal names is in the profile version it was detected against, with its exact bytes (the recorder refuses one
+  // that is not: `GeoSignals.#validateValueBasis`); the reviewed and the out-of-focus ones alike.
+  const unchanged = { id: 'unchanged', statement: 'A finding the notice leaves as it is', sourceRef: 'source' };
+  const untouched = { id: 'untouched', statement: 'A finding outside the reviewed focus', sourceRef: 'source' };
+  await store.writeValue(user.id, project.id, { findings: [finding, unchanged, untouched] }, 'old');
   const [claim] = await store.upsertClaims(user.id, project.id, [{ claimKey: 'claim-key', statement: 'Original claim', quote: 'Original', sourceRef: 'source', runId: 'old' }]);
   const targets = [
     { key: 'article', type: 'article', id: articleId, version: before.versionId, digest: before.digest },
     { key: 'finding', type: 'finding', id: finding.id, version: null, digest: hash(finding) },
     { key: 'claim', type: 'claim', id: claim.id, version: claim.version, digest: 'preserved' },
-    { key: 'unchanged', type: 'finding', id: 'unchanged', version: null, digest: 'preserved' },
-    { key: 'untouched', type: 'finding', id: 'untouched', version: null, digest: 'preserved' },
+    { key: 'unchanged', type: 'finding', id: 'unchanged', version: null, digest: hash(unchanged) },
+    { key: 'untouched', type: 'finding', id: 'untouched', version: null, digest: hash(untouched) },
   ];
+  // A signal whose finding the preserved profile does not hold, or holds with other bytes, is never published.
+  for (const forged of [{ key: 'ghost', type: 'finding', id: 'ghost', version: null, digest: 'preserved' }, { ...targets[3], key: 'altered', digest: hash({ ...unchanged, statement: 'Altered' }) }]) {
+    await assert.rejects(signals.record(project, { kind: 'source_changed', objectKey: `source-${forged.key}`, eventVersion: 'first', title: 'Source correction',
+      basis: { notice: { id: 'source' }, targets: [...targets, forged], profileVersionAtDetection: 1 } }), { code: 'geo_signal_conflict' });
+  }
+  await assert.rejects(signals.record(project, { kind: 'source_changed', objectKey: 'source-no-version', eventVersion: 'first', title: 'Source correction',
+    basis: { notice: { id: 'source' }, targets } }), { code: 'geo_signal_conflict' }, 'finding targets need the profile version they were detected against');
   const signal = await signals.record(project, { kind: 'source_changed', objectKey: 'source', eventVersion: 'first', title: 'Source correction', basis: { notice: { id: 'source' }, targets, profileVersionAtDetection: 1 } });
   const staged = await contexts.stage(user, project.id, { mode: 'signal', signalId: signal.id, expectedSignalRevision: 1, requestKey: 'stage', sessionId: run.sessionId, intent: 'review', focusRefs: targets.slice(0, 4).map(target => target.key) });
   const request = { sessionId: run.sessionId, requestId: run.kernelRequestIds[0], content: [{ type: 'text', text: 'Review these exact source changes.' }], geoPlanContext: { referenceId: staged.referenceId } };
