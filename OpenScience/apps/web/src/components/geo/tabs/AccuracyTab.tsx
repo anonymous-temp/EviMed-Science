@@ -17,7 +17,7 @@ import { Section } from "@/components/ui/Section";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
 import type { ShareSegment } from "@/components/charts/ShareBar";
 import { useGeoErrorPages } from "../useGeoErrorPages";
-import { useGeoToolbar } from "../geoFrame";
+import { geoMayConverse, useGeoToolbar } from "../geoFrame";
 import { useGeoDiagnosis } from "../geoProjectData";
 import { formatGeoValue, geoCellPhrase } from "../GeoCellText";
 import { coverageNotice, denominatorLine, readingChange, shownDelta, tileValue } from "../geoOverviewModel";
@@ -270,8 +270,8 @@ function Accuracy({
   } : null);
 
   const product = project.product?.brandName || project.product?.genericName || project.name;
-  const abilities = project.access?.abilities;
-  const canRun = !abilities || abilities.includes("run");
+  // Writing a correction opens the conversation with staged context, which needs run and edit (`geoMayConverse`).
+  const canRun = geoMayConverse(project);
   const correctClaim = (claim: ClaimModel) => {
     setBusyClaim(claim.key);
     void handoff(claim, product).finally(() => setBusyClaim(null));

@@ -410,6 +410,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // a run that did nothing wrong; failing over those would repeat the
   // official_page_url_forbidden incident exactly.
   "geo_probe_unconfigured",
+  // The inclusion channel's two refusals before a task is taken (not enabled
+  // here; an engine not measured through it): the same operator decision as
+  // an unconfigured probe, 2026-10-25.
+  "geo_inclusion_disabled",
+  "geo_inclusion_engine_not_allowed",
   "geo_probe_endpoint_invalid",
   "geo_probe_plaintext_forbidden",
   "geo_probe_busy",
@@ -2205,6 +2210,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_contract_missing: '这个问句版本没有保存测量约定；请连同测量约定重新保存后再开始。',
   geo_recovery_invalid: '只能补测这次诊断里失败或缺失的单元格，请重新选择。',
   geo_round_empty: '这次没有可以测量的问句或平台，所以没有开始测量。',
+  geo_inclusion_disabled: '这个部署没有开通收录检查，这一项这次没有测。',
+  geo_inclusion_engine_not_allowed: '这个 AI 引擎不通过收录检查来测，这一项这次没有测。',
   geo_round_question_invalid: '这次测量的问句不属于同一个可测量的问句版本，所以没有开始；请检查问句版本后再试。',
   geo_round_engine_invalid: '这次测量选择的平台不在可测范围或测量约定里，所以没有开始。',
   geo_round_too_large: '这次测量的提问次数超过单轮上限，所以没有开始；请减少问句、平台或重复次数。',

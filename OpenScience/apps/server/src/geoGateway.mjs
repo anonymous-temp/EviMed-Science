@@ -362,4 +362,6 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
 export const GEO_READ_FILTER_FIELDS = readFilterFields;
 export const GEO_GATEWAY_PATH = gatewayPath;
 export const GEO_GATEWAY_OPERATIONS = operations;
+/** The service's and the write module's codes a run hears by name; every other refusal reaches it translated (above). */
+export const GEO_GATEWAY_PASS_THROUGH_CODES = passThroughCodes;
 export const GEO_GATEWAY_WINDOW_LIMITS = windowLimits;

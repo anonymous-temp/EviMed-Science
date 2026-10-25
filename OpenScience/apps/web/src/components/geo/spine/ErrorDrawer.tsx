@@ -11,6 +11,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Section } from "@/components/ui/Section";
 import { SeverityBadge, SEVERITY_WORDS } from "@/components/ui/SeverityBadge";
+import { geoMayConverse } from "../geoFrame";
 import { useGeoLoad } from "../geoProjectData";
 import {
   engineName,
@@ -62,9 +63,9 @@ export function ErrorDrawer({
   const handoff = useCorrectionHandoff(geoId, project);
   const [busy, setBusy] = useState(false);
   const product = project.product?.brandName || project.product?.genericName || project.name;
-  const abilities = project.access?.abilities;
   const withdrawn = claim.rows.every(row => row.judgmentState === "withdrawn");
-  const canRun = !withdrawn && (!abilities || abilities.includes("run"));
+  // Writing a correction opens the conversation with staged context, which needs run and edit (`geoMayConverse`).
+  const canRun = !withdrawn && geoMayConverse(project);
   const corrections = useMemo(() => actions.filter((action) => action.need.errorIds.some((id) => claim.rows.some((row) => row.id === id))), [actions, claim.rows]);
 
   const correct = () => {
