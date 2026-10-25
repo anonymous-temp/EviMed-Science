@@ -243,3 +243,15 @@ test("host dependency preparation precedes release CLI module imports and moving
   assert.ok(prepared > 0 && prepared < imported && prepared < moved);
   assert.match(source, /prepare-host-ops-dependencies\.mjs" --source-root "\$\{REL\}\/OpenScience"/);
 });
+
+test("a delta whose office scripts changed replaces the tree and runs the full build's office smoke on it, never the base's copy", async () => {
+  // 2026-10-25: the GEO v3 exports changed office/shared/render_document.py; the delta stopped and asked for a full build the host
+  // had no room for. It now does what the full build does for that tree, with the source's own install-runtime.sh.
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const install = await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8");
+  assert.match(delta, /^COPY deploy\/runtime-dsh\/install-runtime\.sh \/tmp\/evimed-install-runtime\.sh$/m);
+  assert.match(delta, /bash \/tmp\/evimed-install-runtime\.sh office-smoke/);
+  assert.match(delta, /cp -a --no-preserve=links "\$\{source\}" "\$\{live\}"/, "the replaced tree holds single-link files");
+  assert.match(install, /install -m 0644 \/usr\/local\/share\/evimed\/skills\/office\/shared\/render_document\.py \/opt\/evimed\/export\/render_document\.py/,
+    "the office smoke installs the export renderer where the document renderer runs it");
+});
