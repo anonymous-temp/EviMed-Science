@@ -152,3 +152,27 @@ export class GeoNativeFramePolicy {
   onStreamClosed(endpoint) { if (endpoint === '$events') this.scope.closeEvents(); }
   dispose() { this.disposed = true; this.questionInputs.clear(); this.scope.dispose(); }
 }
+
+/**
+ * A delegated frame's standing check. Membership and the frame's claims are resolved on every call. The runtime's shared context —
+ * its launch proof, the generation's bytes and the kernel's session inventory (`verifyContext`) — is verified in full on the
+ * handshake, an HTTP request and a prompt; a carrier's repeated recheck (`recheck`, one memo per carrier) verifies it again only when
+ * `contextStamp`, the runtime generation and the context policy's revision, differs from the one it last verified. Re-verifying an
+ * unchanged generation every second rebuilt the method tree and listed the kernel's sessions once a second per open socket.
+ * @param {{ resolve: (user: any, scope: any, claims: any) => Promise<any>, contextStamp: (resolved: any) => Promise<string | null>,
+ *   verifyContext: (resolved: any) => Promise<void> }} parts
+ */
+export function createGeoFrameResolver({ resolve, contextStamp, verifyContext }) {
+  /** @param {any} user @param {any} scope @param {any} [claims] @param {{ recheck?: { verified?: string | null } | null }} [options] */
+  return async (user, scope, claims = null, { recheck = null } = {}) => {
+    const resolved = await resolve(user, scope, claims);
+    const stamp = recheck ? await contextStamp(resolved) : null;
+    if (recheck && stamp !== null && recheck.verified === stamp) return resolved;
+    if (recheck) recheck.verified = null;
+    await verifyContext(resolved);
+    // A generation or policy that moves while it is verified gives the next recheck another stamp (neither ever moves back), so the
+    // stamp read before the verification is the one it stands for.
+    if (recheck) recheck.verified = stamp;
+    return resolved;
+  };
+}

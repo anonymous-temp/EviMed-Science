@@ -7,6 +7,9 @@ const hash = value => createHash('sha256').update(canonicalJson(value)).digest('
 const sessionIdValid = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const missing = () => new HttpError(404, 'runtime_session_not_found', 'This GEO conversation is unavailable.');
 const changed = () => new HttpError(403, 'geo_member_forbidden', 'The GEO conversation authority changed. Reopen it from the project.');
+/** The kernel's inventory was read and does not list the session (`authorizeOwnedNativeSession`); any other failure proves nothing. */
+const absent = error => error?.status === 404 && error?.code === 'runtime_session_not_found';
+const PRIMARY_LOCK = "SELECT pg_advisory_xact_lock(hashtext('geo-native-primary:' || $1))";
 
 /** GEO-scoped delegation to the existing owner workspace. Generic account project authority stays unchanged. */
 export class GeoNativeAuthority {
@@ -14,12 +17,16 @@ export class GeoNativeAuthority {
   /**
    * `adoptSession(identity)` names the conversation a project already has, for a project whose primary conversation was never
    * registered (one made before GEO conversations were delegated, 2026-10-25): its recorded conversation while that still exists, else
-   * the oldest one of the person's. Without it the first open of such a project made a new, empty conversation beside the research
-   * conversation the project had been worked in.
+   * the oldest one of the person's. Without it the owner's first open of such a project made a new, empty conversation beside the
+   * research conversation the project had been worked in. It is asked for the owner only: the primary is the conversation every member
+   * reads, and only the owner may make one of their own conversations that.
+   * `sessionListed(project, sessionId)` says whether the runtime that is already running lists the session, without starting one; the
+   * owner's read registers a kept conversation only then.
    */
-  constructor({ store, accounts, service, documents, results, createSession, ensureSession, runs, adoptSession = null }) {
+  constructor({ store, accounts, service, documents, results, createSession, ensureSession, runs, adoptSession = null, sessionListed = null }) {
     this.store = store; this.accounts = accounts; this.service = service; this.documents = documents; this.results = results;
     this.createSession = createSession; this.ensureSession = ensureSession; this.runs = runs; this.adoptSession = adoptSession;
+    this.sessionListed = sessionListed;
     this.primaryCreates = new Map();
   }
 
@@ -178,6 +185,90 @@ export class GeoNativeAuthority {
     return sessionId;
   }
 
+  /**
+   * The project's conversation as a read sees it: the primary; else, for the owner, the conversation the project was worked in, which
+   * becomes the primary under the open's lock when the running kernel still lists it. A read never starts a runtime or begins a
+   * conversation: null when there is nothing it can prove, and the next open settles it.
+   */
+  async readPrimary(user, geoId) {
+    const identity = await this.identity(user, geoId, { ability: 'read' });
+    const primary = await this.primary(identity);
+    if (primary || !this.#owns(user, identity) || !this.adoptSession || !this.sessionListed) return primary;
+    const kept = await this.adoptSession(identity);
+    if (!sessionIdValid(kept) || !await this.sessionListed(identity.project, kept)) return null;
+    return this.#registerUnderLock(user, geoId, kept, 'read');
+  }
+
+  #owns(user, identity) { return String(user.id) === identity.geo.userId; }
+
+  /** Whether the kernel has the session, starting the runtime as an open does. Only a read inventory that lacks it says no. */
+  async #present(project, sessionId) {
+    try { await this.ensureSession(project, sessionId); return true; }
+    catch (error) { if (absent(error)) return false; throw error; }
+  }
+
+  /** One in-process attempt per key: concurrent opens of one replica share it instead of each beginning a conversation. */
+  #once(key, attempt) {
+    let pending = this.primaryCreates.get(key);
+    if (!pending) {
+      pending = attempt();
+      this.primaryCreates.set(key, pending);
+      void pending.finally(() => { if (this.primaryCreates.get(key) === pending) this.primaryCreates.delete(key); }).catch(() => {});
+    }
+    return pending;
+  }
+
+  /** Runtime preparation performs network and filesystem work and must not hold the product transaction (including a pool of one
+   * connection), so a candidate is found first and only registered here. Concurrent replicas may have found another: only the
+   * canonical winner is associated, and a losing candidate never becomes visible through the delegated frame. */
+  #registerUnderLock(user, geoId, sessionId, ability) {
+    return this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
+      await client.query(PRIMARY_LOCK, [geoId]);
+      const fresh = await this.identity(user, geoId, { client, ability });
+      return await this.primary(fresh) ?? this.registerPrimary(fresh.geo, sessionId);
+    }));
+  }
+
+  /** A project without a registered primary: the owner's kept conversation while the kernel still has it, else a new one. */
+  #initializePrimary(user, geoId, identity) {
+    return this.#once(this.primaryKey(identity), async () => {
+      const current = await this.identity(user, geoId);
+      const existing = await this.primary(current);
+      if (existing) return existing;
+      const kept = this.#owns(user, current) && this.adoptSession ? await this.adoptSession(current) : null;
+      const candidate = sessionIdValid(kept) && await this.#present(current.project, kept) ? kept : (await this.createSession(current.project)).id;
+      return this.#registerUnderLock(user, geoId, candidate, 'run');
+    });
+  }
+
+  /**
+   * The owner's replacement of a primary the kernel's inventory no longer lists (a conversation removed upstream, or one adopted before
+   * adoption was checked): a new conversation, swapped in under the lock only while the pointer still names the missing one, so
+   * concurrent repairs agree and a replaced pointer is never replaced again by a stale caller. A member cannot do this; their open
+   * keeps answering that the conversation is unavailable until the owner opens it.
+   */
+  #replacePrimary(user, geoId, identity, lost) {
+    return this.#once(`${this.primaryKey(identity)}:${lost}`, async () => {
+      const created = (await this.createSession(identity.project)).id;
+      if (!sessionIdValid(created)) throw missing();
+      return this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
+        await client.query(PRIMARY_LOCK, [geoId]);
+        const fresh = await this.identity(user, geoId, { client });
+        if (!this.#owns(user, fresh)) throw changed();
+        const current = await this.primary(fresh);
+        if (current !== lost) return current;
+        const owner = fresh.geo.userId, projectId = fresh.geo.projectId, base = this.base(fresh);
+        const pointerId = this.primaryKey(fresh), pointer = await this.documents.get(owner, 'geo-plan-context', pointerId);
+        const id = this.sessionKey(fresh, created);
+        await this.documents.put(owner, 'geo-plan-context', id, { recordType: 'geo-native-session', base, sessionId: created, association: 'primary' },
+          { expectedRevision: 0, projectId, transactionClient: client });
+        await this.documents.put(owner, 'geo-plan-context', pointerId, { recordType: 'geo-native-primary', base, sessionId: created, referenceId: id, replaces: lost },
+          { expectedRevision: pointer.revision, projectId, transactionClient: client });
+        return created;
+      }));
+    });
+  }
+
   async primary(identity, snapshot = null) {
     const pointer = await this.documents.get(identity.geo.userId, 'geo-plan-context', this.primaryKey(identity));
     if (!pointer) return null;
@@ -221,34 +312,12 @@ export class GeoNativeAuthority {
   async descriptor(user, geoId, target) {
     if (!target || Object.keys(target).some(key => !['kind', 'referenceId', 'sessionId'].includes(key))) throw missing();
     const identity = await this.identity(user, geoId);
-    let sessionId;
+    let sessionId, ensured = false;
     if (target.kind === 'primary' && Object.keys(target).length === 1) {
-      sessionId = await this.primary(identity);
-      if (!sessionId) {
-        // Runtime preparation performs network and filesystem work and must not
-        // hold the product transaction (including a pool of one connection).
-        const key = this.primaryKey(identity);
-        let pending = this.primaryCreates.get(key);
-        if (!pending) {
-          pending = (async () => {
-            const existing = await this.primary(await this.identity(user, geoId));
-            if (existing) return existing;
-            const adopted = this.adoptSession ? await this.adoptSession(identity) : null;
-            const created = sessionIdValid(adopted) ? { id: adopted } : await this.createSession(identity.project);
-            return this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
-              await client.query("SELECT pg_advisory_xact_lock(hashtext('geo-native-primary:' || $1))", [geoId]);
-              const fresh = await this.identity(user, geoId, { client });
-              // Concurrent replicas may have created another upstream session.
-              // Only the canonical winner is associated; a losing candidate
-              // never becomes visible through the delegated frame.
-              const retained = await this.primary(fresh);
-              return retained ?? this.registerPrimary(fresh.geo, created.id);
-            }));
-          })();
-          this.primaryCreates.set(key, pending);
-          void pending.finally(() => { if (this.primaryCreates.get(key) === pending) this.primaryCreates.delete(key); }).catch(() => {});
-        }
-        sessionId = await pending;
+      sessionId = await this.primary(identity) ?? await this.#initializePrimary(user, geoId, identity);
+      if (this.#owns(user, identity)) {
+        if (await this.#present(identity.project, sessionId)) ensured = true;
+        else sessionId = await this.#replacePrimary(user, geoId, identity, sessionId);
       }
     } else if (target.kind === 'session' && Object.keys(target).length === 2) sessionId = await this.proveSession(identity, target.sessionId);
     else if (target.kind === 'context' && Object.keys(target).length === 2 && /^gpc_[a-f0-9]{64}$/.test(target.referenceId ?? '')) {
@@ -256,7 +325,7 @@ export class GeoNativeAuthority {
       if (context?.projectId !== identity.geo.projectId || context.payload.geoId !== geoId || context.payload.state !== 'bound') throw missing();
       sessionId = await this.proveSession(identity, context.payload.sessionId);
     } else throw missing();
-    await this.ensureSession(identity.project, sessionId);
+    if (!ensured) await this.ensureSession(identity.project, sessionId);
     const fresh = await this.resolve(user, { kind: 'geo', geoProjectId: geoId, sessionId });
     return { scope: { kind: 'geo', geoProjectId: geoId, sessionId }, projectId: fresh.project.id, projectName: fresh.project.name, sessionId };
   }

@@ -6,6 +6,14 @@ import { HttpError } from "./security.mjs";
 
 const MAX_STREAMS = 256;
 const REVALIDATE_MS = 1000;
+/** Consecutive standing rechecks a carrier may fail for want of the data its authority is read from (a database or a kernel
+ * inventory that does not answer) before it closes: the browser reconnects, and the reconnect runs the full handshake check
+ * instead of the carrier streaming on unverified. At one recheck a second, about half a minute. */
+const REVALIDATE_UNAVAILABLE_LIMIT = 30;
+/** A refusal the authority returned (a 4xx verdict) revokes the carrier; any other failure says only that it could not be checked. */
+const authorizationVerdict = (error) => error instanceof HttpError && error.status >= 400 && error.status < 500;
+/** Stream identities one scoped carrier admits in its lifetime (see `closedStreams`). */
+const MAX_LIFETIME_STREAMS = 4096;
 
 // Exact rc.1 native key sets. Validate the whole message before touching a
 // stream registry; a malformed error must not terminate someone else's ID.
@@ -51,9 +59,11 @@ function send(peer, data) {
  * projectItem?: ((endpoint:string,payload:any,value:any,context?:{streamId:string,signal:AbortSignal})=>Promise<{forward:boolean,value?:any}>)|null,
  * onStreamClosed?: ((endpoint:string,streamId?:string)=>void)|null,
  * onProjectionDiscarded?: ((endpoint:string,streamId?:string)=>void)|null,
+ * lifetimeStreams?: number, unavailableRechecks?: number,
  * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any,context?:{streamId:string,signal:AbortSignal}) => Promise<void> }} options
  * `observe` sees an admitted prompt, and a `session/cancel` stop, immediately before it goes upstream; it
- * records, it never refuses.
+ * records, it never refuses. `lifetimeStreams` is a scoped carrier's identity budget and `unavailableRechecks` the number of
+ * standing rechecks that may fail to be made in a row; only a test lowers them.
  */
 export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
   admit = async (_endpoint, operation) => operation(),
@@ -64,6 +74,8 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   projectItem = null,
   onStreamClosed = null,
   onProjectionDiscarded = null,
+  lifetimeStreams = MAX_LIFETIME_STREAMS,
+  unavailableRechecks = REVALIDATE_UNAVAILABLE_LIMIT,
   heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 } }) {
   const target = new URL("/api/remote.mux", runtime.url);
   target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
@@ -83,8 +95,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   // Keep small tombstones for in-flight late frames, never payloads or active
   // stream capacity. Never evict an identity on a live carrier: unread native
   // frames could otherwise acquire a different endpoint's projection on reuse.
-  // Rotate the carrier before admitting more than this lifetime identity budget.
-  const MAX_LIFETIME_STREAMS = 4096;
+  // Rotate the carrier before admitting more than its lifetime identity budget.
   const closedStreams = new Map();
   const rememberClosed = (id, cancelled) => {
     closedStreams.set(id, { streamId: id, cancelled, terminalError: !cancelled, finished: true });
@@ -216,16 +227,20 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     try {
       await revalidate();
     } catch (error) {
-      await rejectStream(frame.streamId, error);
-      shutdown(1008, "runtime_ui_authorization_revoked");
-      return;
+      if (authorizationVerdict(error)) {
+        await rejectStream(frame.streamId, error);
+        shutdown(1008, "runtime_ui_authorization_revoked");
+        return;
+      }
+      // The check could not be made: this operation is refused and the carrier stays. Stopping a stream needs no authority.
+      if (frame.type === "open") { await rejectStream(frame.streamId, error); return; }
     }
     if (closed) return;
     if (frame.type === "open") {
       // A duplicate ID cannot receive an independent error: it aliases an
       // already active stream, so the malformed connection is refused.
       if (streams.has(frame.streamId) || projectItem && closedStreams.has(frame.streamId)) { shutdown(1008, "runtime_ui_stream_duplicate"); return; }
-      if (projectItem && closedStreams.size + streams.size + authorizing.size >= MAX_LIFETIME_STREAMS) {
+      if (projectItem && closedStreams.size + streams.size + authorizing.size >= lifetimeStreams) {
         shutdown(1001, 'runtime_ui_generation_complete'); return;
       }
       const operation = { streamId: frame.streamId, endpoint: frame.endpoint, payload: frame.payload, controller: new AbortController(), cancelled: false, terminalError: false, finished: false };
@@ -397,10 +412,14 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     client.ping(expectedPong, false, (error) => { if (error) shutdown(1011, "runtime_ui_proxy_failed"); });
   }, heartbeat.intervalMs);
   heartbeatTimer.unref();
+  let unavailableStreak = 0;
   validationTimer = setInterval(() => {
     if (closed || validating) return;
     validating = true;
-    void revalidate().catch(() => shutdown(1008, "runtime_ui_authorization_revoked")).finally(() => { validating = false; });
+    void revalidate().then(() => { unavailableStreak = 0; }, (error) => {
+      if (authorizationVerdict(error)) shutdown(1008, "runtime_ui_authorization_revoked");
+      else if (++unavailableStreak >= unavailableRechecks) shutdown(1013, "runtime_ui_authorization_unavailable");
+    }).finally(() => { validating = false; });
   }, REVALIDATE_MS);
   validationTimer.unref();
 }
