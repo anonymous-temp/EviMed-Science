@@ -1,7 +1,7 @@
 import { mirrorSourceRuntimeReplica } from "./sourceRuntimeReplica.mjs";
 import { canonicalJson } from "./geoStore.mjs";
 import { GeoNativeAuthority } from "./geoNativeAuthority.mjs";
-import { GeoNativeFramePolicy } from "./geoNativeFramePolicy.mjs";
+import { GeoNativeFramePolicy, createGeoFrameResolver } from "./geoNativeFramePolicy.mjs";
 import { GeoNativeInputs } from "./geoNativeInputs.mjs";
 import { GeoNativeSelections } from "./geoNativeSelections.mjs";
 import { GeoNativeMemoryContext } from "./geoNativeMemoryContext.mjs";
@@ -8793,16 +8793,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The kernel's browser application, on an origin of its own. It is a
   // listener rather than a route because the application builds every URL it
   // fetches from `location.origin`; see `runtimeUiServer.mjs`.
-  async function resolveGeoFrame(user, scope, claims = null) {
-    if (!geoNativeAuthority) throw new HttpError(404, "geo_not_enabled", "The GEO conversation is unavailable.");
-    const resolved = await geoNativeAuthority.resolve(user, scope, { claims });
-    await runtimeManager.assertContextPolicyGeneration(resolved.project);
-    await authorizeOwnedNativeSession(await store.userById(resolved.project.userId), resolved.project, resolved.principal.rootSessionId);
-    return resolved;
+  const geoFrameResolver = createGeoFrameResolver({
+    resolve: (user, scope, claims) => geoNativeAuthority.resolve(user, scope, { claims }),
+    // What a verified context stays verified for: the runtime that launched it, and the policy's revision it was launched under.
+    contextStamp: async resolved => canonicalJson([runtimeManager.runtimeGeneration(resolved.project),
+      contextPolicyIdentity(await sharedContextPolicies.forProject(resolved.project))]),
+    verifyContext: async resolved => {
+      await runtimeManager.assertContextPolicyGeneration(resolved.project);
+      await authorizeOwnedNativeSession(await store.userById(resolved.project.userId), resolved.project, resolved.principal.rootSessionId);
+    },
+  });
+  /** @param {any} user @param {any} scope @param {any} [claims] @param {{ recheck?: any }} [options] */
+  async function resolveGeoFrame(user, scope, claims = null, options = {}) {
+    if (!geoNativeAuthority || !sharedContextPolicies) throw new HttpError(404, "geo_not_enabled", "The GEO conversation is unavailable.");
+    return geoFrameResolver(user, scope, claims, options);
   }
   const geoNativeSelectionRequests = new WeakSet();
   const runtimeUi = createRuntimeUiServer({
-    resolveDelegatedFrame: (user, delegation) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation),
+    resolveDelegatedFrame: (user, delegation, options) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation, options),
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
       runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),
     prepareSelections: async (user, project, request) => {

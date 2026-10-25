@@ -272,7 +272,7 @@ function assertNativeModelSelection(config, payload) {
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
- *   resolveDelegatedFrame?:((user:any,delegation:any)=>Promise<{project:any,principal:any}>)|null,
+ *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
  *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string, text?: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
@@ -492,13 +492,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
    * @param {any} req @param {any} res
    * @returns {Promise<Record<string, any>>} the project this request addresses
    */
-  async function resolveFrame(req, res) {
+  async function resolveFrame(req, res, { recheck = null } = {}) {
     const frame = parseRuntimeUiFramePath(req.url ?? "/");
     const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     const claims = validateRuntimeUiFrame({ config, req, user, session, frameId: frame.frameId });
     if (claims.version === 2) {
       if (!resolveDelegatedFrame || !createDelegatedPolicy) throw new HttpError(403, "runtime_ui_frame_invalid", "This deployment cannot open the delegated frame.");
-      const resolved = await resolveDelegatedFrame(user, claims.delegation);
+      const resolved = await resolveDelegatedFrame(user, claims.delegation, { recheck });
       if (resolved.project.userId !== claims.delegation.ownerId || resolved.project.id !== claims.projectId
         || resolved.principal.actorId !== user.id) throw new HttpError(403, "runtime_ui_frame_invalid", "The delegated frame identity changed.");
       pruneDelegatedPolicies();
@@ -942,6 +942,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
         trackFrame(snapshot, claims, socket);
         const revalidate = async () => { currentActor = await resolveFrame(snapshot, null); scopedCarrier?.assertCurrent(); };
+        // The carrier's standing recheck (each second and each client frame): the login, membership and claims every time, the
+        // delegated runtime context only when its generation or policy moved (`createGeoFrameResolver`). A prompt checks in full.
+        const recheckMemo = {};
+        const recheck = async () => { currentActor = await resolveFrame(snapshot, null, { recheck: recheckMemo }); scopedCarrier?.assertCurrent(); };
         const authorize = async (endpoint, payload = null, context = null) => {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
@@ -986,7 +990,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             await recordStop(project, payload);
           }
         };
-        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe, prepare,
+        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate: recheck, authorize, observe, prepare,
           ...(initial.scoped ? {
             withAuthority: operation => initial.scoped.withAuthority(operation),
             ...(initial.scoped.nativeInputs ? {

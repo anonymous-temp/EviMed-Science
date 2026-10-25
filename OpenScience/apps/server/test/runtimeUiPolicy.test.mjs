@@ -15,7 +15,7 @@ import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { MODEL_REASONING_EFFORTS } from "../src/modelReasoningPolicy.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
-import { GeoNativeFramePolicy } from "../src/geoNativeFramePolicy.mjs";
+import { GeoNativeFramePolicy, createGeoFrameResolver } from "../src/geoNativeFramePolicy.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
 import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
@@ -23,6 +23,15 @@ import { isDeniedRuntimeUiMethod, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_N
 
 const UI_ORIGIN = "https://science.example:8443";
 const SHELL_ORIGIN = "https://science.example";
+
+/** Wait for a condition that takes seconds (a recheck runs once a second), failing instead of spinning past the test. */
+async function within(milliseconds, predicate, message) {
+  const deadline = Date.now() + milliseconds;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, message);
+    await delay(50);
+  }
+}
 
 async function eventually(predicate) {
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -97,7 +106,8 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const resolveDelegatedFrame = shared ? async (actor, principal) => {
+  const resolveDelegatedFrame = shared ? async (actor, principal, options = undefined) => {
+    shared.resolutions?.push(options ?? null);
     if (!shared.allowed || actor.id !== user.id || JSON.stringify(principal) !== JSON.stringify(delegation)) throw new HttpError(403, 'geo_member_forbidden', 'Membership changed');
     return { project, principal };
   } : null;
@@ -383,7 +393,7 @@ test('carrier closure aborts and cleans a pending authorization before it settle
   const entered = new Promise(resolve => { enter = resolve; });
   const barrier = new Promise(resolve => { release = resolve; });
   const ended = [];
-  const f = await fixture(t, {}, { revalidate: async () => { if (revoked) throw new Error('Revoked'); }, authorize: async (_endpoint, _payload, context) => { signal = context.signal; enter(); await barrier; }, onStreamClosed: (_endpoint, id) => ended.push(id) });
+  const f = await fixture(t, {}, { revalidate: async () => { if (revoked) throw new HttpError(403, 'geo_member_forbidden', 'Revoked'); }, authorize: async (_endpoint, _payload, context) => { signal = context.signal; enter(); await barrier; }, onStreamClosed: (_endpoint, id) => ended.push(id) });
   t.after(() => release());
   const c = f.connect(); assert.equal(await c.opened, 101);
   c.send(open('pending', 'session/page')); await entered;
@@ -414,6 +424,87 @@ test('a scoped carrier retires at its lifetime identity budget without evicting 
   assert.equal(closeCode, 1001, 'a fresh carrier starts before any retired identity can be reused');
   assert.equal(sent.filter(item => item.type === 'open').length, budget);
   const next = f.connect(); assert.equal(await next.opened, 101, 'rotation does not disable new native reading');
+});
+
+test('an unavailable standing recheck keeps the carrier and retries; only an authorization verdict revokes it', { timeout: 15000 }, async t => {
+  let mode = 'ok', checks = 0;
+  const f = await fixture(t, {}, { revalidate: async () => {
+    checks += 1;
+    if (mode === 'unavailable') throw new HttpError(503, 'product_state_unavailable', 'The native session inventory is unavailable.');
+    if (mode === 'database') throw new Error('Connection terminated unexpectedly');
+    if (mode === 'revoked') throw new HttpError(403, 'geo_member_forbidden', 'Membership changed.');
+  } });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  let closed = null; c.ws.on('close', (code, reason) => { closed = { code, reason: String(reason) }; });
+  for (const failure of ['unavailable', 'database']) {
+    mode = failure; const before = checks;
+    await within(5000, () => checks >= before + 2 || closed !== null, 'the recheck keeps running');
+    assert.equal(closed, null, `a ${failure} recheck is retried, not a revocation`);
+    c.send(open(`during-${failure}`, 'session/page'));
+    const refused = await c.next();
+    assert.equal(refused.type, 'error'); assert.equal((await c.next()).type, 'end');
+    assert.equal(closed, null, 'one refused operation leaves the carrier open');
+  }
+  mode = 'ok';
+  c.send(open('after', 'session/page')); assert.equal((await c.next()).value.reached, 'session/page');
+  mode = 'revoked';
+  await within(5000, () => closed !== null, 'a revoked carrier closes');
+  assert.deepEqual(closed, { code: 1008, reason: 'runtime_ui_authorization_revoked' });
+});
+
+test('a carrier whose authority stays unreadable closes for a fresh handshake instead of streaming on', { timeout: 15000 }, async t => {
+  let unavailable = false;
+  const f = await fixture(t, {}, { unavailableRechecks: 2, revalidate: async () => {
+    if (unavailable) throw new HttpError(503, 'product_state_unavailable', 'The native session inventory is unavailable.');
+  } });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const closed = once(c.ws, 'close'); unavailable = true;
+  const [code, reason] = await closed;
+  assert.equal(code, 1013); assert.equal(String(reason), 'runtime_ui_authorization_unavailable');
+});
+
+test('a shared carrier repeats its standing check with a memo of its own; the handshake and HTTP reads check in full', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false, resolutions: [] };
+  const f = await fixture(t, {}, {}, { shared });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  await within(5000, () => shared.resolutions.filter(options => options?.recheck).length >= 2, 'the standing recheck carries a memo');
+  const memos = new Set(shared.resolutions.filter(options => options?.recheck).map(options => options.recheck));
+  assert.equal(memos.size, 1, 'every standing recheck of one carrier shares its memo');
+  assert.equal(shared.resolutions[0]?.recheck ?? null, null, 'the upgrade itself resolves the frame in full');
+  const second = f.connect(); assert.equal(await second.opened, 101);
+  await within(5000, () => new Set(shared.resolutions.filter(options => options?.recheck).map(options => options.recheck)).size >= 2, 'another carrier has its own memo');
+  shared.allowed = false;
+  const [code] = await once(c.ws, 'close'); assert.equal(code, 1008, 'membership is still checked on every recheck');
+});
+
+test('a delegated frame re-verifies its runtime context only when the runtime generation or the context policy changes', async () => {
+  let stamp = 'generation-1/policy-1', resolutions = 0, verifications = 0, failing = false, moveDuringVerification = false;
+  const resolve = createGeoFrameResolver({
+    resolve: async () => { resolutions += 1; return { project: { id: 'project' }, principal: { rootSessionId: 'root' } }; },
+    contextStamp: async () => stamp,
+    verifyContext: async () => {
+      verifications += 1;
+      if (moveDuringVerification) { stamp = 'generation-3/policy-2'; moveDuringVerification = false; }
+      if (failing) throw new HttpError(409, 'runtime_context_unverified', 'The runtime has no current shared context launch proof.');
+    },
+  });
+  const scope = { kind: 'geo', geoProjectId: 'geo', sessionId: 'root' }, recheck = {};
+  for (let tick = 0; tick < 5; tick++) await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(resolutions, 5, 'membership and claims are resolved on every recheck');
+  assert.equal(verifications, 1, 'an unchanged generation and policy are not re-verified');
+  await resolve({ id: 'editor' }, scope); await resolve({ id: 'editor' }, scope);
+  assert.equal(verifications, 3, 'a resolution without a memo verifies in full');
+  stamp = 'generation-2/policy-1';
+  await resolve({ id: 'editor' }, scope, null, { recheck }); await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(verifications, 4, 'a new runtime generation is verified once');
+  stamp = 'generation-3/policy-1'; moveDuringVerification = true;
+  for (let tick = 0; tick < 3; tick++) await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(verifications, 6, 'a stamp that moved during verification is verified again, then remembered');
+  stamp = 'generation-4/policy-2'; failing = true;
+  await assert.rejects(resolve({ id: 'editor' }, scope, null, { recheck }), error => error.code === 'runtime_context_unverified');
+  failing = false;
+  await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(verifications, 8, 'a failed verification is never remembered as a pass');
 });
 
 test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
