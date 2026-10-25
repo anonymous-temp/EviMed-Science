@@ -321,3 +321,40 @@ test("the tool order the distillation is shown is the run's executed trace when 
   assert.deepEqual(dispatched[0].input.trajectory.tools, ["web_search", "bash"], "what completed, the platform's own calls out");
   assert.deepEqual(dispatched[0].input.peerRuns[0].trajectory.tools, ["read"], "a run with no trace reads the transcript's own calls");
 });
+
+test("a script lesson is shown the program that recurred, with how often and the sources of its occurrences; no other lesson carries one", async (t) => {
+  const { transcript, run } = delegatedRun();
+  const scripts = { hash: "a".repeat(32), runs: 3, conversations: 2, exemplars: [{ runId: "run_1", at: "2026-10-25T00:00:00.000Z", source: "print(1)" }, { runId: "run_2", source: "x".repeat(20_000) }] };
+  const plain = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }] }, messages: [user(2, "把本周的导出清理一下")] };
+  const input = buildDistillationInput({ run, trigger: "script", transcript: plain, scripts });
+  assert.equal(input.trigger, "script");
+  assert.equal(input.signal, "run", "nobody corrected a program that recurred");
+  assert.deepEqual([input.scripts.hash, input.scripts.runs, input.scripts.conversations], ["a".repeat(32), 3, 2]);
+  assert.equal(input.scripts.exemplars[0].source, "print(1)");
+  assert.equal(input.scripts.exemplars[1].source.length, 16_000, "bounded like every other text the distillation reads");
+  assert.deepEqual(input.transcriptExcerpts, [], "no intervention to anchor on");
+  assert.equal(Object.hasOwn(buildDistillationInput({ run, trigger: "routine", transcript, scripts }), "scripts"), false, "only a script lesson carries the program");
+  assert.equal(Object.hasOwn(buildDistillationInput({ run, trigger: "correction", transcript }), "scripts"), false);
+
+  // Through execute: the sources are read from the account's occurrences, and a lesson whose occurrences are gone is not retried.
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-distill-script-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { project, run: stored } = await projectWith(root);
+  /** @type {any[]} */ const dispatched = [];
+  const make = (/** @type {any[]} */ exemplars) => new MethodDistillationRuns({
+    learning: { async listMethods() { return { items: [] }; } },
+    scriptUses: { exemplars: async () => exemplars },
+    dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
+    readResult: async () => ({ status: "running" }),
+  });
+  const payload = { runId: stored.id, trigger: "script", scope: "conversation", scriptHash: "a".repeat(32), runs: 3, conversations: 2, dispatchKey: "a".repeat(32) };
+  await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload } });
+  assert.equal(dispatched[0].input.scripts.exemplars.length, 2);
+  assert.match(dispatched[0].question, /Distil at most one reusable method/);
+  await assert.rejects(() => make([]).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload } }), { code: "distillation_run_unavailable" });
+  await assert.rejects(() => make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload: { ...payload, scriptHash: "not-a-hash" } } }), { code: "distillation_run_unavailable" });
+  // Two scripts that complete their count in one run are two lessons: their dispatch identities differ.
+  const second = { ...payload, scriptHash: "b".repeat(32), dispatchKey: "b".repeat(32) };
+  await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload: second } });
+  assert.notEqual(dispatched[0].dispatchId, dispatched.at(-1).dispatchId);
+});

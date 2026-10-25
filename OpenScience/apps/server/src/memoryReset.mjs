@@ -2,6 +2,7 @@ import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
 import { CAPABILITY_HANDBOOK_RECORD_TYPE } from "./handbookLibrary.mjs";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
+import { migrateScriptUses } from "./scriptLessons.mjs";
 
 /** The job kinds that belong to the learning loop (`learningPreservation.mjs` names the same two). */
 // `learning-evidence` settles a run thirty minutes after it ended (`learningEvidence.mjs`): a run the account asked to forget is not settled.
@@ -30,7 +31,8 @@ const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-ev
  * a running one loses its lease, so its worker cannot finish it — and the
  * account's feedback events are deleted. They are what the learning loop reads a
  * correction or an adoption from, and a ledger that outlived the reset would
- * teach the next lesson from what the researcher asked to forget. The
+ * teach the next lesson from what the researcher asked to forget — as would the
+ * occurrences of a script their runs carried, which go with them. The
  * conversations that were already over are held against the reset's instant
  * (`ResearchMemoryStore.noteReset`) by the readers, not deleted: they are the
  * researcher's conversations, and a reset does not touch those.
@@ -48,6 +50,7 @@ const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-ev
  */
 export async function resetLearnedMemory(database, userId) {
   await migrateProductStore(database);
+  await migrateScriptUses(database);
   return database.transaction(async (/** @type {any} */ client) => {
     const removed = await client.query(`WITH doomed AS (
         SELECT kind, id, payload->>'recordType' AS record_type FROM evimed_product.documents
@@ -70,6 +73,8 @@ export async function resetLearnedMemory(database, userId) {
         updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
       WHERE user_id=$1 AND kind=ANY($2::text[]) AND status IN ('queued','running') RETURNING id`, [userId, [...LEARNING_JOB_KINDS]]);
     const feedback = await client.query("DELETE FROM evimed_product.feedback_events WHERE user_id=$1 RETURNING id", [userId]);
+    // The programs the account's runs carried, counted toward a script lesson (`scriptLessons.mjs`): what it asked to forget teaches nothing.
+    await client.query("DELETE FROM evimed_learning.script_uses WHERE user_id=$1", [userId]);
     return {
       methods: count((row) => row.record_type === LEARNED_METHOD_RECORD_TYPE),
       handbooks: count((row) => row.record_type === CAPABILITY_HANDBOOK_RECORD_TYPE),

@@ -34,6 +34,7 @@ import { LEARNING_EVIDENCE_KINDS, LEARNING_EVIDENCE_VERDICTS, METHOD_APPLIED_OUT
 import { LEARNING_EVIDENCE_FAILURES } from "./learningEvidence.mjs";
 import { LEARNING_REFUSAL_REASONS } from "./learningTriggers.mjs";
 import { REPLAY_OUTCOMES, REPLAY_VERDICTS } from "./methodReplay.mjs";
+import { SCRIPT_OUTCOMES } from "./scriptLessons.mjs";
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
@@ -45,6 +46,8 @@ const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carr
 /** How a mount ranked the library (`selectLearnedMethods`): by meaning, by the words they share, or not at all (no first message to rank by). */
 const MOUNT_RANKING = Object.freeze(["embedding", "lexical", "recent"]);
 /** The branches of `retirementProposal` that stop a method on their own, as the counter of stops labels them. */
+/** What a method that carries code came to when its scripts were run before it was written (`MethodDistillationRuns`). */
+const CODE_SKILL_OUTCOMES = Object.freeze(["verified", "failed", "unavailable"]);
 const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regression", "never_opened", "superseded", "unproven_merge_expired", "library_cap", "replay_regressed"]);
 /**
  * Why a stage of the consolidation pass did nothing (`MethodConsolidation`): the pass used to succeed with `groups: 1, builds: 0, relations: 0`
@@ -81,6 +84,10 @@ export class LearningMetrics {
     /** @type {Record<string, number>} */
     this.retirements = Object.fromEntries([...RETIREMENT_CODES, "other"].map((code) => [code, 0]));
     /** @type {Record<string, number>} */
+    this.scripts = Object.fromEntries([...SCRIPT_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
+    /** @type {Record<string, number>} */
+    this.codeSkills = Object.fromEntries([...CODE_SKILL_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
+    /** @type {Record<string, number>} */
     this.replayOutcomes = Object.fromEntries([...REPLAY_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
     /** @type {Record<string, number>} */
     this.replayVerdicts = Object.fromEntries([...REPLAY_VERDICTS, "other"].map((verdict) => [verdict, 0]));
@@ -102,6 +109,19 @@ export class LearningMetrics {
     const label = closed(outcome, METHOD_APPLIED_OUTCOMES);
     const n = Math.trunc(count(times));
     if (n > 0) this.applied[label] = (this.applied[label] ?? 0) + n;
+  }
+
+  /** What the script detector did with one run's programs (`SCRIPT_OUTCOMES`). @param {string} outcome @param {number} [times] */
+  observeScript(outcome, times = 1) {
+    const label = closed(outcome, SCRIPT_OUTCOMES);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.scripts[label] = (this.scripts[label] ?? 0) + n;
+  }
+
+  /** What became of a method that carries code when its scripts were run: verified, failed (no method written), unavailable (the job retries). @param {string} outcome */
+  observeCodeSkill(outcome) {
+    const label = closed(outcome, CODE_SKILL_OUTCOMES);
+    this.codeSkills[label] = (this.codeSkills[label] ?? 0) + 1;
   }
 
   /** What one replay of a changed method came to (`REPLAY_OUTCOMES`). @param {string} outcome */
@@ -226,6 +246,12 @@ export class LearningMetrics {
       { name: "open_science_learning_method_retirements_total", type: "counter",
         help: "Methods the consolidation pass stopped on its own, by the branch that decided; never_opened is the card that rode in OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS answered runs and was never opened, unproven_merge_expired a merge nobody opened, library_cap the least used of a library over its cap, replay_regressed a rewrite whose text contradicted runs the person had accepted (returned to its earlier body, or stopped when it had none).",
         series: Object.entries(this.retirements).map(([code, value]) => ({ value, labels: { code } })) },
+      { name: "open_science_learning_script_total", type: "counter",
+        help: "What the script detector did with the programs a clean run carried, by outcome: snippets found, normalised, unparsable, too_small, sensitive (dropped before anything was stored), recorded (new occurrences), lesson_queued (the same program in three runs of two conversations), executor_unavailable (nothing recorded: no hash is guessed), no_transcript.",
+        series: Object.entries(this.scripts).map(([outcome, value]) => ({ value, labels: { outcome } })) },
+      { name: "open_science_learning_code_skill_total", type: "counter",
+        help: "Methods that carry scripts, by what running them before they were written came to: verified, failed (no method written) or unavailable (the executor could not run them; the lesson is retried).",
+        series: Object.entries(this.codeSkills).map(([outcome, value]) => ({ value, labels: { outcome } })) },
       { name: "open_science_learning_replay_total", type: "counter",
         help: "Replays of a changed method against up to five runs the person had accepted, by what each came to: clean, regressed (two or more grounded contradictions: the newer version was taken out), no_runs, judge_failed, not_in_force, version_changed, method_gone, paused, restore_failed.",
         series: Object.entries(this.replayOutcomes).map(([outcome, value]) => ({ value, labels: { outcome } })) },
@@ -405,7 +431,7 @@ export function learningMetricFamilies(enabled, ledger, counters) {
       { name: "open_science_learning_distill_jobs", help: "Distillation lessons queued, by trigger and job status.", type: "gauge",
         series: Object.entries(ledger.lessons).flatMap(([trigger, statuses]) => JOB_STATUSES.map((status) => ({ value: statuses[status] ?? 0, labels: { trigger, status } }))) },
       { name: "open_science_learning_lessons_total", type: "counter",
-        help: "Distillation lessons queued, by trigger (correction, routine, repair_accepted, edit_diff; delivered only for jobs queued before 2026-10-23).",
+        help: "Distillation lessons queued, by trigger (correction, routine, script, repair_accepted, edit_diff; delivered only for jobs queued before 2026-10-23).",
         series: Object.entries(ledger.lessons).map(([trigger, statuses]) => ({ value: Object.values(statuses).reduce((total, value) => total + value, 0), labels: { trigger } })) },
       { name: "open_science_learning_evidence_total", type: "counter",
         help: "What researchers did to runs, as the learning loop counts it, by evidence (steer, follow_up, result_corrected, silent) and verdict (correction, preference, rejection, accept, none).",

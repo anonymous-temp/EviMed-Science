@@ -120,6 +120,8 @@ import { createLearningRuntime } from "./learningRuntime.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
 import { MethodReplay, MethodReplayJudge, createTrajectoryReader } from "./methodReplay.mjs";
+import { ScriptLessons, ScriptUses } from "./scriptLessons.mjs";
+import { createEvolutionVerification } from "./evolutionVerification.mjs";
 import { createMethodSimilarity } from "./methodSimilarity.mjs";
 import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
@@ -4591,7 +4593,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     // The mount ranks the library by the same reading of "close" (`RuntimeManager.syncCapsuleMethods`).
     runtimeManager.methodSimilarity = methodSimilarity;
+    // Python runs for the control plane in one place, the runtime controller's disposable container (`exec-verify`): the script detector asks it to normalise
+    // the programs a run carried, and a method that carries code is written only once its scripts have run there (`MethodDistillationRuns.#verifiedCode`).
+    const codeController = overrides.codeSkillController ?? new RuntimeControllerClient(config);
+    const codeVerification = createEvolutionVerification({ execute: (body, options) => codeController.execVerify(body, options),
+      prepareDependencies: (requests, options) => codeController.prepareEvolutionDependencies({ requests }, options) });
+    const scriptUses = productDatabase ? new ScriptUses({ database: productDatabase, windowDays: config.transcriptRetentionDays }) : null;
     const distillation = new MethodDistillationRuns({
+      scriptUses, verifyCode: (candidate, options) => codeVerification.verify(candidate, options), onCodeSkill: (outcome) => learningMetrics.observeCodeSkill(outcome),
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
       learning: learningService, jobs: productJobs, notifications: notificationService,
@@ -4675,6 +4684,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       learningEvidence = new LearningEvidence({
         feedback: feedbackEvents, jobs: productJobs, agentRuns, triggers: () => learningTriggers,
         judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch }),
+        // A program a clean run carried is counted toward a script lesson (`scriptLessons.mjs`); the queue is the triggers', given late like the triggers themselves.
+        scripts: scriptUses ? new ScriptLessons({ uses: scriptUses, execute: (body, options) => codeController.execVerify(body, options),
+          queue: () => (project, run, lesson) => learningTriggers.queue(project, run, lesson), onOutcome: (outcome, times) => learningMetrics.observeScript(outcome, times) }) : null,
         // The learned methods the previous run opened, by title and when they apply: what a follow-up can be about.
         methodsOpened: methodFeedback ? async (project, run) => (await methodFeedback.usedBy(project, run)).methods.map((method) => ({
           id: method.id, digest: method.digest,

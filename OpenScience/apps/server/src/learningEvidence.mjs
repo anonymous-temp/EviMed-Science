@@ -180,12 +180,13 @@ export class LearningEvidence {
    * `triggers` is the loop's gate and queue (`LearningTriggers`), or a function returning it: it holds this module, so it is given
    * late. `methodsOpened` lists the learned methods a run opened as `{ id, digest, title, whenToUse }`; without it a follow-up has no
    * methods to be about. `resolveProject` resolves the project a settle job names.
-   * @param {{ feedback: any, jobs: any, agentRuns: any, triggers: any, judge?: FollowUpJudge | null,
+   * `scripts` reads a run the researcher left alone for the programs it ran (`ScriptLessons.afterSettle`, `scriptLessons.mjs`).
+   * @param {{ feedback: any, jobs: any, agentRuns: any, triggers: any, judge?: FollowUpJudge | null, scripts?: { afterSettle: (project: any, run: any) => Promise<unknown> } | null,
    *   methodsOpened?: ((project: any, run: any) => Promise<{ id: string, digest: string, title: string, whenToUse: string }[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
    *   readShapes?: typeof readArtifactShapes, report?: (reason: string) => void, periodDays?: number, now?: () => Date }} dependencies
    */
-  constructor({ feedback, jobs, agentRuns, triggers, judge = null, methodsOpened = null, resolveProject = null, readShapes = readArtifactShapes,
+  constructor({ feedback, jobs, agentRuns, triggers, judge = null, scripts = null, methodsOpened = null, resolveProject = null, readShapes = readArtifactShapes,
     report = () => {}, periodDays = 90, now = () => new Date() }) {
     if (!feedback || !jobs || !agentRuns || !triggers) throw new TypeError("Learning evidence needs the feedback ledger, the job queue, the run ledger and the triggers.");
     this.feedback = feedback;
@@ -193,6 +194,7 @@ export class LearningEvidence {
     this.agentRuns = agentRuns;
     this.triggers = triggers;
     this.judge = judge;
+    this.scripts = scripts;
     this.methodsOpened = methodsOpened;
     this.resolveProject = resolveProject;
     this.readShapes = readShapes;
@@ -355,6 +357,8 @@ export class LearningEvidence {
       settling = recorded.event;
       settled = "silent";
     }
+    // A run nobody corrected may have run a program it has run before: counted toward a script lesson. Never a failure of the settling.
+    await this.scripts?.afterSettle(project, run).catch(() => null);
     if (!shape.length) return { settled, routine: false };
     // The clean runs of this scope in this run's period: the family a routine is counted over.
     const period = Math.floor(Date.parse(String(run.finishedAt ?? run.startedAt ?? "")) / this.periodMs);
