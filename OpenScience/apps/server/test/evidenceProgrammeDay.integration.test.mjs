@@ -364,3 +364,144 @@ test("the programme's document kind and job kind are added to a database that pr
     await sub.jobs.enqueue(PLATFORM_PUBLISHER_USER_ID, "evidence-programme", { day }, { idempotencyKey: `evidence-programme:${day}`, projectId: EVIDENCE_PROJECT_ID });
   } finally { await sub.close(); }
 });
+
+// ── The day's hot topic (前沿动态 round 2, 2026-10-25): taken in code before the model's choice, in its own agenda ──────────────────
+
+const hotZoneId = async (sub) => (await sub.database.query("SELECT id FROM evimed_frontier.evidence_zones WHERE title = '热点求证'")).rows[0]?.id ?? null;
+
+test("a qualifying hot topic takes the day's first action in 「热点求证」 before the model's choice, runs in its own agenda with the topic's question, and is taken", options, async () => {
+  const sub = await programmeFixture({ url, label: "topicone", callModel: chooses(["nsclc", "evidence-update"]) });
+  try {
+    const id = await sub.topic({ boards: [{ board: "weibo", peakRank: 3 }, { board: "baidu", peakRank: 8 }] });
+    const decision = (await sub.programme.runDay(day)).decision;
+    assert.deepEqual(decision.actions.map((action) => [action.zone, action.taskType, action.topicId ?? null]), [["hot-questions", "evidence-update", id], ["nsclc", "evidence-update", null]],
+      "the topic first, the model's choice after it");
+    assert.deepEqual(decision.topicPick, { state: "picked", candidates: 1, topicId: id, surge: false, boards: 2, bestRank: 3 });
+    assert.match(decision.actions[0].reason, /2 个热榜，最高第 3 位/);
+    const input = JSON.parse(sub.decisions.calls[0].body.messages[1].content);
+    assert.equal(input.maxActions, 2, "the model is given what the topic left of the day's three");
+    assert.equal(input.budget.maxActions, 2);
+    assert.equal(input.zones.length, 6, "the zone that answers topics is never the model's to choose");
+    assert.ok(!input.zones.some((zone) => zone.zone === "hot-questions"));
+    assert.equal(decision.budget.maxActions, 3, "the day's own cap is recorded as it was");
+    const [topicAction, zoneAction] = decision.actions;
+    assert.deepEqual([topicAction.status, topicAction.topicState], ["scheduled", "taken"]);
+    assert.deepEqual([zoneAction.status, zoneAction.reason], ["deferred", "concurrency"], "the programme's one slot went to the timely question");
+    const row = await sub.topicRow(id);
+    assert.deepEqual([row.programme_state, row.programme_card_id, row.programme_at.toISOString()], ["taken", null, sub.clock.at.toISOString()]);
+    // Its own agenda: the topic's question in its brief, the event as context with the rules, no zone's standing question.
+    const agenda = await sub.autopilot.get(PLATFORM_PUBLISHER_USER_ID, topicAction.agendaId);
+    assert.deepEqual(agenda.payload.programme, { zoneKey: "hot-questions", topicId: id, zoneId: await hotZoneId(sub) });
+    assert.equal(agenda.payload.title, "证据中心 · 热点求证 · 年轻人心源性猝死的风险有多大？");
+    assert.deepEqual(agenda.payload.taskTypes, ["evidence-update"]);
+    const episode = await sub.autopilot.getEpisode(PLATFORM_PUBLISHER_USER_ID, topicAction.episodeId);
+    const prompt = episode.payload.prompt;
+    assert.match(prompt, /Today's question, raised by a public event: 年轻人发生心源性猝死的风险有多大，哪些人风险更高，出现什么征兆应及时就医？/);
+    assert.match(prompt, /The event, as reported \(新华社, 2026-10-04\): 据新华社报道，一位知名人士因心源性猝死去世。 This is context only/);
+    assert.match(prompt, /Never state, guess or discuss the diagnosis, the cause, a prior condition or the treatment of any person the event concerns/);
+    assert.match(prompt, /absolute risks/);
+    assert.match(prompt, /who is at higher risk/);
+    assert.doesNotMatch(prompt, /Standing question:/, "the episode's question is the topic's, not the zone's standing one");
+    for (const document of [decision, agenda.payload, episode.payload]) assert.ok(!JSON.stringify(document).includes("张某某"), "a subject name is written into no document");
+    // The same day again: the recorded decision is applied, not made again; the topic does not move.
+    await sub.programme.runDay(day);
+    assert.equal((await sub.topicRow(id)).programme_at.toISOString(), row.programme_at.toISOString());
+    assert.equal((await sub.database.query("SELECT count(*)::int AS n FROM evimed_product.documents WHERE kind='episode' AND payload->>'agendaId' = $1", [topicAction.agendaId])).rows[0].n, 1);
+    assert.equal(sub.programme.status().counters.topics.picks.picked, 1);
+    assert.equal(sub.programme.status().counters.topics.states.taken, 1);
+  } finally { await sub.close(); }
+});
+
+test("with no qualifying topic the day is the model's as before: a topic already taken, past a day, closed or not yet accepted is never picked, and one queued a day ago is let go", options, async () => {
+  const sub = await programmeFixture({ url, label: "topicnone", callModel: chooses(["nsclc", "evidence-update"]) });
+  try {
+    const taken = await sub.topic({ programmeState: "taken", programmeAt: "2026-10-05T00:00:00.000Z", surge: true });
+    const old = await sub.topic({ hoursAgo: 25, surge: true });
+    const closed = await sub.topic({ status: "closed", surge: true });
+    const future = await sub.topic({ hoursAgo: -2, surge: true });
+    const stale = await sub.topic({ hoursAgo: 23, programmeState: "queued", programmeAt: "2026-10-04T00:30:00.000Z" });
+    const decision = (await sub.programme.runDay(day)).decision;
+    assert.deepEqual(decision.actions.map((action) => action.zone), ["nsclc"]);
+    assert.deepEqual(decision.topicPick, { state: "none", candidates: 0 });
+    assert.equal(JSON.parse(sub.decisions.calls[0].body.messages[1].content).maxActions, 3, "the model has the whole day");
+    for (const id of [old, closed, future]) assert.equal((await sub.topicRow(id)).programme_state, null, "a topic not picked stays as it was");
+    assert.equal((await sub.topicRow(taken)).programme_state, "taken");
+    assert.equal((await sub.topicRow(stale)).programme_state, "skipped", "queued more than a day ago and never started: let go");
+    assert.equal(sub.programme.status().counters.topics.states.expired, 1);
+    assert.equal(sub.programme.status().counters.topics.picks.none, 1);
+  } finally { await sub.close(); }
+});
+
+test("of two qualifying topics the stronger is taken and the other stays untouched", options, async () => {
+  const sub = await programmeFixture({ url, label: "topictwo", callModel: async () => modelAnswer({ actions: [], reason: "没有变化" }) });
+  try {
+    const wide = await sub.topic({ title: "高温天气如何预防中暑？", boards: [{ board: "weibo", peakRank: 2 }, { board: "baidu", peakRank: 1 }, { board: "toutiao", peakRank: 4 }] });
+    const surge = await sub.topic({ title: "地震后挤压伤怎么救？", surge: true, boards: [{ board: "weibo", peakRank: 9 }], hoursAgo: 1 });
+    const decision = (await sub.programme.runDay(day)).decision;
+    assert.deepEqual(decision.actions.map((action) => action.topicId), [surge], "a surge first, before the topic on more boards");
+    assert.equal(decision.topicPick.candidates, 2);
+    assert.equal(decision.source, "none", "the model chose nothing for the zones");
+    assert.equal((await sub.topicRow(surge)).programme_state, "taken");
+    assert.equal((await sub.topicRow(wide)).programme_state, null, "not picked because another was stronger: still null, for a later day if it is still within its window");
+  } finally { await sub.close(); }
+});
+
+test("a spent day takes no topic; a day that buys one action gives it to the topic and asks no model", options, async () => {
+  const spent = await programmeFixture({ url, label: "topicspent", callModel: chooses(["nsclc", "evidence-update"]) });
+  try {
+    const id = await spent.topic({ surge: true });
+    await spent.spend(30);
+    const decision = (await spent.programme.runDay(day)).decision;
+    assert.deepEqual([decision.source, decision.reason, decision.actions.length], ["none", "budget", 0]);
+    assert.equal(decision.topicPick, undefined, "a day that cannot pay looks at no topic");
+    assert.equal((await spent.topicRow(id)).programme_state, null, "and the topic waits for a day that can");
+    assert.equal(spent.decisions.calls.length, 0);
+  } finally { await spent.close(); }
+
+  const one = await programmeFixture({ url, label: "topiconeaction", callModel: chooses(["nsclc", "evidence-update"]) });
+  try {
+    const id = await one.topic();
+    await one.spend(20); // ¥10 left: one episode's estimate (¥7), not two
+    const decision = (await one.programme.runDay(day)).decision;
+    assert.equal(decision.budget.maxActions, 1);
+    assert.equal(decision.source, "topic", "the topic took the day's only action");
+    assert.deepEqual(decision.actions.map((action) => [action.zone, action.status]), [["hot-questions", "scheduled"]]);
+    assert.equal(one.decisions.calls.length, 0, "no model call for a day with nothing left to choose");
+    assert.equal((await one.topicRow(id)).programme_state, "taken");
+    assert.equal(one.programme.status().counters.decisions.topic, 1);
+  } finally { await one.close(); }
+});
+
+test("a topic's action waits for the programme's slot like any other: queued while it waits, taken when the slot frees", options, async () => {
+  const sub = await programmeFixture({ url, label: "topicslot", callModel: async () => modelAnswer({ actions: [], reason: "没有变化" }) });
+  try {
+    // Another of the programme's episodes still holds the slot.
+    const holder = await sub.autopilot.create(PLATFORM_PUBLISHER_USER_ID, { projectId: EVIDENCE_PROJECT_ID, title: "占位", prompt: "hold the slot", taskTypes: ["evidence-update"],
+      schedule: { kind: "once", timeZone: "Asia/Shanghai", time: "00:00", date: "2099-12-31" }, dailyBudgetCny: 30, weeklyBudgetCny: 210, maxEpisodeCny: 10 });
+    const started = await sub.autopilot.start(PLATFORM_PUBLISHER_USER_ID, holder.id, { expectedRevision: holder.revision });
+    const held = await sub.autopilot.runNow(PLATFORM_PUBLISHER_USER_ID, started.id, { requestId: "slot-holder-0001" });
+    const id = await sub.topic();
+    const decision = (await sub.programme.runDay(day)).decision;
+    const [action] = decision.actions;
+    assert.deepEqual([action.zone, action.status, action.reason, action.topicState], ["hot-questions", "deferred", "concurrency", "queued"]);
+    assert.equal((await sub.topicRow(id)).programme_state, "queued");
+    await sub.autopilot.markEpisodeCanceled(PLATFORM_PUBLISHER_USER_ID, held.episode.id);
+    await sub.programme.sweep();
+    const later = (await sub.documents.get(PLATFORM_PUBLISHER_USER_ID, "programme-decision", `programme-decision-${day}`)).payload.actions[0];
+    assert.deepEqual([later.status, later.topicState], ["scheduled", "taken"]);
+    assert.equal((await sub.topicRow(id)).programme_state, "taken");
+  } finally { await sub.close(); }
+});
+
+test("when 「热点求证」 cannot be written no topic is taken, and every topic stays as it was", options, async () => {
+  const sub = await programmeFixture({ url, label: "topiczone", callModel: async () => modelAnswer({ actions: [], reason: "没有变化" }) });
+  try {
+    await sub.programme.ensureOfficialZones();
+    await sub.database.query("UPDATE evimed_frontier.evidence_zones SET user_id=$1, kind='user' WHERE title='热点求证'", [sub.operatorId]);
+    const id = await sub.topic({ surge: true });
+    const decision = (await sub.programme.runDay(day)).decision;
+    assert.deepEqual(decision.actions, []);
+    assert.deepEqual(decision.topicPick, { state: "zone_not_publisher_owned", candidates: 1 });
+    assert.equal((await sub.topicRow(id)).programme_state, null);
+  } finally { await sub.close(); }
+});

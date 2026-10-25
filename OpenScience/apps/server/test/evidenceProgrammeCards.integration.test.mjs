@@ -572,3 +572,119 @@ test("the hook of a verification and the sweep meeting on one episode settle it 
     assert.equal(cards[0].revision, 1, "written once");
   } finally { await fx.close(); }
 });
+
+// ── A hot topic's episode (前沿动态 round 2, 2026-10-25): its card answers the topic's question, and the topic records it ────────────
+
+const TOPIC_TITLE = "年轻人心源性猝死的风险有多大？";
+const TOPIC_QUESTION = "年轻人发生心源性猝死的风险有多大，哪些人风险更高，出现什么征兆应及时就医？";
+
+/** The day's decision takes the topic (the model chooses no zone), and its episode runs to its fold. */
+async function topicEpisode(fx, { day = "2026-10-05", topic, sources = [SOURCE_A], matrixClaims = [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims = [agendaClaim("CLM-001")] }) {
+  fx.state.model = async () => modelAnswer({ actions: [], reason: "没有变化" });
+  const decided = await fx.programme.runDay(day);
+  const action = decided.decision.actions.find((entry) => entry.topicId === topic);
+  assert.equal(action?.status, "scheduled", JSON.stringify(decided.decision.actions));
+  return foldEpisode(fx, { action, matrixClaims, sources, agendaClaims });
+}
+const topicActionOf = async (fx, day, episodeId) => (await fx.documents.get(PUBLISHER, "programme-decision", `programme-decision-${day}`)).payload.actions.find((entry) => entry.episodeId === episodeId);
+
+test("a hot topic's episode that meets the standard is a card in 「热点求证」 titled with the topic's question; the topic records the card; a replay changes nothing; the answered agenda is stopped the next day", options, async () => {
+  const fx = await setup("topiccard");
+  try {
+    const topic = await fx.topic({ title: TOPIC_TITLE, question: TOPIC_QUESTION, subjectNames: ["张某某"] });
+    const run = await topicEpisode(fx, { topic });
+    assert.equal((await fx.programme.onRunFinished(project, { id: run.runId })).state, "pending_verification");
+    assert.equal((await fx.topicRow(topic)).programme_state, "taken", "a waiting episode leaves the topic taken");
+    await verify(fx, run, { "CLM-001": "stands" });
+    const settled = await fx.programme.onRunFinished(project, { id: run.runId });
+    assert.equal(settled.state, "published");
+    const [card, ...more] = await cardsOf(fx, "热点求证");
+    assert.equal(more.length, 0);
+    assert.equal(card.id, settled.cardId);
+    assert.equal(card.title, TOPIC_TITLE, "the card's title is the topic's question");
+    assert.equal(card.content.question, TOPIC_QUESTION);
+    assert.deepEqual([card.user_id, card.producer.name, card.originality], [PUBLISHER, "EviMed 证据中心", "synthesis"]);
+    assert.equal(card.lineage.agendaId, run.agendaId);
+    const row = await fx.topicRow(topic);
+    assert.deepEqual([row.programme_state, row.programme_card_id], ["card", card.id]);
+    assert.deepEqual([(await topicActionOf(fx, "2026-10-05", run.episodeId)).topicState, (await topicActionOf(fx, "2026-10-05", run.episodeId)).topicReason], ["card", undefined]);
+    for (const text of [JSON.stringify(card), JSON.stringify((await fx.documents.get(PUBLISHER, "programme-decision", "programme-decision-2026-10-05")).payload)]) {
+      assert.ok(!text.includes("张某某"), "the topic's subject names reach no card and no decision");
+    }
+    // Replayed — the hook again, and the sweep: the same card, the topic untouched.
+    const at = row.programme_at.toISOString();
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "published");
+    await fx.programme.sweep();
+    assert.equal((await fx.topicRow(topic)).programme_at.toISOString(), at, "a replay moves nothing");
+    assert.equal((await cardsOf(fx, "热点求证")).length, 1);
+    assert.equal(fx.programme.status().counters.topics.states.card, 1, "and counts once");
+    // The next day the answered topic is not picked again, and its agenda is stopped.
+    fx.clock.at = new Date("2026-10-06T01:00:00.000Z");
+    const next = (await fx.programme.runDay("2026-10-06")).decision;
+    assert.ok(!next.actions.some((entry) => entry.zone === "hot-questions"), "a topic with a card is not taken twice");
+    assert.equal((await fx.autopilot.get(PUBLISHER, run.agendaId)).payload.status, "stopped", "one question, one episode: its agenda leaves the timer's rounds");
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "published", "and the card stands");
+    assert.equal((await fx.topicRow(topic)).programme_state, "card");
+  } finally { await fx.close(); }
+});
+
+test("two topics answered on two days are two cards: a topic's card is never revised by another topic's episode", options, async () => {
+  const fx = await setup("topictwocards");
+  try {
+    const first = await fx.topic({ title: TOPIC_TITLE });
+    const run1 = await topicEpisode(fx, { topic: first });
+    await verify(fx, run1, { "CLM-001": "stands" });
+    await fx.programme.onRunFinished(project, { id: run1.runId });
+    fx.clock.at = new Date("2026-10-06T01:00:00.000Z");
+    const second = await fx.topic({ title: "地震后挤压伤怎么救？", question: "地震后被压埋的人发生挤压综合征的风险有多大，救出前后应注意什么？" });
+    const run2 = await topicEpisode(fx, { day: "2026-10-06", topic: second, sources: [SOURCE_B], matrixClaims: [claim("CLM-001", SOURCE_B, QUOTE_B)] });
+    await verify(fx, run2, { "CLM-001": "stands" });
+    assert.equal((await fx.programme.onRunFinished(project, { id: run2.runId })).state, "published", "published, not revised");
+    assert.notEqual(run1.agendaId, run2.agendaId, "each topic is its own agenda");
+    const cards = await cardsOf(fx, "热点求证");
+    assert.deepEqual(cards.map((card) => card.title), [TOPIC_TITLE, "地震后挤压伤怎么救？"]);
+    assert.deepEqual([(await fx.topicRow(first)).programme_card_id, (await fx.topicRow(second)).programme_card_id], cards.map((card) => card.id));
+  } finally { await fx.close(); }
+});
+
+test("a hot topic's card whose title names a person or body of the event is not published: the topic is skipped with the reason, and a replay refuses it again without a write", options, async () => {
+  const fx = await setup("topicname");
+  try {
+    const topic = await fx.topic({ title: "张某某猝死：年轻人风险有多大？", subjectNames: ["张某某"] });
+    const run = await topicEpisode(fx, { topic });
+    await verify(fx, run, { "CLM-001": "stands" });
+    const settled = await fx.programme.onRunFinished(project, { id: run.runId });
+    assert.equal(settled.state, "topic_name_in_title");
+    assert.equal((await cardsOf(fx, "热点求证")).length, 0, "no card");
+    const recorded = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.equal(recorded.outcome, "topic_name_in_title");
+    const row = await fx.topicRow(topic);
+    assert.deepEqual([row.programme_state, row.programme_card_id], ["skipped", null]);
+    const action = await topicActionOf(fx, "2026-10-05", run.episodeId);
+    assert.deepEqual([action.topicState, action.topicReason], ["skipped", "topic_name_in_title"], "the reason is on the day's decision");
+    const revision = (await fx.documents.get(PUBLISHER, "programme-decision", "programme-decision-2026-10-05")).revision;
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "topic_name_in_title", "final: the same answer again");
+    assert.equal((await fx.documents.get(PUBLISHER, "programme-decision", "programme-decision-2026-10-05")).revision, revision, "and no write");
+    assert.equal(fx.programme.status().counters.cards.topic_name_in_title, 1);
+  } finally { await fx.close(); }
+});
+
+test("a hot topic's episode that earns no card leaves the topic skipped with the outcome as its reason", options, async () => {
+  const fx = await setup("topicnocard");
+  try {
+    const topic = await fx.topic({ title: TOPIC_TITLE });
+    const run = await topicEpisode(fx, { topic });
+    await verify(fx, run, { "CLM-001": "refuted" });
+    assert.equal((await fx.programme.onRunFinished(project, { id: run.runId })).state, "no_qualifying_claims");
+    assert.equal((await fx.topicRow(topic)).programme_state, "skipped");
+    assert.equal((await topicActionOf(fx, "2026-10-05", run.episodeId)).topicReason, "no_qualifying_claims");
+    // A failed episode is skipped the same way.
+    fx.clock.at = new Date("2026-10-06T01:00:00.000Z");
+    const failedTopic = await fx.topic({ title: "高温天气如何预防中暑？" });
+    const decided = await fx.programme.runDay("2026-10-06");
+    const action = decided.decision.actions.find((entry) => entry.topicId === failedTopic);
+    await fx.autopilot.markEpisodeCanceled(PUBLISHER, action.episodeId);
+    assert.equal((await fx.programme.settleEpisode(action.episodeId)).state, "episode_failed");
+    assert.deepEqual([(await fx.topicRow(failedTopic)).programme_state, (await topicActionOf(fx, "2026-10-06", action.episodeId)).topicReason], ["skipped", "episode_failed"]);
+  } finally { await fx.close(); }
+});
