@@ -213,7 +213,8 @@ const RECLUSTER_ROUND_MS = 3 * MINUTE;
 const RECLUSTER_POOL = 3_000;
 const RECLUSTER_POOL_MEMBERS = 30_000;
 const RECLUSTER_DETAIL_MEMBERS = 40;
-const RECLUSTER_ANCHOR_VECTORS = 5;
+const RECLUSTER_ANCHOR_VECTORS = 2;
+const RECLUSTER_NEIGHBOURS = 100;
 const RECLUSTER_SEEN_MAX = 5_000;
 /** The lexical stand-in reads at most this many of the window's items, newest first. */
 const LEXICAL_POOL = 20_000;
@@ -1828,27 +1829,36 @@ export class FrontierEvents {
 
   /**
    * The cosine between two events: the best of their reports', for the pairs at 0.6 or more (what a candidate rule reads). The
-   * anchor side is its five newest reports; the pool side is every report of the pool's events published in the window.
+   * anchor side is its two newest reports, each asking the vector index for its nearest neighbours; the pool side is whichever of
+   * those belong to the pool's events published in the window.
    * @param {string[]} anchorIds @param {string[]} poolIds @param {string} modelKey @param {Date} now
    * @returns {Promise<{ cosines: Map<string, number>, withVectors: Set<string> }>}
    */
   async #reclusterCosines(anchorIds, poolIds, modelKey, now) {
     const since = new Date(now.getTime() - FRONTIER_RECLUSTER.recentMs - FRONTIER_RECLUSTER.windowMs - DAY);
-    const rows = (await this.database.query(`WITH a AS (
-        SELECT event_id, embedding FROM (
-          SELECT ei.event_id, v.embedding, row_number() OVER (PARTITION BY ei.event_id ORDER BY i.timeline_at DESC, i.id DESC) AS rn
-          FROM evimed_frontier.event_items ei
-          JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
-          JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
-          WHERE ei.event_id = ANY($1::bigint[])) t WHERE rn <= ${RECLUSTER_ANCHOR_VECTORS}),
-      b AS (
-        SELECT ei.event_id, v.embedding FROM evimed_frontier.event_items ei
-        JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published' AND i.visible_at >= $4::timestamptz
-        JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
-        WHERE ei.event_id = ANY($3::bigint[]))
-      SELECT a.event_id AS a_id, b.event_id AS b_id, max(1 - (a.embedding <=> b.embedding)) AS cosine
-      FROM a JOIN b ON a.event_id <> b.event_id AND 1 - (a.embedding <=> b.embedding) >= 0.6 GROUP BY a.event_id, b.event_id`,
-    [anchorIds, modelKey, poolIds, since])).rows ?? [];
+    // Each anchor report asks the vector index for its nearest neighbours (an index scan per report, not a distance to every vector
+    // of the pool: that cross product took 30–60 s on 9,000 reports), and the neighbours are kept when they belong to a pool event.
+    // The index returns what its search list holds, so recall is bounded by `hnsw.ef_search`; the other candidate rules do not depend on it.
+    const rows = await this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query(`SET LOCAL hnsw.ef_search = ${RECLUSTER_NEIGHBOURS}`);
+      return (await client.query(`WITH a AS (
+          SELECT event_id, embedding FROM (
+            SELECT ei.event_id, v.embedding, row_number() OVER (PARTITION BY ei.event_id ORDER BY i.timeline_at DESC, i.id DESC) AS rn
+            FROM evimed_frontier.event_items ei
+            JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+            JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
+            WHERE ei.event_id = ANY($1::bigint[])) t WHERE rn <= ${RECLUSTER_ANCHOR_VECTORS})
+        SELECT a.event_id AS a_id, ei.event_id AS b_id, max(n.cosine) AS cosine
+        FROM a
+        CROSS JOIN LATERAL (
+          SELECT v.item_id, 1 - (v.embedding <=> a.embedding) AS cosine FROM evimed_frontier.item_vectors v
+          WHERE v.model_key = $2 ORDER BY v.embedding <=> a.embedding LIMIT ${RECLUSTER_NEIGHBOURS}) n
+        JOIN evimed_frontier.event_items ei ON ei.item_id = n.item_id
+        JOIN evimed_frontier.items i ON i.id = n.item_id AND i.state = 'published' AND i.visible_at >= $4::timestamptz
+        WHERE ei.event_id = ANY($3::bigint[]) AND ei.event_id <> a.event_id AND n.cosine >= 0.6
+        GROUP BY a.event_id, ei.event_id`,
+      [anchorIds, modelKey, poolIds, since])).rows ?? [];
+    });
     /** @type {Map<string, number>} */
     const cosines = new Map();
     for (const row of rows) {
