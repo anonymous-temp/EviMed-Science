@@ -341,7 +341,7 @@ describe("不感兴趣 on the reading page asks why first (c2-hide)", () => {
     await userEvent.click(within(menu).getByRole("menuitem", { name: "不想看“Arena.ai”" }));
     await waitFor(() => expect(client.hideFrontierItem).toHaveBeenCalledWith("x-post-0001", "source"));
     await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: "x-arena", label: "Arena.ai", muted: true }));
-    expect(await screen.findByText("已隐藏，并屏蔽“Arena.ai”")).toBeInTheDocument();
+    expect(await screen.findByText("已隐藏，并屏蔽该来源")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "撤销" }));
     await waitFor(() => expect(client.removeFrontierFollow).toHaveBeenCalledWith("21"));
     expect(client.unhideFrontierItem).toHaveBeenCalledWith("x-post-0001");

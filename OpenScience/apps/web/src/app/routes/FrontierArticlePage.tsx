@@ -115,7 +115,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
       if (reason === "source") {
         try { unmute = await muteSourceOf(item); } catch (error) { toast.error(frontierErrorMessage(error)); }
       }
-      toast.success(unmute ? `已隐藏，并屏蔽“${item.source.name}”` : "已隐藏", {
+      toast.success(unmute ? "已隐藏，并屏蔽该来源" : "已隐藏", {
         action: {
           label: "撤销",
           onClick: () => {
