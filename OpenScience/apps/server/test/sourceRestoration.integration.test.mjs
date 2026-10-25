@@ -31,7 +31,10 @@ test("restoring previously ingested bytes creates a new extraction generation an
     const changed = await send(`/api/sources/${source.id}/note`, "PUT", { title: original.title, body: "Changed wording." });
     assert.equal(changed.status, 200);
     const next = (await changed.json()).data.source;
-    assert.equal((await fetch(`${base}/api/sources/${source.id}`, { headers })).status, 404);
+    // The publication family (2026-10-23, 897389cec): the edit's bytes are a new row and the earlier row stays readable as a
+    // predecessor that is no longer the current publication, where it used to be retired.
+    assert.notEqual(next.id, source.id);
+    assert.equal((await app.sourceService.get(user.id, source.id)).payload.publication?.current, false, "the earlier bytes are no longer the current note");
     const restored = await send(`/api/sources/${next.id}/note`, "PUT", original);
     assert.equal(restored.status, 200);
     const revived = (await restored.json()).data.source;
