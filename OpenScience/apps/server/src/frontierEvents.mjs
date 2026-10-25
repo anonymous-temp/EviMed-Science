@@ -137,6 +137,8 @@ import {
   FRONTIER_GROUP_PAIR_INSTRUCTIONS,
   buildGroupInput,
   buildGroupPairInput,
+  frontierTextOverlap,
+  frontierTextTokens,
   validateGroupAnswer,
   validateGroupPair,
   verifyEventDigest,
@@ -688,37 +690,8 @@ export function otherWork(item, other) {
   return Boolean(pmid[0] && pmid[1] && pmid[0] !== pmid[1]);
 }
 
-/**
- * The words and character pairs two texts are compared by when there is no vector (AIHOT `lexicalSimilarity`, which compares
- * character pairs only — enough for Chinese text, but any two English sentences share most of their letter pairs): a run of
- * Chinese characters gives its character pairs, a run of Latin letters or digits gives itself as one word, lower-cased.
- * @param {unknown} text @returns {Set<string>}
- */
-export function frontierTextTokens(text) {
-  const tokens = new Set();
-  for (const run of String(text ?? "").toLowerCase().match(/[\u3400-\u9fff\uf900-\ufaff]+|[a-z0-9]+/g) ?? []) {
-    if (/^[a-z0-9]+$/.test(run)) {
-      if (run.length >= 2) tokens.add(run);
-      continue;
-    }
-    const characters = [...run];
-    if (characters.length === 1) tokens.add(run);
-    for (let index = 0; index + 1 < characters.length; index += 1) tokens.add(characters[index] + characters[index + 1]);
-  }
-  return tokens;
-}
-
-/**
- * How much of the shorter of two token sets the other holds (0–1; AIHOT's overlap over the smaller set).
- * @param {Set<string>} left @param {Set<string>} right
- */
-export function frontierTextOverlap(left, right) {
-  if (!left.size || !right.size) return 0;
-  const [small, large] = left.size <= right.size ? [left, right] : [right, left];
-  let shared = 0;
-  for (const token of small) if (large.has(token)) shared += 1;
-  return shared / small.size;
-}
+/** The words and character pairs two texts are compared by, and the overlap of two such sets (`frontierEventGrouping.mjs`, where the sweep reads them too). */
+export { frontierTextOverlap, frontierTextTokens };
 
 /** The text an item is compared by without a vector: its title and the start of its summary (AIHOT `reportText`). @param {any} item */
 export function frontierRecallText(item) {

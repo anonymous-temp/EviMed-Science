@@ -1,0 +1,5421 @@
+{
+ "note": "Events of the labelled pairs, from a 2026-10-25 production read of the last four days (titles and sources of public reports; ids are the events' public ids).",
+ "events": [
+  {
+   "id": "036972fb29143a2a",
+   "title": "Ultimate Forza男性补充剂因含未标示药物被召回",
+   "firstAt": "2026-10-24T20:24:00Z",
+   "lastAt": "2026-10-25T02:13:00Z",
+   "entityKeys": [
+    "drug:sildenafil",
+    "drug:tadalafil",
+    "drug:dapoxetine",
+    "org:fda",
+    "disease:勃起功能障碍"
+   ],
+   "members": [
+    {
+     "id": "a050962efb570b12",
+     "titleZh": "Ultimate Forza男性补充剂因含未标示西地那非、他达拉非和达泊西汀被召回",
+     "titleRaw": "Tonight We Ride, LLC Issues Voluntary Recall of Ultimate Forza Male Supplement Due to Presence of Undeclared Sildenafil, Tadalafil, and Dap…",
+     "sourceName": "x-fdarecalls",
+     "primary": false,
+     "publishedAt": "2026-10-24T20:24:00Z",
+     "genre": "safety"
+    },
+    {
+     "id": "7ca22cf16abfaea8",
+     "titleZh": "Ultimate Forza男性补充剂因含未标示西地那非、他达拉非和达泊西汀被召回",
+     "titleRaw": "Tonight We Ride, LLC Issues Voluntary Recall of Ultimate Forza Male Supplement Due to Presence of Undeclared Sildenafil, Tadalafil, and Dapoxetine",
+     "sourceName": "fda-recalls-safety-alerts",
+     "primary": false,
+     "publishedAt": "2026-10-25T02:13:00Z",
+     "genre": "safety"
+    }
+   ]
+  },
+  {
+   "id": "03b4fabf39b7b03d",
+   "title": "FDA批准首款乙肝反义寡核苷酸药物Hibsago",
+   "firstAt": "2026-10-20T00:00:00Z",
+   "lastAt": "2026-10-25T08:38:00Z",
+   "entityKeys": [
+    "drug:bepirovirsen",
+    "org:fda",
+    "org:葛兰素史克",
+    "org:gsk",
+    "disease:慢性乙肝",
+    "trial:b-well 1",
+    "trial:b-well 2",
+    "org:ionis pharmaceuticals",
+    "disease:慢性乙型肝炎",
+    "trial:b-well",
+    "drug:贝普若韦生",
+    "disease:肝硬化",
+    "disease:肝癌",
+    "drug:核苷(酸)类似物",
+    "org:ionis",
+    "org:正大天晴",
+    "disease:血小板减少",
+    "drug:贝匹罗韦森",
+    "drug:核苷(酸)类逆转录酶抑制剂",
+    "disease:乙肝",
+    "drug:hibsago",
+    "org:who",
+    "org:国家药监局",
+    "drug:聚乙二醇干扰素α",
+    "drug:核苷(酸)类药物",
+    "org:罗氏",
+    "drug:entecavir",
+    "drug:替诺福韦",
+    "org:南方医科大学南方医院",
+    "drug:gsk3965193",
+    "disease:hiv感染"
+   ],
+   "members": [
+    {
+     "id": "6674c7a7b2f27941",
+     "titleZh": "美国食品药品监督管理局批准HIBSAGO（bepirovirsen）注射液",
+     "titleRaw": "FDA approval: HIBSAGO — NDA221276 ORIG-1 (Type 1 - New Molecular Entity)",
+     "sourceName": "openfda-drugsfda-api",
+     "primary": false,
+     "publishedAt": "2026-10-20T00:00:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "2f9d7265dd5b7fe2",
+     "titleZh": "FDA批准首款反义寡核苷酸药物治疗慢性乙肝",
+     "titleRaw": "FDA Approves First-of-Its-Kind Chronic Hepatitis B Treatment",
+     "sourceName": "fda-press-announcements",
+     "primary": false,
+     "publishedAt": "2026-10-20T19:49:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "3b0ef494f0fb9329",
+     "titleZh": "美国食品药品监督管理局批准 Hibsago 治疗部分无肝硬化成人慢性乙肝",
+     "titleRaw": "FDA approval: Hibsago",
+     "sourceName": "fda-novel-drug-approvals",
+     "primary": false,
+     "publishedAt": "2026-10-20T20:27:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "b78d9d2dcfe726c5",
+     "titleZh": "刚刚！“功能性治愈”乙肝，FDA批准突破性新药",
+     "titleRaw": "刚刚！“功能性治愈”乙肝，FDA批准突破性新药",
+     "sourceName": "wx-wuxiapptec",
+     "primary": false,
+     "publishedAt": "2026-10-20T21:06:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "b8eb5fc25f40c992",
+     "titleZh": "FDA批准bepirovirsen用于慢性乙肝功能性治愈",
+     "titleRaw": "FDA Green Lights Potential Functional Cure for Chronic Hep B",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-20T22:47:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "062016c2e1690153",
+     "titleZh": "bepirovirsen获美国FDA批准用于慢性乙肝治疗",
+     "titleRaw": "Hibsago (bepirovirsen) approved in the US for the treatment of chronic hepatitis B (CHB)",
+     "sourceName": "gsk-press-releases",
+     "primary": false,
+     "publishedAt": "2026-10-20T23:02:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "eaca7cc35dbbae06",
+     "titleZh": "刚刚！全球首创乙肝功能性治愈疗法获 FDA 批准上市",
+     "titleRaw": "刚刚！全球首创乙肝功能性治愈疗法获 FDA 批准上市",
+     "sourceName": "wx-dxy-insight-db",
+     "primary": false,
+     "publishedAt": "2026-10-20T23:32:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "83bca456b122d466",
+     "titleZh": "重磅！功能性治愈乙肝小核酸疗法获美国 FDA 批准上市",
+     "titleRaw": "重磅！功能性治愈乙肝小核酸疗法获美国 FDA 批准上市",
+     "sourceName": "wx-yimaike",
+     "primary": false,
+     "publishedAt": "2026-10-21T01:12:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "3385b3e4aa7c65c1",
+     "titleZh": "乙肝，第一次把“治愈”写进终点",
+     "titleRaw": "乙肝，第一次把“治愈”写进终点",
+     "sourceName": "wx-yiyao-yao",
+     "primary": false,
+     "publishedAt": "2026-10-21T03:32:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "35bcb0424711ae5b",
+     "titleZh": "全球首款！GSK乙肝功能性治愈新药获FDA批准",
+     "titleRaw": "全球首款！GSK乙肝功能性治愈新药获FDA批准",
+     "sourceName": "wx-vcbeat",
+     "primary": false,
+     "publishedAt": "2026-10-21T04:00:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "7d08f080495da7e5",
+     "titleZh": "乙肝，第一次把“治愈”写进终点",
+     "titleRaw": "乙肝，第一次把“治愈”写进终点",
+     "sourceName": "tmtpost-health",
+     "primary": false,
+     "publishedAt": "2026-10-21T08:33:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "4324c0e4202f97ac",
+     "titleZh": "全球首个慢性乙肝功能性治愈药在美国获批上市",
+     "titleRaw": "全球首个慢性乙肝功能性治愈药在美国获批上市",
+     "sourceName": "jiemian-health",
+     "primary": false,
+     "publishedAt": "2026-10-21T09:55:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "ed3cc82bc23cba37",
+     "titleZh": "“功能性治愈”乙肝，FDA批准突破性新药",
+     "titleRaw": "“功能性治愈”乙肝，FDA批准突破性新药",
+     "sourceName": "wx-xueshujingwei",
+     "primary": false,
+     "publishedAt": "2026-10-21T10:02:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "c4ce090dd952cfa5",
+     "titleZh": "重磅！全球首创乙肝功能性治愈疗法获 FDA 批准上市，正大天晴拿到了国内推广权",
+     "titleRaw": "重磅！全球首创乙肝功能性治愈疗法获 FDA 批准上市，正大天晴拿到了国内推广权",
+     "sourceName": "wx-xinkangjie",
+     "primary": false,
+     "publishedAt": "2026-10-21T10:16:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "7ac20353bdaf2bea",
+     "titleZh": "GSK乙肝药物bepirovirsen获FDA批准，可实现功能性治愈",
+     "titleRaw": "GSK gets FDA approval for hepatitis B drug that offers functional cure",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-21T10:17:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "7c070ca48b27d8d3",
+     "titleZh": "GSK重磅，全球首创乙肝功能性治愈疗法获 FDA 批准上市",
+     "titleRaw": "GSK重磅，全球首创乙肝功能性治愈疗法获 FDA 批准上市",
+     "sourceName": "wx-sinamed",
+     "primary": false,
+     "publishedAt": "2026-10-21T11:30:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "4e5a755a233dc9da",
+     "titleZh": "GSK乙肝功能性治愈新药在美提前获批",
+     "titleRaw": "GSK乙肝功能性治愈新药在美提前获批",
+     "sourceName": "wx-jianshiju",
+     "primary": false,
+     "publishedAt": "2026-10-21T12:04:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "6cbea8f66048363d",
+     "titleZh": "GSK与Ionis的乙肝新药Hibsago获美国批准",
+     "titleRaw": "GSK, Ionis win US approval for first-of-its-kind hepatitis B drug",
+     "sourceName": "biopharma-dive",
+     "primary": false,
+     "publishedAt": "2026-10-21T16:48:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "3bfe66e6ef947e35",
+     "titleZh": "GSK乙肝药物Hibsago获FDA批准并附黑框警告",
+     "titleRaw": "GSK's Hibsago won FDA approval as a potential functional cure for hepatitis B, but a black box warning could limit its appeal.",
+     "sourceName": "x-endpts",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:10:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "ed64846dacc72e80",
+     "titleZh": "FDA批准bepirovirsen用于慢性乙肝功能性治愈",
+     "titleRaw": "The FDA on Tuesday approved bepirovirsen as a potential functional cure for adults with chronic hepatitis B, but with no cirrhosis, who are…",
+     "sourceName": "x-medpagetoday",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:11:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "7e619a1956813732",
+     "titleZh": "GSK乙肝药物获美国食品药品监督管理局批准",
+     "titleRaw": "GSK has won FDA approval for its hepatitis B drug, which extended functional cures to far more patients than previous methods. https://trib…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:15:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "69055502be3f80c2",
+     "titleZh": "GSK乙肝药物获FDA批准，商品名Hibsago",
+     "titleRaw": "GSK has won FDA approval for its hepatitis B drug, which will be marketed as Hibsago.",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:15:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "37e77eede8e308cf",
+     "titleZh": "Hibsago 获批用于部分乙肝患者的功能性治愈",
+     "titleRaw": "Hibsago’s approval—a functional cure for certain patients with a hepatitis B infection—further validates Ionis Pharmaceuticals’ antisense p…",
+     "sourceName": "x-biospace",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:17:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "6935b8ffb95aa464",
+     "titleZh": "GSK与Ionis的乙肝新药获美国批准",
+     "titleRaw": "GSK, Ionis win US approval for first-of-its-kind hepatitis B drug https://www.biopharmadive.com/news/gsk-ionis-fda-approve-hibsago-chronic-…",
+     "sourceName": "x-biopharmadive",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:17:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "1c9a9dc3f2de2c46",
+     "titleZh": "全球首款！每周 1 针，半年有望告别终身服药，新消息来了",
+     "titleRaw": "全球首款！每周 1 针，半年有望告别终身服药，新消息来了",
+     "sourceName": "wx-dxy",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:17:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "6a099c4dde72ffdb",
+     "titleZh": "刚刚！全球首创乙肝功能性治愈疗法获 FDA 批准上市",
+     "titleRaw": "刚刚！全球首创乙肝功能性治愈疗法获 FDA 批准上市",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:19:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "8f713cb9c4bc61e8",
+     "titleZh": "GSK乙肝新药美国获批！瞄准“功能性治愈”",
+     "titleRaw": "GSK乙肝新药美国获批！瞄准“功能性治愈”",
+     "sourceName": "wx-eyjlr",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:34:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "da29aeacb26cdcdf",
+     "titleZh": "全球首个！功能性治愈新药上市，乙肝赛道变天了",
+     "titleRaw": "全球首个！功能性治愈新药上市，乙肝赛道变天了",
+     "sourceName": "wx-saibailan",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:35:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "4e9ca231312e1524",
+     "titleZh": "今日！FDA批准突破性乙肝新药",
+     "titleRaw": "今日！FDA批准突破性乙肝新药",
+     "sourceName": "wx-yiyaoguanlan",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:36:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "08556bbabdb9bc72",
+     "titleZh": "FDA批准用于乙肝感染的反义寡核苷酸药物",
+     "titleRaw": "FDA approves pioneering antisense oligonucleotide drug for hepatitis B infection, offering the potential to achieve functional cure",
+     "sourceName": "x-natrevdrugdisc",
+     "primary": false,
+     "publishedAt": "2026-10-22T12:09:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "8c0e00fef8c2b327",
+     "titleZh": "FDA批准GSK乙肝反义药物bepirovirsen",
+     "titleRaw": "FDA approves hepatitis B antisense drug",
+     "sourceName": "j-1474-1776",
+     "primary": false,
+     "publishedAt": "2026-10-22T18:08:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "674bd1f9b6e90b6b",
+     "titleZh": "美国食品药品监督管理局批准bepirovirsen治疗慢性乙肝",
+     "titleRaw": "On 20 October, the U.S. Food and Drug Administration approved the use of bepirovirsen to treat chronic hepatitis B infection, although the…",
+     "sourceName": "x-newsfromscience",
+     "primary": false,
+     "publishedAt": "2026-10-22T21:34:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "1ada8f3b82efb858",
+     "titleZh": "FDA批准乙型肝炎新药Hibsago，部分患者可停药",
+     "titleRaw": "FDA approves hepatitis B shot that may let some patients stop all treatment",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-23T18:01:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "e71c6921b945dc55",
+     "titleZh": "全球首个！乙肝治愈新药获FDA批准上市",
+     "titleRaw": "全球首个！乙肝治愈新药获FDA批准上市",
+     "sourceName": "wx-yxj",
+     "primary": false,
+     "publishedAt": "2026-10-24T08:37:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "d96e8c0f36e0f83c",
+     "titleZh": "全球首款乙肝功能性治愈 ASO 新药：每周 1 针，半年有望告别终身服药！",
+     "titleRaw": "全球首款乙肝功能性治愈 ASO 新药：每周 1 针，半年有望告别终身服药！",
+     "sourceName": "wx-dxy-gi",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:19:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "762276cbfd0095f0",
+     "titleZh": "GSK与Ionis的Hibsago获FDA批准用于慢性乙肝，为后续同类疗法打开市场",
+     "titleRaw": "GSK与Ionis的Hibsago获FDA批准用于慢性乙肝，为后续同类疗法打开市场",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "f1ff5b7f1d27516b",
+     "titleZh": "全球首个！乙肝治愈新药获FDA批准上市",
+     "titleRaw": "全球首个！乙肝治愈新药获FDA批准上市",
+     "sourceName": "wx-yxj-infect",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:02:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "03c5e45567b2fdbd",
+     "titleZh": "全球首个！乙肝治愈新药获FDA批准上市",
+     "titleRaw": "全球首个！乙肝治愈新药获FDA批准上市",
+     "sourceName": "wx-yxj-peds",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:12:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "28d1cf9615d8cd4e",
+     "titleZh": "GSK乙肝新药Hibsago获FDA批准，国产功能性治愈管线加速推进",
+     "titleRaw": "GSK乙肝新药Hibsago获FDA批准，国产功能性治愈管线加速推进",
+     "sourceName": "wx-cphi-online",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:20:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "2553c031033df233",
+     "titleZh": "乙肝治疗第一次把\"治愈\"写进终点，GSK贝普若韦生获FDA批准",
+     "titleRaw": "乙肝治疗第一次把\"治愈\"写进终点，GSK贝普若韦生获FDA批准",
+     "sourceName": "wx-yaodu",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:32:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "5fba720bc655aa8a",
+     "titleZh": "全球首款乙肝治愈新药提前半年布局中国商业化，看GSK神操作",
+     "titleRaw": "全球首款乙肝治愈新药提前半年布局中国商业化，看GSK神操作",
+     "sourceName": "wx-yyjjb",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:51:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "382f879b032e254b",
+     "titleZh": "GSK的乙肝药物战略选择",
+     "titleRaw": "GSK的乙肝药物战略选择",
+     "sourceName": "wx-tongxieyi",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:21:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "e68fd109b75a44a0",
+     "titleZh": "全球首款！每周 1 针，半年有望告别终身服药，新消息来了",
+     "titleRaw": "全球首款！每周 1 针，半年有望告别终身服药，新消息来了",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:38:00Z",
+     "genre": "approval"
+    }
+   ]
+  },
+  {
+   "id": "05eb5848072c9e74",
+   "title": "ESMO 解除 INTerpath-001 黑色素瘤辅助治疗试验摘要 embargo",
+   "firstAt": "2026-10-22T18:30:00Z",
+   "lastAt": "2026-10-22T19:30:00Z",
+   "entityKeys": [
+    "drug:pembrolizumab",
+    "trial:interpath-001",
+    "org:esmo",
+    "disease:黑色素瘤",
+    "org:moderna",
+    "org:默沙东",
+    "org:默克"
+   ],
+   "members": [
+    {
+     "id": "94e5fc7c92f337b4",
+     "titleZh": "ESMO 解除 INTerpath-001 黑色素瘤辅助治疗试验摘要 embargo",
+     "titleRaw": "#ESMO26: The embargo on LBA1, “INTerpath-001: Phase 3 study of the mRNA-based individualised neoantigen therapy intismeran autogene plus pe…",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-22T18:30:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "423c165f652c444c",
+     "titleZh": "详细数据确认Moderna与默沙东癌症疫苗在黑色素瘤试验中达到关键终点",
+     "titleRaw": "Detailed data confirm Moderna and Merck cancer vaccine met key endpoints in melanoma trial",
+     "sourceName": "x-matthewherper",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:21:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "e23a23aece93e15a",
+     "titleZh": "Moderna与默克癌症疫苗3期数据泄露",
+     "titleRaw": "#ESMO26: Data leak for Merck and Moderna’s therapeutic cancer vaccine",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:27:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "b6ebdc400f256f06",
+     "titleZh": "Moderna与默克个体化mRNA癌症疫苗使黑色素瘤复发风险降低42%",
+     "titleRaw": "A Moderna and Merck personalized mRNA cancer vaccine reduced the risk of disease recurrence in patients with melanoma by 42% compared to st…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:30:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "060135464705a99f",
+   "title": "postMONARCH 试验报告阿贝西利联合方案最终总生存分析",
+   "firstAt": "2026-10-24T08:34:00Z",
+   "lastAt": "2026-10-24T11:42:00Z",
+   "entityKeys": [
+    "drug:abemaciclib",
+    "drug:fulvestrant",
+    "trial:postmonarch",
+    "disease:乳腺癌"
+   ],
+   "members": [
+    {
+     "id": "d1d300459ec540ec",
+     "titleZh": "postMONARCH 3期试验：阿贝西利联合氟维司群的总生存结果",
+     "titleRaw": "📢 #ESMO26 concomitant paper: OS from the phase 3 postMONARCH trial of abemaciclib + fulvestrant vs pbo + fulvestrant for HR+, HER2- advance…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-24T08:34:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "a1ca2c6bf7762aec",
+     "titleZh": "postMONARCH III期研究：阿贝西利联合氟维司群的总生存结果",
+     "titleRaw": "Overall survival from the phase III postMONARCH trial of abemaciclib plus fulvestrant versus placebo plus fulvestrant for HR+, HER2- advanced breast cancer foll",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-24T11:42:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "06a245773fed1324",
+   "title": "仑卡奈单抗真实世界安全性与疗效的系统评价与Meta分析",
+   "firstAt": "2026-10-23T05:51:00Z",
+   "lastAt": "2026-10-23T05:51:00Z",
+   "entityKeys": [
+    "drug:lecanemab",
+    "disease:alzheimer's disease"
+   ],
+   "members": [
+    {
+     "id": "eba1016c262f712a",
+     "titleZh": "仑卡奈单抗真实世界安全性与疗效的系统评价与Meta分析",
+     "titleRaw": "Real-world safety and efficacy of lecanemab in the treatment of Alzheimer's disease: a systematic review and meta-analysis.",
+     "sourceName": "pubmed-target-trial-rwe",
+     "primary": true,
+     "publishedAt": "2026-10-23T05:51:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "09405a1f0b423fe6",
+   "title": "Omvoh（mirikizumab-mrkz）在儿童溃疡性结肠炎3期研究中达到临床缓解主要终点",
+   "firstAt": "2026-10-19T09:23:00Z",
+   "lastAt": "2026-10-22T09:36:00Z",
+   "entityKeys": [
+    "drug:mirikizumab-mrkz",
+    "trial:shine-2",
+    "trial:lucent-2",
+    "org:礼来",
+    "disease:溃疡性结肠炎",
+    "drug:mirikizumab"
+   ],
+   "members": [
+    {
+     "id": "363de144e0416249",
+     "titleZh": "Omvoh（mirikizumab-mrkz）在儿童溃疡性结肠炎3期研究中达到临床缓解主要终点",
+     "titleRaw": "Lilly's Omvoh (mirikizumab-mrkz) meets primary endpoint of clinical remission and is the first IL-23p19 inhibitor to report one-year Phase 3 results in pediatri",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-19T09:23:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "45ef0a0531a102a9",
+     "titleZh": "礼来公布单抗新药3期临床结果，针对儿童溃疡性结肠炎丨产业新闻",
+     "titleRaw": "礼来公布单抗新药3期临床结果，针对儿童溃疡性结肠炎丨产业新闻",
+     "sourceName": "wx-yiyaoguanlan",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:36:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "0b6cdbc7c92f90d0",
+   "title": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+   "firstAt": "2026-10-24T08:45:00Z",
+   "lastAt": "2026-10-24T23:10:00Z",
+   "entityKeys": [
+    "drug:tqb2102",
+    "drug:capecitabine",
+    "drug:paclitaxel",
+    "drug:白蛋白紫杉醇",
+    "trial:apex-breast01",
+    "org:中山大学肿瘤防治中心",
+    "org:esmo",
+    "disease:her2低表达乳腺癌",
+    "drug:rolditamig deuderuxtecan",
+    "drug:trastuzumab deruxtecan",
+    "drug:pertuzumab",
+    "drug:trastuzumab",
+    "trial:db04",
+    "trial:db06",
+    "trial:daisy",
+    "org:iarc",
+    "disease:转移性乳腺癌",
+    "drug:白蛋白结合型紫杉醇",
+    "org:哈尔滨医科大学附属肿瘤医院",
+    "org:正大天晴",
+    "drug:benmelstobart",
+    "org:中国生物制药",
+    "disease:胃癌",
+    "disease:结直肠癌",
+    "disease:胆道癌",
+    "trial:tonacea 01",
+    "disease:乳腺癌",
+    "disease:胃食管结合部癌"
+   ],
+   "members": [
+    {
+     "id": "8912a69dbbc47347",
+     "titleZh": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "titleRaw": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "sourceName": "wx-yxj-onco",
+     "primary": false,
+     "publishedAt": "2026-10-24T08:45:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "eea9d1e576a55d10",
+     "titleZh": "新型ADC在HER2低表达转移性乳腺癌中显著延长PFS",
+     "titleRaw": "Novel ADC Achieves Impressive PFS Advantage in HER2-Low Metastatic Breast Cancer",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:47:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "2172e0e0cbc55cff",
+     "titleZh": "ESMO2026：全球首款显著改善HER2低表达乳腺癌PFS的HER2双表位ADC",
+     "titleRaw": "ESMO2026：全球首款显著改善HER2低表达乳腺癌PFS的HER2双表位ADC",
+     "sourceName": "wx-cmt-onco",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:16:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "ea143b4705907988",
+     "titleZh": "ESMO公布TQB2102治疗HER2低表达乳腺癌III期结果",
+     "titleRaw": "ESMO重磅丨PFS风险比低至0.29！全球首个HER2双表位ADC TQB2102 III期APEX-Breast01研究结果公布",
+     "sourceName": "wx-medlive",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:20:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "960e41b468c96605",
+     "titleZh": "新一代标杆ADC，拿下大结果",
+     "titleRaw": "新一代标杆ADC，拿下大结果",
+     "sourceName": "wx-pharmcube",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:44:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "da157b498775869b",
+     "titleZh": "最强数据！中生ADC王牌亮相ESMO",
+     "titleRaw": "最强数据！中生ADC王牌亮相ESMO",
+     "sourceName": "wx-tongxieyi",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:10:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "0cbc060bc95077b3",
+   "title": "EMA建议批准Rasonque用于转移性胰腺癌",
+   "firstAt": "2026-10-15T13:49:00Z",
+   "lastAt": "2026-10-22T08:21:00Z",
+   "entityKeys": [
+    "drug:daraxonrasib",
+    "org:ema",
+    "org:chmp",
+    "disease:转移性胰腺腺癌",
+    "org:revolution medicines netherlands b.v.",
+    "org:revolution medicines",
+    "disease:胰腺癌",
+    "trial:rasolute 302",
+    "org:fda",
+    "disease:转移性胰腺癌",
+    "disease:胰腺腺癌",
+    "drug:rasonque"
+   ],
+   "members": [
+    {
+     "id": "614e4bd7c6504e3f",
+     "titleZh": "EMA建议批准Rasonque用于转移性胰腺癌",
+     "titleRaw": "EMA recommends authorisation of Rasonque for metastatic pancreatic cancer",
+     "sourceName": "ema-whats-new",
+     "primary": false,
+     "publishedAt": "2026-10-15T13:49:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "2e2ca498eda62b41",
+     "titleZh": "EMA建议批准daraxonrasib单药治疗转移性胰腺癌",
+     "titleRaw": "Human medicines European public assessment report (EPAR): Rasonque, Daraxonrasib, Status: Opinion",
+     "sourceName": "ema-whats-new",
+     "primary": false,
+     "publishedAt": "2026-10-15T13:49:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "06e3b7d0cdcad7cf",
+     "titleZh": "RevMed胰腺癌药物接近欧洲获批",
+     "titleRaw": "STAT+: RevMed’s pancreatic cancer drug nears European approval",
+     "sourceName": "stat-biotech",
+     "primary": false,
+     "publishedAt": "2026-10-16T14:14:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "62ae0489e6006b8c",
+     "titleZh": "CHMP建议批准首个广谱RAS靶向药治疗转移性胰腺癌",
+     "titleRaw": "CHMP recommends first broad RAS-targeted therapy for metastatic pancreatic cancer",
+     "sourceName": "european-pharmaceutical-review",
+     "primary": false,
+     "publishedAt": "2026-10-19T21:23:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "b38e6c930c5ff19d",
+     "titleZh": "CHMP支持RASONQUE用于转移性胰腺癌",
+     "titleRaw": "CHMP backs RASONQUE for metastatic pancreatic cancer",
+     "sourceName": "pharmatimes",
+     "primary": false,
+     "publishedAt": "2026-10-20T16:35:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "07c99b39d1cb61ad",
+     "titleZh": "CHMP支持RASONQUE用于转移性胰腺癌",
+     "titleRaw": "CHMP backs RASONQUE for metastatic pancreatic cancer https://pharmatimes.com/news/chmp-backs-rasonque-for-metastatic-pancreatic-cancer/",
+     "sourceName": "x-pharmatimes",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:21:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "106a4c7a7f1f3d05",
+   "title": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+   "firstAt": "2026-10-13T13:58:00Z",
+   "lastAt": "2026-10-22T15:10:00Z",
+   "entityKeys": [
+    "drug:pembrolizumab",
+    "drug:sacituzumab tirumotecan",
+    "drug:belzutifan",
+    "drug:lenvatinib",
+    "trial:interpath-001",
+    "trial:trofuse-005",
+    "trial:keynote-c93",
+    "trial:optitrop-lung06",
+    "trial:litespark-011",
+    "org:默沙东",
+    "org:esmo",
+    "disease:黑色素瘤",
+    "disease:子宫内膜癌",
+    "disease:非小细胞肺癌",
+    "disease:肾细胞癌",
+    "drug:intismeran autogene",
+    "drug:keytruda",
+    "org:moderna",
+    "org:fda",
+    "disease:肺癌",
+    "disease:肾癌",
+    "disease:膀胱癌",
+    "disease:胰腺癌",
+    "drug:sac-tmt",
+    "org:默克",
+    "org:科伦博泰"
+   ],
+   "members": [
+    {
+     "id": "622db9d5a6ce2b24",
+     "titleZh": "默沙东将在ESMO 2026公布3项3期试验首次结果",
+     "titleRaw": "Merck Showcases First-Time Pivotal Phase 3 Results From Oncology Pipeline and Continued Innovative Potential of Existing Portfolio at ESMO 2026",
+     "sourceName": "msd-merck-news",
+     "primary": false,
+     "publishedAt": "2026-10-13T13:58:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "4cb1abc686b6a857",
+     "titleZh": "默沙东与Moderna称癌症疫苗初步成功后仍需大量探索",
+     "titleRaw": "Merck and Moderna have ‘lot of exploring to do’ after initial cancer vaccine success",
+     "sourceName": "stat-news",
+     "primary": false,
+     "publishedAt": "2026-10-15T20:36:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "d296577c247a34f6",
+     "titleZh": "默克将在ESMO展示3项sac-TMT后期试验",
+     "titleRaw": "At the European Society for Medical Oncology meeting this weekend, Merck will showcase three late-stage trials of its Kelun-Biotech–partner…",
+     "sourceName": "x-biospace",
+     "primary": false,
+     "publishedAt": "2026-10-22T15:10:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "11637ca6ca335e6a",
+   "title": "ADHD与全因及特定原因死亡风险升高相关",
+   "firstAt": "2026-10-19T20:57:00Z",
+   "lastAt": "2026-10-24T17:08:00Z",
+   "entityKeys": [
+    "disease:注意缺陷多动障碍",
+    "org:ucl",
+    "org:nice"
+   ],
+   "members": [
+    {
+     "id": "2b63e2b2cabb2fc3",
+     "titleZh": "注意缺陷多动障碍患者全因及特定原因死亡风险的系统评价与Meta分析",
+     "titleRaw": "Mortality Among People With Attention-Deficit/Hyperactivity Disorder",
+     "sourceName": "j-2574-3805",
+     "primary": true,
+     "publishedAt": "2026-10-19T20:57:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "3b693d3b83936a56",
+     "titleZh": "UCL研究揭示ADHD人群面临广泛的死亡风险",
+     "titleRaw": "UCL study reveals broad mortality risks faced by ADHD individuals",
+     "sourceName": "news-medical-net",
+     "primary": false,
+     "publishedAt": "2026-10-19T20:59:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "ec0d806153fff30a",
+     "titleZh": "注意缺陷多动障碍与全因死亡风险升高相关",
+     "titleRaw": "ADHD linked to higher mortality risk from all causes",
+     "sourceName": "discovered-3ac324fd73457de33401",
+     "primary": false,
+     "publishedAt": "2026-10-24T17:08:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "14f147ce3465e278",
+   "title": "绝经潮热药elinzanetant睡前服用未致日间困倦",
+   "firstAt": "2026-10-23T19:47:00Z",
+   "lastAt": "2026-10-24T21:59:00Z",
+   "entityKeys": [
+    "drug:elinzanetant",
+    "trial:oasis i",
+    "trial:oasis ii",
+    "trial:oasis-iii",
+    "org:fda",
+    "disease:血管舒缩症状",
+    "drug:埃林扎奈坦"
+   ],
+   "members": [
+    {
+     "id": "67194951e2669620",
+     "titleZh": "绝经潮热药elinzanetant睡前服用未致日间困倦",
+     "titleRaw": "No Daytime Grogginess Observed With Menopause Hot Flash Drug",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:47:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "86508f1a8062101e",
+     "titleZh": "埃林扎奈坦睡前服用未致日间残留嗜睡",
+     "titleRaw": "Taking the nonhormonal dual NK receptor antagonist elinzanetant (Lynkuet) at bedtime did not result in residual daytime sleepiness and actu…",
+     "sourceName": "x-medpagetoday",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:59:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "16185fadc1a5e49c",
+   "title": "美国食品药品监督管理局批准瑞米布替尼片剂补充申请",
+   "firstAt": "2026-10-06T00:00:00Z",
+   "lastAt": "2026-10-22T09:30:00Z",
+   "entityKeys": [
+    "drug:remibrutinib",
+    "org:fda",
+    "org:诺华",
+    "trial:remind",
+    "trial:remodel-1/-2",
+    "disease:症状性皮肤划痕症",
+    "disease:慢性自发性荨麻疹",
+    "disease:慢性诱导性荨麻疹",
+    "drug:omalizumab",
+    "drug:dupilumab",
+    "drug:ciclosporin",
+    "disease:寒冷性荨麻疹",
+    "disease:胆碱能性荨麻疹",
+    "disease:多发性硬化"
+   ],
+   "members": [
+    {
+     "id": "cca017b6d4c4e649",
+     "titleZh": "美国食品药品监督管理局批准瑞米布替尼片剂补充申请",
+     "titleRaw": "FDA approval: RHAPSIDO — NDA218436 SUPPL-1 (Efficacy)",
+     "sourceName": "openfda-drugsfda-api",
+     "primary": false,
+     "publishedAt": "2026-10-06T00:00:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "4632470e5a831ff0",
+     "titleZh": "诺华瑞米布替尼获FDA批准治疗症状性皮肤划痕症",
+     "titleRaw": "Novartis Rhapsido® (remibrutinib) receives FDA approval as first treatment for symptomatic dermographism (SD), expanding its use beyond chronic spontaneous urti",
+     "sourceName": "novartis-news",
+     "primary": false,
+     "publishedAt": "2026-10-07T16:10:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "f26569bc23921176",
+     "titleZh": "美国食品药品监督管理局扩大瑞米布替尼适应症至症状性皮肤划痕症",
+     "titleRaw": "FDA Expands Indication for Urticaria Drug to Treat Symptomatic Dermographism",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-07T21:47:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "fdf31b1701c616d2",
+     "titleZh": "全球首个！巨痒的皮肤划痕症有救了",
+     "titleRaw": "全球首个！巨痒的皮肤划痕症有救了",
+     "sourceName": "wx-yxj-rheum",
+     "primary": false,
+     "publishedAt": "2026-10-19T11:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "5a83c7139bd71ec4",
+     "titleZh": "全球首个！巨痒的皮肤划痕症有救了",
+     "titleRaw": "全球首个！巨痒的皮肤划痕症有救了",
+     "sourceName": "wx-yxj-infect",
+     "primary": false,
+     "publishedAt": "2026-10-20T11:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "5a3bafe28a3bb373",
+     "titleZh": "全球首个！巨痒的皮肤划痕症有救了",
+     "titleRaw": "全球首个！巨痒的皮肤划痕症有救了",
+     "sourceName": "wx-yxj",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:30:00Z",
+     "genre": "approval"
+    }
+   ]
+  },
+  {
+   "id": "166b613bd0f5b4a1",
+   "title": "个体化mRNA疫苗联合帕博利珠单抗降低黑色素瘤术后复发风险42%",
+   "firstAt": "2026-10-22T19:30:00Z",
+   "lastAt": "2026-10-24T17:22:00Z",
+   "entityKeys": [
+    "org:moderna",
+    "org:默沙东",
+    "disease:黑色素瘤",
+    "org:merck",
+    "drug:intismeran autogene",
+    "drug:keytruda",
+    "org:默克",
+    "org:esmo",
+    "drug:个体化mrna新抗原疫苗",
+    "disease:转移性黑色素瘤",
+    "drug:pembrolizumab",
+    "trial:interpath-001",
+    "org:莫德纳",
+    "drug:intismeran",
+    "trial:keynote-942",
+    "trial:interpath-004",
+    "org:fda",
+    "disease:肾癌",
+    "org:msd",
+    "disease:膀胱癌",
+    "disease:肺癌",
+    "disease:肾细胞癌"
+   ],
+   "members": [
+    {
+     "id": "c2aac3edfaed583e",
+     "titleZh": "详细数据确认Moderna与默沙东癌症疫苗在黑色素瘤试验中达到关键终点",
+     "titleRaw": "#Breaking: Detailed data confirm Moderna and Merck cancer vaccine met key endpoints in melanoma trial https://www.statnews.com/2026/10/22/e…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:30:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "6222f62f6e856966",
+     "titleZh": "ESMO26 数据：个体化 mRNA 疫苗使黑色素瘤复发减少 42%",
+     "titleRaw": "#ESMO26 embargo lifted following breach.",
+     "sourceName": "x-adamfeuerstein",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:42:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "64d17e9aff67c9f3",
+     "titleZh": "Moderna与默克癌症疫苗联合Keytruda降低黑色素瘤复发风险42%",
+     "titleRaw": "Moderna, Merck shares fall on eagerly anticipated cancer vaccine results",
+     "sourceName": "biopharma-dive",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:49:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "1f885578eaa64216",
+     "titleZh": "Moderna与默克癌症疫苗结果公布后股价下跌",
+     "titleRaw": "Moderna, Merck shares fall on eagerly anticipated cancer vaccine results https://www.biopharmadive.com/news/moderna-merck-esmo-intismeran-m…",
+     "sourceName": "x-biopharmadive",
+     "primary": false,
+     "publishedAt": "2026-10-22T20:14:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "c260ca82e0f823ca",
+     "titleZh": "个体化mRNA新抗原疫苗改善转移性黑色素瘤术后结局",
+     "titleRaw": "How to improve outcomes in patients with metastatic melanoma post-surgical resection, and specifically, vs controls:",
+     "sourceName": "x-erictopol",
+     "primary": false,
+     "publishedAt": "2026-10-22T21:18:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "9627271d542f2054",
+     "titleZh": "intismeran autogene联合帕博利珠单抗3期结果将在ESMO 2026公布",
+     "titleRaw": "Merck and Moderna Will Present Results From Landmark Phase 3 INTerpath-001 Trial for Intismeran Autogene Plus KEYTRUDA® (pembrolizumab) at ESMO 2026 Presidentia",
+     "sourceName": "moderna-news",
+     "primary": false,
+     "publishedAt": "2026-10-22T21:46:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "1a5c13d2a02a7bcf",
+     "titleZh": "个体化mRNA疫苗显著降低黑色素瘤复发或死亡风险",
+     "titleRaw": "‘Bespoke’ mRNA vaccine significantly reduces risk of melanoma recurrence or death, clinical trial shows",
+     "sourceName": "guardian-medical-research",
+     "primary": false,
+     "publishedAt": "2026-10-23T06:15:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "8376ab5515f92b59",
+     "titleZh": "详细数据确认Moderna与默克尔癌症疫苗在黑色素瘤试验中达到关键终点",
+     "titleRaw": "Updated with a lot more information and context from my STAT colleague @DrewQJoseph (Reporting we were saving for Saturday.)",
+     "sourceName": "x-adamfeuerstein",
+     "primary": false,
+     "publishedAt": "2026-10-23T06:17:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "bd591afedd48e223",
+     "titleZh": "ESMO 2026：Interpath-001 达到主要终点，Moderna 股价仍跌 18%",
+     "titleRaw": "ESMO 2026 – adjuvant benchmark can't save Moderna's valuation",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-23T08:28:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "fc5b6824a8e7b6d7",
+     "titleZh": "个体化癌症疫苗联合免疫治疗降低黑色素瘤复发风险42%",
+     "titleRaw": "First personalised cancer vaccine cuts risk of disease returning in major trial",
+     "sourceName": "bbc-health",
+     "primary": false,
+     "publishedAt": "2026-10-23T08:36:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "2ca85ad82528b89d",
+     "titleZh": "个体化mRNA疫苗联合免疫治疗使黑色素瘤复发或死亡风险降低42%",
+     "titleRaw": "Moderna mRNA vaccine almost halves the risk of skin cancer returning",
+     "sourceName": "nature-news",
+     "primary": false,
+     "publishedAt": "2026-10-23T12:21:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "d02b2fc124d27701",
+     "titleZh": "Moderna与默克癌症疫苗3期试验降低黑色素瘤复发或死亡风险42%",
+     "titleRaw": "Moderna and Merck’s cancer vaccine cut the risk of melanoma recurrence or death by 42% in Phase 3, but fell short of investors’ high hopes.…",
+     "sourceName": "x-endpts",
+     "primary": false,
+     "publishedAt": "2026-10-23T13:51:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "218a32247f1be34d",
+     "titleZh": "个体化mRNA疫苗使黑色素瘤术后2年复发风险降低42%",
+     "titleRaw": "Experimental mRNA cancer vaccine cuts risk of melanoma returning by 42%: ‘A new frontier'",
+     "sourceName": "discovered-6849feefa92d03bedf73",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:20:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "ad32506e3d6dfc4f",
+     "titleZh": "个体化mRNA癌症疫苗使黑色素瘤复发风险降低42%",
+     "titleRaw": "A personalized mRNA cancer vaccine reduced the risk of disease recurrence in patients with melanoma by 42% compared to a standard treatment…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:22:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "2c99a14082b7b021",
+     "titleZh": "Merck/Moderna个体化新抗原疫苗联合帕博利珠单抗III期结果公布",
+     "titleRaw": "The Merck/Moderna Results",
+     "sourceName": "in-the-pipeline",
+     "primary": false,
+     "publishedAt": "2026-10-23T15:21:00Z",
+     "genre": "commentary"
+    },
+    {
+     "id": "2e1ec164ac6468dd",
+     "titleZh": "个体化mRNA癌症疫苗使黑色素瘤复发风险降低42%",
+     "titleRaw": "A personalized mRNA cancer vaccine reduced the risk of disease recurrence in patients with melanoma by 42% compared to a standard treatment…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:57:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "de83d39d4d4a68ef",
+     "titleZh": "mRNA黑色素瘤疫苗联合帕博利珠单抗显著改善无复发生存",
+     "titleRaw": "mRNA Melanoma Vaccine Cuts Risk of Recurrence or Death, Leaked Trial Data Show",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-23T17:40:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "42cd5cf21cdb4203",
+     "titleZh": "mRNA癌症疫苗联合帕博利珠单抗改善黑色素瘤无复发生存",
+     "titleRaw": "Adjuvant treatment with the mRNA-based cancer vaccine intismeran autogene plus pembrolizumab significantly improved recurrence-free surviva…",
+     "sourceName": "x-medpagetoday",
+     "primary": false,
+     "publishedAt": "2026-10-23T18:59:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "b60bb862b81ac551",
+     "titleZh": "ESMO公布Moderna-Merck个体化mRNA癌症疫苗数据",
+     "titleRaw": "In data released at ESMO, the Moderna-Merck personalized mRNA cancer vaccine reduced recurrence-free survival and the time until distant me…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:59:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "589281f603c26d28",
+     "titleZh": "个体化新抗原疫苗联合帕博利珠单抗使高危黑色素瘤复发或死亡风险降低42%",
+     "titleRaw": "Melanoma vaccine reduces death or cancer recurrence by 42%",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-23T23:01:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "438e060d449ff887",
+     "titleZh": "ESMO 2026 年会公布 INTerpath-001 完整结果",
+     "titleRaw": "Today is the day at #ESMO26!",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-24T10:13:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "f0155afe333152b8",
+     "titleZh": "个体化mRNA新抗原疫苗获阳性生存结果",
+     "titleRaw": "#ESMO26: With long-awaited positive survival outcomes for a personalised #mRNA #NeoantigenVaccine, a key question discussed by John Haanen…",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-24T17:22:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "1d2a7ac47ba21bd7",
+   "title": "氟喹诺酮类治疗布鲁氏菌病的疗效与安全性：系统评价与Meta分析",
+   "firstAt": "2026-10-24T01:09:00Z",
+   "lastAt": "2026-10-24T01:09:00Z",
+   "entityKeys": [
+    "drug:doxycycline",
+    "drug:streptomycin",
+    "drug:rifampicin",
+    "drug:氟喹诺酮类",
+    "org:cochrane",
+    "disease:布鲁氏菌病"
+   ],
+   "members": [
+    {
+     "id": "319b81b491a50031",
+     "titleZh": "氟喹诺酮类治疗人布鲁氏菌病的疗效与安全性：系统评价与Meta分析",
+     "titleRaw": "Efficacy and safety of fluoroquinolones in the treatment of human brucellosis: A systematic review and meta-analysis.",
+     "sourceName": "pubmed-grade-certainty",
+     "primary": true,
+     "publishedAt": "2026-10-24T01:09:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "23252a0df22f4337",
+   "title": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+   "firstAt": "2026-10-24T21:08:00Z",
+   "lastAt": "2026-10-24T21:20:00Z",
+   "entityKeys": [
+    "org:who",
+    "org:非洲疾病预防控制中心",
+    "disease:埃博拉病毒病"
+   ],
+   "members": [
+    {
+     "id": "ef7418cee7ebd84b",
+     "titleZh": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "titleRaw": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "sourceName": "lead-de11a63ae698387225da",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:08:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "b659376d1aabaace",
+     "titleZh": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "titleRaw": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "sourceName": "lead-8fb3f1b4e54b0f98fd73",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:08:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "b2e7786285dda979",
+     "titleZh": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "titleRaw": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "sourceName": "lead-c2751cc0d19f24729752",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:20:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "280998f991edbb72",
+     "titleZh": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "titleRaw": "世卫组织：刚果（金）埃博拉疫情出现反弹",
+     "sourceName": "lead-5d64640b987a93bd5afa",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:20:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "3c7950338e1cad7b",
+     "titleZh": "世卫组织：刚果（金）埃博拉疫情出现反弹_手机网易网",
+     "titleRaw": "世卫组织：刚果（金）埃博拉疫情出现反弹_手机网易网",
+     "sourceName": "lead-8eba716a0adf479bd7c5",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:20:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "25ed3de5aba0685a",
+   "title": "口服米诺地尔缓释制剂VDPHL01后期试验达主要终点",
+   "firstAt": "2026-10-19T11:22:00Z",
+   "lastAt": "2026-10-24T22:35:00Z",
+   "entityKeys": [
+    "drug:minoxidil",
+    "trial:vdphl01",
+    "org:veradermics",
+    "drug:finasteride",
+    "trial:study 304",
+    "trial:study 302",
+    "disease:雄激素性脱发",
+    "trial:304",
+    "trial:302",
+    "trial:306",
+    "org:fda",
+    "drug:spironolactone",
+    "trial:study 306"
+   ],
+   "members": [
+    {
+     "id": "4c3ecf7fc0bd0d6f",
+     "titleZh": "口服米诺地尔缓释制剂VDPHL01后期试验达主要终点",
+     "titleRaw": "Veradermics' oral Rogaine wins again at growing hair in late-stage trial",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-19T11:22:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "0f9dbb5d25b8c336",
+     "titleZh": "脱发药，3期成功",
+     "titleRaw": "脱发药，3期成功",
+     "sourceName": "wx-yaozh",
+     "primary": false,
+     "publishedAt": "2026-10-21T03:26:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "29f9874c28b191e0",
+     "titleZh": "两个月起效！口服脱发药 III 期成功",
+     "titleRaw": "两个月起效！口服脱发药 III 期成功",
+     "sourceName": "wx-dxy-insight-db",
+     "primary": false,
+     "publishedAt": "2026-10-21T06:52:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "cd2967902750fe26",
+     "titleZh": "两个月起效！脱发口服药 III 期成功",
+     "titleRaw": "两个月起效！脱发口服药 III 期成功",
+     "sourceName": "wx-sinamed",
+     "primary": false,
+     "publishedAt": "2026-10-21T11:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "e01560e328c9fd81",
+     "titleZh": "两个月起效！口服脱发药 III 期结果积极，每天一片，半年收获茂密秀发",
+     "titleRaw": "两个月起效！口服脱发药 III 期结果积极，每天一片，半年收获茂密秀发",
+     "sourceName": "wx-dxy",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:17:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "72fb3e49afa76c9b",
+     "titleZh": "口服缓释米诺地尔VDPHL01 3期试验显示6个月促生发",
+     "titleRaw": "VDPHL01, an oral, extended-release formulation of minoxidil, successfully regrew hair in men with androgenetic alopecia over 6 months in a…",
+     "sourceName": "x-medscape",
+     "primary": false,
+     "publishedAt": "2026-10-23T13:21:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "8d1ff3af1e59bd1d",
+     "titleZh": "3.4亿人的头顶有救了？这款口服生发药带来新选择",
+     "titleRaw": "3.4亿人的头顶有救了？这款口服生发药带来新选择",
+     "sourceName": "wx-xinkangjie",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "738475e599cfca49",
+     "titleZh": "2个月快速生发！百亿脱发赛道再添猛火",
+     "titleRaw": "2个月快速生发！百亿脱发赛道再添猛火",
+     "sourceName": "wx-yiyao-dili",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:35:00Z",
+     "genre": "industry"
+    }
+   ]
+  },
+  {
+   "id": "2fbed99d2724c3dc",
+   "title": "Cejemly（舒格利单抗）欧洲公共评估报告第8版修订",
+   "firstAt": "2026-10-22T14:49:00Z",
+   "lastAt": "2026-10-22T14:49:00Z",
+   "entityKeys": [
+    "drug:sugemalimab",
+    "org:ema",
+    "disease:非小细胞肺癌"
+   ],
+   "members": [
+    {
+     "id": "258a402ce6ea749a",
+     "titleZh": "欧洲药品管理局EPAR更新：舒格利单抗Cejemly获批用于非小细胞肺癌",
+     "titleRaw": "Human medicines European public assessment report (EPAR): Cejemly, sugemalimab, Date of authorisation: 24/07/2024, Revision: 8, Status: Authorised",
+     "sourceName": "ema-whats-new",
+     "primary": false,
+     "publishedAt": "2026-10-22T14:49:00Z",
+     "genre": "approval"
+    }
+   ]
+  },
+  {
+   "id": "30ed869f2b91ed62",
+   "title": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据",
+   "firstAt": "2026-10-23T14:13:00Z",
+   "lastAt": "2026-10-24T21:56:00Z",
+   "entityKeys": [
+    "drug:zoci-p",
+    "org:再鼎医药",
+    "org:ideaya",
+    "disease:小细胞肺癌",
+    "drug:atezolizumab",
+    "drug:carboplatin",
+    "drug:durvalumab",
+    "org:恒瑞医药",
+    "disease:神经内分泌癌",
+    "drug:zocilurtatug pelitecan",
+    "trial:dllevate",
+    "org:esmo",
+    "disease:广泛期小细胞肺癌"
+   ],
+   "members": [
+    {
+     "id": "1cb0bbcf496f5e4a",
+     "titleZh": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据",
+     "titleRaw": "ESMO 2026 – Zai Lab and Ideaya tout DLL3 results",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:13:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "88857ba279269fa5",
+     "titleZh": "ESMO26：再鼎与Ideaya公布DLL3药物肺癌数据",
+     "titleRaw": "ESMO26: Zai and Ideaya showcase DLL3 drugs in lung cancer",
+     "sourceName": "discovered-fc9b6524b25ae4fc0f60",
+     "primary": false,
+     "publishedAt": "2026-10-24T17:07:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "055aeb524770cc28",
+     "titleZh": "再鼎医药公布zoci联合atezolizumab一线治疗广泛期小细胞肺癌Ib期数据：确认ORR 81.8%",
+     "titleRaw": "再鼎医药公布zoci联合atezolizumab一线治疗广泛期小细胞肺癌Ib期数据：确认ORR 81.8%",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "3193cd6a14e4edb9",
+   "title": "多智能体协同重构医疗AI！清华AIR孵化：医生AI分身“坐诊”医院",
+   "firstAt": "2026-10-21T15:39:00Z",
+   "lastAt": "2026-10-24T23:24:00Z",
+   "entityKeys": [
+    "org:清华air",
+    "org:紫荆智康",
+    "org:北京清华长庚医院",
+    "org:清华大学",
+    "org:tairex",
+    "disease:哮喘",
+    "org:清华大学智能产业研究院",
+    "org:东兴市人民医院"
+   ],
+   "members": [
+    {
+     "id": "24ac33de1839c3a2",
+     "titleZh": "多智能体协同重构医疗AI！清华AIR孵化：医生AI分身“坐诊”医院",
+     "titleRaw": "多智能体协同重构医疗AI！清华AIR孵化：医生AI分身“坐诊”医院",
+     "sourceName": "qbitai",
+     "primary": false,
+     "publishedAt": "2026-10-21T15:39:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "8224f84bfab6fddc",
+     "titleZh": "医生分身智能体可提升诊疗效率",
+     "titleRaw": "医生分身智能体可提升诊疗效率",
+     "sourceName": "zhongguokexuebao",
+     "primary": false,
+     "publishedAt": "2026-10-22T07:22:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "9be2f8bf2f57bc40",
+     "titleZh": "Tairex推出多智能体AI系统用于临床协作与决策支持",
+     "titleRaw": "Tairex bringt ein Multi-Agent-KI-System auf den Markt, das die klinische Zusammenarbeit und Entscheidungsunterstützung revolutionieren soll",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-23T06:23:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "f4783d8bbb13c19b",
+     "titleZh": "多智能体协同生态系统将构建医生分身智能体",
+     "titleRaw": "多智能体协同生态系统将构建医生分身智能体",
+     "sourceName": "zhongguokexuebao",
+     "primary": false,
+     "publishedAt": "2026-10-24T10:23:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "baa14cc9a0f15916",
+     "titleZh": "从一场发布会看多分身协同，紫荆智康如何做AI医疗的Infra底座？",
+     "titleRaw": "从一场发布会看多分身协同，紫荆智康如何做AI医疗的Infra底座？",
+     "sourceName": "wx-vcbeat",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:24:00Z",
+     "genre": "industry"
+    }
+   ]
+  },
+  {
+   "id": "31f8c658864c779d",
+   "title": "Moderna与默克癌症疫苗数据即将公布",
+   "firstAt": "2026-10-22T13:54:00Z",
+   "lastAt": "2026-10-22T14:25:00Z",
+   "entityKeys": [
+    "org:moderna",
+    "org:默克",
+    "org:默沙东"
+   ],
+   "members": [
+    {
+     "id": "8ab0ce3e3528fc9b",
+     "titleZh": "Moderna与默克癌症疫苗数据即将公布",
+     "titleRaw": "The Moderna-Merck cancer vaccine data reveal is days away. Here's what to expect. https://trib.al/02Pb6XR",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T13:54:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "ea437642f60066b9",
+     "titleZh": "ESMO 2026 将公布 Moderna 与默沙东癌症疫苗数据",
+     "titleRaw": "A preview of Saturday’s big #ESMO26 event:",
+     "sourceName": "x-adamfeuerstein",
+     "primary": false,
+     "publishedAt": "2026-10-22T14:09:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "e1e6a81cf1a391fa",
+     "titleZh": "Moderna与默克mRNA癌症疫苗完整数据即将公布",
+     "titleRaw": "Nine weeks after Moderna and Merck announced the positive study outcome for their mRNA cancer vaccine, the full data reveal is imminent.",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T14:25:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "342d8984a59d04ed",
+   "title": "DNA测序揭示罕见癌症如何在出生前于双胞胎间传播",
+   "firstAt": "2026-10-16T14:01:00Z",
+   "lastAt": "2026-10-22T09:25:00Z",
+   "entityKeys": [
+    "disease:未分化肉瘤",
+    "org:韦尔科姆桑格研究所",
+    "org:大奥蒙德街儿童医院",
+    "disease:急性淋巴细胞白血病",
+    "drug:vincristine",
+    "drug:cyclophosphamide",
+    "org:维康桑格研究所",
+    "org:厦门大学附属中山医院",
+    "disease:恶性圆细胞肿瘤",
+    "disease:神经母细胞瘤"
+   ],
+   "members": [
+    {
+     "id": "87ffc430747778ca",
+     "titleZh": "DNA测序揭示罕见癌症如何在出生前于双胞胎间传播",
+     "titleRaw": "DNA sequencing reveals how rare cancer spread between twins before birth",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-16T14:01:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "c6c0a3fdeebf28fd",
+     "titleZh": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "titleRaw": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "sourceName": "wx-yxj",
+     "primary": false,
+     "publishedAt": "2026-10-18T09:49:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "64e8d8a6c9d95124",
+     "titleZh": "罕见！双胞胎相继患癌死亡，癌症竟能人传人？",
+     "titleRaw": "罕见！双胞胎相继患癌死亡，癌症竟能人传人？",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:25:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "354b10a2cb2ee5fa",
+   "title": "二甲双胍缓释片500mg将停产：Mylan公司商业决策",
+   "firstAt": "2026-10-23T04:34:00Z",
+   "lastAt": "2026-10-23T04:34:00Z",
+   "entityKeys": [
+    "drug:metformin",
+    "org:mylan pharmaceuticals inc.",
+    "org:viatris"
+   ],
+   "members": [
+    {
+     "id": "919b26865f8d340a",
+     "titleZh": "二甲双胍缓释片500mg将停产：Mylan公司商业决策",
+     "titleRaw": "Drug shortage (To Be Discontinued): Metformin Hydrochloride Tablet, Extended Release — Mylan Pharmaceuticals Inc., a Viatris Company",
+     "sourceName": "openfda-drug-shortages-api",
+     "primary": false,
+     "publishedAt": "2026-10-23T04:34:00Z",
+     "genre": "safety"
+    }
+   ]
+  },
+  {
+   "id": "39e59c822accd5f6",
+   "title": "钦州港口岸获批药材进口边境口岸",
+   "firstAt": "2026-10-22T09:36:00Z",
+   "lastAt": "2026-10-23T06:06:00Z",
+   "entityKeys": [
+    "org:nmpa",
+    "org:海关总署",
+    "org:国家药监局",
+    "org:广西壮族自治区药品检验研究院"
+   ],
+   "members": [
+    {
+     "id": "fc6ebd8e3ea6170f",
+     "titleZh": "国家药监局 海关总署关于增设广西壮族自治区钦州港口岸为药材进口边境口岸的公告（2026年第93号）",
+     "titleRaw": "国家药监局 海关总署关于增设广西壮族自治区钦州港口岸为药材进口边境口岸的公告（2026年第93号）",
+     "sourceName": "nmpa-other-drug-announcements",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:36:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "b653a60defe38e8c",
+     "titleZh": "关于增设广西壮族自治区钦州港口岸为药材进口...",
+     "titleRaw": "关于增设广西壮族自治区钦州港口岸为药材进口...",
+     "sourceName": "pharmnet-news",
+     "primary": false,
+     "publishedAt": "2026-10-23T06:06:00Z",
+     "genre": "approval"
+    }
+   ]
+  },
+  {
+   "id": "3c40172c89971616",
+   "title": "共悦 · 李烦繁教授：让“临床治愈”更近一步——T-DXd+P方案改写HER2阳性晚期乳腺癌一线治疗格局",
+   "firstAt": "2026-10-22T09:27:00Z",
+   "lastAt": "2026-10-22T09:27:00Z",
+   "entityKeys": [
+    "drug:trastuzumab deruxtecan",
+    "drug:pertuzumab",
+    "drug:trastuzumab",
+    "drug:docetaxel",
+    "drug:trastuzumab emtansine",
+    "trial:destiny-breast09",
+    "trial:cleopatra",
+    "trial:destiny-breast03",
+    "trial:phila",
+    "trial:daisy",
+    "org:nmpa",
+    "org:esmo",
+    "org:asco",
+    "disease:her2阳性乳腺癌"
+   ],
+   "members": [
+    {
+     "id": "c383671aa88293cf",
+     "titleZh": "共悦 · 李烦繁教授：让“临床治愈”更近一步——T-DXd+P方案改写HER2阳性晚期乳腺癌一线治疗格局",
+     "titleRaw": "共悦 · 李烦繁教授：让“临床治愈”更近一步——T-DXd+P方案改写HER2阳性晚期乳腺癌一线治疗格局",
+     "sourceName": "wx-yxj-onco",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:27:00Z",
+     "genre": "commentary"
+    }
+   ]
+  },
+  {
+   "id": "3dd342c7a09e89ca",
+   "title": "ESMO：dostarlimab 观察等待策略在部分局部胃食管腺癌中获良好缓解",
+   "firstAt": "2026-10-23T15:54:00Z",
+   "lastAt": "2026-10-24T23:06:00Z",
+   "entityKeys": [
+    "drug:dostarlimab",
+    "org:esmo",
+    "disease:胃食管腺癌",
+    "drug:多塔利单抗",
+    "trial:gercor-gono dewi",
+    "org:中山大学肿瘤防治中心"
+   ],
+   "members": [
+    {
+     "id": "8d9e24081370897c",
+     "titleZh": "ESMO：dostarlimab 观察等待策略在部分局部胃食管腺癌中获良好缓解",
+     "titleRaw": "#ESMO26: Phase II data suggest selected patients with localised gastro-oesophageal adenocarcinoma (#GEA) may benefit from a dostarlimab wat…",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-23T15:54:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "6e8dcdf6076b8d37",
+     "titleZh": "dMMR/MSI-H局部进展期胃食管腺癌采用多塔利单抗“观察等待”策略，1年cCR率61%，部分患者有望保留器官",
+     "titleRaw": "dMMR/MSI-H局部进展期胃食管腺癌采用多塔利单抗“观察等待”策略，1年cCR率61%，部分患者有望保留器官",
+     "sourceName": "wx-oncologynews",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:06:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "3edac0e2e296c894",
+   "title": "CMS向密西西比州农村医疗拨款3200万美元",
+   "firstAt": "2026-10-21T19:41:00Z",
+   "lastAt": "2026-10-22T14:25:00Z",
+   "entityKeys": [
+    "org:cms"
+   ],
+   "members": [
+    {
+     "id": "ddc45c7babad5d0c",
+     "titleZh": "CMS宣布向密西西比州拨款3200万美元，用于招募农村医生、培训医护人员并扩展精神科急诊服务",
+     "titleRaw": "CMS News: Trump Administration Announces $32 Million to Recruit Rural Doctors, Train Healthcare Workers and Expand Emergency Mental Healthcare Across Mississipp",
+     "sourceName": "cms-newsroom",
+     "primary": false,
+     "publishedAt": "2026-10-21T19:41:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "2995016df1e5ee0e",
+     "titleZh": "美国宣布向密西西比州农村医疗转型项目拨款3200万美元",
+     "titleRaw": "The Trump Administration announced $32 million in Rural Health Transformation Program funding to strengthen Mississippi’s rural healthcare…",
+     "sourceName": "x-cmsgov",
+     "primary": false,
+     "publishedAt": "2026-10-22T14:25:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "3fb79b41a8a7b196",
+   "title": "GSK公布Ris-Rez治疗广泛期小细胞肺癌首个全球数据",
+   "firstAt": "2026-10-19T01:18:00Z",
+   "lastAt": "2026-10-22T09:35:00Z",
+   "entityKeys": [
+    "drug:risvutatug rezetecan",
+    "drug:topotecan",
+    "drug:tarlatamab",
+    "trial:embold pantumour-101",
+    "trial:embold sclc-301",
+    "trial:artemis-008",
+    "trial:resonance",
+    "org:葛兰素史克",
+    "org:翰森制药",
+    "org:esmo",
+    "disease:广泛期小细胞肺癌",
+    "disease:间质性肺病",
+    "org:gsk",
+    "org:ema",
+    "disease:小细胞肺癌",
+    "disease:转移性去势抵抗性前列腺癌",
+    "org:fda"
+   ],
+   "members": [
+    {
+     "id": "3714e3350bed4454",
+     "titleZh": "GSK公布Ris-Rez治疗广泛期小细胞肺癌首个全球数据",
+     "titleRaw": "GSK presents first global data for Ris-Rez in extensive-stage small cell lung cancer",
+     "sourceName": "gsk-press-releases",
+     "primary": false,
+     "publishedAt": "2026-10-19T01:18:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "f1f7e5f960fc6e16",
+     "titleZh": "ESMO 2026 – GSK claims a global ris-rez success",
+     "titleRaw": "ESMO 2026 – GSK claims a global ris-rez success",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-19T15:13:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "c3c90912df5ccda5",
+     "titleZh": "GSK 公布 B7-H3 ADC 首个全球数据，引进自中国翰森",
+     "titleRaw": "GSK 公布 B7-H3 ADC 首个全球数据，引进自中国翰森",
+     "sourceName": "wx-yimaike",
+     "primary": false,
+     "publishedAt": "2026-10-19T23:20:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "511ad326df15c1d8",
+     "titleZh": "全球首秀！GSK公布B7-H3 ADC全球Ib期数据，来自翰森",
+     "titleRaw": "全球首秀！GSK公布B7-H3 ADC全球Ib期数据，来自翰森",
+     "sourceName": "drugtimes",
+     "primary": false,
+     "publishedAt": "2026-10-20T02:56:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "00a953ac3461d55a",
+     "titleZh": "全球首秀！GSK公布B7-H3 ADC全球Ib期数据，来自翰森",
+     "titleRaw": "全球首秀！GSK公布B7-H3 ADC全球Ib期数据，来自翰森",
+     "sourceName": "wx-yaoshidai",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:35:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "42eae0036f2c7b72",
+   "title": "注意缺陷多动障碍药物或改善围绝经期脑雾",
+   "firstAt": "2026-10-20T14:01:00Z",
+   "lastAt": "2026-10-22T23:31:00Z",
+   "entityKeys": [
+    "drug:赖氨酸安非他明",
+    "drug:atomoxetine",
+    "org:北美绝经学会",
+    "org:田纳西大学健康科学中心",
+    "disease:围绝经期",
+    "disease:注意缺陷多动障碍",
+    "org:menopause society"
+   ],
+   "members": [
+    {
+     "id": "e27dae07f683216a",
+     "titleZh": "注意缺陷多动障碍药物或改善围绝经期脑雾",
+     "titleRaw": "ADHD medications offer promise in managing menopausal brain fog",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-20T14:01:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "c1f2f480d191ebf1",
+     "titleZh": "ADHD药物或可缓解更年期脑雾",
+     "titleRaw": "ADHD Drugs May Alleviate Menopausal Brain Fog",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-22T23:31:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "484da39d84dce141",
+   "title": "olomorasib联合化疗免疫一线治疗KRAS G12C突变NSCLC数据更新",
+   "firstAt": "2026-10-24T13:38:00Z",
+   "lastAt": "2026-10-25T08:23:00Z",
+   "entityKeys": [
+    "drug:olomorasib",
+    "trial:loxo-ras-20001",
+    "trial:sunray-01",
+    "org:md安德森癌症中心",
+    "disease:非小细胞肺癌",
+    "drug:pembrolizumab",
+    "drug:pemetrexed",
+    "org:esmo",
+    "org:礼来"
+   ],
+   "members": [
+    {
+     "id": "45f584d4cdc52c06",
+     "titleZh": "olomorasib联合化疗免疫一线治疗KRAS G12C突变NSCLC数据更新",
+     "titleRaw": ".@mvnegrao, of @MDAndersonNews, speaks to the updated first-line data from the LOXO-RAS-20001 and SUNRAY-01 trials with olomorasib and chem…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T13:38:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "d5387658d3333c80",
+     "titleZh": "olomorasib联合免疫一线治疗KRAS G12C突变NSCLC显示持久活性",
+     "titleRaw": "New data on Lilly's investigational treatment olomorasib at ESMO 2026 show durable first-line activity in KRAS G12C-mutant non-small cell lung cancer",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:23:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "4a79f6843f8fde02",
+   "title": "Atacicept 3期试验最终分析减缓IgA肾病eGFR下降",
+   "firstAt": "2026-10-22T14:25:00Z",
+   "lastAt": "2026-10-24T21:58:00Z",
+   "entityKeys": [
+    "drug:atacicept",
+    "trial:origin 3",
+    "disease:iga 肾病",
+    "org:vera therapeutics",
+    "disease:iga肾病",
+    "drug:阿塞西普",
+    "org:fda",
+    "drug:atacicept-vymj"
+   ],
+   "members": [
+    {
+     "id": "2957d0c12e8de686",
+     "titleZh": "Atacicept 在 IgA 肾病 3 期试验中减缓 eGFR 下降",
+     "titleRaw": "Presented at #KidneyWk:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-22T14:25:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "eeafe7f8ce5b9eea",
+     "titleZh": "Atacicept治疗IgA肾病3期试验最终疗效分析",
+     "titleRaw": "Atacicept in IgA Nephropathy — Phase 3 Trial Final Efficacy Analysis",
+     "sourceName": "j-0028-4793",
+     "primary": true,
+     "publishedAt": "2026-10-23T13:03:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "ed5e3e91a16bd14e",
+     "titleZh": "Atacicept治疗IgA肾病：3期ORIGIN 3试验最终疗效分析",
+     "titleRaw": "Original Article: Atacicept in IgA Nephropathy — Phase 3 Trial Final Efficacy Analysis (ORIGIN 3 trial) https://nej.md/4dJYTAo",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:21:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "1f40828a1a5b180d",
+     "titleZh": "NEJM丨IgA肾病III期最终分析：阿塞西普让eGFR两年几乎不再下降，肾脏进展风险降低76%",
+     "titleRaw": "NEJM丨IgA肾病III期最终分析：阿塞西普让eGFR两年几乎不再下降，肾脏进展风险降低76%",
+     "sourceName": "lead-06f35b4d59d5988ae81f",
+     "primary": true,
+     "publishedAt": "2026-10-24T21:26:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "70831168f0882a19",
+     "titleZh": "Vera公布atacicept治疗IgA肾病ORIGIN 3最终分析阳性结果",
+     "titleRaw": "Vera Therapeutics公布TRUTAKNA治疗IgA肾病ORIGIN 3最终疗效分析阳性结果，计划Q4提交补充BLA",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "4fa7e3fa0f1d4753",
+   "title": "研究揭示对抗小细胞肺癌的新免疫通路",
+   "firstAt": "2026-10-14T20:21:00Z",
+   "lastAt": "2026-10-23T04:26:00Z",
+   "entityKeys": [
+    "org:wehi",
+    "disease:小细胞肺癌",
+    "drug:tarlatamab",
+    "drug:zoledronic acid",
+    "trial:impower133",
+    "trial:caspian",
+    "org:victorian cancer biobank",
+    "org:royal melbourne hospital"
+   ],
+   "members": [
+    {
+     "id": "9217aaad7732c495",
+     "titleZh": "研究揭示对抗小细胞肺癌的新免疫通路",
+     "titleRaw": "WEHI study reveals a new immune pathway for fighting small cell lung cancer",
+     "sourceName": "news-medical-net",
+     "primary": false,
+     "publishedAt": "2026-10-14T20:21:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "6d5475ef558b21b5",
+     "titleZh": "实验室培养肿瘤揭示可杀伤小细胞肺癌的免疫细胞",
+     "titleRaw": "Lab-grown tumors reveal immune cells capable of killing small cell lung cancer",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-16T00:00:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "1a6aae34e3fe8284",
+     "titleZh": "研究揭示可识别并杀伤小细胞肺癌的免疫细胞",
+     "titleRaw": "Invisible no more: New treatment avenue unlocked for deadliest lung cancer",
+     "sourceName": "news-medical-net",
+     "primary": false,
+     "publishedAt": "2026-10-16T07:51:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "c91f2fd8f922a170",
+     "titleZh": "研究识别可识别并杀伤小细胞肺癌的γδ T细胞",
+     "titleRaw": "Scientists discover a hidden immune weapon against deadly lung cancer",
+     "sourceName": "sciencedaily-health",
+     "primary": false,
+     "publishedAt": "2026-10-23T04:26:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "51efcedb9a23f6b2",
+   "title": "美国财政部拟议法规将大幅限制对中国生物技术投资",
+   "firstAt": "2026-10-22T23:06:00Z",
+   "lastAt": "2026-10-24T23:10:00Z",
+   "entityKeys": [
+    "org:美国财政部",
+    "org:辉瑞",
+    "org:百时美施贵宝",
+    "org:药明康德"
+   ],
+   "members": [
+    {
+     "id": "a05c4c942e3a2f02",
+     "titleZh": "美国财政部拟议法规将大幅限制对中国生物技术投资",
+     "titleRaw": "Treasury proposal would sharply limit US investments in much of China biotech",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-22T23:06:00Z",
+     "genre": "policy"
+    },
+    {
+     "id": "d6ddd03fb97eb127",
+     "titleZh": "美国对外投资规则草案或影响跨境合作",
+     "titleRaw": "Draft U.S. outbound investment rule could chill cross-border collaboration: Proposed COINS Act implementing rule allows licensing Chinese d…",
+     "sourceName": "x-biocentury",
+     "primary": false,
+     "publishedAt": "2026-10-23T02:16:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "704d1aa4246412d7",
+     "titleZh": "美国财政部拟议规则将多项药物技术列入对华投资禁令",
+     "titleRaw": "Post-Hoc Live: Did the US just kill off China biotech deals?",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-23T13:17:00Z",
+     "genre": "policy"
+    },
+    {
+     "id": "b13f0debc1520d9e",
+     "titleZh": "美国财政部拟限制对中国生物技术领域的投资",
+     "titleRaw": "STAT+: Treasury proposes major restrictions to U.S. investment in Chinese biotech sector",
+     "sourceName": "stat-biotech",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:29:00Z",
+     "genre": "policy"
+    },
+    {
+     "id": "0b81d8778b1b632d",
+     "titleZh": "美国财政部规则草案拟大幅限制对中国生物技术投资",
+     "titleRaw": "Draft Treasury rules would sharply limit US investments in much of China biotech, likely curtailing deals with Chinese drugmakers. https://…",
+     "sourceName": "x-endpts",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:55:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "25223014dd6039c3",
+     "titleZh": "美国财政部新提案拟限制对中国生物科技企业的投资，但允许许可交易",
+     "titleRaw": "A new Treasury Department proposal would restrict U.S. investments in Chinese biotechs, but still allows licensing deals. https://trib.al/5…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-23T15:23:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "807a18110e69fbd6",
+     "titleZh": "美国政府提出涉华生物技术投资国家安全新提案",
+     "titleRaw": "A new proposal from the U.S. government seeking to address investment in Chinese biotech as a matter of national security drew cautious sta…",
+     "sourceName": "x-biospace",
+     "primary": false,
+     "publishedAt": "2026-10-23T15:24:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "ae39c881c2e74cc4",
+     "titleZh": "辉瑞、BMS先中招！美财政部拟限制生物技术投资？NewCo、Co-Co将如何？",
+     "titleRaw": "辉瑞、BMS先中招！美财政部拟限制生物技术投资？NewCo、Co-Co将如何？",
+     "sourceName": "wx-eyjlr",
+     "primary": false,
+     "publishedAt": "2026-10-24T08:50:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "18666419005ae00a",
+     "titleZh": "美国财政部拟限制对华生物技术投资",
+     "titleRaw": "美国财政部拟限制对华生物技术投资",
+     "sourceName": "caixin-health",
+     "primary": false,
+     "publishedAt": "2026-10-24T14:45:00Z",
+     "genre": "policy"
+    },
+    {
+     "id": "0354e8802cad7de5",
+     "titleZh": "突发！美国拟将“生物技术”纳入投资审查清单",
+     "titleRaw": "突发！美国拟将“生物技术”纳入投资审查清单",
+     "sourceName": "wx-yaozh",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:32:00Z",
+     "genre": "policy"
+    },
+    {
+     "id": "f27de35d79bb0797",
+     "titleZh": "当美国提案，限制对华生物技术投资",
+     "titleRaw": "当美国提案，限制对华生物技术投资",
+     "sourceName": "wx-tongxieyi",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:10:00Z",
+     "genre": "policy"
+    }
+   ]
+  },
+  {
+   "id": "555e88cbaae6cc02",
+   "title": "BioNTech HPV16 mRNA疫苗头颈癌试验未达无进展生存期终点",
+   "firstAt": "2026-10-13T15:22:00Z",
+   "lastAt": "2026-10-22T08:17:00Z",
+   "entityKeys": [
+    "org:biontech",
+    "disease:头颈癌",
+    "drug:tenumomeran raplemomeran",
+    "drug:bnt 113",
+    "drug:keytruda",
+    "drug:pumitamig",
+    "org:辉瑞",
+    "org:百时美施贵宝",
+    "disease:头颈部鳞状细胞癌",
+    "disease:结直肠癌",
+    "drug:bnt113"
+   ],
+   "members": [
+    {
+     "id": "775fb6de1150f929",
+     "titleZh": "BioNTech头颈癌疫苗未达到两项主要终点之一",
+     "titleRaw": "BioNTech’s head and neck cancer vaccine misses first of two goals",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-13T15:22:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "7f2d68a63264dcc1",
+     "titleZh": "BioNTech固定抗原免疫疗法未达主要终点",
+     "titleRaw": "BioNTech stumbles with another immunotherapy",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-13T15:35:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "69b95fb175dc4257",
+     "titleZh": "BioNTech mRNA癌症免疫疗法关键研究未达首要目标",
+     "titleRaw": "BioNTech mRNA cancer immunotherapy misses first objective in key study",
+     "sourceName": "biopharma-dive",
+     "primary": false,
+     "publishedAt": "2026-10-13T19:11:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "aaa820166455ecde",
+     "titleZh": "共享抗原癌症疫苗屡屡未达预期",
+     "titleRaw": "Shared-Antigen Cancer Vaccines Keep Falling Short",
+     "sourceName": "j-2159-8274",
+     "primary": true,
+     "publishedAt": "2026-10-20T14:39:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "bfd2193b0e3ef1ab",
+     "titleZh": "共享抗原癌症疫苗疗效仍不理想",
+     "titleRaw": "News: Shared-Antigen Cancer Vaccines Keep Falling Short https://doi.org/10.1158/2159-8290.CD-NW2026-0096",
+     "sourceName": "x-cd_aacr",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:17:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "56a926f8bcd3a5f3",
+   "title": "ESMO 2026：Incyte公布CDK2抑制剂联合Avastin卵巢癌数据",
+   "firstAt": "2026-10-23T19:43:00Z",
+   "lastAt": "2026-10-24T14:38:00Z",
+   "entityKeys": [
+    "drug:incb123667",
+    "drug:bevacizumab",
+    "trial:maestra-3",
+    "org:incyte",
+    "disease:卵巢癌",
+    "disease:血小板减少",
+    "disease:脓毒症",
+    "disease:铂耐药卵巢癌"
+   ],
+   "members": [
+    {
+     "id": "4c7a0b2b570eac83",
+     "titleZh": "ESMO 2026：Incyte公布CDK2抑制剂联合Avastin卵巢癌数据",
+     "titleRaw": "ESMO 2026 – Incyte sets a bar for its Avastin combo",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:43:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "5e429fc29773e5b9",
+     "titleZh": "INCB123667联合贝伐珠单抗在铂耐药卵巢癌中应答率达48%",
+     "titleRaw": "New phase 1 data presented at @myESMO #ESMO26 show a 48% response rate with INCB123667 plus bevacizumab in heavily pretreated, cyclin E1–ov…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T14:38:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "577290b29aefc879",
+   "title": "Moderna与默克癌症疫苗数据泄露",
+   "firstAt": "2026-10-22T19:30:00Z",
+   "lastAt": "2026-10-25T09:05:00Z",
+   "entityKeys": [
+    "org:moderna",
+    "org:默克",
+    "drug:intismeran",
+    "drug:pembrolizumab",
+    "trial:keynote-942",
+    "trial:swog s1801",
+    "org:默沙东",
+    "org:esmo",
+    "disease:黑色素瘤",
+    "drug:intismeran autogene",
+    "trial:interpath-001",
+    "drug:intisimeran/mrna-4157",
+    "org:fda",
+    "org:merck",
+    "trial:keynote-942/mrna-4157-p201",
+    "drug:v940",
+    "disease:非小细胞肺癌",
+    "drug:mrna疫苗",
+    "org:莫德纳",
+    "drug:bnt113",
+    "org:biontech",
+    "disease:头颈部鳞状细胞癌",
+    "disease:多发性骨髓瘤"
+   ],
+   "members": [
+    {
+     "id": "d68066e462424a6d",
+     "titleZh": "Moderna与默克癌症疫苗数据泄露",
+     "titleRaw": "⚡️Breaking: Moderna and Merck cancer vaccine data leak https://endpoints.news/data-leaks-for-merck-and-modernas-therapeutic-cancer-vaccine/…",
+     "sourceName": "x-endpts",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:30:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "01276ec04ff62c9a",
+     "titleZh": "肿瘤疫苗价值存疑？数据泄露后，Moderna股价跌超17%",
+     "titleRaw": "肿瘤疫苗价值存疑？数据泄露后，Moderna股价跌超17%",
+     "sourceName": "wx-yaoshidai",
+     "primary": false,
+     "publishedAt": "2026-10-24T08:54:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "7f1037ef6bced006",
+     "titleZh": "个体化mRNA新抗原疫苗联合帕博利珠单抗使可切除黑色素瘤复发风险降低42%",
+     "titleRaw": "#ESMO26: Intismeran autogene individualised #mRNA-based #NeoantigenVaccine therapy reduced recurrence risk by 42% in patients with resectab…",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-24T14:48:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "eb6fd928e627efa7",
+     "titleZh": "个体化mRNA疫苗辅助治疗高危黑色素瘤复发风险降42%",
+     "titleRaw": "Historic at #ESMO26 Madrid - For the first time, an mRNA vaccine (intisimeran/mRNA-4157) given in the adjuvant setting shows positive resul…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T16:39:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "31ecfcb2f02aed03",
+     "titleZh": "Moderna与默克黑色素瘤疫苗III期数据公布：联合Keytruda降低复发或死亡风险42%",
+     "titleRaw": "Moderna与默克黑色素瘤疫苗III期数据公布：联合Keytruda降低复发或死亡风险42%",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "2fcf1dfe31d46d78",
+     "titleZh": "ESMO 2026：默克与 Moderna 个性化癌症疫苗数据泄露后股价下跌，III 期 RFS 风险比 0.58 低于部分预期",
+     "titleRaw": "ESMO 2026：默克与 Moderna 个性化癌症疫苗数据泄露后股价下跌，III 期 RFS 风险比 0.58 低于部分预期",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "208bafe121e9f01a",
+     "titleZh": "详细数据确认Moderna与Merck癌症疫苗在黑色素瘤试验中达到关键终点",
+     "titleRaw": "详细数据确认Moderna与Merck癌症疫苗在黑色素瘤试验中达到关键终点",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "2542f736f44388c6",
+     "titleZh": "默沙东与Moderna公布intismeran联合帕博利珠单抗III期阳性结果",
+     "titleRaw": "默沙东与Moderna公布intismeran autogene联合KEYTRUDA III期INTerpath-001阳性结果",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "5b817452d21d00b5",
+     "titleZh": "数据提前泄露，Moderna股价暴跌",
+     "titleRaw": "数据提前泄露，Moderna股价暴跌",
+     "sourceName": "wx-yaodu",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:32:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "c4e68905c18f1df8",
+     "titleZh": "mRNA肿瘤疫苗大分歧",
+     "titleRaw": "mRNA肿瘤疫苗大分歧",
+     "sourceName": "wx-anjiguancha",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:38:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "6ebf386c209a8dc6",
+     "titleZh": "个体化mRNA疗法降低已切除黑色素瘤复发风险",
+     "titleRaw": "Presidential Symposium Highlight: Personalized mRNA therapy cuts recurrence risk in resected melanoma. @ProfGLongMIA @Sydney_Uni",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:49:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "4f2f6331c9830c06",
+     "titleZh": "刚刚！默沙东、Moderna mRNA癌症疫苗3期详细结果出炉",
+     "titleRaw": "刚刚！默沙东、Moderna mRNA癌症疫苗3期详细结果出炉",
+     "sourceName": "wx-wuxiapptec",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:50:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "581ec87fdf55a016",
+     "titleZh": "创纪录暴跌26％！莫德纳疫苗数据泄露，市场为何失望？",
+     "titleRaw": "创纪录暴跌26％！莫德纳疫苗数据泄露，市场为何失望？",
+     "sourceName": "lead-a3a81d6f66dbae611245",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:00:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "429700b443516ee3",
+     "titleZh": "mRNA肿瘤疫苗大分歧",
+     "titleRaw": "mRNA肿瘤疫苗大分歧",
+     "sourceName": "tmtpost-health",
+     "primary": false,
+     "publishedAt": "2026-10-25T05:03:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "ef201d6c8266a2d1",
+     "titleZh": "个体化mRNA治疗在关键试验中改善癌症患者结局",
+     "titleRaw": "MADRID — With the first pivotal trial showing a customized mRNA treatment improved outcomes for cancer patients presented here this weekend…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:41:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "3dc4b3b5c7d0d59d",
+     "titleZh": "个体化mRNA癌症疫苗联合帕博利珠单抗降低黑色素瘤复发或死亡风险42%",
+     "titleRaw": "STAT+: After a cancer vaccine’s first success, the race is on to expand the impact",
+     "sourceName": "stat-news",
+     "primary": false,
+     "publishedAt": "2026-10-25T09:05:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "5f3b11ff96c4d4da",
+   "title": "伊匹木单抗联合纳武利尤单抗治疗食管癌中严重免疫相关不良事件的预后影响",
+   "firstAt": "2026-10-22T10:57:00Z",
+   "lastAt": "2026-10-22T10:57:00Z",
+   "entityKeys": [
+    "drug:ipilimumab",
+    "drug:nivolumab",
+    "disease:食管癌"
+   ],
+   "members": [
+    {
+     "id": "36bd1d90a08a3c6e",
+     "titleZh": "伊匹木单抗联合纳武利尤单抗治疗食管癌中严重irAEs的预后影响",
+     "titleRaw": "MO02-3 Prognostic impact of severe immune-related adverse events in esophageal cancer treated with ipilimumab plus nivolumab",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-19T19:32:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "602460b803b87763",
+   "title": "本迪布焦型埃博拉疫情在刚果（金）持续，肯尼亚、尼日利亚报告输入病例",
+   "firstAt": "2026-10-19T15:36:00Z",
+   "lastAt": "2026-10-23T19:08:00Z",
+   "entityKeys": [
+    "org:ecdc",
+    "disease:埃博拉病毒病",
+    "org:who",
+    "disease:本迪布焦型埃博拉病毒病"
+   ],
+   "members": [
+    {
+     "id": "1013c4aa6e6aa631",
+     "titleZh": "2026年多国埃博拉疫情：刚果（金）持续报告病例",
+     "titleRaw": "Ebola disease: Multi-country outbreak 2026",
+     "sourceName": "ecdc-news",
+     "primary": false,
+     "publishedAt": "2026-10-19T15:36:00Z",
+     "genre": "safety"
+    },
+    {
+     "id": "e39a0670a0e15e23",
+     "titleZh": "刚果（金）本迪布焦型埃博拉疫情扩散，肯尼亚和尼日利亚报告输入病例",
+     "titleRaw": "Ebola disease caused by Bundibugyo virus - Democratic Republic of the Congo, Kenya and Nigeria",
+     "sourceName": "who-disease-outbreak-news",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:08:00Z",
+     "genre": "safety"
+    }
+   ]
+  },
+  {
+   "id": "62f37e6d1f8a8e76",
+   "title": "FDA加速批准dostarlimab用于局部晚期直肠癌",
+   "firstAt": "2026-10-19T00:00:00Z",
+   "lastAt": "2026-10-24T23:29:00Z",
+   "entityKeys": [
+    "drug:多塔利单抗",
+    "org:fda",
+    "org:葛兰素史克",
+    "drug:dostarlimab",
+    "trial:azur-1",
+    "org:gsk",
+    "org:health canada",
+    "org:mhra",
+    "disease:局部晚期直肠癌",
+    "drug:dostarlimab-gxly",
+    "trial:nct05723562",
+    "trial:nct04165772",
+    "org:memorial sloan kettering cancer center",
+    "org:glaxosmithkline",
+    "disease:直肠癌",
+    "org:esmo",
+    "disease:错配修复缺陷",
+    "drug:jemperli",
+    "org:纪念斯隆凯特琳癌症中心",
+    "org:纪念斯隆-凯特琳癌症中心",
+    "drug:pembrolizumab",
+    "drug:nivolumab",
+    "drug:tislelizumab",
+    "drug:sintilimab",
+    "disease:结肠癌",
+    "disease:头颈部鳞状细胞癌",
+    "disease:非小细胞肺癌"
+   ],
+   "members": [
+    {
+     "id": "75ef7f37f1722fcc",
+     "titleZh": "FDA批准JEMPERLI（多塔利单抗）补充生物制品许可申请",
+     "titleRaw": "FDA approval: JEMPERLI — BLA761174 SUPPL-15 (Efficacy)",
+     "sourceName": "openfda-drugsfda-api",
+     "primary": false,
+     "publishedAt": "2026-10-19T00:00:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "f0e59b14e5e10158",
+     "titleZh": "FDA加速批准dostarlimab用于局部晚期直肠癌",
+     "titleRaw": "FDA grants accelerated approval to dostarlimab for locally advanced rectal cancer",
+     "sourceName": "fda-whats-new-drugs",
+     "primary": false,
+     "publishedAt": "2026-10-19T20:55:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "33340e791b96d523",
+     "titleZh": "FDA加速批准dostarlimab用于dMMR/MSI-H局部晚期直肠癌",
+     "titleRaw": "FDA Approves Immunotherapy That May Allow Certain Patients with Rectal Cancer to Avoid Chemotherapy, Radiation and Surgery",
+     "sourceName": "fda-whats-new-drugs",
+     "primary": false,
+     "publishedAt": "2026-10-19T20:55:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "dfc01c309cd7ece5",
+     "titleZh": "Jemperli获美国FDA批准用于MSI-H/dMMR局部晚期直肠癌",
+     "titleRaw": "Jemperli (dostarlimab) approved in US as first and only immunotherapy for adults with MSI-H/dMMR locally advanced rectal cancer",
+     "sourceName": "gsk-press-releases",
+     "primary": false,
+     "publishedAt": "2026-10-19T21:51:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "a974b29d827dc7ec",
+     "titleZh": "FDA加速批准dostarlimab用于可手术直肠癌免于手术",
+     "titleRaw": "'Groundbreaking Option' Approved for Rectal Cancer",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-19T22:47:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "e0a7884563e24f57",
+     "titleZh": "首个且唯一！葛兰素史克 PD-1 新适应症加速获批上市",
+     "titleRaw": "首个且唯一！葛兰素史克 PD-1 新适应症加速获批上市",
+     "sourceName": "wx-sinamed",
+     "primary": false,
+     "publishedAt": "2026-10-20T11:30:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "02eddffec9feb4eb",
+     "titleZh": "FDA快速批准Jemperli，Azur-1数据提前公布",
+     "titleRaw": "ESMO 2026 – Jemperli's fast approval scoops its presentation",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-20T12:58:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "44bd84fa542ded96",
+     "titleZh": "FDA加速批准dostarlimab用于特定错配修复缺陷直肠癌",
+     "titleRaw": "New drug could let some rectal cancer patients skip chemotherapy, radiation and surgery",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-21T02:00:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "cd7c80507efc642b",
+     "titleZh": "FDA加速批准dostarlimab用于dMMR/MSI-H局部晚期直肠癌",
+     "titleRaw": "What does the FDA accelerated approval of dostarlimab mean for the management of dMMR/MSI-H locally advanced rectal cancer? @AndreaCercek o…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:20:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "77f542c4700aba38",
+     "titleZh": "FDA 批准首个且唯一！PD-1 新适应症加速获批上市",
+     "titleRaw": "FDA 批准首个且唯一！PD-1 新适应症加速获批上市",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:25:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "af1eac0e2e4a3403",
+     "titleZh": "FDA加速批准dostarlimab用于局部晚期直肠癌",
+     "titleRaw": "FDA grants accelerated approval to groundbreaking rectal cancer immunotherapy",
+     "sourceName": "news-medical-net",
+     "primary": false,
+     "publishedAt": "2026-10-22T20:20:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "0c8b738bbb499aa5",
+     "titleZh": "GSK PD-1抑制剂获批治疗直肠癌",
+     "titleRaw": "GSK PD-1抑制剂获批治疗直肠癌",
+     "sourceName": "wx-sinamed",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:29:00Z",
+     "genre": "approval"
+    }
+   ]
+  },
+  {
+   "id": "655b6ef080f40701",
+   "title": "肯尼亚本迪布焦型埃博拉9例确诊1例死亡",
+   "firstAt": "2026-10-24T10:00:00Z",
+   "lastAt": "2026-10-24T17:40:00Z",
+   "entityKeys": [
+    "org:肯尼亚卫生部",
+    "org:cdc",
+    "disease:埃博拉病毒感染",
+    "org:who",
+    "disease:埃博拉病毒病"
+   ],
+   "members": [
+    {
+     "id": "6bcb4585661db046",
+     "titleZh": "肯尼亚报告第2例埃博拉死亡，为首例患者的近亲",
+     "titleRaw": "Kenya announces 2nd Ebola death, a close relative of the first patient",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-24T10:00:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "f99838fbf4ea4f27",
+     "titleZh": "肯尼亚本迪布焦型埃博拉疫情1例患者死亡",
+     "titleRaw": "WHO is deeply saddened by the death of a patient receiving care for #Ebola disease caused by Bundibugyo virus in Kenya. We extend our heart…",
+     "sourceName": "x-whoafro",
+     "primary": false,
+     "publishedAt": "2026-10-24T17:40:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "65692e8cabe8d92a",
+   "title": "香港9岁男童侵袭性肺炎球菌感染死亡",
+   "firstAt": "2026-10-18T09:35:00Z",
+   "lastAt": "2026-10-24T21:40:00Z",
+   "entityKeys": [
+    "drug:肺炎球菌结合疫苗",
+    "org:香港卫生署卫生防护中心",
+    "disease:侵袭性肺炎球菌病",
+    "disease:肺炎",
+    "disease:脓胸",
+    "disease:脓毒性休克",
+    "disease:急性肾衰竭",
+    "org:卫生署卫生防护中心",
+    "disease:侵入性肺炎球菌病"
+   ],
+   "members": [
+    {
+     "id": "0cb3a1944a4d83ef",
+     "titleZh": "香港卫生防护中心调查一例儿童侵袭性肺炎球菌死亡病例",
+     "titleRaw": "CHP investigates fatal case of invasive pneumococcal disease",
+     "sourceName": "hk-govt-press-releases",
+     "primary": false,
+     "publishedAt": "2026-10-18T09:35:00Z",
+     "genre": "safety"
+    },
+    {
+     "id": "df1f24b6950e49cf",
+     "titleZh": "9岁男童发热咳嗽5日后死亡！肺炎球菌感染到底多凶险？",
+     "titleRaw": "9岁男童发热咳嗽5日后死亡！肺炎球菌感染到底多凶险？",
+     "sourceName": "wx-medlive-endo",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:40:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "656ea8c146911211",
+   "title": "TALENT试验：德曲妥珠单抗在HR阳性HER2低表达早期乳腺癌pCR率低",
+   "firstAt": "2026-10-23T16:57:00Z",
+   "lastAt": "2026-10-24T17:07:00Z",
+   "entityKeys": [
+    "drug:trastuzumab deruxtecan",
+    "trial:talent",
+    "org:esmo",
+    "disease:早期乳腺癌",
+    "drug:anastrozole",
+    "drug:戈沙妥单抗",
+    "drug:datopotamab deruxtecan",
+    "trial:destiny-breast04",
+    "trial:sascia",
+    "trial:i-spy2.2",
+    "disease:乳腺癌"
+   ],
+   "members": [
+    {
+     "id": "88202c7e9640c29a",
+     "titleZh": "TALENT试验：德曲妥珠单抗在HR阳性HER2低表达早期乳腺癌pCR率低",
+     "titleRaw": "#ESMO26: Final results from the TALENT #ClinicalTrial show low pathological complete response rates with the antibody–drug conjugate (#ADC)…",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:57:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "4c5d352de684103b",
+     "titleZh": "ESMO26：德曲妥珠单抗新辅助治疗早期乳腺癌未达主要疗效",
+     "titleRaw": "ESMO26: Neoadjuvant Enhertu fails in early breast cancer",
+     "sourceName": "discovered-fc9b6524b25ae4fc0f60",
+     "primary": false,
+     "publishedAt": "2026-10-24T17:07:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "7616cd3c3d82e4cd",
+   "title": "Ziihera联合方案一线治疗HER2阳性胃食管腺癌3年生存数据公布",
+   "firstAt": "2026-10-23T14:23:00Z",
+   "lastAt": "2026-10-24T23:06:00Z",
+   "entityKeys": [
+    "drug:zanidatamab",
+    "drug:tislelizumab",
+    "drug:trastuzumab",
+    "trial:herizon-gea-01",
+    "org:jazz pharmaceuticals",
+    "org:esmo",
+    "org:nccn",
+    "org:fda",
+    "disease:胃食管腺癌",
+    "org:北京大学肿瘤医院",
+    "disease:her2阳性胃食管腺癌"
+   ],
+   "members": [
+    {
+     "id": "30f8ef1c142e5085",
+     "titleZh": "Ziihera联合方案一线治疗HER2阳性胃食管腺癌3年生存数据公布",
+     "titleRaw": "Ziihera® (zanidatamab-hrii) Combinations Demonstrate Sustained Survival at Three Years in First-Line HER2+ Advanced Gastroesophageal Adenocarcinoma at ESMO 2026",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:23:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "ea6fdde53c6ed3ca",
+     "titleZh": "【4278】2026 ESMO | 沈琳教授解析HER2阳性晚期胃癌一线诊疗变革：泽尼达妥单抗+替雷利珠单抗+化疗树立治疗新标准",
+     "titleRaw": "【4278】2026 ESMO | 沈琳教授解析HER2阳性晚期胃癌一线诊疗变革：泽尼达妥单抗+替雷利珠单抗+化疗树立治疗新标准",
+     "sourceName": "wx-oncologynews",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:06:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "79f4e24ae24829cf",
+   "title": "Tango联合疗法在晚期胰腺癌中报告82%肿瘤缓解率",
+   "firstAt": "2026-10-23T10:35:00Z",
+   "lastAt": "2026-10-24T22:50:00Z",
+   "entityKeys": [
+    "drug:rasonque",
+    "org:tango therapeutics",
+    "org:revolution medicines",
+    "disease:胰腺癌",
+    "disease:晚期胰腺癌",
+    "drug:vopimetostat",
+    "drug:zoldonrasib",
+    "drug:docetaxel",
+    "trial:rasolute-302",
+    "trial:rasolute-303",
+    "trial:rasolute-309",
+    "trial:rasolve-301",
+    "org:fda",
+    "org:esmo",
+    "disease:胰腺导管腺癌",
+    "disease:非小细胞肺癌",
+    "drug:daraxonrasib",
+    "drug:cetuximab",
+    "trial:rasolute 302",
+    "org:asco",
+    "disease:结直肠癌"
+   ],
+   "members": [
+    {
+     "id": "5baa999f591f4809",
+     "titleZh": "Tango联合疗法在晚期胰腺癌中报告82%肿瘤缓解率",
+     "titleRaw": "STAT+: Tango reports 82% tumor response rate in trial of combo therapy for advanced pancreatic cancer",
+     "sourceName": "stat-news",
+     "primary": false,
+     "publishedAt": "2026-10-23T10:35:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "b7f346319118d753",
+     "titleZh": "Tango公布实验性联合用药在晚期胰腺癌中应答率82%",
+     "titleRaw": "An experimental drug combination led to tumor responses in 82% of patients with a certain type of advanced pancreatic cancer, Tango Therape…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-23T11:18:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "1eae67b134cc15f8",
+     "titleZh": "Tango报告PRMT5联合pan RAS治疗晚期胰腺癌应答率82%",
+     "titleRaw": "Tango $TNGX reports 82% tumor response rate in trial of combo therapy with $RVMD for advanced pancreatic cancer",
+     "sourceName": "x-adamfeuerstein",
+     "primary": false,
+     "publishedAt": "2026-10-23T11:19:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "6a33b6c05953d6da",
+     "titleZh": "ESMO 2026：Tango公布RAS联合方案最新数据",
+     "titleRaw": "ESMO 2026 – Tango pushes RAS combo plans",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-23T12:12:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "331186eb5e36deb9",
+     "titleZh": "Tango报告联合疗法在晚期胰腺癌试验中肿瘤缓解率达82%",
+     "titleRaw": "Tango reports 82% tumor response rate in trial of combo therapy for advanced pancreatic cancer https://www.statnews.com/2026/10/23/esmo-202…",
+     "sourceName": "x-matthewherper",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:23:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "bd1e8945e48b5ea6",
+     "titleZh": "Tango报告联合疗法在晚期胰腺癌试验中肿瘤缓解率达82%",
+     "titleRaw": "Tango reports 82% tumor response rate in trial of combo therapy for advanced pancreatic cancer https://www.statnews.com/2026/10/23/esmo-202…",
+     "sourceName": "x-matthewherper",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:24:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "a7b041768a0770bd",
+     "titleZh": "Tango实验药联合Rasonque在晚期胰腺癌中肿瘤缓解率达82%",
+     "titleRaw": "The combination of an experimental drug from Tango Therapeutics and Revolution Medicines’ Rasonque led to tumor responses in 82% of patient…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-23T20:30:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "734e929839fcc141",
+     "titleZh": "Tango公布vopimetostat联合daraxonrasib胰腺癌更新数据，缓解率降至82%，仍将推进III期",
+     "titleRaw": "Tango 公布 vopimetostat 联合 daraxonrasib 胰腺癌更新数据，缓解率降至 82%，仍将推进 III 期",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "e97fc00b23474b05",
+     "titleZh": "Tango公布vopimetostat联合daraxonrasib治疗胰腺癌1/2期数据，计划2027年上半年启动一线3期",
+     "titleRaw": "Tango公布vopimetostat联合daraxonrasib治疗胰腺癌1/2期数据，计划2027年上半年启动一线3期",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "86ce4460aa4f2904",
+     "titleZh": "Tango公布联合疗法治疗晚期胰腺癌试验中82%肿瘤缓解率",
+     "titleRaw": "Tango公布联合疗法治疗晚期胰腺癌试验中82%肿瘤缓解率",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "be0070f3e5442bd2",
+     "titleZh": "治疗“癌症之王”，明星RAS抑制剂组合再传捷报！",
+     "titleRaw": "治疗“癌症之王”，明星RAS抑制剂组合再传捷报！",
+     "sourceName": "wx-wuxiapptec",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:50:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "7b0219f5c18c0ece",
+   "title": "KEYNOTE-866围术期帕博利珠单抗治疗膀胱癌研究发布",
+   "firstAt": "2026-10-23T12:20:00Z",
+   "lastAt": "2026-10-23T23:28:00Z",
+   "entityKeys": [
+    "drug:pembrolizumab",
+    "drug:platinum",
+    "drug:gemcitabine",
+    "trial:keynote-866",
+    "disease:肌层浸润性膀胱癌"
+   ],
+   "members": [
+    {
+     "id": "d120c5afcc344e28",
+     "titleZh": "KEYNOTE-866：围手术期帕博利珠单抗联合新辅助化疗治疗肌层浸润性膀胱癌",
+     "titleRaw": "📢 #ESMO26 concomitant paper - Perioperative pembrolizumab or pbo + neoadjuvant cisplatin and gemcitabine in participants with muscle-invasi…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-23T12:20:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "585e8674ee1b9d7a",
+     "titleZh": "围手术期帕博利珠单抗联合化疗未显著改善MIBC无事件生存",
+     "titleRaw": "Perioperative pembrolizumab or placebo plus neoadjuvant cisplatin and gemcitabine in participants with muscle-invasive bladder cancer who are eligible for cispl",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-23T14:43:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "2401aeda905a316e",
+     "titleZh": "围手术期帕博利珠单抗联合新辅助化疗未改善MIBC的EFS",
+     "titleRaw": "Perioperative pembrolizumab plus neoadjuvant chemo did not improve EFS vs placebo plus chemo in pts w/ cisplatin-eligible MIBC undergoing r…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-23T23:28:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "7c517b6e1ca9c534",
+   "title": "FourLight-1研究公布主要分析",
+   "firstAt": "2026-10-24T07:31:00Z",
+   "lastAt": "2026-10-24T08:43:00Z",
+   "entityKeys": [
+    "drug:atirmociclib",
+    "drug:fulvestrant",
+    "trial:fourlight-1",
+    "disease:乳腺癌",
+    "drug:everolimus",
+    "drug:exemestane",
+    "disease:hr阳性her2阴性乳腺癌",
+    "disease:转移性乳腺癌"
+   ],
+   "members": [
+    {
+     "id": "64731610608d9059",
+     "titleZh": "Atirmociclib联合氟维司群治疗HR+/HER2-晚期乳腺癌的FourLight-1研究",
+     "titleRaw": "📢 #ESMO26 concomitant paper - Atirmociclib and fulvestrant for patients with HR+/HER2– advanced/metastatic breast cancer who progressed on…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-24T07:31:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "ce3b714eaeede7dd",
+     "titleZh": "Atirmociclib联合氟维司群改善CDK4/6抑制剂进展后HR+/HER2-乳腺癌PFS",
+     "titleRaw": "Atirmociclib and fulvestrant for patients with HR+/HER2– advanced/metastatic breast cancer who progressed on a prior cyclin-dependent kinase 4/6 inhibitor: prim",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-24T08:43:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "8362f13cced54155",
+   "title": "CheckMate 8HW 公布最终总生存分析",
+   "firstAt": "2026-10-24T13:38:00Z",
+   "lastAt": "2026-10-24T14:43:00Z",
+   "entityKeys": [
+    "drug:nivolumab",
+    "drug:ipilimumab",
+    "trial:checkmate 8hw",
+    "disease:转移性结直肠癌"
+   ],
+   "members": [
+    {
+     "id": "e517e2759a835e22",
+     "titleZh": "CheckMate 8HW 最终结果：纳武利尤单抗联合伊匹木单抗治疗 MSI-H/dMMR 转移性结直肠癌",
+     "titleRaw": "📢 #ESMO26 concomitant paper - Final results of nivolumab plus ipilimumab versus nivolumab or chemotherapy in microsatellite instability-hig…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-24T13:38:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "2b957b1685edaa89",
+     "titleZh": "CheckMate 8HW最终结果：纳武利尤单抗联合伊匹木单抗治疗MSI-H/dMMR转移性结直肠癌",
+     "titleRaw": "Final results of nivolumab plus ipilimumab versus nivolumab or chemotherapy in microsatellite instability-high/mismatch repair-deficient metastatic colorectal c",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-24T14:43:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "895a76940c31322c",
+   "title": "口腔衰弱危险因素的系统评价与Meta分析",
+   "firstAt": "2026-10-24T16:26:00Z",
+   "lastAt": "2026-10-24T16:26:00Z",
+   "entityKeys": [
+    "disease:口腔衰弱",
+    "disease:营养不良",
+    "disease:肌少症"
+   ],
+   "members": [
+    {
+     "id": "eddc8a9fa1dacb0b",
+     "titleZh": "口腔衰弱危险因素的系统评价与Meta分析",
+     "titleRaw": "Systematic review and meta-analysis of risk factors for oral frailty",
+     "sourceName": "j-1536-5964",
+     "primary": true,
+     "publishedAt": "2026-10-24T16:26:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "90c8edd510d3f460",
+   "title": "默克集团以13亿美元收购Silence Therapeutics及其siRNA管线",
+   "firstAt": "2026-10-19T14:22:00Z",
+   "lastAt": "2026-10-24T22:37:00Z",
+   "entityKeys": [
+    "drug:divesiran",
+    "org:默克集团",
+    "org:silence therapeutics",
+    "disease:罕见病",
+    "drug:sapablursen",
+    "drug:ag-236",
+    "drug:bomedemstat",
+    "drug:givinostat",
+    "trial:sanreco",
+    "trial:verify",
+    "trial:intrepid",
+    "trial:prevail",
+    "org:武田",
+    "org:protagonist therapeutics",
+    "org:ionis pharmaceuticals",
+    "disease:真性红细胞增多症",
+    "drug:mimrylo",
+    "drug:jakafi",
+    "drug:hydroxycarbamide",
+    "drug:busulfan",
+    "org:agios pharmaceuticals",
+    "drug:zerlasiran",
+    "drug:sln365",
+    "org:默克",
+    "org:protagonist",
+    "org:翰森制药",
+    "disease:慢性髓性白血病",
+    "drug:evobrutinib",
+    "org:阿斯利康",
+    "org:威廉・布莱尔",
+    "disease:多发性硬化",
+    "org:merck kgaa"
+   ],
+   "members": [
+    {
+     "id": "a08d45f3e3e2683e",
+     "titleZh": "默克集团以13亿美元收购Silence Therapeutics及其siRNA管线",
+     "titleRaw": "Merck KGaA to buy Silence Therapeutics and its siRNA pipeline for $1.3B",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-19T14:22:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "4bf5661cbc345879",
+     "titleZh": "默克集团以13亿美元收购Silence Therapeutics",
+     "titleRaw": "German Merck pays for Silence",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-19T15:13:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "09c2f38c0f11df04",
+     "titleZh": "默克集团13亿美元收购Silence，押注RNAi疗法",
+     "titleRaw": "Merck KGaA bets on RNAi with $1.3B Silence buyout",
+     "sourceName": "biopharma-dive",
+     "primary": false,
+     "publishedAt": "2026-10-19T20:57:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "a53c1af88cd191c4",
+     "titleZh": "默克全现金拿下Silence，剑指武田PV市场",
+     "titleRaw": "默克全现金拿下Silence，剑指武田PV市场",
+     "sourceName": "wx-medtrend",
+     "primary": false,
+     "publishedAt": "2026-10-20T11:40:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "94b3293583716929",
+     "titleZh": "默克约13亿美元收购Silence，强化罕见病管线",
+     "titleRaw": "Merck KGaA strengthens rare disease pipeline with $1.3bn Silence acquisition",
+     "sourceName": "european-pharmaceutical-review",
+     "primary": false,
+     "publishedAt": "2026-10-20T15:58:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "abf45c9626bfd6b5",
+     "titleZh": "溢价82%！投行直言：默克这笔买赚了",
+     "titleRaw": "溢价82%！投行直言：默克这笔买赚了",
+     "sourceName": "drugtimes",
+     "primary": false,
+     "publishedAt": "2026-10-21T01:03:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "4c1b60ae77240102",
+     "titleZh": "溢价82%！投行直言：默克这笔买赚了",
+     "titleRaw": "溢价82%！投行直言：默克这笔买赚了",
+     "sourceName": "wx-yaoshidai",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:35:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "96e5a368c0cc21c8",
+     "titleZh": "德国默克13亿美元收购Silence Therapeutics",
+     "titleRaw": "13亿美元！德国默克收购Silence Therapeutics",
+     "sourceName": "wx-yaodu",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:37:00Z",
+     "genre": "industry"
+    }
+   ]
+  },
+  {
+   "id": "91f1e525bc8d8c05",
+   "title": "依沃西单抗又一适应症拟纳入优先审评",
+   "firstAt": "2026-10-24T08:33:00Z",
+   "lastAt": "2026-10-24T23:10:00Z",
+   "entityKeys": [
+    "drug:ivonescimab",
+    "drug:durvalumab",
+    "trial:harmoni-gi1",
+    "trial:ak112-309",
+    "org:康方生物",
+    "org:cde",
+    "disease:胆道癌",
+    "trial:ak112-309/harmoni-gi1"
+   ],
+   "members": [
+    {
+     "id": "bceccaf3977adb79",
+     "titleZh": "依沃西单抗又一适应症拟纳入优先审评",
+     "titleRaw": "依沃西单抗又一适应症拟纳入优先审评",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-24T08:33:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "81fc858f5d16fadb",
+     "titleZh": "康方生物依沃西单抗又一适应症拟纳入优先审评",
+     "titleRaw": "康方生物依沃西单抗又一适应症拟纳入优先审评",
+     "sourceName": "wx-dxy-insight-db",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:21:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "aebc8a86d918c928",
+     "titleZh": "康方生物依沃西单抗新适应症拟纳入优先审评",
+     "titleRaw": "康方生物依沃西单抗新适应症拟纳入优先审评",
+     "sourceName": "wx-sinamed",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:10:00Z",
+     "genre": "approval"
+    }
+   ]
+  },
+  {
+   "id": "98f3dfca71eb5298",
+   "title": "口服icotrokinra治疗溃疡性结肠炎2b期试验达主要终点",
+   "firstAt": "2026-10-14T21:47:00Z",
+   "lastAt": "2026-10-24T03:00:00Z",
+   "entityKeys": [
+    "drug:icotrokinra",
+    "drug:risankizumab",
+    "drug:mirikizumab",
+    "drug:guselkumab",
+    "drug:ustekinumab",
+    "trial:anthem-uc",
+    "trial:iconic-uc",
+    "org:cedars-sinai medical center",
+    "org:fda",
+    "disease:溃疡性结肠炎",
+    "disease:斑块状银屑病",
+    "org:johnson & johnson"
+   ],
+   "members": [
+    {
+     "id": "1cf924a545c581b2",
+     "titleZh": "口服肽icotrokinra治疗溃疡性结肠炎76周疗效持久",
+     "titleRaw": "Oral Peptide Shows Durable Efficacy in Ulcerative Colitis",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-14T21:47:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "299e8076ba873375",
+     "titleZh": "口服 icotrokinra 治疗溃疡性结肠炎的 2 期试验",
+     "titleRaw": "Phase 2 Trial of Icotrokinra for Patients with Ulcerative Colitis",
+     "sourceName": "j-0028-4793",
+     "primary": true,
+     "publishedAt": "2026-10-14T22:26:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "02684bc2ec6049b4",
+     "titleZh": "2分钟NEJM | 口服单克隆抗体有效缓解溃疡性结肠炎",
+     "titleRaw": "2分钟NEJM | 口服单克隆抗体有效缓解溃疡性结肠炎",
+     "sourceName": "wx-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-17T03:30:00Z",
+     "genre": "commentary"
+    },
+    {
+     "id": "8b2a2894db7673b4",
+     "titleZh": "口服icotrokinra在中重度溃疡性结肠炎中优于安慰剂",
+     "titleRaw": "Once-daily oral icotrokinra outperforms placebo in ulcerative colitis",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-24T03:00:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "98fd90838ae8b06d",
+   "title": "IgA肾病新药暴发，北大医院张宏同天2篇NEJM",
+   "firstAt": "2026-10-23T08:25:00Z",
+   "lastAt": "2026-10-23T08:25:00Z",
+   "entityKeys": [
+    "drug:atacicept",
+    "drug:sibeprenlimab",
+    "drug:iptacopan",
+    "trial:origin 3",
+    "trial:visionary",
+    "trial:applause-igan",
+    "org:北京大学第一医院",
+    "org:fda",
+    "disease:iga肾病",
+    "disease:终末期肾病"
+   ],
+   "members": [
+    {
+     "id": "521274e4422952ec",
+     "titleZh": "IgA肾病新药暴发，北大医院张宏同天2篇NEJM",
+     "titleRaw": "IgA肾病新药暴发，北大医院张宏同天2篇NEJM",
+     "sourceName": "wx-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-23T08:25:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "99df797295e4e721",
+   "title": "撒哈拉以南非洲新生儿窒息病因与危险因素系统评价方案",
+   "firstAt": "2026-10-08T12:40:00Z",
+   "lastAt": "2026-10-22T16:11:00Z",
+   "entityKeys": [
+    "org:prospero",
+    "disease:新生儿窒息"
+   ],
+   "members": [
+    {
+     "id": "c307e7703cf0ab92",
+     "titleZh": "撒哈拉以南非洲新生儿窒息病因与危险因素：系统评价与Meta分析方案",
+     "titleRaw": "Causes of and risk factors for asphyxia neonatorum in sub-Saharan Africa: a study protocol for systematic review and meta-analysis",
+     "sourceName": "j-2044-6055",
+     "primary": true,
+     "publishedAt": "2026-10-08T12:40:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "72534692fa12d02e",
+     "titleZh": "撒哈拉以南非洲新生儿窒息病因与危险因素：系统评价与Meta分析研究方案",
+     "titleRaw": "Causes of and risk factors for asphyxia neonatorum in sub-Saharan Africa: a study protocol for systematic review and meta-analysis by @jame…",
+     "sourceName": "x-bmj_open",
+     "primary": false,
+     "publishedAt": "2026-10-22T16:11:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "9a967f03a22d1d25",
+   "title": "武田公布CLDN18.2胃癌数据并筹备提交上市申请",
+   "firstAt": "2026-10-24T17:07:00Z",
+   "lastAt": "2026-10-24T17:07:00Z",
+   "entityKeys": [
+    "drug:arcotatug tavatecan",
+    "drug:zolbetuximab",
+    "trial:g-hope-001",
+    "org:武田",
+    "org:信达生物",
+    "org:nmpa",
+    "disease:胃癌",
+    "disease:胃食管结合部腺癌",
+    "disease:胰腺癌"
+   ],
+   "members": [
+    {
+     "id": "162656efd2edcd5a",
+     "titleZh": "TAK-921 治疗晚期胃癌 3 期试验达到主要终点",
+     "titleRaw": "ESMO26: Takeda preps filings on CLDN18.2 gastric cancer data",
+     "sourceName": "discovered-fc9b6524b25ae4fc0f60",
+     "primary": false,
+     "publishedAt": "2026-10-24T17:07:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "9ad4b8ba63d3dcfb",
+   "title": "同卵双胞胎宫内肿瘤传播的胚胎起源",
+   "firstAt": "2026-10-06T13:13:00Z",
+   "lastAt": "2026-10-24T22:14:00Z",
+   "entityKeys": [
+    "disease:软组织肿瘤",
+    "disease:肿瘤",
+    "org:韦尔科姆桑格研究所",
+    "org:大奥蒙德街儿童医院",
+    "disease:未分化肉瘤"
+   ],
+   "members": [
+    {
+     "id": "ebe6039106d0e785",
+     "titleZh": "新生双胞胎癌症的胚胎起源",
+     "titleRaw": "Embryonic origin of cancer in newborn twins",
+     "sourceName": "j-2041-1723",
+     "primary": true,
+     "publishedAt": "2026-10-06T13:13:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "e525d7e2fb7d2187",
+     "titleZh": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "titleRaw": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "sourceName": "yxj-news",
+     "primary": false,
+     "publishedAt": "2026-10-18T16:29:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "a783990f0355263f",
+     "titleZh": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "titleRaw": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "sourceName": "wx-yxj-peds",
+     "primary": false,
+     "publishedAt": "2026-10-19T11:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "e4e9ea9952e492dc",
+     "titleZh": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "titleRaw": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "sourceName": "wx-yxj-infect",
+     "primary": false,
+     "publishedAt": "2026-10-19T11:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "a7e96b56ce499f30",
+     "titleZh": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "titleRaw": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "sourceName": "wx-sinamed",
+     "primary": false,
+     "publishedAt": "2026-10-19T11:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "89d688d6269cdca0",
+     "titleZh": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "titleRaw": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "sourceName": "wx-yxj-rheum",
+     "primary": false,
+     "publishedAt": "2026-10-20T11:30:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "0c7e86041a85fe71",
+     "titleZh": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "titleRaw": "双胞胎发生肿瘤传播后死亡，顶刊披露",
+     "sourceName": "wx-yxj-resp",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:14:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "a32dcd8a9856a35d",
+   "title": "VOLGA 3期试验：围手术期免疫联合方案改善肌层浸润性膀胱癌生存",
+   "firstAt": "2026-10-24T14:48:00Z",
+   "lastAt": "2026-10-24T18:40:00Z",
+   "entityKeys": [
+    "drug:durvalumab",
+    "drug:enfortumab vedotin",
+    "trial:volga",
+    "disease:肌层浸润性膀胱癌",
+    "drug:imfinzi",
+    "drug:keytruda",
+    "drug:padcev",
+    "trial:keynote-905",
+    "org:astrazeneca",
+    "org:merck & co",
+    "disease:膀胱癌",
+    "org:esmo",
+    "drug:platinum"
+   ],
+   "members": [
+    {
+     "id": "960eb41f9b5b18f2",
+     "titleZh": "VOLGA 3期试验：围手术期度伐利尤单抗联合维恩妥尤单抗改善肌层浸润性膀胱癌无事件生存",
+     "titleRaw": "Presented at #ESMO26:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-24T14:48:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "a62b94d956b063ce",
+     "titleZh": "ESMO 2026：Volga 研究辅助治疗阶段完全弃用 Padcev",
+     "titleRaw": "ESMO 2026 – Volga chips away at Padcev",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-24T15:12:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "93e5197df86fbc94",
+     "titleZh": "VOLGA 3期试验：新辅助维恩妥尤单抗联合度伐利尤单抗改善 MIBC 生存",
+     "titleRaw": "#ESMO26: Neoadjuvant enfortumab vedotin significantly improved event-free and overall survival when added to peri-operative durvalumab for…",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-24T15:19:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "ca5c70cf640a286a",
+     "titleZh": "VOLGA 3期试验：度伐利尤单抗联合维恩妥尤单抗改善不适合顺铂的 MIBC 患者生存",
+     "titleRaw": "💥 Survival was improved with durvalumab plus enfortumab vedotin in patients with MIBC according to new data from the phase 3 VOLGA trial",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T18:40:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "eded1ce36a53a40f",
+     "titleZh": "不适合或拒绝顺铂的MIBC围术期度伐利尤单抗联合维恩妥尤单抗",
+     "titleRaw": "In patients with MIBC ineligible for or refusing cisplating, perioperative durvalumab + 3 cycles of neoadjuvant enfortumab vedotin shos pra…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T18:40:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "a560a6c090274fbc",
+   "title": "欧盟批准帕博利珠单抗联合维恩妥尤单抗围手术期治疗肌层浸润性膀胱癌",
+   "firstAt": "2026-10-21T13:58:00Z",
+   "lastAt": "2026-10-22T08:20:00Z",
+   "entityKeys": [
+    "drug:pembrolizumab",
+    "drug:enfortumab vedotin",
+    "drug:platinum",
+    "drug:gemcitabine",
+    "trial:keynote-b15",
+    "trial:ev-304",
+    "org:欧洲委员会",
+    "org:ema",
+    "org:fda",
+    "org:默沙东",
+    "disease:肌层浸润性膀胱癌",
+    "org:欧盟委员会"
+   ],
+   "members": [
+    {
+     "id": "174a6a152a8d7442",
+     "titleZh": "欧盟批准帕博利珠单抗联合维恩妥尤单抗围手术期治疗肌层浸润性膀胱癌",
+     "titleRaw": "European Commission Approves KEYTRUDA® (pembrolizumab) Plus Padcev® (enfortumab vedotin-ejfv) as Perioperative Treatment for Adults With Resectable Muscle-Invas",
+     "sourceName": "msd-merck-news",
+     "primary": false,
+     "publishedAt": "2026-10-21T13:58:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "44c294140e77ba4a",
+     "titleZh": "欧盟委员会批准围手术期维恩妥尤单抗联合帕博利珠单抗治疗可切除肌层浸润性膀胱癌",
+     "titleRaw": "The EC has approved perioperative enfortumab vedotin plus pembrolizumab for the treatment of resectable MIBC, irrespective of cisplatin eli…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:20:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "a58fbf0df34e864c",
+   "title": "daraxonrasib 在晚期胰腺癌各 RAS 突变亚组中均改善生存",
+   "firstAt": "2026-10-23T19:01:00Z",
+   "lastAt": "2026-10-24T21:56:00Z",
+   "entityKeys": [
+    "drug:daraxonrasib",
+    "trial:rasolute 302",
+    "org:esmo",
+    "org:fda",
+    "disease:胰腺癌",
+    "disease:转移性胰腺癌",
+    "org:revolution medicines",
+    "disease:转移性胰腺腺癌"
+   ],
+   "members": [
+    {
+     "id": "8a51d16a1e172e45",
+     "titleZh": "daraxonrasib 在晚期胰腺癌各 RAS 突变亚组中均改善生存",
+     "titleRaw": "ESMO: New analysis reinforces survival benefits of targeted therapy for advanced pancreatic cancer",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:01:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "d7ba5d524273fb1d",
+     "titleZh": "RASolute 302亚组分析：daraxonrasib在各RAS突变亚型中维持OS获益",
+     "titleRaw": "Subgroup analyses from RASolute 302 showed daraxonrasib maintained its OS benefit across RAS mutation subtypes #pancsm #oncology",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:26:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "b1207d8006a1d192",
+     "titleZh": "靶向药daraxonrasib在多种胰腺癌亚组中延长生存",
+     "titleRaw": "Targeted drug extends survival across diverse pancreatic cancer patient groups",
+     "sourceName": "news-medical-net",
+     "primary": false,
+     "publishedAt": "2026-10-24T02:35:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "653370513c2f6bf4",
+     "titleZh": "Daraxonrasib在经治转移性胰腺癌各RAS亚组显示一致OS获益",
+     "titleRaw": "Revolution Medicines在ESMO 2026公布daraxonrasib既往治疗转移性胰腺癌亚组OS数据",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "a814d9541131f157",
+   "title": "云南新增清水河、猴桥药材进口口岸",
+   "firstAt": "2026-10-22T09:36:00Z",
+   "lastAt": "2026-10-25T08:32:00Z",
+   "entityKeys": [
+    "org:nmpa",
+    "org:海关总署",
+    "org:国家药监局",
+    "org:云南省食品药品监督检验研究院"
+   ],
+   "members": [
+    {
+     "id": "8f78ad05859fde9a",
+     "titleZh": "国家药监局 海关总署关于增设云南省清水河、猴桥口岸为药材进口边境口岸的公告（2026年第94号）",
+     "titleRaw": "国家药监局 海关总署关于增设云南省清水河、猴桥口岸为药材进口边境口岸的公告（2026年第94号）",
+     "sourceName": "nmpa-other-drug-announcements",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:36:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "909e2229f0acb017",
+     "titleZh": "关于增设云南省清水河、猴桥口岸为药材进口边...",
+     "titleRaw": "关于增设云南省清水河、猴桥口岸为药材进口边...",
+     "sourceName": "pharmnet-news",
+     "primary": false,
+     "publishedAt": "2026-10-23T06:06:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "171a3d26fd96da5e",
+     "titleZh": "云南新增两个中药材进口边境口岸",
+     "titleRaw": "云南新增两个中药材进口边境口岸",
+     "sourceName": "wx-cntcm",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:32:00Z",
+     "genre": "policy"
+    }
+   ]
+  },
+  {
+   "id": "aa170b0558e84da4",
+   "title": "青少年减重：家庭行为治疗加情绪调节可减少体重反弹",
+   "firstAt": "2026-10-22T16:00:00Z",
+   "lastAt": "2026-10-23T00:43:00Z",
+   "entityKeys": [
+    "org:加州大学圣迭戈分校",
+    "org:明尼苏达大学",
+    "disease:肥胖",
+    "disease:超重",
+    "trial:nct03674944",
+    "org:university of california, san diego"
+   ],
+   "members": [
+    {
+     "id": "eb9b5e475fef0e9d",
+     "titleZh": "家庭减重治疗加入情绪管理技能或助青少年维持减重",
+     "titleRaw": "Adding emotion management skills to family weight treatment may help teens maintain weight loss",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-22T16:00:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "0ee70e53ceeff0f8",
+     "titleZh": "情绪管理技能或助青少年治疗后维持减重",
+     "titleRaw": "Emotion management helps teens maintain weight loss after treatment",
+     "sourceName": "news-medical-net",
+     "primary": false,
+     "publishedAt": "2026-10-22T20:20:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "363efb1c30c0b105",
+     "titleZh": "青少年减重：家庭行为治疗加情绪调节可减少体重反弹",
+     "titleRaw": "Emotion-Focused Behavioral Weight Loss Treatment for Adolescents",
+     "sourceName": "j-2574-3805",
+     "primary": true,
+     "publishedAt": "2026-10-23T00:43:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "aab4dfe6c2a1d7da",
+   "title": "NK受体拮抗剂改善绝经女性睡眠障碍",
+   "firstAt": "2026-10-22T21:50:00Z",
+   "lastAt": "2026-10-23T13:51:00Z",
+   "entityKeys": [
+    "drug:fezolinetant",
+    "drug:elinzanetant",
+    "trial:oasis i",
+    "trial:oasis ii",
+    "trial:oasis iii",
+    "trial:switch-1",
+    "trial:daylight",
+    "org:menopause society",
+    "disease:睡眠障碍",
+    "drug:神经激肽受体拮抗剂"
+   ],
+   "members": [
+    {
+     "id": "8b6f5c8cf118ad99",
+     "titleZh": "NK受体拮抗剂改善绝经女性睡眠障碍",
+     "titleRaw": "Non-Hormonal Menopause Drugs Offer Sleep Relief",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-22T21:50:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "7e873ff864455fd2",
+     "titleZh": "神经激肽受体拮抗剂改善绝经女性睡眠障碍",
+     "titleRaw": "Neurokinin-receptor antagonists improved sleep disturbances in menopausal women, a meta-analysis of randomized controlled trials showed. #M…",
+     "sourceName": "x-medpagetoday",
+     "primary": false,
+     "publishedAt": "2026-10-23T13:51:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "aae9b73f3bc6a0c6",
+   "title": "LATE-MT：卒中后24至72小时取栓功能结局更优但出血与死亡更多",
+   "firstAt": "2026-10-24T02:06:00Z",
+   "lastAt": "2026-10-24T21:16:00Z",
+   "entityKeys": [
+    "trial:late-mt",
+    "disease:缺血性卒中",
+    "disease:脑出血",
+    "trial:mild-mt",
+    "trial:moste",
+    "trial:select late",
+    "org:长海医院",
+    "disease:急性缺血性卒中",
+    "disease:大血管闭塞",
+    "disease:颅内出血",
+    "drug:heparin",
+    "drug:tirofiban",
+    "org:海军军医大学第一附属医院",
+    "org:复旦大学类脑智能科学与技术研究院",
+    "org:福建医科大学附属协和医院",
+    "disease:前循环大血管闭塞",
+    "disease:蛛网膜下腔出血",
+    "disease:颅内动脉粥样硬化"
+   ],
+   "members": [
+    {
+     "id": "671ce11cbff3d869",
+     "titleZh": "LATE-MT：卒中后24至72小时取栓功能结局更优但出血与死亡更多",
+     "titleRaw": "Presented at the OCIN 2026 Conference:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-24T02:06:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "5321ec5bea853d8f",
+     "titleZh": "血管内治疗拓展至轻型卒中与更晚时间窗",
+     "titleRaw": "Endovascular Therapy Eyed for Milder Strokes, Later Time Window",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-24T03:47:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "83e62842afb4dd1d",
+     "titleZh": "刚刚，中国团队2项研究与OCIN同步见刊NEJM：从超时间窗到轻型卒中",
+     "titleRaw": "刚刚，中国团队2项研究与OCIN同步见刊NEJM：从超时间窗到轻型卒中",
+     "sourceName": "wx-nejm",
+     "primary": true,
+     "publishedAt": "2026-10-24T08:26:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "12d0d4af73c60f26",
+     "titleZh": "LATE-MT与MILD-MT研究的心血管视角解读：大血管闭塞性卒中血管内治疗新证据与心脑血管共病管理",
+     "titleRaw": "LATE-MT与MILD-MT研究的心血管视角解读：大血管闭塞性卒中血管内治疗新证据与心脑血管共病管理",
+     "sourceName": "lead-d1510c926e5a606479e8",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:16:00Z",
+     "genre": "commentary"
+    }
+   ]
+  },
+  {
+   "id": "af879b27fbe794d6",
+   "title": "科研 | 希思科-肿瘤创新科研项目（2026年度）第四期——消化道肿瘤等实体瘤方向",
+   "firstAt": "2026-10-19T07:00:00Z",
+   "lastAt": "2026-10-24T21:05:00Z",
+   "entityKeys": [
+    "drug:cdk4/6抑制剂",
+    "drug:pd-l1抑制剂",
+    "org:北京市希思科临床肿瘤学研究基金会",
+    "disease:消化道肿瘤",
+    "disease:食管癌",
+    "disease:胃癌",
+    "disease:结直肠癌",
+    "disease:胆道恶性肿瘤",
+    "disease:头颈部鳞状细胞癌",
+    "disease:肝癌"
+   ],
+   "members": [
+    {
+     "id": "1a7fff41e5b2285a",
+     "titleZh": "科研 | 希思科-肿瘤创新科研项目（2026年度）第四期——消化道肿瘤等实体瘤方向",
+     "titleRaw": "科研 | 希思科-肿瘤创新科研项目（2026年度）第四期——消化道肿瘤等实体瘤方向",
+     "sourceName": "wx-csco-official",
+     "primary": false,
+     "publishedAt": "2026-10-19T07:00:00Z",
+     "genre": "policy"
+    },
+    {
+     "id": "eb835cdf2cef6ae6",
+     "titleZh": "科研 | 希思科-肿瘤创新科研项目（2026年度）第四期——消化道肿瘤等实体瘤方向",
+     "titleRaw": "科研 | 希思科-肿瘤创新科研项目（2026年度）第四期——消化道肿瘤等实体瘤方向",
+     "sourceName": "wx-csco-official",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:05:00Z",
+     "genre": "policy"
+    }
+   ]
+  },
+  {
+   "id": "b104562be40d82f9",
+   "title": "CMS向得州28家农村医疗机构拨款800万美元",
+   "firstAt": "2026-10-22T16:26:00Z",
+   "lastAt": "2026-10-23T14:52:00Z",
+   "entityKeys": [
+    "org:cms",
+    "disease:糖尿病",
+    "disease:心血管疾病"
+   ],
+   "members": [
+    {
+     "id": "c69ff3f16da798aa",
+     "titleZh": "特朗普政府向得州28家农村医疗机构拨款800万美元",
+     "titleRaw": "Trump Administration Announces $8 Million for 28 Rural Healthcare Providers to Strengthen Healthcare Across Texas",
+     "sourceName": "cms-newsroom",
+     "primary": false,
+     "publishedAt": "2026-10-22T16:26:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "0c3b146aa2a83dca",
+     "titleZh": "CMS向得州28家农村医疗机构拨款800万美元",
+     "titleRaw": "The Trump Administration announced $8 million in Rural Health Transformation Program funding to 28 rural healthcare providers through the R…",
+     "sourceName": "x-cmsgov",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:52:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "b46c9309f1ff7667",
+   "title": "anbenitamab联合方案改善HER2阳性晚期乳腺癌PFS",
+   "firstAt": "2026-10-24T06:42:00Z",
+   "lastAt": "2026-10-25T08:50:00Z",
+   "entityKeys": [
+    "drug:anbenitamab",
+    "drug:白蛋白结合型多西他赛",
+    "trial:healer",
+    "disease:her2阳性晚期乳腺癌",
+    "drug:hb1801",
+    "org:nejm",
+    "drug:安尼妥单抗",
+    "drug:trastuzumab",
+    "drug:pertuzumab",
+    "drug:docetaxel",
+    "trial:cleopatra",
+    "trial:destiny-breast09",
+    "trial:neo-healer",
+    "org:中国医学科学院肿瘤医院",
+    "org:esmo",
+    "disease:her2阳性乳腺癌",
+    "drug:trastuzumab deruxtecan",
+    "trial:kc-wise",
+    "disease:胃癌"
+   ],
+   "members": [
+    {
+     "id": "8f22ac908a9dbcb2",
+     "titleZh": "anbenitamab联合白蛋白结合型多西他赛治疗HER2阳性晚期乳腺癌3期结果",
+     "titleRaw": "Presented at #ESMO26:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-24T06:42:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "8c1e97ab0e165566",
+     "titleZh": "NEJM发表Anbenitamab联合HB1801治疗HER2阳性晚期乳腺癌3期HEALER试验",
+     "titleRaw": "Original Article: Anbenitamab plus HB1801 for HER2-Positive Advanced Breast Cancer (phase 3 HEALER trial) https://nej.md/4BcWlF3",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-25T06:09:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "71b5f9769835da42",
+     "titleZh": "徐兵河院士领衔NEJM论著：国产HER2双抗完胜乳腺癌经典一线方案",
+     "titleRaw": "徐兵河院士领衔NEJM论著：国产HER2双抗完胜乳腺癌经典一线方案",
+     "sourceName": "wx-nejm",
+     "primary": true,
+     "publishedAt": "2026-10-25T08:26:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "3e456ba2fd9c3ef6",
+     "titleZh": "进展死亡风险降 54%！乳腺癌首个国产 HER2 双抗新方案来袭",
+     "titleRaw": "进展死亡风险降 54%！乳腺癌首个国产 HER2 双抗新方案来袭",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:33:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "6d74a1facb91a747",
+     "titleZh": "刚刚！徐兵河院士：ORR达87.6%！安尼妥单抗联合方案开辟乳腺癌治疗新局面 | ESMO 2026",
+     "titleRaw": "刚刚！徐兵河院士：ORR达87.6%！安尼妥单抗联合方案开辟乳腺癌治疗新局面 | ESMO 2026",
+     "sourceName": "wx-yxj-onco",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:50:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "b4a919e78d8c3423",
+   "title": "tarlatamab联合度伐利尤单抗延长广泛期小细胞肺癌生存",
+   "firstAt": "2026-10-24T14:48:00Z",
+   "lastAt": "2026-10-25T08:37:00Z",
+   "entityKeys": [
+    "drug:durvalumab",
+    "drug:tarlatamab",
+    "trial:dellphi-305",
+    "disease:广泛期小细胞肺癌",
+    "drug:imdelltra",
+    "drug:imfinzi",
+    "org:amgen",
+    "org:astrazeneca",
+    "org:esmo",
+    "disease:小细胞肺癌",
+    "drug:etoposide",
+    "drug:carboplatin",
+    "trial:dellphi-303",
+    "org:安进",
+    "org:阿斯利康",
+    "disease:脑转移",
+    "drug:塔拉妥单抗"
+   ],
+   "members": [
+    {
+     "id": "8b4c8b92cba50f54",
+     "titleZh": "tarlatamab联合度伐利尤单抗维持治疗延长广泛期小细胞肺癌总生存",
+     "titleRaw": "Presented at #ESMO26:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-24T14:48:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "306838dfbd21c6aa",
+     "titleZh": "Imdelltra联合方案在3期小细胞肺癌试验中降低死亡风险58%",
+     "titleRaw": "#ESMO26: Amgen's Imdelltra regimen more than halves risk of death in Phase 3 lung cancer trial",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-24T15:23:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "169b9e4ab3bc8ea5",
+     "titleZh": "塔拉妥单抗联合度伐利尤单抗一线维持治疗广泛期小细胞肺癌降低死亡风险58%",
+     "titleRaw": "IMDELLTRA® IN COMBINATION WITH IMFINZI® REDUCED RISK OF DEATH BY AN UNPRECEDENTED 58% IN FIRST-LINE EXTENSIVE STAGE SMALL CELL LUNG CANCER",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-24T15:23:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "e8a0d789ec702baf",
+     "titleZh": "DeLLphi-305：tarlatamab联合度伐利尤单抗改善广泛期小细胞肺癌总生存",
+     "titleRaw": "#ESMO26: Significant improvements in overall survival in the DeLLphi-305 #ClinicalTrial with the bispecific T-cell engager #immunotherapy t…",
+     "sourceName": "x-myesmo",
+     "primary": false,
+     "publishedAt": "2026-10-24T15:49:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "ed2fee2652d173e5",
+     "titleZh": "DeLLphi-305：tarlatamab联合度伐利尤单抗维持治疗改善广泛期小细胞肺癌生存",
+     "titleRaw": "DeLLphi-305 | #ESMO2025 | ES-SCLC 1L Maintenance",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T16:39:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "a6912fcf7dd8060e",
+     "titleZh": "DeLLphi-305：塔拉妥单抗联合度伐利尤单抗一线维持治疗延长ES-SCLC生存",
+     "titleRaw": "A standing ovation: Tarlatamab + durvalumab as frontline maintenance in ES-SCLC, phase 3 DeLLphi-305:",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-24T20:41:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "0ed36bc5299cdea9",
+     "titleZh": "ESMO 2026：DeLLphi-305研究公布塔拉妥单抗一线维持治疗结果",
+     "titleRaw": "2026 ESMO丨DeLLphi-305研究重磅发布！",
+     "sourceName": "wx-oncologynews",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:06:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "377efe11b70dd818",
+     "titleZh": "ESMO 2026：DeLLphi-305 塔拉妥单抗一线维持显著改善 ES-SCLC 生存",
+     "titleRaw": "✨ESMO 2026｜DeLLphi-305同步登顶NEJM",
+     "sourceName": "wx-medlive-onco",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:37:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "b4b7e21b631b18a6",
+   "title": "Rusfertide III期试验达主要终点",
+   "firstAt": "2026-10-14T00:24:00Z",
+   "lastAt": "2026-10-23T16:25:00Z",
+   "entityKeys": [
+    "drug:rusfertide",
+    "trial:verify",
+    "disease:真性红细胞增多症"
+   ],
+   "members": [
+    {
+     "id": "574ad690b62ff44e",
+     "titleZh": "VERIFY III期试验：Rusfertide对比安慰剂治疗放血依赖的真性红细胞增多症",
+     "titleRaw": "VERIFY: A Phase III Trial of Rusfertide Versus Placebo in Phlebotomy-Dependent Patients With Polycythemia Vera Receiving Standard-of-Care Therapy",
+     "sourceName": "j-0732-183x",
+     "primary": true,
+     "publishedAt": "2026-10-14T00:24:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "42f9f79f6259a948",
+     "titleZh": "VERIFY：Rusfertide 对比安慰剂治疗依赖放血的真性红细胞增多症 III 期试验",
+     "titleRaw": "VERIFY: A Phase III Trial of Rusfertide Versus Placebo in Phlebotomy-Dependent Patients With Polycythemia Vera Receiving Standard-of-Care T…",
+     "sourceName": "x-jco_asco",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:25:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "b4fe9f6897b7c922",
+   "title": "AZUR-1：多塔利单抗单药治疗局部晚期直肠癌完全缓解率76%",
+   "firstAt": "2026-10-25T00:55:00Z",
+   "lastAt": "2026-10-25T11:43:00Z",
+   "entityKeys": [
+    "drug:多塔利单抗",
+    "trial:azur-1",
+    "org:葛兰素史克",
+    "org:esmo",
+    "org:fda",
+    "disease:局部晚期直肠癌",
+    "disease:msi-h/dmmr",
+    "disease:直肠癌"
+   ],
+   "members": [
+    {
+     "id": "af6c575109861abb",
+     "titleZh": "多塔利单抗单药治疗MSI-H/dMMR局部晚期直肠癌完全缓解率达76%",
+     "titleRaw": "Jemperli (dostarlimab) data show 76% of patients with MSI-H/dMMR locally advanced rectal cancer achieved a complete response",
+     "sourceName": "gsk-press-releases",
+     "primary": false,
+     "publishedAt": "2026-10-25T00:55:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "37bf7f4e2cf2b671",
+     "titleZh": "AZUR-1试验：多塔利单抗单药治疗dMMR/MSI-H局部晚期直肠癌的临床完全缓解结果",
+     "titleRaw": "📢 #ESMO26 concomitant paper - Clinical complete response with dostarlimab monotherapy in dMMR/MSI-H locally advanced rectal cancer: first r…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-25T09:52:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "6035c73820f7782f",
+     "titleZh": "AZUR-1：多塔利单抗治疗局部晚期dMMR/MSI-H直肠癌",
+     "titleRaw": "AZUR-1 presented by @AndreaCercek @MSKCancerCenter: dostarlimab x 6 months in locally advanced dMMR/MSI-H #rectalcancer (recently FDA appro…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-25T10:53:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "84d2ee3a5a6b03a0",
+     "titleZh": "Dostarlimab单药治疗dMMR/MSI-H局部晚期直肠癌达临床完全缓解",
+     "titleRaw": "Clinical Complete Response with Dostarlimab Monotherapy in dMMR/MSI-H Locally Advanced Rectal Cancer: First Results from the Global AZUR-1 Trial",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-25T11:43:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "bb93d9abcfaddcaa",
+   "title": "欧洲疾控中心评估本迪布焦型埃博拉输入肯尼亚和尼日利亚的风险",
+   "firstAt": "2026-10-23T14:52:00Z",
+   "lastAt": "2026-10-23T15:01:00Z",
+   "entityKeys": [
+    "org:ecdc",
+    "org:who",
+    "org:cdc",
+    "disease:埃博拉病毒病"
+   ],
+   "members": [
+    {
+     "id": "0f8d6ffac87f35e3",
+     "titleZh": "欧洲疾控中心评估肯尼亚和尼日利亚埃博拉输入病例风险",
+     "titleRaw": "Importation of Ebola cases to Kenya and Nigeria: ECDC assesses the threat",
+     "sourceName": "ecdc-news",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:52:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "85a07e921868e55a",
+     "titleZh": "欧洲疾控中心评估肯尼亚和尼日利亚输入性本迪布焦型埃博拉病例风险",
+     "titleRaw": "Threat assessment brief – Importation of Ebola disease cases caused by Bundibugyo virus to Kenya and Nigeria",
+     "sourceName": "ecdc-publications",
+     "primary": false,
+     "publishedAt": "2026-10-23T15:01:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "bc2913b7aac2c84e",
+   "title": "FDA警示Green Lumber含未标注药物成分",
+   "firstAt": "2026-10-23T16:44:00Z",
+   "lastAt": "2026-10-23T16:44:00Z",
+   "entityKeys": [
+    "drug:tadalafil",
+    "org:fda",
+    "disease:勃起功能障碍"
+   ],
+   "members": [
+    {
+     "id": "d5b207b211112499",
+     "titleZh": "FDA警示Green Lumber含未标注他达拉非",
+     "titleRaw": "Public Notification: Green Lumber contains hidden drug ingredient",
+     "sourceName": "fda-whats-new-drugs",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:44:00Z",
+     "genre": "safety"
+    }
+   ]
+  },
+  {
+   "id": "be44d580b829913c",
+   "title": "Kostaive（zapomeran）欧洲公共评估报告更新至第6版",
+   "firstAt": "2026-10-22T13:49:00Z",
+   "lastAt": "2026-10-22T13:49:00Z",
+   "entityKeys": [
+    "drug:zapomeran",
+    "org:ema",
+    "disease:新冠"
+   ],
+   "members": [
+    {
+     "id": "d3f873ef215a6f10",
+     "titleZh": "欧洲药品管理局授权Kostaive新冠疫苗上市",
+     "titleRaw": "Human medicines European public assessment report (EPAR): Kostaive, zapomeran, Date of authorisation: 12/02/2025, Revision: 6, Status: Authorised",
+     "sourceName": "ema-whats-new",
+     "primary": false,
+     "publishedAt": "2026-10-22T13:49:00Z",
+     "genre": "approval"
+    }
+   ]
+  },
+  {
+   "id": "c565d55d62a2756b",
+   "title": "Sibeprenlimab 3期试验最终分析：稳定IgA肾病eGFR斜率",
+   "firstAt": "2026-10-22T14:25:00Z",
+   "lastAt": "2026-10-24T21:58:00Z",
+   "entityKeys": [
+    "drug:sibeprenlimab",
+    "trial:visionary",
+    "disease:iga肾病",
+    "org:otsuka pharmaceutical development and commercialization",
+    "disease:肾衰竭",
+    "drug:atacicept",
+    "trial:origin",
+    "org:fda",
+    "drug:sibeprenlimab-szsi",
+    "org:大冢制药",
+    "org:大冢",
+    "disease:原发性iga肾病"
+   ],
+   "members": [
+    {
+     "id": "e05983ddfa68be01",
+     "titleZh": "sibeprenlimab 3期试验在IgA肾病中稳定eGFR斜率",
+     "titleRaw": "Presented at #KidneyWk:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-22T14:25:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "78f5a38f2b027e51",
+     "titleZh": "Sibeprenlimab治疗IgA肾病3期试验最终分析",
+     "titleRaw": "Sibeprenlimab in IgA Nephropathy — Final Phase 3 Trial Analysis",
+     "sourceName": "j-0028-4793",
+     "primary": true,
+     "publishedAt": "2026-10-23T13:03:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "5c1dd944d775e34b",
+     "titleZh": "Sibeprenlimab治疗IgA肾病3期试验最终分析",
+     "titleRaw": "Original Article: Sibeprenlimab in IgA Nephropathy — Final Phase 3 Trial Analysis (VISIONARY trial) https://nej.md/4z3QsZg",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-23T15:23:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "4e8a197c18b851cd",
+     "titleZh": "Atacicept与Sibeprenlimab在IgA肾病III期试验中延缓肾功能下降",
+     "titleRaw": "Atacicpet, Sibeprenlimab Halt Decline in Kidney Function in IgA Nephropathy",
+     "sourceName": "medpage-today",
+     "primary": false,
+     "publishedAt": "2026-10-24T20:47:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "97e8b899a8d34bfd",
+     "titleZh": "临床III期成功，显著降低肾功能下降或衰竭风险97%_腾讯新闻",
+     "titleRaw": "临床III期成功，显著降低肾功能下降或衰竭风险97%_腾讯新闻",
+     "sourceName": "lead-a9efd1207786e9b16a33",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:11:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "fc11f5465ab891cf",
+     "titleZh": "大冢公布 VISIONARY III 期最终结果：VOYXACT 两年稳定肾功能，并完成 sBLA 滚动提交",
+     "titleRaw": "大冢公布 VISIONARY III 期最终结果：VOYXACT 两年稳定肾功能，并完成 sBLA 滚动提交",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "c5cc6f5e9914fb89",
+   "title": "芦康沙妥珠单抗联合免疫延长PD-L1阴性NSCLC无进展生存",
+   "firstAt": "2026-10-24T08:33:00Z",
+   "lastAt": "2026-10-25T11:23:00Z",
+   "entityKeys": [
+    "drug:sacituzumab tirumotecan",
+    "drug:pembrolizumab",
+    "drug:pemetrexed",
+    "drug:osimertinib",
+    "trial:optitrop-lung05",
+    "trial:optitrop-lung06",
+    "trial:optitrop-lung07",
+    "trial:keynote-189",
+    "trial:keynote-407",
+    "org:asco",
+    "org:esmo",
+    "disease:非小细胞肺癌",
+    "org:同济大学附属东方医院",
+    "drug:platinum",
+    "drug:carboplatin",
+    "trial:keytruda",
+    "org:四川科伦博泰"
+   ],
+   "members": [
+    {
+     "id": "0bed61677e7bb569",
+     "titleZh": "向未「莱」：芦康沙妥珠单抗「替代化疗」联合免疫治疗——OptiTROP-Lung05 及 06 研究开启驱动基因阴性 NSCLC 一线治疗新标准",
+     "titleRaw": "向未「莱」：芦康沙妥珠单抗「替代化疗」联合免疫治疗——OptiTROP-Lung05 及 06 研究开启驱动基因阴性 NSCLC 一线治疗新标准",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-24T08:33:00Z",
+     "genre": "commentary"
+    },
+    {
+     "id": "258b4fa994abb601",
+     "titleZh": "全球首个｜芦康沙妥珠单抗联合免疫再进阶，一线治疗 PD-L1 阴性 NSCLC III 期 OptiTROP-Lung06 研究完整数据 2026 ESMO LBA 即将公布！",
+     "titleRaw": "全球首个｜芦康沙妥珠单抗联合免疫再进阶，一线治疗 PD-L1 阴性 NSCLC III 期 OptiTROP-Lung06 研究完整数据 2026 ESMO LBA 即将公布！",
+     "sourceName": "wx-dxy-onco",
+     "primary": false,
+     "publishedAt": "2026-10-25T08:33:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "dc623152ac67c036",
+     "titleZh": "ESMO26：芦康沙妥珠单抗联合帕博利珠单抗延长PD-L1阴性非鳞NSCLC无进展生存",
+     "titleRaw": "Presented at #ESMO26:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-25T09:42:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "ae5041c4a6c02eb1",
+     "titleZh": "芦康沙妥珠单抗联合帕博利珠单抗一线治疗非鳞NSCLC的III期结果",
+     "titleRaw": "The Results of Phase III OptiTROP-Lung06 Study of Sacituzumab Tirumotecan (sac-TMT) Presented as an ESMO Oral Presentation and Simultaneously Published in The N",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-25T11:23:00Z",
+     "genre": "conference"
+    }
+   ]
+  },
+  {
+   "id": "c7ae2de6c4537fa9",
+   "title": "刚果（金）：埃博拉疫情蔓延，防疫人员面临压力",
+   "firstAt": "2026-10-24T21:10:00Z",
+   "lastAt": "2026-10-24T21:10:00Z",
+   "entityKeys": [
+    "drug:ervebo",
+    "org:who",
+    "disease:埃博拉病毒病"
+   ],
+   "members": [
+    {
+     "id": "2b96e0e501ed8949",
+     "titleZh": "刚果（金）：埃博拉疫情蔓延，防疫人员面临压力",
+     "titleRaw": "刚果（金）：埃博拉疫情蔓延，防疫人员面临压力",
+     "sourceName": "lead-3fe6b84738ca274c9646",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:10:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "d147fac283d5363a",
+   "title": "Temab-A联合贝伐珠单抗随机1期研究亮相ESMO",
+   "firstAt": "2026-10-24T13:38:00Z",
+   "lastAt": "2026-10-24T14:43:00Z",
+   "entityKeys": [
+    "drug:bevacizumab",
+    "drug:曲氟尿苷替匹嘧啶",
+    "disease:转移性结直肠癌"
+   ],
+   "members": [
+    {
+     "id": "99f6c01e984b067b",
+     "titleZh": "📢 #ESMO26 concomitant paper: A randomized phase I study of telisotuzumab adizutecan (ABBV-400, Temab-A) in combination w",
+     "titleRaw": "📢 #ESMO26 concomitant paper: A randomized phase I study of telisotuzumab adizutecan (ABBV-400, Temab-A) in combination with bevacizumab ver…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-24T13:38:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "3c6c4923bf8f49a4",
+     "titleZh": "Telisotuzumab adizutecan联合贝伐珠单抗治疗转移性结直肠癌的随机1期研究",
+     "titleRaw": "A randomized Phase 1 study of telisotuzumab adizutecan (ABBV-400, Temab-A) in combination with bevacizumab versus trifluridine-tipiracil with bevacizumab in pat",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-24T14:43:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "d3e317cfaa1f8f92",
+   "title": "尼日利亚报告首例本迪布焦型埃博拉病例，肯尼亚和刚果（金）疫情数字继续上升",
+   "firstAt": "2026-10-23T18:24:00Z",
+   "lastAt": "2026-10-23T18:24:00Z",
+   "entityKeys": [
+    "org:who",
+    "org:尼日利亚卫生部",
+    "disease:本迪布焦型埃博拉病毒病",
+    "disease:埃博拉病毒感染"
+   ],
+   "members": [
+    {
+     "id": "ce92ebd1e06402f0",
+     "titleZh": "尼日利亚报告首例本迪布焦型埃博拉病例，肯尼亚和刚果（金）疫情数字继续上升",
+     "titleRaw": "Ebola: Nigeria announces first Bundibugyo case, as numbers continue to rise in Kenya and DRC",
+     "sourceName": "j-1756-1833",
+     "primary": true,
+     "publishedAt": "2026-10-23T18:24:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "d6f42998164b544d",
+   "title": "香港12岁女童甲型H1流感死亡，未接种疫苗",
+   "firstAt": "2026-10-21T12:06:00Z",
+   "lastAt": "2026-10-24T21:32:00Z",
+   "entityKeys": [
+    "org:香港卫生署卫生防护中心",
+    "org:东区尤德夫人那打素医院",
+    "disease:甲型h1流感",
+    "disease:感染性休克",
+    "disease:弥散性血管内凝血",
+    "disease:多器官衰竭",
+    "drug:季节性流感疫苗",
+    "disease:甲型流感",
+    "disease:败血性休克",
+    "disease:多重器官衰竭"
+   ],
+   "members": [
+    {
+     "id": "b438c41fcaa9be1a",
+     "titleZh": "香港卫生防护中心调查一例儿童流感死亡病例",
+     "titleRaw": "CHP investigates fatal case of paediatric influenza infection",
+     "sourceName": "hk-govt-press-releases",
+     "primary": false,
+     "publishedAt": "2026-10-21T12:06:00Z",
+     "genre": "safety"
+    },
+    {
+     "id": "a69bb79d3349ff68",
+     "titleZh": "最新丨香港新增本流感季第二宗儿童甲流死亡个案，患儿H1流感阳性……近月社区的流感传播广泛，感染人数及严重个案均显著增加",
+     "titleRaw": "最新丨香港新增本流感季第二宗儿童甲流死亡个案，患儿H1流感阳性……近月社区的流感传播广泛，感染人数及严重个案均显著增加",
+     "sourceName": "wx-huxijie",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:32:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "d70f59449841c85b",
+   "title": "成人注意缺陷多动障碍",
+   "firstAt": "2026-10-14T22:26:00Z",
+   "lastAt": "2026-10-22T08:14:00Z",
+   "entityKeys": [
+    "disease:注意缺陷多动障碍",
+    "disease:焦虑障碍",
+    "disease:心境障碍",
+    "disease:睡眠障碍",
+    "disease:物质使用障碍",
+    "drug:lomitapide",
+    "drug:苯丙胺",
+    "disease:广泛性焦虑障碍",
+    "disease:抑郁症"
+   ],
+   "members": [
+    {
+     "id": "9ee74ec6c5aeb443",
+     "titleZh": "成人注意缺陷多动障碍",
+     "titleRaw": "Adult Attention Deficit–Hyperactivity Disorder",
+     "sourceName": "j-0028-4793",
+     "primary": true,
+     "publishedAt": "2026-10-14T22:26:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "99d0629c1c6f4b64",
+     "titleZh": "真正的成人ADHD没那么多 | NEJM综述",
+     "titleRaw": "真正的成人ADHD没那么多 | NEJM综述",
+     "sourceName": "wx-medlive-psych",
+     "primary": false,
+     "publishedAt": "2026-10-19T12:10:00Z",
+     "genre": "commentary"
+    },
+    {
+     "id": "daf00b410ad08935",
+     "titleZh": "成人注意缺陷多动障碍的评估与治疗综述",
+     "titleRaw": "A new article summarizes the assessment and treatment of adult attention deficit–hyperactivity disorder, with an emphasis on common psychia…",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:14:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "dc7b315ae085627e",
+   "title": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动",
+   "firstAt": "2026-10-24T21:56:00Z",
+   "lastAt": "2026-10-24T22:51:00Z",
+   "entityKeys": [
+    "drug:zocilurtatug pelitecan",
+    "drug:atezolizumab",
+    "drug:carboplatin",
+    "org:再鼎医药",
+    "disease:广泛期小细胞肺癌",
+    "trial:zl-1310-001",
+    "trial:dllevate",
+    "org:esmo",
+    "disease:神经内分泌癌"
+   ],
+   "members": [
+    {
+     "id": "96b1e5bd22c53d7d",
+     "titleZh": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动",
+     "titleRaw": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "92ae9065e0299ca9",
+     "titleZh": "ORR 81.8%、≥3级TRAE 9.1%！再鼎zoci 一线小细胞肺癌数据出炉 | 新闻稿",
+     "titleRaw": "ORR 81.8%、≥3级TRAE 9.1%！再鼎zoci 一线小细胞肺癌数据出炉 | 新闻稿",
+     "sourceName": "wx-yanfake",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:51:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "e02d890c66cc8cb1",
+   "title": "肯尼亚、尼日利亚各现首例邦迪布焦型埃博拉输入病例",
+   "firstAt": "2026-10-19T17:00:00Z",
+   "lastAt": "2026-10-23T16:57:00Z",
+   "entityKeys": [
+    "org:who",
+    "disease:埃博拉病毒病",
+    "org:尼日利亚卫生部",
+    "org:肯尼亚卫生部",
+    "disease:埃博拉病毒感染",
+    "org:尼日利亚疾病控制与预防中心",
+    "org:台湾疾病管制署",
+    "disease:伊波拉病毒感染",
+    "disease:埃博拉",
+    "org:非洲疾控中心"
+   ],
+   "members": [
+    {
+     "id": "a54ee109d5ce351c",
+     "titleZh": "刚果埃博拉疫情扩散至第8个省",
+     "titleRaw": "Congo's fast-moving Ebola outbreak spreads to eighth province",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-19T17:00:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "d9b934c8ca2fc8e5",
+     "titleZh": "尼日利亚报告本轮疫情首例埃博拉病例",
+     "titleRaw": "Nigeria records first Ebola case",
+     "sourceName": "medical-xpress",
+     "primary": false,
+     "publishedAt": "2026-10-20T18:00:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "500cbb39df2a1e48",
+     "titleZh": "尼日利亚阿布贾确诊1例埃博拉病例",
+     "titleRaw": "Nigeria confirms an Ebola case in Abuja as a woman arriving from Uganda tests positive",
+     "sourceName": "npr-health",
+     "primary": false,
+     "publishedAt": "2026-10-20T21:17:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "62f14b2d7dbf98e0",
+     "titleZh": "世卫组织协助尼日利亚应对首例埃博拉输入病例",
+     "titleRaw": "世卫组织协助尼日利亚应对首例埃博拉输入病例",
+     "sourceName": "lead-3fe6b84738ca274c9646",
+     "primary": false,
+     "publishedAt": "2026-10-21T00:00:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "39c6e17fe38add6d",
+     "titleZh": "近期肯亞及奈及利亞均確診境外移入相關伊波拉病毒感染症病例，疾管署持續監測疫情發展，並維持剛果民主共和國旅遊警示等級第三級警告(Warning)",
+     "titleRaw": "近期肯亞及奈及利亞均確診境外移入相關伊波拉病毒感染症病例，疾管署持續監測疫情發展，並維持剛果民主共和國旅遊警示等級第三級警告(Warning)",
+     "sourceName": "taiwan-cdc-press",
+     "primary": false,
+     "publishedAt": "2026-10-21T09:13:00Z",
+     "genre": "safety"
+    },
+    {
+     "id": "8654deac264f5e0a",
+     "titleZh": "尼日利亚报告12年来首例埃博拉病例",
+     "titleRaw": "Nigeria announces its first Ebola case in 12 years",
+     "sourceName": "x-cidrap",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:09:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "76655675d84d38b5",
+     "titleZh": "尼日利亚确诊一例输入性埃博拉病例",
+     "titleRaw": "Nigeria has confirmed an imported Ebola case tied to the ongoing outbreak centered in the Democratic Republic of the Congo, becoming the fi…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:15:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "5f649b44a0ed1ffe",
+     "titleZh": "尼日利亚确诊埃博拉病例，与刚果（金）疫情相关",
+     "titleRaw": "Nigeria confirmed an Ebola case tied to the ongoing outbreak centered in the DRC, health officials said.",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:15:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "a10e121893940ee9",
+     "titleZh": "非洲疾控中心：尼日利亚确诊首例埃博拉病例",
+     "titleRaw": "Clear, timely and trusted communication is central to any outbreak response.",
+     "sourceName": "x-africacdc",
+     "primary": false,
+     "publishedAt": "2026-10-23T06:13:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "fc827170b2d3334e",
+     "titleZh": "尼日利亚报告首例埃博拉邦迪布焦型病毒病病例",
+     "titleRaw": "Nigeria has announced its first case of Ebola Bundibugyo virus disease, becoming the fifth country to be affected by an outbreak that has l…",
+     "sourceName": "x-bmj_latest",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:57:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "e1dbe946aad4dfb0",
+   "title": "AbbVie 在疼痛性皮肤病 3 期试验中取得阳性结果",
+   "firstAt": "2026-10-22T14:22:00Z",
+   "lastAt": "2026-10-24T21:58:00Z",
+   "entityKeys": [
+    "drug:lutikizumab",
+    "org:abbvie",
+    "org:fda",
+    "trial:intrepid",
+    "org:艾伯维",
+    "disease:化脓性汗腺炎",
+    "drug:卢替珠单抗",
+    "drug:bimzelx",
+    "drug:tulisokibart",
+    "org:ucb",
+    "org:默克"
+   ],
+   "members": [
+    {
+     "id": "1c1c6c15eff9fb7e",
+     "titleZh": "AbbVie 在疼痛性皮肤病 3 期试验中取得阳性结果",
+     "titleRaw": "AbbVie notches Phase 3 win in painful skin condition, FDA filing likely next year",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-22T14:22:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "e2c5d7c6800a2a52",
+     "titleZh": "Lutikizumab 3期INTREPID研究达到主要终点",
+     "titleRaw": "AbbVie Announces Topline Results from the Phase 3 INTREPID Trial Showing Lutikizumab Significantly Improved Signs and Symptoms of Disease in Patients with Hidra",
+     "sourceName": "abbvie-news",
+     "primary": false,
+     "publishedAt": "2026-10-22T15:22:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "c67f9792c32092ef",
+     "titleZh": "AbbVie化脓性汗腺炎药物3期试验达标但低于市场预期",
+     "titleRaw": "STAT+: AbbVie skin disorder drug succeeds in late-stage trial, but results miss market expectations",
+     "sourceName": "stat-biotech",
+     "primary": false,
+     "publishedAt": "2026-10-22T18:56:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "271e4dee205bcaf5",
+     "titleZh": "AbbVie 的 lutikizumab 在后期试验中达到主要终点但未达市场预期",
+     "titleRaw": "AbbVie's lutikizumab, an experimental therapy for a chronic skin condition, succeeded in a late-stage trial but missed market expectations.…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T19:01:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "aea15b6fec9342f1",
+     "titleZh": "艾伯维化脓性汗腺炎3期试验取得阳性结果",
+     "titleRaw": "AbbVie scored a Phase 3 win in the painful skin condition hidradenitis suppurativa, with an FDA filing likely next year. https://endpoints.…",
+     "sourceName": "x-endpts",
+     "primary": false,
+     "publishedAt": "2026-10-22T20:32:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "85b862bf35eca574",
+     "titleZh": "艾伯维公布Lutikizumab治疗化脓性汗腺炎三期INTREPID试验顶线结果：16周HiSCR75显著优于安慰剂",
+     "titleRaw": "艾伯维公布Lutikizumab治疗化脓性汗腺炎三期INTREPID试验顶线结果：16周HiSCR75显著优于安慰剂",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "9da3cfa193041616",
+     "titleZh": "艾伯维Lutikizumab治疗化脓性汗腺炎3期INTREPID试验达到主要终点",
+     "titleRaw": "艾伯维Lutikizumab治疗化脓性汗腺炎3期INTREPID试验达到主要终点",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "f99e1ffe4927aeda",
+     "titleZh": "艾伯维lutikizumab治疗化脓性汗腺炎三期达标，但应答率低于预期",
+     "titleRaw": "艾伯维lutikizumab治疗化脓性汗腺炎三期达标，但应答率低于预期",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:58:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "e310a7541773f7ea",
+   "title": "CMS向阿拉斯加农村医疗投入近2.49亿美元",
+   "firstAt": "2026-10-22T12:41:00Z",
+   "lastAt": "2026-10-22T16:58:00Z",
+   "entityKeys": [
+    "org:cms"
+   ],
+   "members": [
+    {
+     "id": "8f3057683df669db",
+     "titleZh": "特朗普政府宣布近2.49亿美元改善阿拉斯加农村医疗",
+     "titleRaw": "Trump Administration Announces Nearly $249 Million to Bring Healthcare Closer to Home for Rural Alaskans",
+     "sourceName": "cms-newsroom",
+     "primary": false,
+     "publishedAt": "2026-10-22T12:41:00Z",
+     "genre": "approval"
+    },
+    {
+     "id": "c8b0e421130c9c22",
+     "titleZh": "美国CMS向阿拉斯加农村医疗投入近2.49亿美元",
+     "titleRaw": "The Trump Administration announced nearly $249 million in Rural Health Transformation Program funding for 254 projects that will strengthen…",
+     "sourceName": "x-cmsgov",
+     "primary": false,
+     "publishedAt": "2026-10-22T16:58:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "e3a0e92ab9b86fde",
+   "title": "NATALEE 6年随访：辅助瑞波西利总生存结果",
+   "firstAt": "2026-10-23T13:22:00Z",
+   "lastAt": "2026-10-23T15:10:00Z",
+   "entityKeys": [
+    "drug:ribociclib",
+    "drug:非甾体芳香化酶抑制剂",
+    "trial:natalee",
+    "disease:乳腺癌",
+    "drug:letrozole",
+    "drug:anastrozole",
+    "drug:goserelin",
+    "trial:monaleesa-2",
+    "trial:monaleesa-3",
+    "trial:monaleesa-7",
+    "org:诺华",
+    "org:esmo"
+   ],
+   "members": [
+    {
+     "id": "4bc1a466f5bf4c42",
+     "titleZh": "NATALEE 6年随访：高危早期乳腺癌辅助瑞波西利总生存结果",
+     "titleRaw": "📢 #ESMO26 concomitant paper - Overall survival with adjuvant ribociclib plus nonsteroidal aromatase inhibitor in patients with high-risk HR…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-23T13:22:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "463106d0f367ea10",
+     "titleZh": "NATALEE 6年随访：瑞波西利辅助治疗改善高危早期乳腺癌总生存",
+     "titleRaw": "Overall survival with adjuvant ribociclib plus nonsteroidal aromatase inhibitor in patients with high-risk HR+/HER2– early breast cancer: Six-year follow-up of ",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-23T14:43:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "26f0593d0eaff7b7",
+     "titleZh": "Kisqali 在 HR+/HER2- 早期乳腺癌高危人群显示总生存获益",
+     "titleRaw": "Kisqali® shows clinically meaningful overall survival in broadest HR+/HER2- early breast cancer population at high risk of recurrence",
+     "sourceName": "novartis-news",
+     "primary": false,
+     "publishedAt": "2026-10-23T15:10:00Z",
+     "genre": "industry"
+    }
+   ]
+  },
+  {
+   "id": "e5add0f1b4e3cb04",
+   "title": "科研 | 希思科-肿瘤创新科研项目（2026年度）第六期公告——妇科肿瘤方向",
+   "firstAt": "2026-10-20T07:00:00Z",
+   "lastAt": "2026-10-24T21:05:00Z",
+   "entityKeys": [
+    "drug:cdk4/6抑制剂",
+    "drug:pd-l1抑制剂",
+    "org:北京市希思科临床肿瘤学研究基金会",
+    "disease:卵巢癌",
+    "disease:宫颈癌",
+    "disease:子宫内膜癌",
+    "drug:抗体偶联药物",
+    "disease:恶性胸腹水"
+   ],
+   "members": [
+    {
+     "id": "15d2647b076d3816",
+     "titleZh": "科研 | 希思科-肿瘤创新科研项目（2026年度）第六期公告——妇科肿瘤方向",
+     "titleRaw": "科研 | 希思科-肿瘤创新科研项目（2026年度）第六期公告——妇科肿瘤方向",
+     "sourceName": "wx-csco-official",
+     "primary": false,
+     "publishedAt": "2026-10-20T07:00:00Z",
+     "genre": "policy"
+    },
+    {
+     "id": "99df07aa540bd4d8",
+     "titleZh": "科研 | 希思科-肿瘤创新科研项目（2026年度）第六期公告——妇科肿瘤方向",
+     "titleRaw": "科研 | 希思科-肿瘤创新科研项目（2026年度）第六期公告——妇科肿瘤方向",
+     "sourceName": "wx-csco-official",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:05:00Z",
+     "genre": "policy"
+    }
+   ]
+  },
+  {
+   "id": "e816554dfb281b30",
+   "title": "Ravulizumab治疗IgA肾病3期试验中期结果",
+   "firstAt": "2026-10-23T16:57:00Z",
+   "lastAt": "2026-10-24T16:20:00Z",
+   "entityKeys": [
+    "drug:ravulizumab",
+    "trial:i can",
+    "disease:iga肾病"
+   ],
+   "members": [
+    {
+     "id": "a144889013792788",
+     "titleZh": "ravulizumab 治疗 IgA 肾病 3 期试验中期分析显示降蛋白尿优于安慰剂",
+     "titleRaw": "Presented at #KidneyWk:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:57:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "313295b5d78f47ea",
+     "titleZh": "Ravulizumab治疗IgA肾病3期试验中期分析",
+     "titleRaw": "Ravulizumab in IgA Nephropathy — Interim Analysis of a Phase 3 Trial",
+     "sourceName": "j-0028-4793",
+     "primary": true,
+     "publishedAt": "2026-10-24T09:06:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "03d05d94e05b10a2",
+     "titleZh": "Ravulizumab治疗IgA肾病3期试验期中分析",
+     "titleRaw": "Original Article: Ravulizumab in IgA Nephropathy — Interim Analysis of a Phase 3 Trial (I CAN trial) https://nej.md/4iwTFdS",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-24T16:20:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "ecf7df48b53fdf4f",
+   "title": "中国创新药最贵的答辩，就在这五天",
+   "firstAt": "2026-10-20T23:28:00Z",
+   "lastAt": "2026-10-24T22:32:00Z",
+   "entityKeys": [
+    "drug:savolitinib",
+    "drug:osimertinib",
+    "drug:durvalumab",
+    "trial:saffron",
+    "trial:clarity-gastric01",
+    "trial:harmoni-gi1",
+    "trial:artemis-011",
+    "trial:trofuse-005",
+    "org:esmo",
+    "org:nmpa",
+    "disease:非小细胞肺癌",
+    "disease:胃食管癌",
+    "disease:胆道癌",
+    "disease:骨肉瘤",
+    "disease:子宫内膜癌",
+    "drug:ivonescimab",
+    "drug:sacituzumab tirumotecan",
+    "drug:zolbetuximab",
+    "org:fda",
+    "disease:胃癌",
+    "drug:serplulimab",
+    "trial:optitrop-breast01",
+    "trial:sanovo",
+    "disease:三阴性乳腺癌"
+   ],
+   "members": [
+    {
+     "id": "1ba2b1bb776aa2f4",
+     "titleZh": "中国创新药最贵的答辩，就在这五天",
+     "titleRaw": "中国创新药最贵的答辩，就在这五天",
+     "sourceName": "wx-yiyao-yao",
+     "primary": false,
+     "publishedAt": "2026-10-20T23:28:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "69dd2fa502fbf814",
+     "titleZh": "原研闪耀ESMO 2026： 29项LBA入选创纪录，5项跻身主席研讨会",
+     "titleRaw": "原研闪耀ESMO 2026： 29项LBA入选创纪录，5项跻身主席研讨会",
+     "sourceName": "wx-yaodu",
+     "primary": false,
+     "publishedAt": "2026-10-20T23:30:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "ed6ec5e0d738afd0",
+     "titleZh": "中国创新药的“成人礼”",
+     "titleRaw": "中国创新药的“成人礼”",
+     "sourceName": "wx-yaozh",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:32:00Z",
+     "genre": "news"
+    }
+   ]
+  },
+  {
+   "id": "f19f01ff0d3d158b",
+   "title": "Povetacicept 3期期中分析：IgA肾病蛋白尿降52%",
+   "firstAt": "2026-10-23T16:57:00Z",
+   "lastAt": "2026-10-24T17:22:00Z",
+   "entityKeys": [
+    "drug:povetacicept",
+    "trial:rainier ais-d08",
+    "disease:iga肾病",
+    "org:vertex pharmaceuticals"
+   ],
+   "members": [
+    {
+     "id": "2811b241ea5ae98d",
+     "titleZh": "povetacicept 在 IgA 肾病中显著降低蛋白尿",
+     "titleRaw": "Presented at #KidneyWk:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-23T16:57:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "403bc72e7b6caaa1",
+     "titleZh": "Povetacicept治疗IgA肾病3期试验中期分析",
+     "titleRaw": "Interim Analysis of a Phase 3 Trial of Povetacicept in IgA Nephropathy",
+     "sourceName": "j-0028-4793",
+     "primary": true,
+     "publishedAt": "2026-10-24T09:06:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "069d5c9c31f26c83",
+     "titleZh": "Povetacicept治疗IgA肾病3期试验期中分析",
+     "titleRaw": "Original Article: Interim Analysis of a Phase 3 Trial of Povetacicept in IgA Nephropathy (RAINIER AIS-D08 trial) https://nej.md/3VWcGh6",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-24T17:22:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "f1e802d64febfac4",
+   "title": "MILD-MT：大血管闭塞轻型卒中血管内治疗90天预后更优",
+   "firstAt": "2026-10-24T02:06:00Z",
+   "lastAt": "2026-10-25T02:23:00Z",
+   "entityKeys": [
+    "trial:mild-mt",
+    "disease:卒中",
+    "disease:大血管闭塞",
+    "trial:late-mt",
+    "disease:急性缺血性卒中",
+    "disease:颅内动脉粥样硬化",
+    "org:福建医科大学附属协和医院",
+    "org:福建医科大学附属漳州市医院",
+    "org:海军军医大学第一附属医院",
+    "org:上海长海医院",
+    "disease:缺血性卒中"
+   ],
+   "members": [
+    {
+     "id": "6435550b7d325775",
+     "titleZh": "MILD-MT：大血管闭塞轻型卒中血管内治疗90天预后更优",
+     "titleRaw": "Presented at the OCIN 2026 Conference:",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-24T02:06:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "e0e304df075a7923",
+     "titleZh": "刘建民教授团队两项原创卒中研究同日登顶《新英格兰医学杂志》-人民日报欧洲网-人民日报海外版欧洲刊_人民日报社_海外华文媒体门户",
+     "titleRaw": "刘建民教授团队两项原创卒中研究同日登顶《新英格兰医学杂志》-人民日报欧洲网-人民日报海外版欧洲刊_人民日报社_海外华文媒体门户",
+     "sourceName": "lead-dd217267582684ca93e0",
+     "primary": true,
+     "publishedAt": "2026-10-24T21:16:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "32831c50f7b8edb9",
+     "titleZh": "从福建走向世界！福建医疗团队原创卒中研究登上国际顶级医学期刊 - 原创新闻",
+     "titleRaw": "从福建走向世界！福建医疗团队原创卒中研究登上国际顶级医学期刊 - 原创新闻",
+     "sourceName": "lead-4dc444f5156b26a5daa7",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:16:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "5ec7c8d7d5afe6a7",
+     "titleZh": "将改写全球脑梗治疗！刘建民团队两项研究同时登顶NEJM",
+     "titleRaw": "将改写全球脑梗治疗！刘建民团队两项研究同时登顶NEJM",
+     "sourceName": "wx-yxj-neuro",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:24:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "419f7c89eeb0cccf",
+     "titleZh": "MILD-MT试验：轻型卒中合并大血管闭塞的血管内治疗",
+     "titleRaw": "Original Article: Trial of Endovascular Therapy for Mild Stroke with Large-Vessel Occlusion (MILD-MT trial) https://nej.md/4hWstFc",
+     "sourceName": "x-nejm",
+     "primary": false,
+     "publishedAt": "2026-10-25T00:03:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "b512cfc9703ba69d",
+     "titleZh": "研究为轻型卒中大血管闭塞治疗提供中国证据",
+     "titleRaw": "研究为轻型卒中大血管闭塞治疗提供中国证据",
+     "sourceName": "zhongguokexuebao",
+     "primary": true,
+     "publishedAt": "2026-10-25T02:23:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "f352468fdb43a17a",
+   "title": "Tairex发布多智能体AI系统，用于临床协作与决策支持",
+   "firstAt": "2026-10-22T09:37:00Z",
+   "lastAt": "2026-10-22T16:24:00Z",
+   "entityKeys": [
+    "org:清华大学智能产业研究院",
+    "org:tairex",
+    "org:清华大学"
+   ],
+   "members": [
+    {
+     "id": "51ace5aad566c057",
+     "titleZh": "Tairex推出多智能体AI系统，用于临床协作与决策支持",
+     "titleRaw": "Tairex Launches Multi-Agent AI System to Transform Clinical Collaboration and Decision Support",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-22T09:37:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "c1fd99f89be734fa",
+     "titleZh": "Tairex发布多智能体AI系统MHAC用于临床协作",
+     "titleRaw": "Tairex lance un système d'IA multi-agents pour transformer la collaboration clinique et l'aide à la prise de décision.",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-22T16:24:00Z",
+     "genre": "industry"
+    },
+    {
+     "id": "e314efc7f7868d58",
+     "titleZh": "Tairex发布多智能体AI系统，用于临床协作与决策支持",
+     "titleRaw": "Tairex lanza un sistema de IA multiagente",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-22T16:24:00Z",
+     "genre": "industry"
+    }
+   ]
+  },
+  {
+   "id": "f6d07690cee8cc80",
+   "title": "膀胱癌围手术期纳武利尤单抗Ⅲ期试验最终结果发表",
+   "firstAt": "2026-10-23T12:20:00Z",
+   "lastAt": "2026-10-23T19:26:00Z",
+   "entityKeys": [
+    "drug:nivolumab",
+    "trial:ca017-078",
+    "disease:肌层浸润性膀胱癌",
+    "drug:gemcitabine",
+    "drug:platinum",
+    "trial:energize"
+   ],
+   "members": [
+    {
+     "id": "48ddb275659ca8db",
+     "titleZh": "CA017-078 Ⅲ期试验：肌层浸润性膀胱癌围手术期纳武利尤单抗最终结果",
+     "titleRaw": "📢 #ESMO26 concomitant paper - Neoadjuvant nivolumab + gem/cis followed by postsurgical adjuvant nivolumab vs neoadjuvant gem/cis in pts wit…",
+     "sourceName": "x-annals_oncology",
+     "primary": false,
+     "publishedAt": "2026-10-23T12:20:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "e4a635618e6b99a1",
+     "titleZh": "围手术期纳武利尤单抗联合GC未改善肌层浸润性膀胱癌结局",
+     "titleRaw": "Neoadjuvant nivolumab plus gemcitabine–cisplatin followed by postsurgical adjuvant nivolumab versus neoadjuvant gemcitabine–cisplatin in patients with muscle-in",
+     "sourceName": "j-0923-7534",
+     "primary": true,
+     "publishedAt": "2026-10-23T14:43:00Z",
+     "genre": "paper"
+    },
+    {
+     "id": "f9ff8749e831662c",
+     "titleZh": "ENERGIZE 试验：围手术期纳武利尤单抗未改善肌层浸润性膀胱癌 pCR 与 EFS",
+     "titleRaw": "Data from the phase 3 ENERGIZE trial showed the addition of perioperative nivolumab to neoadjuvant chemo did not yield a statistically sign…",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:26:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "fa4e835d0f10d1b6",
+   "title": "Upacicalcet 两项 3 期试验达主要终点",
+   "firstAt": "2026-10-24T00:23:00Z",
+   "lastAt": "2026-10-24T03:15:00Z",
+   "entityKeys": [
+    "drug:upacicalcet",
+    "trial:path-1",
+    "trial:path-2",
+    "org:pathalys pharma",
+    "org:fda",
+    "disease:继发性甲状旁腺功能亢进",
+    "disease:终末期肾病",
+    "disease:慢性肾脏病"
+   ],
+   "members": [
+    {
+     "id": "9d62b3b764aaf646",
+     "titleZh": "Upacicalcet 3期研究在血液透析继发性甲旁亢中达主要终点",
+     "titleRaw": "Pathalys Pharma Presents Positive Data from Pivotal Phase 3 Studies of Upacicalcet in Featured Oral Presentation at ASN Kidney Week 2026",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-24T00:23:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "9f8ff2300ba6388b",
+     "titleZh": "Upacicalcet 在血液透析继发性甲旁亢中降低 iPTH",
+     "titleRaw": "Efficacy and Safety of Upacicalcet in Hemodialysis Patients with Secondary Hyperparathyroidism",
+     "sourceName": "j-1046-6673",
+     "primary": true,
+     "publishedAt": "2026-10-24T03:15:00Z",
+     "genre": "paper"
+    }
+   ]
+  },
+  {
+   "id": "fa9cb46ba8effe54",
+   "title": "2026 ESMO前瞻：DeLLphi-305将交出怎样的OS答卷？谁是小肺最佳预言家？",
+   "firstAt": "2026-10-20T12:02:00Z",
+   "lastAt": "2026-10-23T08:36:00Z",
+   "entityKeys": [
+    "drug:塔拉妥单抗",
+    "drug:pd-l1单抗",
+    "trial:dellphi-305",
+    "trial:dellphi-304",
+    "trial:dellphi-303",
+    "org:esmo",
+    "disease:广泛期小细胞肺癌",
+    "drug:durvalumab"
+   ],
+   "members": [
+    {
+     "id": "c916b4ec5960a847",
+     "titleZh": "2026 ESMO前瞻：DeLLphi-305将交出怎样的OS答卷？谁是小肺最佳预言家？",
+     "titleRaw": "2026 ESMO前瞻：DeLLphi-305将交出怎样的OS答卷？谁是小肺最佳预言家？",
+     "sourceName": "wx-medlive",
+     "primary": false,
+     "publishedAt": "2026-10-20T12:02:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "7c839416a3897791",
+     "titleZh": "TCE TALK | 全球首个TCE一线维持Ⅲ期数据将重磅揭晓！储天晴×Jacob Sands畅谈SCLC一线维持治疗新格局",
+     "titleRaw": "TCE TALK | 全球首个TCE一线维持Ⅲ期数据将重磅揭晓！储天晴×Jacob Sands畅谈SCLC一线维持治疗新格局",
+     "sourceName": "wx-medlive-onco",
+     "primary": false,
+     "publishedAt": "2026-10-23T08:36:00Z",
+     "genre": "commentary"
+    }
+   ]
+  },
+  {
+   "id": "fb279d0439b3d800",
+   "title": "重庆市居民体重管理标准化临床路径专家共识",
+   "firstAt": "2026-10-23T15:23:00Z",
+   "lastAt": "2026-10-23T15:23:00Z",
+   "entityKeys": [
+    "org:西部内分泌代谢科肥胖诊疗联盟",
+    "org:重庆市医学会内分泌学分会",
+    "org:重庆市医学会糖尿病学分会",
+    "org:重庆市卫生健康委员会",
+    "disease:肥胖",
+    "disease:超重"
+   ],
+   "members": [
+    {
+     "id": "3ad537a3cf95c4f5",
+     "titleZh": "重庆市居民体重管理标准化临床路径专家共识",
+     "titleRaw": "重庆市居民体重管理标准化临床路径专家共识",
+     "sourceName": "medsci-guidelines-cn",
+     "primary": true,
+     "publishedAt": "2026-10-23T15:23:00Z",
+     "genre": "guideline"
+    }
+   ]
+  },
+  {
+   "id": "fc75ff7608248e7b",
+   "title": "拉米夫定300mg片剂将停产：ViiV计划2027年停止分销",
+   "firstAt": "2026-10-21T16:41:00Z",
+   "lastAt": "2026-10-21T16:41:00Z",
+   "entityKeys": [
+    "drug:lamivudine",
+    "org:fda",
+    "org:viiv healthcare"
+   ],
+   "members": [
+    {
+     "id": "4f42d464f28d85d8",
+     "titleZh": "拉米夫定300mg片剂将停产：ViiV计划2027年停止分销",
+     "titleRaw": "Drug shortage (To Be Discontinued): Lamivudine Tablet — ViiV Healthcare Company",
+     "sourceName": "openfda-drug-shortages-api",
+     "primary": false,
+     "publishedAt": "2026-10-21T16:41:00Z",
+     "genre": "safety"
+    }
+   ]
+  },
+  {
+   "id": "fca851e75080c506",
+   "title": "美国财政部新规预计将收紧对中国生物技术交易的审查",
+   "firstAt": "2026-10-21T19:22:00Z",
+   "lastAt": "2026-10-22T17:31:00Z",
+   "entityKeys": [
+    "org:美国财政部"
+   ],
+   "members": [
+    {
+     "id": "e7f72bb9398ea9b1",
+     "titleZh": "美国财政部预计在新规中收紧对华生物技术交易审查",
+     "titleRaw": "Treasury expected to be harder on China biotech deals in new rules",
+     "sourceName": "endpoints-news-ai",
+     "primary": false,
+     "publishedAt": "2026-10-21T19:22:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "934f78eb26d01504",
+     "titleZh": "美国财政部拟收紧对华生物医药交易审查",
+     "titleRaw": "Pharma is bracing for tougher Treasury scrutiny of China deals, with draft outbound investment rules expected Thursday.",
+     "sourceName": "x-endpts",
+     "primary": false,
+     "publishedAt": "2026-10-22T08:10:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "92919f59195f39e5",
+     "titleZh": "美国拟出台规则加强对华生物技术对外授权交易审查",
+     "titleRaw": "U.S. is poised to issue a proposed rule that would subject outbound licensing deals with Chinese biotech companies to additional scrutiny h…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T15:27:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "82d523d9e33806f5",
+     "titleZh": "传美国财政部本周拟提出限制对华生物技术投资规则",
+     "titleRaw": "Rumors are swirling that the Treasury Department this week is going to propose a rule that restricts U.S. investment in the Chinese biotech…",
+     "sourceName": "x-statnews",
+     "primary": false,
+     "publishedAt": "2026-10-22T17:31:00Z",
+     "genre": "social"
+    }
+   ]
+  },
+  {
+   "id": "fd66c355f7f3492d",
+   "title": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点",
+   "firstAt": "2026-10-23T10:23:00Z",
+   "lastAt": "2026-10-25T01:43:00Z",
+   "entityKeys": [
+    "drug:arcotatug tavatecan",
+    "drug:irinotecan",
+    "drug:paclitaxel",
+    "drug:曲氟尿苷替匹嘧啶",
+    "trial:g-hope-001",
+    "org:信达生物",
+    "org:武田",
+    "disease:胃癌",
+    "disease:胃食管结合部腺癌",
+    "org:信达",
+    "org:esmo",
+    "disease:胃或胃食管结合部腺癌",
+    "org:nmpa",
+    "trial:nct06238843",
+    "disease:胃食管交界处腺癌",
+    "drug:坦康阿妥塔单抗",
+    "drug:曲氟尿苷/替匹嘧啶",
+    "org:武田制药",
+    "drug:依喜替康"
+   ],
+   "members": [
+    {
+     "id": "89377a996b48c3d9",
+     "titleZh": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点",
+     "titleRaw": "2026 ESMO LBA | Innovent Announces International Phase 3 Study of Arcotatug Tavatecan (CLDN18.2-ADC) in Gastric Cancer Met Dual Primary Endpoints of PFS and OS",
+     "sourceName": "prnewswire-health",
+     "primary": false,
+     "publishedAt": "2026-10-23T10:23:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "75d07aa212947d04",
+     "titleZh": "ESMO 2026：信达/武田Claudin18.2 ADC 3期取得有限成功",
+     "titleRaw": "ESMO 2026 – a limited win for Innovent/Takeda’s Claudin conjugate",
+     "sourceName": "apexonco",
+     "primary": false,
+     "publishedAt": "2026-10-23T14:13:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "a15939c74a6abcff",
+     "titleZh": "CLDN18.2 抗体偶联药物 arcotatug tavatecan 改善晚期胃癌生存",
+     "titleRaw": "🧬 What could a CLDN18.2-directed ADC offer patients with previously treated advanced gastric cancer?",
+     "sourceName": "x-onclive",
+     "primary": false,
+     "publishedAt": "2026-10-23T19:26:00Z",
+     "genre": "social"
+    },
+    {
+     "id": "d28e08f0eb5e7bba",
+     "titleZh": "TAK-921 在晚期胃癌 3 期研究中显著改善总生存和无进展生存",
+     "titleRaw": "Takeda Announces Arcotatug Tavatecan (TAK-921) Demonstrated Statistically Significant and Clinically Meaningful Improvements in Overall Survival and Progression",
+     "sourceName": "lead-ba009053b973292226b0",
+     "primary": false,
+     "publishedAt": "2026-10-24T20:54:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "d55a4b25addbaf94",
+     "titleZh": "ESMO 2026：武田Claudin18.2 ADC胃癌III期取得阳性结果",
+     "titleRaw": "ESMO 2026: Takeda Reaches First Summit With Claudin18.2 ADC",
+     "sourceName": "lead-002d965c9443e9bd521c",
+     "primary": false,
+     "publishedAt": "2026-10-24T20:54:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "b91820487fce9fc2",
+     "titleZh": "武田CLDN18.2 ADC胃癌3期研究达双主要终点",
+     "titleRaw": "Takeda Announces Arcotatug Tavatecan (TAK-921) Demonstrated Statistically Significant and Clinically Meaningful Improvements in Overall Survival and Progression",
+     "sourceName": "lead-bf5c75822a9b080122c6",
+     "primary": false,
+     "publishedAt": "2026-10-24T20:55:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "c14eed1e36fc8331",
+     "titleZh": "武田公布arcotatug tavatecan三期G-HOPE-001达到OS与PFS双主要终点",
+     "titleRaw": "武田公布 arcotatug tavatecan（TAK-921）三期 G-HOPE-001 达到 OS 与 PFS 双主要终点",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "565d019255878c3b",
+     "titleZh": "信达公布CLDN18.2 ADC胃癌III期达到PFS和OS双终点",
+     "titleRaw": "信达公布arcotatug tavatecan（CLDN18.2 ADC）胃癌国际III期G-HOPE-001达到PFS和OS双主要终点",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "db0ffb9478bffae3",
+     "titleZh": "信达生物公布arcotatug tavatecan胃癌国际III期G-HOPE-001研究达到PFS和OS双主要终点",
+     "titleRaw": "信达生物公布arcotatug tavatecan（CLDN18.2 ADC）胃癌国际III期G-HOPE-001研究达到PFS和OS双主要终点",
+     "sourceName": "discovered-29e04956f24c862b4024",
+     "primary": false,
+     "publishedAt": "2026-10-24T21:56:00Z",
+     "genre": "news"
+    },
+    {
+     "id": "e28e55e1935f0ec6",
+     "titleZh": "信达/武田首次公布 CLDN18.2 ADC Ⅲ 期数据",
+     "titleRaw": "信达/武田首次公布 CLDN18.2 ADC Ⅲ 期数据",
+     "sourceName": "wx-dxy-insight-db",
+     "primary": false,
+     "publishedAt": "2026-10-24T22:21:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "31739a7c66a62610",
+     "titleZh": "长存可7，坦康阿妥塔单抗（CLDN18.2-ADC）闪耀ESMO：后线治疗中位PFS超7个月，媲美一线免疫联合化疗的PFS数据",
+     "titleRaw": "长存可7，坦康阿妥塔单抗（CLDN18.2-ADC）闪耀ESMO：后线治疗中位PFS超7个月，媲美一线免疫联合化疗的PFS数据",
+     "sourceName": "wx-oncologynews",
+     "primary": false,
+     "publishedAt": "2026-10-24T23:16:00Z",
+     "genre": "conference"
+    },
+    {
+     "id": "337afcc06e25e4cd",
+     "titleZh": "亮相2026年欧洲肿瘤内科学会年会 信达生物发布坦康阿妥塔单抗胃癌Ⅲ期临床研究数据 _ 东方财富网",
+     "titleRaw": "亮相2026年欧洲肿瘤内科学会年会 信达生物发布坦康阿妥塔单抗胃癌Ⅲ期临床研究数据 _ 东方财富网",
+     "sourceName": "lead-26d25e2993e5655054c6",
+     "primary": false,
+     "publishedAt": "2026-10-25T01:43:00Z",
+     "genre": "conference"
+    }
+   ]
+  }
+ ]
+}
