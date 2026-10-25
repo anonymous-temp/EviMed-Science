@@ -238,6 +238,10 @@ class GeoStopReasonTests(_GatewayCase):
         self.assertEqual(geo_platform.GeoPlatformError("geo_gateway_unreachable", "x", retryable=True).stop_reason(), "retry")
         self.assertEqual(geo_platform.GeoPlatformError("geo_disabled", "x").stop_reason(), "unsupported")
 
+    def test_the_write_says_a_questions_write_adds_to_the_map_unless_it_replaces_it(self):
+        write = {tool["name"]: tool for tool in geo_platform.tool_definitions()}["geo_write"]
+        self.assertIn("data.replace:true", write["description"])
+
 
 class SocialPostsTests(_GatewayCase):
     def test_collected_posts_come_back_as_they_were_minimised(self):

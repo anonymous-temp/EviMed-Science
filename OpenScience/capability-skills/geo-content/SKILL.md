@@ -71,9 +71,11 @@ batch. Continue a useful draft from the preserved research or source text that i
 available, naming its origin and uncertainty; keep an unresolved subgroup or
 calculation as a local limitation. Qualitative observations can be explained
 without a fabricated number, quotation or verified-card marker. A summary is not
-its source's verbatim quotation. If registration needs a question group, create a
-minimal group for the actual question, without presenting an inferred question as
-observed demand. Write the article before registering its path. Existing source,
+its source's verbatim quotation. If registration needs a question group, add a
+minimal group for the actual question with `geo_write questions` (a group of a
+new name is added to the map; one of an existing name and pool replaces it),
+without presenting an inferred question as observed demand. Write the article
+before registering its path. Existing source,
 safety and publication checks still apply to the resulting draft; a partial draft
 does not become verified or authorized for distribution by being written.
 For example, low-certainty effectiveness findings without cards still support an

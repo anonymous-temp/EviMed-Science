@@ -131,12 +131,13 @@ def tool_definitions():
         {
             "name": "geo_write",
             "description": (
-                "Write this 循证 GEO project; valid items survive individual refusals. "
-                "value merges findings; reuse ids to amend. "
-                "questions: groups[].questions[].isMeasured:true selects probes before lock_questions; no answers needed. "
-                "research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. "
+                "Write this 循证 GEO project; items are refused one by one. "
+                "value merges findings by id. "
+                "questions merges groups into the latest map by name+pool (data.replace:true: whole map); "
+                "isMeasured:true marks probes for lock_questions; no answers needed. "
+                "research queues {capabilityId,question,context?,rationale?}, run after this one. "
                 "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. "
-                "actions: per-gap strategy actions."
+                "actions: per gap."
             ),
             "inputSchema": {
                 "type": "object",

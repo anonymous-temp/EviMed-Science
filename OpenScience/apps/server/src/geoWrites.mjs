@@ -483,8 +483,10 @@ export function geoGroupName(name) {
  */
 function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
   const read = fields(data, issues, {});
-  read.unknown(["groups", "note"]);
+  read.unknown(["groups", "note", "replace"]);
   const note = read.text("note", 500);
+  // Whether the groups are the whole map (`true`) or are added to the latest one, by name and pool (the default; see `geoMergedQuestionMap`).
+  const replace = read.flag("replace");
   if (!Array.isArray(data.groups) || data.groups.length === 0 || data.groups.length > GEO_WRITE_LIMITS.groups) {
     throw failure(400, "geo_write_payload_invalid", `data.groups must hold 1 to ${GEO_WRITE_LIMITS.groups} groups.`);
   }
@@ -529,7 +531,9 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
       question.unknown(QUESTION_FIELDS);
       const parsed = {
         text: question.text("text", 300, { required: true }),
-        kind: question.word("kind", GEO_QUESTION_KINDS, { fallback: "real" }),
+        // A question written without its kind is one the run wrote, not one a person was heard asking (2026-10-25: the default was
+        // `real`, so a run's own questions reached the page as 真实问法, dated to the write and with no place they were said).
+        kind: question.word("kind", GEO_QUESTION_KINDS, { fallback: "typical" }),
         pool: question.word("pool", GEO_POOLS, { fallback: value.pool }),
         platform: question.word("platform", GEO_QUESTION_PLATFORMS),
         sourceUrl: question.url("sourceUrl"),
@@ -557,7 +561,69 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
     issues.push({ field: "collectedAt", code: "notice",
       message: `${stamped} real phrasing(s) came without collectedAt and are dated to this write; pass each post's collectedAt from social_posts_search.` });
   }
-  return { groups, note };
+  return { groups, note, replace: replace === true, replaceRefused: replace === undefined };
+}
+
+/** What names a group across set versions: its pool and its name, as the spine aliases a group's older ids by them (`geoSpine.mjs`). @param {Record<string, any>} group */
+const groupIdentity = (group) => `${group.pool ?? ""}\u0000${(geoGroupName(group.name) ?? "").trim()}`;
+
+/**
+ * The question map a `questions` write leaves, from the latest set's groups and the write's: a group of the write replaces its
+ * namesake (the same pool and name) in its place, every other group of the latest set is carried over with its questions as they
+ * are — measured or not, real or typical, where and when heard — and a group of a name the map does not hold is added at the end.
+ *
+ * Production, 2026-10-25: a write used to be the whole map. A content run told to make "a minimal group" for an article wrote that
+ * one group, and the project's locked 24-group map was followed by a one-group version — the version every page and every
+ * `geo_read` reads — and another project had three one-group versions in a row before a 22-group one. `replace: true` is still the
+ * whole map, for the run that means it.
+ *
+ * The map keeps the bounds of one write (`GEO_WRITE_LIMITS.groups` and `.questions`): the latest set's groups are always kept, and a
+ * group the write would add past a bound is refused by its index.
+ * @param {Array<Record<string, any> & { questions: any[] }>} current the latest set's groups, as the store reads them
+ * @param {Array<Record<string, any> & { questions: any[] }>} written the write's validated groups
+ * @returns {{ groups: any[], placed: Array<number | null>, carried: number, refused: number[] }}
+ *   `placed[i]` is where written group `i` stands in `groups`, or null when it was refused
+ */
+export function geoMergedQuestionMap(current, written) {
+  /** @type {Map<string, number[]>} */
+  const byIdentity = new Map();
+  written.forEach((group, index) => byIdentity.set(groupIdentity(group), [...(byIdentity.get(groupIdentity(group)) ?? []), index]));
+  /** @type {any[]} */
+  const groups = [];
+  /** @type {Array<number | null>} */
+  const placed = written.map(() => null);
+  const replaced = new Set();
+  let carried = 0;
+  for (const group of current) {
+    const identity = groupIdentity(group);
+    const namesakes = byIdentity.get(identity);
+    if (!namesakes) {
+      groups.push(group);
+      carried += 1;
+      continue;
+    }
+    // A second group of that name in the latest set goes with the first: the write named them both.
+    if (replaced.has(identity)) continue;
+    replaced.add(identity);
+    for (const index of namesakes) {
+      placed[index] = groups.length;
+      groups.push(written[index]);
+    }
+  }
+  let questions = groups.reduce((total, group) => total + group.questions.length, 0);
+  /** @type {number[]} */
+  const refused = [];
+  written.forEach((group, index) => {
+    if (replaced.has(groupIdentity(group))) return;
+    if (groups.length >= GEO_WRITE_LIMITS.groups || questions + group.questions.length > GEO_WRITE_LIMITS.questions) {
+      refused.push(index);
+      return;
+    }
+    placed[index] = groups.length;
+    groups.push(group);
+    questions += group.questions.length;
+  });
+  return { groups, placed, carried, refused };
 }
 
 /**
@@ -1827,10 +1893,27 @@ async function writeToProject({ store, project, what, body, renameProject = null
       return done(written.map((entry) => entry.id), { claims: written });
     }
     case "questions": {
-      const { groups, note } = validatedGroups(dataOf(body), issues);
-      if (!groups.length) return done([]);
-      const written = await store.writeQuestionSet(userId, project.id, { groups, note: note ?? null });
-      return done(written.groupIds, { version: written.version, questionIds: written.questionIds });
+      const { groups, note, replace, replaceRefused } = validatedGroups(dataOf(body), issues);
+      // `replace` given as something other than true or false is a word the run has to correct: neither reading of it is safe.
+      if (!groups.length || replaceRefused) return done([]);
+      /** @type {Array<number | null>} */
+      let placed = groups.map((_group, index) => index);
+      let carried = 0;
+      const written = await store.writeQuestionSet(userId, project.id, { groups, note: note ?? null, merge: replace ? null : (current) => {
+        const merged = geoMergedQuestionMap(current, groups);
+        placed = merged.placed;
+        carried = merged.carried;
+        for (const index of merged.refused) {
+          issues.push({ group: index, code: "too_many",
+            message: `A question map holds at most ${GEO_WRITE_LIMITS.groups} groups and ${GEO_WRITE_LIMITS.questions} questions; this group was not added. Write with replace: true to rewrite the map.` });
+        }
+        // Nothing of the write fits: the latest set stands, and no version is written that only repeats it.
+        return merged.placed.some((position) => position != null) ? merged.groups : null;
+      } });
+      if (!written) return done([]);
+      const at = placed.filter((position) => position != null);
+      return done(at.map((position) => written.groupIds[position]), { version: written.version, questionIds: at.map((position) => written.questionIds[position]),
+        ...(carried ? { carried } : {}) });
     }
     case "lock_questions": {
       const data = body.data == null ? {} : dataOf(body);
