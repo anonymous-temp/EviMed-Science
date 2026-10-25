@@ -5,7 +5,7 @@ import { taskBudgetRefusal } from "../src/agendaBudget.mjs";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 
-async function fixture(t, digestProjectId = "owned-project", { stopRun = null } = {}) {
+async function fixture(t, digestProjectId = "owned-project", { stopRun = null, enabled = true } = {}) {
   const calls = [];
   const agenda = { id: "agenda-one", projectId: "owned-project", revision: 2 };
   const digest = { id: "digest-one", projectId: digestProjectId, revision: 1 };
@@ -54,7 +54,7 @@ async function fixture(t, digestProjectId = "owned-project", { stopRun = null } 
       return { id };
     },
   };
-  const route = createAutopilotRoutes({ store, service, maxJsonBytes: 64 * 1024, stopRun });
+  const route = createAutopilotRoutes({ store, service, maxJsonBytes: 64 * 1024, stopRun, enabled });
   const server = createServer((req, res) => route(req, res).then((handled) => {
     if (!handled) { res.writeHead(404); res.end(); }
   }).catch((error) => sendError(res, error)));
@@ -109,7 +109,7 @@ test("digest decisions are scoped and accept only declared fields", async (t) =>
   // for a project the account owns.
   assert.equal((await fetch(`${base}/api/autopilot/episodes?projectId=other`, { headers })).status, 404);
   assert.equal((await fetch(`${base}/api/autopilot/episodes?projectId=owned-project&agendaId=agenda-one`, { headers })).status, 200);
-  assert.deepEqual(calls.find((call) => call.method === "episodes"), { method: "episodes", userId: "owner", options: { projectId: "owned-project", agendaId: "agenda-one" } });
+  assert.deepEqual(calls.find((call) => call.method === "episodes"), { method: "episodes", userId: "owner", options: { projectId: "owned-project", agendaId: "agenda-one", cursor: null, limit: 100 } });
   const response = await fetch(`${base}/api/autopilot/digests/digest-one/decisions`, { method: "POST", headers,
     body: JSON.stringify({ action: "adopt", claimId: "claim-one", note: "continue" }) });
   assert.equal(response.status, 200);
@@ -213,4 +213,53 @@ test("one execution is canceled through an owned task, with CSRF and a request i
   assert.equal(cancelCalls(), 2, "the unknown agenda never reaches the cancel; only the unknown episode asked the service");
   // The GET of the same path is not a cancel.
   assert.equal((await fetch(url, { headers })).status, 404);
+});
+
+
+test("history cursors and bounded page sizes reach the service through owned project scope", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const response = await fetch(`${base}/api/autopilot/episodes?projectId=owned-project&agendaId=agenda-one&cursor=next-page&limit=25`, { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls.find(call => call.method === "episodes").options, { projectId: "owned-project", agendaId: "agenda-one", cursor: "next-page", limit: 25 });
+  for (const limit of ["0", "101", "2.5", "wrong"]) assert.equal((await fetch(`${base}/api/autopilot/episodes?projectId=owned-project&limit=${limit}`, { headers })).status, 400);
+});
+
+test("disabled scheduling preserves reads and stop operations while refusing execution admission", async (t) => {
+  const { base, headers, calls } = await fixture(t, "owned-project", { enabled: false });
+  assert.equal((await fetch(`${base}/api/autopilot/agendas?projectId=owned-project`, { headers })).status, 200);
+  for (const suffix of ["", "/agenda-one/start", "/agenda-one/run-now", "/agenda-one/schedule", "/agenda-one/follow-ups"]) {
+    const response = await fetch(`${base}/api/autopilot/agendas${suffix}`, { method: "POST", headers, body: "{}" });
+    assert.equal(response.status, 503); assert.equal((await response.json()).code, "task_tools_disabled");
+  }
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one/stop`, { method: "POST", headers, body: JSON.stringify({ expectedRevision: 2 }) })).status, 200);
+  assert.equal(calls.some(call => ["create", "start", "runNow", "schedule", "followUp"].includes(call.method)), false);
+});
+
+test("an older execution is readable directly only from its owned project and omits the run brief", async (t) => {
+  const { base, headers, service } = await fixture(t);
+  service.getEpisode = async (_user, id) => ({ id, projectId: id === "foreign" ? "other" : "owned-project", payload: { status: "merged", prompt: "private brief" } });
+  const response = await fetch(`${base}/api/autopilot/episodes/older`, { headers });
+  assert.equal(response.status, 200); assert.equal((await response.json()).data.payload.prompt, undefined);
+  assert.equal((await fetch(`${base}/api/autopilot/episodes/foreign`, { headers })).status, 404);
+});
+
+test("disabled deployments return truthful read and edit projections without changing saved task state", async (t) => {
+  const { base, headers, service } = await fixture(t,"owned-project",{enabled:false});
+  service.projectAgenda=agenda=>({...agenda,payload:{enabled:true,status:"active",nextRunAt:"2026-10-26T07:00:00.000Z",scheduleState:"scheduled"}});
+  const list=(await (await fetch(`${base}/api/autopilot/agendas?projectId=owned-project`,{headers})).json()).data;
+  assert.equal(list.available,false);assert.equal(list.items[0].payload.schedulingAvailable,false);assert.equal(list.items[0].payload.nextRunAt,null);
+  const detail=(await (await fetch(`${base}/api/autopilot/agendas/agenda-one`,{headers})).json()).data;
+  assert.equal(detail.payload.schedulingAvailable,false);assert.equal(detail.payload.nextRunAt,null);assert.equal(detail.payload.status,"active");
+  const edited=(await (await fetch(`${base}/api/autopilot/agendas/agenda-one`,{method:"PATCH",headers,body:JSON.stringify({expectedRevision:2,title:"Edited"})})).json()).data;
+  assert.equal(edited.payload.schedulingAvailable,false);assert.equal(edited.payload.nextRunAt,null);
+  assert.equal((await service.get("owner","agenda-one")).payload,undefined,"the availability projection does not mutate a stored record");
+});
+
+test("disabled stop and deletion forward exact run cancellation through the authenticated project", async (t) => {
+  const stopped=[],{base,headers,service}=await fixture(t,"owned-project",{enabled:false,stopRun:async(project,runId)=>{stopped.push([project.id,runId]);}});
+  service.stop=async(userId,id,_body,options)=>{await options.stopRun({runId:"accepted-stop",sessionId:"session"});return service.get(userId,id);};
+  service.archive=async(userId,id,_body,options)=>{await options.stopRun({runId:"accepted-delete",sessionId:"session"});return service.get(userId,id);};
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one/stop`,{method:"POST",headers,body:JSON.stringify({expectedRevision:2})})).status,200);
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one`,{method:"DELETE",headers,body:JSON.stringify({expectedRevision:2})})).status,200);
+  assert.deepEqual(stopped,[["owned-project","accepted-stop"],["owned-project","accepted-delete"]]);
 });

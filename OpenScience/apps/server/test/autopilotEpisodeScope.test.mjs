@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText } from "../src/autopilotEpisodeScope.mjs";
+import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, isUnattendedExecution } from "../src/autopilotEpisodeScope.mjs";
+
+test("task-tool authority recognizes ordinary scheduled runs without the acceptance automated marker", () => {
+  for (const effectiveRouteReason of ["autopilot:routine", "autopilot:evidence:literature-sentinel", "autopilot-verify", "autopilot-verify:evidence"]) {
+    assert.equal(isUnattendedExecution({ automated: false, effectiveRouteReason }), true, effectiveRouteReason);
+  }
+  assert.equal(isUnattendedExecution({ automated: true, effectiveRouteReason: "loopx-continuation" }), true);
+  assert.equal(isUnattendedExecution({ automated: false, agendaId: "agenda-user-followup", effectiveRouteReason: "conversation-turn", question: "autopilot:routine" }), false);
+});
 
 const EPISODE = "episode-0123456789abcdef0123456789abcdef";
 

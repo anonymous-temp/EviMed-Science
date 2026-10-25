@@ -700,7 +700,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   /** @param {string | null} excludeEpisodeId @returns {Promise<number>} the programme episodes that hold the slot now */
   async function activeEpisodes(excludeEpisodeId) {
     const row = (await database.query(`SELECT count(*)::integer AS n FROM evimed_product.documents
-      WHERE user_id = $1 AND kind = 'episode' AND project_id = $2 AND deleted_at IS NULL AND payload->>'status' IN ('queued', 'running', 'verifying')
+      WHERE user_id = $1 AND kind = 'episode' AND project_id = $2 AND deleted_at IS NULL AND payload->>'status' IN ('queued', 'retry_pending', 'running', 'verifying')
         AND updated_at > $3::timestamptz AND ($4::text IS NULL OR id <> $4)`,
     [publisher, EVIDENCE_PROJECT_ID, new Date(now().getTime() - PROGRAMME_ACTIVE_EPISODE_MS).toISOString(), excludeEpisodeId])).rows[0];
     return row?.n ?? 0;

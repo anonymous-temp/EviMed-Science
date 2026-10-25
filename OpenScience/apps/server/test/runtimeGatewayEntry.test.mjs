@@ -169,6 +169,8 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
     taskToolsEnabled: true, stateStore: "postgres", modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
   });
   assert.equal(withTasks?.tasks, "https://evimed.example/runtime-gateway/tasks/v1");
+  assert.equal(publicRuntimeGatewayUrls({ runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway", taskToolsEnabled: true, autopilotEnabled: false, stateStore: "postgres",
+    modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1" })?.tasks, "", "no task tools when the scheduler is off");
   assert.equal(publicRuntimeGatewayUrls({ runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway", taskToolsEnabled: true, stateStore: "file",
     modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1" })?.tasks, "", "no product ledger to keep a task in");
   assert.ok(RUNTIME_GATEWAY_NAMES.includes("tasks"));

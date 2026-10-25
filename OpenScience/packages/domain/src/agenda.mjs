@@ -83,7 +83,7 @@ export const SCHEDULED_TASK_DEFAULT_TYPES = Object.freeze([
 ])
 
 /** An episode's lifecycle. */
-export const EPISODE_STATES = Object.freeze(['queued', 'running', 'verifying', 'merged', 'failed', 'canceled'])
+export const EPISODE_STATES = Object.freeze(['queued', 'retry_pending', 'running', 'verifying', 'merged', 'failed', 'canceled'])
 
 /**
  * Why a claim was not given an independent re-check (`verification.status` is
@@ -95,9 +95,10 @@ export const EPISODE_STATES = Object.freeze(['queued', 'running', 'verifying', '
  *    pay for this one at `MIN_RUN_BUDGET_CNY` (`splitEpisodeBudget`).
  *  - `agenda_stopped` / `agenda_paused`: the agenda stopped before the re-check
  *    started. A restart does not revive it: the next episode brings its own.
+ *  - `task_tools_disabled`: scheduling is operationally disabled; the finished result is still retained.
  */
 export const VERIFICATION_UNSCHEDULED_REASONS = Object.freeze([
-  'verification_cap', 'verification_budget_unavailable', 'agenda_stopped', 'agenda_paused',
+  'verification_cap', 'verification_budget_unavailable', 'agenda_stopped', 'agenda_paused', 'task_tools_disabled',
 ])
 
 /**

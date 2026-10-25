@@ -16,6 +16,7 @@
     "./runtime-ui-transport": "./src/runtimeUiTransport.mjs",
     "./runtime-ui-bridge": "./src/runtimeUiBridge.mjs",
     "./compaction": "./src/compaction.mjs",
+    "./run-context-authority": "./src/runContextAuthority.mjs",
     "./runtime-ui-shell": "./src/runtimeUiShell.mjs",
     "./runtime-ui-frame": "./src/runtimeUiFrame.mjs",
     "./runtime-ui-kit": "./src/runtimeUiKit.mjs",

@@ -96,12 +96,20 @@ const GATE_SOURCE_REFUSAL = '交付门禁的实现不在你的阅读范围内。
  *   deliveryAttemptLimit: number,
  *   frozenDeliverables?: readonly string[],
  *   runningChildren?: number,
+ *   unattended?: boolean,
  * }} state `runningChildren`: the children of this run working now, by either tool that starts one
  * @returns {{ allow: true } | { allow: false, code: string, reason: string }}
  */
 export function toolPolicy(call, state) {
   const name = String(call?.name ?? '')
   const args = /** @type {Record<string, any>} */ (call?.args ?? {})
+  if (state.unattended === true) {
+    if (name === 'ask_user_question') return { allow: false, code: 'unattended_question_unavailable',
+      reason: 'Nobody is attending this execution. Continue with the supplied information and state any missing input; do not wait for an answer.' }
+    if (['schedule_task', 'update_task', `${MCP_TOOL_PREFIX}schedule_task`, `${MCP_TOOL_PREFIX}update_task`].includes(name)) {
+      return { allow: false, code: 'task_tools_not_in_conversation', reason: 'An unattended execution cannot create or change scheduled tasks.' }
+    }
+  }
   const frozen = new Set(state.frozenDeliverables ?? [])
 
   const readFields = READ_ARG_TOOLS[/** @type {keyof typeof READ_ARG_TOOLS} */ (name)]

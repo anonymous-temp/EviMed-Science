@@ -38,14 +38,14 @@ class MemoryDocuments {
 
 const jobs = { enqueue: async () => ({ id: "job" }), cancel: async () => null };
 
-async function fixture(t, { enabled = true, maxTasks = 30, service: given = undefined, runId = null } = {}) {
+async function fixture(t, { enabled = true, autopilotEnabled = true, maxTasks = 30, service: given = undefined, runId = null, conversationCheck = null } = {}) {
   const documents = new MemoryDocuments();
   let counter = 0;
   const real = new AutopilotService({ documents, jobs, now: () => NOW, id: (prefix) => `${prefix}${++counter}` });
   const failures = [];
   const handler = createTaskToolsGateway({
-    config: { taskToolsEnabled: enabled, taskToolsMaxTasks: maxTasks },
-    runtimeManager: { assertActiveModelGatewayToken: (token) => {
+    config: { taskToolsEnabled: enabled, autopilotEnabled, taskToolsMaxTasks: maxTasks },
+    runtimeManager: { assertTaskToolsConversation: conversationCheck, assertActiveModelGatewayToken: (token) => {
       if (token === TOKEN) return { userId: "owner", projectId: "p1" };
       if (token === BOUNDED) return { userId: "owner", projectId: "p1", runId: "run-bounded", dailyLimit: 1, weeklyLimit: 1, runLimit: 1 };
       throw new Error("no");
@@ -76,6 +76,7 @@ async function fixture(t, { enabled = true, maxTasks = 30, service: given = unde
 const weekly = { kind: "weekly", weekdays: [5], time: "09:00" };
 const said = "每周五帮我看看 SGLT2 抑制剂的新研究，说明设计与局限";
 const stored = async (real, id) => (await real.get("owner", id)).payload;
+const fixturePause = async (real, id) => { const row = await real.get("owner", id); return real.stop("owner", id, { expectedRevision: row.revision }); };
 
 test("a task is made and started as the form makes one: default budgets and types, no step to approve, the facts back", async (t) => {
   const { schedule, real } = await fixture(t);
@@ -178,7 +179,11 @@ test("a project holds a bounded number of tasks, and deleting one makes room", a
   await schedule({ instruction: "二", schedule: weekly });
   const third = await schedule({ instruction: "三", schedule: weekly });
   assert.deepEqual([third.status, third.body.code], [409, "task_limit_reached"]);
-  assert.match(third.body.error, /delete or pause one/);
+  assert.match(third.body.error, /delete.*task/i);
+  assert.doesNotMatch(third.body.error, /delete or pause/i);
+  await fixturePause(real, first.body.data.taskId);
+  const afterPause = await schedule({ instruction: "三", schedule: weekly });
+  assert.deepEqual([afterPause.status, afterPause.body.code], [409, "task_limit_reached"]);
   // The same task said again is still the same task, not a new one over the limit.
   assert.equal((await schedule({ instruction: "一", schedule: weekly })).body.data.created, false);
   const gone = await real.get("owner", first.body.data.taskId);
@@ -322,13 +327,162 @@ test("an unexpected failure is a coded outage the run goes on from, never the st
   assert.doesNotMatch(JSON.stringify(answer.body), /10\.0\.0\.7|connection reset/);
 });
 
-test("a task that cannot be started is not left behind paused, and the service's own refusal reaches the run by its code", async (t) => {
-  const failing = new AutopilotService({ documents: new MemoryDocuments(), jobs, now: () => NOW, id: (prefix) => `${prefix}x` });
-  failing.start = async () => { throw new HttpError(400, "autopilot_episode_budget_too_small", "This task's episode budget is below the minimum."); };
-  const { schedule } = await fixture(t, { service: failing });
-  const answer = await schedule({ instruction: "x", schedule: weekly });
-  assert.deepEqual([answer.status, answer.body.code], [400, "autopilot_episode_budget_too_small"]);
-  assert.equal((await failing.list("owner", { projectId: "p1" })).items.length, 0, "the half-made task was removed");
+test("concurrent identical calls share one task and quota admission across gateway instances", async (t) => {
+  const documents = new MemoryDocuments();
+  const originalPut = documents.put.bind(documents);
+  documents.put = async (...args) => { await new Promise((resolve) => setTimeout(resolve, 5)); return originalPut(...args); };
+  let counter = 0;
+  const one = new AutopilotService({ documents, jobs, now: () => NOW, id: (prefix) => `${prefix}${++counter}` });
+  const two = new AutopilotService({ documents, jobs, now: () => NOW, id: (prefix) => `${prefix}${++counter}` });
+  const a = await fixture(t, { service: one, maxTasks: 1 });
+  const b = await fixture(t, { service: two, maxTasks: 1 });
+  const same = { instruction: said, schedule: weekly };
+  const answers = await Promise.all([a.schedule(same), b.schedule(same)]);
+  assert.deepEqual(answers.map((answer) => answer.status), [200, 200]);
+  assert.equal(new Set(answers.map((answer) => answer.body.data.taskId)).size, 1);
+  assert.deepEqual(answers.map((answer) => answer.body.data.created).sort(), [false, true]);
+  const distinct = await Promise.all([a.schedule({ ...same, instruction: "another" }), b.schedule({ ...same, instruction: "third" })]);
+  assert.deepEqual(distinct.map((answer) => [answer.status, answer.body.code]), [[409, "task_limit_reached"], [409, "task_limit_reached"]]);
+  assert.equal((await one.list("owner", { projectId: "p1" })).items.length, 1);
+});
+
+test("a lost creation response retries the same retained task without consuming another slot", async (t) => {
+  const { schedule, real } = await fixture(t, { maxTasks: 1 });
+  const create = real.createScheduledTask.bind(real);
+  let loseResponse = true;
+  real.createScheduledTask = async (...args) => {
+    const result = await create(...args);
+    if (loseResponse) { loseResponse = false; throw new Error("injected response loss after commit"); }
+    return result;
+  };
+  const request = { instruction: said, schedule: weekly };
+  const lost = await schedule(request);
+  assert.deepEqual([lost.status, lost.body.code], [503, "task_tools_unavailable"]);
+  const rows = (await real.list("owner", { projectId: "p1" })).items;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].payload.enabled, true);
+  const retry = await schedule(request);
+  assert.deepEqual([retry.status, retry.body.data.taskId, retry.body.data.created], [200, rows[0].id, false]);
+  assert.equal((await real.list("owner", { projectId: "p1" })).items.length, 1);
+});
+
+test("distinct simultaneous requests cannot both take the final project slot", async (t) => {
+  const documents = new MemoryDocuments();
+  const originalPut = documents.put.bind(documents);
+  documents.put = async (...args) => { await new Promise((resolve) => setTimeout(resolve, 5)); return originalPut(...args); };
+  let counter = 0;
+  const one = new AutopilotService({ documents, jobs, now: () => NOW, id: (prefix) => `${prefix}${++counter}` });
+  const two = new AutopilotService({ documents, jobs, now: () => NOW, id: (prefix) => `${prefix}${++counter}` });
+  const a = await fixture(t, { service: one, maxTasks: 1 });
+  const b = await fixture(t, { service: two, maxTasks: 1 });
+  const answers = await Promise.all([a.schedule({ instruction: "one", schedule: weekly }), b.schedule({ instruction: "two", schedule: weekly })]);
+  assert.deepEqual(answers.map((answer) => answer.status).sort(), [200, 409]);
+  assert.equal((await one.list("owner", { projectId: "p1" })).items.length, 1);
+});
+
+test("a repeated paused task is returned paused without restarting it", async (t) => {
+  const { schedule, update, real } = await fixture(t);
+  const first = await schedule({ instruction: said, schedule: weekly });
+  await update({ taskId: first.body.data.taskId, paused: true });
+  const again = await schedule({ instruction: said, schedule: weekly });
+  assert.deepEqual([again.body.data.created, again.body.data.state, again.body.data.nextRunAt], [false, "paused", null]);
+  assert.equal((await real.list("owner", { projectId: "p1" })).items.length, 1);
+});
+
+test("saved edits survive a resume failure and return their actual state plus a safe remaining retry", async (t) => {
+  const { schedule, update, real } = await fixture(t);
+  const { taskId } = (await schedule({ instruction: said, schedule: weekly })).body.data;
+  await update({ taskId, paused: true });
+  const original = real.start.bind(real);
+  real.start = async () => { throw new HttpError(503, "autopilot_unavailable", "Task activation is temporarily unavailable."); };
+  const answer = await update({ taskId, instruction: "Changed instruction", paused: false });
+  assert.equal(answer.status, 200);
+  assert.deepEqual([answer.body.data.outcome, answer.body.data.changed, answer.body.data.state], ["partial", ["instruction"], "paused"]);
+  assert.deepEqual(answer.body.data.pending, { paused: false });
+  assert.deepEqual(answer.body.data.recovery, { operation: "update", taskId, paused: false });
+  assert.equal((await stored(real, taskId)).prompt, "Changed instruction");
+  real.start = original;
+  const retry = await update(answer.body.data.recovery);
+  assert.equal(retry.status, 400, "the transport operation is metadata, not an accepted task field");
+  const { operation, ...payload } = answer.body.data.recovery;
+  const resumed = await update(payload);
+  assert.equal(operation, "update");
+  assert.equal(resumed.body.data.state, "scheduled");
+  assert.equal((await real.list("owner", { projectId: "p1" })).items.length, 1);
+});
+
+test("a response lost after save and resume is verified from persisted state", async (t) => {
+  const { schedule, update, real } = await fixture(t);
+  const { taskId } = (await schedule({ instruction: said, schedule: weekly })).body.data;
+  await update({ taskId, paused: true });
+  const original = real.start.bind(real);
+  real.start = async (...args) => { await original(...args); throw new Error("injected response loss"); };
+  const answer = await update({ taskId, instruction: "Changed instruction", paused: false });
+  assert.equal(answer.status, 200);
+  assert.deepEqual([answer.body.data.state, answer.body.data.changed], ["scheduled", ["instruction", "resumed"]]);
+  assert.notEqual(answer.body.data.outcome, "partial");
+});
+
+test("saved edits also report a failed pause and recover without repeating the edits", async (t) => {
+  const { schedule, update, real } = await fixture(t);
+  const { taskId } = (await schedule({ instruction: said, schedule: weekly })).body.data;
+  const stop = real.stop.bind(real);
+  real.stop = async () => { throw new HttpError(503, "autopilot_unavailable", "Task pause is temporarily unavailable."); };
+  const answer = await update({ taskId, title: "Saved title", paused: true });
+  assert.deepEqual([answer.status, answer.body.data.outcome, answer.body.data.changed, answer.body.data.state], [200, "partial", ["title"], "scheduled"]);
+  assert.deepEqual(answer.body.data.pending, { paused: true });
+  real.stop = stop;
+  const { operation, ...retry } = answer.body.data.recovery;
+  assert.equal(operation, "update");
+  assert.equal((await update(retry)).body.data.state, "paused");
+});
+
+test("a save whose response was lost is verified without applying the same edit twice", async (t) => {
+  const { schedule, update, real } = await fixture(t);
+  const { taskId } = (await schedule({ instruction: said, schedule: weekly })).body.data;
+  const save = real.update.bind(real);
+  let writes = 0;
+  real.update = async (...args) => { writes += 1; await save(...args); throw new Error("injected response loss"); };
+  const answer = await update({ taskId, title: "Saved title" });
+  assert.deepEqual([answer.status, answer.body.data.title, answer.body.data.changed], [200, "Saved title", ["title"]]);
+  assert.equal(writes, 1);
+});
+
+test("source references persist on creation and additive updates within the authenticated project", async (t) => {
+  const { schedule, update, real, documents } = await fixture(t);
+  const mine = `src_${"a".repeat(32)}`, next = `src_${"b".repeat(32)}`, otherProject = `src_${"c".repeat(32)}`, otherUser = `src_${"d".repeat(32)}`;
+  for (const [userId, projectId, id] of [["owner", "p1", mine], ["owner", "p1", next], ["owner", "p2", otherProject], ["stranger", "p1", otherUser]]) {
+    await documents.put(userId, "source", id, { status: "ready", title: id }, { expectedRevision: 0, projectId });
+  }
+  const first = await schedule({ instruction: said, schedule: weekly, sourceIds: [mine] });
+  assert.equal(first.status, 200);
+  const { taskId } = first.body.data;
+  assert.deepEqual(first.body.data.sourceIds, [mine]);
+  assert.deepEqual((await stored(real, taskId)).materials.map((item) => item.sourceId), [mine]);
+  const changed = await update({ taskId, sourceIds: [next, mine] });
+  assert.deepEqual(changed.body.data.changed, ["materials"]);
+  assert.deepEqual(changed.body.data.sourceIds.sort(), [mine, next]);
+  assert.deepEqual((await update({ taskId, sourceIds: [next] })).body.data.changed, []);
+  for (const source of [otherProject, otherUser]) {
+    const denied = await update({ taskId, instruction: "Must not persist", sourceIds: [source] });
+    assert.deepEqual([denied.status, denied.body.code], [404, "autopilot_material_not_found"]);
+    assert.equal((await stored(real, taskId)).prompt, said, "material validation precedes every mutation");
+  }
+  const malformed = await schedule({ instruction: "bad material", schedule: weekly, sourceIds: ["/tmp/file"] });
+  assert.deepEqual([malformed.status, malformed.body.code], [400, "task_materials_invalid"]);
+  const before = (await real.list("owner", { projectId: "p1" })).items.length;
+  const denied = await schedule({ instruction: "foreign source", schedule: weekly, sourceIds: [otherProject] });
+  assert.equal(denied.status, 404);
+  assert.equal((await real.list("owner", { projectId: "p1" })).items.length, before);
+});
+
+test("scheduler availability and trusted shared-runtime unattended guard deny mutations", async (t) => {
+  const off = await fixture(t, { autopilotEnabled: false });
+  const refused = await off.schedule({ instruction: said, schedule: weekly });
+  assert.deepEqual([refused.status, refused.body.code], [503, "task_tools_disabled"]);
+  const background = await fixture(t, { conversationCheck: async () => { throw new HttpError(403, "task_tools_not_in_conversation", "A scheduled execution cannot make or change tasks."); } });
+  assert.equal((await background.schedule({ instruction: said, schedule: weekly })).status, 403);
+  assert.equal((await background.real.list("owner", { projectId: "p1" })).items.length, 0);
 });
 
 test("a task that moved under the call (edited on the page at the same moment) is read again once", async (t) => {

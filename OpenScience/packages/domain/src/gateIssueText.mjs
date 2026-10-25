@@ -249,6 +249,8 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   contract_kind_ambiguous: '交付物类型不明确',
   attempt_limit_reached: '提交次数已达上限',
   budget_exhausted: '运行预算已用完',
+  unattended_question_unavailable: '无人值守任务无法等待提问',
+  autopilot_cancellation_failed: '任务尚未完全停止',
   path_guard_denied: '写入位置被拒绝',
   subagent_failed: '子任务没有完成',
   subagent_start_failed: '子任务未能启动',

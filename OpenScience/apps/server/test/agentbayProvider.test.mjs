@@ -1,3 +1,4 @@
+import { runContextAuthorityPublicKey } from "@evimed/harness-port/run-context-authority";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -225,6 +226,10 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   assert.match(kernelEnv, /^OPEN_SCIENCE_RUNTIME_AUTHORITY='dsh\.runtime'$/m);
   assert.match(kernelEnv, /^EVIMED_PUBLIC_SOURCE_GATEWAY_URL='https:\/\/evimed\.example\/runtime-gateway\/sources\/v1\/fetch'$/m);
   for (const secret of secrets) assert.ok(!kernelEnv.includes(secret), "the kernel's environment carries no secret");
+  assert.ok(kernelEnv.includes(`EVIMED_ATTENDANCE_PUBLIC_KEY='${runContextAuthorityPublicKey("m".repeat(48))}'`));
+  assert.match(kernelEnv, /^EVIMED_ATTENDANCE_USER_ID='alice'$/m);
+  assert.match(kernelEnv, /^EVIMED_ATTENDANCE_PROJECT_ID='paper1'$/m);
+  assert.ok(!kernelEnv.includes("m".repeat(48)), "the AgentBay runtime receives only the verifier, never the API signing secret");
   assert.match(kernelEnv, /^EVIMED_GEO_SKILLS='0'$/m, "an ordinary project's session is told, in so many words, that it carries no GEO method pack");
 
   assert.equal(runtime.url, "http://dsh.runtime");

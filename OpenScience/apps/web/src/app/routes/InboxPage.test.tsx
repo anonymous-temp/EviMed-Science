@@ -659,3 +659,9 @@ describe("the inbox's composition", () => {
     expect(facts.toolbars[0].compareDocumentPosition(screen.getByRole("list", { name: "消息" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+it("opens a terminal task failure in the task's own project", async () => {
+  serve({ items: [{ ...review, id: "task-failure", title: "行业日报未完成", noticeType: "notify", projectId: "project-two", source: { type: "system", id: "autopilot-task:agenda-one" }, actions: [{ id: "open", label: "查看任务", style: "primary" }], readAt: at(1) }], nextCursor: null });
+  open();
+  expect(await screen.findByRole("link", { name: "行业日报未完成" })).toHaveAttribute("href", "/app/autopilot/agenda-one?project=project-two");
+});

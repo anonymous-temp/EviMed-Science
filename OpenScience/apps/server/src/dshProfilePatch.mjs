@@ -96,6 +96,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [publicSourceGatewayUrl]
  * @property {string} [webSearchGatewayUrl]
  * @property {string} [modelGatewayTokenFile]
+ * @property {{publicKey:string,userId:string,projectId:string}} [attendanceAuthority]
  * @property {string} workloadTokenFile
  * @property {string} bundleVersion
  * @property {string} dshVersion
@@ -661,7 +662,7 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'attendanceAuthority'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -716,6 +717,9 @@ export function runtimeEnvironment(input) {
     // the container was never given it.
     EVIMED_WEB_SEARCH_GATEWAY_URL: input.webSearchGatewayUrl ?? "",
     EVIMED_MODEL_GATEWAY_TOKEN_FILE: input.modelGatewayTokenFile ?? "",
+    EVIMED_ATTENDANCE_PUBLIC_KEY: input.attendanceAuthority?.publicKey ?? "",
+    EVIMED_ATTENDANCE_USER_ID: input.attendanceAuthority?.userId ?? "",
+    EVIMED_ATTENDANCE_PROJECT_ID: input.attendanceAuthority?.projectId ?? "",
     EVIMED_WORKLOAD_TOKEN_FILE: input.workloadTokenFile,
     EVIMED_BUNDLE_VERSION: input.bundleVersion,
     EVIMED_ASK_USER: input.flags.askUser ? "1" : "0",

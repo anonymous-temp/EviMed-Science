@@ -33,6 +33,8 @@ import { usePageScroll } from "@/lib/pageScroll";
 import { toast } from "@/lib/toast";
 import { useOperator } from "@/lib/useOperator";
 import { cn } from "@/lib/cn";
+import { taskPath } from "@/lib/taskLocation";
+import { scopedConversationPath } from "@/lib/runtimeUiNavigation";
 
 type Filter = "all" | "unread";
 
@@ -425,6 +427,10 @@ function InboxGroupRow({ group, name, busy, onOpen, onRead }: { group: InboxGrou
 /** Where an item's action goes when it is navigation rather than a decision. */
 function actionHref(item: InboxItem, action: InboxAction): string | null {
   if (action.id !== "open" || !item.source) return null;
+  if (item.source.type === "system" && /^autopilot-task:[A-Za-z0-9_-]{1,160}$/.test(item.source.id)) {
+    const path = taskPath(item.source.id.slice("autopilot-task:".length));
+    return item.projectId ? scopedConversationPath(path, item.projectId) : path;
+  }
   // A digest is either an autopilot briefing or the frontier daily of a day;
   // the daily names itself `frontier-daily:<YYYY-MM-DD>`, the key it is pushed
   // under, and opens on that issue.

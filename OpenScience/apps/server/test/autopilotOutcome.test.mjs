@@ -142,10 +142,11 @@ test("a routine execution is no observation about whether a direction produces c
   assert.equal(payload.taskTypeState.routine.lastOutcome, "succeeded");
 });
 
-test("a routine type that keeps failing to run is paused alone, like any other type", () => {
+test("repeated failures pause the same ordinary job instead of rotating into research", () => {
   let payload = agenda({ taskTypes: ["routine", "literature-sentinel"] });
   payload = record(payload, "routine", "failed");
   payload = record(payload, "routine", "failed");
-  assert.deepEqual(eligibleTaskTypes(payload), ["literature-sentinel"]);
-  assert.equal(payload.status, "active");
+  assert.deepEqual(eligibleTaskTypes(payload), []);
+  assert.equal(payload.taskIntent, "routine");
+  assert.equal(payload.status, "paused");
 });

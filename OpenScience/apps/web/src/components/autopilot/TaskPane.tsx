@@ -5,7 +5,7 @@ import type { WebAgentRun, WebRunDeliverableStatus } from "@/lib/apiClient";
 import { currentPhaseLabel, childrenLine, progressCountsLine, runDeliverables, runProgressOf } from "@/lib/runProgress";
 import { registerTaskPane } from "@/lib/taskPane";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
-import { activeAgenda, inFlight, instant, runState, scheduleOf, zoneName } from "./taskPresentation";
+import { activeAgenda, cancellationPending, inFlight, instant, runState, scheduleOf, zoneName } from "./taskPresentation";
 
 /** The state words of a plan item, in the product's own (appendix B): the ledger's gate words are not the researcher's. */
 const ITEM_STATE: Record<WebRunDeliverableStatus, string> = {
@@ -91,7 +91,7 @@ export function TaskPane({ agenda, execution, lock, ledgerRun, projectId }: {
   }
   if (execution) {
     const waiting = Object.values(execution.payload.resourceDeferrals ?? {}).find(value => value?.status === "waiting");
-    const retry = waiting?.retryAt ? `预计重试 ${instant(waiting.retryAt, zone)}` : "";
+    const retry = !cancellationPending(agenda) && agenda.payload.schedulingAvailable !== false && waiting?.retryAt ? `预计重试 ${instant(waiting.retryAt, zone)}` : "";
     return box(inFlight(execution) ? "waiting" : "no-conversation", <>
       {(inFlight(execution) || execution.payload.status !== "merged") && <p className="flex items-center gap-2 text-ui font-semibold text-text">{inFlight(execution) && <RunStatusDot state="running" labelled />}{runState(execution.payload)}</p>}
       {retry && <p className="text-ui text-text-2">{retry}</p>}
@@ -100,7 +100,7 @@ export function TaskPane({ agenda, execution, lock, ledgerRun, projectId }: {
   }
   const instruction = agenda.payload.prompt ?? agenda.payload.topics.join("\n");
   // The time is said with its zone: a time without one is ambiguous.
-  const nextAt = activeAgenda(agenda) && agenda.payload.nextRunAt ? instant(agenda.payload.nextRunAt, zone) : "";
+  const nextAt = !cancellationPending(agenda) && activeAgenda(agenda) && agenda.payload.nextRunAt ? instant(agenda.payload.nextRunAt, zone) : "";
   return box("never-run", <>
     <p className="whitespace-pre-wrap break-words text-ui leading-relaxed text-text">{instruction}</p>
     <p className="text-ui text-text-3">{nextAt ? `还没有执行过，下次 ${nextAt}${zoneName(zone) ? ` ${zoneName(zone)}` : ""}` : "还没有执行过"}</p>

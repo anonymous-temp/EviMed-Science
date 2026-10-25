@@ -1,5 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import type { AgendaSchedule } from "@/lib/autopilotClient";
 import { useProjectStore } from "@/lib/projects";
@@ -15,6 +17,8 @@ vi.mock("@evimed/domain", async (original) => ({
   AGENDA_MIN_EPISODE_BUDGET_CNY: 3.5,
 }));
 
+const sources = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sourceList", () => ({ listAllSources: sources }));
 const noop = () => {};
 const open = async (showBudgets = true) => {
   render(<TaskForm projectId="project-one" showBudgets={showBudgets} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
@@ -78,10 +82,12 @@ describe("the task form's budgets", () => {
   });
 });
 
-describe("the task form's summary line", () => {
-  const task = (schedule: AgendaSchedule) => ({ id: "agenda-one", projectId: "project-one", revision: 1, createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z", deletedAt: null, payload: {
+const task = (schedule: AgendaSchedule) => ({ id: "agenda-one", projectId: "project-one", revision: 1, createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z", deletedAt: null, payload: {
     title: "心衰追踪", prompt: "跟进心衰", topics: ["x"], taskTypes: ["literature-sentinel"], dailyBudgetCny: 11, weeklyBudgetCny: 40, maxEpisodeCny: 7,
     scheduleHour: 7, timeZone: "Asia/Shanghai", schedule, enabled: false, status: "paused", pauseReason: null, outcomes: [] } });
+
+describe("the task form's summary line", () => {
+
 
   it("says above the buttons where the task runs, how often and in which zone, and follows the fields: no cost is said", async () => {
     useProjectStore.setState({ projects: [{ id: "project-one", name: "我的研究" } as never] });
@@ -101,11 +107,11 @@ describe("the task form's summary line", () => {
 
   it("says a one-time task by its day, and leaves out a zone it cannot name", async () => {
     render(<TaskForm projectId="project-one" agenda={task({ kind: "once", timeZone: "Asia/Shanghai", time: "08:30", date: "2031-02-03" })} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-    expect(screen.getByText("2031年2月3日 · 仅一次 08:30 · 中国标准时间")).toBeInTheDocument();
+    expect(screen.getByText("在当前项目运行 · 2031年2月3日 · 仅一次 08:30 · 中国标准时间")).toBeInTheDocument();
     await userEvent.click(screen.getByText("高级设置"));
     const zone = screen.getByLabelText("时区");
     await userEvent.clear(zone); await userEvent.type(zone, "Mars/Base");
-    expect(screen.getByText("2031年2月3日 · 仅一次 08:30")).toBeInTheDocument();
+    expect(screen.getByText("在当前项目运行 · 2031年2月3日 · 仅一次 08:30")).toBeInTheDocument();
   });
 
   it("names the project the way every picker does, so a namesake is told apart", () => {
@@ -149,5 +155,58 @@ describe("the task types a new task holds", () => {
     mocks.startAgenda.mockResolvedValue({ id: "agenda-new", revision: 2, projectId: "project-one", payload: {} });
     await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
     await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledWith(expect.objectContaining({ taskTypes: ["routine"] })));
+  });
+});
+
+describe("schedule preview and ordinary materials", () => {
+  it("previews the exact next date using the schedule's zone and explains result delivery", () => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-01T02:00:00Z"));
+    try {
+      render(<TaskForm projectId="project-one" agenda={{ ...task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:30" }), payload: { ...task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:30" }).payload, scheduleChangedAt: "2026-10-01T02:00:00Z" } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+      expect(screen.getByText(/预计开始：2026年10月2日周五 07:30 · 中国标准时间/)).toBeInTheDocument();
+      expect(screen.getByText(/这是开始执行的时间，完成后结果保留在任务对话中/)).toBeInTheDocument();
+      expect(screen.getByLabelText("时区")).toBeVisible();
+      fireEvent.change(screen.getByLabelText("时间"), { target: { value: "15:30" } });
+      expect(screen.getByText(/预计开始：2026年10月1日周四 15:30/)).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+  it("previews the saved paused schedule's latest missed occurrence, but changed calendars start now", () => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-01T02:00:00Z"));
+    try {
+      const saved = task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:30" });
+      render(<TaskForm projectId="project-one" agenda={{ ...saved, payload: { ...saved.payload, scheduleChangedAt: "2026-09-01T00:00:00Z", lastScheduledOccurrence: { key: "2026-09-30T07:30@Asia/Shanghai", scheduledAt: "2026-09-29T23:30:00Z", localDate: "2026-09-30" } } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+      expect(screen.getByText(/启用后补跑最近一次：2026年10月1日周四 07:30/)).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("时间"), { target: { value: "08:30" } });
+      expect(screen.getByText(/启用后预计开始：2026年10月2日周五 08:30/)).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+  it.each([false, true])("does not replay an occurrence already recorded by the saved watermark (legacy=%s)", legacy => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-01T02:00:00Z"));
+    try {
+      const saved = task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" });
+      render(<TaskForm projectId="project-one" agenda={{ ...saved, payload: { ...saved.payload, schedule: legacy ? undefined : saved.payload.schedule, lastScheduledDate: "2026-10-01", ...(legacy ? {} : { lastScheduledOccurrence: { key: "2026-10-01T07:00@Asia/Shanghai", scheduledAt: "2026-09-30T23:00:00Z", localDate: "2026-10-01" } }) } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+      expect(screen.getByText(/启用后预计开始：2026年10月2日周五 07:00/)).toBeInTheDocument();
+      expect(screen.queryByText(/启用后补跑最近一次/)).not.toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+  it("does not promise another execution when editing an unchanged completed once-only task", () => {
+    const completed = task({ kind: "once", timeZone: "Asia/Shanghai", time: "07:30", date: "2026-01-01" });
+    render(<TaskForm projectId="project-one" agenda={{ ...completed, payload: { ...completed.payload, enabled: true, scheduleState: "completed" } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+    expect(screen.getByText("任务已完成，保留原计划不会再次执行。")).toBeInTheDocument();
+    expect(screen.queryByText(/预计开始/)).not.toBeInTheDocument();
+  });
+  it("saves chosen project materials with the task before activation", async () => {
+    sources.mockResolvedValue([{ id: "src_" + "a".repeat(32), payload: { paths: ["knowledge-base/weekly.xlsx"] } }]);
+    mocks.createAgenda.mockResolvedValue({ id: "with-materials", revision: 1, payload: {} });
+    mocks.startAgenda.mockResolvedValue({ id: "with-materials", revision: 2, payload: {} });
+    render(<MemoryRouter><TaskForm projectId="project-one" onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} /></MemoryRouter>);
+    await userEvent.type(screen.getByLabelText("任务指令"), "每周汇总这份表格");
+    await userEvent.click(screen.getByRole("button", { name: "从知识库选择" }));
+    await userEvent.click(await screen.findByLabelText("weekly.xlsx"));
+    await userEvent.click(screen.getByRole("button", { name: "添加到这个任务" }));
+    expect(mocks.createAgenda).not.toHaveBeenCalledWith(expect.objectContaining({ sourceIds: expect.anything() }));
+    await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
+    await waitFor(() => expect(mocks.createAgenda).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: "project-one", sourceIds: ["src_" + "a".repeat(32)] })));
+    expect(mocks.startAgenda).toHaveBeenLastCalledWith("with-materials", 1);
   });
 });

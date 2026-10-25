@@ -33,6 +33,7 @@ import { expectedPluginTools, pluginProofMismatch, pluginUpstreamHealth, provenP
 import { renderProfilePatch, runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
 import { RUN_CONTEXT_PROTOCOL } from "@evimed/domain";
+import { runContextAuthorityPublicKey, runContextAuthorityFileFor, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 /**
@@ -387,6 +388,21 @@ server.listen(socketPath);
   assert.equal(initialized.stderr, "");
   return bin;
 }
+
+test("actual Docker launch environment carries attendance public authority without its signing secret", () => {
+  const secret = "api-only-runtime-attendance-secret";
+  const config = { runtimeSandboxMode: "docker", runtimeContainerBin: "docker", runtimeContainerImage: "evimed-runtime-dsh:test", runtimeTransport: "unix", runtimeNetworkMode: "none", modelGatewaySigningSecret: secret };
+  const local = buildRuntimeLaunchPlan(config, project, 49152);
+  const key = runContextAuthorityPublicKey(secret);
+  assert.equal(local.attendancePublicKey, key);
+  for (const expected of [`EVIMED_ATTENDANCE_PUBLIC_KEY=${key}`, `EVIMED_ATTENDANCE_USER_ID=${project.userId}`, `EVIMED_ATTENDANCE_PROJECT_ID=${project.id}`]) {
+    assert.ok(local.args.includes(expected), expected);
+  }
+  assert.ok(!local.args.some((arg) => String(arg).includes(secret)));
+  const controller = buildRuntimeLaunchPlan({ ...config, modelGatewaySigningSecret: "" }, project, 49152, { attendancePublicKey: key });
+  assert.equal(controller.attendancePublicKey, key);
+  assert.ok(controller.args.includes(`EVIMED_ATTENDANCE_PUBLIC_KEY=${key}`));
+});
 
 test("buildRuntimeLaunchPlan generates a container sandbox launch command", () => {
   const plan = buildRuntimeLaunchPlan(
@@ -2433,6 +2449,60 @@ test("dispatchPrompt materializes the research context beside the run id", async
   assert.equal(await readFile(memoryFile, "utf8"), block);
   await manager.dispatchPrompt(project, "ses_general", { text: "third", system: "# Brief\n", memoryContext: "", runId: "run_brief_4" });
   assert.equal(await readFile(memoryFile, "utf8"), "");
+});
+
+test("scheduled dispatch authority is session scoped and survives a steer only for that run", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  manager.config.modelGatewaySigningSecret = "only-the-control-plane-knows-this-fixture-secret";
+  t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });
+  await manager.start(project);
+  const sessionId = "ses_scheduled_authority";
+  const index = async () => JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId, "index.json"), "utf8"));
+  await manager.dispatchPrompt(project, sessionId, { text: "scheduled", runId: "run_scheduled", requestId: "req_scheduled", unattended: true, strictContext: true });
+  assert.equal((await index()).unattended, true);
+  const publicKey = runContextAuthorityPublicKey(manager.config.modelGatewaySigningSecret);
+  assert.equal(verifyRunContextAuthority(await index(), { publicKey, userId: project.userId, projectId: project.id, sessionId }).unattended, true);
+  assert.ok(!JSON.stringify(await index()).includes(manager.config.modelGatewaySigningSecret));
+  await manager.dispatchPrompt(project, sessionId, { text: "continue", runId: "run_scheduled", requestId: "req_steer", mode: "steer", strictContext: true });
+  assert.equal((await index()).unattended, true);
+  const steerReceipt = JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_steer")), "utf8"));
+  assert.equal(verifyRunContextAuthority(steerReceipt, { publicKey, userId: project.userId, projectId: project.id, sessionId }).unattended, true);
+  await manager.dispatchPrompt(project, sessionId, { text: "my follow-up", runId: "run_attended", requestId: "req_attended", strictContext: true });
+  assert.notEqual((await index()).unattended, true);
+});
+
+test("shared runtime task tools refuse an automated turn and recover for attended work", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });
+  let automated = true;
+  manager.hasUnattendedRuns = async (scope) => {
+    assert.equal(scope.userId, project.userId);
+    assert.equal(scope.id, project.id);
+    return automated;
+  };
+  const identity = { userId: project.userId, projectId: project.id };
+  await assert.rejects(() => manager.assertTaskToolsConversation(identity), { code: "task_tools_not_in_conversation" });
+  automated = false;
+  await manager.assertTaskToolsConversation(identity);
+  await assert.rejects(() => manager.assertTaskToolsConversation({ ...identity, runId: "bounded" }), { code: "task_tools_not_in_conversation" });
+});
+
+test("native attendance proof does not depend on optional learning and is mirrored before forwarding", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });
+  manager.config.modelGatewaySigningSecret = "only-the-control-plane-knows-this-fixture-secret";
+  manager.config.learningEnabled = false;
+  const mirrored = [];
+  manager.mirrorWorkspaceWrite = async (_project, relative, text, required) => { mirrored.push({ relative, text, required }); };
+  const request = { sessionId: "native_human", requestId: "human-request-without-handbook" };
+  await manager.writePromptAttendance(project, request, { unattended: false });
+  const relative = runContextAuthorityFileFor(request.sessionId, request.requestId);
+  const proof = JSON.parse(await readFile(path.join(project.workspaceDir, relative), "utf8"));
+  assert.equal(verifyRunContextAuthority(proof, { publicKey: runContextAuthorityPublicKey(manager.config.modelGatewaySigningSecret),
+    userId: project.userId, projectId: project.id, sessionId: request.sessionId }).unattended, false);
+  assert.equal(proof.contextRevision, request.requestId);
+  assert.equal(mirrored[0].relative, relative);
+  assert.equal(mirrored[0].required, true);
 });
 
 test("a reserved session receives strict context before its first DSH create", async (t) => {

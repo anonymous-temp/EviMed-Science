@@ -31,7 +31,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, beforeDataCleanup = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, beforeDataCleanup = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const peers = new Set(), clients = new Set();
   let upstream, wss, ui;
@@ -91,7 +91,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt });
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -1651,6 +1651,37 @@ test("native HTTP and mux freeze context only for admitted prompts without rewri
   c.send(steer); assert.equal((await c.next()).type, "item");
   assert.deepEqual(f.received.at(-1), steer);
   assert.deepEqual(frozen[1].request, steer.payload.args.request);
+});
+
+test("native attendance is committed before HTTP or mux forwarding independently of optional context", async t => {
+  let unavailable = true;
+  const receipts = [], forwarded = [];
+  const f = await fixture(t, {}, {}, {
+    recordPromptAttendance: async (user, project, request) => {
+      assert.equal(user.id, f.user.id); assert.equal(project.id, 'default');
+      if (unavailable) throw new HttpError(503, 'runtime_prompt_rejected', 'Attendance receipt could not be mirrored.');
+      receipts.push(request.requestId);
+    },
+    preparePrompt: async () => { throw new Error('Optional enrichment unavailable'); },
+    recordPromptActor: async () => { throw new Error('Optional extension binding unavailable'); },
+  });
+  f.manager.proxy = async (req, res) => { forwarded.push(req.__openScienceProxyBody.toString('utf8')); res.writeHead(200); res.end('{}'); };
+  const request = { requestId: 'attendance-http', sessionId: 'ordinary', mode: 'queue', content: [{ type: 'text', text: 'Question' }] };
+  const post = () => fetch(`${f.base}/api/session/prompt`, { method: 'POST', headers: { cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: 'transport', method: 'session/prompt', payload: { args: { request } } }) });
+  assert.equal((await post()).status, 503);
+  assert.equal(forwarded.length, 0);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('attendance-failed', 'session/prompt', { request }));
+  assert.equal((await c.next()).type, 'error');
+  assert.equal((await c.next()).type, 'end');
+  assert.equal(f.received.length, 0);
+  unavailable = false;
+  assert.equal((await post()).status, 200);
+  c.send(open('attendance-ok', 'session/prompt', { request: { ...request, requestId: 'attendance-mux' } }));
+  assert.equal((await c.next()).type, 'item');
+  assert.deepEqual(receipts, ['attendance-http', 'attendance-mux']);
+  assert.equal(forwarded.length, 1); assert.equal(f.received.length, 1);
 });
 
 test("failed native supplemental context never refuses an otherwise authorized prompt", async t => {

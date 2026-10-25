@@ -24,7 +24,8 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // Version 14 adds one more optional field to a runtime start: `geoSkills`, true for the runtime of a 「循证 GEO」 project, which
 // mounts the GEO method pack as a skill root (absent for every other project). A boolean, and all it chooses is whether one
 // read-only directory the image already carries is among the session's skill roots.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 14;
+// Version 15 adds only the API's Ed25519 public attendance verifier. No signing secret crosses this boundary.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 15;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -298,7 +299,12 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false) {
+  /** @param {any} project @param {number} port @param {string} password @param {string} [capsuleGatewayUrl]
+   * @param {string} [revisionGatewayUrl] @param {string} [publicSourceGatewayUrl] @param {any} [pluginConfig]
+   * @param {any} [personalSkillGeneration] @param {any} [extensionGeneration] @param {any} [platformSkillGeneration]
+   * @param {string} [memoryGatewayUrl] @param {boolean} [geoSkills] @param {string} [attendancePublicKey]
+   * The controller gets only an Ed25519 public verifier; the API's signing secret stays in the API process. */
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false, attendancePublicKey = "") {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -315,6 +321,8 @@ export class RuntimeControllerClient {
       ...(memoryGatewayUrl ? { memoryGatewayUrl } : {}),
       // Protocol 14: the project is a 「循证 GEO」 one. Sent only then; absent, no method pack is mounted.
       ...(geoSkills === true ? { geoSkills: true } : {}),
+      // Protocol 15: the API signs attendance; this process transports only its bounded public verifier.
+      ...(attendancePublicKey ? { attendancePublicKey } : {}),
     });
   }
 

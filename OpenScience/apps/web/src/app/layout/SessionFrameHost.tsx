@@ -272,17 +272,6 @@ export function SessionFrameHost() {
   }, [paneElement]);
   useLayoutEffect(() => { measure.current(); });
 
-  if (!uiOrigin) {
-    if (!onChat) return null;
-    if (originLoading) return <FrameSkeleton title={conversationTitle(sessionId)} />;
-    return (
-      <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui text-error">
-        <p>对话暂时无法连接</p>
-        <Button variant="ghost" onClick={() => setOriginAttempt((value) => value + 1)}>重试</Button>
-      </div>
-    );
-  }
-
   // Over a task's pane the host itself takes no room and no clicks; only the frame's box, at the pane's rectangle, does.
   const placed = !onChat && taskSession !== null;
   const box = placed && placement ? { left: placement.left, top: placement.top, width: placement.width, height: placement.height } : undefined;
@@ -290,7 +279,13 @@ export function SessionFrameHost() {
     // Hidden rather than unmounted: see the note above.
     <div ref={root} className={cn(onChat ? "relative h-full w-full" : placed ? "pointer-events-none absolute inset-0" : "hidden")}
       data-session-surface={onChat ? "visible" : placed ? "task" : "hidden"}>
-      {cached.map((projectId) => {
+      {!uiOrigin && onSurface && (onChat || box) && <div data-task-frame={placed ? "" : undefined} className={cn("absolute pointer-events-auto", !placed && "inset-0")} style={box}>
+        {originLoading ? <FrameSkeleton title={conversationTitle(sessionId)} /> : <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui text-error">
+          <p>对话暂时无法连接</p>
+          <Button variant="ghost" onClick={() => setOriginAttempt(value => value + 1)}>重试</Button>
+        </div>}
+      </div>}
+      {uiOrigin && cached.map((projectId) => {
         const here = projectId === currentProjectId;
         return (
           <div key={projectId} data-task-frame={placed && here ? "" : undefined}
@@ -308,7 +303,7 @@ export function SessionFrameHost() {
         );
       })}
       {/* This project has no surface yet: the one it displaces is still being released. */}
-      {onSurface && !cached.includes(currentProjectId) && (placed
+      {uiOrigin && onSurface && !cached.includes(currentProjectId) && (placed
         ? box && <div className="pointer-events-auto absolute" style={box}><FrameSkeleton title={conversationTitle(sessionId)} /></div>
         : <FrameSkeleton title={conversationTitle(sessionId)} />)}
     </div>

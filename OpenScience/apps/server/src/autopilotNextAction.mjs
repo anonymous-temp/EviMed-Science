@@ -149,13 +149,15 @@ function cut(value, max) {
 /**
  * The task types an agenda may run now: the ones it enables, less the ones
  * paused for repeated failures (`taskTypeState`, kept by `foldOutcome`).
- * @param {{taskTypes?: string[], taskTypeState?: Record<string, {pausedAt?: string|null}>}} payload
+ * @param {{taskTypes?: string[], taskIntent?:string, taskTypeState?: Record<string, {pausedAt?: string|null,lastOutcome?:string} >}} payload
  * @returns {string[]}
  */
 export function eligibleTaskTypes(payload) {
   const state = payload?.taskTypeState ?? {};
+  // Once an ordinary job is chosen, a failure cannot turn it into a research direction.
+  const routine = payload?.taskIntent === ROUTINE_TASK_TYPE || Boolean(state[ROUTINE_TASK_TYPE]?.lastOutcome);
   return (Array.isArray(payload?.taskTypes) ? payload.taskTypes : [])
-    .filter((type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type)) && !state[type]?.pausedAt);
+    .filter((type) => (!routine || type === ROUTINE_TASK_TYPE) && AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type)) && !state[type]?.pausedAt);
 }
 
 /**
