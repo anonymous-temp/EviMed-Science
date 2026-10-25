@@ -50,7 +50,7 @@ test("a deleted project's lessons move to the learning project with what the wai
   }
   const rows = [
     { id: "j1", kind: "distill", status: "queued", projectId: "paper", payload: { runId: "run_main", trigger: "routine", peerRunIds: ["run_peer"] } },
-    { id: "j2", kind: "distill", status: "succeeded", projectId: "paper", payload: { runId: "run_done", trigger: "delivered" } },
+    { id: "j2", kind: "distill", status: "succeeded", projectId: "paper", payload: { runId: "run_done", trigger: "edit_diff" } },
     { id: "j3", kind: "consolidate", status: "queued", projectId: "paper", payload: { action: "sleep" } },
     { id: "j4", kind: "distill", status: "queued", projectId: "other", payload: { runId: "run_elsewhere" } },
   ];

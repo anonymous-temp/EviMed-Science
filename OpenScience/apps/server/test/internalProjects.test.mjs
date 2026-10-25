@@ -136,11 +136,11 @@ test("a learning step writes its input at the learning project's root, on a work
     await assert.rejects(runtime.dispatch({
       job: { userId: "u1", projectId: "default", payload: {} }, userId: "u1", projectId: "default",
       dispatchId: "method-distillation-0123abcd", capabilityId: "method-distillation", contractKind: "method-candidate",
-      input: { schemaVersion: 1, trigger: "delivered" }, question: "q",
+      input: { schemaVersion: 1, trigger: "edit_diff" }, question: "q",
     }), { code: "fixture_stop" });
     assert.deepEqual((await readdir(workspaceDir)).sort(), ["distillation-input.json"], "the last step's files are gone");
     const { readFile } = await import("node:fs/promises");
-    assert.match(await readFile(path.join(workspaceDir, "distillation-input.json"), "utf8"), /"trigger":"delivered"/);
+    assert.match(await readFile(path.join(workspaceDir, "distillation-input.json"), "utf8"), /"trigger":"edit_diff"/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

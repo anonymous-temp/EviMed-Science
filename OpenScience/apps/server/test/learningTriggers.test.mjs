@@ -148,7 +148,7 @@ test("a routine lesson's peers read in both shapes it has been queued in", () =>
     [{ runId: "run_a", projectId: "aspirin" }, { runId: "run_b", projectId: null }]);
   // Queued before 2026-09-28: run ids only, every one in the lesson's own project.
   assert.deepEqual(lessonPeers({ peerRunIds: ["run_a", "", 7, "run_b"] }), [{ runId: "run_a", projectId: null }, { runId: "run_b", projectId: null }]);
-  assert.deepEqual(lessonPeers({ trigger: "delivered" }), []);
+  assert.deepEqual(lessonPeers({ trigger: "edit_diff" }), []);
 });
 
 // ---------------------------------------------------------------------------------------------------- gates
@@ -312,7 +312,7 @@ test("a lesson that could not be queued is audited and counted, and the others s
 // ---------------------------------------------------------------------------------------------------- inputs
 
 test("a routine induction reads each run of the family by its digest, never by raw lines", () => {
-  assert.ok(DISTILLATION_TRIGGERS.includes("delivered"), "a job queued before 2026-10-23 is still read");
+  assert.ok(!DISTILLATION_TRIGGERS.includes("delivered"), "the trigger is deleted, not only unused");
   assert.ok(DISTILLATION_TRIGGERS.includes("routine"));
   const transcript = (text) => ({
     header: { completeness: "complete" },
@@ -332,13 +332,13 @@ test("a routine induction reads each run of the family by its digest, never by r
     [["run_1", "complete", ["第一次综述"]], ["run_2", "unavailable", null]]);
   assert.deepEqual(input.transcriptExcerpts, [], "a routine carries digests and no raw lines");
   // Every other trigger reads one run.
-  assert.deepEqual(buildDistillationInput({ run: { id: "r" }, trigger: "delivered", transcript: null }).peerRuns, []);
+  assert.deepEqual(buildDistillationInput({ run: { id: "r" }, trigger: "edit_diff", transcript: null }).peerRuns, []);
 });
 
 test("the distiller sees which related methods were retired, and why", () => {
   const input = buildDistillationInput({
     run: { id: "run_4" },
-    trigger: "delivered",
+    trigger: "edit_diff",
     transcript: null,
     relatedMethods: [
       { id: "method:learned:a", payload: { contentDigest: "sha256:a", frontmatter: { name: "a" }, body: "A", status: "approved" } },

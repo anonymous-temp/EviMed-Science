@@ -107,7 +107,7 @@ writing a basis nobody gave it).
 
 ## 1. Induce from the trigger, in the trigger's own shape
 
-`trigger` says which of six inductions applies. Do exactly the one named.
+`trigger` says which of five inductions applies. Do exactly the one named.
 Every trigger is set by the platform on its own — no researcher approved the
 lesson or will approve the method; the researcher's later runs are what keep it
 or stop it.
@@ -192,13 +192,6 @@ work they named:
   those words, for it to be kept, so "an ordinary run" is not a reason for `no_change`, and the atomising of section 3 starts with
   its second mark already given (they said it as a standing practice). Only an adopted way you cannot state without inventing what
   the person did not give is thin enough to answer `no_change`, and `reason` says what was missing.
-
-**`delivered` — a delivery finished and nobody reacted to it.** The platform no longer queues this
-by itself (what it taught is read in the routine below); a job queued earlier may still carry it. A
-routine success of work already covered is the commonest case, and its answer is `no_change`. Propose
-something only when the run followed a procedure that made the work sound — an ordering of steps, a
-check, a way of handling the evidence or the file — that no method in `relatedMethods` states and that
-would plausibly recur. A step the run took because this one task required it is not a method.
 
 **`routine` — three clean runs of one scope and one shape: induce across them.** The input carries this
 run's `trajectory` and, in `peerRuns`, the trajectories of two more runs of the same `scope` whose files have

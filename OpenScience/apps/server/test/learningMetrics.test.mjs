@@ -61,9 +61,9 @@ test("the durable counts come from the ledger in closed vocabularies, across eve
   assert.deepEqual(counts.methods, { candidate: 0, approved: 2, retired: 1 });
   assert.deepEqual(counts.uses, { loaded: 9, invoked: 3, succeeded: 8, read: 1, carried: 41, explored: 0, appliedCorrected: 0, appliedClean: 0 });
   assert.equal("handbookCandidates" in counts, false, "the handbook arm is gone: no count for its candidates");
-  assert.equal(counts.lessons.delivered.queued, 1);
-  assert.equal(counts.lessons.delivered.succeeded, 3);
-  assert.equal(counts.lessons.other.succeeded, 4, "a trigger nobody named, and the deleted repair trigger of older jobs, are `other`, never a new label");
+  assert.equal(counts.lessons.delivered, undefined, "a deleted trigger is not a label of its own");
+  assert.equal(counts.lessons.other.queued, 1);
+  assert.equal(counts.lessons.other.succeeded, 7, "a trigger nobody named, and the deleted repair and delivered triggers of older jobs, are `other`, never a new label");
   // Jobs from before 2026-10-25 may still say `repair_accepted` and `handbook`: closed vocabularies, so they are `other`, never a label of their own.
   assert.deepEqual(counts.results, { create: 0, amend: 1, merge: 0, no_change: 3, other: 3 });
   assert.deepEqual(counts.spend, { settled: 1.25, open: 0.5 });
@@ -87,7 +87,7 @@ test("an account's summary for its method list says what the loop did for it", a
   const summary = await learningSummary(ledger(), "u1");
   assert.deepEqual(summary.methods, { candidate: 0, approved: 2, retired: 1 });
   assert.deepEqual(summary.lessons, {
-    byTrigger: { delivered: 4, correction: 1, other: 4 },
+    byTrigger: { correction: 1, other: 8 },
     succeeded: 7, failed: 1,
   });
   assert.equal(summary.spend24hCny, 1.25);
@@ -152,7 +152,7 @@ test("launches and runs count what they carried, and the families expose all of 
   assert.deepEqual(Object.entries(series("open_science_learning_follow_up_judge_total")).filter(([, value]) => value > 0),
     [["adopt_confirmed", 1], ["adopt_disagreed", 2], ["examples_ngram", 1], ["steer_judged", 1], ["other", 1]], "what the judging did, by outcome from a closed list");
   assert.deepEqual(series("open_science_learning_evidence_quotes_total"), { kept: 3, dropped: 1 });
-  assert.deepEqual(series("open_science_learning_lessons_total"), { delivered: 4, correction: 1, other: 4 }, "lessons queued, by trigger, from the ledger (the deleted repair trigger of older jobs is `other`)");
+  assert.deepEqual(series("open_science_learning_lessons_total"), { correction: 1, other: 8 }, "lessons queued, by trigger, from the ledger (the deleted repair and delivered triggers of older jobs are `other`)");
   assert.deepEqual(series("open_science_learning_evidence_total"), { "follow_up/correction": 4, "follow_up/accept": 6, "silent/none": 9, "steer/correction": 2, "steer/none": 1, "used/none": 5, "follow_up/adopt": 3, "other/none": 1 });
   assert.equal(byName.get("open_science_learning_evidence_last_at")?.series.length, 1);
   assert.ok(!JSON.stringify(byName.get("open_science_learning_evidence_last_at")).includes("user_with_a_long_internal_id"));
