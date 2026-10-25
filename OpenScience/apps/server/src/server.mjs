@@ -368,7 +368,7 @@ import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
 import { createGeoValueUpkeep } from "./geoValueUpkeep.mjs";
 import { geoArticleGateBound, geoArticleGateOf } from "./geoWrites.mjs";
-import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
+import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness, oldestPersonalConversation } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
@@ -2613,8 +2613,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
         return { sessionId, bound: true };
       },
-      // The project's own conversation: the newest one no programme step opened (a step's session is the AI-run record's, never the
-      // header's 「对话」). Null when the project has none of the person's, and the page begins one.
+      // The conversation of a project made before its own was recorded on it: the oldest one no programme step opened (a step's
+      // session is the AI-run record's, never the header's 「对话」). Null when the project has none of the person's, and the page begins one.
       conversationSessionId: async (user, projectId) => personalConversationSessionId(await store.requireProject(user, projectId)),
       // What the programme did in the background, newest first: a read-only record, never a destination.
       programmeRuns: async (userId, projectId) => {
@@ -2949,16 +2949,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
   }
   /**
-   * The conversation a person has in a module's project: the newest session that no programme run opened. "The newest session of the
-   * project" was where the header's 「对话」 landed after any step — in the step's own session, which the person can neither take part
-   * in nor leave (the same shape as the study's, R3). Null when the project has none of the person's own.
+   * The conversation a person has in a GEO project made before its own conversation was recorded on it: the oldest session that no
+   * programme run opened (`oldestPersonalConversation`). "The newest session of the project" was where the header's 「对话」 landed
+   * after any step — in the step's own session, which the person can neither take part in nor leave — and then after any other
+   * conversation of the project was touched. Null when the project has none of the person's own.
    * @param {any} project
    * @returns {Promise<string | null>}
    */
   async function personalConversationSessionId(project) {
     const [sessions, runs] = await Promise.all([researchSessions.list(project), agentRuns.list(project)]);
     const programme = new Set(runs.filter((run) => run.automated === true || runRoleOf(run) === "programme").map((run) => run.sessionId));
-    return sessions.find((entry) => !programme.has(entry.sessionId))?.sessionId ?? null;
+    return oldestPersonalConversation(sessions, programme);
   }
   /**
    * The study's own conversation (R3, 2026-10-14): the one recorded when it was made; for a study made before that, the oldest

@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
 import { isSeverityLevel, SeverityBadge } from "@/components/ui/SeverityBadge";
+import { measurementPause, type MeasurementPause } from "./geoBand";
 import { useGeoFrame } from "./geoFrame";
+import { useGeoMonitoring } from "./geoProjectData";
 import { engineName, GEO_STEP_NAMES, zh } from "./geoText";
 import { geoDestinationPath, GEO_STEP_HOME } from "./geoTabs";
 import { answerPath } from "./tabs/geoTabText";
@@ -22,20 +24,38 @@ import { useOpenGeoConversation } from "./useOpenGeoConversation";
  * the wrong sentence in it — and the row itself goes where its object is read. Nothing here is an approval: a person is asked only
  * for a thing that is theirs to do (money, a safety stop, an act outside the platform) or that went wrong; the programme goes on by
  * itself. A project with nothing to ask draws nothing: no sentence says so.
+ *
+ * One row is the page's own: while no AI engine can be asked, the measurement is paused, and the person is told so here — when it
+ * stopped, that it goes on by itself — so the numbers above are not read as this week's. A step that failed because nothing could
+ * be asked offers no 接着做 until it can be (a retry would ask nobody again).
  */
 export function NeedsYou({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const monitoring = useGeoMonitoring(geoId);
+  const pause = measurementPause(monitoring.state.kind === "ready" ? monitoring.state.data.measurement : null);
   const items = project.needsYou;
-  if (items.length === 0) return null;
+  const paused = pause?.paused ? pause : null;
+  if (items.length === 0 && !paused) return null;
   return (
-    <Section title="需要你" count={items.length} className="mt-0">
+    <Section title="需要你" count={items.length + (paused ? 1 : 0)} className="mt-0">
       <List divided label="需要你处理的事">
-        {items.map((item) => <NeedsYouRow key={item.key} geoId={geoId} project={project} item={item} />)}
+        {paused && (
+          <ListRow
+            title={paused.short}
+            titleProps={{ "data-geo-measurement": "paused" }}
+            meta={paused.detail}
+            to={geoDestinationPath(geoId, GEO_STEP_HOME.monitoring)}
+          />
+        )}
+        {items.map((item) => <NeedsYouRow key={item.key} geoId={geoId} project={project} item={item} pause={paused} />)}
       </List>
     </Section>
   );
 }
 
-function NeedsYouRow({ geoId, project, item }: { geoId: string; project: GeoProject; item: GeoNeedsYou }) {
+/** The steps that ask the AI engines: while measurement is paused, a retry of one of them would ask nobody. */
+const MEASURING_STEPS: ReadonlySet<GeoStepKey> = new Set(["diagnosis", "monitoring"]);
+
+function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: GeoProject; item: GeoNeedsYou; pause: MeasurementPause | null }) {
   const frame = useGeoFrame();
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
@@ -83,7 +103,7 @@ function NeedsYouRow({ geoId, project, item }: { geoId: string; project: GeoProj
             loading={busy}
             onClick={() => {
               setBusy(true);
-              void open({ projectId: project.projectId, sessionId: project.sessionId }, draft).finally(() => setBusy(false));
+              void open({ projectId: project.projectId }, draft).finally(() => setBusy(false));
             }}
           >
             {!busy && <PenLine size={16} aria-hidden="true" />}
@@ -133,12 +153,15 @@ function NeedsYouRow({ geoId, project, item }: { geoId: string; project: GeoProj
   }
 
   if (item.kind === "step_failed" && step) {
+    // A measurement that asked nobody kept nothing; while nobody can be asked, there is nothing to retry yet.
+    const measuring = MEASURING_STEPS.has(step);
+    const held = measuring && pause !== null;
     return (
       <ListRow
         title={`${GEO_STEP_NAMES[step]}没有做完`}
-        meta="已经做出来的部分都留着"
+        meta={held ? "测量服务暂时连不上，这一轮没有问到任何 AI，恢复后再接着做" : measuring ? "上一轮没有拿到 AI 的回答，接着做会重新测一轮" : "已经做出来的部分都留着"}
         to={geoDestinationPath(geoId, GEO_STEP_HOME[step])}
-        actions={(
+        actions={held ? undefined : (
           <Button
             variant="secondary"
             size="sm"

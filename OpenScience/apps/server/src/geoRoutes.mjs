@@ -306,7 +306,12 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 2) {
       if (method === "GET") {
         const view = await service.projectView(user, id);
-        const sessionId = await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        // The project's own conversation is the one recorded on it; a project made before that was recorded finds its oldest one, and
+        // the owner's read records it so it stays that one. A member reads what the lookup gives them, as before.
+        const own = view.userId === String(user.id);
+        const recorded = own && typeof view.conversationSessionId === "string" && view.conversationSessionId ? view.conversationSessionId : null;
+        let sessionId = recorded ?? await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        if (own && !recorded && sessionId) sessionId = await Promise.resolve(service.recordConversation?.(view.id, sessionId)).catch(() => null) ?? sessionId;
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {

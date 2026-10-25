@@ -599,3 +599,46 @@ describe("a GEO project's page", () => {
     expect(client.getGeoProject).not.toHaveBeenCalled();
   });
 });
+
+describe("a GEO project that is not being measured", () => {
+  const PAUSED = { state: "paused" as const, since: "2026-10-20T04:00:00.000Z", engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"] };
+
+  it("says 已暂停 in the header with 继续 beside it when its owner paused it, and promises no next round", async () => {
+    client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, status: "paused" });
+    renderProject();
+    expect(await screen.findByText(/^已暂停 · /)).toBeInTheDocument();
+    await waitFor(() => expect(client.getGeoMonitoring).toHaveBeenCalled());
+    expect(band()).not.toHaveTextContent(/下次复测|待复测/);
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "暂停" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "继续" })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("button", { name: "继续" }));
+    await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalledWith("geo_masi", { status: "active" }));
+  });
+
+  it("says in the band, on every view, that the measurement is paused and since when — and no next round", async () => {
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, next: { date: "2026-10-26", kind: "weekly" }, measurement: PAUSED });
+    renderProject("/app/geo/geo_masi/chat/ses_geo_masi");
+    await waitFor(() => expect(band()).toHaveTextContent("AI 回答测量暂停中（10月20日起）"));
+    expect(band()).not.toHaveTextContent(/下次复测|待复测/);
+  });
+
+  it("names the engines that are paused while the others are measured, and keeps the next round", async () => {
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, next: { date: "2099-01-05", kind: "weekly" }, measurement: { state: "measuring", since: null, engines: ["doubao", "kimi"] } });
+    renderProject();
+    await waitFor(() => expect(band()).toHaveTextContent("豆包、Kimi 暂停测量"));
+    expect(band()).toHaveTextContent("下次复测");
+  });
+
+  it("marks on the rail only a step whose result is on the page, and keeps the person's selection for the views built from it", async () => {
+    renderProject("/app/geo/geo_masi/evidence?step=monitoring");
+    await screen.findByTestId("evidence-tab");
+    const marked = () => [...document.querySelectorAll("[data-rail-step]")].filter((node) => node.querySelector("[aria-current='step']")).map((node) => node.getAttribute("data-rail-step"));
+    expect(marked()).toEqual(["evidence"]);
+    await chooseResult("可见度");
+    await screen.findByTestId("visibility-tab");
+    expect(screen.getByTestId("landed")).toHaveTextContent("step=monitoring");
+    expect(marked()).toEqual(["monitoring"]);
+  });
+});

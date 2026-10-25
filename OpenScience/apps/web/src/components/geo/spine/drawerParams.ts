@@ -25,6 +25,8 @@ export const GEO_DRAWER_ENGINE_PARAM = "on";
 export const GEO_CLUSTER_FILTER_PARAM = "cluster";
 export const GEO_POOL_PARAM = "pool";
 export const GEO_SOURCE_PARAM = "source";
+/** One article named on 行动 (a 「本周」 line about it): its row is marked where it waits for a person. Not a drawer. */
+export const GEO_ARTICLE_PARAM = "article";
 
 /** The query string after the named changes (`null` removes a parameter); every other parameter is kept as it is. */
 export function searchWith(search: string, changes: Readonly<Record<string, string | null | undefined>>): string {

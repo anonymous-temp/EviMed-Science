@@ -184,6 +184,20 @@ export function geoProjectName(project, controlName) {
   return brand || controlName || GEO_DEFAULT_PROJECT_NAME;
 }
 
+/**
+ * The conversation a GEO project made before its conversation was recorded opens: the oldest of its project's conversations that no
+ * programme run opened — the one the project was created with. Never the newest: that was whichever conversation of the project was
+ * touched last (a capability chosen, a document scoped), and the project's research conversation was silently replaced by it.
+ * @param {ReadonlyArray<{ sessionId?: string, createdAt?: string | null }>} sessions
+ * @param {ReadonlySet<string>} programme the sessions programme runs opened
+ * @returns {string | null}
+ */
+export function oldestPersonalConversation(sessions, programme) {
+  const own = sessions.filter((entry) => entry && typeof entry.sessionId === "string" && entry.sessionId && !programme.has(entry.sessionId));
+  own.sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
+  return own[0]?.sessionId ?? null;
+}
+
 /** A calendar day in a time zone, `YYYY-MM-DD`. @param {Date} date @param {string} timeZone */
 function dayIn(date, timeZone) {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -628,8 +642,18 @@ export class GeoService {
       product: input.brandName ? { brandName: input.brandName } : {},
     });
     const session = await hooks.bindSession(user, control.id);
+    // The conversation made here is the project's own from now on: recorded, so the page does not drift to a later one.
+    if (typeof session.sessionId === "string" && session.sessionId) await this.store.setConversationSession(project.id, session.sessionId);
     this.counters.projectsCreated += 1;
     return { id: project.id, projectId: control.id, sessionId: session.sessionId, bound: session.bound };
+  }
+
+  /**
+   * Record the conversation found for a project made before its conversation was recorded (write-once; the first one stands).
+   * @param {string} geoId @param {string} sessionId @returns {Promise<string | null>} the conversation the project holds now
+   */
+  async recordConversation(geoId, sessionId) {
+    return this.store.setConversationSession(geoId, sessionId);
   }
 
   /**
