@@ -123,6 +123,11 @@ class Request(unittest.TestCase):
 
 
 class Scoring(unittest.TestCase):
+    def test_a_notation_number_is_not_an_added_number(self):
+        case = BY_ID["weekly-report"]
+        reply = "HR 0.82（95% CI 0.70–0.96），eGFR 以 mL/min/1.73 m² 计；95%的患者完成随访，1.73 倍"
+        self.assertEqual(rf.added_numbers(case, "partial", reply), ["0.82", "0.70", "0.96", "95%", "1.73"])
+
     def test_given_items_are_found_by_any_alternative_ignoring_spacing(self):
         case = BY_ID["weekly-report"]
         reply = "1. 数据清洗完成，缺失率降到3%\n2. Cox 模型 HR 0.82\n3. 周三定了大纲，下周写方法"

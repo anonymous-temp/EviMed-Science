@@ -48,6 +48,26 @@ A replacement that matches nothing is an error (an arm silently equal to `curren
 `methodReplace` must match at least one case's method. `variants/pre-2026-10-24.json` reproduces the guidance before the fix (the arm
 the sentence is measured against); `variants/example-method-conditional.json` shows the method-edit shape.
 
+## Measurements
+
+DeepSeek Flash, judge Flash at temperature 0, thirty pairs; "invented" counts partial replies with at least one statement or number the
+person never gave, "filled" the places filled without a source, "right" the pairs right on both sides.
+
+| Date | Arm | Samples | full all-given | partial invented | filled | pairs right |
+|---|---|---|---|---|---|---|
+| 2026-10-25 | guidance before 2026-10-24 (`pre-1024`) | 3 | 80/90 | 81/90 | 38 | 7/90 |
+| 2026-10-25 | guidance of 2026-10-24 (`pre-1025`) | 3 | 80/90 | 72/90 | 32 | 16/90 |
+| 2026-10-25 | guidance of 2026-10-25 (`current`) | 3 | 81/90 | 58/90 | 16 | 27/90 |
+| 2026-10-25 | `current` + methods with conditional places (`conditional-method`) | 3 | 81/90 | 47/90 | 11 | 39/90 |
+
+The 2026-10-25 wording names the person's own facts widely (what was done, progress, results, decisions, reasons, scope, people,
+dates) and says that a reason, background, significance or conclusion added to look complete is filling in for them; four rewordings
+were tried on two samples first (none of the always-on sentences moved it further). The cases' methods keep the incident's unconditional
+wording ("每条先写结论，再写依据"); a method written by `method-distillation` 1.4.1 or later states its places as conditional, which the
+`conditional-method` arm stands in for. What still gets invented is mostly genre boilerplate stated as the person's fact (a cover letter's
+"not published elsewhere", a review's "the clinic work went as planned", an abstract's cohort size).
+
+## Limits
 ## Limits
 
 Samples are small (a direction, not a significance: repeat with `--samples`). The deterministic number check reads the whole reply, not

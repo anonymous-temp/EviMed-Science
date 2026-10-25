@@ -215,10 +215,17 @@ def _norm(number: str) -> str:
     return number.replace(",", "")
 
 
+# Numbers that are part of a notation and say nothing about the person's work: the level of a confidence interval ("95% CI",
+# "95%置信区间") and the body-surface normalisation of a filtration rate ("mL/min/1.73 m²"). A closed list of formats, removed
+# before the count; a level or a normalisation with no interval or unit beside it is still a number like any other.
+NOTATION = re.compile(r"\b(?:90|95|99)\s?%\s?(?=CI\b|置信区间|confidence interval|credible interval)|\b1\.73\s?(?=m²|m2|m\^2|平方米)", re.IGNORECASE)
+
+
 def added_numbers(case: dict, variant: str, reply: str) -> list[str]:
-    """Numbers (two digits or more, decimals, percentages) in the reply that the person's ask and their own remembered words do not hold."""
+    """Numbers (two digits or more, decimals, percentages) in the reply that the person's ask and their own remembered words do not
+    hold, notation numbers (`NOTATION`) aside."""
     given = {_norm(n) for n in checks.numbers_in(case[variant]["ask"] + "\n" + "\n".join(m["text"] for m in case["memory"]), 2)}
-    return [n for n in checks.numbers_in(reply, 2) if _norm(n) not in given]
+    return [n for n in checks.numbers_in(NOTATION.sub(" ", reply), 2) if _norm(n) not in given]
 
 
 def format_checks(case: dict, variant: str, reply: str) -> list[dict]:
