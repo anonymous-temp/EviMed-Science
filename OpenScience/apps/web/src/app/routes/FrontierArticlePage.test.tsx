@@ -6,10 +6,13 @@ import { WebApiError } from "@/lib/apiClient";
 import { parseFrontierItemDetail } from "@/lib/frontierClient";
 import { frontierItemDetail, rawChineseNews, rawOpenAccessPaper, rawStructuredAbstract, rawXPost } from "@/components/frontier/__fixtures__/frontierItems";
 import { expectComposed } from "@/test/expectComposed";
+import { useToastStore } from "@/lib/toast";
+import { Toaster } from "@/components/ui/Toaster";
 import { FrontierArticlePage } from "./FrontierArticlePage";
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(), fetchFrontierItem: vi.fn(), fetchFrontierAbstractZh: vi.fn(), markFrontierItemRead: vi.fn(),
-  starFrontierItem: vi.fn(), unstarFrontierItem: vi.fn(), hideFrontierItem: vi.fn(), addFrontierFollow: vi.fn(),
+  starFrontierItem: vi.fn(), unstarFrontierItem: vi.fn(), hideFrontierItem: vi.fn(), unhideFrontierItem: vi.fn(), addFrontierFollow: vi.fn(),
+  listFrontierFollows: vi.fn(), removeFrontierFollow: vi.fn(),
 }));
 vi.mock("@/lib/frontierClient", async (original) => ({ ...(await original<typeof import("@/lib/frontierClient")>()), ...client }));
 const detail = (raw: Record<string, unknown>) => parseFrontierItemDetail(raw)!;
@@ -276,6 +279,84 @@ describe("an X post with every block", () => {
     expect(entries).not.toContain("深入研究");
     await userEvent.click(screen.getByRole("menuitem", { name: "关注 Arena.ai" }));
     expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: "x-arena", label: "Arena.ai", muted: false });
+  });
+});
+
+describe("不感兴趣 on the reading page asks why first (c2-hide)", () => {
+  async function chooseHide() {
+    show("/app/frontier/items/x-post-0001");
+    render(<Toaster />);
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "不感兴趣" }));
+    return screen.findByRole("menu", { name: "不感兴趣的原因" });
+  }
+  beforeEach(() => {
+    useToastStore.setState({ toasts: [] });
+    wide();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawXPost()));
+    client.hideFrontierItem.mockResolvedValue({ starred: false, hidden: true, read: true });
+    client.unhideFrontierItem.mockResolvedValue({ starred: false, hidden: false, read: true });
+  });
+
+  it("opens the reasons — the same words — instead of hiding at once", async () => {
+    const menu = await chooseHide();
+    expect(within(menu).getAllByRole("menuitem").map((entry) => entry.textContent)).toEqual([
+      "与我无关", "看过了", "内容质量不高", "像广告或软文", "不是我的专科", expect.stringMatching(/^不想看“.+”$/), "不说原因，直接隐藏"]);
+    expect(client.hideFrontierItem).not.toHaveBeenCalled();
+  });
+
+  it("hides with the reason chosen and shows the toast, whose 撤销 unhides", async () => {
+    const menu = await chooseHide();
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "看过了" }));
+    await waitFor(() => expect(client.hideFrontierItem).toHaveBeenCalledWith("x-post-0001", "already-seen"));
+    expect(client.addFrontierFollow).not.toHaveBeenCalled();
+    const toast = await screen.findByText("已隐藏");
+    expect(toast).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "撤销" }));
+    await waitFor(() => expect(client.unhideFrontierItem).toHaveBeenCalledWith("x-post-0001"));
+  });
+
+  it("hides with no reason on 「不说原因，直接隐藏」", async () => {
+    const menu = await chooseHide();
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "不说原因，直接隐藏" }));
+    await waitFor(() => expect(client.hideFrontierItem).toHaveBeenCalledWith("x-post-0001", undefined));
+    expect(await screen.findByText("已隐藏")).toBeInTheDocument();
+  });
+
+  it("hides nothing when the reasons are dismissed, and opens them again on the next 不感兴趣", async () => {
+    await chooseHide();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "不感兴趣的原因" })).not.toBeInTheDocument());
+    expect(client.hideFrontierItem).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "不感兴趣" }));
+    expect(await screen.findByRole("menu", { name: "不感兴趣的原因" })).toBeInTheDocument();
+  });
+
+  it("mutes the source for its own reason, and 撤销 takes the mute back with the hide", async () => {
+    client.listFrontierFollows.mockResolvedValue([]);
+    client.addFrontierFollow.mockResolvedValue({ id: "21", kind: "source", key: "x-arena", label: "Arena.ai", muted: true });
+    client.removeFrontierFollow.mockResolvedValue(undefined);
+    const menu = await chooseHide();
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "不想看“Arena.ai”" }));
+    await waitFor(() => expect(client.hideFrontierItem).toHaveBeenCalledWith("x-post-0001", "source"));
+    await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: "x-arena", label: "Arena.ai", muted: true }));
+    expect(await screen.findByText("已隐藏，并屏蔽该来源")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "撤销" }));
+    await waitFor(() => expect(client.removeFrontierFollow).toHaveBeenCalledWith("21"));
+    expect(client.unhideFrontierItem).toHaveBeenCalledWith("x-post-0001");
+  });
+});
+
+describe("不感兴趣 on a phone's reading page (c2-hide)", () => {
+  it("opens the reasons beside the bar at the window's bottom", async () => {
+    client.fetchFrontierItem.mockResolvedValue(detail(rawXPost()));
+    show("/app/frontier/items/x-post-0001");
+    await userEvent.click(await screen.findByRole("button", { name: "更多" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "不感兴趣" }));
+    const menu = await screen.findByRole("menu", { name: "不感兴趣的原因" });
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(7);
+    expect(client.hideFrontierItem).not.toHaveBeenCalled();
   });
 });
 

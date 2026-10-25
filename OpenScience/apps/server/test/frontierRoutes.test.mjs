@@ -24,6 +24,7 @@ function response() {
 /** @param {Record<string, any>} config @param {string} userId */
 function fixture(config, userId = "reader") {
   const calls = [];
+  const states = [];
   const audits = [];
   const store = {
     async ensureSessionUser() { return { user: { id: userId } }; },
@@ -38,7 +39,7 @@ function fixture(config, userId = "reader") {
       return ifNoneMatch === 'W/"1.0.abc"' ? { status: 304, etag: 'W/"1.0.abc"' } : { status: 200, etag: 'W/"1.0.abc"', body: { items: [], nextCursor: null, version: "1", mode: "list" } };
     },
     async getItem() { return { status: 200, etag: 'W/"1.0.item"', body: { item: { id: "abc" } } }; },
-    async setItemState(_user, id, action) { calls.push([action, id]); return { state: { starred: action === "star", hidden: false, read: false } }; },
+    async setItemState(_user, id, action, options) { calls.push([action, id]); states.push([action, id, options]); return { state: { starred: action === "star", hidden: action === "hide", read: false } }; },
     async sources() { return { sources: [] }; },
     async listFollows() { return { follows: [] }; },
     async createFollow(_user, body) { return { follow: { id: "1", ...body } }; },
@@ -54,7 +55,7 @@ function fixture(config, userId = "reader") {
   };
   const routes = createFrontierRoutes({ store, service, config, maxJsonBytes: 65_536,
     audit: async (event, status, details) => { audits.push({ event, status, ...details }); } });
-  return { routes, calls, audits };
+  return { routes, calls, audits, states };
 }
 
 const on = { frontierEnabled: true, frontierAudience: "all", operatorUsers: ["ops"], frontierPreviewUsers: ["preview"] };
@@ -112,6 +113,29 @@ test("a reader's writes take no fields they do not name, and the CSRF check runs
   const removed = response();
   await routes(request("DELETE", "/api/frontier/follows/7"), removed);
   assert.deepEqual(removed.json(), { data: { deleted: true } });
+});
+
+test("a hide may say why, by one of the feed's words; nothing else takes a reason and nothing else rides in a hide (c2-hide)", async () => {
+  const { routes, states } = fixture(on);
+  for (const [body, expected] of [[undefined, null], [{}, null], [{ reason: null }, null], [{ reason: "already-seen" }, "already-seen"], [{ reason: "source" }, "source"]]) {
+    const res = response();
+    await routes(request("POST", "/api/frontier/items/abc123def456/hide", body === undefined ? {} : { body }), res);
+    assert.equal(res.status, 200);
+    assert.deepEqual(states.at(-1), ["hide", "abc123def456", { reason: expected }], JSON.stringify(body));
+  }
+  // The closed list is the domain's: a word it does not hold is refused by name, and nothing reached the service.
+  const before = states.length;
+  for (const reason of ["boring", "", 7, "Source", ["source"]]) {
+    await assert.rejects(routes(request("POST", "/api/frontier/items/abc123def456/hide", { body: { reason } }), response()), { status: 400, code: "frontier_payload_invalid" }, String(reason));
+  }
+  await assert.rejects(routes(request("POST", "/api/frontier/items/abc123def456/hide", { body: { reason: "source", note: "free text" } }), response()), { code: "frontier_payload_invalid" });
+  for (const action of ["unhide", "star", "unstar", "read"]) {
+    await assert.rejects(routes(request("POST", `/api/frontier/items/abc123def456/${action}`, { body: { reason: "source" } }), response()), { code: "frontier_payload_invalid" }, action);
+  }
+  assert.equal(states.length, before, "a refused request never reached the service");
+  const unhide = response();
+  await routes(request("POST", "/api/frontier/items/abc123def456/unhide", { body: {} }), unhide);
+  assert.deepEqual(states.at(-1), ["unhide", "abc123def456", undefined]);
 });
 
 test("operator routes answer 403 to anyone else, and an operator's change is audited", async () => {

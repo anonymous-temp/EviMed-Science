@@ -428,6 +428,13 @@ describe("state changes", () => {
       { url: "/api/frontier/items/item%2F1/hide", method: "POST" },
     ]);
   });
+
+  it("send the reason of a hide when there is one, and nothing but an empty body when there is not", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { data: { state: { starred: false, hidden: true, read: false } } }));
+    await hideFrontierItem("item-1");
+    await hideFrontierItem("item-1", "promotional");
+    expect(fetchMock.mock.calls.map(([, init]) => init?.body)).toEqual(["{}", JSON.stringify({ reason: "promotional" })]);
+  });
 });
 
 describe("whether the module is offered", () => {

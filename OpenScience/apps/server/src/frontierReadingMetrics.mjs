@@ -21,6 +21,10 @@ import { HttpError } from "./security.mjs";
  *   `d1` and `d7` are the share of a day's active readers active again exactly one and seven days later ("return on"), and
  *   `within7` on any of the seven days after ("on or after"); `null` while that day has not come.
  * - **Onboarding**: readers shown the card, and answers finished and skipped, by day.
+ * - **Flagged sources** (c2-hide): the hides readers gave a reason for — 「内容质量不高」 (`low-quality`) and 「像广告或软文」
+ *   (`promotional`) — counted per source over the last `FLAGGED_DAYS` days whatever the window asked for, with how many readers
+ *   said it. A reader's word is a hint to the operator about a source, not a ruling: no ranking reads it, and it is never on a
+ *   reader's page.
  *
  * A part that cannot be read is `{ value: null, reason }`, never 0 (frontierUsage's discipline). The scrape reuses one
  * snapshot for a minute; the route computes its own.
@@ -38,6 +42,10 @@ const SCRAPE_MS = 60_000;
 const GAUGE_DAYS = 7;
 export const FRONTIER_POSITION_BUCKETS = Object.freeze(["0", "1", "2", "3", "4", "5-9", "10-19", "20+"]);
 export const FRONTIER_DWELL_BUCKETS = Object.freeze(["lt10s", "10-30s", "30s-2m", "2-5m", "ge5m"]);
+/** The days the flagged-source counts look back, whatever window the day figures were asked for. */
+export const FRONTIER_FLAGGED_DAYS = 30;
+/** The sources listed at most: the ones readers flagged most. */
+const FLAGGED_SOURCES_LIMIT = 50;
 const POSITION_SQL = `CASE WHEN position IS NULL THEN 'none' WHEN position <= 4 THEN position::text WHEN position <= 9 THEN '5-9'
   WHEN position <= 19 THEN '10-19' ELSE '20+' END`;
 
@@ -148,6 +156,22 @@ export function createFrontierReadingMetrics({ database, config = {}, now = () =
     return new Map(rows.map((/** @type {any} */ row) => [String(row.day), { shown: Number(row.shown), done: Number(row.done), skipped: Number(row.skipped) }]));
   }
 
+  /**
+   * The sources readers flagged — hidden with a reason of low quality or promotion — over the last `FRONTIER_FLAGGED_DAYS` days,
+   * most flagged first. @param {string} at
+   */
+  async function flaggedSources(at) {
+    const rows = (await database.query(`SELECT s.id, s.name,
+        count(*) FILTER (WHERE us.hidden_reason = 'low-quality')::integer AS low_quality,
+        count(*) FILTER (WHERE us.hidden_reason = 'promotional')::integer AS promotional,
+        count(DISTINCT us.user_id)::integer AS readers
+      FROM evimed_frontier.user_state us JOIN evimed_frontier.items i ON i.id = us.item_id JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+      WHERE us.hidden_at >= ($1::timestamptz - make_interval(days => $2::int)) AND us.hidden_reason IN ('low-quality', 'promotional')
+      GROUP BY s.id, s.name ORDER BY count(*) DESC, s.id LIMIT ${FLAGGED_SOURCES_LIMIT}`, [at, FRONTIER_FLAGGED_DAYS])).rows ?? [];
+    return { days: FRONTIER_FLAGGED_DAYS, sources: rows.map((/** @type {any} */ row) => ({ source: String(row.id), name: String(row.name),
+      lowQuality: Number(row.low_quality), promotional: Number(row.promotional), readers: Number(row.readers) })) };
+  }
+
   /** The window's days, newest first, as the feed's calendar has them. @param {number} days @param {string} at */
   async function calendar(days, at) {
     const rows = (await database.query(`SELECT to_char(d::date, 'YYYY-MM-DD') AS day FROM generate_series(
@@ -166,9 +190,9 @@ export function createFrontierReadingMetrics({ database, config = {}, now = () =
     }
     counters.snapshots += 1;
     const at = now().toISOString();
-    const [dayList, acts, viewed, returned, onboarded, ctr] = await Promise.all([
+    const [dayList, acts, viewed, returned, onboarded, ctr, flagged] = await Promise.all([
       part(() => calendar(days, at)), part(() => activity(days, at)), part(() => views(days, at)), part(() => returns(days, at)),
-      part(() => onboarding(days, at)), part(() => clickThrough(days, at)),
+      part(() => onboarding(days, at)), part(() => clickThrough(days, at)), part(() => flaggedSources(at)),
     ]);
     const map = (/** @type {any} */ value) => (value instanceof Map ? value : null);
     const totals = { views: 0, satisfied: 0, reachedEnd: 0, buckets: Object.fromEntries(FRONTIER_DWELL_BUCKETS.map((bucket) => [bucket, 0])) };
@@ -188,8 +212,9 @@ export function createFrontierReadingMetrics({ database, config = {}, now = () =
         onboarding: map(onboarded) ? map(onboarded).get(day) ?? { shown: 0, done: 0, skipped: 0 } : null,
       })) : dayList,
       clickThrough: ctr,
+      flaggedSources: flagged,
       dwell: map(viewed) ? { ...totals, satisfiedShare: rate(totals.satisfied, totals.views), reachEndShare: rate(totals.reachedEnd, totals.views) } : absent(/** @type {any} */ (viewed).reason),
-      partsMissing: Object.entries({ calendar: dayList, activity: acts, views: viewed, return: returned, onboarding: onboarded, clickThrough: ctr })
+      partsMissing: Object.entries({ calendar: dayList, activity: acts, views: viewed, return: returned, onboarding: onboarded, clickThrough: ctr, flaggedSources: flagged })
         .filter(([, value]) => value && typeof value === "object" && "value" in value && value.value === null).map(([name, value]) => ({ name, reason: /** @type {any} */ (value).reason })),
     };
   }

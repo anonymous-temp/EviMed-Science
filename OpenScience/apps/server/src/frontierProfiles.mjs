@@ -41,6 +41,13 @@
  *   every candidate of its event and, where there are vectors, every candidate
  *   whose cosine to it is at least `FRONTIER_FOR_YOU_HIDDEN_COSINE`. Items the
  *   reader already starred or opened are not recommended to them again.
+ * - **What the reason says (c2-hide, 2026-10-25).** A hide may carry why (`user_state.hidden_reason`, the reader's own word).
+ *   「不是我的专科」 in the last `notMySpecialty.windowDays` days lowers the specialties of those items for this reader — each
+ *   hide `perHide`, at most `max`, on the rank, the editor's order and the exploration pool of every candidate of that specialty
+ *   (an item takes the strongest of its specialties) — except the specialties the reader named in onboarding: what they stated
+ *   stands over what one hide of one item can say (principle 18), so the other specialties of such an item carry it. 「看过了」
+ *   says the item was good and old: it is a hide that keeps the item out and counts against no genre. 「内容质量不高」 and 「像广告或软文」
+ *   are the operator's — counted per source in `/api/ops/frontier-reading`, never shown to a reader and never moving a ranking.
  * - **Ranking (ct-track, 2026-10-24).** Every published item of the window that passes the reader's hidden and muted
  *   filters is a candidate (the newest 300). Its reasons are the profile's phrases (a phrase vector's cosine, at or above
  *   the 0.4 floor; or a keyword hit), what the reader told onboarding (a tag or entity key of interest), what they follow
@@ -312,9 +319,12 @@ export function decodeVector(value, dimension) {
  *   or after index `position`.
  * - `perReason`: how many items one reason may pick. `follows`: the positive follows read, most recent first.
  * - `onboardingOpens`: a reader with this many opened items is known enough not to be asked.
+ * - `notMySpecialty` (c2-hide): items the reader hid as 「不是我的专科」 within `windowDays` days lower their specialties by `perHide`
+ *   each, at most `max`: on the cosine scale of a match (so five hides take a specialty's items 0.2 down, the distance between a
+ *   follow and a weak phrase), and as `max × 100` points where the editor's order or the exploration pool sorts by score.
  */
 export const FRONTIER_RANKING = Object.freeze({
-  policy: "for-you-2026-10-24.1",
+  policy: "for-you-2026-10-25.1",
   match: Object.freeze({ interest: 0.6, follow: 0.6, keyword: 0.5, specialty: 0.42 }),
   editorial: Object.freeze({ ceiling: 0.3, floor: 0.1, visitsHalf: 5 }),
   genre: Object.freeze({ share: 0.05, base: 0.08, lean: 0.12, strength: 10, windowDays: 60, openWeight: 0.5 }),
@@ -331,6 +341,7 @@ export const FRONTIER_RANKING = Object.freeze({
   perReason: Object.freeze({ phrase: FRONTIER_FOR_YOU_PER_PHRASE, interest: 2, follow: 2, specialty: 4 }),
   follows: 30,
   onboardingOpens: 5,
+  notMySpecialty: Object.freeze({ windowDays: 90, perHide: 0.04, max: 0.2 }),
 });
 
 /** The topics of the entries that have no reason of the reader's: the editor's pick, and the exploration entry. */
@@ -375,6 +386,27 @@ export function frontierGenreAffinity(outcomes, role, rule = FRONTIER_RANKING.ge
 }
 
 /**
+ * How far a reader's 「不是我的专科」 hides lower each specialty: `perHide` for every hidden item that carries it, at most `max`.
+ * An item's specialties the reader named in onboarding (`stated`) are not counted — what they stated stands over what one hide of
+ * one item can say — so such an item lowers only its other specialties. Pure.
+ * @param {Array<readonly string[]>} hides the specialties of each item the reader hid as 「不是我的专科」 within the window
+ * @param {readonly string[]} stated the specialties the reader named in onboarding
+ * @param {typeof FRONTIER_RANKING.notMySpecialty} [rule]
+ * @returns {Record<string, number>} specialty key → how much to take off, in the cosine scale
+ */
+export function frontierSpecialtyDemotion(hides, stated = [], rule = FRONTIER_RANKING.notMySpecialty) {
+  const own = new Set(stated);
+  /** @type {Record<string, number>} */
+  const counts = {};
+  for (const specialties of Array.isArray(hides) ? hides : []) {
+    for (const key of new Set(Array.isArray(specialties) ? specialties : [])) {
+      if (typeof key === "string" && key && !own.has(key)) counts[key] = (counts[key] ?? 0) + 1;
+    }
+  }
+  return Object.fromEntries(Object.entries(counts).map(([key, count]) => [key, Math.round(Math.min(rule.max, count * rule.perHide) * 10_000) / 10_000]));
+}
+
+/**
  * @typedef {{ id: string, publicId: string, weight: number, selected: boolean, safetyAlert: boolean, genre: string, specialties: string[],
  *   visibleAt: number }} RankCandidate
  * @typedef {{ topic: string, kind: string, cap: number }} RankReason
@@ -386,17 +418,21 @@ export function frontierGenreAffinity(outcomes, role, rule = FRONTIER_RANKING.ge
 /**
  * The block from its parts, in display order (pure; the integration test drives it through SQL). `pairs` are the (item, reason)
  * matches already above their floor; `terms` the genre terms; `random` returns [0, 1).
+ * `demotion` is `frontierSpecialtyDemotion`'s answer: what a reader's 「不是我的专科」 hides take off an item of that specialty.
  * @param {{ candidates: RankCandidate[], reasons: RankReason[], pairs: RankPair[], readerSpecialties: string[], editorialShare: number,
  *   terms: Record<string, { term: number }>, now: number, selectThreshold: number, random?: () => number, size?: number,
- *   ranking?: typeof FRONTIER_RANKING }} input
+ *   ranking?: typeof FRONTIER_RANKING, demotion?: Record<string, number> }} input
  * @returns {RankEntry[]}
  */
 export function frontierForYouBlock({ candidates, reasons, pairs, readerSpecialties, editorialShare, terms, now, selectThreshold,
-  random = Math.random, size = FRONTIER_FOR_YOU_SIZE, ranking = FRONTIER_RANKING }) {
+  random = Math.random, size = FRONTIER_FOR_YOU_SIZE, ranking = FRONTIER_RANKING, demotion = {} }) {
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   const own = new Set(readerSpecialties);
   const overlaps = (/** @type {RankCandidate} */ candidate) => candidate.specialties.some((key) => own.has(key));
-  const boost = (/** @type {RankCandidate} */ candidate) => editorialShare * candidate.weight / 100 + (terms[candidate.genre]?.term ?? 0);
+  // An item takes the strongest demotion of its specialties; in points where the editor's order sorts by score.
+  const lowered = (/** @type {RankCandidate} */ candidate) => candidate.specialties.reduce((most, key) => Math.max(most, demotion[key] ?? 0), 0);
+  const standing = (/** @type {RankCandidate} */ candidate) => candidate.weight - lowered(candidate) * 100;
+  const boost = (/** @type {RankCandidate} */ candidate) => editorialShare * candidate.weight / 100 + (terms[candidate.genre]?.term ?? 0) - lowered(candidate);
   const label = (/** @type {string} */ genre) => /** @type {Record<string, string>} */ (FRONTIER_GENRE_LABELS_ZH)[genre] ?? genre;
   /** @type {RankEntry[]} */
   const mustSee = [];
@@ -404,7 +440,7 @@ export function frontierForYouBlock({ candidates, reasons, pairs, readerSpecialt
     && (!own.size || !candidate.specialties.length || overlaps(candidate)))
     .sort((left, right) => right.visibleAt - left.visibleAt || left.id.localeCompare(right.id));
   const major = own.size ? candidates.filter((candidate) => !candidate.safetyAlert && candidate.selected && (candidate.genre === "guideline" || candidate.genre === "approval")
-    && overlaps(candidate)).sort((left, right) => right.weight - left.weight || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)) : [];
+    && overlaps(candidate)).sort((left, right) => standing(right) - standing(left) || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)) : [];
   for (const candidate of [...safety, ...major].slice(0, ranking.mustSee.max)) {
     mustSee.push({ itemId: candidate.id, slot: "must-see", reason: null, topic: label(candidate.genre), kind: "must-see", score: candidate.weight / 100, propensity: 1 });
   }
@@ -430,7 +466,7 @@ export function frontierForYouBlock({ candidates, reasons, pairs, readerSpecialt
   }
   // While the reader's own reasons leave room, the editor's: 精选 by score.
   const editorial = candidates.filter((candidate) => candidate.selected && !taken.has(candidate.id))
-    .sort((left, right) => right.weight - left.weight || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id));
+    .sort((left, right) => standing(right) - standing(left) || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id));
   for (const candidate of editorial) {
     if (chosen.length >= room) break;
     taken.add(candidate.id);
@@ -445,7 +481,7 @@ export function frontierForYouBlock({ candidates, reasons, pairs, readerSpecialt
   const block = [...mustSee, ...grouped];
   // The exploration entry: one of the best items the reader's reasons matched nothing of, drawn uniformly, its probability kept.
   const pool = candidates.filter((candidate) => !taken.has(candidate.id) && !matched.has(candidate.id) && (candidate.selected || candidate.weight >= selectThreshold))
-    .sort((left, right) => right.weight - left.weight || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)).slice(0, ranking.explore.poolMax);
+    .sort((left, right) => standing(right) - standing(left) || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)).slice(0, ranking.explore.poolMax);
   for (let slot = 0; slot < exploreSlots && pool.length; slot += 1) {
     const draw = Math.min(pool.length - 1, Math.floor(Math.max(0, random()) * pool.length));
     const propensity = 1 / pool.length;
@@ -522,7 +558,7 @@ export class FrontierProfiles {
     /** Observable counters (principle 15). */
     this.counters = { refreshed: 0, empty: 0, paused: 0, failures: 0, ranked: 0, embedded: 0, embedFailures: 0, reasonsDropped: 0, reads: 0,
       staleMarks: 0, staleMarkFailures: 0, visitFailures: 0, questionFailures: 0, hiddenDropped: 0, entityPhrases: 0, entityFailures: 0,
-      signalFailures: 0, statedFailures: 0, prefsSaved: 0 };
+      signalFailures: 0, statedFailures: 0, prefsSaved: 0, demotionFailures: 0, demotedRanks: 0 };
     /** @type {string | null} */
     this.lastError = null;
   }
@@ -996,23 +1032,25 @@ export class FrontierProfiles {
       const rows = (await this.database.query(`WITH acts AS (
           SELECT x.item_id, min(x.genre) AS logged_genre, bool_or(x.type = 'impression') AS seen, bool_or(x.type = 'open') AS opened,
             coalesce(sum(x.value) FILTER (WHERE x.type = 'dwell'), 0) AS dwell, bool_or(x.type = 'reach-end') AS reached,
-            bool_or(x.type IN ('star', 'save', 'share', 'research')) AS kept, bool_or(x.type = 'hide') AS hid
+            bool_or(x.type IN ('star', 'save', 'share', 'research')) AS kept, bool_or(x.type = 'hide' AND x.detail IS DISTINCT FROM 'already-seen') AS hid
           FROM evimed_frontier.interactions x WHERE x.user_id = $1 AND x.item_id IS NOT NULL AND x.client_at >= $2 GROUP BY x.item_id
         ), marks AS (
+          -- 「看过了」: the item is kept out of the feed but is no failure of its genre, whichever of the two records says it.
           SELECT us.item_id, coalesce(us.read_at >= $2, false) AS read, coalesce(us.starred_at >= $2, false) AS starred,
-            coalesce(us.hidden_at >= $2, false) AS hidden
+            coalesce(us.hidden_at >= $2, false) AS hidden, coalesce(us.hidden_at IS NOT NULL AND us.hidden_reason = 'already-seen', false) AS seen_before
           FROM evimed_frontier.user_state us WHERE us.user_id = $1 AND (us.read_at >= $2 OR us.starred_at >= $2 OR us.hidden_at >= $2)
         )
         SELECT a.logged_genre, ${FRONTIER_GENRE_COLUMNS}, coalesce(a.seen, false) AS seen, coalesce(a.opened, false) AS opened,
           coalesce(a.dwell, 0) AS dwell, coalesce(a.reached, false) AS reached, coalesce(a.kept, false) AS kept, coalesce(a.hid, false) AS hid,
-          coalesce(m.read, false) AS read, coalesce(m.starred, false) AS starred, coalesce(m.hidden, false) AS hidden
+          coalesce(m.read, false) AS read, coalesce(m.starred, false) AS starred, coalesce(m.hidden, false) AS hidden,
+          coalesce(m.seen_before, false) AS seen_before
         FROM acts a FULL JOIN marks m ON m.item_id = a.item_id
         JOIN evimed_frontier.items i ON i.id = coalesce(a.item_id, m.item_id) LIMIT 5000`, [userId, since])).rows ?? [];
       const outcomes = rows.map((/** @type {any} */ row) => ({
         genre: isFrontierGenre(row.logged_genre) ? row.logged_genre : frontierItemGenre(row),
         seen: row.seen === true, opened: row.opened === true || row.read === true,
         satisfied: Number(row.dwell) >= FRONTIER_DWELL.satisfiedMs || row.reached === true || row.kept === true || row.starred === true,
-        hidden: row.hid === true || row.hidden === true,
+        hidden: (row.hid === true || row.hidden === true) && row.seen_before !== true,
       }));
       const visits = Number((await this.database.query(`SELECT count(*)::integer AS days FROM (
           SELECT (client_at AT TIME ZONE $3)::date AS day FROM evimed_frontier.interactions WHERE user_id = $1 AND client_at >= $2
@@ -1023,6 +1061,25 @@ export class FrontierProfiles {
       this.counters.signalFailures += 1;
       this.lastError = codeOf(error);
       return { outcomes: [], opens: 0, visits: 0 };
+    }
+  }
+
+  /**
+   * The specialties of the items the reader hid as 「不是我的专科」 within `notMySpecialty.windowDays` days, one list per item, newest
+   * first, at most 500 (what `frontierSpecialtyDemotion` counts). A signal that cannot be read is empty (counted).
+   * @param {string} userId @param {Date} now
+   * @returns {Promise<string[][]>}
+   */
+  async #specialtyHides(userId, now) {
+    const since = new Date(now.getTime() - this.ranking.notMySpecialty.windowDays * DAY);
+    try {
+      return ((await this.database.query(`SELECT i.specialties FROM evimed_frontier.user_state us JOIN evimed_frontier.items i ON i.id = us.item_id
+        WHERE us.user_id = $1 AND us.hidden_reason = 'not-my-specialty' AND us.hidden_at >= $2 ORDER BY us.hidden_at DESC LIMIT 500`,
+      [userId, since])).rows ?? []).map((/** @type {any} */ row) => (row.specialties ?? []).map(String));
+    } catch (error) {
+      this.counters.demotionFailures += 1;
+      this.lastError = codeOf(error);
+      return [];
     }
   }
 
@@ -1195,6 +1252,9 @@ export class FrontierProfiles {
     const pairs = [...phrasePairs, ...stated.pairs.map((pair) => ({ ...pair, reason: pair.reason + phrases.length }))]
       .filter((pair) => reasons[pair.reason]?.text && (reasons[pair.reason].source !== "memory" || reasons[pair.reason].memoryId));
     const signal = await this.#readingSignal(userId, now);
+    // What they said was not their specialty lowers it, except what they stated in onboarding (frontierSpecialtyDemotion).
+    const demotion = frontierSpecialtyDemotion(await this.#specialtyHides(userId, now), prefs.specialties, this.ranking.notMySpecialty);
+    if (Object.keys(demotion).length) this.counters.demotedRanks += 1;
     const block = frontierForYouBlock({
       candidates: candidates.map((row) => ({ id: String(row.id), publicId: String(row.public_id), weight: Number(row.weight) || 0, selected: row.selected === true,
         safetyAlert: row.safety_alert === true, genre: frontierItemGenre(row), specialties: (row.specialties ?? []).map(String),
@@ -1202,7 +1262,7 @@ export class FrontierProfiles {
       reasons: reasons.map((reason) => ({ topic: reason.text, kind: reason.kind, cap: reason.cap })),
       pairs, readerSpecialties, editorialShare: frontierEditorialShare(signal.visits, this.ranking.editorial),
       terms: frontierGenreAffinity(signal.outcomes, prefs.role, this.ranking.genre), now: now.getTime(), selectThreshold: threshold,
-      random: this.random, ranking: this.ranking,
+      random: this.random, ranking: this.ranking, demotion,
     });
     const items = block.map((entry) => {
       const reason = entry.reason === null ? null : reasons[entry.reason];

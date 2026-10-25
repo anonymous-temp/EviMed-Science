@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useLocation, useParams } from "react-router";
-import { fetchFrontierItem, frontierAbsence, frontierErrorMessage, frontierItemGone, hideFrontierItem, markFrontierItemRead, starFrontierItem, unstarFrontierItem, useFrontierFeature, type FrontierItemDetail } from "@/lib/frontierClient";
+import { fetchFrontierItem, frontierAbsence, frontierErrorMessage, frontierItemGone, hideFrontierItem, markFrontierItemRead, starFrontierItem, unhideFrontierItem, unstarFrontierItem, useFrontierFeature, type FrontierHideReason, type FrontierItemDetail } from "@/lib/frontierClient";
 import { useWide } from "@/lib/useMediaQuery";
 import { PageShell } from "@/components/layout/PageShell";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -8,6 +8,8 @@ import { LoadError } from "@/components/cards/LoadError";
 import { Note } from "@/components/ui/Note";
 import { FrontierBack, evidenceFromState } from "@/components/frontier/FrontierBack";
 import { useItemActions } from "@/components/frontier/FrontierCard";
+import { FrontierHideReasonMenu } from "@/components/frontier/FrontierHideStrip";
+import { muteSourceOf } from "@/components/frontier/frontierHide";
 import {
   ReaderAbstract,
   ReaderActions,
@@ -33,7 +35,7 @@ import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EXTERNAL, isSocialItem } from "@/components/frontier/frontierText";
 import { toast } from "@/lib/toast";
-import { useFrontierReadTracking } from "@/lib/frontierTracking";
+import { trackFrontierItemAction, useFrontierReadTracking } from "@/lib/frontierTracking";
 
 type ArticleState = { kind: "loading" } | { kind: "ready"; item: FrontierItemDetail } | { kind: "gone" } | { kind: "off" } | { kind: "error"; message: string };
 
@@ -96,14 +98,40 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   const prefix = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [textOpen, setTextOpen] = useState(false);
   useFrontierReadTracking(item.id, { language, expanded: textOpen, url: item.url, state: item.state });
-  const update = async (action: "star" | "hide") => {
+  const toggleStar = async () => {
     try {
-      const next = await (action === "hide" ? hideFrontierItem(item.id) : item.state.starred ? unstarFrontierItem(item.id) : starFrontierItem(item.id));
-      onItem({ ...item, state: next });
-      if (action === "hide") toast.success("已隐藏");
+      onItem({ ...item, state: await (item.state.starred ? unstarFrontierItem(item.id) : starFrontierItem(item.id)) });
     } catch (error) { toast.error(frontierErrorMessage(error)); }
   };
-  const { more, reports, research } = useItemActions(item, { reader: true, onHide: () => void update("hide") });
+  // 「不感兴趣」 asks why first (owner, 2026-10-25): the reasons open beside the actions, and the choice — or 「不说原因，直接隐藏」 —
+  // hides with it. The toast keeps 撤销, which unhides and, where the reason muted the source, unmutes it. The key opens the menu anew.
+  const [reasons, setReasons] = useState(0);
+  const hide = async (reason: FrontierHideReason | null) => {
+    try {
+      const next = await hideFrontierItem(item.id, reason ?? undefined);
+      onItem({ ...item, state: next });
+      trackFrontierItemAction("hide", item.id, reason ? { detail: reason } : {});
+      let unmute: (() => Promise<void>) | null = null;
+      if (reason === "source") {
+        try { unmute = await muteSourceOf(item); } catch (error) { toast.error(frontierErrorMessage(error)); }
+      }
+      toast.success(unmute ? "已隐藏，并屏蔽该来源" : "已隐藏", {
+        action: {
+          label: "撤销",
+          onClick: () => {
+            void (async () => {
+              try {
+                onItem({ ...item, state: await unhideFrontierItem(item.id) });
+                trackFrontierItemAction("unhide", item.id);
+                await unmute?.();
+              } catch (error) { toast.error(frontierErrorMessage(error)); }
+            })();
+          },
+        },
+      });
+    } catch (error) { toast.error(frontierErrorMessage(error)); }
+  };
+  const { more, reports, research } = useItemActions(item, { reader: true, onHide: () => setReasons((value) => value + 1) });
   const fallback = frontierFallbackReason(item);
   // An original title beside a translated one, for an article; a post's 「title」 is its own first words.
   const originalTitle = !isSocialItem(item) && item.titleZh && item.titleRaw !== item.titleZh ? item.titleRaw : null;
@@ -111,7 +139,9 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   const sections = item.body ? readerOutline(item.body, language, prefix) : [];
   const outline = sections.length >= 3 ? sections : [];
   const presentation = item.body ? readerBodyPresentation(item, item.body) : null;
-  const actions = { item, more, onStar: () => void update("star"), onResearch: research };
+  const actions = { item, more, onStar: () => void toggleStar(), onResearch: research };
+  const chooser = (anchorClassName: string) => (reasons > 0
+    ? <FrontierHideReasonMenu key={reasons} item={item} anchorClassName={anchorClassName} onChoose={(reason) => void hide(reason)} /> : null);
   return (
     <PageShell
       className="[&_h1]:line-clamp-none"
@@ -124,7 +154,10 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
       asideLabel="文章操作与推荐"
       aside={wide ? (
         <div className="flex flex-col gap-8">
-          <ReaderActions {...actions} />
+          <div className="relative">
+            <ReaderActions {...actions} />
+            {chooser("absolute right-0 top-10")}
+          </div>
           <ReaderNotes item={item} outline={outline.length > 0 ? <ReaderOutline entries={outline} layout="inline" onReveal={() => setTextOpen(true)} /> : undefined} />
         </div>
       ) : undefined}
@@ -149,6 +182,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
         {!wide && <div className="mt-10"><ReaderNotes item={item} /></div>}
       </article>
       {!wide && <ReaderBar {...actions} />}
+      {!wide && chooser("fixed bottom-16 right-3")}
     </PageShell>
   );
 }

@@ -40,6 +40,7 @@ const client = vi.hoisted(() => ({
   listFrontierTags: vi.fn(),
   fetchFrontierTag: vi.fn(),
   addFrontierFollow: vi.fn(),
+  removeFrontierFollow: vi.fn(),
 }));
 // Partial: the vocabulary, the parsers and the error words stay real.
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
@@ -721,17 +722,71 @@ describe("the actions on a card", () => {
     await waitFor(() => expect(within(card).getByRole("button", { name: "收藏" })).toHaveAttribute("aria-pressed", "true"));
   });
 
-  it("hides an item with a toast that can undo it", async () => {
-    renderPage();
+  /** 不感兴趣 on the first card, as a reader presses it. */
+  async function chooseHide() {
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
     await userEvent.click(within(card).getByRole("button", { name: "更多操作" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "不感兴趣" }));
+  }
+
+  it("hides an item at once and leaves one line in its place that asks why, in the domain's order; 撤销 brings the card back (c2-hide)", async () => {
+    client.unhideFrontierItem.mockResolvedValue({ starred: false, hidden: false, read: false });
+    renderPage();
+    await chooseHide();
     expect(screen.queryByRole("article", { name: "今天的一条 RCT" })).not.toBeInTheDocument();
     expect(client.hideFrontierItem).toHaveBeenCalledWith("today-1");
-    expect(screen.getByText("已隐藏")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "撤销" }));
+    expect(client.hideFrontierItem.mock.calls[0]).toHaveLength(1);
+    const line = await screen.findByRole("group", { name: "不感兴趣" });
+    expect(line).toHaveTextContent("已隐藏 · 说说原因（可不选）");
+    expect(within(line).getAllByRole("button").map((button) => button.textContent)).toEqual(
+      ["与我无关", "看过了", "内容质量不高", "像广告或软文", "不是我的专科", `不想看“${today.source.name}”`, "撤销"]);
+    expect(screen.queryByText("已隐藏")).not.toBeInTheDocument(); // no toast: the line is the way back
+    // The line stands where the card was, between its neighbours.
+    expect(screen.getByRole("article", { name: "昨天的一条指南" })).toBeInTheDocument();
+    await userEvent.click(within(line).getByRole("button", { name: "撤销" }));
     expect(await screen.findByRole("article", { name: "今天的一条 RCT" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "不感兴趣" })).not.toBeInTheDocument();
     await waitFor(() => expect(client.unhideFrontierItem).toHaveBeenCalledWith("today-1"));
+  });
+
+  it("sends the reason chosen on the line, says 「已记下」, and the card is gone when it closes (c2-hide)", async () => {
+    client.hideFrontierItem.mockResolvedValue({ starred: false, hidden: true, read: false });
+    renderPage();
+    await chooseHide();
+    await userEvent.click(within(await screen.findByRole("group", { name: "不感兴趣" })).getByRole("button", { name: "像广告或软文" }));
+    await waitFor(() => expect(client.hideFrontierItem).toHaveBeenLastCalledWith("today-1", "promotional"));
+    expect(screen.getByText("已记下")).toBeInTheDocument();
+    expect(client.addFrontierFollow).not.toHaveBeenCalled(); // only the source's own reason mutes it
+    await waitFor(() => expect(screen.queryByRole("group", { name: "不感兴趣" })).not.toBeInTheDocument(), { timeout: 3_000 });
+    expect(screen.queryByRole("article", { name: "今天的一条 RCT" })).not.toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "昨天的一条指南" })).toBeInTheDocument();
+  });
+
+  it("mutes the source for 「不想看这个来源」, and 撤销 gives the follow back as it was (c2-hide)", async () => {
+    client.hideFrontierItem.mockResolvedValue({ starred: false, hidden: true, read: false });
+    client.unhideFrontierItem.mockResolvedValue({ starred: false, hidden: false, read: false });
+    client.listFrontierFollows.mockResolvedValue([]);
+    client.addFrontierFollow.mockResolvedValue({ id: "55", kind: "source", key: today.source.id, label: today.source.name, muted: true });
+    client.removeFrontierFollow.mockResolvedValue(undefined);
+    renderPage();
+    await chooseHide();
+    await userEvent.click(within(await screen.findByRole("group", { name: "不感兴趣" })).getByRole("button", { name: `不想看“${today.source.name}”` }));
+    await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: today.source.id, label: today.source.name, muted: true }));
+    expect(client.hideFrontierItem).toHaveBeenLastCalledWith("today-1", "source");
+    await userEvent.click(screen.getByRole("button", { name: "撤销" }));
+    await waitFor(() => expect(client.removeFrontierFollow).toHaveBeenCalledWith("55"));
+    expect(client.unhideFrontierItem).toHaveBeenCalledWith("today-1");
+    expect(await screen.findByRole("article", { name: "今天的一条 RCT" })).toBeInTheDocument();
+  });
+
+  it("brings the card back with the error when the hide itself is refused (c2-hide)", async () => {
+    client.hideFrontierItem.mockRejectedValue(new WebApiError("down", { status: 503, code: null }));
+    renderPage();
+    await chooseHide();
+    await waitFor(() => expect(screen.queryByRole("group", { name: "不感兴趣" })).not.toBeInTheDocument());
+    expect(await screen.findByRole("article", { name: "今天的一条 RCT" })).toBeInTheDocument();
+    expect(client.unhideFrontierItem).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 
   it("saves to the knowledge base, and stops offering it where the server has no such route", async () => {

@@ -1,4 +1,4 @@
-import { FRONTIER_GENRE_LABELS_ZH, frontierEventEvidenceCounts } from '@evimed/domain';
+import { FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, frontierEventEvidenceCounts } from '@evimed/domain';
 import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
@@ -1372,22 +1372,37 @@ export class FrontierService {
   }
 
   /**
-   * Star, unstar, hide, unhide or mark read one item for one reader.
+   * Star, unstar, hide, unhide or mark read one item for one reader. A hide may say why (`options.reason`, one of
+   * `FRONTIER_HIDE_REASONS`): the reason is kept with the hide (`user_state.hidden_reason`), a later hide of an item that is
+   * still hidden replaces it when it carries one and leaves it when it does not, and an unhide clears it — a reason belongs to
+   * the hide that stands.
    * @param {{ id: string }} user @param {string} publicId @param {"star" | "unstar" | "hide" | "unhide" | "read"} action
+   * @param {{ reason?: string | null }} [options]
    */
-  async setItemState(user, publicId, action) {
+  async setItemState(user, publicId, action, options = {}) {
     const columns = { star: ["starred_at", true], unstar: ["starred_at", false], hide: ["hidden_at", true], unhide: ["hidden_at", false], read: ["read_at", true] };
     if (!Object.hasOwn(columns, action)) throw failure(404, "not_found", "Frontier route not found.");
     if (!PUBLIC_ID.test(String(publicId ?? ""))) throw failure(404, "frontier_item_not_found", "No such item.");
+    const reason = options?.reason ?? null;
+    if (reason !== null && (action !== "hide" || !FRONTIER_HIDE_REASONS.includes(/** @type {any} */ (reason)))) {
+      throw failure(400, "frontier_payload_invalid", "The hide reason is not one the feed knows.");
+    }
     const [column, set] = columns[action];
+    // The first time counts: a second star keeps when it was starred. A hide keeps its first time too, and takes the reason it was given.
+    const insertColumns = action === "hide" ? "user_id, item_id, hidden_at, hidden_reason" : `user_id, item_id, ${column}`;
+    const insertValues = action === "hide" ? "$1, $2, clock_timestamp(), $3" : `$1, $2, ${set ? "clock_timestamp()" : "NULL"}`;
+    const update = action === "hide"
+      ? `hidden_at = coalesce(us.hidden_at, clock_timestamp()),
+          hidden_reason = CASE WHEN us.hidden_at IS NULL THEN EXCLUDED.hidden_reason ELSE coalesce(EXCLUDED.hidden_reason, us.hidden_reason) END`
+      : action === "unhide" ? "hidden_at = NULL, hidden_reason = NULL"
+        : `${column} = ${set ? `coalesce(us.${column}, clock_timestamp())` : "NULL"}`;
     const state = await this.#transaction(async (client) => {
       const item = (await client.query(`SELECT id FROM evimed_frontier.items WHERE public_id=$1 AND state IN ('published','withdrawn')`, [publicId])).rows[0];
       if (!item) throw failure(404, "frontier_item_not_found", "No such item.");
-      // The first time counts: a second star keeps when it was starred.
-      const row = (await client.query(`INSERT INTO evimed_frontier.user_state AS us (user_id, item_id, ${column})
-          VALUES ($1, $2, ${set ? "clock_timestamp()" : "NULL"})
-        ON CONFLICT (user_id, item_id) DO UPDATE SET ${column} = ${set ? `coalesce(us.${column}, clock_timestamp())` : "NULL"}
-        RETURNING starred_at IS NOT NULL AS starred, hidden_at IS NOT NULL AS hidden, read_at IS NOT NULL AS read`, [user.id, item.id])).rows[0];
+      const row = (await client.query(`INSERT INTO evimed_frontier.user_state AS us (${insertColumns}) VALUES (${insertValues})
+        ON CONFLICT (user_id, item_id) DO UPDATE SET ${update}
+        RETURNING starred_at IS NOT NULL AS starred, hidden_at IS NOT NULL AS hidden, read_at IS NOT NULL AS read`,
+      action === "hide" ? [user.id, item.id, reason] : [user.id, item.id])).rows[0];
       await this.#bumpState(client, user.id);
       return row;
     });
@@ -2284,7 +2299,7 @@ export function frontierMetricFamilies(enabled, snapshot) {
     if (profiles) {
       add("profiles_total", "Profile refreshes, rankings, reasons dropped because their memory was gone, profiles marked due by a change, and candidates dropped as near a hidden item.", "counter",
         ["refreshed", "empty", "paused", "failures", "ranked", "embedded", "embedFailures", "reasonsDropped", "staleMarks", "staleMarkFailures",
-          "visitFailures", "questionFailures", "hiddenDropped"]
+          "visitFailures", "questionFailures", "hiddenDropped", "demotionFailures", "demotedRanks"]
           .map((kind) => ({ labels: { kind }, value: Number(profiles.counters?.[kind] ?? 0) })));
     }
     add("composer_loop_failures_total", "Composer loop runs that ended in an error, by loop.", "counter",

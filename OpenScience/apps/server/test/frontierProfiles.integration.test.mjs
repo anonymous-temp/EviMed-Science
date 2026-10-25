@@ -463,3 +463,77 @@ test("what the reader reads leans their block: papers read to the end come befor
   assert.deepEqual(leaning.items.map((entry) => entry.item.title), ["Cardiology trial", "Cardiology news"]);
   assert.ok(news && paper);
 });
+
+/** A reader's hide of an item, as the table keeps it: when, and the reason they gave (none is null). */
+async function hide(userId, item, { daysAgo = 5, reason = null } = {}) {
+  await database.query(`INSERT INTO evimed_frontier.user_state (user_id, item_id, hidden_at, hidden_reason) VALUES ($1, $2, $3, $4)
+    ON CONFLICT (user_id, item_id) DO UPDATE SET hidden_at = EXCLUDED.hidden_at, hidden_reason = EXCLUDED.hidden_reason`,
+  [userId, item.id, hoursAgo(24 * daysAgo), reason]);
+}
+
+test("what the reader said was not their specialty lowers it for them for ninety days, except what they stated (c2-hide)", options, async () => {
+  const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), selected: true, sourceId: "nejm" };
+  const oncology = await insertComposedItem(database, { ...recent, title: "Oncology A", specialties: ["oncology"], scoreTotal: 88 });
+  await insertComposedItem(database, { ...recent, title: "Oncology B", specialties: ["oncology"], scoreTotal: 86 });
+  await insertComposedItem(database, { ...recent, title: "Cardiology A", specialties: ["cardiology"], scoreTotal: 80 });
+  assert.ok(oncology);
+  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+    now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
+  const order = async (userId = users.fresh) => {
+    await database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [userId]);
+    return (await reader.forYou({ id: userId }, hydrate)).items.map((entry) => entry.item.title);
+  };
+  assert.deepEqual(await order(), ["Oncology A", "Oncology B", "Cardiology A"], "by the editor's score while nobody has said anything");
+  // Three oncology items hidden as 「不是我的专科」, and three more hidden for other reasons, which say nothing of a specialty.
+  const said = [];
+  for (let index = 0; index < 3; index += 1) {
+    said.push(await insertComposedItem(database, { ...recent, title: `Said ${index}`, specialties: ["oncology"], scoreTotal: 70 }));
+    await hide(users.fresh, said[index], { reason: "not-my-specialty" });
+    await hide(users.fresh, await insertComposedItem(database, { ...recent, title: `Other ${index}`, specialties: ["oncology"], scoreTotal: 70 }),
+      { reason: ["already-seen", "promotional", null][index] });
+  }
+  assert.deepEqual(await order(), ["Cardiology A", "Oncology A", "Oncology B"],
+    "three hides take twelve points off the specialty: the 80 now leads the 88 and the 86; the other reasons moved nothing");
+  assert.ok((await reader.rank(users.fresh)).policy === FRONTIER_RANKING.policy);
+  assert.ok(reader.counters.demotedRanks >= 1);
+  // One that is older than the window is forgotten; another reader's word is not this reader's.
+  for (const item of said) await hide(users.fresh, item, { reason: "not-my-specialty", daysAgo: FRONTIER_RANKING.notMySpecialty.windowDays + 1 });
+  assert.deepEqual(await order(), ["Oncology A", "Oncology B", "Cardiology A"], "ninety days and it is no longer said");
+  for (const item of said) await hide(users.paused, item, { reason: "not-my-specialty" });
+  assert.deepEqual(await order(), ["Oncology A", "Oncology B", "Cardiology A"], "what another reader said is theirs");
+  // What they stated in onboarding stands over a hide of one item: oncology is theirs, so those hides lower nothing.
+  for (const item of said) await hide(users.fresh, item, { reason: "not-my-specialty" });
+  assert.deepEqual(await order(), ["Cardiology A", "Oncology A", "Oncology B"]);
+  await reader.savePrefs(users.fresh, { specialties: ["oncology"], done: true });
+  const stated = await order();
+  assert.equal(stated[0], "Oncology A", `the reader's own specialty is not lowered (${stated.join(", ")})`);
+});
+
+test("「看过了」 keeps an item out and counts against no genre; any other hide is one more failure of it (c2-hide)", options, async () => {
+  const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), selected: true, specialties: ["cardiology"] };
+  await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "Cardiology news", scoreTotal: 88 });
+  await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology trial", scoreTotal: 76 });
+  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+    now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
+  await reader.savePrefs(users.fresh, { specialties: ["cardiology"], done: true });
+  // Their last week: four news items seen, then hidden — with the reason in both records the way the page writes it.
+  const history = [];
+  for (let index = 0; index < 4; index += 1) {
+    const old = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: `Old news ${index}`, visibleAt: hoursAgo(24 * 9), timelineAt: hoursAgo(24 * 9) });
+    await hide(users.fresh, old, { daysAgo: 8, reason: "already-seen" });
+    history.push([old.id, "impression", null], [old.id, "hide", "already-seen"]);
+  }
+  for (const [index, [itemId, type, detail]] of history.entries()) {
+    await database.query(`INSERT INTO evimed_frontier.interactions (user_id, client_id, type, surface, item_id, genre, detail, session_id, client_at)
+      VALUES ($1, $2, $3, 'feed', $4, 'news', $5, 'ses_00000001', $6)`, [users.fresh, `evt_${suffix}_s${index}`, type, itemId, detail, hoursAgo(24 * 8)]);
+  }
+  const order = async () => {
+    await database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [users.fresh]);
+    return (await reader.forYou({ id: users.fresh }, hydrate)).items.map((entry) => entry.item.title);
+  };
+  assert.deepEqual(await order(), ["Cardiology news", "Cardiology trial"],
+    "four news items seen and hidden as already seen: the genre is lowered only by the impressions, not enough to pass a trial 12 points behind");
+  await database.query("UPDATE evimed_frontier.user_state SET hidden_reason = NULL WHERE user_id = $1 AND hidden_reason = 'already-seen'", [users.fresh]);
+  await database.query("UPDATE evimed_frontier.interactions SET detail = NULL WHERE user_id = $1 AND type = 'hide'", [users.fresh]);
+  assert.deepEqual(await order(), ["Cardiology trial", "Cardiology news"], "the same four hides with no reason are four failures of the genre, and the trial passes");
+});

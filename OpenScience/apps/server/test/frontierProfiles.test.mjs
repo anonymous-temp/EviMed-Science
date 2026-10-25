@@ -21,6 +21,7 @@ import {
   frontierProfileMemories,
   frontierProfileQuestions,
   frontierReasonText,
+  frontierSpecialtyDemotion,
 } from "../src/frontierProfiles.mjs";
 
 const record = (id, overrides = {}) => ({
@@ -302,4 +303,43 @@ test("a mark that cannot be written fails nothing: it is counted, and the profil
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(profiles.counters.staleMarkFailures, 3);
   assert.equal(profiles.lastError, "database_unavailable");
+});
+
+test("「不是我的专科」: each hide lowers the specialties of its item by one step, to a ceiling, except what the reader stated (c2-hide)", () => {
+  const rule = FRONTIER_RANKING.notMySpecialty;
+  assert.deepEqual(rule, { windowDays: 90, perHide: 0.04, max: 0.2 }, "the documented constant: ninety days, a step of 0.04, a ceiling of 0.2");
+  assert.deepEqual(frontierSpecialtyDemotion([], []), {});
+  assert.deepEqual(frontierSpecialtyDemotion(null, null), {}, "nothing read is nothing lowered");
+  assert.deepEqual(frontierSpecialtyDemotion([["oncology"], ["oncology", "hematology"], ["cardiology"]], []),
+    { oncology: 0.08, hematology: 0.04, cardiology: 0.04 }, "a specialty by the number of items hidden for it");
+  assert.deepEqual(frontierSpecialtyDemotion(Array.from({ length: 9 }, () => ["oncology"]), []), { oncology: rule.max }, "to a ceiling");
+  assert.deepEqual(frontierSpecialtyDemotion([["oncology", "oncology"]], []), { oncology: 0.04 }, "an item counts once for a specialty");
+  assert.deepEqual(frontierSpecialtyDemotion([["cardiology"], ["cardiology", "oncology"]], ["cardiology"]), { oncology: 0.04 },
+    "what the reader named in onboarding stands; the item's other specialty carries the hide");
+  assert.deepEqual(frontierSpecialtyDemotion([[], ["", 7]], []), {}, "no key, no step");
+});
+
+test("the block: a demoted specialty falls in the rank, in the editor's order and in the exploration pool; a safety alert is never lowered (c2-hide)", () => {
+  const candidates = [candidate("onco", { weight: 90, selected: true, specialties: ["oncology"] }), candidate("cardio", { weight: 80, selected: true, specialties: ["cardiology"] }),
+    candidate("mixed", { weight: 85, selected: true, specialties: ["oncology", "cardiology"] }),
+    candidate("alert", { weight: 40, selected: true, safetyAlert: true, genre: "safety", specialties: ["oncology"] })];
+  const plain = block({ candidates, reasons: [], pairs: [] }).map((entry) => entry.itemId);
+  assert.deepEqual(plain, ["alert", "onco", "mixed", "cardio"], "the editor's order by score, after the must-see alert");
+  const lowered = block({ candidates, reasons: [], pairs: [], demotion: { oncology: 0.2 } }).map((entry) => entry.itemId);
+  assert.deepEqual(lowered, ["alert", "cardio", "onco", "mixed"], "twenty points off every item of the specialty (the strongest of an item's specialties), and the alert stays first");
+  assert.deepEqual(block({ candidates, reasons: [], pairs: [], demotion: { oncology: 0.04 } }).map((entry) => entry.itemId), ["alert", "onco", "mixed", "cardio"],
+    "one hide moves an item four points: a near tie is decided, a clear lead is not");
+  // The rank of a match: a phrase's cosine plus the boost, which now holds the demotion.
+  const pairs = [{ itemId: "onco", reason: 0, score: 0.6 }, { itemId: "cardio", reason: 1, score: 0.55 }];
+  const reasons = [reason("A"), reason("B")];
+  assert.deepEqual(block({ candidates: candidates.slice(0, 2), reasons, pairs }).map((entry) => entry.itemId), ["onco", "cardio"]);
+  assert.deepEqual(block({ candidates: candidates.slice(0, 2), reasons, pairs, demotion: { oncology: 0.08 } }).map((entry) => entry.itemId), ["cardio", "onco"],
+    "a match is lowered on the cosine scale");
+  // The exploration pool sorts by the same standing: with one place for the editor, the pool's first is the best of the rest by standing.
+  const explore = (demotion) => frontierForYouBlock({ readerSpecialties: [], editorialShare: 0, terms: {}, now: NOW_MS, selectThreshold: 82, random: () => 0,
+    ranking: FRONTIER_RANKING, candidates: [candidate("a", { weight: 90, selected: true, specialties: ["oncology"] }), candidate("b", { weight: 80, selected: true, specialties: ["cardiology"] }),
+      candidate("c", { weight: 75, selected: true, specialties: ["cardiology"] })], reasons: [], pairs: [], size: 1 + FRONTIER_RANKING.explore.slots, demotion })
+    .map((entry) => [entry.itemId, entry.slot]);
+  assert.deepEqual(explore({}), [["a", "editorial"], ["b", "explore"]]);
+  assert.deepEqual(explore({ oncology: 0.2 }), [["b", "editorial"], ["c", "explore"]], "the lowered item is neither the editor's pick nor the first drawn");
 });
