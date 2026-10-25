@@ -38,10 +38,44 @@ beforeEach(() => {
 it("opens discovery with publisher-visible cards, without a creation-first empty library or duplicated workflows", async () => {
   open();
   expect(await screen.findByRole("tab", { name: /发现/ })).toHaveAttribute("aria-selected", "true");
-  expect(await screen.findByText("K-Dense · 适配版")).toBeInTheDocument();
+  expect(await screen.findByText("K-Dense")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "科学绘图" })).toBeInTheDocument();
   expect(screen.queryByText(/还没有自己的技能/)).not.toBeInTheDocument();
   expect(api.listWebResearchAgents).not.toHaveBeenCalled();
+});
+
+it("separates authored methods from upstream packages and exposes only the upstream GitHub link", async () => {
+  skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], items: [skill,
+    { ...skill, id: "curated:authored", title: "自研分析", provenance: { ...source, kind: "first-party-derived", publisher: "EviMed", upstreamPublisher: "K-Dense-AI" } },
+  ] });
+  open();
+  const own = await screen.findByRole("region", { name: "EviMed Science" });
+  expect(within(own).getByRole("button", { name: "自研分析" })).toBeInTheDocument();
+  expect(within(own).queryByRole("link")).not.toBeInTheDocument();
+  const upstream = screen.getByRole("region", { name: "第三方" });
+  expect(within(upstream).getByRole("link", { name: "科学绘图 的 GitHub" })).toHaveAttribute("href", "https://github.com/K-Dense-AI/scientific-agent-skills");
+  expect(screen.queryByText(/参考 K-Dense/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "清除筛选" })).not.toBeInTheDocument();
+});
+
+it("keeps source filtering when switching between discovery and added", async () => {
+  skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], items: [skill,
+    { ...skill, id: "curated:authored", title: "自研分析", provenance: { ...source, kind: "first-party" } },
+  ] });
+  open("/app/extensions/discover?origin=first-party");
+  expect(await screen.findByRole("button", { name: "自研分析" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "科学绘图" })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("tab", { name: "已添加" }));
+  expect(await screen.findByRole("switch", { name: /自研分析/ })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "科学绘图" })).not.toBeInTheDocument();
+});
+
+it.each(["全部", "清除筛选"])("clears a legacy plugin route's implicit type with %s", async label => {
+  open("/app/extensions/plugins");
+  await screen.findByText("暂无可添加的扩展");
+  await userEvent.click(screen.getByRole("button", { name: label }));
+  expect(await screen.findByRole("button", { name: "科学绘图" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
 });
 it("offers a real current-project switch and keeps a disabled preinstalled skill in Added", async () => {
   const updated = { ...project, revision: 4, payload: { disabled: [skill.id] }, items: [{ ...skill, enabled: false, effective: true }], activation: { ...activation, phase: "waiting", savedRevision: 4 } };

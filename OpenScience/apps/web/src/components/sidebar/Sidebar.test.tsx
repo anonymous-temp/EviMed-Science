@@ -147,7 +147,7 @@ describe("Sidebar navigation", () => {
   it("uses the global entry for New Conversation and the brand", async () => {
     renderSidebar();
     expect(screen.getByRole("link", { name: "新对话" })).toHaveAttribute("href", "/app/home");
-    expect(screen.getByRole("link", { name: "EviMed 首页" })).toHaveAttribute("href", "/app/home");
+    expect(screen.getByRole("link", { name: "EviMed Science 首页" })).toHaveAttribute("href", "/app/home");
     await userEvent.click(screen.getByRole("link", { name: "新对话" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/home");
     expect(screen.getByTestId("intent")).toBeEmptyDOMElement();
@@ -214,7 +214,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     const row = await screen.findByRole("link", { name: "前沿动态" });
     expect(row).toHaveAttribute("href", "/app/frontier");
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.indexOf("前沿动态")).toBe(rows.indexOf("新对话") + 1);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier");
@@ -236,7 +236,7 @@ describe("Sidebar navigation", () => {
     const row = await screen.findByRole("link", { name: "循证 GEO" });
     expect(row).toHaveAttribute("href", "/app/geo");
     await screen.findByRole("link", { name: "前沿动态" });
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
@@ -257,7 +257,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     const row = await screen.findByRole("link", { name: "虚拟临床研究" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
@@ -309,7 +309,7 @@ describe("Sidebar navigation", () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "虚拟临床研究" });
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
@@ -318,7 +318,7 @@ describe("Sidebar navigation", () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "循证 GEO" });
-    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed 首页").map((link) => link.textContent);
+    const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
     expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
@@ -403,7 +403,7 @@ describe("Sidebar navigation", () => {
   it("carries the brand and the inbox bell above the nav", async () => {
     mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 2, safetyUnread: 0 });
     renderSidebar();
-    expect(screen.getByRole("img", { name: "EviMed" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "EviMed Science" })).toBeInTheDocument();
     // One old notification did not earn a permanent navigation row; unread
     // work earns a dot on the bell, and the count is in its name.
     const bell = await screen.findByRole("button", { name: "收件箱，2 条未读" });

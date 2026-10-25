@@ -10,6 +10,9 @@ import type { WebPluginConfiguration } from "@/lib/apiClient";
 import type { Inventory, InventoryItem } from "@/lib/extensionsClient";
 import { DrawerSection } from "./PlatformSkillDrawer";
 import type { useCitationPlugin } from "./useCitationPlugin";
+import { RepositoryLink } from "./CatalogueView";
+import { skillRepositoryUrl } from "./catalogueModel";
+import { Tag } from "@/components/ui/Tag";
 
 type Citation = ReturnType<typeof useCitationPlugin>;
 
@@ -57,9 +60,10 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
   // A tool the item has no sentence for is not shown: a name is not a description.
   const tools = (plugin?.tools ?? []).map(name => item.toolSentences?.[name]).filter((sentence): sentence is string => Boolean(sentence));
   return (
-    <Drawer title={item.title} description={groupTitle} onClose={onClose}>
+    <Drawer title={item.title} description={item.publisher ? `${item.publisher} · ${groupTitle}` : groupTitle} onClose={onClose}>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3"><Tag>插件</Tag><RepositoryLink href={skillRepositoryUrl(item.repository)} title={item.title} /></div>
+        <div className="flex items-center justify-between gap-3 rounded-card bg-surface-1 p-4">
           <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={desired?.enabled ?? false} disabled={busy || !desired} onChange={enabled => void save({ enabled })} />
         </div>
         {waiting && <p role="status" className="text-ui text-text-2">保存后在下次对话生效</p>}
@@ -112,7 +116,8 @@ export function InventoryDrawer({ item, groupTitle, tools, onClose, controls }: 
   return (
     <Drawer title={item.title} description={item.publisher ? `${item.publisher} · ${groupTitle}` : groupTitle} onClose={onClose}>
       <div className="flex flex-col gap-6">
-        {controls}
+        <div className="flex items-center gap-3"><Tag>{item.system ? "系统提供" : "插件"}</Tag><RepositoryLink href={skillRepositoryUrl(item.repository)} title={item.title} /></div>
+        {controls && <div className="rounded-card bg-surface-1 p-4">{controls}</div>}
         <DrawerSection title="它会做什么"><p className="text-ui text-text">{item.does}</p></DrawerSection>
         <DrawerSection title="怎么用"><p className="text-ui text-text">{item.how}</p></DrawerSection>
         {item.parts && item.parts.length > 0 && (

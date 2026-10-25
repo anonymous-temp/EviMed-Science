@@ -69,6 +69,7 @@ export interface InventoryItem {
   id: string;
   title: string;
   publisher?: string | null;
+  repository?: string;
   kind?: "upstream" | "platform";
   system?: boolean;
   /** The one line a row carries. */

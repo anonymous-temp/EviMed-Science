@@ -9,6 +9,7 @@
   "items": {
     "loopx": {
       "publisher": "loopx-project",
+      "repository": "https://github.com/loopx-project/loopx",
       "kind": "upstream",
       "system": true,
       "group": "conversation",
@@ -40,6 +41,7 @@
     },
     "memory": {
       "publisher": "OpenViking",
+      "repository": "https://github.com/volcengine/OpenViking",
       "kind": "upstream",
       "system": true,
       "group": "conversation",
@@ -74,6 +76,7 @@
     },
     "citations": {
       "publisher": "STARDUSTLC666",
+      "repository": "https://github.com/STARDUSTLC666/dsh-cite",
       "kind": "upstream",
       "system": false,
       "group": "conversation",
@@ -110,6 +113,7 @@
     },
     "annotation": {
       "publisher": "changfenhuang",
+      "repository": "https://github.com/omdsh-dev/dsh-annotation",
       "kind": "upstream",
       "system": false,
       "group": "conversation",
@@ -138,7 +142,8 @@
       "toolSets": []
     },
     "diagrams": {
-      "publisher": null,
+      "publisher": "MrmoLabs",
+      "repository": "https://github.com/MrmoLabs/dsh-mermaid",
       "kind": "upstream",
       "system": false,
       "group": "conversation",

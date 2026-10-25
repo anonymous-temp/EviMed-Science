@@ -103,8 +103,8 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
           <Toolbar label="技能内容" views={{ label: "技能内容", items: [{ value: "content", label: "内容" }, { value: "versions", label: "版本" }], value: view, onChange: next => setView(next as "content" | "versions") }} />
           {view === "content" ? (
             <div className="flex flex-col gap-6">
-              {skill.payload.description && <p className="text-ui text-text-2">{skill.payload.description}</p>}
-              <DrawerSection title="使用">
+              {skill.payload.description && <p className="text-body text-text-2">{skill.payload.description}</p>}
+              <div className="rounded-card bg-surface-1 p-4"><DrawerSection title="使用">
                 <p role="status" className="text-ui text-text-2">{skillActivationText(!!currentSelection, selection?.activation)}</p>
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-3">
@@ -118,7 +118,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
                     {staleDefault && <Button size="sm" variant="text" disabled={busy || !defaults} onClick={() => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>
                 </div>
-              </DrawerSection>
+              </DrawerSection></div>
               <DrawerSection title="全文"><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-surface-1 p-4 text-ui text-text">{skill.payload.instructions}</pre></DrawerSection>
               {skill.payload.resources.length > 0 && (
                 <DrawerSection title="资源"><List label="技能资源" divided>{skill.payload.resources.map(resource => <ListRow key={`${resource.id}:${resource.path}`} title={resource.path} href={personalSkillResourceUrl(skill.id, skill.revision, resource.id)} />)}</List></DrawerSection>

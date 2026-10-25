@@ -230,7 +230,7 @@ export function createPlatformSkillCatalogue({ rootDir, dataDir = null, packages
       const kind = row.id.startsWith('geo-private:') ? 'proprietary' : row.id.startsWith('loopx:') ? 'upstream'
         : source?.kind === 'repository' ? (record?.origin === 'curated' && scientificSkills.find(item => item.name === row.name)?.upstreamReview?.edits?.length ? 'upstream-adapted' : 'upstream') : source?.kind === 'derived' ? 'first-party-derived' : 'first-party';
       return { ...row, scope: 'project', requirement: platformSkillRequirement(row.id), provenance: {
-        kind, publisher: kind === 'first-party-derived' ? 'EviMed' : repo?.split('/')[0] ?? (kind === 'first-party' || kind === 'proprietary' ? 'EviMed Science' : null),
+        kind, publisher: kind === 'first-party-derived' ? 'EviMed Science' : repo?.split('/')[0] ?? (kind === 'first-party' || kind === 'proprietary' ? 'EviMed Science' : null),
         upstreamPublisher: kind === 'first-party-derived' ? repo?.split('/')[0] ?? null : null,
         repository: repo ? `https://github.com/${repo}` : kind === 'first-party' ? 'https://github.com/anonymous-temp/EviMed-Science' : null,
         version: record?.version ?? (row.id.startsWith('loopx:') ? loopx?.version : null) ?? null, commit: source?.commit ?? (source?.kind === 'derived' ? scientific?.pin?.commit : null),

@@ -31,9 +31,9 @@ it("keeps required and module-private methods out of the selectable catalogue", 
 });
 
 it("keeps publisher and adaptation identity instead of relabeling every package as built-in", () => {
-  expect(skillPublisher({ source: "platform", provenance: { kind: "adapted", publisher: "K-Dense", repository: "K-Dense-AI/scientific-agent-skills", version: "v2.72.0", license: "MIT" } } as PlatformSkill)).toBe("K-Dense · 适配版");
-  expect(skillPublisher({ source: "platform", provenance: { kind: "first-party", publisher: "EviMed", repository: null, version: null, license: "MIT" } } as PlatformSkill)).toBe("EviMed");
-  expect(skillPublisher({ source: "platform", provenance: { kind: "first-party-derived", publisher: "EviMed", upstreamPublisher: "K-Dense-AI", repository: "https://github.com/K-Dense-AI/scientific-agent-skills", version: null, license: "MIT" } } as PlatformSkill)).toBe("EviMed · 参考 K-Dense-AI");
+  expect(skillPublisher({ source: "platform", provenance: { kind: "adapted", publisher: "K-Dense", repository: "K-Dense-AI/scientific-agent-skills", version: "v2.72.0", license: "MIT" } } as PlatformSkill)).toBe("K-Dense");
+  expect(skillPublisher({ source: "platform", provenance: { kind: "first-party", publisher: "EviMed", repository: null, version: null, license: "MIT" } } as PlatformSkill)).toBe("EviMed Science");
+  expect(skillPublisher({ source: "platform", provenance: { kind: "first-party-derived", publisher: "EviMed", upstreamPublisher: "K-Dense-AI", repository: "https://github.com/K-Dense-AI/scientific-agent-skills", version: null, license: "MIT" } } as PlatformSkill)).toBe("EviMed Science");
 });
 
 it("does not present saved personal or platform choices as effective", () => {

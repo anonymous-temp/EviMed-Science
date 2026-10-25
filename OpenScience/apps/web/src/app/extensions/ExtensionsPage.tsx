@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router";
-import { Plus, Upload } from "lucide-react";
+import { ChevronDown, Plus, Upload } from "lucide-react";
 import { searchMatches } from "@evimed/domain";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -18,7 +18,8 @@ import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
-import { allInstalledExtensions, extensionAvailability, skillActivationText, skillPublisher, visiblePlatformSkills } from "./catalogueModel";
+import { allInstalledExtensions, catalogueOrigins, extensionAvailability, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl, visiblePlatformSkills } from "./catalogueModel";
+import { inventoryIcon } from "./inventoryIcons";
 import { ExtensionDrawer } from "./ExtensionDrawer";
 import { InventoryList } from "./InventoryList";
 import { CitationDrawer, InventoryDrawer } from "./PluginDrawers";
@@ -43,7 +44,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   const view: View = tab === "installed" || itemId ? "installed" : "discover";
   const rawType = params.get("type") ?? (tab === "skills" || tab === "plugins" ? tab : "all");
   const type: Kind = rawType === "skills" || rawType === "plugins" ? rawType : "all";
-  const query = params.get("q") ?? "", group = params.get("group") ?? "all";
+  const query = params.get("q") ?? "", group = params.get("group") ?? "all", origin = params.get("origin") ?? "all";
   const projectName = useProjectStore(state => state.projects.find(project => project.id === projectId)?.name) ?? "当前项目";
   const alive = useRef(true), running = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -127,6 +128,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     const chosen = currentPolicy?.items.find(item => item.id === skill.id);
     const enabled = chosen?.enabled ?? !currentPolicy?.payload.disabled.includes(skill.id);
     entries.push({ id: skill.id, title: skill.title, description: skill.use, publisher: skillPublisher(skill), type: "skills", group: skill.group,
+      origin: skillOrigin(skill), repository: skillOrigin(skill) === "third-party" ? skillRepositoryUrl(skill.provenance?.repository) : null,
       added: true, state: skillActivationText(enabled, currentPolicy?.activation), open: () => setOpen({ kind: "platform", skill }),
       action: view === "installed"
         ? <Switch label={`在“${projectName}”里使用${skill.title}`} checked={enabled} disabled={!!busy || !currentPolicy} onChange={checked => void switchPlatform(skill, checked)} />
@@ -134,7 +136,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   }
   for (const skill of personalRows) {
     const enabled = !!currentPersonal?.payload.skills.some(row => row.skillId === skill.id);
-    entries.push({ id: skill.id, title: skill.payload.title, description: skill.payload.description, publisher: "我的技能", type: "skills", group: "我的技能", added: true,
+    entries.push({ id: skill.id, title: skill.payload.title, description: skill.payload.description, publisher: "我的技能", type: "skills", group: "我的技能", origin: "personal", added: true,
       state: skillActivationText(enabled, currentPersonal?.activation), open: () => openSkill(skill.id),
       action: view === "installed" ? <Switch label={`在“${projectName}”里使用${skill.payload.title}`} checked={enabled} disabled={!!busy || !currentPersonal} onChange={checked => void switchPersonal(skill, checked)} /> : undefined });
   }
@@ -148,6 +150,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
       if (alive.current) projectPlugins.replace(result);
     });
     entries.push({ id: entry.id, title: entry.title, description: "查看插件提供的能力、来源与所需账户连接。", publisher, type: "plugins", group: "插件", added: !!installation,
+      origin: "third-party", repository: entry.coordinate.kind === "github" ? skillRepositoryUrl(entry.coordinate.repository) : null,
       state: installation ? currentPlugins ? extensionAvailability(installation, selected) : "生效状态待确认" : undefined,
       open: () => { if (installed.state.status === "ready") openExtension(installation?.id ?? entry.id); else setActionError("请先重试读取已添加插件，再查看此项。"); },
       action: !installation ? <Button size="sm" variant="secondary" loading={busy === entry.id} disabled={!!busy || installed.state.status !== "ready"} onClick={() => void install(entry)}>添加</Button>
@@ -157,6 +160,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   for (const item of installedRows.filter(item => !(catalogueData?.items ?? []).some(entry => entry.id === item.catalogueId))) {
     const name = item.coordinate.kind === "npm" ? item.coordinate.name : item.coordinate.repository;
     entries.push({ id: item.id, title: name, description: "查看已添加插件的配置与当前项目状态。", publisher: name, type: "plugins", group: "插件", added: true,
+      origin: "third-party", repository: item.coordinate.kind === "github" ? skillRepositoryUrl(item.coordinate.repository) : null,
       state: currentPlugins ? extensionAvailability(item, currentPlugins.selections.find(row => row.installationId === item.id)) : "生效状态待确认", open: () => openExtension(item.id) });
   }
   // Removed account entries can remain pinned in a project; they must never lose their stop control.
@@ -170,6 +174,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
       if (alive.current) projectPlugins.replace(result);
     });
     entries.push({ id: `retained:${selected.installationId}`, title: name, description: "已从个人库移除，当前项目仍保留所选版本。", publisher: "项目保留版本", type: "plugins", group: "插件", added: true,
+      origin: "third-party", repository: selected.coordinate?.kind === "github" ? skillRepositoryUrl(selected.coordinate.repository) : null,
       state: selected.effective ? "已启用" : selected.enabled ? "生效状态待确认" : "已关闭", open: () => setActionError("这个版本已从个人库移除，可用行末操作将它移出当前项目。"),
       action: <Button size="sm" variant="text" disabled={!!busy} onClick={() => void remove()}>移出当前项目</Button> });
   }
@@ -183,6 +188,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
       { enabled, effective: !!citation.plugin.effective?.enabled, phase: citation.plugin.phase } as import("@/lib/extensionsClient").ExtensionSelection) : "生效状态待确认"
       : selected?.available === false ? "当前环境未提供" : skillActivationText(enabled, currentBuiltin?.activation);
     entries.push({ id: `builtin:${item.id}`, title: item.title, description: item.use, publisher: item.publisher ?? "社区", type: "plugins", group: "插件", added: true, state,
+      origin: item.kind === "platform" ? "first-party" : "third-party", repository: skillRepositoryUrl(item.repository), icon: inventoryIcon(item.icon),
       open: () => setOpen({ kind: "item", id: item.id }),
       action: view === "installed" ? <Switch label={`在“${projectName}”里使用${item.title}`} checked={enabled}
         disabled={!!busy || (isCitation ? citation.busy || !citation.plugin?.desired : !selected?.available)}
@@ -190,7 +196,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   }
   const scopedEntries = entries.filter(entry => view === "discover" || entry.added);
   const groups = [...new Set(scopedEntries.filter(entry => type === "all" || entry.type === type).map(entry => entry.group))];
-  const filtered = scopedEntries.filter(entry => (type === "all" || entry.type === type) && (group === "all" || entry.group === group)
+  const filtered = scopedEntries.filter(entry => (type === "all" || entry.type === type) && (group === "all" || entry.group === group) && (origin === "all" || entry.origin === origin)
     && searchMatches(query, [entry.title, entry.description, entry.publisher, entry.group]));
   const systemInventory = inventoryData ? { ...inventoryData, groups: inventoryData.groups.map(section => ({ ...section, items: section.items.filter(item => item.control.kind === "none") })).filter(section => section.items.length) } : null;
   const unavailable = catalogueData?.availability?.state === "unavailable" || catalogueData?.policyState === "unconfigured" || catalogueData?.policyState === "unavailable";
@@ -223,19 +229,21 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   return <PageShell title="插件与技能" meta={`当前项目：${projectName}`} width="wide" actions={<Menu label="导入与创建" items={[
     { label: "导入技能", icon: Upload, onSelect: () => setOpen({ kind: "import" }) },
     { label: "创建技能", icon: Plus, onSelect: () => setOpen({ kind: "create" }) },
-  ]}><Button variant="secondary" aria-label="导入与创建"><Upload size={16} aria-hidden />导入…</Button></Menu>}
-    toolbar={{ label: "筛选与搜索", views: { label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setOpen(null); navigate(`/app/extensions/${next}?${params}`); } },
+  ]}><Button variant="secondary" aria-label="导入与创建" className="gap-2"><Plus size={16} aria-hidden />添加技能<ChevronDown size={16} aria-hidden /></Button></Menu>}
+    tabs={{ label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setOpen(null); navigate(`/app/extensions/${next}?${params}`); } }}
+    toolbar={{ label: "筛选与搜索",
       filters: [{ kind: "chips", label: "类型", value: type, options: [{ value: "all", label: "全部" }, { value: "skills", label: "技能" }, { value: "plugins", label: "插件" }], onChange: next => { const changed = new URLSearchParams(params); changed.set("type", next); changed.delete("group"); setParams(changed, { replace: true }); } },
-        ...(groups.length > 1 ? [{ kind: "select" as const, label: "分类", value: group, options: [{ value: "all", label: "全部分类" }, ...groups.map(name => ({ value: name, label: name }))], onChange: (next: string) => setFilter("group", next) }] : [])],
+        { kind: "select", label: "来源", allLabel: "全部来源", value: origin === "all" ? null : origin, options: catalogueOrigins, onChange: next => setFilter("origin", next ?? "all") },
+        ...(groups.length > 1 ? [{ kind: "select" as const, label: "分类", allLabel: "全部分类", value: group === "all" ? null : group, options: groups.map(name => ({ value: name, label: name })), onChange: (next: string | null) => setFilter("group", next ?? "all") }] : [])],
       search: { label: "搜索插件与技能", value: query, placeholder: "搜索名称、用途或作者", onChange: next => setFilter("q", next), onClear: () => setFilter("q", "") },
-      onClear: () => setParams({}, { replace: true }) }}>
+      onClear: () => setParams(tab === "skills" || tab === "plugins" ? { type: "all" } : {}, { replace: true }) }}>
     {actionError && open?.kind !== "create" && <LoadError message={actionError} onRetry={() => { setActionError(null); reloadSelections(); projectPlugins.reload(); }} />}
     {citation.error && controlled.some(item => item.control.kind === "switch" && item.control.setting === "dsh-cite") && <Note tone="warn" action={<Button size="sm" variant="text" disabled={citation.busy} onClick={() => void citation.reload()}>刷新引用设置</Button>}>{citation.error}</Note>}
     {failures.map(({ load, label }) => load.state.status === "error" && <Note key={label} tone="warn" action={<Button size="sm" variant="text" onClick={() => load.reload()}>{label}</Button>}>{load.state.message}</Note>)}
     {unavailable && type !== "skills" && <Note action={<Button size="sm" variant="text" onClick={() => catalogue.reload()}>刷新插件目录</Button>}>暂未提供可添加的插件，已有功能仍可使用。</Note>}
     {type !== "plugins" && <PendingSkillTransfers onResume={entry => setOpen({ kind: "import", recovery: entry })} />}
     {loading ? <FilesSkeleton /> : filtered.length ? <CatalogueView entries={filtered} view={view} />
-      : <EmptyState title={query || group !== "all" ? "没有找到匹配项" : view === "installed" ? "还没有添加这类扩展" : "暂无可添加的扩展"}
+      : <EmptyState title={query || group !== "all" || origin !== "all" ? "没有找到匹配项" : view === "installed" ? "还没有添加这类扩展" : "暂无可添加的扩展"}
         action={<Button variant="secondary" onClick={() => { setParams({}, { replace: true }); navigate("/app/extensions/discover"); }}>浏览全部</Button>} />}
     {cursor && type !== "plugins" && <div className="mt-4"><Button variant="text" loading={loadingMore} onClick={() => void loadMore()}>更多我的技能</Button></div>}
     {view === "installed" && systemInventory && <Disclosure summary="系统提供" className="mt-6"><InventoryList inventory={systemInventory} query={query} onOpen={id => setOpen({ kind: "item", id })} /></Disclosure>}

@@ -53,6 +53,7 @@ import { researchToolGroups } from './researchToolDisplay.mjs'
  * @property {string} does
  * @property {string} how
  * @property {string|null} [publisher]
+ * @property {string} [repository] the upstream's public repository URL, where recorded
  * @property {'upstream'|'platform'} [kind]
  * @property {boolean} [system]
  * @property {ItemControl} control
@@ -175,6 +176,7 @@ export function unaccountedInventory(inventory = RUNTIME_INVENTORY, words = RUNT
  * @property {string} does
  * @property {string} how
  * @property {string|null} publisher
+ * @property {string} [repository]
  * @property {'upstream'|'platform'} kind
  * @property {boolean} system
  * @property {{ title: string, does: string }[]} [parts]
@@ -208,6 +210,7 @@ export function listInventory(facts = {}, words = RUNTIME_INVENTORY_WORDS) {
         /** @type {ListedItem} */
         const listed = { id, title: item.title, use: item.use, icon: item.icon, state, control: item.control, opens: item.opens, does: item.does, how: item.how,
           publisher: item.publisher ?? null, kind: item.kind ?? (item.bundles.length ? 'upstream' : 'platform'), system: item.system ?? item.bundles.length === 0 }
+        if (item.repository) listed.repository = item.repository
         if (item.parts) listed.parts = item.parts.map((part) => ({ ...part }))
         if (item.toolSentences) listed.toolSentences = { ...item.toolSentences }
         if (item.toolSets.includes('research')) listed.showsTools = true

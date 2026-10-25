@@ -30,12 +30,22 @@ export function skillActivationText(enabled: boolean, activation?: SkillActivati
 export const visiblePlatformSkills = (items: readonly PlatformSkill[], geoGroup?: string) =>
   items.filter(item => !item.requirement?.required && !item.id.startsWith("geo-private:") && (!geoGroup || item.group !== geoGroup));
 
+export type CatalogueOrigin = "first-party" | "third-party" | "personal";
+export const catalogueOrigins: ReadonlyArray<{ value: CatalogueOrigin; label: string }> = [
+  { value: "third-party", label: "第三方" },
+  { value: "first-party", label: "EviMed Science" },
+  { value: "personal", label: "我的技能" },
+];
+
+export function skillOrigin(skill: PlatformSkill): CatalogueOrigin {
+  if (!skill.provenance) return skill.source === "community" ? "third-party" : "first-party";
+  return ["first-party", "first-party-derived", "proprietary"].includes(skill.provenance.kind) ? "first-party" : "third-party";
+}
+
 export function skillPublisher(skill: PlatformSkill): string {
   const source = skill.provenance;
-  if (!source) return skill.source === "community" ? "社区" : "EviMed";
-  if (source.kind === "first-party-derived") return `${source.publisher}${source.upstreamPublisher ? ` · 参考 ${source.upstreamPublisher}` : " · 自编方法"}`;
-  const adapted = ["adapted", "derived", "upstream-adapted"].includes(source.kind);
-  return `${source.publisher}${adapted ? " · 适配版" : ""}`;
+  if (skillOrigin(skill) === "first-party") return "EviMed Science";
+  return source?.publisher ?? "社区";
 }
 
 export function skillRepositoryUrl(repository: string | null | undefined): string | null {

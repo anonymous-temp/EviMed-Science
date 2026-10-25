@@ -17,7 +17,9 @@ import { Link } from "react-router";
 import { MissingRecord, orMissing, RecordMissing } from "./MissingRecord";
 import { DrawerSection } from "./PlatformSkillDrawer";
 import { settingLabel } from "./extensionCopy";
-import { extensionAvailability } from "./catalogueModel";
+import { extensionAvailability, skillRepositoryUrl } from "./catalogueModel";
+import { RepositoryLink } from "./CatalogueView";
+import { Tag } from "@/components/ui/Tag";
 
 /** The three words a package's state comes down to for a reader: it works, it is getting ready, or it needs something from them. */
 export const extensionState = extensionAvailability;
@@ -108,6 +110,10 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
     <Drawer title={entry?.title ?? "插件"} description={state ? `我的插件 · ${state}` : "可以添加"} onClose={onClose}>
       {error && <p role="alert" className="mb-4 text-ui text-error">{error}<Button variant="text" disabled={busy} onClick={() => void load()}>刷新</Button></p>}
       {!loaded ? !error && <FilesSkeleton /> : coordinate && <div className="flex flex-col gap-6">
+        <div className="flex flex-wrap items-center gap-3"><Tag>第三方插件</Tag>
+          {coordinate.kind === "github" ? <RepositoryLink href={skillRepositoryUrl(coordinate.repository)} title={entry?.title ?? "插件"} />
+            : <a className="text-ui text-accent" href={extensionSourceUrl(coordinate)} target="_blank" rel="noopener noreferrer">npm 来源</a>}
+        </div>
         {!installation ? <div><Button loading={busy} onClick={() => void add()}>添加到我的插件</Button></div> : <>
           {!exactDescriptor && <p className="text-ui text-text-2">当前安装版本的配置暂不可编辑。</p>}
           {entry && !exactDescriptor && <div><Button variant="secondary" disabled={busy} onClick={() => void act(() => updateExtension(installation.id, installation.revision, entry.coordinate))}>{sameExtensionCoordinate(installation.coordinate, entry.coordinate) ? "重新获取最新版" : "更新到最新版"}</Button></div>}

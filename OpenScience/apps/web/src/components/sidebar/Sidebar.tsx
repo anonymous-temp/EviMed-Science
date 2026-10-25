@@ -189,9 +189,10 @@ export function Sidebar() {
       <div className="flex h-full max-w-full flex-col bg-surface-1" style={{ width }}>
         <div className="px-4 pb-3 pt-4">
           <div className="flex items-center gap-1.5">
-            <Link to="/app/home" aria-label="EviMed 首页" className="flex items-center gap-1.5">
-              <EviMedMark className="h-5 w-5 shrink-0" />
-              <span className="text-wordmark font-semibold text-text">EviMed</span>
+            <Link to="/app/home" aria-label="EviMed Science 首页" className="flex min-w-0 flex-1 items-center gap-1.5">
+              {/* At the minimum width, keep the full name and both controls instead of the redundant mark. */}
+              <EviMedMark className={cn("h-5 w-5 shrink-0", width < 220 && "hidden")} />
+              <span className={cn("min-w-0 font-semibold text-text", width < 220 ? "text-ui" : "text-wordmark")}>EviMed Science</span>
             </Link>
             <InboxBell />
             <IconButton icon={PanelLeft} label="收起侧边栏" title="收起侧边栏 (Ctrl+B)" onClick={toggleSidebar} />

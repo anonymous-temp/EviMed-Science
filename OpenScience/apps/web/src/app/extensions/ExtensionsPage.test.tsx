@@ -68,7 +68,7 @@ it("the create form says what the purpose and the text are for, with an example 
   expect(within(drawer).getByLabelText("名称")).toHaveAttribute("placeholder", "例如：随访资料整理");
   const purpose = within(drawer).getByLabelText("用途");
   expect(purpose).toHaveAttribute("placeholder", expect.stringContaining("例如：我给出一批随访记录"));
-  expect(purpose).toHaveAccessibleDescription("写清什么时候该用它。对话里 EviMed 靠这一句决定要不要用到这个技能。");
+  expect(purpose).toHaveAccessibleDescription("写清什么时候该用它。对话里 EviMed Science 靠这一句决定要不要用到这个技能。");
   const text = within(drawer).getByLabelText("技能说明");
   expect(text).toHaveAttribute("placeholder", expect.stringContaining("需要的输入：…"));
   expect(text).toHaveAccessibleDescription("写清怎么做：需要什么输入、分几步、产出什么、哪些事不能做。");
