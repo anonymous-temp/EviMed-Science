@@ -497,32 +497,54 @@ stderr; restarting it releases them.
 
 The switch runs `scripts/ops/ui-walk.mjs` in a throwaway container of the
 release's runtime image (it carries Node, Chromium and the Playwright driver;
-the host has none of them) with host networking, as the account
-`/srv/evimed-science/shared/ui-walk.env` names. Without that file the switch
-prints `UI WALK NOT RUN` and exits 0. Set it up once:
+the host has none of them) with host networking, and the file
+`scripts/ops/throwaway-account.mjs` mounted beside it. Without
+`/srv/evimed-science/shared/ui-walk.env` the switch prints `UI WALK NOT RUN` and
+exits 0. Set it up once; it names the address and the switches and **no account
+and no password**:
 
 ```bash
-read -rsp "acceptance account password: " walk_password; echo
-printf '%s\n' "$walk_password" | sudo sh -c 'umask 077; cat > /srv/evimed-science/shared/secrets/ui-walk-password'
-unset walk_password
 sudo tee /srv/evimed-science/shared/ui-walk.env >/dev/null <<'EOF'
 OPEN_SCIENCE_WALK_BASE_URL=https://<the public origin, as a browser reaches it from this host>
-OPEN_SCIENCE_WALK_USER=<owner-account>
-OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=/srv/evimed-science/shared/secrets/ui-walk-password
 OPEN_SCIENCE_WALK_CHAT=1
 EOF
 sudo chmod 0600 /srv/evimed-science/shared/ui-walk.env
 ```
 
-The password file is mounted read-only into the walk and never passed as a
-value. The walk refuses every `start_runtime` a page makes (the shell warms
+The walk signs in as nobody (owner, 2026-10-25: production keeps no test
+account). It registers an account of its own through the product's
+self-registration (`walk-<UTC yyyymmddHHMM>-<6 hex>`, a random password held in
+memory and never printed or written), walks as it, and deletes it through the
+product's own `DELETE /api/account` at the end, on a pass, a failure and an
+interrupt. Its output has one line `account created: walk-…` and one
+`account deleted: walk-…`; an account it cannot delete is a `FAIL account walk-…
+was NOT deleted (<the product's reason>)` line and a failed walk, because nobody
+can sign in to it again: an operator removes it (the id says when it was made).
+So the deployment must take new accounts (`OPEN_SCIENCE_SELF_REGISTRATION_ENABLED`,
+on by default); a deployment that does not stops the walk before any page with
+`registering walk-… was refused (403 self_registration_disabled)`. The account
+holds nothing, so the pages that need an object of the account's own (a GEO
+project, a study, a received pack, a finished PDF in the knowledge base) are
+reported as coverage gaps, as they are for any account without them; the
+`fixture` profile is where those pages are read with data. The release switch
+empties `OPEN_SCIENCE_WALK_USER` and `OPEN_SCIENCE_WALK_PASSWORD_FILE` whatever
+the file says, and the production walk refuses both when it is started by hand
+(they belong to the `fixture` profile: the account a local control plane was
+seeded with); an `ui-walk.env` written before 2026-10-25 that still names an
+account and a password file is shorter now, and its password file can be
+deleted. The walk refuses every `start_runtime` a page makes (the shell warms
 the account's default runtime from every page) and counts them in its report;
 only the chat page, walked when `OPEN_SCIENCE_WALK_CHAT=1`, may start the
-runtime it needs. With the chat page asked for, the walk also waits up to 135 s
+runtime it needs, and a new account has none: the walk starts it through the API
+first, while the browser is idle, because the host's network changes when an
+account's first runtime container starts and Chromium aborts what it is loading
+then. With the chat page asked for, the walk also waits up to 135 s
 for the shell to give up on a cleanup the walk itself reports as unfinished
 (`OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips the wait). The base URL
-must be the public origin — logout is checked against it — so if this host
+must be the public origin, so if this host
 cannot reach its own public address, add that name to the host's `/etc/hosts`.
+A host script that runs the walk by hand (a `rewalk.sh`) mounts both
+`ui-walk.mjs` and `throwaway-account.mjs` into `/walk`, as the switch does.
 
 What the walk writes, and what it fails on (R19). Report, pictures and facts go
 to `/srv/evimed-science/shared/ui-walk/<release>/`: `report.json`, and for every
@@ -551,9 +573,9 @@ reached`) is a failure that no entry accepts. The baseline is carried inside
 names another, `none` accepts nothing.
 
 The baseline has two sets of debts. `OPEN_SCIENCE_WALK_PROFILE=owner` (the
-default) is the release walk on the owner-view account, whose empty pages
-cannot be observed: an entry for `not-observable` or `not-walked` may be given
-to it. `fixture` is the local walk on the data-rich fixture (`--url` of a
+default; the name is the one the baseline files carry) is the production release
+walk on a throwaway account that holds nothing, whose empty pages cannot be
+observed: an entry for `not-observable` or `not-walked` may be given to it. `fixture` is the local walk on the data-rich fixture (`--url` of a
 harness control plane), which accepts no coverage gap. **Rehearse before a
 candidate that changes the walk or the pages is switched**: the host's
 `rewalk.sh <tag> <candidate ui-walk.mjs>` (a host script, not in this
