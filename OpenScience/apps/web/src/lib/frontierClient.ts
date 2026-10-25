@@ -39,6 +39,7 @@ import {
   FRONTIER_EVIDENCE_TYPES as EVIDENCE_TYPE_KEYS,
   FRONTIER_GENRE_LABELS_ZH,
   FRONTIER_GENRES,
+  FRONTIER_HIDE_REASONS,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANE_LABELS_ZH,
   FRONTIER_LANES as LANE_KEYS,
@@ -51,6 +52,9 @@ import {
 } from "@evimed/domain";
 import { WebApiError, webApiBase, webErrorMessage } from "./apiClient";
 import { productRequest } from "./productClient";
+
+/** One of the reasons a reader may give for hiding an item (`@evimed/domain` `FRONTIER_HIDE_REASONS`). */
+export type FrontierHideReason = (typeof FRONTIER_HIDE_REASONS)[number];
 
 /* ---------------------------------------------------------------- vocabulary */
 
@@ -1523,12 +1527,13 @@ export async function fetchFrontierSources(): Promise<FrontierSources> {
   };
 }
 
-async function itemAction(itemId: string, action: "star" | "unstar" | "hide" | "unhide" | "read"): Promise<FrontierItemState> {
-  return parseState(await productRequest<unknown>(`/frontier/items/${id(itemId)}/${action}`, "POST", {}));
+async function itemAction(itemId: string, action: "star" | "unstar" | "hide" | "unhide" | "read", body: Record<string, string> = {}): Promise<FrontierItemState> {
+  return parseState(await productRequest<unknown>(`/frontier/items/${id(itemId)}/${action}`, "POST", body));
 }
 export const starFrontierItem = (itemId: string) => itemAction(itemId, "star");
 export const unstarFrontierItem = (itemId: string) => itemAction(itemId, "unstar");
-export const hideFrontierItem = (itemId: string) => itemAction(itemId, "hide");
+/** 「不感兴趣」, with the reader's reason when they gave one (`FRONTIER_HIDE_REASONS`); a later call with a reason sets it on an item already hidden. */
+export const hideFrontierItem = (itemId: string, reason?: FrontierHideReason) => itemAction(itemId, "hide", reason ? { reason } : {});
 export const unhideFrontierItem = (itemId: string) => itemAction(itemId, "unhide");
 export const markFrontierItemRead = (itemId: string) => itemAction(itemId, "read");
 

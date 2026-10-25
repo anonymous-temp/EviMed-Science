@@ -13,12 +13,10 @@ import {
   FRONTIER_LANES,
   FRONTIER_FOLLOWS_CHANGED,
   FRONTIER_WINDOWS,
-  hideFrontierItem,
   listFrontierItems,
   markFrontierItemRead,
   saveFrontierItemToLibrary,
   starFrontierItem,
-  unhideFrontierItem,
   unstarFrontierItem,
   useFrontierFeature,
   type FrontierForYou,
@@ -38,6 +36,7 @@ import { frontierToolbar, type PageView } from "@/components/frontier/FrontierCo
 import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
+import { useFrontierHide } from "@/components/frontier/useFrontierHide";
 import { NO_FILTERS, readChannel, readEvidence, readSpecialties, readTag, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
 import { rememberTagName, useHotTags, useTagFollow, useTagName, useTagSuggestions } from "@/components/frontier/useFrontierTags";
 import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/frontier/FrontierHot";
@@ -381,42 +380,15 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     }
   };
 
-  const hide = (item: FrontierItem) => {
-    const listIndex = listing?.items.findIndex((entry) => entry.id === item.id) ?? -1;
-    const forYouItems = forYou.kind === "ready" ? forYou.forYou?.items ?? [] : [];
-    const forYouIndex = forYouItems.findIndex((entry) => entry.item.id === item.id);
-    const restored = { ...item, state: { ...item.state, hidden: false } };
-    const restore = () => {
-      if (listIndex >= 0) {
-        patchListing((list) => (list.items.some((entry) => entry.id === item.id) ? list
-          : { ...list, items: [...list.items.slice(0, listIndex), restored, ...list.items.slice(listIndex)] }));
-      }
-      if (forYouIndex >= 0) {
-        const entry = { ...forYouItems[forYouIndex], item: restored };
-        patchForYou((items) => (items.some((existing) => existing.item.id === item.id) ? items
-          : [...items.slice(0, forYouIndex), entry, ...items.slice(forYouIndex)]));
-      }
-    };
-    patchListing((list) => ({ ...list, items: list.items.filter((entry) => entry.id !== item.id) }));
-    patchForYou((items) => items.filter((entry) => entry.item.id !== item.id));
-    const surface = cardSurface;
-    const hidden = hideFrontierItem(item.id).then(() => { trackFrontierItemAction("hide", item.id, { surface }); return true; }, (error: unknown) => {
-      restore();
-      toast.error(frontierErrorMessage(error));
-      return false;
-    });
-    toast.success("已隐藏", {
-      action: {
-        label: "撤销",
-        onClick: () => {
-          restore();
-          void hidden
-            .then((done) => (done ? unhideFrontierItem(item.id).then((state) => { trackFrontierItemAction("unhide", item.id, { surface }); return state; }) : null))
-            .catch((error: unknown) => toast.error(frontierErrorMessage(error)));
-        },
-      },
-    });
-  };
+  // 「不感兴趣」: the card goes at once and one line stands in its place to ask why (useFrontierHide); the item leaves the list when the
+  // line closes, and 撤销 is the card coming back where it was.
+  const hideStrips = useFrontierHide({
+    surface: cardSurface,
+    onClosed: (item) => {
+      patchListing((list) => ({ ...list, items: list.items.filter((entry) => entry.id !== item.id) }));
+      patchForYou((items) => items.filter((entry) => entry.item.id !== item.id));
+    },
+  });
 
   // 存入知识库 is offered once `/status` says this deployment can save (its
   // `capabilities`); a server that answers the route 404 anyway says so once,
@@ -722,7 +694,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       grouped={grouped}
       markSelected={view !== "selected"}
       onStar={(target) => void toggleStar(target)}
-      onHide={hide}
+      onHide={hideStrips.start}
+      hideStrip={hideStrips.strip(item.id)}
       onSave={saveOffered ? (target) => void save(target) : undefined}
       saving={savingId === item.id}
       onOpened={opened}

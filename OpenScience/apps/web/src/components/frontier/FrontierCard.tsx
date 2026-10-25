@@ -11,6 +11,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { ScorePill } from "@/components/ui/Score";
 import { Tag } from "@/components/ui/Tag";
+import { FrontierHideStrip } from "./FrontierHideStrip";
+import type { FrontierHideStripControls } from "./useFrontierHide";
 import {
   CARD_FLAG_KEYS,
   CARD_MAX_TAGS,
@@ -43,7 +45,10 @@ export interface FrontierCardProps {
   /** Where not every item is 精选 (全部, a search), say which are — the dot, and words for a screen reader. */
   markSelected?: boolean;
   onStar: (item: FrontierItem) => void;
+  /** 「不感兴趣」: the page hides the item at once (`useFrontierHide`) and says so through `hideStrip`. */
   onHide: (item: FrontierItem) => void;
+  /** While this is set the card is not drawn: in its place one line asks why it was hidden (`FrontierHideStrip`). */
+  hideStrip?: FrontierHideStripControls | null;
   /** 「存入知识库」; absent where this server cannot save yet. */
   onSave?: (item: FrontierItem) => void;
   saving?: boolean;
@@ -126,8 +131,10 @@ const ABOVE = "relative z-sticky";
  *  - a footer only when there is something for it: up to three of its tags, each narrowing the feed to it, and 「另有 N 家报道 ›」.
  *
  * In a day group the clock is a column of its own beside the card, with the 精选 dot.
+ *
+ * 不感兴趣 hides the card at once and, while the page says so (`hideStrip`), one line stands in its place (`FrontierHideStrip`).
  */
-export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
+export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
   const titleId = useId();
   const origin = useFrontierOrigin();
   const location = useLocation();
@@ -146,6 +153,9 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
     : item.source.name;
   const when = grouped ? "" : metaTime(item);
   const [thumbFailed, setThumbFailed] = useState(false);
+
+  // Hidden a moment ago: one line where the card was, to say why or take it back (owner, 2026-10-25).
+  if (hideStrip) return <FrontierHideStrip item={item} grouped={grouped} {...hideStrip} />;
 
   return (
     <li data-frontier-item={item.id} className="flex">

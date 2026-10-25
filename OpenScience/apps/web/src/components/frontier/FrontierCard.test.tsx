@@ -267,6 +267,22 @@ describe("its actions", () => {
     expect(handlers.onHide).toHaveBeenCalledWith(item);
   });
 
+  it("stands aside for its line while the page says it was hidden, and is the card again when it does not (c2-hide)", async () => {
+    const item = scored();
+    const strip = { noted: false, onReason: vi.fn(), onUndo: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<MemoryRouter><ul><FrontierCard item={item} onStar={vi.fn()} onHide={vi.fn()} hideStrip={strip} /></ul></MemoryRouter>);
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    expect(document.querySelector("[data-frontier-item]")).toBeNull();
+    const line = screen.getByRole("group", { name: "不感兴趣" });
+    await userEvent.click(within(line).getByRole("button", { name: "内容质量不高" }));
+    expect(strip.onReason).toHaveBeenCalledWith("low-quality");
+    await userEvent.click(within(line).getByRole("button", { name: "撤销" }));
+    expect(strip.onUndo).toHaveBeenCalledTimes(1);
+    rerender(<MemoryRouter><ul><FrontierCard item={item} onStar={vi.fn()} onHide={vi.fn()} hideStrip={null} /></ul></MemoryRouter>);
+    expect(screen.getByRole("article")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "不感兴趣" })).not.toBeInTheDocument();
+  });
+
   it("offers 存入知识库 only where the page does", async () => {
     renderCard(frontierItem(), { onSave: undefined });
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
