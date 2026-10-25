@@ -16,6 +16,12 @@ export interface ProgrammeRun {
   at: string | null;
 }
 
+/** One page of a module's record, newest first, and where the next one begins (null: there is none). */
+export interface ProgrammeRunPage {
+  runs: ProgrammeRun[];
+  nextCursor: string | null;
+}
+
 /** The three state words a run is read by; any other word the server sent is a run that did not finish. @param {unknown} value */
 export function programmeRunState(value: unknown): ProgrammeRun["state"] {
   return value === "running" || value === "finished" ? value : "stopped";

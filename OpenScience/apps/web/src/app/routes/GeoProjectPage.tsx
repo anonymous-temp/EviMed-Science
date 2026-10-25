@@ -178,9 +178,11 @@ function GeoProjectView({ geoId }: { geoId: string }) {
     void (scope ? getGeoProject(geoId, scope) : getGeoProject(geoId)).then(
       async (project) => {
         if (!live) return;
-        // Articles and orders can change without touching the project row; every successful refresh updates active shared reads.
+        // The shared views are read again when the work moved — a step began or ended, or the project's revision changed — and not
+        // on every poll: each read of them is a set of requests of its own, every 10 s while a step runs. A view's own reads keep
+        // their freshness (`STALE_MS`) and every write that changes one asks for it.
         const state = stepsState(project);
-        if (shown.current !== null && document.visibilityState !== "hidden") data.invalidate();
+        if (shown.current !== null && shown.current !== state && document.visibilityState !== "hidden") data.invalidate();
         shown.current = state;
         setLoaded({ kind: "ready", project, scopeKey });
       },
@@ -548,7 +550,7 @@ function GeoBand({
         />
       )}
       {panel === "members" && <MembersDialog geoId={geoId} onClose={() => onPanel(null)} />}
-      {panel === "runs" && <ProgrammeRunsDrawer projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} readRecord={project.signalsSupported ? readRunRecord : undefined} version={runsVersion} onClose={() => onPanel(null)} />}
+      {panel === "runs" && <ProgrammeRunsDrawer projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} loadMore={(cursor) => getGeoProgrammeRuns(geoId, cursor)} readRecord={project.signalsSupported ? readRunRecord : undefined} version={runsVersion} onClose={() => onPanel(null)} />}
       {panel === "rename" && (
         <RenameDialog
           geoId={geoId}

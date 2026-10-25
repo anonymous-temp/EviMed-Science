@@ -154,7 +154,7 @@ beforeEach(() => {
   client.getGeoStrategy.mockRejectedValue(new Error("no plan in this test"));
   client.getGeoDistribution.mockResolvedValue({ budget: null, spentCny: 0, reservedCny: 0, suggestedBudgetCny: 5000, market: { configured: true }, orders: [], ownedLinks: [] });
   client.open.mockResolvedValue(true);
-  client.getGeoProgrammeRuns.mockResolvedValue([]);
+  client.getGeoProgrammeRuns.mockResolvedValue({ runs: [], nextCursor: null });
   client.patchGeoProject.mockResolvedValue({});
   client.deleteGeoProject.mockResolvedValue({});
 });
@@ -649,10 +649,10 @@ describe("a GEO project's page", () => {
 
   it("“⋯” holds the AI-run record: the steps the programme ran, read where the reader is — and the toast of a start leads to it", async () => {
     client.exportGeo.mockResolvedValue({ accepted: true, runId: "run_1", step: null });
-    client.getGeoProgrammeRuns.mockResolvedValue([
+    client.getGeoProgrammeRuns.mockResolvedValue({ runs: [
       { sessionId: "ses_a", label: "写第 1 批稿件", state: "finished", at: "昨天 09:12" },
       { sessionId: "ses_b", label: "整理产品证据、绘制患者旅程、列出测量问题", state: "finished", at: "9月14日" },
-    ]);
+    ], nextCursor: null });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "AI 运行" }));
@@ -890,5 +890,21 @@ describe("a saved selection whose data changed", () => {
     await waitFor(() => expect(screen.getByTestId("landed")).not.toHaveTextContent("selectionRef"));
     expect(screen.getByTestId("landed")).toHaveTextContent("from=2026-10-01");
     await waitFor(() => expect(screen.queryByText(/所选范围里的数据已经更新/)).not.toBeInTheDocument());
+  });
+});
+
+describe("watching a project", () => {
+  it("reads the shared views again only when a step or the project moved, not on every poll", async () => {
+    renderProject();
+    await waitFor(() => expect(client.getGeoMonitoring).toHaveBeenCalled());
+    await waitFor(() => expect(client.getGeoProject).toHaveBeenCalledTimes(1));
+    const before = client.getGeoMonitoring.mock.calls.length;
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await waitFor(() => expect(client.getGeoProject).toHaveBeenCalledTimes(2));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+    expect(client.getGeoMonitoring.mock.calls.length).toBe(before);
+    client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, updatedAt: "2099-01-01T00:00:00.000Z" });
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await waitFor(() => expect(client.getGeoMonitoring.mock.calls.length).toBeGreaterThan(before));
   });
 });

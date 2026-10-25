@@ -27,7 +27,7 @@ import { geoReadScopeQuery, type GeoReadScope, type GeoScopedView, type GeoMetri
 import { fetchWebMe, WebApiError, webApiBase, type WebMe } from "./apiClient";
 import { formatRelativeTime } from "./format";
 import { productRequest } from "./productClient";
-import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
+import { programmeRunState, type ProgrammeRunPage } from "./programmeRuns";
 import type { GeoAnalysisMembers, GeoAnalysisValue } from "./geoAnalysisClient";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -1519,25 +1519,22 @@ export function exportGeo(geoId: string, kind: GeoExportKind) {
 /**
  * 「AI 运行」: the steps the programme ran in the project's own sessions, newest first — each named by what it was, with a state word and
  * a time, never an id. A record to read, not a conversation to go to (the person's own conversation is the project's `sessionId`).
+ *
+ * One page per call (the server's, at most fifty runs): the drawer opens on the first and reads the next from `nextCursor` when the
+ * reader asks — the record grows with every step of every week, and walking all of it on every open and every poll is not a read the
+ * reader asked for.
  */
-export async function getGeoProgrammeRuns(geoId: string): Promise<ProgrammeRun[]> {
-  const rows: Array<Record<string, unknown>> = [];
-  let cursor: string | null = null;
-  const seen = new Set<string>();
-  do {
-    const value: { runs?: unknown; nextCursor?: string | null } = await productRequest(`${project(geoId)}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
-    if (Array.isArray(value?.runs)) rows.push(...value.runs);
-    cursor = value.nextCursor ?? null;
-    if (cursor && seen.has(cursor)) throw new Error('The execution cursor did not advance.');
-    if (cursor) seen.add(cursor);
-  } while (cursor);
-  return rows.filter((row) => row && typeof row.sessionId === "string" && row.sessionId).map((row) => ({
+export async function getGeoProgrammeRuns(geoId: string, cursor?: string | null): Promise<ProgrammeRunPage> {
+  const value: { runs?: unknown; nextCursor?: string | null } = await productRequest(`${project(geoId)}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+  const rows: Array<Record<string, unknown>> = Array.isArray(value?.runs) ? value.runs : [];
+  const next = typeof value?.nextCursor === "string" && value.nextCursor && value.nextCursor !== cursor ? value.nextCursor : null;
+  return { nextCursor: next, runs: rows.filter((row) => row && typeof row.sessionId === "string" && row.sessionId).map((row) => ({
     sessionId: String(row.sessionId),
     ...(typeof row.runId === "string" && row.runId ? { runId: row.runId } : {}),
     label: typeof row.label === "string" && row.label.trim() ? row.label.trim() : "后台分析",
     state: programmeRunState(row.state),
     at: typeof row.startedAt === "string" && row.startedAt ? formatRelativeTime(row.startedAt) || null : null,
-  }));
+  })) };
 }
 
 /* -------------------------------------------------------------------- feature */
