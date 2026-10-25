@@ -579,6 +579,14 @@ describe("one row with a filter button (`oneRow`, 前沿动态 2026-10-25)", () 
       expect(screen.getByRole("button", { name: "筛选，已选 1 项" }).querySelector("[data-filter-mark]")).not.toBeNull();
     });
 
+    it("counts a page's token that is not a filter on 「筛选」, and offers no 「重置」 that would leave it standing", async () => {
+      narrow();
+      const { container } = render(<Feed tokens={[{ label: "只看：肿瘤", onRemove: () => {} }]} />);
+      expect(container.querySelector("[data-toolbar-row]")).toContainElement(screen.getByRole("button", { name: "移除筛选：只看：肿瘤" }));
+      await userEvent.click(screen.getByRole("button", { name: "筛选，已选 1 项" }));
+      expect(within(screen.getByRole("dialog", { name: "筛选" })).getByRole("button", { name: "重置" })).toBeDisabled();
+    });
+
     it("begins the sheet with the page's own section, which can close it", async () => {
       narrow();
       render(<Feed sheetLead={(close) => <nav aria-label="我的关注"><button type="button" onClick={close}>与我相关</button></nav>} />);

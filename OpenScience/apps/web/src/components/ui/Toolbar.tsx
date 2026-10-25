@@ -453,6 +453,8 @@ function PanelGroups({ filters }: { filters: readonly ToolbarFilter[] }) {
 
 /** The floating layer a panel opens in on a wide screen: a card under its chip, on the popover tier. */
 const POPOVER = "z-popover w-[min(36rem,calc(100vw-2rem))] max-h-[min(32rem,calc(100vh-8rem))] overflow-y-auto rounded-card border border-border bg-surface p-4 shadow-e2 outline-none animate-menu-in";
+/** `oneRow`'s 「筛选」 holds every dimension of the list (the thirty specialties among them): as tall as the window allows, so its last groups are not hidden under a scroll. */
+const POPOVER_TALL = cn(POPOVER, "max-h-[min(48rem,calc(100vh-7rem))]");
 
 /** 「专科 ▾」: a chip that opens its groups under it; every choice applies at once, and 「清除」 lets go of all of them. */
 function PanelChip({ panel }: { panel: ToolbarPanel }) {
@@ -485,9 +487,11 @@ function PanelChip({ panel }: { panel: ToolbarPanel }) {
  * With `oneRow` the chip carries the accent mark while anything in it is on, the phone's trigger is an icon, the sheet may begin with
  * the page's own section (`lead`) and end with the view's buttons (`extra`), and the open state is the toolbar's, so 「+N」 opens it.
  */
-function FoldChip({ filters, count, narrow, onReset, stepOut, open, onOpenChange, mark = false, icon = false, align = "start", lead, extra, resultCount }: {
+function FoldChip({ filters, count, resettable = count, narrow, onReset, stepOut, open, onOpenChange, mark = false, icon = false, align = "start", lead, extra, resultCount }: {
   filters: readonly ToolbarFilter[];
   count: number;
+  /** How many of what is counted 「重置」 / 「清除」 lets go of (a narrowed follow is not a filter). Default `count`. */
+  resettable?: number;
   narrow: boolean;
   onReset: () => void;
   stepOut: boolean;
@@ -522,7 +526,7 @@ function FoldChip({ filters, count, narrow, onReset, stepOut, open, onOpenChange
         {open && (
           <Drawer title="筛选" placement="bottom" onClose={close} footer={(
             <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" disabled={count === 0} onClick={onReset}>重置</Button>
+              <Button variant="secondary" className="flex-1" disabled={resettable === 0} onClick={onReset}>重置</Button>
               <Button className="flex-1" onClick={close}>{resultCount !== undefined ? `查看 ${resultCount.toLocaleString("zh-CN")} 条` : "查看结果"}</Button>
             </div>
           )}>
@@ -542,12 +546,12 @@ function FoldChip({ filters, count, narrow, onReset, stepOut, open, onOpenChange
     <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger asChild>{chip}</Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content aria-label="筛选" align={align} side="bottom" sideOffset={4} collisionPadding={8} className={POPOVER}
+        <Popover.Content aria-label="筛选" align={align} side="bottom" sideOffset={4} collisionPadding={8} className={mark ? POPOVER_TALL : POPOVER}
           onEscapeKeyDown={(event) => event.stopPropagation()}>
           <PanelGroups filters={filters} />
-          {(count > 0 || resultCount !== undefined) && (
+          {(resettable > 0 || resultCount !== undefined) && (
             <div className={cn("mt-4 flex items-center border-t border-border pt-3", resultCount !== undefined ? "justify-between" : "justify-end")}>
-              {count > 0 ? <Button variant="text" size="sm" onClick={onReset}>清除</Button> : <span />}
+              {resettable > 0 ? <Button variant="text" size="sm" onClick={onReset}>清除</Button> : <span />}
               {resultCount !== undefined && <span className="text-caption tabular-nums text-text-3">共 {resultCount.toLocaleString("zh-CN")} 条</span>}
             </div>
           )}
@@ -842,10 +846,12 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const one = oneRow && Boolean(views);
   // A row of its own is crowded when it wraps; the tab row (`Tabs` lays its trailing controls out) when its views no longer all show.
   const crowded = useCrowded(views ? root : row, inBand && !narrow && !one, Boolean(views));
-  // `oneRow`: the tokens give way first, then the controls that are not pinned fold as well.
+  // `oneRow`: the tokens give way first — two, then one, then none and the chip's count alone — and then the controls that are not
+  // pinned fold as well.
   const declaredKey = declared.map((filter) => `${filter.kind}:${filter.label}`).join("|");
   const tokenKey = `${declaredKey}#${given.map((token) => token.label).join("|")}#${groupsOf(declared.filter((filter) => filter.folded)).filter(groupCounted).length}`;
-  const tokensCrowded = useViewsCrowded(root, one && inBand && !narrow, tokenKey);
+  const twoCrowded = useViewsCrowded(root, one && inBand && !narrow, tokenKey);
+  const tokensCrowded = useViewsCrowded(root, one && inBand && !narrow && twoCrowded, tokenKey);
   const controlsCrowded = useViewsCrowded(root, one && inBand && !narrow && tokensCrowded, tokenKey);
   const fold = one ? narrow || controlsCrowded : narrow || crowded;
   // On a phone, and where the band's row is full, the filters fold into one chip — all but the pinned ones, which stay as they are; a
@@ -882,9 +888,10 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
     // What is applied: the page's own tokens, then what is on in 「筛选」 (those of the `folded` filters, and on a phone whatever folded).
     const applied = [...given, ...groupsOf(filters).map(groupToken).filter((token): token is ToolbarToken => token !== null)];
     const count = folded + given.length;
-    const shown = applied.slice(0, 2);
+    // On a phone the line under the row scrolls sideways, so it holds two; on a wide row as many as fit of two.
+    const shown = applied.slice(0, !narrow && twoCrowded ? 1 : 2);
     const hidden = applied.length - shown.length;
-    const clearable = applied.length >= 2 && applied.some((token) => token.filter);
+    const clearable = applied.length >= 2 && applied.some((token) => token.filter) && !(twoCrowded && !narrow);
     const searchToken: ToolbarToken | null = narrow && !searchOpen && search?.value
       ? { label: `搜索：${search.value}`, onRemove: () => (search.onClear ? search.onClear() : search.onChange("")) } : null;
     const tokenNodes = (
@@ -899,7 +906,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
     // On a phone the view's buttons and its count are in the sheet, after the filters.
     const extra = narrow && (summary != null || actions) ? <>{summary != null && <span className="text-caption tabular-nums text-text-3">{summary}</span>}{actions}</> : undefined;
     const trigger = (filters.length > 0 || (narrow && (sheetLead || extra))) && (
-      <FoldChip filters={filters} count={count} narrow={narrow} onReset={reset} stepOut={false} open={foldOpen} onOpenChange={setFoldOpen}
+      <FoldChip filters={filters} count={count} resettable={folded + given.filter((token) => token.filter).length} narrow={narrow} onReset={reset} stepOut={false} open={foldOpen} onOpenChange={setFoldOpen}
         mark icon={narrow} align="end" lead={narrow ? sheetLead : undefined} extra={extra} resultCount={resultCount} />
     );
     if (!narrow) {
@@ -927,7 +934,8 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
             <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} className="border-b-0" />
           </div>
           {searchOpen && search ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2 py-1.5">
+            // As tall as the views' row: 40 px, the last of them over the row's rule, as a tab's underline is.
+            <div className="-mb-px flex h-10 min-w-0 flex-1 items-center gap-2">
               <SearchBox search={search} inputRef={searchInput} focusOnMount shortcut={searchShortcut} onEscapeEmpty={() => setSearchOpen(false)} />
               <Button variant="text" size="sm" className="shrink-0" onClick={() => setSearchOpen(false)}>取消</Button>
             </div>

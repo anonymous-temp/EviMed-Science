@@ -145,12 +145,14 @@ export async function followAnswers(answer: FrontierPrefs | undefined, held: rea
  * Every entry is an address (`follow=`), so Back and a shared link land on it; `onPick` hears the choice (on a phone it closes the
  * 「筛选」 sheet the list is the first section of). A column beside the entry on a wide screen.
  */
-export function FollowList({ state, choice, hrefFor, onManage, onPick }: {
+export function FollowList({ state, choice, hrefFor, onManage, onPick, titled = false }: {
   state: FollowingState;
   choice: FollowChoice;
   hrefFor: (choice: FollowChoice) => string;
   onManage: () => void;
   onPick?: () => void;
+  /** Named on the page (a section of the 「筛选」 sheet among the filters' groups). */
+  titled?: boolean;
 }) {
   const current = (entry: FollowChoice) => followChoiceParam(entry) === followChoiceParam(choice);
   const item = (entry: FollowChoice, label: string, count?: number) => (
@@ -163,6 +165,7 @@ export function FollowList({ state, choice, hrefFor, onManage, onPick }: {
   );
   return (
     <nav aria-label="我的关注" data-frontier-follows="" className="space-y-4">
+      {titled && <p aria-hidden="true" className="text-caption text-text-3">我的关注</p>}
       <ul className="space-y-0.5">
         {item({ kind: "foryou" }, "与我相关")}
         {item({ kind: "all" }, "全部关注")}

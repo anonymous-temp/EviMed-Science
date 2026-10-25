@@ -776,7 +776,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const updated = new URLSearchParams(current); updated.set("follow", "all"); return updated;
   });
   const followList = (onPick?: () => void, onManage?: () => void) => choice && (
-    <FollowList state={following} choice={choice} hrefFor={followHref} onManage={onManage ?? (() => setManageFollows(true))}
+    <FollowList state={following} choice={choice} hrefFor={followHref} onManage={onManage ?? (() => setManageFollows(true))} titled={Boolean(onPick)}
       onPick={() => { trackFrontierFilter("follow", "follows"); onPick?.(); }} />
   );
   // The onboarding card's answer becomes the first follows; then the view and 与我相关 are read again.
