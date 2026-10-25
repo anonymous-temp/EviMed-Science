@@ -131,6 +131,18 @@ test("items published after the follow are found by the sweep, once each, newest
   assert.equal((await service.listFollows(alice)).follows[0].newItems, 1, "only what came after they looked");
 });
 
+test("c3 review: an item committed after the sweep had passed its visible time is found by the next sweep", options, async () => {
+  const { follow } = await typed(alice, "司美格鲁肽 和胰腺炎");
+  clock = new Date(at(30));
+  await watch.sweep();
+  // A long round: the item carries the round's start (minute 5) as its visible time, and is committed at minute 32.
+  const late = await publish(5, "Semaglutide pancreatitis, committed late in its round", { keys: ["drug:semaglutide", "disease:pancreatitis"] });
+  await db.query("UPDATE evimed_frontier.items SET updated_at = $2 WHERE id = $1", [late.id, at(32)]);
+  clock = new Date(at(33));
+  assert.deepEqual(await watch.sweep(), { followed: 1, matched: 1, failed: 0 });
+  assert.deepEqual(await feed(alice, follow.id), [late.publicId]);
+});
+
 test("a sweep leaves a follow whose scan is recent alone, and finds a follow whose backfill failed", options, async () => {
   const { follow } = await typed(alice, "司美格鲁肽 和胰腺炎");
   clock = new Date(at(0.5));

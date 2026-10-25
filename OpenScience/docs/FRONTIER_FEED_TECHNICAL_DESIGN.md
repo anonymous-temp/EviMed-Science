@@ -1704,6 +1704,7 @@ node evals/frontier-editing/run_eval.mjs --runs 3 --key-file <你的模型密钥
 | `OPEN_SCIENCE_FRONTIER_FAITH_ENABLED` | `true` | 需要上一项。导读、要点写成后据研究事实复核：设计、方向、对照、人群不符或把握程度强于原文的，退回写作模型改一次，仍不符的句子删去；卡片摘要只删不改；不向读者显示，结果在 `open_science_frontier_pipeline_total{outcome=faith*}` 与 `editor_diagnostics.faith`；存量用 `frontier-rewrite.mjs --steps facts,faith` |
 | `OPEN_SCIENCE_FRONTIER_RECLUSTER_MAX_PAIRS` | 40 | 0–400；重新聚类每轮（每 10 分钟，仅在当日预算正常时）交给模型判断的事件对数；0 关闭 |
 | `OPEN_SCIENCE_FRONTIER_PRIMARY_REPORTS_ENABLED` | `true` | 权威 4–5 期刊、有 DOI 但没有正文的条目，每 6 小时看一次附近已发布的非期刊报道（同事件、向量近邻、否则共享词），一次 flash 调用判断它是否为研究、哪些是它的报道；采纳的报道导读成为它的阅读正文，导读注明出自谁的报道；因无正文被丢下的条目 21 天内再向插件要；`false` 两者都关 |
+| `OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT` | 55 | 30–95；打字关注（读者输入的药物、试验或问题，词表里没有对应实体时）走向量一路时，条目向量与关注词的余弦下限（百分之一）；起始值，未在线上向量上测过：向量命中把余弦记在 `follow_matches.score`（实体或词命中记 1.0），先读这个分布和读者点开了哪些再调 |
 | `OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH` | 50 | 1–200；周刊收件人分页、安全推送扇出与投递循环的批量（日报推送固定每次 50 人） |
 | `OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH` | 100 | 1–500 |
 | `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL` | 空 | http(s)，不含凭据 |

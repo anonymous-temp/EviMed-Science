@@ -173,6 +173,26 @@ test("a notice that cannot be made gives its matches back, and the next try tell
   assert.equal((await told())[0].body, "头条论文\n你关注的“司美格鲁肽”有 1 条新动态");
 });
 
+test("c3 review: a notice that was made keeps its matches told even when recording the push day fails after it", options, async () => {
+  await follow("司美格鲁肽", drug("司美格鲁肽", "semaglutide"));
+  await publish(at(-300), "Semaglutide report", ["drug:semaglutide"]);
+  clock = new Date(at(-120));
+  await watch.sweep();
+  await issue();
+  // The database refuses the push day's record once, after the inbox took the notice.
+  const failing = new Proxy(db, { get(target, name) {
+    if (name !== "query") return Reflect.get(target, name);
+    return async (/** @type {string} */ sql, /** @type {unknown[]} */ values) => {
+      if (/last_push_day/.test(sql) && /INSERT/.test(sql)) throw Object.assign(new Error("lost"), { code: "57P01" });
+      return target.query(sql, values);
+    };
+  } });
+  const push = new FrontierDaily({ database: failing, jobs: null, watch, notifications, config: { frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierAudience: "all" }, now: () => MORNING });
+  assert.deepEqual(await push.pushDue(), { pushed: 0 });
+  assert.equal((await told()).length, 1, "the notice went out");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM evimed_frontier.follow_matches WHERE notified_at IS NOT NULL")).rows[0].n, 1, "its items stay told");
+});
+
 test("a reader who turned the frontier notice off is told nothing and nothing is claimed", options, async () => {
   await follow("司美格鲁肽", drug("司美格鲁肽", "semaglutide"));
   await publish(at(-300), "Semaglutide report", ["drug:semaglutide"]);

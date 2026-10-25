@@ -252,7 +252,7 @@ function FollowedQueries({ follows }: { follows: FrontierFollowedQuery[] }) {
       <ul aria-label="有新动态的关注" className="mt-1">
         {follows.map((follow) => (
           <li key={follow.id} className="flex items-baseline gap-2 border-b border-border py-3">
-            <Link to={`/app/frontier?view=following&follow=${encodeURIComponent(follow.id)}`} className="min-w-0 flex-1 text-body leading-6 text-text hover:text-accent hover:underline">
+            <Link to={`/app/frontier?view=following&follow=${encodeURIComponent(follow.id)}`} className="min-w-0 flex-1 text-body font-semibold leading-6 text-text hover:text-accent hover:underline">
               {follow.label}
             </Link>
             <span className="shrink-0 text-caption tabular-nums text-text-3">{follow.newItems >= 99 ? "99+" : follow.newItems} 条新动态</span>

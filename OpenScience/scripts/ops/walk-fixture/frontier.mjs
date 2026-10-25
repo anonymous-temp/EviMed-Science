@@ -161,6 +161,29 @@ export async function furnishFrontier(app, user, { log }) {
   const { insertSource } = await load("test", "helpers", "frontierFixtures.mjs");
   const { insertComposedItem } = await load("test", "helpers", "frontierComposeFixtures.mjs");
   const database = app.store.database;
+  const composer = app.frontier?.composer;
+  /** @type {{ events: any, daily: any } | null} */
+  let editors = null;
+  // The stand-in is in place before the items are: the feed's own worker ticks on its own cadence and would otherwise cluster the
+  // first items with no editor to ask, one event each, before the rounds below (seen 2026-10-25).
+  if (composer) {
+    // The model is absent here (no key, and nothing to bill it to): an editor that says what the editor would — these reports are one event,
+    // here is the digest — stands in while the loops run, and the real one is put back after. Everything else is the module's own code.
+    editors = { events: composer.events.editor, daily: composer.daily.editor };
+    // The account the feed's jobs run under: the worker finds it on its own at its next start; the fixture does not wait for that.
+    const { ensureFrontierProject } = await load("src", "frontierWorker.mjs");
+    app.frontier.editor.owner = await ensureFrontierProject({ store: app.store, config: app.config });
+    composer.events.editor = {
+      available: true, model: "walk-fixture",
+      judgeSameEvent: async (/** @type {{ candidates: unknown[] }} */ input) => ({ verdicts: input.candidates.map(() => "yes"), error: null, attempts: 1 }),
+      writeEventDigest: async (/** @type {{ reports: any[] }} */ input) => {
+        const first = input.reports[0] ?? {};
+        const title = String(first.titleZh ?? first.title_zh ?? first.title ?? "这件事");
+        return { verification: "passed", digestZh: `${title}。共有 ${input.reports.length} 家机构报道，一手材料与转述报道各自的要点见下。`, latestZh: String(input.reports.at(-1)?.titleZh ?? title), error: null };
+      },
+    };
+    composer.daily.editor = { available: true, model: "walk-fixture", writeDaily: async () => ({ verification: "passed", aiMinuteZh: "今天与临床相关的 AI 进展有 3 条，其中一条是前瞻性评估。", error: null }) };
+  }
   for (const [id, name, lane, sourceType, authority] of SOURCES) {
     await insertSource(database, id, { name, lane, source_type: sourceType, authority, owner_entity: `${id}-owner`, safety_feed: lane === "safety" || lane === "regulatory" });
   }
@@ -190,27 +213,9 @@ export async function furnishFrontier(app, user, { log }) {
   await database.query("UPDATE evimed_frontier.items SET ask_zh = $1::jsonb WHERE selected",
     [JSON.stringify(["这个结果适用于中国患者吗", "和现有标准治疗相比差在哪", "安全性数据有哪些"])]);
   log(`frontier: ${SOURCES.length} sources, ${ITEMS.length} items`);
-  await furnishTrack(database, insertComposedItem, { hoursAgo, log });
 
   // The composer's own loops, once: items into events, the hot list, today's issue.
-  const composer = app.frontier?.composer;
-  if (composer) {
-    // The model is absent here (no key, and nothing to bill it to): an editor that says what the editor would — these reports are one event,
-    // here is the digest — stands in while the loops run, and the real one is put back after. Everything else is the module's own code.
-    const editors = { events: composer.events.editor, daily: composer.daily.editor };
-    // The account the feed's jobs run under: the worker finds it on its own at its next start; the fixture does not wait for that.
-    const { ensureFrontierProject } = await load("src", "frontierWorker.mjs");
-    app.frontier.editor.owner = await ensureFrontierProject({ store: app.store, config: app.config });
-    composer.events.editor = {
-      available: true, model: "walk-fixture",
-      judgeSameEvent: async (/** @type {{ candidates: unknown[] }} */ input) => ({ verdicts: input.candidates.map(() => "yes"), error: null, attempts: 1 }),
-      writeEventDigest: async (/** @type {{ reports: any[] }} */ input) => {
-        const first = input.reports[0] ?? {};
-        const title = String(first.titleZh ?? first.title_zh ?? first.title ?? "这件事");
-        return { verification: "passed", digestZh: `${title}。共有 ${input.reports.length} 家机构报道，一手材料与转述报道各自的要点见下。`, latestZh: String(input.reports.at(-1)?.titleZh ?? title), error: null };
-      },
-    };
-    composer.daily.editor = { available: true, model: "walk-fixture", writeDaily: async () => ({ verification: "passed", aiMinuteZh: "今天与临床相关的 AI 进展有 3 条，其中一条是前瞻性评估。", error: null }) };
+  if (composer && editors) {
     for (let round = 0; round < 3; round += 1) {
       // The loops keep their own cadence (a hot list every ten minutes); the worker has already ticked them once, before there was anything
       // to cluster. Each is made due again, and the order the composer keeps (clustering, the hot list, the digests) does the rest.
@@ -228,6 +233,7 @@ export async function furnishFrontier(app, user, { log }) {
     const dailies = (await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.dailies")).rows[0]?.n ?? 0;
     log(`frontier: ${events} events, ${hot} hot snapshot(s), ${dailies} daily issue(s)`);
   } else log("frontier: no composer — the events, the hot list and the daily were not made");
+  await furnishTrack(database, insertComposedItem, { hoursAgo, log });
 
   return furnishZones(app, user, { log });
 }

@@ -644,6 +644,9 @@ export class FrontierDaily {
     for (const reader of readers) {
       /** The matches this reader's notice names, taken before it is made and given back if it cannot be. @type {string[]} */
       let claimed = [];
+      // Whether the notice itself was made: a failure after it (the push day's record) must not give its matches back, or the
+      // next attempt would name them again in a body the inbox refuses as a different one (c3 review).
+      let created = false;
       try {
         // A line per typed follow with news (c3-watch): the matches are marked as told when taken, so an item is named at most once.
         // A reader whose lines cannot be read gets the notice without them.
@@ -659,13 +662,14 @@ export class FrontierDaily {
           }
         }
         await this.notifications.create(reader.user_id, lines.length ? frontierDailyNotice({ ...issueNotice, follows: lines }) : notice, { now });
+        created = true;
         await this.database.query(`INSERT INTO evimed_frontier.user_prefs (user_id, last_push_day) VALUES ($1, $2::date)
           ON CONFLICT (user_id) DO UPDATE SET last_push_day = EXCLUDED.last_push_day`, [reader.user_id, day]);
         pushed += 1;
       } catch (error) {
         // One reader's inbox refusing is that reader's; the next scan tries
         // again (the key makes a second attempt the same item).
-        if (claimed.length) await this.watch?.releaseNotice(claimed).catch(() => undefined);
+        if (claimed.length && !created) await this.watch?.releaseNotice(claimed).catch(() => undefined);
         this.counters.pushFailures += 1;
         this.state.lastError = codeOf(error);
       }

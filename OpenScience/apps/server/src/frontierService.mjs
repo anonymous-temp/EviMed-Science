@@ -1650,6 +1650,10 @@ export class FrontierService {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`frontier-follows:${user.id}`]);
       const count = Number((await client.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1", [user.id])).rows[0].n);
       if (count >= MAX_FOLLOWS) throw failure(409, "frontier_follow_limit", `At most ${MAX_FOLLOWS} follows per account.`);
+      // The typed cap again under the lock: two requests read the count above at once (c3 review). A follow of the same words is one.
+      const again = (await client.query(`SELECT count(*) FILTER (WHERE kind='query')::integer AS n, bool_or(kind='query' AND key=$2) AS held
+        FROM evimed_frontier.user_follows WHERE user_id=$1`, [user.id, key])).rows[0];
+      if (!again.held && Number(again.n) >= FRONTIER_FOLLOW_QUERY_MAX) throw failure(409, "frontier_follow_limit", `At most ${FRONTIER_FOLLOW_QUERY_MAX} typed follows per account.`);
       const saved = (await client.query(`INSERT INTO evimed_frontier.user_follows AS f (user_id, kind, key, label, muted, query, created_at) VALUES ($1,'query',$2,$3,false,$4::jsonb,$5::timestamptz)
         ON CONFLICT (user_id, kind, key) DO UPDATE SET label = EXCLUDED.label RETURNING ${columns}`, [user.id, key, label, JSON.stringify(parsed.query), this.now().toISOString()])).rows[0];
       await this.#bumpState(client, user.id);

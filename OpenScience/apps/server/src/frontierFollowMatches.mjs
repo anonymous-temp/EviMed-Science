@@ -173,13 +173,18 @@ export class FrontierFollowWatch {
   }
 
   /**
-   * Match the published items that became visible in [since, until) with one typed follow and keep the matches that are new.
+   * Match the published items that became matchable since `since` with one typed follow and keep the matches that are new: visible
+   * before `until` and within `FRONTIER_FOLLOW_BACKFILL_MS` of it, and visible since `since` or — by keys and words — committed since
+   * (`updated_at`: `visible_at` is the round's start, and an item of a long round is committed minutes later), or — by its embedding
+   * — embedded since (`embedded_at`: embeddings are the round's last step, often a later round's). An item seen twice is kept once
+   * (c3 review: windowing by `visible_at` alone lost the items committed or embedded after the sweep had passed their time).
    * @param {{ id: string | number, userId: string, query: any }} follow @param {{ since: Date, until: Date }} window
    * @returns {Promise<{ matched: number }>}
    */
   async scan(follow, { since, until }) {
     const capabilities = await this.ready();
     const values = /** @type {any[]} */ ([follow.id, since.toISOString(), until.toISOString()]);
+    const recent = new Date(until.getTime() - FRONTIER_FOLLOW_BACKFILL_MS).toISOString();
     const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
     const predicate = followMatchPredicate(follow.query, param);
     let matched = 0;
@@ -187,7 +192,8 @@ export class FrontierFollowWatch {
       const limit = param(FRONTIER_FOLLOW_SCAN_LIMIT);
       const result = await this.database.query(`INSERT INTO evimed_frontier.follow_matches (follow_id, item_id, score)
         SELECT $1::bigint, i.id, 1.0 FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-        WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $2::timestamptz AND i.visible_at < $3::timestamptz AND (${predicate})
+        WHERE i.state = 'published' AND s.enabled AND i.visible_at >= ${param(recent)}::timestamptz AND i.visible_at < $3::timestamptz
+          AND (i.visible_at >= $2::timestamptz OR i.updated_at >= $2::timestamptz) AND (${predicate})
         ORDER BY i.visible_at DESC LIMIT ${limit}
         ON CONFLICT (follow_id, item_id) DO NOTHING`, values);
       matched += result.rowCount ?? 0;
@@ -198,11 +204,11 @@ export class FrontierFollowWatch {
       const result = await this.database.query(`INSERT INTO evimed_frontier.follow_matches (follow_id, item_id, score)
         SELECT $1::bigint, i.id, 1 - (v.embedding <=> $4::${type}) FROM evimed_frontier.item_vectors v
         JOIN evimed_frontier.items i ON i.id = v.item_id JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-        WHERE v.model_key = $5 AND i.state = 'published' AND s.enabled AND i.visible_at >= $2::timestamptz AND i.visible_at < $3::timestamptz
-          AND 1 - (v.embedding <=> $4::${type}) >= $6
+        WHERE v.model_key = $5 AND i.state = 'published' AND s.enabled AND i.visible_at >= $7::timestamptz AND i.visible_at < $3::timestamptz
+          AND (i.visible_at >= $2::timestamptz OR v.embedded_at >= $2::timestamptz) AND 1 - (v.embedding <=> $4::${type}) >= $6
         ORDER BY 1 - (v.embedding <=> $4::${type}) DESC LIMIT ${FRONTIER_FOLLOW_SCAN_LIMIT}
         ON CONFLICT (follow_id, item_id) DO NOTHING`,
-      [follow.id, since.toISOString(), until.toISOString(), `[${vector.join(",")}]`, String(this.embedder.modelKey), this.minCosine]);
+      [follow.id, since.toISOString(), until.toISOString(), `[${vector.join(",")}]`, String(this.embedder.modelKey), this.minCosine, recent]);
       this.counters.vectorMatched += result.rowCount ?? 0;
       matched += result.rowCount ?? 0;
     }
