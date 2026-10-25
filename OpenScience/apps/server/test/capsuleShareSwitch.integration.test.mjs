@@ -73,7 +73,7 @@ test("sharing is on unless its own switch is turned off: off, routes 404 by name
     }
     assert.doesNotMatch(await metrics(), /open_science_capsule_share_funnel_total/, "nothing of sharing is exported while it is off");
     // The capsule's own routes are not sharing and answer as before.
-    assert.equal((await call("inside", "GET", "/api/capsules")).status, 200);
+    assert.equal((await call("inside", "GET", "/api/capsules/received")).status, 200);
   });
   await withApp({ capsuleShareEnabled: true }, async ({ call, metrics }) => {
     assert.equal((await call("inside", "GET", "/api/me")).body.data.features.capsuleShare, true);

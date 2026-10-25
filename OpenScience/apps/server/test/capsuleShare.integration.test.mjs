@@ -490,7 +490,7 @@ test("a take-down stops a pack mounting at the recipients' next dispatch, whiche
   try {
     // One snapshot of the capsule reaches three accounts by three channels: a delivery, a link and a file made for one of them.
     const toAlice = await sharing.deliver(author, capsule.id, { recipients: [alice] });
-    const aliceDelivery = (await shareNotices(alice)).find((item) => /delivery\//.test(item.source.id)).source.id.split("/")[1];
+    const aliceDelivery = (await sharing.sent(author, { snapshotId: toAlice.snapshot.id }))[0].id;
     const aliceOpened = await sharing.open(alice, aliceDelivery);
     const aliceCopy = await keep(alice, await sharing.import(alice, aliceDelivery, { expectedDigest: aliceOpened.preview.archiveSha256, title: "撤稿做法" }));
     const link = await sharing.createLink(author, capsule.id, { maxUses: 5 });
@@ -505,9 +505,10 @@ test("a take-down stops a pack mounting at the recipients' next dispatch, whiche
     const snapshots = (await transfers.history(author, capsule.id)).items.map((item) => item.id);
     assert.ok(snapshots.length >= 3);
 
-    const mountedFor = async (userId) => (await selectCapsuleMethods(capsules, { userId, projectId: null })).map((method) => method.capsuleId);
+    // How many of a copy's methods a conversation beginning now would mount (the account may hold other packs from other tests).
+    const mountedOf = async (userId, copy) => (await selectCapsuleMethods(capsules, { userId, projectId: null })).filter((method) => method.capsuleId === copy.id).length;
     for (const [userId, copy] of [[alice, aliceCopy], [bob, bobCopy], [dave, daveCopy]]) {
-      assert.deepEqual([...new Set(await mountedFor(userId))], [copy.id], "mounted before the take-down");
+      assert.equal(await mountedOf(userId, copy), 2, "both methods are mounted before the take-down");
     }
     refreshed.length = 0;
     const done = [];
@@ -517,11 +518,12 @@ test("a take-down stops a pack mounting at the recipients' next dispatch, whiche
       "each recipient's running runtimes were asked to drop the pack now, not at their next restart");
 
     for (const [userId, copy] of [[alice, aliceCopy], [bob, bobCopy], [dave, daveCopy]]) {
-      assert.deepEqual(await mountedFor(userId), [], "a conversation that begins now mounts nothing of it");
+      assert.equal(await mountedOf(userId, copy), 0, "a conversation that begins now mounts nothing of it");
       // Even if a stale list still named it: the mount reads the copy, not only the list.
-      await capsules.documents.put(userId, "preferences", ACTIVATION_KEY, { items: [{ capsuleId: copy.id, mode: "guest" }] },
-        { expectedRevision: (await capsules.active(userId)).record?.revision ?? 0 });
-      assert.deepEqual(await mountedFor(userId), [], "and a list that still names it mounts nothing of it either");
+      const listed = await capsules.active(userId);
+      await capsules.documents.put(userId, "preferences", ACTIVATION_KEY, { items: [...listed.items, { capsuleId: copy.id, mode: "guest" }] },
+        { expectedRevision: listed.record?.revision ?? 0 });
+      assert.equal(await mountedOf(userId, copy), 0, "and a list that still names it mounts nothing of it either");
       const shelf = (await capsules.received(userId)).find((pack) => pack.id === copy.id);
       assert.equal(shelf.takenDown.by, "author", "the shelf reads it as withdrawn by its author");
       assert.equal(shelf.takenDown.reason, "这条做法有误");

@@ -32,15 +32,17 @@
 # - The agent-memory API is switched on here, and it publishes an account's
 #   memory to whoever holds one of its keys. Put a TLS terminator in front that
 #   forwards `/api/agent-memory/v1/` and, for the operator, `/api/auth/*`,
-#   `/api/me`, `/api/agent-keys` and `/api/capsules/*`; nothing else of the
-#   control plane needs to be reachable from outside.
+#   `/api/me`, `/api/agent-keys`, `/api/capsules/transfers/*` and
+#   `/api/capsules/<id>/enable`; nothing else of the control plane needs to be
+#   reachable from outside.
 # - With no browser application, the operator works over HTTP with a session:
 #   sign in (`POST /api/auth/login`), read the CSRF token from `GET /api/me`
 #   and send it as `X-Open-Science-CSRF` on every write, then mint the CDSS's
 #   integration key with
 #   `POST /api/agent-keys {"name":"CDSS","scopes":["memory.read","memory.write","memory.manage","memory.observe"],"subjects":true}`
 #   and import the lineage packs (`scripts/ops/pack-lineage-capsule.mjs`) with
-#   `POST /api/capsules/transfers/preview` then `.../import`.
+#   `POST /api/capsules/transfers/preview` then `.../import`, and put each in
+#   force with `POST /api/capsules/<id>/enable` (an empty JSON body).
 # - Only the base file and this one. The product overlays (ingestion,
 #   knowledge, AgentBay, SaaS) add to what this one takes away; monitoring and
 #   backup combine with it.
