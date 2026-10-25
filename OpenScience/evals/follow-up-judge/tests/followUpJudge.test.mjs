@@ -210,3 +210,14 @@ test("a dry run prints the module's request and needs no key", async () => {
   assert.equal(printed.instructionsAreTheModules, true);
   assert.equal(printed.request.messages[0].content, FOLLOW_UP_JUDGE_INSTRUCTIONS);
 });
+
+test("the harness is registered in the acceptance ledger beside the other suites, and the row says what the case file says", async () => {
+  const ledger = JSON.parse(await readFile(path.join(here, "../../acceptance-ledger.json"), "utf8"));
+  const rows = ledger.suites.filter((row) => row.id === "follow-up-judge");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].evalHarness, "evals/follow-up-judge");
+  assert.equal(rows[0].caseCount, cases.length);
+  const kinds = {};
+  for (const item of cases) kinds[item.class] = (kinds[item.class] ?? 0) + 1;
+  assert.deepEqual(rows[0].kinds, Object.fromEntries(Object.entries(kinds).sort(([left], [right]) => left.localeCompare(right))));
+});

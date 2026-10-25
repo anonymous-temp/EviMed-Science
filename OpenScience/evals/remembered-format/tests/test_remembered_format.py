@@ -219,6 +219,19 @@ class Scoring(unittest.TestCase):
         self.assertEqual(summary["b"]["full"]["givenRate"], 0.75)
 
 
+class Registration(unittest.TestCase):
+    """The harness is registered in evals/acceptance-ledger.json beside the other suites, and the row says what the case file says."""
+
+    def test_the_ledger_row_matches_the_case_file(self):
+        ledger = json.loads((HERE.parent / "acceptance-ledger.json").read_text(encoding="utf-8"))
+        rows = [r for r in ledger["suites"] if r["id"] == "remembered-format"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["evalHarness"], "evals/remembered-format")
+        self.assertTrue((HERE.parents[1] / rows[0]["evalHarness"]).is_dir())
+        self.assertEqual(rows[0]["caseCount"], len(CASES))
+        self.assertEqual(rows[0]["kinds"], {"pair": len(CASES)})
+
+
 class Runner(unittest.TestCase):
     def test_a_cell_is_one_reply_and_one_judgement(self):
         calls = []
