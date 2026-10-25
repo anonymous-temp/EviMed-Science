@@ -591,17 +591,18 @@ export class FrontierTopics {
       WHERE s.offered_at IS NULL AND s.topic_id IS NULL
         AND NOT EXISTS (SELECT 1 FROM evimed_frontier.hot_sightings o WHERE o.title_key = s.title_key AND o.offered_at IS NOT NULL AND o.last_seen_at >= $1)
       ORDER BY s.last_rank, s.board`, [new Date(now.getTime() - FRONTIER_TOPIC_CANDIDATE.unseenHours * HOUR)])).rows;
-    /** @type {Map<string, FrontierTopicCandidate>} */
+    // Every board a key stands on, the best-ranked first; the key is a candidate when one of its boards qualifies.
+    /** @type {Map<string, FrontierTopicCandidate & { qualifies: boolean }>} */
     const byKey = new Map();
     for (const row of rows) {
       const qualifies = Number(row.last_rank) <= FRONTIER_TOPIC_CANDIDATE.maxRank && Number(row.streak) >= FRONTIER_TOPIC_CANDIDATE.minStreak;
-      const known = byKey.get(row.title_key);
       const board = { board: row.board, rank: Number(row.last_rank), url: row.url ?? null, firstSeenAt: iso(row.first_seen_at) ?? now.toISOString() };
-      if (known) { known.boards.push(board); known.description ??= row.description ?? null; continue; }
-      if (!qualifies) continue;
-      byKey.set(row.title_key, { n: 0, key: row.title_key, title: row.title, description: row.description ?? null, boards: [board] });
+      const known = byKey.get(row.title_key);
+      if (known) { known.boards.push(board); known.description ??= row.description ?? null; known.qualifies ||= qualifies; continue; }
+      byKey.set(row.title_key, { n: 0, key: row.title_key, title: row.title, description: row.description ?? null, boards: [board], qualifies });
     }
-    return [...byKey.values()].slice(0, FRONTIER_TOPIC_CANDIDATE.perRound).map((candidate, index) => ({ ...candidate, n: index + 1 }));
+    return [...byKey.values()].filter((candidate) => candidate.qualifies).slice(0, FRONTIER_TOPIC_CANDIDATE.perRound)
+      .map(({ qualifies: _qualifies, ...candidate }, index) => ({ ...candidate, n: index + 1 }));
   }
 
   /**

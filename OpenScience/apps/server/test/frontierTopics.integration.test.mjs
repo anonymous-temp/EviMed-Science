@@ -158,6 +158,13 @@ test("the hot lists become sightings; a candidate is new, ranked ≤ 30 and seen
   assert.deepEqual([vivant.streak, vivant.best_rank], [2, 2]);
 });
 
+test("a key that qualifies on one board carries every board it stands on, a board seen once included", options, async () => {
+  const topics = topicsWith({ plugin: fakePlugin([weibo(at(0)), weibo(at(30), false), snap("toutiao", at(31), [[EVENT, 1]])]) });
+  await topics.readHotLists(at(40));
+  const event = (await topics.candidates(at(40))).find((candidate) => candidate.title === EVENT);
+  assert.deepEqual(event?.boards.map((board) => [board.board, board.rank]).sort(), [["toutiao", 1], ["weibo", 1]]);
+});
+
 test("a round: the medical event becomes a surge topic, the rest are refused by the model's own answer, a name in the title is rewritten away", options, async () => {
   // A paper of the last week that shares the event's key joins at creation (corpus), as evidence.
   const paper = await insertComposedItem(database, { sourceId: "jama", title: "Cardiac Arrest During Long-Distance Running Races", entityKeys: ["disease:心源性猝死"],

@@ -113,7 +113,8 @@ describe("热点话题 in 热榜 and 当前热点", () => {
     const rows = within(screen.getByRole("list", { name: "热点话题" })).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByRole("link", { name: "运动会诱发心源性猝死吗？风险有多大" })).toHaveAttribute("href", "/app/frontier/topics/a1b2c3d4e5f6a7b8");
-    expect(rows[0]).toHaveTextContent("公众人物据其公司讣告");
+    expect(rows[0]).toHaveTextContent("公众人物3 篇");
+    expect(within(rows[0]).getByText(/^据其公司讣告/)).toHaveClass("truncate");
     expect(rows[0]).toHaveTextContent("3 篇");
     expect(rows[1]).not.toHaveTextContent("篇");
   });
@@ -140,7 +141,10 @@ describe("热点话题 in 热榜 and 当前热点", () => {
       firstAt: ago(30), lastAt: ago(3), status: "developing" as const, heat: 30, rankChange: null, badge: null, trend: null, period: null }));
     render(<MemoryRouter><HotCard events={events} onOpenAll={vi.fn()} /></MemoryRouter>);
     expect(await screen.findByRole("link", { name: /运动会诱发心源性猝死吗/ })).toHaveAttribute("href", "/app/frontier/topics/a1b2c3d4e5f6a7b8");
-    expect(within(screen.getByRole("list", { name: "当前热点" })).getAllByRole("listitem")).toHaveLength(2);
+    const rows = within(screen.getByRole("list", { name: "当前热点" })).getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent("运动会诱发心源性猝死吗？风险有多大话题");
+    expect(within(rows[0]).getByText("话题").closest("a")).toBeNull();
   });
 });
 

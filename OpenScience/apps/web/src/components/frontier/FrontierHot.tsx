@@ -52,10 +52,11 @@ export function HotTopics({ topics }: { topics: readonly FrontierTopicSummary[] 
             </Link>
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-3">
               <Tag>{topic.domainLabel}</Tag>
-              {topic.peg && <span data-prose="" className="min-w-0 max-w-full truncate">{topic.peg.text}</span>}
-              {topic.itemCount > 0 && <><span aria-hidden="true">·</span><span className="tabular-nums">{topic.itemCount} 篇</span></>}
-              {topic.acceptedAt && <><span aria-hidden="true">·</span><span>{ago(topic.acceptedAt)}</span></>}
+              {topic.itemCount > 0 && <span className="tabular-nums">{topic.itemCount} 篇</span>}
+              {topic.itemCount > 0 && topic.acceptedAt && <span aria-hidden="true">·</span>}
+              {topic.acceptedAt && <span>{ago(topic.acceptedAt)}</span>}
             </div>
+            {topic.peg && <p data-prose="" className="mt-1 truncate text-caption text-text-3">{topic.peg.text}</p>}
           </li>
         ))}
       </ul>
@@ -90,13 +91,17 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
         </div>
       )}
     >
-      {surge && (
-        <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(surge.id)} className="group mx-1 flex h-control min-w-0 items-center gap-3 rounded text-ui">
-          <Tag tone="accent">话题</Tag>
-          <span data-row-title data-prose="" className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{surge.title}</span>
-        </Link>
-      )}
       <ol aria-label="当前热点" className="px-1">
+        {/* The surge topic's row has no rank: its title starts on the events' edge and its label stands after the link. */}
+        {surge && (
+          <li className="flex min-w-0 items-center gap-3">
+            <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(surge.id)} className="group flex h-control min-w-0 flex-1 items-center gap-3 rounded text-ui">
+              <span aria-hidden="true" className="w-5 shrink-0" />
+              <span data-row-title data-prose="" className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{surge.title}</span>
+            </Link>
+            <Tag tone="accent">话题</Tag>
+          </li>
+        )}
         {top.map((event, index) => {
           const change = rankChangeLabel(event.rankChange);
           return (
