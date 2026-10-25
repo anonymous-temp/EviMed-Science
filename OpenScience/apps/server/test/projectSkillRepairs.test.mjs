@@ -206,24 +206,24 @@ test('a rebase asked for at a start answers nothing when the selected plugins di
 test('a generation is published without a disabled id the platform no longer ships, and the proof never fails on one', async () => {
   const { selectPersonalSkillMounts } = await import('../src/personalSkillMount.mjs')
   const user = { id: 'owner' }, project = { id: 'paper', userId: 'owner' }
-  const selection = { revision: 3, payload: { skills: [], disabledPlatformSkills: ['community:gone', 'office:docx'], disabledBuiltinPlugins: [] } }
-  const service = { requireProject: async () => {}, projectSelections: async () => selection, platformSkillIds: async () => new Set(['office:docx', 'office:xlsx']) }
+  const selection = { revision: 3, payload: { skills: [], disabledPlatformSkills: ['community:gone', 'curated:matplotlib'], disabledBuiltinPlugins: [] } }
+  const service = { requireProject: async () => {}, projectSelections: async () => selection, platformSkillIds: async () => new Set(['curated:matplotlib', 'curated:survival-analysis']) }
   const selected = await selectPersonalSkillMounts({ service, user, project })
-  assert.deepEqual(selected.platformSkills.disabled, ['office:docx'])
+  assert.deepEqual(selected.platformSkills.disabled, ['curated:matplotlib'])
   assert.deepEqual(selected.findings, [{ platformSkillId: 'community:gone', code: 'platform_skill_stale' }])
   // A list that cannot be read keeps the saved ids, and the runtime proof tolerates one it does not list.
   service.platformSkillIds = async () => null
-  assert.deepEqual((await selectPersonalSkillMounts({ service, user, project })).platformSkills.disabled, ['community:gone', 'office:docx'])
+  assert.deepEqual((await selectPersonalSkillMounts({ service, user, project })).platformSkills.disabled, ['community:gone', 'curated:matplotlib'])
   const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0 })
-  const expected = { reference: { generationHash: 'e'.repeat(64) }, pins: [], platformSkills: { disabled: ['community:gone', 'office:docx'] } }
+  const expected = { reference: { generationHash: 'e'.repeat(64) }, pins: [], platformSkills: { disabled: ['community:gone', 'curated:matplotlib'] } }
   manager.runtimes.set(manager.key(project), { modelGatewayTokenJti: 'live', personalSkillGeneration: expected })
-  let listed = [{ name: 'docx', invocation: { userInvocable: false, modelInvocable: false } }]
+  let listed = [{ name: 'matplotlib', invocation: { userInvocable: false, modelInvocable: false } }]
   manager.callKernel = async (_runtime, _project, method) => method === 'session/list' ? { items: [{ sessionId: 's1' }] }
     : method === 'skills/list' ? { skills: [] } : method === 'evimedSkills/list' ? { complete: true, items: listed } : assert.fail(method)
   const proof = await manager.probePersonalSkillGeneration(project, expected)
   assert.equal(proof.pendingSession, false)
   assert.deepEqual(proof.absentDisabled, ['community:gone'])
   // A skill the runtime lists and still serves is a failed proof, as before.
-  listed = [{ name: 'docx', invocation: { userInvocable: true, modelInvocable: false } }]
+  listed = [{ name: 'matplotlib', invocation: { userInvocable: true, modelInvocable: false } }]
   await assert.rejects(manager.probePersonalSkillGeneration(project, expected), { status: 502 })
 })

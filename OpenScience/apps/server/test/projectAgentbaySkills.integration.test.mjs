@@ -41,13 +41,13 @@ test('AgentBay carries an owned native personal revision and binary resources in
   const skill = await skills.saveContent(user, `skill:${randomUUID()}`, { expectedRevision: 0, title: 'Native method', description: 'Read the preserved bytes', instructions: 'Read resources/input.bin.' },
     [{ id: `resource:${hex}`, path: 'resources/input.bin', digest: `sha256:${hex}`, size: binary.length }])
   const selected = await skills.saveProjectSelections(user, project, { expectedRevision: 0, skills: [{ skillId: skill.id, revision: 1 }] })
-  const disabled = await skills.saveProjectPlatform(user, project, { expectedRevision: selected.revision, disabled: ['office:docx'] })
+  const disabled = await skills.saveProjectPlatform(user, project, { expectedRevision: selected.revision, disabled: ['curated:matplotlib'] })
   await skills.saveProjectBuiltins(user, project, { expectedRevision: disabled.revision, disabled: ['annotation', 'mermaid'] })
   const plugins = new PluginService(db), generations = new PersonalSkillGenerationService(db, { config, skillService: skills, pluginService: plugins,
     resolveUser: async () => user, identities: () => personalSkillRuntimeIdentity(manager), ledgerBusy: async () => false })
   const candidate = await plugins.withAdmission(project, () => generations.reconcile(user, project))
   assert.equal(candidate.pins[0].digest, skill.payload.digest)
-  assert.deepEqual(candidate.platformSkills, { disabled: ['office:docx'], disabledPlugins: ['annotation', 'mermaid'] })
+  assert.deepEqual(candidate.platformSkills, { disabled: ['curated:matplotlib'], disabledPlugins: ['annotation', 'mermaid'] })
   let record
   const provider = new AgentBayRuntimeProvider(manager, { client: /** @type {any} */ ({ createSession: async () => ({ sessionId: 'isolated-session', session: {} }) }) })
   provider.assertConfigured = () => new URL(config.runtimeGatewayPublicUrl)
@@ -74,9 +74,9 @@ test('AgentBay carries an owned native personal revision and binary resources in
   assert.ok(commands.some(line => line.includes('chown 0:0') && line.includes('sha256sum')))
   assert.ok(commands.every(line => !line.includes('/workspace/')))
   const env = provider.kernelEnvironment(project, plan)
-  assert.deepEqual(JSON.parse(env.EVIMED_DISABLED_PLATFORM_SKILLS), ['office:docx'])
+  assert.deepEqual(JSON.parse(env.EVIMED_DISABLED_PLATFORM_SKILLS), ['curated:matplotlib'])
   assert.deepEqual(JSON.parse(env.EVIMED_DISABLED_CLIENT_BUNDLES), ['annotation', 'mermaid'])
   assert.equal(env.EVIMED_PERSONAL_SKILLS_DIR, plan.personalSkillsRuntimeDir)
   const readback = await shell('/bin/sh', ['-c', renderKernelEnvironment(env) + '\nprintf "%s" "$EVIMED_DISABLED_PLATFORM_SKILLS"'])
-  assert.deepEqual(JSON.parse(readback.stdout), ['office:docx'])
+  assert.deepEqual(JSON.parse(readback.stdout), ['curated:matplotlib'])
 })

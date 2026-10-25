@@ -38,14 +38,14 @@ test('PostgreSQL optional policy survives restart, waits for current work, publi
   await service.markEffective(project, original, 'original-runtime')
   captured = original
   await database.query("UPDATE evimed_product.jobs SET status='succeeded' WHERE status='queued'")
-  await plugins.withAdmission(project, () => skills.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['office:docx'] }))
+  await plugins.withAdmission(project, () => skills.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['curated:matplotlib'] }))
   skills = new SkillLibraryService(database, options); service.skills = skills
   skills.projectActivation = observe
-  assert.deepEqual((await skills.projectPlatform(user, project)).payload.disabled, ['office:docx'])
+  assert.deepEqual((await skills.projectPlatform(user, project)).payload.disabled, ['curated:matplotlib'])
   assert.deepEqual((await skills.projectPlatform(user, second)).payload.disabled, [])
   const candidate = await plugins.withAdmission(project, () => service.reconcile(user, project))
   assert.notEqual(candidate.reference.generationHash, original.reference.generationHash)
-  assert.deepEqual((await verifyPersonalSkillGeneration(service.config, project, candidate.reference)).platformSkills, { disabled: ['office:docx'], disabledPlugins: [] })
+  assert.deepEqual((await verifyPersonalSkillGeneration(service.config, project, candidate.reference)).platformSkills, { disabled: ['curated:matplotlib'], disabledPlugins: [] })
   const saved = await service.current(project)
   assert.equal((await personalGenerationForStart({ state: saved, identity, busy: async () => true })).reference.generationHash, original.reference.generationHash)
   assert.equal((await personalGenerationForStart({ state: saved, identity, busy: async () => false })).reference.generationHash, candidate.reference.generationHash)
@@ -56,19 +56,19 @@ test('PostgreSQL optional policy survives restart, waits for current work, publi
   const worker = new PersonalSkillGenerationWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false })
   await worker.tick()
   assert.equal(replacements, 0)
-  assert.equal((await skills.projectPlatform(user, project)).items.find(item => item.id === 'office:docx').effective, true)
+  assert.equal((await skills.projectPlatform(user, project)).items.find(item => item.id === 'curated:matplotlib').effective, true)
   busy = false
   await database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE status='queued'")
   await worker.tick()
   const effective = await skills.projectPlatform(user, project)
   assert.equal(replacements, 1)
   assert.equal(effective.activation.phase, 'effective')
-  assert.equal(effective.items.find(item => item.id === 'office:docx').effective, false)
+  assert.equal(effective.items.find(item => item.id === 'curated:matplotlib').effective, false)
   captured = null
   // The runtime was reaped: the generation the worker proved stays what the next start mounts, and reads as in effect.
   const idle = await skills.projectPlatform(user, project)
   assert.equal(idle.activation.phase, 'ready')
-  assert.equal(idle.items.find(item => item.id === 'office:docx').effective, false)
+  assert.equal(idle.items.find(item => item.id === 'curated:matplotlib').effective, false)
   captured = candidate; epoch = 'cold-runtime'
   assert.equal((await skills.projectPlatform(user, project)).activation.phase, 'waiting')
   const proofJob = await service.requestRuntimeProof(project, captured, epoch)
@@ -86,8 +86,8 @@ test('PostgreSQL optional policy survives restart, waits for current work, publi
   const failed = await skills.projectPlatform(user, project)
   assert.equal(failed.activation.phase, 'rolled-back')
   assert.equal(failed.activation.error, 'personal_skill_apply_failed')
-  assert.equal(failed.items.find(item => item.id === 'office:docx').enabled, true)
-  assert.equal(failed.items.find(item => item.id === 'office:docx').effective, false)
+  assert.equal(failed.items.find(item => item.id === 'curated:matplotlib').enabled, true)
+  assert.equal(failed.items.find(item => item.id === 'curated:matplotlib').effective, false)
   assert.notEqual(captured.reference.generationHash, enabled.reference.generationHash)
   await worker.close()
 })
