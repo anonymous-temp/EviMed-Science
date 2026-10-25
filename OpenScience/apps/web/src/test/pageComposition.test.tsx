@@ -372,7 +372,8 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
   /** The landmarks of each page, in the order a reader meets them. */
   const ORDER: Record<string, string[]> = {
     questions: ["[data-geo-group]"],
-    sources: ["[data-chart-grid]", "ul[aria-label='信源']"],
+    // The pictures above the list are the embedded selected-data analysis (GEO v3), which replaced the two fixed charts.
+    sources: ["[data-geo-analysis]", "ul[aria-label='信源']"],
     accuracy: ["[data-chart-grid]", "[data-geo-error-list]"],
     visibility: ["[data-chart='trend']", "[data-heat-row]", "[data-geo-engine-trend]"],
   };
@@ -389,8 +390,9 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
       expect(precedes(earlier, found), `${key}: ${selector} follows the one before it`).toBe(true);
       earlier = found;
     }
-    // nothing in the body filters: every search box is the band's
-    for (const search of body.querySelectorAll("input[type='search']")) expect(search).toBeNull();
+    // nothing in the body filters: every search box is the band's — except in the embedded selected-data analysis (GEO v3), a workbench of
+    // its own whose toolbar stands above the table it controls and filters only that table
+    for (const search of body.querySelectorAll("input[type='search']")) expect(search.closest("[data-geo-analysis]"), `${key}: a search box in the body`).not.toBeNull();
     expect(facts.clickableTags).toEqual([]);
   });
 

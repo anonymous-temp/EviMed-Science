@@ -47,12 +47,15 @@ export function GeoAnalysisWorkbench({
   initialView = "V01",
   embedded = false,
   initialDescriptor,
+  titleLevel,
 }: {
   geoId: string;
   project: GeoProject;
   initialView?: GeoAnalysisId;
   embedded?: boolean;
   initialDescriptor?: GeoAnalysisDescriptor;
+  /** The heading's rung when embedded: a page that already sets its blocks at the section rung sets this one there too, rather than adding a pair. */
+  titleLevel?: "section" | "sub";
 }) {
   const [expanded, setExpanded] = useState(false);
   if (embedded)
@@ -60,7 +63,7 @@ export function GeoAnalysisWorkbench({
       <div data-geo-analysis="">
         <Section
           title="所选数据分析"
-          level={initialView === "V12" ? "section" : "sub"}
+          level={titleLevel ?? (initialView === "V12" ? "section" : "sub")}
         >
           <AnalysisBody
             geoId={geoId}

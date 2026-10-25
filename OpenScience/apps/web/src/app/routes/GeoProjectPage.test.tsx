@@ -828,9 +828,16 @@ describe("a GEO project that is not being measured", () => {
     await screen.findByTestId("evidence-tab");
     const marked = () => [...document.querySelectorAll("[data-rail-step]")].filter((node) => node.querySelector("[aria-current='step']")).map((node) => node.getAttribute("data-rail-step"));
     expect(marked()).toEqual(["evidence"]);
+    // The rail is the way in (GEO v3): 诊断 first, then its 可见度 view. The step the person pressed is the one the page keeps and marks —
+    // not the stray `step=monitoring` the address carried while it showed another step's result.
     await chooseResult("可见度");
     await screen.findByTestId("visibility-tab");
-    expect(screen.getByTestId("landed")).toHaveTextContent("step=monitoring");
+    expect(screen.getByTestId("landed")).toHaveTextContent("step=diagnosis");
+    expect(marked()).toEqual(["diagnosis"]);
+    // 监测 reads the same tab (its trend), and then it is the step that is kept and marked.
+    await chooseStep(/^监测/);
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent("step=monitoring"));
+    expect(screen.getByTestId("visibility-tab")).toBeInTheDocument();
     expect(marked()).toEqual(["monitoring"]);
   });
 });

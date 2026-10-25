@@ -250,7 +250,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
   const nothing = all.length === 0 && articleList.length === 0 && view.control.length === 0;
   if (nothing && articles.state.kind === "loading") return <TabSkeleton />;
   if (nothing && !articlesFailed && mode !== "monitoring" && mode !== "distribution") {
-    return <><StepPending geoId={geoId} project={project} step="content" /><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V23" embedded /></>;
+    return <><StepPending geoId={geoId} project={project} step="content" /><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V23" embedded titleLevel="section" /></>;
   }
   // The other reads of the page, each said where it failed with its own 重试; the articles' stands where 「需要你」 sends a person
   // to release them (`#geo-review`), so that link lands on what went wrong rather than on nothing.
@@ -287,7 +287,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
       />}
       {(mode === "all" || mode === "distribution") && <BudgetLine distribution={marketConnected(project) || distributionData?.budget ? distributionData : null} canManage={can("manage_money")} onEdit={() => frame?.openPanel("budget")} />}
       {mode === "distribution" && <DistributionWorkbench key={geoId} geoId={geoId} project={project} />}
-      {mode!=="monitoring"&&<GeoAnalysisWorkbench key={`${geoId}:${mode}`} geoId={geoId} project={project} initialView={mode==="distribution"?"V25":"V23"} embedded/>}
+      {mode!=="monitoring"&&<GeoAnalysisWorkbench key={`${geoId}:${mode}`} geoId={geoId} project={project} initialView={mode==="distribution"?"V25":"V23"} embedded titleLevel="section"/>}
       {(mode === "all" || mode === "content") && project.cards?.blockedBy && can("edit") && (
         <Note action={<Button variant="secondary" size="sm" onClick={() => frame?.openPanel(CARDS_WAIT[project.cards?.blockedBy as "producer" | "reviewer"].panel)}>{CARDS_WAIT[project.cards.blockedBy].verb}</Button>}>
           {CARDS_WAIT[project.cards.blockedBy].sentence}
