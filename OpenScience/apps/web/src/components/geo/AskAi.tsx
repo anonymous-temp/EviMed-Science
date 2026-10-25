@@ -3,6 +3,7 @@ import { MessageSquare } from "lucide-react";
 import type { GeoCell } from "@/lib/geoClient";
 import { buttonClasses } from "@/components/ui/Button";
 import { geoCellPhrase } from "./GeoCellText";
+import { geoMayConverse, useGeoFrame } from "./geoFrame";
 import type { GeoUnit } from "./geoText";
 import { useOpenGeoConversation, type GeoConversationTarget } from "./useOpenGeoConversation";
 
@@ -69,6 +70,9 @@ export function AskAi({
 }) {
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
+  // A role that may not open the conversation (it takes run and edit) is not offered a button that can only be refused.
+  const frame = useGeoFrame();
+  if (frame && !geoMayConverse(frame.project)) return null;
   // Asked about a number that is not there yet (未测, 样本不足 with no value):
   // there is nothing to explain, so there is no button.
   if (draft == null && cell !== undefined && (cell == null || cell.value == null)) return null;

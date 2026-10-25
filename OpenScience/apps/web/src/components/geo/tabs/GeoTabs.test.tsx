@@ -1256,3 +1256,16 @@ describe("a hand-off to the conversation that fails", () => {
   });
 });
 
+describe("a role that may not open the conversation", () => {
+  const viewer = () => geoProject({}, { access: { roles: ["viewer"], abilities: ["read"], owner: false } });
+  it("is offered no hand-off it would only be refused: 信源's 在对话中处理", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
+    renderTab(<SourcesTab {...props(viewer())} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    await within(dialog).findByRole("region", { name: "讲错的回答" });
+    expect(within(dialog).queryByRole("button", { name: "在对话中处理" })).not.toBeInTheDocument();
+  });
+});

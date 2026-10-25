@@ -834,3 +834,43 @@ describe("a GEO project that is not being measured", () => {
     expect(marked()).toEqual(["monitoring"]);
   });
 });
+
+describe("the project's conversation for a role that may not converse", () => {
+  const viewer = { ...GEO_PROJECT, access: { roles: ["viewer"], abilities: ["read"], owner: false } };
+  it("「对话」 reads the kept conversation, never asks to open one", async () => {
+    client.getGeoProject.mockResolvedValue(viewer);
+    renderProject("/app/geo/geo_masi/visibility");
+    await userEvent.click(await screen.findByRole("button", { name: "对话" }));
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi\/chat\/ses_geo_masi\?.*result=visibility/));
+    expect(client.open).not.toHaveBeenCalled();
+    expect(client.nativeOpen).not.toHaveBeenCalled();
+  });
+
+  it("offers no 「对话」 where there is no conversation to read, and the bare conversation address says so instead of loading forever", async () => {
+    client.getGeoProject.mockResolvedValue({ ...viewer, sessionId: null });
+    renderProject();
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByRole("button", { name: "对话" })).not.toBeInTheDocument();
+    renderProject("/app/geo/geo_masi/chat");
+    expect(await screen.findByText("这个项目还没有对话")).toBeInTheDocument();
+    expect(client.open).not.toHaveBeenCalled();
+  });
+
+  it("the bare conversation address goes to the kept conversation", async () => {
+    client.getGeoProject.mockResolvedValue(viewer);
+    renderProject("/app/geo/geo_masi/chat");
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi\/chat\/ses_geo_masi/));
+    expect(client.open).not.toHaveBeenCalled();
+  });
+
+  it("for a role that may, a conversation that cannot be opened says so with 重试, which asks again", async () => {
+    client.open.mockResolvedValue(false);
+    renderProject("/app/geo/geo_masi/chat");
+    expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时无法打开，请稍后重试。");
+    expect(client.open).toHaveBeenCalledTimes(1);
+    client.open.mockResolvedValue(true);
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+});

@@ -22,7 +22,7 @@ import { Section } from "@/components/ui/Section";
 import { BulletBar } from "@/components/ui/StatTile";
 import { Tag } from "@/components/ui/Tag";
 import { formatGeoValue, GeoCellText } from "../GeoCellText";
-import { useGeoFrame } from "../geoFrame";
+import { geoMayConverse, useGeoFrame } from "../geoFrame";
 import { geoSectionId } from "../geoTabs";
 import {
   engineName,
@@ -461,7 +461,7 @@ export function Assumptions({ project, plan }: { project: GeoProject; plan: GeoS
                 key={`${entry.field}-${index}`}
                 title={<span className="max-w-measure-body">{value && entry.reason ? `${value}：${entry.reason}` : line}</span>}
                 trailing={basis ? <Tag>{basis}</Tag> : undefined}
-                actions={mayChange ? (
+                actions={mayChange && geoMayConverse(project) ? (
                   <Button
                     variant="text"
                     size="sm"

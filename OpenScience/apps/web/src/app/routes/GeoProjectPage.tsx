@@ -18,6 +18,7 @@ import {
   type GeoStepKey,
 } from "@/lib/geoClient";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
+import { geoChatPath } from "@/lib/geoLocation";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -133,7 +134,6 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const navigate = useNavigate();
   const feature = useGeoFeature();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
-  const [conversationError, setConversationError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
   const [data] = useState(() => new GeoDataCache());
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
@@ -175,7 +175,6 @@ function GeoProjectView({ geoId }: { geoId: string }) {
     reading.current = true;
     reloadQueued.current = false;
     setLoaded(current => current.kind === "ready" && current.scopeError ? { ...current, scopeError: undefined } : current);
-    setConversationError(null);
     void (scope ? getGeoProject(geoId, scope) : getGeoProject(geoId)).then(
       async (project) => {
         if (!live) return;
@@ -273,7 +272,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
 
   return (
     <GeoFrameContext.Provider value={api}>
-      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} conversationError={conversationError} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} scopeOpen={scopeOpen} onScopeOpen={setScopeOpen} />
+      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} scopeOpen={scopeOpen} onScopeOpen={setScopeOpen} />
     </GeoFrameContext.Provider>
   );
 }
@@ -283,7 +282,6 @@ function GeoBand({
   api,
   onChat,
   addressedSession,
-  conversationError,
   toolbar,
   panel,
   suggested,
@@ -294,7 +292,6 @@ function GeoBand({
   api: GeoFrameApi;
   onChat: boolean;
   addressedSession?: string;
-  conversationError: string | null;
   toolbar: ToolbarProps | null | undefined;
   panel: GeoPanel | null;
   suggested: number | null;
@@ -361,12 +358,38 @@ function GeoBand({
   const params = new URLSearchParams(location.search);
   const heldSession = api.conversation;
   const target = { geoId, projectId: project.projectId, sessionId: heldSession };
+  // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
+  // same; the page only does not offer what would be refused.
+  const abilities = project.access?.abilities;
+  const can = (ability: string) => !abilities || abilities.includes(ability);
+  // Opening the conversation (and everything that hands it a draft) takes both, as the module's descriptor does. A role without them
+  // reads the conversation the project keeps, as it was.
+  const canConverse = can("run") && can("edit");
+  const readOnlyChat = heldSession ? `${geoChatPath(geoId, heldSession)}?${(() => {
+    const kept = new URLSearchParams(location.search);
+    if (!onChat) kept.set("result", snapshotId ? "questions" : tab);
+    return kept.toString();
+  })()}` : null;
+  // The bare conversation address: opened for a role that may converse, the kept one for a role that reads, and said in place when
+  // neither can be shown — a page left on its skeleton is a page that never says what happened.
+  const [conversationError, setConversationError] = useState<string | null>(null);
+  const [conversationAttempt, setConversationAttempt] = useState(0);
   useEffect(() => {
-    if (!onChat || addressedSession) return;
-    void openConversation({ geoId, projectId: project.projectId, sessionId: heldSession });
-  }, [onChat, addressedSession, heldSession, geoId, project.projectId, openConversation]);
+    if (!onChat || addressedSession) return undefined;
+    setConversationError(null);
+    if (!canConverse) {
+      if (heldSession) navigate(`${geoChatPath(geoId, heldSession)}${location.search}`, { replace: true });
+      return undefined;
+    }
+    let live = true;
+    void openConversation({ geoId, projectId: project.projectId, sessionId: heldSession })
+      .then((opened) => { if (live && !opened) setConversationError("对话暂时无法打开，请稍后重试。"); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the search is carried along, never a reason to open again
+  }, [onChat, addressedSession, heldSession, geoId, project.projectId, openConversation, canConverse, conversationAttempt, navigate]);
   const openChat = () => {
     if (busy) return;
+    if (!canConverse) { if (readOnlyChat) navigate(readOnlyChat); return; }
     setBusy("conversation");
     void openConversation(target).finally(() => setBusy(null));
   };
@@ -385,10 +408,6 @@ function GeoBand({
       .then(() => { toast.success(pause ? "已暂停，测量和投放都停下了。" : "已继续。"); reload(); })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目状态无法修改，请稍后重试。" })));
   };
-  // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
-  // same; the menu only does not offer what would be refused.
-  const abilities = project.access?.abilities;
-  const can = (ability: string) => !abilities || abilities.includes(ability);
   const menu: MenuEntry[] = [
     ...(can("edit") ? [{ label: "重命名", onSelect: () => onPanel("rename") }] : []),
     // The engines, the window, the budget, who speaks for the product and the members: one drawer, not four entries.
@@ -433,7 +452,7 @@ function GeoBand({
   const needsBudget = marketConnected(project) && !(project.budget && project.budget.totalCny > 0);
   const continues: { label: string; onClick: () => void } | null = selectedStep === "distribution" && needsBudget && can("manage_money")
     ? { label: "设预算", onClick: () => api.openPanel("budget") }
-    : !can("run") ? null
+    : !canConverse ? null
       : selectedStep === "evidence" ? { label: "让 AI 补充结论", onClick: ask(`请在现有结论库的基础上，补充${product}还没有覆盖的说明书内容和临床证据，每条结论都带原文出处。`) }
         : selectedStep === "journey" ? { label: "让 AI 重画旅程", onClick: ask(`请根据最新的结论和 AI 的回答，重新画一遍${product}的患者与医生旅程。`) }
           : selectedStep === "questions" ? { label: "加问", onClick: ask(`请再补几个值得测量的问题，覆盖${product}现有问句池里还没有问到的情形。`) }
@@ -475,7 +494,7 @@ function GeoBand({
             <FileDown size={16} aria-hidden="true" />
             周报
           </Button>}
-          {!onChat && <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
+          {!onChat && (canConverse || readOnlyChat) && <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
             <MessageSquare size={16} aria-hidden="true" />
             对话
           </Button>}
@@ -492,7 +511,9 @@ function GeoBand({
         更新暂时失败，仍显示上次结果。{api.refreshError || dataRefreshError}
       </Note>}
       {onChat ? (
-        conversationError ? <LoadError message={conversationError} onRetry={reload} /> : addressedSession ? <GeoConversationPane canRun={can("run") && can("edit")} owner={project.access?.owner ?? true} geoId={geoId} projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
+        conversationError ? <LoadError message={conversationError} onRetry={() => setConversationAttempt((value) => value + 1)} />
+          : !addressedSession && !canConverse && !heldSession ? <EmptyState icon={MessageSquare} title="这个项目还没有对话" action={<Button variant="secondary" onClick={() => navigate(destination("overview"))}>回到项目总览</Button>} />
+          : addressedSession ? <GeoConversationPane canRun={can("run") && can("edit")} owner={project.access?.owner ?? true} geoId={geoId} projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
       ) : snapshotId ? (
         // One answer, read inside the band: the route's own element, which may still be on its way.
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>

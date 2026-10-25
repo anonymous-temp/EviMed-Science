@@ -21,7 +21,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { DiagnosisReview } from "@/components/geo/DiagnosisReview";
 import { AnswerChecks } from "@/components/geo/AnswerChecks";
-import { useGeoFrame, useGeoToolbar } from "@/components/geo/geoFrame";
+import { geoMayConverse, useGeoFrame, useGeoToolbar } from "@/components/geo/geoFrame";
 import { useGeoEvidence } from "@/components/geo/geoProjectData";
 import { scrollBlockToTop } from "@/components/geo/geoScroll";
 import { questionGroupIndex, clusterName } from "@/components/geo/spine/clusterModel";
@@ -245,7 +245,7 @@ function Answer({
           </p>
         </div>
       </div>
-      {target && (
+      {target && geoMayConverse(project) && (
         // The answer's own step, not the module's next one: a secondary button in the answer's heading row, as 确认后联系 is in its
         // person's row (T3: the one primary action of a module page is the band header's).
         <Button data-geo-answer-primary="" variant="secondary" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>

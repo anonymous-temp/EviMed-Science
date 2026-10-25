@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useToastStore } from "@/lib/toast";
 import { AskAi } from "./AskAi";
+import { GeoFrameHarness } from "./__fixtures__/geoFrameHarness";
+import { geoProject } from "./__fixtures__/geoTabs";
 
 // The person's own project selection is never touched: a GEO conversation opens through the module's descriptor, in place.
 const store = vi.hoisted(() => ({
@@ -84,4 +86,15 @@ describe("问 AI", () => {
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/plan");
   });
+});
+
+it("is not offered to a role that may not open the conversation: there is nothing for it to do but be refused", () => {
+  for (const roles of [["viewer"], ["medical_reviewer"]]) {
+    const project = geoProject({}, { access: { roles, abilities: roles[0] === "viewer" ? ["read"] : ["read", "review"], owner: false } });
+    const view = render(<MemoryRouter><GeoFrameHarness project={project}><AskAi project={{ projectId: "prj_geo_1", sessionId: "ses_geo_1" }} draft="这个数说明了什么？" /></GeoFrameHarness></MemoryRouter>);
+    expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
+    view.unmount();
+  }
+  render(<MemoryRouter><GeoFrameHarness project={geoProject()}><AskAi project={{ projectId: "prj_geo_1", sessionId: "ses_geo_1" }} draft="这个数说明了什么？" /></GeoFrameHarness></MemoryRouter>);
+  expect(screen.getByRole("button", { name: "问 AI" })).toBeInTheDocument();
 });

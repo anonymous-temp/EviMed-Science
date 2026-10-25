@@ -53,6 +53,15 @@ export type GeoPanel = "members" | "producer" | "rename" | "budget" | "settings"
 
 export const GeoFrameContext = createContext<GeoFrameApi | null>(null);
 
+/**
+ * Whether the account may open the project's conversation, or hand it a draft: the module's descriptor takes run and edit, so a role
+ * without them (只读, 医学审核) would only be refused. Such a role is offered the conversation kept, read-only, where there is one.
+ */
+export function geoMayConverse(project: Pick<GeoProject, "access"> | null | undefined): boolean {
+  const abilities = project?.access?.abilities;
+  return !abilities || abilities.includes("run") && abilities.includes("edit");
+}
+
 /** The layout this component is in, or null outside one. */
 export function useGeoFrame(): GeoFrameApi | null {
   return useContext(GeoFrameContext);
