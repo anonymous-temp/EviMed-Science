@@ -117,10 +117,10 @@ per-project workspace + JSONL provenance.
   (a DSH row or plugin, an official skill, a mature library, OpenViking's native engine); a mismatch with a
   boundary we drew is an adapter, a shim or a template with a stated date of deletion, not a rebuild.
 - **OpenViking is an engine, not only an index** (v0.5.1.1, `packages/contracts/openviking/README.md` is the
-  division of labour; the identity shim of v0.5.0 is deleted, and a write-back to a knowledge page is a checked write). An account's memory is on one of two engines: `legacy` (PostgreSQL records, OpenViking
-  only their derived recall index) or `native` (the engine extracts, merges and recalls; the runtime's official
+  division of labour; the identity shim of v0.5.0 is deleted, and a write-back to a knowledge page is a checked write). Every account's memory is the engine's own: it extracts, merges and recalls; the runtime's official
   plugin reaches it through a loopback bridge and the control plane's memory gateway; PostgreSQL keeps a thin
-  overlay). The knowledge base pushes every readable document to the engine as a Resource, and the official
+  overlay. Without OpenViking memory is off as a status, never a fallback (the control plane's own records engine was
+  deleted on 2026-10-25). The knowledge base pushes every readable document to the engine as a Resource, and the official
   `llm-wiki` and `knowledge-graph` skills compile the wiki and the graph, mirrored back into the product
   ledger; quotation checks on them are ✓ / ⚠ labels, not a condition. The engine's model calls go through our
   model gateway; the runtime holds no key; the volume is backed up.
@@ -128,8 +128,7 @@ per-project workspace + JSONL provenance.
   work — and never what a document, a tool, a web page, the platform or the assistant said. The two shared blocks of
   `packages/domain/src/memoryNeverKept.mjs` (what is never kept, how to decide) are the one place the policy is written; a
   change to them is replayed on `evals/memory-write-quality` (every case, a failing one three times) and the never side
-  only gets better. A native memory has no expiry date and nothing promises one. The legacy engine is on a deletion plan
-  (root `AGENTS.md`, owner decisions 2026-10-23).
+  only gets better. A native memory has no expiry date and nothing promises one.
 - **A person has one capsule**; a project is a label on its entries, a received pack is enabled for the whole account, and a
   native account reaches its capsule through the memory gateway's `search` and a profile block, never a second recall
   tool. A capsule is context, never permission (below).
