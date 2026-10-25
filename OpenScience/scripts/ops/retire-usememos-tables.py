@@ -67,7 +67,7 @@ from pathlib import Path
 DEFAULT_ROOT = Path("/srv/evimed-science/shared")
 # What usememos creates in its database (its PostgreSQL migrations, v0.18 on:
 # `resource` became `attachment`), and the two tables the EviMed import read
-# beside them (`memory_record`, `memo_share`, scripts/ops/migrate-research-memory.mjs).
+# beside them (`memory_record`, `memo_share`, the one-off import deleted on 2026-10-25).
 RETIRED_USEMEMOS_TABLES = frozenset({
     "activity", "attachment", "idp", "inbox", "memo", "memo_organizer", "memo_relation", "memo_share",
     "memory_record", "migration_history", "reaction", "resource", "shortcut", "storage", "system_setting",

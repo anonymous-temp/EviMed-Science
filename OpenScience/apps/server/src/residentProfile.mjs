@@ -48,7 +48,7 @@ import { memoryPausedFor } from "./memorySettings.mjs";
 /** The most characters of the project's card a conversation is handed. */
 export const PROJECT_CARD_MAX_CHARS = 1_500;
 
-/** The project the catch-all is: it has no single subject, so it has no card (`memoryIntelligence.mjs` keeps no project fact in it). */
+/** The project the catch-all is: it has no single subject, so it has no card (no project card is ever written for it). */
 const CATCH_ALL_PROJECT_ID = "default";
 
 /**

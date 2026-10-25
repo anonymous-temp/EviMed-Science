@@ -12,7 +12,7 @@
  * - **Found by recorded links, never by what a thing says.** A result rests on a source when one of its recorded inputs
  *   names it (by identifier, or by the digest of the exact bytes when the source is a knowledge-base document); a
  *   calculation among the value bindings of a report is the same, one step along `bindingSources`; a memory rests on it
- *   by its `record_sources` link, a learned method through the immutable result versions its record names. A title, a
+ *   by the source link its file records, a learned method through the immutable result versions its record names. A title, a
  *   topic or a similar-looking sentence is not a link.
  * - **A notice is not a verdict.** A correction says the source changed; whether the conclusion that cites it still
  *   stands is for the researcher or a recheck to say. Every sentence built from this record states the change and what

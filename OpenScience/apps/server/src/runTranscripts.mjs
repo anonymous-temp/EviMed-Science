@@ -5,7 +5,7 @@
  * Hidden knowledge: this is the smallest possible change and it is the one the
  * whole learning loop stands on. `onRunFinished` has always read the kernel
  * transcript while the container is still alive — it hands it to
- * `memoryIntelligence.recordRun` — and has always thrown it away afterwards.
+ * the memory side's consumers — and has always thrown it away afterwards.
  * The container exits, `sessionTranscript` starts answering
  * `runtime_not_running`, and the only durable trace of the run is the ledger's
  * counters. Nothing can be distilled from a counter.
