@@ -1,0 +1,128 @@
+{
+ "case": "enrich/paper-feeds-c3",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-25T13:17:10+00:00",
+ "feeds": {
+  "gastro-inpress": {
+   "url": "https://www.gastrojournal.org/inpress.rss",
+   "items": 125,
+   "notes": [],
+   "dois": [
+    "10.1053/j.gastro.2012.08.012",
+    "10.1053/j.gastro.2012.09.010",
+    "10.1053/j.gastro.2012.10.020",
+    "10.1053/j.gastro.2012.11.010",
+    "10.1053/j.gastro.2014.11.011"
+   ]
+  },
+  "mayo-inpress": {
+   "url": "https://www.mayoclinicproceedings.org/inpress.rss",
+   "items": 79,
+   "notes": [],
+   "dois": [
+    "10.1016/j.mayocp.2025.09.024",
+    "10.1016/j.mayocp.2025.10.022",
+    "10.1016/j.mayocp.2025.11.017",
+    "10.1016/j.mayocp.2025.12.018",
+    "10.1016/j.mayocp.2025.12.023"
+   ]
+  },
+  "gut-ahead": {
+   "url": "https://gut.bmj.com/rss/ahead.xml",
+   "items": 277,
+   "notes": [],
+   "dois": []
+  },
+  "jno-new": {
+   "url": "https://jamanetwork.com/rss/site_214/187.xml",
+   "items": 178,
+   "notes": [],
+   "dois": [
+    "10.1001/jamanetworkopen.2026.31265",
+    "10.1001/jamanetworkopen.2026.32899",
+    "10.1001/jamanetworkopen.2026.32903",
+    "10.1001/jamanetworkopen.2026.32907",
+    "10.1001/jamanetworkopen.2026.32973"
+   ]
+  }
+ },
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.gastrojournal.org/inpress.rss",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.gastrojournal.org/inpress.rss",
+   "headers": {
+    "content-type": "application/rss+xml;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:16:52+00:00",
+   "file": "01.xml.gz",
+   "gzip": true,
+   "bytes": 181178,
+   "sha256": "15acb4cf60d6a2d54374ab4822d24378d8064654dac7d0d57713edf0356699e5"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.mayoclinicproceedings.org/inpress.rss",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.mayoclinicproceedings.org/inpress.rss",
+   "headers": {
+    "content-type": "application/rss+xml;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:16:55+00:00",
+   "file": "02.xml.gz",
+   "gzip": true,
+   "bytes": 116837,
+   "sha256": "120b18f0f3439f1367dda50318ed05b34c48796e65a0cb840ded927ef01fc779"
+  },
+  {
+   "method": "GET",
+   "url": "https://gut.bmj.com/rss/ahead.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://gut.bmj.com/rss/ahead.xml",
+   "headers": {
+    "content-type": "application/xml",
+    "etag": "\"ce3557eb-b9c74-65e84aade5db4\"",
+    "last-modified": "Fri, 23 Oct 2026 16:42:35 GMT"
+   },
+   "fetched_at": "2026-10-25T13:16:58+00:00",
+   "file": "03.xml.gz",
+   "gzip": true,
+   "bytes": 760948,
+   "sha256": "2f41a1f330b243e308b74810fb52a428962e876696c0acba854acd3baecbfaec"
+  },
+  {
+   "method": "GET",
+   "url": "https://jamanetwork.com/rss/site_214/187.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://jamanetwork.com/rss/site_214/187.xml",
+   "headers": {
+    "content-type": "text/xml",
+    "last-modified": "Sat, 24 Oct 2026 15:44:11 GMT",
+    "etag": "\"80976783ce63dd1:0\""
+   },
+   "fetched_at": "2026-10-25T13:17:01+00:00",
+   "file": "04.xml.gz",
+   "gzip": true,
+   "bytes": 144261,
+   "sha256": "a0236e37aeee33bb1ac01329acdbab8eec98c5f085ca91ab5a4fe18842f2fd27"
+  }
+ ]
+}

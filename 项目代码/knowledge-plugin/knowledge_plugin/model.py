@@ -289,6 +289,9 @@ class RequestSpec:
     api: bool = False
     # Discovery may follow only the publisher origin already admitted; ordinary readers retain their existing redirect policy.
     same_origin_redirects: bool = False
+    # c3-primary 2026-10-25: "high" is a request for an entry the platform waits on most (a top journal's research paper): it may
+    # spend the share of a host's daily cap that ``HostRule.reserved`` keeps back from every other request.
+    priority: str = "normal"
 
 
 @dataclass(frozen=True)
