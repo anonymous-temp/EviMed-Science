@@ -7177,11 +7177,25 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (originReferenceRoute && req.method === "PUT") {
         const ctx = await context(req, res);
         const body = await readJson(req, 4096);
-        if (body?.kind !== "frontier-event" || !/^[a-z0-9]{12,32}$/.test(body?.id ?? "") || !frontier?.service || !frontier.service.allows(ctx.user)) throw new HttpError(400, "invalid_request", "Invalid conversation reference.");
-        const found = await frontier.service.event(ctx.user, body.id);
-        if (!found.event) throw new HttpError(404, "frontier_event_not_found", "No such event.");
-        sendJson(res, 200, { data: await researchSessions.setOriginReference(ctx.project, decodeRouteComponent(originReferenceRoute[1], "session id"),
-          { kind: "frontier-event", id: found.event.id, title: found.event.title }) });
+        if (!["frontier-event", "frontier-item"].includes(body?.kind) || !/^[a-z0-9]{12,32}$/.test(body?.id ?? "") || !frontier?.service || !frontier.service.allows(ctx.user)) throw new HttpError(400, "invalid_request", "Invalid conversation reference.");
+        // The title is the server's, read through the frontier service as the person's own page reads it: an item or an event they
+        // cannot open is not an origin (c3-ask: an item opens a conversation as an event does).
+        let reference;
+        if (body.kind === "frontier-item") {
+          let found;
+          try { found = await frontier.service.getItem(ctx.user, body.id); } catch (error) {
+            if (error?.code === "frontier_item_not_found") throw new HttpError(404, "frontier_item_not_found", "No such item.");
+            throw error;
+          }
+          const item = found?.body?.item;
+          if (!item?.title) throw new HttpError(404, "frontier_item_not_found", "No such item.");
+          reference = { kind: "frontier-item", id: item.id, title: String(item.title).slice(0, 300) };
+        } else {
+          const found = await frontier.service.event(ctx.user, body.id);
+          if (!found.event) throw new HttpError(404, "frontier_event_not_found", "No such event.");
+          reference = { kind: "frontier-event", id: found.event.id, title: found.event.title };
+        }
+        sendJson(res, 200, { data: await researchSessions.setOriginReference(ctx.project, decodeRouteComponent(originReferenceRoute[1], "session id"), reference) });
         return;
       }
       const sourceScopeRoute = /^\/api\/research-sessions\/([^/]+)\/source-scope$/.exec(pathname);

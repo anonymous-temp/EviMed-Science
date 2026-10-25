@@ -787,6 +787,12 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.congress_recaps (
   PRIMARY KEY (congress_id, day)
 );
 
+-- c3-ask 2026-10-25: the text (its settled hash) and the instructions the questions were written from, and when, so a changed text
+-- or a changed prompt writes them again and an item with no good question is not asked about twice.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_basis text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_version text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_at timestamptz(3);
+
 ${FRONTIER_INTERACTIONS_SQL}
 `;
 }
