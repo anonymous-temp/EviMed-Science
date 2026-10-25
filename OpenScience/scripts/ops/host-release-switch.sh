@@ -463,7 +463,9 @@ echo "=== switched to ${EXPECTED_RELEASE_ID} ==="
 # `shared/ui-walk.env` holds the address and the switches and no account or
 # password. The walk aborts every `start_runtime` (the chat page's own is let
 # through when it is asked for), and writes its report and screenshots to
-# `shared/ui-walk/<release>/`. After retention on purpose: the walk judges the
+# `shared/ui-walk/<release>/`. The container is on docker's default bridge network, never the host's: on the host network
+# Chromium sees ERR_NETWORK_CHANGED the moment the walk account's first runtime container adds its interface, aborts the frame load
+# and the chat page times out; the public origin the walk reads is reachable from the bridge (rehearsed 2026-10-25). After retention on purpose: the walk judges the
 # pages, not whether the switch may finish, and its failure leaves the release
 # in front — it says so, and exits non-zero. It is always the whole walk:
 # `OPEN_SCIENCE_WALK_ONLY` (a partial walk, for the one who changed a page) is
@@ -481,7 +483,7 @@ walk_image=$(docker exec "$WEB_CONTAINER" printenv OPEN_SCIENCE_RUNTIME_CONTAINE
 walk_out="${ROOT}/shared/ui-walk/${NEW}"
 mkdir -p "$walk_out"
 set +e
-docker run --rm --network host --env-file "$WALK_ENV" \
+docker run --rm --env-file "$WALK_ENV" \
   -e OPEN_SCIENCE_WALK_OUT=/walk-out -e OPEN_SCIENCE_WALK_USER= -e OPEN_SCIENCE_WALK_PASSWORD_FILE= \
   -e OPEN_SCIENCE_WALK_CHROMIUM=/usr/bin/chromium -e OPEN_SCIENCE_WALK_ONLY= \
   -v "${walk_out}:/walk-out" \

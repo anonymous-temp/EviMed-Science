@@ -56,11 +56,13 @@ export function VcrPrecedentsPanel() {
       summary: !asked && state.kind === "ready" ? `已保存 ${state.data.precedents.length} 项` : undefined,
     });
   if (off) return <EmptyState icon={Library} title={VCR_OFF_SENTENCE} />;
+  const searchExample = () => { setQuery("diabetes"); setAsked("diabetes"); };
 
   return (
     <div className="flex flex-col gap-4">
       {asked && <VcrReferenceSearch key={asked} query={asked} onApplied={reload} />}
-      {!asked && <Button variant="text" onClick={() => { setQuery("diabetes"); setAsked("diabetes"); }}>检索示例：diabetes</Button>}
+      {/* With nothing saved the example search is the empty state's own action, not a line above it. */}
+      {!asked && !(state.kind === "ready" && state.data.available && state.data.precedents.length === 0) && <Button variant="text" onClick={searchExample}>检索示例：diabetes</Button>}
       {!asked && (state.kind === "loading" ? <VcrTabSkeleton />
         : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} />
           : !state.data.available ? <div data-vcr-precedents-unavailable=""><EmptyState icon={Library} title={state.data.message ?? "参考试验库在本部署尚未接入。"} /></div>
@@ -69,7 +71,7 @@ export function VcrPrecedentsPanel() {
               <EmptyState
                 icon={Library}
                 title={asked ? "没有找到已保存的参考试验" : "尚未保存参考试验"}
-                action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : undefined}
+                action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : <Button variant="secondary" onClick={searchExample}>检索示例：diabetes</Button>}
               />
             )
             : <VcrPrecedentTable rows={state.data.precedents} />)}
