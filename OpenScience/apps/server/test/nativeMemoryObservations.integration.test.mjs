@@ -94,7 +94,7 @@ test("two different conversations make a preference of a choice; one alone never
   assert.equal(promotions.length, 1, "one session of its own");
   const sent = f.stub.requests.find((request) => request.method === "POST" && /\/messages$/.test(request.path) && request.path.includes("evimed-promote-"));
   const words = sent.body.parts[0].text;
-  assert.match(words, /^请记住（这是我在两次不同的对话里都做出的选择，以后默认这样做）：/);
+  assert.match(words, /^请记住我做事的一个偏好（我在两次不同的对话里都这样选，以后默认这样做）：/);
   assert.match(words, /预算类表格：带透视表/, "the note's own words");
   assert.equal(f.stub.files.has(`${f.root}/${OBSERVATION}`), false, "the note is spent");
   assert.equal(nativeMemoryCounters().observationOutcomes.promoted, 1);

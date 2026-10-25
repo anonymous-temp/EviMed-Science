@@ -73,8 +73,10 @@ export function versionOfHash(hash) {
   return Number.parseInt(String(hash).slice(0, 12), 16) + 1;
 }
 
-/** What the control plane says to the engine for a choice two conversations made: the person's explicit request to keep it (`keepRepeatedChoice`; the write-quality replay says it the same way). @param {string} choice */
-export const repeatedChoiceMessage = (choice) => `请记住（这是我在两次不同的对话里都做出的选择，以后默认这样做）：${choice}`;
+/** What the control plane says to the engine for a choice two conversations made: the person's explicit request to keep it as a preference about how
+ * work is done (`keepRepeatedChoice`; the write-quality replay says it the same way). Named a preference because, said only as a choice to keep, the
+ * engine wrote it into the profile in two of three lab samples (c22, 2026-10-25). @param {string} choice */
+export const repeatedChoiceMessage = (choice) => `请记住我做事的一个偏好（我在两次不同的对话里都这样选，以后默认这样做）：${choice}`;
 
 /** The id that ties together the revisions of one forget (`actOf` reads it back from a reason). */
 const newAct = () => randomUUID().replace(/-/g, "").slice(0, 12);

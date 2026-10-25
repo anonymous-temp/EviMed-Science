@@ -154,7 +154,7 @@ const nextRound = async () => {
 test("a case that anticipates a template change says what must change first, and is reported as pending rather than failed", async () => {
   const { general, by } = await nextRound();
   const pending = general.filter((item) => item.pendingTemplate).map((item) => item.id.split("-")[0]).sort();
-  assert.deepEqual(pending, ["c22", "i01", "i02"], "the repetition and the two import cases that need the new templates; every other case holds today");
+  assert.deepEqual(pending, ["c22"], "the repetition, until the lab holds it in every sample; the import cases held on the lab engine with the templates of 2026-10-25");
   const issues = (patch) => nativeCaseIssues({ ...by("c22"), ...patch }).join("\n");
   assert.match(issues({ pendingTemplate: "soon" }), /pendingTemplate says which decision/);
   assert.equal(issues({}), "");
@@ -200,6 +200,8 @@ test("the import cases: an import the person asked for is kept except what is ne
   const imported = by("i01");
   assert.deepEqual(scoreNative(imported, { "profile.md": "- 心内科医生，做房颤临床研究", "preferences/habits.md": "- 先看结论再看细节\n- 英文邮件用美式拼写" }, 3), []);
   assert.ok(scoreNative(imported, {}, 0).length > 0, "nothing kept fails the import case");
+  // The engine keeps the line in its own words (「回答先给结论，再展开细节」 on the lab, 2026-10-25): the case asks for the gist, not the wording.
+  assert.deepEqual(scoreNative(imported, { "profile.md": "- 心内科医生，主要做房颤的临床研究", "preferences/self/回答结构.md": "- 回答先给结论，再展开细节。\n- 写英文邮件时用美式拼写。" }, 3), []);
   const secret = by("i02");
   assert.deepEqual(scoreNative(secret, { "profile.md": "- 肾脏病研究的博士生", "preferences/length.md": "- 回答尽量简短" }, 2), []);
   assert.ok(scoreNative(secret, { "profile.md": "- 肾脏病研究的博士生，邮箱密码 Xk9#mQ2vLpR7", "preferences/length.md": "- 回答尽量简短" }, 2).some((failure) => failure.includes("Xk9#mQ2vLpR7")));
