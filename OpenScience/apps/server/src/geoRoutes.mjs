@@ -329,6 +329,12 @@ export function createGeoRoutes(dependencies) {
       if (method === "PUT" && action === "source-scope") {
         return reply(await dependencies.projects.conversationRead(user, id, parts[3], action, await bodyOf(req, maxJsonBytes, ["sourceIds"])));
       }
+      // 「停止」 on the run strip of the module's conversation: one run of this conversation, stopped as its own cancel stops it.
+      if (method === "POST" && action === "stop") {
+        const stopped = await dependencies.projects.conversationRead(user, id, parts[3], action, await bodyOf(req, maxJsonBytes, ["runId"]));
+        await audit("geo.conversation.stop", "completed", { userId: user.id, code: id, detail: String(stopped?.run?.id ?? "") });
+        return reply(stopped);
+      }
       throw new HttpError(404, "not_found", "GEO conversation route not found.");
     }
     if (parts.length === 2) {

@@ -1,4 +1,4 @@
-import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, type GeoConversationScope } from "@/lib/geoNativeClient";
+import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, stopGeoConversationRun, type GeoConversationScope } from "@/lib/geoNativeClient";
 import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
 import { putConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -218,6 +218,10 @@ function refusedStart(error: unknown): FrameFailure | null {
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
 
+/** What a member of a module project is told when the frame asks for the owner's file or source, or to keep a file. */
+const MEMBER_OPEN_TEXT = "这份内容在项目所有者的资料里，请在对话右侧查看。";
+const MEMBER_SAVE_TEXT = "只有项目所有者可以把这份文件存入知识库。";
+
 /**
  * A delivered file's path as the frame names it, or null. The frame is
  * third-party-composed code on another origin: the path becomes part of a
@@ -326,10 +330,15 @@ function SimulatedRechargeButton() {
  * `active` is the conversation surface being on screen in this project:
  * inactive frames keep their document and their lease and send nothing.
  */
-export function RuntimeUiFrame({ projectId, origin, scope, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease }: {
+export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease }: {
   projectId: string;
   origin: string;
   scope?: GeoConversationScope;
+  /**
+   * In a module conversation (`scope`), whether the person owns the module project. The owner's files, sources and knowledge base are
+   * read through their own projects as anywhere else; a member reaches only what the module's routes serve, so the rest is not run.
+   */
+  scopeOwner?: boolean;
   /** The conversation this surface should be showing: the chat address's, or the one a task's page asks for. */
   sessionId?: string | null;
   active?: boolean;
@@ -735,11 +744,19 @@ export function RuntimeUiFrame({ projectId, origin, scope, sessionId = null, act
       if (scope && message?.type === "evimed.runtime-ui.task" && message.rootSessionId !== scope.sessionId) return;
       if (!message || message.version !== 1 || message.frameId !== binding.frameId || message.projectId !== projectId
         || !Number.isSafeInteger(message.seq) || message.seq <= incoming.current) return;
-      if (scope && ["evimed.runtime-ui.open-artifact", "evimed.runtime-ui.save-to-knowledge-base", "evimed.runtime-ui.stop-run", "evimed.runtime-ui.source-citations", "evimed.runtime-ui.open-source", "evimed.runtime-ui.bind-capability", "evimed.runtime-ui.vcr-options"].includes(message.type)) {
+      // A module conversation keeps its own research tool and its own study: the frame cannot rebind either.
+      if (scope && ["evimed.runtime-ui.bind-capability", "evimed.runtime-ui.vcr-options"].includes(message.type)) {
         incoming.current = message.seq;
-        if (message.type === "evimed.runtime-ui.open-artifact") navigate(`/app/geo/${encodeURIComponent(scope.geoProjectId)}/articles`);
-        else if (message.type === "evimed.runtime-ui.source-citations") postToFrame("source-citations-result", {requestId:message.requestId,ok:false,items:[]});
-        else toast.error("请使用对话中的工具，或从项目页面打开这项内容。");
+        toast.error("请使用对话中的工具，或从项目页面打开这项内容。");
+        return;
+      }
+      // A member acts in the owner's runtime through the module's routes, which serve no run file, saved source or knowledge-base
+      // copy of the owner's: those run for the owner below, as in any conversation. For a member the references the frame asks
+      // about are answered as unread, which the frame draws as nothing, and a file or source asked to open is said plainly.
+      if (scope && !scopeOwner && ["evimed.runtime-ui.open-artifact", "evimed.runtime-ui.save-to-knowledge-base", "evimed.runtime-ui.source-citations", "evimed.runtime-ui.open-source"].includes(message.type)) {
+        incoming.current = message.seq;
+        if (message.type === "evimed.runtime-ui.source-citations") postToFrame("source-citations-result", { requestId: message.requestId, ok: false, items: [] });
+        else toast.error(message.type === "evimed.runtime-ui.save-to-knowledge-base" ? MEMBER_SAVE_TEXT : MEMBER_OPEN_TEXT);
         return;
       }
       if (message.type === "evimed.runtime-ui.booted") {
@@ -835,7 +852,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, sessionId = null, act
         const path = artifactPath(message.path);
         if (!runId || !path) return;
         incoming.current = message.seq;
-        void saveToKnowledgeBase(path).then(
+        // A module conversation's files are its project's: the owner's copy goes into that project's knowledge base.
+        void (scope ? saveToKnowledgeBase(path, { projectId }) : saveToKnowledgeBase(path)).then(
           (saved) => toast.success(saved.duplicate ? "这份文件已经在知识库里" : "已存入知识库，正在读取"),
           (failure) => toast.error(`没能存入知识库：${webErrorMessage(failure)}`),
         );
@@ -857,7 +875,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, sessionId = null, act
         void readCurrentRuns().then(async runs => {
           const run = runs.find(item => item.id === message.runId && item.sessionId === (sessionId ?? frameTask));
           if (!run?.availableActions?.some(action => action.kind === "stop" && action.targetId === run.id)) return;
-          await cancelWebAgentRun(run.id);
+          // A module conversation's run is stopped under the module's authority: it is in the owner's project, not the person's.
+          await (scope ? stopGeoConversationRun(scope, run.id) : cancelWebAgentRun(run.id));
         }).catch(failure => toast.error(webErrorMessage(failure)));
       } else if (message.type === "evimed.runtime-ui.source-citations"
         && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)
@@ -988,7 +1007,7 @@ export function RuntimeUiFrame({ projectId, origin, scope, sessionId = null, act
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, sessionId, frameTask, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress, scope, readCurrentRuns]);
+  }, [binding, origin, projectId, sessionId, frameTask, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress, scope, scopeOwner, readCurrentRuns]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;

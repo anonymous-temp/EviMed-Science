@@ -492,7 +492,7 @@ function GeoBand({
         更新暂时失败，仍显示上次结果。{api.refreshError || dataRefreshError}
       </Note>}
       {onChat ? (
-        conversationError ? <LoadError message={conversationError} onRetry={reload} /> : addressedSession ? <GeoConversationPane canRun={can("run") && can("edit")} geoId={geoId} projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
+        conversationError ? <LoadError message={conversationError} onRetry={reload} /> : addressedSession ? <GeoConversationPane canRun={can("run") && can("edit")} owner={project.access?.owner ?? true} geoId={geoId} projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
       ) : snapshotId ? (
         // One answer, read inside the band: the route's own element, which may still be on its way.
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>

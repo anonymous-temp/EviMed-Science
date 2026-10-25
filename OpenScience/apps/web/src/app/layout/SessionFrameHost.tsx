@@ -304,6 +304,7 @@ export function SessionFrameHost() {
             <RuntimeUiFrame
               projectId={scopedPanes.current.get(projectId)?.projectId ?? projectId}
               scope={scopedPanes.current.get(projectId)?.scope}
+              scopeOwner={scopedPanes.current.get(projectId)?.owner === true}
               origin={uiOrigin}
               sessionId={sessionId}
               active={onSurface && here}
