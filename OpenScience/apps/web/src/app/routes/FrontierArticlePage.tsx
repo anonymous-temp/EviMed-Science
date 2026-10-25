@@ -5,7 +5,6 @@ import { useWide } from "@/lib/useMediaQuery";
 import { PageShell } from "@/components/layout/PageShell";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
-import { Note } from "@/components/ui/Note";
 import { FrontierBack, evidenceFromState } from "@/components/frontier/FrontierBack";
 import { useItemActions } from "@/components/frontier/FrontierCard";
 import {
@@ -23,15 +22,15 @@ import {
   ReaderQuote,
   ReaderSameEvent,
   ReaderSource,
+  ReaderSourceAction,
   ReaderText,
-  frontierFallbackReason,
   readerBodyPresentation,
   readerOutline,
   useReaderLanguage,
 } from "@/components/frontier/FrontierReader";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
-import { EXTERNAL, isSocialItem } from "@/components/frontier/frontierText";
+import { isSocialItem } from "@/components/frontier/frontierText";
 import { toast } from "@/lib/toast";
 import { frontierArrival, useFrontierReadTracking } from "@/lib/frontierTracking";
 
@@ -105,7 +104,6 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
     } catch (error) { toast.error(frontierErrorMessage(error)); }
   };
   const { more, reports, research } = useItemActions(item, { reader: true, onHide: () => void update("hide") });
-  const fallback = frontierFallbackReason(item);
   // An original title beside a translated one, for an article; a post's 「title」 is its own first words.
   const originalTitle = !isSocialItem(item) && item.titleZh && item.titleRaw !== item.titleZh ? item.titleRaw : null;
   // A text of three sections or more has its contents: in the right column, or folded above the text on a narrow screen.
@@ -132,7 +130,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
     >
       <article aria-label="正文" data-frontier-reader={item.id} data-genre={item.genre} className={wide ? "min-w-0" : "min-w-0 pb-20"}>
         {originalTitle && <p lang={item.lang !== "und" ? item.lang : undefined} className="max-w-measure-body text-ui text-text-3">{originalTitle}</p>}
-        {fallback && <Note className="mt-4" action={<a href={item.url} {...EXTERNAL} className="text-link hover:underline">阅读来源</a>}>{fallback}</Note>}
+        <ReaderSourceAction item={item} className="mt-4" />
         <ReaderSameEvent item={item} className="mt-4" />
         {item.lead && <ReaderLead text={item.lead} className="mt-6" />}
         {item.brief && <ReaderBrief brief={item.brief} item={item} className="mt-8" />}
