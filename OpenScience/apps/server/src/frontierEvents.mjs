@@ -111,7 +111,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { FRONTIER_SOURCE_STREAM_COLUMNS, frontierSourceStreamColumns } from "./frontierSourceColumns.mjs";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import {
   DISPLAY_TIME_ZONE,
   FRONTIER_HEAT_BILINGUAL_FACTOR,

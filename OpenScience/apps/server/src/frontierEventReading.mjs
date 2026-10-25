@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { FRONTIER_SOURCE_STREAM_COLUMNS, frontierSourceStreamColumns } from "./frontierSourceColumns.mjs";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import { frontierSourceDisplayName } from '@evimed/domain';
 
 // Reader state is still exportable when the feed is disabled. Both migration
