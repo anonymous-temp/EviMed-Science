@@ -22,7 +22,7 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { useGeoLoad } from "./geoProjectData";
 import { useGeoFrame } from "./geoFrame";
-import { answerPath } from "./tabs/geoTabText";
+import { answerPath, severityWord, surfaceText, SNAPSHOT_STATUS_WORDS } from "./tabs/geoTabText";
 import { useGeoPath } from "./useGeoPath";
 import { engineName, claimConditionsText, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS } from "./geoText";
 const units: Record<string, string> = {
@@ -30,7 +30,7 @@ const units: Record<string, string> = {
   article_formats: "内容与文件格式配对", orders: "投放订单", order_events: "订单事件",
   error_records: "错误记录",
   statement_assessments: "陈述判定", finding_observations: "发现表达",
-  claims: "主张", findings: "发现", articles: "内容", result_versions: "内容版本", publications: "发布记录", distinct_answered_questions: "已回答问题",
+  claims: "结论", findings: "发现", articles: "内容", result_versions: "内容版本", publications: "发布记录", distinct_answered_questions: "已回答问题",
   answers: "回答",
   asks: "采集任务",
   questions: "问题",
@@ -42,6 +42,15 @@ const units: Record<string, string> = {
   rounds: "轮次",
   observations: "观察",
 };
+/** What a sampled answer or a collection task is called by its state; a state nobody named is not printed. */
+const MEMBER_STATUS_WORDS: Record<string, string> = {
+  ...SNAPSHOT_STATUS_WORDS,
+  queued: "等待采集",
+  leased: "正在采集",
+  done: "采集完成",
+  skipped: "已跳过",
+};
+
 export function GeoAnalysisMembersDrawer({
   geoId,
   project,
@@ -156,9 +165,9 @@ function Member({
   const evidenceQuery=new URLSearchParams(location.search);evidenceQuery.delete("view");
   if(selectionRef)evidenceQuery.set("selectionRef",selectionRef);
   const evidenceReason = ({ source_update_needed: "来源已有变更，需更新依据", exact_card_revision_unavailable: "历史证据卡版本不可用",
-    exact_claim_quote_unavailable: "缺少精确主张与引文关联", exact_source_identity_unavailable: "原始来源关联不明", source_unavailable: "来源原文不可用",
-    quote_not_found: "引文未在所存原文中找到", no_quote: "未保留引文", author_excerpt_only: "仅有作者提供的摘录", claim_inactive: "主张当前不活跃",
-    claim_expired: "主张适用期已过", claim_expiry_unknown: "主张适用期尚无法核实", card_withdrawn: "证据卡已撤回", preserved_claim_unavailable: "当时的主张依据未保留" } as Record<string,string>)[item.reason ?? ""];
+    exact_claim_quote_unavailable: "缺少精确结论与引文关联", exact_source_identity_unavailable: "原始来源关联不明", source_unavailable: "来源原文不可用",
+    quote_not_found: "引文未在所存原文中找到", no_quote: "未保留引文", author_excerpt_only: "仅有作者提供的摘录", claim_inactive: "结论当前不活跃",
+    claim_expired: "结论适用期已过", claim_expiry_unknown: "结论适用期尚无法核实", card_withdrawn: "证据卡已撤回", preserved_claim_unavailable: "当时的结论依据未保留" } as Record<string,string>)[item.reason ?? ""];
   const changeWord = (kind: string) => ({ retraction: "撤稿", retracted: "撤稿", correction: "更正", corrected: "更正", concern: "关注声明", expression_of_concern: "关注声明", withdrawal: "撤回", update: "更新" } as Record<string,string>)[kind] ?? "来源变更";
   if(["business_events","history_answer_refs","history_target_refs"].includes(item.unit))return <GeoHistoryMember geoId={geoId} item={item} selectionRef={selectionRef} openPublication={openPublication}/>;
   if(["ledger_entries","ledger_balance_readings","target_rows","frozen_metric_readings"].includes(item.unit))return <GeoFinanceMember geoId={geoId} item={item} selectionRef={selectionRef}/>;
@@ -177,7 +186,7 @@ function Member({
         ...(item.stateLabel?[{label:"当前记录状态",value:item.stateLabel}]:[]),...(item.unit==="order_events"?[{label:"事件",value:item.eventLabel??`${item.fromStateLabel??"未知"} → ${item.toStateLabel??"未知"}`}]:[]),
         ...(item.association?.channel?[{label:"版本中的预期渠道",value:(GEO_ARTICLE_CHANNEL_LABELS_ZH as Record<string,string>)[item.association.channel]??"未分类"}]:[]),...(item.platform||item.domain?[{label:"实际登记平台或域名",value:item.platform?((GEO_OWNED_LINK_PLATFORM_LABELS_ZH as Record<string,string>)[item.platform]??item.platform):item.domain!}]:[]),
         ...(item.at!==undefined?[{label:item.timeBasis==="user_reported_published_at"?"用户登记的发布时间":item.timeBasis==="order_created_at"?"订单创建时间":"记录时间",value:item.at??"未知"}]:[]),
-        ...(item.publicationBasis==="user_reported"?[{label:"发布依据",value:"用户登记；未由本分析核验外部页面"}]:[])
+        ...(item.publicationBasis==="user_reported"?[{label:"发布依据",value:"用户登记；未核对外部页面"}]:[])
       ]}/>
       {item.resultVersionCount!=null&&item.resultVersionCount>0&&item.rowResultVersionCount!=null&&onShowVersions&&<Button size="sm" variant="text" onClick={()=>onShowVersions(item.rowResultVersionCount!)}>查看本行内容版本明细</Button>}
       {item.resultVersionId&&item.digest&&openPublication&&<Button size="sm" variant="text" onClick={()=>void openPublication(item.resultVersionId!,item.digest!)}>打开当时内容版本</Button>}
@@ -192,22 +201,21 @@ function Member({
     return <article className="flex flex-col gap-2">
       <p className="text-ui">{item.errorStatement??"原始说法未保留"}</p>
       <FactList rows={[{label:"平台",value:engineName(item.engine??"")},{label:"错误类型",value:(GEO_ERROR_TYPE_WORDS as Record<string,string>)[item.errorType??""]??"未知"},
-        {label:"严重程度",value:item.severity??"未知"},{label:"判定状态",value:item.judgmentState==="active"?"有效判定":item.judgmentState==="withdrawn"?"判定已撤回":"未知"},
+        {label:"严重程度",value:severityWord(item.severity)??"未知"},{label:"判定状态",value:item.judgmentState==="active"?"有效判定":item.judgmentState==="withdrawn"?"判定已撤回":"未知"},
         {label:"当前处置状态",value:(GEO_ERROR_STATUS_WORDS as Record<string,string>)[item.status??""]??"未知"},
-        {label:"最初判定适用条件",value:claimConditionsText(item.applicability)},{label:"最初判定主张版本",value:item.claimVersion??"未知"},
+        {label:"最初判定适用条件",value:claimConditionsText(item.applicability)},{label:"最初判定结论版本",value:item.claimVersion??"未知"},
         {label:"所选关联回答时间",value:item.askedAt??"未知"},{label:"依据原文",value:item.evidenceQuote??"未保留"}]}/>
-      {!item.originalErrorAssessment&&<p className="text-caption text-text-2">最初判定的完整依据未保留，不能用当前主张替代。</p>}
-      {item.currentClaim&&<Disclosure summary="当前主张信息"><FactList rows={[{label:"当前主张版本",value:item.currentClaim.version??"未知"},{label:"当前适用条件",value:claimConditionsText(item.currentClaim.applicability)}]}/></Disclosure>}
+      {item.currentClaim&&<Disclosure summary="当前结论信息"><FactList rows={[{label:"当前结论版本",value:item.currentClaim.version??"未知"},{label:"当前适用条件",value:claimConditionsText(item.currentClaim.applicability)}]}/></Disclosure>}
       <Link className="text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/accuracy?${query}`)}>查看说法的处置与历史</Link>
       {item.snapshotId&&<Link className="text-accent" to={contextPath(`${answerPath(geoId,item.snapshotId)}${selectionRef?`?${geoSearchWithScope(location.search,{selectionRef})}`:location.search}`)}>查看所选关联回答</Link>}
     </article>;
   }
   if (["claims","findings","articles","result_versions","publications","statement_assessments","finding_observations"].includes(item.unit)) return <article className="flex flex-col gap-2">
-    <p className="text-ui">{item.claimStatement??item.finding?.statement??item.title??item.statement?.text??({claims:"关联主张",findings:"关联发现",articles:"关联内容",result_versions:"内容版本",publications:"发布记录",finding_observations:"原始发现定义未保留",statement_assessments:"主张依据未保留"} as Record<string,string>)[item.unit]}</p>
+    <p className="text-ui">{item.claimStatement??item.finding?.statement??item.title??item.statement?.text??({claims:"关联结论",findings:"关联发现",articles:"关联内容",result_versions:"内容版本",publications:"发布记录",finding_observations:"原始发现定义未保留",statement_assessments:"结论依据未保留"} as Record<string,string>)[item.unit]}</p>
     <FactList rows={[{label:item.unit==="finding_observations"?"记录口径":"依据状态",value:item.unit==="finding_observations"?"回答对指定发现的表达；不代表医学来源核实":item.verification==="verified_preserved_quote"?"原文已核实；来源变更另行保留":item.reason === "source_update_needed" ? "来源已有变更，原文核实记录保留" : item.pinState==="exact"?"已匹配当时内容版本":item.pinState==="unknown"?"当时内容版本未知":"已关联、尚未核实"},
       ...(evidenceReason?[{label:"核实说明",value:evidenceReason}]:[]),
       ...(item.preservedQuoteVerification?.status === "verified" ? [{label:"原文核实记录",value:"所存历史原文已核实"}]:[]),
-      ...(item.version != null || item.claimVersion != null ? [{label:"主张版本",value:item.version??item.claimVersion??"未知"}]:[]),...(item.quote?[{label:item.unit==="finding_observations"?"回答中的原文":"依据原文",value:item.quote}]:[]),...(item.sourceRef?[{label:"原始来源",value:item.sourceRef}]:[])]}/>
+      ...(item.version != null || item.claimVersion != null ? [{label:"结论版本",value:item.version??item.claimVersion??"未知"}]:[]),...(item.quote?[{label:item.unit==="finding_observations"?"回答中的原文":"依据原文",value:item.quote}]:[]),...(item.sourceRef?[{label:"原始来源",value:item.sourceRef}]:[])]}/>
     {item.unit === "statement_assessments" && <FactList rows={[{label:"回答陈述",value:item.statement?.text??"未保留"},
       {label:"所存判定",value:({correct:"正确",wrong:"错误",unverifiable:"无法核实"} as Record<string,string>)[item.statement?.verdict??""]??"未知"},
       {label:"适用条件",value:claimConditionsText(item.applicability??item.statement?.applicability)},
@@ -249,11 +257,10 @@ function Member({
       <p className="text-caption text-text-3">
         {[
           item.engine ? engineName(item.engine) : null,
-          item.roundId,
           item.repeatIndex != null ? `第 ${item.repeatIndex + 1} 次` : null,
           item.askedAt ?? item.answer?.asked_at ?? "采样时间未知",
-          item.status,
-          ({ sampling_plan_unknown:"缺少完整采集计划", sampling_plan_incomplete:"采集计划缺少重复任务", scheduled_observation_missing:"计划中的重复采集尚无回答", sampling_scope_incomplete:"重复回答未完整落入所选范围" } as Record<string,string>)[item.reason??""]??item.reason,
+          item.status ? MEMBER_STATUS_WORDS[item.status] : null,
+          ({ sampling_plan_unknown:"缺少完整采集计划", sampling_plan_incomplete:"采集计划缺少重复任务", scheduled_observation_missing:"计划中的重复采集尚无回答", sampling_scope_incomplete:"重复回答未完整落入所选范围" } as Record<string,string>)[item.reason??""],
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -274,7 +281,7 @@ function Member({
       {item.source && <Disclosure summary="完整来源页面与原始地址"><Note action={null}>错误与品牌提及仅表示共同出现，不能据此推断来源导致错误。部分判定保留原判定状态。</Note>{item.source.pages.map(page=><article key={page.sourceKey}><p className="text-caption text-text-2">{page.sourceKey}</p>{page.originalUrls.map(url=><a key={url} className="block text-accent" href={safeCitationUrl(url)?url:undefined} target="_blank" rel="noreferrer">{url}</a>)}{page.annotations?.length ? <SourceAnnotations geoId={geoId} annotations={page.annotations} canEdit={canEdit}/> : null}{page.preservedCitations?.map((citation,index)=><p key={index} className="text-caption text-text-2">{citation.marker!=null?`引用标记：${String(citation.marker)}`:""}{citation.position!=null?` · 保留位置：${String(citation.position)}`:""}</p>)}</article>)}</Disclosure>}
       {!!item.judgment && <Disclosure summary="原始判定"><pre className="whitespace-pre-wrap text-caption">{JSON.stringify(item.judgment,null,2)}</pre></Disclosure>}
       {item.citingAnswers?.map(answer=><Member key={answer.id} canEdit={canEdit} geoId={geoId} item={answer} selectionRef={selectionRef}/>)}
-      {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取版本",value:item.extraction.parserVersion ?? "未知"},{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名原始提取",value:JSON.stringify(item.extraction.genericMentions)}]} /></Disclosure>}
+      {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名原始提取",value:JSON.stringify(item.extraction.genericMentions)}]} /></Disclosure>}
       {item.expression && <FactList rows={[
         {label:"表达对象",value:item.expression.entity ?? "对象未保留"},
         {label:"分类",value:({recommended:"推荐",conditional:"条件性推荐",reasonable_nonrecommendation:"合理不推荐",mention_only:"仅提及",unknown:"尚未分类"} as Record<string,string>)[item.expression.state] ?? "未知"},
@@ -286,7 +293,7 @@ function Member({
           {label:"不推荐的依据原文",value:item.expression.nonrecommendationBasis.evidenceQuote},
           {label:"条件的依据原文",value:item.expression.nonrecommendationBasis.evidenceConditionQuote ?? "未陈述"},
         ] : []),
-        {label:"主张版本",value:item.expression.claimRefs.map(ref=>`${ref.claimId} · ${ref.claimVersion}`).join("；") || "未提供"},
+        {label:"结论版本",value:item.expression.claimRefs.map(ref=>`第 ${ref.claimVersion} 版`).join("；") || "未提供"},
       ]} />}
       {item.statement && (
         <FactList
@@ -302,10 +309,10 @@ function Member({
                   } as Record<string, string>
                 )[item.statement.verdict] ?? "未知",
             },
-            { label: "主张版本", value: item.statement.claimVersion ?? "未知" },
+            { label: "结论版本", value: item.statement.claimVersion ?? "未知" },
             {
               label: "临床条件",
-              value: JSON.stringify(item.statement.applicability ?? null),
+              value: claimConditionsText(item.statement.applicability),
             },
             { label: "引文依据", value: item.statement.evidence ?? "未保留" },
           ]}
@@ -337,7 +344,7 @@ function Member({
           </p>
           <FactList
             rows={[
-              { label: "采样方式", value: JSON.stringify(item.answer.surface) },
+              { label: "采样方式", value: surfaceText(item.answer.surface as Record<string, unknown> | null | undefined) ?? "未记录" },
             ]}
           />
           {item.answer.citations?.map((citation, index) =>
@@ -370,7 +377,7 @@ function safeCitationUrl(value: string | undefined) {
 
 function SourceAnnotations({geoId,annotations,canEdit}:{geoId:string;annotations:NonNullable<GeoAnalysisMemberItem['source']>['pages'][number]['annotations'];canEdit:boolean}) {
   const [url,setUrl]=useState<string|null>(null);
-  return <section aria-label="精确信源关系注释"><p className="text-caption text-text-3">以下为读取时的当前上下文，采样时间单独保留；编辑器读取当前关系。</p>
+  return <section aria-label="精确信源关系注释">
     {annotations?.map(annotation=><div key={annotation.url}>
       <p>{GEO_SOURCE_RELATIONSHIP_LABELS_ZH[annotation.relation as keyof typeof GEO_SOURCE_RELATIONSHIP_LABELS_ZH]??'未确认'} · {annotation.origin==='page'?'精确页面':annotation.origin==='domain'?'域名标记':'未标记'}</p>
       <p>{annotation.reference?.id??'没有注释记录'} · 修订 {annotation.reference?.revision??'未知'} · 注释日期 {annotation.reviewedAt??'未记录'}</p>

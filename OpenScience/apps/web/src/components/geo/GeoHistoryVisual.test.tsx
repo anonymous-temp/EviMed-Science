@@ -12,7 +12,8 @@ it("plots actual business times independently of observed samples and leaves unk
  expect(Number(circles[1].getAttribute("cx"))).toBeLessThan(Number(circles[0].getAttribute("cx")));
  expect(Number(circles[0].getAttribute("cx"))).toBeLessThan(Number(circles[2].getAttribute("cx")));
  expect(screen.getByText(/1 条时间未知记录保留/)).toBeVisible();
- expect(screen.getByText(/1 条读数或时间未知/)).toBeVisible();
+ // The count is a figure of its own inside a Note (a number that stands for something), so the sentence is read whole.
+ expect(screen.getByText(/条读数或时间未知/).closest("[data-note]")).toHaveTextContent("1 条读数或时间未知");
  expect(screen.getByText(/先后关系不表示因果/)).toBeVisible();
 });
 
