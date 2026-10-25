@@ -14,6 +14,11 @@
  * `droppedAtTheDoor` (the messages the memory door must not forward: platform text posing as the person's words) and
  * `requireConflictWith` (the legacy extractor's `conflictsWith`, which never fired on production).
  *
+ * Added 2026-10-25 (the evals package): `pendingTemplate`, a sentence saying which owner decision the case anticipates and what must
+ * change in the memory templates before it can pass (the cross-conversation repetition and the import cases). A pending case still
+ * runs, so a live run shows when it has become true; while it fails it is reported as `pending-template`, never as a failure, and
+ * when it passes the row says the marker can be dropped.
+ *
  * @module caseShape
  */
 
@@ -57,6 +62,9 @@ export function generalCaseIssues(item) {
   if (item.replay?.seed !== undefined) issues.push(...messageIssues(`${item.file}: replay.seed`, item.replay.seed?.messages));
   if (item.arms !== undefined && !(nonEmptyStrings(item.arms) && item.arms.every((/** @type {string} */ arm) => CASE_ARMS.includes(arm)))) {
     issues.push(`${item.file}: arms is not a non-empty list of ${CASE_ARMS.join(" / ")}`);
+  }
+  if (item.pendingTemplate !== undefined && !(typeof item.pendingTemplate === "string" && item.pendingTemplate.trim().length >= 40)) {
+    issues.push(`${item.file}: pendingTemplate says which decision the case anticipates and what must change first (a sentence)`);
   }
   if (item.decidable !== false && !item.expect) issues.push(`${item.file}: a decidable case names no expectation`);
   if (item.decidable === false && typeof item.judge !== "string") issues.push(`${item.file}: an undecidable case names no judge question`);

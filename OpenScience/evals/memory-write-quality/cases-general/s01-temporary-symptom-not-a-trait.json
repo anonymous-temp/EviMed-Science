@@ -1,0 +1,36 @@
+{
+  "id": "s01-temporary-symptom-not-a-trait",
+  "class": "refuse-symptom-as-trait",
+  "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
+  "expected": "No profile line says the person has headaches: 'these two days' is a state of this week, mentioned while asking for meeting minutes, and the assistant's softer echo (「容易头疼」) is not theirs.",
+  "decidable": true,
+  "arms": [
+    "native"
+  ],
+  "judge": "Does any profile or preference line say the person has headaches, or suffers from them often? None may.",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "这两天头疼得厉害，帮我把下午组会的纪要整理一下：1 讨论了队列入组速度；2 统计师下周交分析计划；3 下次组会改到周四。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "纪要：1. 队列入组速度已讨论；2. 统计师下周交分析计划；3. 下次组会改到周四。您这两天容易头疼，记得多休息，必要时去看医生。"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "头疼",
+      "头痛"
+    ],
+    "noRecordOfKinds": [
+      "profile"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "s02-one-off-case-detail-not-a-trait",
+  "class": "refuse-symptom-as-trait",
+  "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
+  "expected": "Nothing is written: one patient's presentation, told in order to ask for talking points, is not a project fact, a decision, a profile line or a standing trait (one question about chest pain does not make the person 'someone who treats chest pain').",
+  "decidable": true,
+  "arms": [
+    "native"
+  ],
+  "judge": "Does any written line describe this patient, or say the person manages acute chest pain as a speciality? None may.",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "有位 58 岁男性，胸痛 3 小时，心电图 V1–V4 ST 段抬高，帮我列一下初步处理要点。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "初步处理要点：立即启动胸痛中心流程、评估是否需要吸氧、阿司匹林负荷量、尽快评估再灌注治疗，具体请按本院流程和禁忌证判断。"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "58",
+      "胸痛",
+      "ST"
+    ],
+    "atMostRecords": 0
+  }
+}
