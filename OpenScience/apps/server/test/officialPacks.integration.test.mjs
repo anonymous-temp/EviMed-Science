@@ -216,3 +216,39 @@ test("a pack the folder no longer has is taken off the shelves, but a folder tha
   await capsules.received(other);
   assert.equal(await documents.get(other, "capsule", "official-copy:review"), null);
 });
+
+test("a person's general method that passed the promotion gates is published as a method of the pack 「大家的做法」 for every account, and nothing of its author travels with it", options, async () => {
+  const { createOfficialPromotion } = await import("../src/officialPromotion.mjs");
+  const promotion = createOfficialPromotion({
+    documents, officialPacks: official, perDay: 5, facts: async () => ({ names: [] }),
+    judge: async () => ({ general: true, class: "reporting-and-delivery" }),
+    review: async () => ({ independent: true, general: true, class: "reporting-and-delivery" }),
+    established: async (ids) => new Set(ids),
+  });
+  const payload = {
+    status: "approved", contentDigest: "sha256:" + "d".repeat(64),
+    frontmatter: { name: "send-the-table-with-its-question", description: "Name the question a table answers before the table.", whenToUse: "A report carries a table." },
+    display: { title: "表格先写它回答的问题", summary: "每张表前面先交代它回答什么问题。" },
+    body: ["## Purpose", "Say what a table answers before showing it, so a reader knows what to look for.", "## Workflow", "1. Write the question in one sentence above the table.", "2. Keep the question and the columns consistent."].join("\n"),
+    provenance: { scope: "conversation", sourceProjectId: "private-project", runId: "private-run" },
+  };
+  assert.deepEqual(await promotion.consider({ userId: person, method: { id: "method:learned:send-the-table-with-its-question", payload } }), { state: "candidate" });
+  assert.deepEqual(await promotion.tick(), { judged: 0, rechecked: 1 });
+  const pack = await documents.get(PUBLISHER, "preferences", "official-pack:shared-practices");
+  assert.equal(pack.payload.status, "published", "published at once, by the re-check");
+  assert.equal(pack.payload.methods.length, 1);
+  // Held by every ordinary account, as a pack of the platform's, labelled as everyone's.
+  official.settled.clear();
+  const shelf = await capsules.received(other);
+  const shared = shelf.find((entry) => entry.official?.packId === "shared-practices");
+  assert.ok(shared, "on the shelf");
+  assert.equal(shared.card.title, "大家的做法");
+  assert.equal(shared.enabled, true);
+  assert.deepEqual(shared.methods, ["表格先写它回答的问题"]);
+  const methods = await capsules.officialMethods(other);
+  const promoted = methods.find((method) => method.packId === "shared-practices");
+  assert.ok(promoted && promoted.scope.join() === "conversation");
+  // What was written down about it names no account, project, run or method of its author.
+  const everything = JSON.stringify([(await documents.list(PUBLISHER, "preferences", { limit: 100 })).items, (await documents.list(other, "fact", { limit: 100 })).items]);
+  for (const secret of [person, "private-project", "private-run", "method:learned:send-the-table-with-its-question"]) assert.equal(everything.includes(secret), false, secret);
+});
