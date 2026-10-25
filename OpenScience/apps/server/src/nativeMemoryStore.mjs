@@ -590,6 +590,17 @@ export class NativeMemoryStore {
     return rows;
   }
 
+  /**
+   * The memories of a list of ids, as the page's records: what a document's 「相关记忆」 panel says of each one it names. An id that is not
+   * a memory of this account is left out.
+   * @param {string} userId @param {readonly string[]} ids
+   */
+  async recordSummaries(userId, ids) {
+    this.#assertConfigured();
+    const wanted = new Set(ids.map(String));
+    return (await this.records(userId)).filter((record) => wanted.has(record.id));
+  }
+
   /** The sources one memory names, with the state each is in (`GET /api/memory/records/:id/sources`). @param {string} userId @param {string} id */
   async sourceLinks(userId, id) {
     const { file } = await this.#target(userId, id);

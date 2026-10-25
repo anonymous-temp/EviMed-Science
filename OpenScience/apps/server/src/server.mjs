@@ -1811,7 +1811,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // ledger and the research memory — all built further down, and all read only when a request arrives.
   const sourceDependents = createSourceDependents({
     knowledge: { dependents: (ownerId, projectId, ref, versionIds) => knowledgeChange.dependents(ownerId, projectId, ref, versionIds) },
-    documents: productDocuments, memory: memorySettings,
+    documents: productDocuments, memory: nativeMemory.configured ? nativeMemory : null,
     // The compiled pages that cite the document, from the mirror's record of each page's links.
     pages: (userId, projectId, sourceId) => (knowledgePages ? knowledgePages.pagesQuoting(userId, projectId, sourceId) : Promise.resolve([])),
     runs: async (project, runIds) => {

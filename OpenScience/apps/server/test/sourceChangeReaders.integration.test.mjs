@@ -10,7 +10,7 @@ import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { nativeSourceLinks } from "./helpers/nativeSourceLinks.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 import { createSourceChanges, recordFrontierNotices } from "../src/sourceChanges.mjs";
 import { createSourceUpdateLookup } from "../src/sourceUpdates.mjs";
@@ -22,7 +22,7 @@ const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configure
 const hex = (character, length = 64) => character.repeat(length);
 const rv = (n) => `rv_${String(n).padStart(64, "0")}`;
 const DOI = "10.9999/frontier.retracted";
-/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let memory; /** @type {any} */ let learning;
+/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let native; /** @type {any} */ let learning;
 const owners = [];
 
 before(async () => {
@@ -30,7 +30,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 8, databaseConnectionTimeoutMs: 5_000 });
   await migrateProductStore(database);
   documents = new ProductDocuments(database);
-  memory = new MemorySettingsStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  native = nativeSourceLinks();
   learning = new LearningService({ documents });
 });
 after(async () => {
@@ -81,8 +81,7 @@ async function researcher({ cites = true } = {}) {
   const parsed = parseSkillFrontmatter(skill);
   const method = await learning.createCandidate(owner, { frontmatter: parsed.frontmatter, body: parsed.body,
     provenance: { origin: "inferred", runId: "run-1", results: [{ role: "original", versionId: rv(1), digest: hex("9") }, { role: "successor", versionId: rv(9), digest: hex("8") }] } });
-  const fact = await memory.upsertRecord(owner, { scope: "project", scopeId: project, kind: "project_fact", key: "project.pooled", value: "the pooled finding", summary: "pooled",
-    origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false }, null, { sourceLinks: [{ type: "doi", id: DOI }] });
+  const fact = { id: native.file(owner, { scope: "project", scopeId: project, kind: "project_fact", links: [{ type: "doi", id: DOI }] }) };
   return { owner, project, results, method, fact };
 }
 
@@ -95,7 +94,7 @@ async function platform(person, { withRecord = true } = {}) {
     fetchImpl: async (/** @type {URL} */ request) => { asked.push(String(request)); throw new Error("no network in this test"); } });
   sourceChanges?.useLookup(lookup);
   const notices = [];
-  const knowledge = new KnowledgeChangeService({ memory, methods: learning, sourceChanges });
+  const knowledge = new KnowledgeChangeService({ native, methods: learning, sourceChanges });
   const impacts = new ResultImpactService({ documents, results: person.results, knowledge, sourceChanges, now: () => new Date("2026-10-05T12:00:00Z"),
     notifications: { async create(_user, input) { notices.push(input); } } });
   return { sourceChanges, lookup, asked, notices, knowledge, impacts };
@@ -104,7 +103,7 @@ async function platform(person, { withRecord = true } = {}) {
 /** What the frontier pipeline writes when a retraction notice names the DOI. */
 const frontierRetraction = (sourceChanges) => recordFrontierNotices(sourceChanges,
   [{ kind: "retraction", noticeDoi: "10.9999/retraction-notice", doi: DOI, date: "2026-10-01" }]);
-const linkStates = async (person) => (await memory.sourceLinks(person.owner, person.fact.id)).map(link => [link.type, link.state, link.stateReason]);
+const linkStates = async (person) => native.states(person.fact.id);
 
 test("Postgres: a retraction the frontier recorded reaches the result that cites it, the memory linked to it and the method learnt from it, with no request to Crossref", options, async () => {
   const person = await researcher();
@@ -122,7 +121,7 @@ test("Postgres: a retraction the frontier recorded reaches the result that cites
   assert.equal(reply.items[0].payload.historicalResultPreserved, true);
   assert.equal(p.notices.length, 1);
   assert.match(p.notices[0].body, /来源发布了更正或撤回通知/);
-  assert.deepEqual(await linkStates(person), [["doi", "retracted", "retraction"]], "the memory that names the DOI is labelled retracted");
+  assert.deepEqual(await linkStates(person), [["doi", "retracted"]], "the memory that names the DOI is labelled retracted");
   assert.deepEqual(reply.items[0].payload.affected.memories.items.map(item => [item.recordId, item.state]), [[person.fact.id, "retracted"]]);
   const labelled = await learning.getMethod(person.owner, person.method.id);
   assert.deepEqual(labelled.payload.sourceChanges.map(label => [label.state, label.relation]), [["retracted", "learnt_from"]], "and so is the method learnt from the result");
@@ -142,7 +141,7 @@ test("Postgres: the same change is taken by position, with no lookup at all, and
   assert.deepEqual(caught.items.map(item => item.payload.versionId), [rv(1)]);
   assert.deepEqual([caught.cursor, caught.hasMore, caught.scanned], [1, false, 1]);
   assert.equal(p.notices.length, 1);
-  assert.deepEqual(await linkStates(citing), [["doi", "retracted", "retraction"]]);
+  assert.deepEqual(await linkStates(citing), [["doi", "retracted"]]);
   assert.equal((await learning.getMethod(citing.owner, citing.method.id)).payload.sourceChanges.length, 1);
   assert.deepEqual(p.asked, []);
 
@@ -152,7 +151,7 @@ test("Postgres: the same change is taken by position, with no lookup at all, and
   const other = await q.impacts.reconcileSince(bystander.owner, { projectId: bystander.project, since: 0 });
   assert.deepEqual(other.items, [], "no result of this project cites it");
   assert.equal((await documents.list(bystander.owner, "result-impact", { projectId: bystander.project })).items.length, 0);
-  assert.deepEqual(await linkStates(bystander), [["doi", "retracted", "retraction"]], "but a memory of its own that names the work is labelled");
+  assert.deepEqual(await linkStates(bystander), [["doi", "retracted"]], "but a memory of its own that names the work is labelled");
   assert.equal(q.notices.length, 1, "and the researcher is told once");
   assert.equal((await documents.list(citing.owner, "result-impact", { projectId: citing.project })).items.length, 1, "another account's impacts are not this one's");
 });
@@ -164,9 +163,9 @@ test("Postgres: the memories alone can be labelled from the feed, without a resu
   const labelled = await p.knowledge.labelSince(person.owner, person.project, { since: 0 });
   assert.deepEqual(labelled.items?.map(entry => [entry.identifier, entry.memories.map(item => item.recordId)]), [[`doi:${DOI}`, [person.fact.id]]]);
   assert.equal(labelled.cursor, 1);
-  assert.deepEqual(await linkStates(person), [["doi", "retracted", "retraction"]]);
+  assert.deepEqual(await linkStates(person), [["doi", "retracted"]]);
   assert.deepEqual((await p.knowledge.labelSince(person.owner, person.project, { since: labelled.cursor })).items, []);
-  const noRecord = new KnowledgeChangeService({ memory, methods: learning });
+  const noRecord = new KnowledgeChangeService({ native, methods: learning });
   assert.deepEqual(await noRecord.labelSince(person.owner, person.project), { unknown: "unavailable" });
 });
 
@@ -194,7 +193,7 @@ test("Postgres: a record that says nothing changes nothing, and a record that ca
     status: { state: "no_update", checkedAt: "2026-10-05T12:00:00Z", updates: [] } });
   assert.deepEqual(clean.items, []);
   assert.equal(p.notices.length, 0);
-  assert.deepEqual(await linkStates(person), [["doi", "current", ""]], "a clean answer moves nothing that was not unknown");
+  assert.deepEqual(await linkStates(person), [["doi", "current"]], "a clean answer moves nothing that was not unknown");
 
   const failures = [];
   const broken = new ResultImpactService({ documents, results: person.results, report: code => failures.push(code), now: () => new Date("2026-10-05T12:00:00Z"),
