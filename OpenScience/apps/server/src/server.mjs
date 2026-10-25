@@ -8692,6 +8692,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcr,
     vcrService: vcr?.service ?? null,
     capsuleService,
+    officialPacks,
     pluginService,
     extensionService,
     skillLibraryService,
@@ -8770,6 +8771,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution?.worker.interrupt();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
+      // The pass that publishes the official packs at start writes into the database and the data directory: let it end first.
+      await officialPacks?.idle();
       await pluginApplyWorker?.close();
       await personalSkillWorker?.close();
       await hostedExtensions?.preparation.close();

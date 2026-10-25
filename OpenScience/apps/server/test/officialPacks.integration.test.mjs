@@ -47,6 +47,7 @@ before(async () => {
   await writePack("review", { "pack.json": CARD("系统综述"), "pooling.md": methodFile("合并之前先看异质性", "可比性不够就不合并。", "conversation, meta-analysis") });
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
   await migrateMemorySettings(database);
+  await clearPublisher();
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Person','development'),($2,'Other','development'),($3,'Subject',NULL)`.replace("NULL", "'subject'"),
     [person, other, subject]);
   assert.equal((await database.query("SELECT auth_type FROM evimed_control.users WHERE id=$1", [PUBLISHER])).rows[0]?.auth_type, "platform", "the migration made the publisher account");
@@ -61,10 +62,15 @@ before(async () => {
   capsules.official = official;
 });
 
+/** The publisher's records are one platform's, shared by every test file that starts the app against this database: this file owns them while it runs. */
+async function clearPublisher() {
+  await database.query("DELETE FROM evimed_product.documents WHERE user_id=$1 AND kind='preferences' AND payload->>'recordType' IN ('official-pack','official-method','official-promoted','capsule-snapshot')", [PUBLISHER]);
+}
+
 after(async () => {
   if (database) {
     await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[person, other, subject]]);
-    await database.query("DELETE FROM evimed_product.documents WHERE user_id=$1 AND kind='preferences' AND payload->>'recordType' IN ('official-pack','official-method','capsule-snapshot')", [PUBLISHER]);
+    await clearPublisher();
     await database.close();
   }
   if (directory) await rm(directory, { recursive: true, force: true });
@@ -190,4 +196,23 @@ test("a pack an account deleted is not made again, and a taken-down copy stays d
   const after = await capsules.received(other);
   assert.ok(after.every((pack) => pack.takenDown && pack.enabled === false));
   assert.deepEqual(await capsules.officialMethods(other), []);
+});
+
+test("a pack the folder no longer has is taken off the shelves, but a folder that is missing or holds nothing takes nothing off", options, async () => {
+  const published = async (/** @type {string} */ pack) => (await documents.get(PUBLISHER, "preferences", `official-pack:${pack}`)).payload.status;
+  const lost = new OfficialPacks({ documents, database, transfers, scanner: { scan: async () => { throw new Error("not asked"); } }, sourcesDir: path.join(directory, "no-such-folder") });
+  assert.deepEqual(await lost.publishAll(), []);
+  const emptyDir = path.join(directory, "empty");
+  await mkdir(emptyDir);
+  assert.deepEqual(await new OfficialPacks({ documents, database, transfers, scanner: /** @type {any} */ (null), sourcesDir: emptyDir }).publishAll(), []);
+  assert.deepEqual([await published("daily"), await published("review")], ["published", "published"], "an image that lost its folder is not an instruction to empty every shelf");
+  // The folder lost one pack on purpose.
+  await rm(path.join(sources, "review"), { recursive: true });
+  await official.publishAll();
+  assert.deepEqual([await published("daily"), await published("review")], ["published", "withdrawn"]);
+  const withdrawn = await documents.get(PUBLISHER, "preferences", "official-pack:review");
+  assert.equal((await documents.get(PUBLISHER, "preferences", withdrawn.payload.snapshotId)).payload.status, "revoked");
+  official.settled.clear();
+  await capsules.received(other);
+  assert.equal(await documents.get(other, "capsule", "official-copy:review"), null);
 });

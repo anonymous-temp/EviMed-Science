@@ -770,7 +770,8 @@ export class CapsuleTransferService {
     const accountCreatedAt = await this.withAccount(publisherId, null);
     const prior = previousSnapshotId ? await this.documents.get(publisherId, "preferences", previousSnapshotId) : null;
     const previous = prior?.payload?.recordType === "capsule-snapshot" && prior.payload.capsuleId === capsuleId ? prior : null;
-    await this.#assertRoomForSnapshot(publisherId);
+    // No cap of live snapshots: the bound is for accounts that are people (`#assertRoomForSnapshot`), and the platform keeps one live snapshot of
+    // each pack, retiring the one before it as it publishes the next (`OfficialPacks`).
     const made = await this.#seal({ userId: publisherId, accountCreatedAt, capsuleId, scopes: ["workstyle"], channel: "official",
       input: { card, password: digest(`evimed-official-pack:${packId}`) }, previous,
       source: { revision: version, facts: methods.map((method) => ({ id: method.key, revision: version, payload: { factKind: "method_preference", content: method.content, origin: "system" } })) },

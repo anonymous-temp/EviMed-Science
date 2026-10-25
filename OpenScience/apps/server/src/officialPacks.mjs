@@ -54,6 +54,8 @@ const SHARED_PRACTICES_SUMMARY = "用过的人普遍觉得好用、也不涉及�
 const OBSERVATION_LIMIT = 200;
 /** How long what is read from the ledger for the mount (the stopped bodies) may be reused, in ms: a stop takes effect within this. */
 const STOPPED_TTL_MS = 15_000;
+/** How many times a seal is asked again when the password derivation was busy. */
+const SEAL_RETRIES = 4;
 /** The accounts whose copies are known to be current, and how many are remembered. */
 const SETTLED_LIMIT = 5_000;
 
@@ -119,6 +121,8 @@ export class OfficialPacks {
     this.settled = new Map();
     /** @type {Map<string, Promise<any>>} */
     this.inflight = new Map();
+    /** The pass in flight (`publishAll`). @type {Promise<any> | null} */
+    this.publishing = null;
     /** @type {{ at: number, bodies: Set<string> } | null} */
     this.stoppedCache = null;
   }
@@ -132,6 +136,14 @@ export class OfficialPacks {
    */
   async publishAll() {
     if (!this.enabled) return [];
+    // One pass at a time in a process: a second caller is given the first's answer, and the password derivation of a seal (one at a time per
+    // account) is never asked for by two of this process's own passes.
+    if (this.publishing) return this.publishing;
+    this.publishing = this.#publishAll().finally(() => { this.publishing = null; });
+    return this.publishing;
+  }
+
+  async #publishAll() {
     const { packs, issues } = await readOfficialPackSources(this.sourcesDir);
     for (const issue of issues) {
       this.counters.sourceIssues[issue.issue] = (this.counters.sourceIssues[issue.issue] ?? 0) + 1;
@@ -148,9 +160,12 @@ export class OfficialPacks {
         results.push({ packId: source.id, state: "failed" });
       }
     }
-    // A pack the folder no longer has is withdrawn: not given to accounts any more, and removed from the shelves that hold it.
+    // A pack the folder no longer has is withdrawn: not given to accounts any more, and removed from the shelves that hold it. Only when the folder
+    // was read and holds packs: an image that lost its folder, or one whose texts are all refused, is a mistake to be said and not an instruction to
+    // take every pack off every shelf.
     const live = new Set(sources.map((source) => source.id));
-    for (const row of await this.#publicationRows()) {
+    const trustworthy = packs.length > 0 && !issues.some((issue) => issue.issue === "directory_missing");
+    for (const row of trustworthy ? await this.#publicationRows() : []) {
       if (row.payload.status === "published" && !live.has(row.payload.packId) && !issues.some((issue) => issue.pack === row.payload.packId)) {
         await this.documents.put(this.publisherId, "preferences", row.id, { ...row.payload, status: "withdrawn", withdrawnAt: this.now().toISOString() }, { expectedRevision: row.revision })
           .catch(() => null);
@@ -160,6 +175,11 @@ export class OfficialPacks {
     this.publications = null;
     this.settled.clear();
     return results;
+  }
+
+  /** Resolves when the publication pass in flight, if any, has ended: a shutdown waits for it, and a failure of it is the pass's own to say. */
+  async idle() {
+    await this.publishing?.catch(() => null);
   }
 
   /** The pack made of promoted methods, from the publisher's records of them; null while there is none. */
@@ -208,7 +228,7 @@ export class OfficialPacks {
       return { packId: source.id, state: /** @type {const} */ ("refused") };
     }
     const version = Number(previous?.payload.version ?? 0) + 1;
-    const made = await this.transfers.publishOfficial({ publisherId: this.publisherId, packId: source.id, version,
+    const made = await this.#sealed({ publisherId: this.publisherId, packId: source.id, version,
       methods: kept.map((method) => ({ key: method.key, content: method.content })),
       card: { title: source.title, author: this.publisherName, summary: source.summary },
       previousSnapshotId: previous?.payload.status === "published" ? previous.payload.snapshotId : null });
@@ -237,6 +257,20 @@ export class OfficialPacks {
     }
     this.counters.publication.published += 1;
     return { packId: source.id, state: /** @type {const} */ ("published"), version };
+  }
+
+  /**
+   * The seal of a pack, asked again after the wait it names when the platform's one password derivation at a time was busy (another control plane
+   * starting beside this one, or a person's export): a pack that waits a few seconds is published, and one that was given up on waited a restart.
+   * @param {Parameters<import('./capsuleTransferService.mjs').CapsuleTransferService["publishOfficial"]>[0]} input
+   */
+  async #sealed(input) {
+    for (let attempt = 0; ; attempt += 1) {
+      try { return await this.transfers.publishOfficial(input); } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "capsule_password_busy" || attempt >= SEAL_RETRIES) throw error;
+        await new Promise((resolve) => setTimeout(resolve, Math.max(250, Number(/** @type {any} */ (error)?.retryAfterSeconds ?? 2) * 1_000)));
+      }
+    }
   }
 
   /** The packs as published now, in the shelf's order. @returns {Promise<any[]>} */

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
@@ -106,6 +106,47 @@ test("the actual app takes the capsule store's limits from its configuration: th
   } finally {
     container.configurePasswordKdfGate?.(KDF_GATE_DEFAULTS);
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("the actual app puts the platform's starter packs on an ordinary account's shelf, apart from the eight in force, and the person can switch one off", {
+  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  const dataDir = await mkdtemp(path.join("/tmp", "evimed-official-app-"));
+  const packs = path.join(dataDir, "official");
+  await mkdir(path.join(packs, "daily"), { recursive: true });
+  await writeFile(path.join(packs, "daily", "pack.json"), JSON.stringify({ title: "日常文稿", summary: "日常文稿的写法。" }));
+  await writeFile(path.join(packs, "daily", "weekly.md"), "---\nscope: conversation\nwhenToUse: 写周报时。\n---\n# 周报：事实只用你给的\n\n没给的栏留空。\n");
+  const app = createWebApiApp({ evimedWorkloadSigningSecret: randomBytes(32).toString("hex"), dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
+    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl, officialPacksDir: packs });
+  const username = `official${randomUUID().slice(0, 8)}`;
+  let user;
+  try {
+    user = await app.store.createUser(username, "test-only-official-password", "Official fixture");
+    const address = await app.listen(0, "127.0.0.1");
+    const base = `http://127.0.0.1:${address.port}`;
+    // Published at start; asking again is the same answer.
+    assert.ok((await app.officialPacks.publishAll()).every((result) => ["published", "unchanged"].includes(result.state)));
+    const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password: "test-only-official-password" }) });
+    const auth = await login.json();
+    const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
+    const shelf = (await (await fetch(`${base}/api/capsules/received`, { headers })).json()).data;
+    const daily = shelf.find((pack) => pack.official?.packId === "daily");
+    assert.ok(daily, "the account's first read of its shelf brings the pack");
+    assert.equal(daily.enabled, true);
+    assert.equal(daily.card.author, "EviMed 证据中心");
+    assert.equal(JSON.stringify(shelf).includes("evimed-evidence-center"), false, "the publisher's account id is nobody's to read");
+    assert.deepEqual((await (await fetch(`${base}/api/capsules/active`, { headers })).json()).data.items, []);
+    assert.equal((await fetch(`${base}/api/capsules/${encodeURIComponent(daily.id)}/disable`, { method: "POST", headers, body: "{}" })).status, 200);
+    assert.equal((await (await fetch(`${base}/api/capsules/received`, { headers })).json()).data.find((pack) => pack.id === daily.id).enabled, false);
+    assert.equal((await fetch(`${base}/api/capsules/${encodeURIComponent(daily.id)}/enable`, { method: "POST", headers, body: "{}" })).status, 200);
+    assert.equal((await (await fetch(`${base}/api/capsules/received`, { headers })).json()).data.find((pack) => pack.id === daily.id).enabled, true);
+  } finally {
+    if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
+    await app.store.database.query("DELETE FROM evimed_product.documents WHERE user_id='evimed-evidence-center' AND kind='preferences' AND payload->>'recordType' IN ('official-pack','official-method','capsule-snapshot')");
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
   }

@@ -140,3 +140,21 @@ test("a doctor with no memory yet still reads the named school, and nothing of a
   assert.equal(result.sources.memory, 0);
   assert.ok(result.items.every((item) => item.source === "capsule"));
 });
+
+test("the platform's own starter methods come last, only for an account that holds them, and never from a named school", options, async () => {
+  const official = { key: "official:daily-writing:status-report", capsuleId: "official-copy:daily-writing", description: "周报与进展汇报：事实只用你给的", whenToUse: "写周报时。",
+    body: "没给的栏留空。", scope: ["conversation"] };
+  const other = { ...official, key: "official:review:pooling", body: "可比性不够就不合并。", scope: ["meta-analysis"] };
+  const held = capsules.official;
+  capsules.official = /** @type {any} */ ({ methodsFor: async (/** @type {string} */ userId) => (userId === doctor.id ? [official, other] : []) });
+  try {
+    const result = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x" });
+    assert.deepEqual(result.methods.map((method) => method.source), ["capsule", "learned", "official"], "below everything of the person's own: their capsule, then what was learnt");
+    assert.deepEqual(result.methods[2], { source: "official", id: official.key, capsuleId: official.capsuleId, title: official.description, summary: null, whenToUse: official.whenToUse,
+      content: official.body, digest: result.methods[2].digest, since: null, contextOnly: true });
+    assert.match(result.methods[2].digest, /^sha256:[a-f0-9]{64}$/);
+    const named = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [school] });
+    assert.ok(!named.methods.some((method) => method.source === "official"));
+    assert.ok(!(await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", methods: "own" })).methods.some((method) => method.source === "official"));
+  } finally { capsules.official = held; }
+});
