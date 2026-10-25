@@ -69,6 +69,19 @@ file (`tag`): 「这次就这样吧」 and "Fine for this time" (accept, not ado
 (correction), 「顺便帮我查一下 X」 (none), 「就按这个来吧，发出去」 (accept: this version, now), 「以后都用表格」 (a preference: it states a way, it
 does not keep the one just used).
 
+## Measurements
+
+| Date | Tree | Cases | accuracy | adopt precision / recall | correction precision / recall |
+|---|---|---|---|---|---|
+| 2026-10-25 | before `adopt` (five verdicts, no bank) | all 129 | 0.67 | — (0/25 read as adopt) | — / 0.56 |
+| 2026-10-25 | `adopt`, contrasts in the instructions only (`--no-examples`) | 72 held out | 0.94 | 1.00 / 0.93 | 0.90 / 1.00 |
+| 2026-10-25 | `adopt`, bank by character n-grams | 72 held out | 0.94 | 1.00 / 0.93 | 0.85 / 1.00 |
+| 2026-10-25 | `adopt`, bank by the DashScope embedder (production) | 72 held out | 0.96 | 1.00 / 0.93 | 0.85 / 1.00 |
+
+DeepSeek Flash, one sample. Every adopt was confirmed by the second reading; the one missed adopt (fj-114) was read as a correction. The
+contrasts written into the instructions carry most of the gain; the retrieved examples add little on these cases, which are written in
+the same register as the bank's — real follow-ups are the test of that (`evals/capsule-longitudinal` S8 after a release).
+
 ## The labelling rubric
 
 One label per message, by the **main act of the message about the work just delivered**:
