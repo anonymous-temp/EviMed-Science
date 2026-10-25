@@ -6256,6 +6256,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           system: `${prepared.system}${vcrBriefBlock(brief)}`,
           routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+          // A programme step: its context tells the model nobody will answer, and its signed attendance says the same.
+          unattended: true,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
         await resident.delivered();
@@ -6352,6 +6354,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           text: `${promptText}\n\n<evimed-geo-run>${geoRunId(dispatchId)}</evimed-geo-run>${marker ? `\n\n${marker}` : ""}`,
           system: `${prepared.system}${geoBriefBlock(brief)}`, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+          // A programme step: its context tells the model nobody will answer, and its signed attendance says the same.
+          unattended: true,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
         await resident.delivered();
@@ -6790,6 +6794,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           runId: dispatchedRun.id,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
           strictContext: true,
+          // A person sent this from their channel (or started their study here) and reads the reply: `attended: true` above.
+          unattended: false,
         });
         await resident.delivered();
       } catch (error) {
@@ -6839,6 +6845,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       requestId: correctionRequestId,
       mode: "steer",
       strictContext: true,
+      // A person's correction from their channel.
+      unattended: false,
     });
     return { corrections: updated?.corrections ?? 0 };
   }
@@ -7969,6 +7977,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             runId: dispatchedRun.id,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
             strictContext: true,
+            // The same decision the context got (`attended: !automated`): a person's dispatch is attended, a probe's, an audit's
+            // or an evaluation harness's is not, and the signed attendance says so.
+            unattended: automated,
           });
           // The profile is the conversation's from here: the next dispatch finds it there (`ResidentProfiles`).
           await resident.delivered();
@@ -8022,6 +8033,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           requestId: correctionRequestId,
           mode: "steer",
           strictContext: true,
+          // A person's correction of the run; a probe's or a harness's run (`automated`) stays a turn nobody attends.
+          unattended: run.automated === true,
         });
         sendJson(res, 202, { data: { id: runId, corrections: updated?.corrections ?? 0 } });
         return;

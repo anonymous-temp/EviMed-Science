@@ -407,6 +407,7 @@ export function createLearningRuntime({
               model: `deepseek/${config.deepseekModel}`,
               runId: dispatchedRun.id,
               allowBounded: true,
+              unattended: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
           } catch (error) {

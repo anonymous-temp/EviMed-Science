@@ -5981,7 +5981,9 @@ export class RuntimeManager {
    * or null when it was routed to none; the index states it, and that is where the runtime reads it. A dispatch that writes
    * no context (a steer) leaves it out, and the index keeps what the context on disk was routed to.
    *
-   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void> }} input
+   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, unattended?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void> }} input
+   * `unattended`: whether nobody is in this turn to answer a question, signed into the turn's attendance receipt. Stated by every
+   * caller from the same decision its research context gets (`attended`); a person-initiated path says `false`.
    * @returns {Promise<void>}
    */
   /** Control-only observed proof; unsupported providers and failed probes never block delivery. @param {any} input */
@@ -6067,7 +6069,10 @@ export class RuntimeManager {
       // socket still reads at every run's start is emptied here: a profile left from before would be handed over again.
       await this.withdrawCapsuleProfileFile(project);
     }
-    let dispatchedUnattended = unattended === true;
+    // Signed attendance follows the dispatch's own decision, the one the research context gets (`attended`). Every caller states it
+    // (`dispatchAttendance.test.mjs` holds each call site to that); a caller that does not is treated as nobody being in the turn —
+    // except a steer of a run, which keeps the attendance that run's index was signed with (`writeRunBriefIndex`).
+    let dispatchedUnattended = unattended !== false;
     if (typeof runId === "string" && runId) {
       const authority = await this.writeRunBriefIndex(project, runId, {
         sessionId,
@@ -6239,8 +6244,10 @@ export class RuntimeManager {
       const previousAuthority = publicKey ? verifyRunContextAuthority(previous, {
         publicKey, userId: String(project.userId), projectId: String(project.id), sessionId: session,
       }) : null;
-      if (unattended === undefined) withoutReader = previousAuthority?.protocol === RUN_CONTEXT_PROTOCOL
-        && previousAuthority.runId === runId && previousAuthority.unattended === true;
+      // Not stated: the run's own earlier signed index decides (a steer continues the turn it steers); with none, nobody is assumed
+      // to be attending. A person-initiated path always says `unattended: false`.
+      if (unattended === undefined) withoutReader = previousAuthority?.protocol === RUN_CONTEXT_PROTOCOL && previousAuthority.runId === runId
+        ? previousAuthority.unattended === true : true;
       const index = {
         // The hand-off revision this index was written under; the runtime image reads an index under its own revision and
         // refuses any other by name (`RUN_CONTEXT_PROTOCOL`).
@@ -6312,7 +6319,8 @@ export class RuntimeManager {
       await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, brief), "", { encoding: "utf8", mode: 0o444 });
       await this.mirrorWorkspaceWrite(project, brief, "", true);
       await this.writeRunBriefIndex(project, `native_${createHash("sha256").update(session).digest("hex").slice(0, 32)}`, {
-        sessionId: session, required: true, contextRevision: randomId("release_"), capability: null,
+        // The conversation goes back to the person who owns it.
+        sessionId: session, required: true, contextRevision: randomId("release_"), capability: null, unattended: false,
       });
       return true;
     } catch {
@@ -7225,7 +7233,8 @@ export class RuntimeManager {
     }
     const proof = await this.probePersonalSkillGeneration(project, pinned, safeId(sessionId, 'session id'));
     if (proof.pendingSession) throw new HttpError(404, 'runtime_session_not_found', 'The target conversation is unavailable.');
-    await this.dispatchAdmittedPrompt(project, sessionId, { text: `/${source.nativeName}`, requestId: safeId(idempotencyKey, 'invocation id'), ...(recordPromptActor ? { recordPromptActor } : {}) });
+    // A person asked for this skill in their own conversation, from the skills page.
+    await this.dispatchAdmittedPrompt(project, sessionId, { text: `/${source.nativeName}`, requestId: safeId(idempotencyKey, 'invocation id'), unattended: false, ...(recordPromptActor ? { recordPromptActor } : {}) });
     return { accepted: true, sessionId, skillId, revision, generation: pinned.reference.generationHash };
   }
 

@@ -2469,8 +2469,32 @@ test("scheduled dispatch authority is session scoped and survives a steer only f
   assert.equal((await index()).unattended, true);
   const steerReceipt = JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_steer")), "utf8"));
   assert.equal(verifyRunContextAuthority(steerReceipt, { publicKey, userId: project.userId, projectId: project.id, sessionId }).unattended, true);
-  await manager.dispatchPrompt(project, sessionId, { text: "my follow-up", runId: "run_attended", requestId: "req_attended", strictContext: true });
+  await manager.dispatchPrompt(project, sessionId, { text: "my follow-up", runId: "run_attended", requestId: "req_attended", strictContext: true, unattended: false });
   assert.notEqual((await index()).unattended, true);
+});
+
+test("a dispatch that does not say whether a person attends it is signed unattended, in its index and its receipt", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  manager.config.modelGatewaySigningSecret = "only-the-control-plane-knows-this-fixture-secret";
+  t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });
+  await manager.start(project);
+  const publicKey = runContextAuthorityPublicKey(manager.config.modelGatewaySigningSecret);
+  const sessionId = "ses_background_step";
+  const verify = (value) => verifyRunContextAuthority(value, { publicKey, userId: project.userId, projectId: project.id, sessionId });
+  const index = async () => JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId, "index.json"), "utf8"));
+  // A programme step, a learning job or an evaluation dispatch whose caller forgot to say: nobody is assumed to be there.
+  await manager.dispatchPrompt(project, sessionId, { text: "a background step", runId: "run_background", requestId: "req_background", strictContext: true });
+  assert.equal(verify(await index()).unattended, true);
+  const receipt = JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_background")), "utf8"));
+  assert.equal(verify(receipt).unattended, true);
+  // A dispatch without a run of its own (a skill invocation that did not say) is no exception.
+  await manager.dispatchPrompt(project, sessionId, { text: "/a-skill", requestId: "req_no_run" });
+  assert.equal(verify(JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_no_run")), "utf8"))).unattended, true);
+  // The person's own dispatch says so, and its steer keeps it.
+  await manager.dispatchPrompt(project, sessionId, { text: "my question", runId: "run_person", requestId: "req_person", strictContext: true, unattended: false });
+  await manager.dispatchPrompt(project, sessionId, { text: "and also", runId: "run_person", requestId: "req_person_steer", mode: "steer", strictContext: true });
+  assert.equal(verify(await index()).unattended, false);
+  assert.equal(verify(JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_person_steer")), "utf8"))).unattended, false);
 });
 
 test("native attendance proof does not depend on optional learning and is mirrored before forwarding", async (t) => {
@@ -2501,6 +2525,7 @@ test("a reserved session receives strict context before its first DSH create", a
   assert.equal(await manager.sessionStatus(project, session.id), "idle");
   await manager.dispatchPrompt(project, session.id, {
     text: "bounded episode", system: "# Session context\n", memoryContext: "# Session memory\n", runId: "run_strict_1", requestId: "req_strict_1", strictContext: true,
+    unattended: true,
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", session.id);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
@@ -2508,6 +2533,7 @@ test("a reserved session receives strict context before its first DSH create", a
     runId: "run_strict_1",
     sessionId: session.id,
     contextRevision: "req_strict_1",
+    unattended: true,
   });
   assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Session context\n");
   assert.equal(await readFile(path.join(root, "memory.md"), "utf8"), "# Session memory\n", "strict context keeps the memory session-scoped too");
@@ -2522,10 +2548,10 @@ test("a follow-up and repair commit distinct session context revisions", async (
   await manager.start(project);
   const sessionId = "ses_revisions";
   await manager.dispatchPrompt(project, sessionId, {
-    text: "first", system: "# First context\n", runId: "run_same", requestId: "req_first", strictContext: true,
+    text: "first", system: "# First context\n", runId: "run_same", requestId: "req_first", strictContext: true, unattended: false,
   });
   await manager.dispatchPrompt(project, sessionId, {
-    text: "repair", system: "# Repair context\n", runId: "run_same", requestId: "req_repair", strictContext: true,
+    text: "repair", system: "# Repair context\n", runId: "run_same", requestId: "req_repair", strictContext: true, unattended: false,
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
