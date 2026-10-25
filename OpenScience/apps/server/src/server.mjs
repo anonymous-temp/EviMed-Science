@@ -5574,6 +5574,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       } : null,
     };
     geoParts.measureState = measureDeps.state;
+    // What the monitoring view says of a paused measurement: the breaker and the host pause of this process's probe loop.
+    geoParts.service.probeState = () => measureDeps.state;
     // The market's read-only ranking beside an action: the function the market places by, over the same rows (nothing is ordered by asking).
     geoParts.service.spine.placementPreview = (/** @type {any} */ input) => previewGeoOutlets(marketDeps, input);
     // The platform's own medication-question bank (flywheel F22): composed only with its lever on, beside the module. It is the module's

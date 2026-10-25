@@ -55,6 +55,7 @@ import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
 import { geoSourceFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
+import { GEO_PROBE_ENGINES } from "./geoProbeQueue.mjs";
 import { HttpError } from "./security.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
@@ -273,6 +274,26 @@ export const GEO_HEADLINE_ROUND_KINDS = Object.freeze(["baseline", "weekly", "si
 export const GEO_CELL_SNAPSHOT_LIMIT = 200;
 
 /**
+ * Whether a project's measurement can run now, from the probe's own state (`geoProbeQueue`'s breaker, in this process): the project's
+ * engines the breaker holds paused — every probe engine while the probe host cannot be reached — and `paused` when none of the
+ * project's engines can be asked. An engine of the inclusion channel is not the probe's and is never held here. With no probe state
+ * to read (the measurement not composed), or no probe configured (the queue's wait, not an absence), nothing is known to be paused. 2026-10-25: the probe host had been
+ * unreachable for six days, every round closed with nothing asked, and the monitoring page went on naming the next re-measure.
+ * @param {{ engines: readonly string[], probe?: { breaker?: { paused?: () => string[] }, hostPausedUntil?: number } | null,
+ *   config: Record<string, any>, now: Date }} input
+ * @returns {{ state: "measuring" | "paused", engines: string[] }}
+ */
+export function geoMeasurementPause({ engines, probe = null, config, now }) {
+  const inclusion = new Set((config?.geoInclusionEngines ?? []).map(String));
+  const probed = engines.filter((engine) => GEO_PROBE_ENGINES.includes(engine) && !inclusion.has(engine));
+  const hostDown = Number(probe?.hostPausedUntil ?? 0) > now.getTime();
+  const held = new Set(probe?.breaker?.paused?.() ?? []);
+  const paused = probed.filter((engine) => hostDown || held.has(engine));
+  const askable = engines.filter((engine) => inclusion.has(engine) || (probed.includes(engine) && !paused.includes(engine)));
+  return { state: engines.length && !askable.length ? "paused" : "measuring", engines: paused };
+}
+
+/**
  * The engines this deployment can measure: the configured probe engines and
  * the inclusion channel's (the new-project control offers them).
  * @param {Record<string, any>} config
@@ -362,6 +383,12 @@ export class GeoService {
      * composition gives it the market's read-only ranking (`spine.placementPreview`) when there is a market.
      */
     this.spine = new GeoSpine({ store, now: () => this.now(), marketConfigured: () => geoMarketConfigured(config) });
+    /**
+     * The probe's in-process state (the breaker, the host pause), set by the composition beside the measurement; what the
+     * monitoring view says of a paused measurement (`geoMeasurementPause`). Null: nothing is known to be paused.
+     * @type {(() => { breaker?: { paused?: () => string[] }, hostPausedUntil?: number } | null) | null}
+     */
+    this.probeState = null;
   }
 
   ready() { return this.store.ready(); }
@@ -786,8 +813,11 @@ export class GeoService {
           LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
         WHERE o.geo_project_id = $1 AND e.at >= $2 AND e.detail ->> 'reason' = 'text_changed'
         GROUP BY o.id, a.title ORDER BY min(e.at) DESC LIMIT 2`, [project.id, since]),
-      this.store.query(`SELECT id, kind, done, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status IN ('done', 'partial')
-        AND finished_at >= $2 AND kind IN ('baseline', 'weekly', 'single_step', 'noise') ORDER BY finished_at DESC LIMIT 2`, [project.id, since]),
+      // A round that heard no answer is no event of the week: it read 「每周复测完成，0 次提问」 (2026-10-25).
+      this.store.query(`SELECT r.id, r.kind, r.done, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.status IN ('done', 'partial')
+        AND r.finished_at >= $2 AND r.kind IN ('baseline', 'weekly', 'single_step', 'noise')
+        AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))
+        ORDER BY r.finished_at DESC LIMIT 2`, [project.id, since]),
       this.store.query(`SELECT count(*)::integer AS n, max(updated_at) AS at FROM evimed_geo.articles WHERE geo_project_id = $1 AND status = 'publishable'
         AND updated_at >= $2`, [project.id, since]),
       this.store.query(`SELECT count(*)::integer AS n, max(updated_at) AS at FROM evimed_geo.orders WHERE geo_project_id = $1
@@ -1547,12 +1577,26 @@ export class GeoService {
       // or a noise round measures a sliver and is never 「下次复测」.
       this.store.query(`SELECT kind, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status IN ('queued', 'running')
         AND kind = ANY($2::text[]) ORDER BY created_at LIMIT 1`, [project.id, [...GEO_HEADLINE_ROUND_KINDS]]),
-      this.store.query(`SELECT finished_at, (SELECT coalesce(array_agg(key), '{}') FROM evimed_geo.schedule_marks
+      // The baseline the weekly rest counts from is the first that heard an answer, as the schedule's (2026-10-25).
+      this.store.query(`SELECT r.finished_at, (SELECT coalesce(array_agg(key), '{}') FROM evimed_geo.schedule_marks
           WHERE geo_project_id = $1 AND starts_with(key, 'weekly:')) AS taken
-        FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'single_step') AND status IN ('done', 'partial')
-        ORDER BY finished_at LIMIT 1`, [project.id]),
+        FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind IN ('baseline', 'single_step') AND r.status IN ('done', 'partial')
+          AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))
+        ORDER BY r.finished_at LIMIT 1`, [project.id]),
       this.#rivalSeries(project.id),
     ]);
+    const pause = geoMeasurementPause({ engines: project.engines, probe: this.probeState?.() ?? null, config: this.config, now: this.now() });
+    // Since when, as the stored answers show it: for each paused engine, its first failed or suspect ask after its last counted
+    // answer (any project's: an engine is down for all of them). A paused measurement dates from the engine that stopped last; a
+    // running one with engines out, from the one out longest. Null where nothing stored says it.
+    const starts = pause.engines.length ? (await this.store.query(`SELECT e.engine, (SELECT min(s.asked_at) FROM evimed_geo.snapshots s
+        WHERE s.engine = e.engine AND s.status IN ('failed', 'suspect') AND coalesce(s.surface ->> 'mode', 'web') <> 'inclusion'
+          AND s.asked_at > coalesce((SELECT max(a.asked_at) FROM evimed_geo.snapshots a WHERE a.engine = e.engine AND a.status IN ('valid', 'refusal')
+            AND coalesce(a.surface ->> 'mode', 'web') <> 'inclusion'), '-infinity'::timestamptz)) AS since
+      FROM unnest($1::text[]) AS e(engine)`, [pause.engines])).rows.map((/** @type {any} */ row) => row.since).filter(Boolean)
+      .map((/** @type {any} */ at) => new Date(at).getTime()) : [];
+    const measurement = { state: pause.state, engines: pause.engines,
+      since: starts.length ? new Date(pause.state === "paused" ? Math.max(...starts) : Math.min(...starts)).toISOString() : null };
     const projectSeries = series.get(project.id) ?? new Map();
     const armSeries = arms.get(project.id) ?? new Map();
     const engineSeries = byEngine.get(project.id) ?? new Map();
@@ -1561,7 +1605,9 @@ export class GeoService {
     // Otherwise the weekly re-measure the schedule will run, by its own skip
     // rules, and only while the program monitors at all.
     const measured = baseline.rows[0];
-    const next = queued.rows[0]
+    // Nothing is next while the owner has paused the project or no engine of it can be asked: the page would name a re-measure that
+    // will not happen.
+    const next = project.status === "paused" || measurement.state === "paused" ? null : queued.rows[0]
       ? { date: dayIn(new Date(queued.rows[0].created_at), this.timeZone), kind: String(queued.rows[0].kind) }
       : measured && wantedSteps(programSteps(project.steps)).want.has("monitoring")
         ? { date: nextWeeklySlot({ now: this.now(), timeZone: this.timeZone, baselineFinishedAt: measured.finished_at,
@@ -1585,6 +1631,7 @@ export class GeoService {
       cited,
       newErrors: newErrors.rows.map(errorView),
       next,
+      measurement,
     };
   }
 

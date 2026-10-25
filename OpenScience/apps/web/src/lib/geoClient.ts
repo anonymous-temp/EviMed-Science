@@ -680,7 +680,15 @@ export interface GeoMonitoring {
   rivals?: Array<{ name: string; points: GeoSeriesPoint[] }>;
   cited: Array<{ articleId: string; title: string; engine: GeoEngine; firstSeen: string }>;
   newErrors: GeoErrorRow[];
+  /** Null while the project is paused by its owner or `measurement.state` is `paused`: no re-measure will run. */
   next: { date: string; kind: string } | null;
+  /**
+   * Whether measurement can run now. `engines`: this project's engines the probe's breaker holds paused (all its probe engines when
+   * the probe host is unreachable or not configured); `state` is `paused` when none of the project's engines can be asked; `since`:
+   * when the pause began as the stored answers show it (ISO), else null. The server always sends it; optional here only until the
+   * page's fixtures carry it.
+   */
+  measurement?: { state: "measuring" | "paused"; since: string | null; engines: string[] };
 }
 
 /* --------------------------------------------------------- the question group as the spine (R19) */
