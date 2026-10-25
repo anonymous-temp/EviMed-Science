@@ -11,6 +11,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Menu } from "@/components/ui/Menu";
 import { Note } from "@/components/ui/Note";
 import { Switch } from "@/components/ui/Switch";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { extensionCatalogue, extensionInstallations, installExtension, inventory as loadInventoryOf, projectExtensions, projectBuiltinPlugins, saveProjectBuiltinPlugins, saveProjectExtensions, type BuiltinPluginPolicy, type CatalogueExtension, type Inventory } from "@/lib/extensionsClient";
 import { listWebResearchAgents } from "@/lib/apiClient";
 import { bindConversationCapability } from "@/lib/dispatch";
@@ -271,7 +272,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     { load: projectPlugins, label: "重试项目插件设置" }, { load: builtinPlugins, label: "重试内置插件设置" }, { load: inventory, label: "重试平台能力" },
     { load: tools, label: "重试科研工具" },
   ];
-  return <PageShell title="插件与技能" width="wide" meta={<span title={`当前项目：${projectName}`} className="inline-flex max-w-48 items-center gap-1.5 text-ui"><Folder size={16} aria-hidden /><span className="truncate">{projectName}</span></span>}
+  return <PageShell title="插件与技能" width="wide" meta={<Tooltip content={`当前项目：${projectName}`} kind="label"><span className="inline-flex max-w-48 items-center gap-1.5 text-ui"><Folder size={16} aria-hidden /><span className="truncate">{projectName}</span></span></Tooltip>}
     toolbar={{ label: "筛选与搜索", className: "pt-3",
       views: { label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setOpen(null); navigate(`/app/extensions/${next}?${params}`); } },
       filters: [{ kind: "select", label: "类型", allLabel: "全部类型", value: type === "all" ? null : type, options: [{ value: "skills", label: "技能" }, { value: "plugins", label: "插件" }], onChange: next => { const changed = new URLSearchParams(params); changed.set("type", next ?? "all"); changed.delete("group"); setParams(changed, { replace: true }); } },
