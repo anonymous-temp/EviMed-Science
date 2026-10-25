@@ -27,7 +27,8 @@ async function fixture(t, { type = 'entities', after = 'A scoped project fact. d
   await accounts.createProject(owner, 'project-b', 'B');
   const aProject = await accounts.requireProject(owner, 'default'), bProject = await accounts.requireProject(owner, 'project-b');
   const geo = new GeoStore({ database: accounts.database }); await geo.ready();
-  for (const project of [aProject, bProject]) await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+  // A shared GEO project: one with a member (a one-person GEO project is an owned project, owner ruling 2026-10-25).
+  for (const project of [aProject, bProject]) await geo.addMember({ geoId: (await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 })).id, userId: 'member', role: 'editor', invitedBy: owner.id });
   let failExtraction = false;
   const stub = await startOpenVikingStub(t, { extract: ({ user }) => failExtraction ? 'fail' : { adds: [{ uri: `viking://user/${user}/memories/${type}/fact.md`, memory_type: type, after }] } });
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
@@ -213,7 +214,7 @@ test('bounded namespace scans rotate and a scan failure cannot strand an already
   for (let index = 0; index < 8; index++) {
     const id = `extra-${index}`; await f.accounts.createProject(f.owner, id, id);
     const project = await f.accounts.requireProject(f.owner, id);
-    await f.geo.createProject({ userId: f.owner.id, projectId: id, engines: ['deepseek'], coverageDays: 30 });
+    await f.geo.addMember({ geoId: (await f.geo.createProject({ userId: f.owner.id, projectId: id, engines: ['deepseek'], coverageDays: 30 })).id, userId: 'member', role: 'editor', invitedBy: f.owner.id });
     await f.contexts.forProject(project);
   }
   const views = await f.contexts.all(f.owner.id), last = views.at(-1);

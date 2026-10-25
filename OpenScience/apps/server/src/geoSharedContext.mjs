@@ -8,9 +8,11 @@ const RECORD_TYPE = 'geo-native-context-policy';
 const refused = () => new HttpError(403, 'memory_scope_denied', 'The project context policy is unavailable or changed.');
 const keyOf = namespace => `gncp_${createHash('sha256').update(namespace.id).digest('hex')}`;
 
-/** Persistent project context floor, derived from the owner's canonical control
- * project rather than the browser's actor, selected tab or current session.
- * Uses the existing product document ledger; it stores no memory text.
+/** Persistent project context floor of a shared GEO project, derived from the
+ * owner's canonical control project rather than the browser's actor, selected
+ * tab or current session. It applies while the project has a member; a GEO
+ * project its owner works in alone is an owned project. Uses the existing
+ * product document ledger; it stores no memory text.
  */
 export class GeoSharedContext {
   constructor({ database, documents }) { this.database = database; this.documents = documents; }
@@ -43,14 +45,21 @@ export class GeoSharedContext {
       const namespace = projectNativeMemoryNamespace(identity), id = keyOf(namespace);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [id]);
       const saved = await this.documents.get(project.userId, KIND, id, { includeDeleted: true });
-      if (saved) return this.read(saved, project.userId, namespace);
-      const table = (await client.query("SELECT to_regclass('evimed_geo.projects') IS NOT NULL AS present")).rows[0]?.present;
-      // A module that has never existed does not impose professional context on
-      // an ordinary project. Once registered, the saved floor is checked above
-      // even when GEO is disabled or its business row has been removed.
-      const geo = table ? (await client.query('SELECT id FROM evimed_geo.projects WHERE user_id=$1 AND project_id=$2', [project.userId, project.id])).rows : [];
-      if (!geo.length) return { kind: 'owned', ownerId: project.userId, controlProjectId: project.id };
-      if (geo.length !== 1) throw refused();
+      // A saved floor is checked whatever the membership says: a changed or removed one is refused, never read as personal.
+      const policy = saved ? this.read(saved, project.userId, namespace) : null;
+      const owned = { kind: 'owned', ownerId: project.userId, controlProjectId: project.id };
+      const tables = (await client.query(`SELECT to_regclass('evimed_geo.projects') IS NOT NULL AS projects,
+        to_regclass('evimed_geo.members') IS NOT NULL AS members`)).rows[0];
+      // The project namespace is a shared project's: a live GEO project with at least one member (owner ruling 2026-10-25).
+      // A one-person GEO project is its owner's like any other project — their own memory, capsule, packs and methods, the
+      // project a label — and the decision is read here on every call, so adding the first member or removing the last one
+      // takes effect at the next operation. Nothing is moved: what was written in either namespace stays where it is.
+      const geo = tables?.projects ? (await client.query(`SELECT g.id, g.deleted_at IS NULL AS live,
+        ${tables.members ? 'EXISTS (SELECT 1 FROM evimed_geo.members m WHERE m.geo_project_id=g.id)' : 'false'} AS shared
+        FROM evimed_geo.projects g WHERE g.user_id=$1 AND g.project_id=$2`, [project.userId, project.id])).rows : [];
+      if (geo.length > 1) throw refused();
+      if (!geo[0]?.live || !geo[0].shared) return owned;
+      if (policy) return policy;
       const row = await this.documents.put(project.userId, KIND, id, { recordType: RECORD_TYPE, policyVersion: 1,
         geoProjectId: geo[0].id, namespace }, { projectId: project.id, expectedRevision: 0, transactionClient: client });
       return this.read(row, project.userId, namespace);

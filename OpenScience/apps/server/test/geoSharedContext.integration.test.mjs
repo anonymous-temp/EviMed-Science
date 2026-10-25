@@ -11,7 +11,8 @@ import { loadConfig } from '../src/config.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
-async function setup(t) {
+// A shared project: one with a member. A one-person GEO project keeps its owner's own context (owner ruling 2026-10-25).
+async function setup(t, { shared = true } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geocontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-context-'));
   const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
@@ -22,11 +23,19 @@ async function setup(t) {
   const geoStore = new GeoStore({ database: accounts.database }); await geoStore.ready();
   const geo = await geoStore.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
+  if (shared) await geoStore.addMember({ geoId: geo.id, userId: editor.id, role: 'editor', invitedBy: owner.id });
   return { accounts, documents, policies, geoStore, owner, editor, project, personal, geo };
 }
 
-test('GEO context registers one persistent project floor before an editor or input exists', options, async t => {
-  const f = await setup(t);
+test('a one-person GEO project keeps the owner\'s own context; the first member registers the project floor and the last one leaving returns it', options, async t => {
+  const f = await setup(t, { shared: false });
+  const owned = { kind: 'owned', ownerId: f.owner.id, controlProjectId: f.project.id };
+  const policies = () => f.documents.list(f.owner.id, 'geo-plan-context', { filter: { recordType: 'geo-native-context-policy' } });
+  assert.deepEqual(await f.policies.forProject(f.project), owned, 'a GEO project nobody else is in is its owner\'s project');
+  assert.deepEqual(await f.policies.forWorkload({ userId: f.owner.id, projectId: f.project.id }), owned);
+  assert.deepEqual(await f.policies.namespacesForOwner(f.owner.id), []);
+  assert.equal((await policies()).items.length, 0, 'no project namespace is registered while nobody shares the project');
+  await f.geoStore.addMember({ geoId: f.geo.id, userId: f.editor.id, role: 'editor', invitedBy: f.owner.id });
   const [first, parallel] = await Promise.all([f.policies.forProject(f.project), f.policies.forWorkload({ userId: f.owner.id, projectId: f.project.id })]);
   assert.deepEqual(first, parallel);
   assert.equal(first.kind, 'geo-project'); assert.equal(first.geoProjectId, f.geo.id);
@@ -34,12 +43,15 @@ test('GEO context registers one persistent project floor before an editor or inp
   assert.deepEqual(await f.policies.namespacesForOwner(f.owner.id), [first.namespace]);
   const normal = await f.policies.forProject(f.personal);
   assert.deepEqual(normal, { kind: 'owned', ownerId: f.editor.id, controlProjectId: f.personal.id });
-  assert.equal((await f.documents.list(f.owner.id, 'geo-plan-context', { filter: { recordType: 'geo-native-context-policy' } })).items.length, 1);
-  await f.geoStore.addMember({ geoId: f.geo.id, userId: f.editor.id, role: 'editor', invitedBy: f.owner.id });
-  assert.deepEqual(await f.policies.forProject(f.project), first);
+  assert.equal((await policies()).items.length, 1);
   await f.geoStore.removeMember({ geoId: f.geo.id, userId: f.editor.id, role: 'editor' });
+  assert.deepEqual(await f.policies.forProject(f.project), owned, 'the last member leaving gives the project back to its owner');
+  assert.deepEqual(await f.policies.namespacesForOwner(f.owner.id), [first.namespace], 'what the shared project kept stays enumerable for export and cleanup');
+  assert.equal((await policies()).items.length, 1);
+  await f.geoStore.addMember({ geoId: f.geo.id, userId: f.editor.id, role: 'editor', invitedBy: f.owner.id });
+  assert.deepEqual(await f.policies.forProject(f.project), first, 'sharing again reopens the same project namespace');
   await f.accounts.database.query('UPDATE evimed_geo.projects SET deleted_at=clock_timestamp() WHERE id=$1', [f.geo.id]);
-  assert.deepEqual(await f.policies.forProject(f.project), first, 'deleting the GEO row or last editor cannot expose personal context to an old workspace');
+  assert.deepEqual(await f.policies.forProject(f.project), owned, 'a deleted GEO project is reachable by its owner only');
 });
 
 test('invalid durable project policy fails closed and cannot be treated as an ordinary owner project', options, async t => {

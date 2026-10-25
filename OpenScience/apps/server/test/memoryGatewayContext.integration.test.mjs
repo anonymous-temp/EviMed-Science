@@ -25,12 +25,18 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'memory-gateway-context-'));
   const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
   t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
-  await accounts.createUser('owner', 'fixture-password', 'Owner');
+  await accounts.createUser('owner', 'fixture-password', 'Owner'); await accounts.createUser('editor', 'fixture-password', 'Editor');
   const owner = await accounts.userById('owner');
-  await accounts.createProject(owner, 'project-b', 'B'); await accounts.createProject(owner, 'ordinary', 'Ordinary');
+  await accounts.createProject(owner, 'project-b', 'B'); await accounts.createProject(owner, 'ordinary', 'Ordinary'); await accounts.createProject(owner, 'solo', 'Solo');
   const a = await accounts.requireProject(owner, 'default'), b = await accounts.requireProject(owner, 'project-b'), ordinary = await accounts.requireProject(owner, 'ordinary');
+  const solo = await accounts.requireProject(owner, 'solo');
   const geo = new GeoStore({ database: accounts.database }); await geo.ready();
-  for (const project of [a, b]) await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+  // Two shared GEO projects (a member each) and one its owner works in alone.
+  for (const project of [a, b]) {
+    const row = await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+    await geo.addMember({ geoId: row.id, userId: 'editor', role: 'editor', invitedBy: owner.id });
+  }
+  const soloGeo = await geo.createProject({ userId: owner.id, projectId: solo.id, engines: ['deepseek'], coverageDays: 30 });
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
   const stub = await startOpenVikingStub(t);
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
@@ -43,7 +49,7 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
   const admission = { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) };
   const handler = createMemoryGatewayHandler({ config: { ovNativeMemoryEnabled: true, memoryEnabled: true, memoryGatewayTimeoutMs:gatewayTimeoutMs }, sessions, admission, overlay,
     runtimeManager: { assertActiveEviMedWorkloadToken: async token => {
-      if (![a.id, b.id, ordinary.id].includes(token)) throw new Error('Unknown workload');
+      if (![a.id, b.id, ordinary.id, solo.id].includes(token)) throw new Error('Unknown workload');
       return { userId: owner.id, projectId: token };
     }, runtimeGeneration: () => 'generation-1' }, store: accounts,
     memoryContexts: contexts, rememberJournal: journal, capsuleSearch,
@@ -56,8 +62,34 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
     const text = await result.text(); let json; try { json = JSON.parse(text); } catch { json = null; }
     return { status: result.status, json, text };
   };
-  return { owner, accounts, documents, contexts, sessions, a, b, ordinary, stub, handler, commits, noted, forgotten, call, overlay };
+  return { owner, accounts, documents, contexts, sessions, a, b, ordinary, solo, soloGeo, geo, stub, handler, commits, noted, forgotten, call, overlay };
 }
+
+test('a one-person GEO project answers from the owner\'s own memory, packs included, until a member joins', options, async t => {
+  const called = [];
+  const f = await fixture(t, { capsuleSearch: async input => { called.push(input); return input.contextPolicy?.kind === 'geo-project' ? [] : [{ content: 'Received pack fact' }]; } });
+  const personal = f.sessions.engineUser(f.owner.id), root = f.sessions.userRoot(f.owner.id);
+  f.stub.seedMemory(personal, 'profile.md', 'PERSONAL PROFILE');
+  f.stub.seedMemory(personal, 'preferences/tone.md', 'PERSONAL PREFERENCE');
+  const context = await f.contexts.forProject(f.solo);
+  assert.equal(context.kind, 'owned'); assert.equal(context.namespaceId, personal);
+  const startup = await f.call(f.solo, 'POST', '/api/v1/search/search', { mode: 'context', query: '' });
+  assert.equal(startup.status, 200); assert.match(startup.text, /PERSONAL PROFILE/);
+  const preference = await f.call(f.solo, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(`${root}/memories/preferences/tone.md`)}`);
+  assert.equal(preference.status, 200); assert.match(preference.text, /PERSONAL PREFERENCE/);
+  const search = await f.call(f.solo, 'POST', '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'facts' } } });
+  assert.equal(search.status, 200); assert.match(search.text, /Received pack fact/);
+  assert.notEqual(called.at(-1).contextPolicy?.kind, 'geo-project', 'the capsule half reads the account\'s capsules in force and its unlabelled entries');
+  assert.equal((await f.call(f.solo, 'GET', '/api/v1/system/status')).json.result.user, personal);
+  await f.geo.addMember({ geoId: f.soloGeo.id, userId: 'editor', role: 'editor', invitedBy: f.owner.id });
+  const shared = await f.contexts.forProject(f.solo);
+  assert.equal(shared.kind, 'geo-project');
+  assert.equal((await f.call(f.solo, 'GET', '/api/v1/system/status')).json.result.user, shared.namespaceId, 'the next request after the first member joins is the project\'s');
+  const sharedStartup = await f.call(f.solo, 'POST', '/api/v1/search/search', { mode: 'context', query: '' });
+  assert.doesNotMatch(sharedStartup.text, /PERSONAL/);
+  await f.geo.removeMember({ geoId: f.soloGeo.id, userId: 'editor', role: 'editor' });
+  assert.equal((await f.call(f.solo, 'GET', '/api/v1/system/status')).json.result.user, personal, 'and the owner\'s again once the last one left');
+});
 
 test('one native entrance passes the bound project policy to capsule selection and retains ordinary recall', options, async t => {
   const called = [];

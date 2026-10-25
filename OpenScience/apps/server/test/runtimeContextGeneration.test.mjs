@@ -83,6 +83,19 @@ test('busy work and pending prompts preserve the old runtime; idle cutover uses 
  busy=false;pending=true;assert.deepEqual(await m.ensureContextPolicyGeneration(f.project),{adopted:false,pending:true});assert.equal(stops,0);
  pending=false;assert.deepEqual(await m.ensureContextPolicyGeneration(f.project),{adopted:true});assert.equal(stops,1);assert.ok(scoped);assert.ok(locks.every(args=>args[0]==='plugin-project:owner:project'));
 });
+test('a project whose last member left is its owner\'s again: no refusal, and the shared-launched runtime is replaced once idle',async t=>{
+ const f=await managerFixture(t),m=f.manager;await launch(f);assert.ok(await m.launchedContextReceipt(f.project));
+ const owned={kind:'owned',ownerId:'owner',controlProjectId:'project'};m.contextPolicies={forProject:async()=>owned};
+ assert.deepEqual(await m.contextPolicyFor(f.project),owned);assert.equal(await m.assertContextPolicyGeneration(f.project),null);
+ let busy=true,stops=0;m.idleVerdict=async()=>busy?'working':'idle';m.pluginRuntimeBusy=async()=>busy;
+ m.pluginService={database:{transaction:async work=>work({query:async()=>({rows:[{acquired:true}]})}),withTransactionClient:async(client,work)=>work()},scope:async()=>{},hasPendingPrompts:async()=>false};
+ m.stopIdleRuntime=async(project,options)=>{if(!await options.guard()) return false;stops++;m.runtimes.delete(m.key(project));return true;};
+ m.startAdmitted=async(project,options)=>{await options.replaceRuntime();};
+ assert.deepEqual(await m.ensureContextPolicyGeneration(f.project),{adopted:false},'work in the old runtime goes on; nothing waits for the cutover');assert.equal(stops,0);
+ busy=false;assert.deepEqual(await m.ensureContextPolicyGeneration(f.project),{adopted:true});assert.equal(stops,1);
+ m.runtimes.set(m.key(f.project),{kind:'dsh',project:f.project,workspaceDir:f.project.workspaceDir});
+ assert.deepEqual(await m.ensureContextPolicyGeneration(f.project),{adopted:false},'an owned launch is left alone');assert.equal(stops,1);
+});
 test('concurrent generation construction is atomic and activation fanout re-resolves each shared project',async t=>{
  const f=await managerFixture(t);const results=await Promise.all(Array.from({length:6},()=>f.manager.prepareSharedContext(f.project,policy)));assert.equal(new Set(results.map(item=>item.digest)).size,1);
  await launch(f);let checks=0;f.manager.ensureContextPolicyGeneration=async()=>{checks++;return {adopted:false,pending:true};};

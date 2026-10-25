@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {fixture} from './helpers/geoNativeCompositionFixture.mjs';
 const options={skip:!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL&&'Disposable PostgreSQL required'};
 
-async function setup(t,background) {
+async function setup(t,background,{shared=true}={}) {
  const f=await fixture(t,true,{sourceIngestionEnabled:true,sourceIngestionPollMs:3600000}),app=f.app,manager=app.runtimeManager;
  const geo=(await f.call('owner','POST','/api/geo/projects',{})).body.data;
+ // A shared project's sources are its context's; a one-person project is an owned one (owner ruling 2026-10-25).
+ if(shared) assert.equal((await f.call('owner','POST',`/api/geo/projects/${geo.id}/members`,{userId:'editor',role:'editor'})).status,201);
  const primary=(await f.call('owner','POST',`/api/geo/projects/${geo.id}/conversation/open`,{target:{kind:'primary'}})).body.data.sessionId;
  const owner=await app.store.userById('owner'),project=await app.store.requireProject(owner,geo.projectId);
  let root=primary;
