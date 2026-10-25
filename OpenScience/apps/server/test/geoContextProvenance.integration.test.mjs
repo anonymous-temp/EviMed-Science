@@ -248,3 +248,21 @@ test('consumed shared follow-up keeps canonical input trace through real cleaner
   assert.equal(await f.items.method(f.policy,method),true);
   const count=queued.length;second.automated=true;await triggers.afterRun(f.project,second);assert.equal(queued.length,count);
 });
+test('a method learnt in a shared project never mounts in the owner\'s ordinary conversations, even after the project is theirs alone again',options,async t=>{
+  const f=await fixture(t);
+  const {LearningService}=await import('../src/learningService.mjs'),{selectLearnedMethods}=await import('../src/learnedMethodMount.mjs');
+  const learning=new LearningService({documents:f.documents,contextProvenance:f.provenance});
+  await f.create('member-lesson');
+  const own=async(name,provenance)=>{
+    const payload={recordType:'learned-method',status:'approved',frontmatter:{...frontmatter,name},body:BODY,dependencies:[],provenance};
+    payload.contentDigest=methodContentDigest(payload,sha256);
+    return f.documents.put('owner','method',name,payload,{expectedRevision:0,projectId:null});
+  };
+  await own('own-lesson',{runId:'own-run',sourceProjectId:'elsewhere'});
+  // Distilled while the project was shared; its source project reads as the owner's now, the provenance still says where it came from.
+  await own('earlier-shared-lesson',{runId:'shared-run',sourceProjectId:'elsewhere',contextPolicy:contextPolicyIdentity(f.policy)});
+  const ordinary=await selectLearnedMethods(learning,{userId:'owner',projectId:'elsewhere'});
+  assert.deepEqual(ordinary.map(method=>method.id),['own-lesson']);
+  const shared=await selectLearnedMethods(learning,{userId:'owner',projectId:f.project.id,contextPolicy:f.policy,contextItems:f.items});
+  assert.deepEqual(shared.map(method=>method.id),['member-lesson'],'the shared project still mounts its own');
+});

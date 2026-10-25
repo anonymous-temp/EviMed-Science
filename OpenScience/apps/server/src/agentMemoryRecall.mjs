@@ -131,6 +131,8 @@ async function ownMethods(learning, userId, projectId, budget) {
   /** @type {Map<string, any>} */
   const documents = new Map();
   const reading = {
+    // What a shared GEO project learnt stays out of the account's own methods here as in a mount.
+    contextProvenance: learning.contextProvenance ?? null,
     getMethod: (/** @type {string} */ owner, /** @type {string} */ id) => learning.getMethod(owner, id),
     approvedMethods: async (/** @type {string} */ owner) => {
       const found = await learning.approvedMethods(owner);
