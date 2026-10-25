@@ -69,7 +69,8 @@ const RECURRING_SWEEPS = [
     name: "autopilot agenda scheduling",
     intervalMs: 60_000,
     startupRuns: 1,
-    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda'/,
+    // The scheduling pass itself: the stop-work recovery also reads agendas (queued notices, stopped tasks) with the same opening.
+    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active'/,
   },
   {
     key: "notificationDefaults",
@@ -681,7 +682,9 @@ test("the reranker and the index strictness reach both recall paths", async (t) 
 });
 
 test("startup arms every recurring sweep, and each timer really drives its own sweep", async (t) => {
-  const fixture = await composedApp(t);
+  // The production composition: agenda scheduling is armed only where scheduled tasks are on (OPEN_SCIENCE_AUTOPILOT_ENABLED,
+  // true in every hosted deployment), and the test below holds that it is not armed where they are off.
+  const fixture = await composedApp(t, { autopilotEnabled: true });
   const startup = fixture.evidence();
 
   for (const sweep of RECURRING_SWEEPS) {
@@ -711,8 +714,17 @@ test("startup arms the retry of unconfirmed container removals, and its timer dr
   assert.equal(passes >= 1, true, "no timer at the retry cadence runs the manager's pass");
 });
 
+test("with scheduled tasks off, startup never runs agenda scheduling and arms no timer that drives it", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: false });
+  const scheduling = RECURRING_SWEEPS.find((sweep) => sweep.key === "autopilotSchedule");
+  assert.ok(scheduling);
+  assert.equal(fixture.evidence()[scheduling.key] ?? 0, 0, "a deployment with scheduled tasks off still scheduled agendas at startup");
+  assert.equal(((await fixture.drivers()).get(scheduling.key) ?? []).length, 0, "a timer drives agenda scheduling although scheduled tasks are off");
+});
+
 for (const managedBrowserEnabled of [false, true]) test(`a maintenance pause clears every recurring timer and reopening re-arms them (managed browser=${managedBrowserEnabled})`, async (t) => {
   const fixture = await composedApp(t, {
+    autopilotEnabled: true,
     managedBrowserEnabled,
     managedBrowserCdpUrl: "http://127.0.0.1:9222",
     edgeProxyUrl: "https://proxy.example.org",
