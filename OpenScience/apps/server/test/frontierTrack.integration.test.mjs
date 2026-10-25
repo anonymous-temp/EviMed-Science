@@ -199,6 +199,12 @@ test("the approval list: the last 90 days by the decision's day, `other` left ou
   assert.deepEqual(all.agencies.map((entry) => [entry.key, entry.count]).sort(), [["ema", 1], ["fda", 1], ["nmpa", 1], ["none", 1]]);
   assert.equal(all.ytd.total, 5, "the year's count reaches back to January: the old one is in it");
   assert.equal(all.ytd.since, "2026-05-01");
+  // `since` is how far back the tracker has seen anything, the day it was reported: a decision dated long before it was reported
+  // (a late report of a February approval) counts in the year and does not move the start.
+  await item({ track: approvalRecord({ drug: { text: "Late report", quote: "Late report" }, date: { value: "2026-02-03", quote: "x" } }), text: "a9", publishedAt: "2026-10-09T04:00:00Z" });
+  const later = await instance.approvals();
+  assert.equal(later.ytd.total, 6);
+  assert.equal(later.ytd.since, "2026-05-01");
   assert.deepEqual((await instance.approvals({ agency: "ema" })).rows.map((row) => row.facts.drug.text), ["Ximluci"]);
   assert.deepEqual((await instance.approvals({ agency: "none" })).rows.map((row) => row.facts.drug.text), ["Unlabelled"]);
   assert.deepEqual((await instance.approvals({ kind: "new-indication" })).rows, []);

@@ -356,7 +356,8 @@ export class FrontierTrack {
   // ───────────────────────── reads ─────────────────────────
 
   /**
-   * 审批: the approvals of the window, newest decision first, a page at a time.
+   * 审批: the approvals of the window, newest decision first, a page at a time. `ytd.since` is the first day an approval was reported, which
+   * is how far the year's count reaches back.
    * @param {{ from?: string | null, agency?: string | null, kind?: string | null, cursor?: string | null, limit?: number }} [query]
    * @returns {Promise<{ rows: Array<{ rowId: string, publicId: string, at: string, facts: any }>, next: string | null,
    *   agencies: Array<{ key: string, label: string, region: string, count: number }>, ytd: { year: number, since: string | null, total: number, byAgency: Array<{ key: string, label: string, count: number }> },
@@ -368,7 +369,7 @@ export class FrontierTrack {
     const kinds = kind && FRONTIER_APPROVAL_KINDS.includes(/** @type {any} */ (kind)) && kind !== "other" ? [kind] : FRONTIER_APPROVAL_KINDS.filter((entry) => entry !== "other");
     const yearStart = `${today.slice(0, 4)}-01-01`;
     const listed = `WITH listed AS (
-        SELECT i.id, i.public_id, i.track_facts AS facts, i.track_facts->'agency'->>'key' AS agency,
+        SELECT i.id, i.public_id, i.track_facts AS facts, i.track_facts->'agency'->>'key' AS agency, ${ITEM_DAY_SQL("$1")} AS reported,
           COALESCE(CASE WHEN i.track_facts->'date'->>'value' ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN (i.track_facts->'date'->>'value')::date END,
             ${ITEM_DAY_SQL("$1")}) AS at
         FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
@@ -386,7 +387,7 @@ export class FrontierTrack {
     const facets = (await this.database.query(`${listed}
       SELECT agency, count(*)::int AS count FROM listed WHERE at >= $3::date AND at <= $4::date GROUP BY agency`, [this.timeZone, kinds, start, today])).rows;
     const year = (await this.database.query(`${listed}
-      SELECT agency, count(*)::int AS count, min(at) AS since FROM listed WHERE at >= $3::date AND at <= $4::date GROUP BY agency`, [this.timeZone, kinds, yearStart, today])).rows;
+      SELECT agency, count(*)::int AS count, min(reported) AS since FROM listed WHERE at >= $3::date AND at <= $4::date GROUP BY agency`, [this.timeZone, kinds, yearStart, today])).rows;
     const label = (/** @type {string | null} */ key) => (key ? frontierAgencyByKey(key)?.label ?? "其他监管机构" : "未注明机构");
     const region = (/** @type {string | null} */ key) => (key ? frontierAgencyByKey(key)?.region ?? "other" : "other");
     const since = year.map((/** @type {any} */ row) => dayOf(row.since)).sort()[0] ?? null;
