@@ -289,21 +289,21 @@ export async function runGeoDataFixes({ database, geoProjectId, apply = false, d
         }
         const ofBatch = new Set(articles.map((article) => article.id));
         for (const errorId of errorIds) {
-          const row = (await db.query(`SELECT status, materials FROM evimed_geo.errors WHERE geo_project_id = $1 AND id = $2`, [geoProjectId, errorId])).rows[0];
-          if (!row) continue;
-          const held = (Array.isArray(row.materials) ? row.materials : []).filter((entry) => ofBatch.has(String(entry?.articleId ?? "")));
+          const errorRow = (await db.query(`SELECT status, materials FROM evimed_geo.errors WHERE geo_project_id = $1 AND id = $2`, [geoProjectId, errorId])).rows[0];
+          if (!errorRow) continue;
+          const held = (Array.isArray(errorRow.materials) ? errorRow.materials : []).filter((entry) => ofBatch.has(String(entry?.articleId ?? "")));
           if (held.length <= 1) continue;
           crossAttached.push(errorId);
           const keep = paired.get(errorId);
           if (!keep) { unlisted.push(errorId); continue; }
-          const materialsLeft = (Array.isArray(row.materials) ? row.materials : [])
+          const materialsLeft = (Array.isArray(errorRow.materials) ? errorRow.materials : [])
             .filter((entry) => !ofBatch.has(String(entry?.articleId ?? "")) || keep.has(String(entry.articleId)));
           const hasCorrection = materialsLeft.some((entry) => entry?.kind === "article");
-          const status = row.status === "acting" && !hasCorrection ? "open" : row.status;
+          const status = errorRow.status === "acting" && !hasCorrection ? "open" : errorRow.status;
           await db.query(`UPDATE evimed_geo.errors SET materials = $3::jsonb, status = $4, updated_at = now() WHERE geo_project_id = $1 AND id = $2`,
             [geoProjectId, errorId, JSON.stringify(materialsLeft), status]);
-          detached += (Array.isArray(row.materials) ? row.materials.length : 0) - materialsLeft.length;
-          if (status !== row.status) reopened += 1;
+          detached += (Array.isArray(errorRow.materials) ? errorRow.materials.length : 0) - materialsLeft.length;
+          if (status !== errorRow.status) reopened += 1;
         }
       }
       report.materials = { pairs, attached, errors: acting.size, crossAttached: crossAttached.length, detached, reopened, unlisted };

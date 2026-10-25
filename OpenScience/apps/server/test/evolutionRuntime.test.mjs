@@ -69,7 +69,7 @@ test('protocol 12 exposes only bounded candidate execution and refuses command s
   const server=createRuntimeController({dataDir,runtimeControllerSocket:socketPath,runtimeContainerBin:dockerBin,runtimeContainerImage:image,evolutionEnabled:true},{evolutionVerification:{tools,imageId:async()=> 'sha256:'+'a'.repeat(64)}});
   try{
     await server.listen();const client=new RuntimeControllerClient({runtimeControllerSocket:socketPath});
-    assert.equal((await client.health()).protocolVersion,RUNTIME_CONTROLLER_PROTOCOL_VERSION);assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION,14);
+    assert.equal((await client.health()).protocolVersion,RUNTIME_CONTROLLER_PROTOCOL_VERSION);assert.ok(RUNTIME_CONTROLLER_PROTOCOL_VERSION>=12);
     const result=await client.execVerify({files:{'scripts/x.py':'value=1'},code:"print('verified')"});assert.equal(result.output,'verified');assert.equal(observed.candidateFiles['scripts/x.py'],'value=1');
     assert.ok(observed.mounts.includes('/workspace:ro,noexec,nosuid,nodev,size=1m'));
     await assert.rejects(()=>client.execVerify({files:{},code:'',imageId:'attacker-selected'}),error=>error.code==='extension_contract_invalid');

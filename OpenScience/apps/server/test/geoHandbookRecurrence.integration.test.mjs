@@ -13,6 +13,8 @@ import {ProductJobs} from '../src/productJobs.mjs';
 import {HandbookConsolidation} from '../src/handbookConsolidation.mjs';
 import {registry} from './helpers/handbookFixture.mjs';
 const sha=s=>createHash('sha256').update(s).digest('hex');
+// A disposable PostgreSQL is required, as for the other native-input suites; without one the file is skipped, not failed.
+const pg=!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL&&'Disposable PostgreSQL required';
 async function fixture(t,poolMax=4) {
  const f=await createNativeInputFixture(t,poolMax),runs=[],transcripts=new Map();
  const p=new GeoContextProvenance({documents:f.documents,contextPolicies:new GeoSharedContext({database:f.db,documents:f.documents}),
@@ -51,7 +53,7 @@ async function handbook(t,label,poolMax=4) {
  return {...f,a,b,c,jobs,learning,loop,make,claim,input1,input2,candidate1,candidate2,job1,job2,old,publications:()=>publications};
 }
 
-test('QUALITY: eight successive applications retain exact authority with measured query cost',{timeout:60000},async t=>{
+test('QUALITY: eight successive applications retain exact authority with measured query cost',{skip:pg,timeout:60000},async t=>{
  const f=await handbook(t,'quality-generations'),costs=[],query=f.db.query.bind(f.db);let total=0;
  f.db.query=async(...args)=>{total++;return query(...args);};
  for(let generation=2;generation<=8;generation++){
@@ -68,7 +70,7 @@ test('QUALITY: eight successive applications retain exact authority with measure
  for(const stage of ['authorizationQueries','applicationQueries'])assert.ok(costs.at(-1)[stage]<costs[2][stage]*2.2,'Generations four to eight remain near linear: '+stage);
 });
 
-for(const retry of [false,true])test(`real ABA recurrence has a distinct generation and exact immutable predecessor proof (retry=${retry})`,{timeout:60000},async t=>{
+for(const retry of [false,true])test(`real ABA recurrence has a distinct generation and exact immutable predecessor proof (retry=${retry})`,{skip:pg,timeout:60000},async t=>{
  const f=await handbook(t,'recurrence-'+retry,retry?1:4);assert.equal((await f.loop.run({job:f.job2})).disposition,'applied');
  const oldCandidateRef=f.p.proofId('owner','method',f.candidate2.id,f.candidate2.payload),oldCandidateProof=await f.documents.get('owner','geo-plan-context',oldCandidateRef);
  const oldHandbook=await f.documents.get('owner','method',f.old.id),oldHandbookRef=f.p.proofId('owner','method',oldHandbook.id,oldHandbook.payload),oldHandbookProof=await f.documents.get('owner','geo-plan-context',oldHandbookRef);
@@ -93,7 +95,7 @@ for(const retry of [false,true])test(`real ABA recurrence has a distinct generat
  f.a.automated=true;assert.equal(await f.items.handbook(f.policy,current),false,'No positive cache crosses requests');
 });
 
-for(const change of ['actor','run','run-capability','proof','historical-bytes','historical-capability'])test(`request-owned reuse rechecks ${change} before accepting the complete closure`,{timeout:60000},async t=>{
+for(const change of ['actor','run','run-capability','proof','historical-bytes','historical-capability'])test(`request-owned reuse rechecks ${change} before accepting the complete closure`,{skip:pg,timeout:60000},async t=>{
  const f=await handbook(t,'final-recheck-'+change);assert.equal((await f.loop.run({job:f.job2})).disposition,'applied');
  const head=await f.documents.get('owner','method',f.old.id),finish=f.items.finish.bind(f.items);let changed=false;
  f.items.finish=async(policy,traversal)=>{
@@ -116,7 +118,7 @@ for(const change of ['actor','run','run-capability','proof','historical-bytes','
  assert.equal(await f.items.handbook(f.policy,head),false);assert.equal(changed,true);
 });
 
-test('a recurrence superseded by a further recurrence during evaluation cannot stamp the newer generation', {timeout:60000},async t=>{
+test('a recurrence superseded by a further recurrence during evaluation cannot stamp the newer generation', {skip:pg,timeout:60000},async t=>{
  const f=await handbook(t,'recurrence-race');await f.loop.run({job:f.job2});
  await f.learning.recordHandbookCandidate('owner',f.make(f.c,BODY+'\nPreserve the intervening instruction.'));await f.loop.run({job:await f.claim()});
  const baseline=await f.documents.get('owner','method',f.old.id),candidate=await f.learning.recordHandbookCandidate('owner',f.input2),job=await f.claim();let latest,evaluations=0;
@@ -133,7 +135,7 @@ test('a recurrence superseded by a further recurrence during evaluation cannot s
  assert.equal(await f.items.handbook(f.policy,await f.documents.get('owner','method',f.old.id)),true);
 });
 
-test('ABA application receipt failure rolls back and the same leased result can succeed without changing old proofs', {timeout:60000},async t=>{
+test('ABA application receipt failure rolls back and the same leased result can succeed without changing old proofs', {skip:pg,timeout:60000},async t=>{
  const f=await handbook(t,'recurrence-rollback');await f.loop.run({job:f.job2});
  await f.learning.recordHandbookCandidate('owner',f.make(f.c,BODY+'\nPreserve the intervening instruction.'));await f.loop.run({job:await f.claim()});
  const baseline=await f.documents.get('owner','method',f.old.id),candidate=await f.learning.recordHandbookCandidate('owner',f.input2),job=await f.claim(),put=f.documents.put.bind(f.documents);let failed=false;
