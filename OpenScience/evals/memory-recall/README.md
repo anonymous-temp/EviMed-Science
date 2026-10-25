@@ -8,8 +8,8 @@ the memory-ablation study of 2026-09 asked and git history keeps) — but a prov
 that cannot win here cannot win there either.
 
 The runner has two modes since 2026-10-25: `--mode capsule` (capsule facts, the lexical fallback against the index) and
-`--mode engine` (OpenViking's own memory engine, which every account's memory is on). The third, the platform's own records
-recall behind `memorySubstrate` (the `term matcher` columns below), went with the legacy memory engine; its sections stay as the
+`--mode engine` (OpenViking's own memory engine, which every account's memory is on). The third, the legacy engine's own records
+recall (the `term matcher` columns below), went with that engine; its sections stay as the
 measurements the adoption of the index was decided on, and are no longer reproducible with this runner.
 
 Both arms answer the same queries over the same corpus. Every query is

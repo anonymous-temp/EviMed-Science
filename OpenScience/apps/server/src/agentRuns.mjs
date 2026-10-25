@@ -4731,7 +4731,7 @@ export class AgentRunStore {
 
   /**
    * Every conversation of a project with its runs, newest first: one read of the ledger for what `conversationRuns` answers one
-   * conversation at a time. What reading older memories against the conversations they came from asks (`memoryEvidenceProvenance.mjs`).
+   * conversation at a time. What naming the conversations a native memory file came from asks of the ledger (`nativeConversationTitles` in `server.mjs`).
    * @param {any} project @returns {Promise<Map<string, Record<string, any>[]>>}
    */
   async conversationIndex(project) {
