@@ -45,6 +45,7 @@ import {
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
+import { readToolTraces } from "./toolExecutionEdges.mjs";
 import { learnedMethodId, methodScopeOf, methodSourceProjects } from "./learningService.mjs";
 import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
@@ -311,23 +312,24 @@ function anchoredExcerpts({ runId, trigger, messages, interventions, rootSession
  * Then the trajectory (`trajectoryDigest`): what was asked, what was done to it, what it left. The excerpts follow, each anchored on
  * an intervention; a lesson with none (a routine, a clean delivery) has the digests and nothing raw.
  * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[],
- *   shapes?: Record<string, any> | null,
- *   peerRuns?: {runId: string, run?: any, shapes?: Record<string, any> | null, transcript: {header: any, messages: any[]} | null}[],
+ *   shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null,
+ *   peerRuns?: {runId: string, run?: any, shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null, transcript: {header: any, messages: any[]} | null}[],
  *   correctionRecords?: {recordId: string, key?: string | null, text: string}[],
  *   methodsUsed?: {invoked?: any[], handbooks?: any[], passedOver?: any[], unresolved?: any[]} | null}} input
  *   `methodsUsed`: what the run read, resolved to revisions with what became of the results produced under each
  *   (`MethodFeedbackService.usedForLesson`); absent when this deployment cannot say, which is not "none".
  *   `shapes`: the run's files' structure by path (`readArtifactShapes`); absent, the digest has path and format only.
+ *   `toolTraces`: the run's executed tool trace (`readToolTraces`); absent or empty, the digest's tool order is read from the transcript's own calls.
  */
 export function buildDistillationInput(input) {
   if (!DISTILLATION_TRIGGERS.includes(input.trigger)) {
     throw new HttpError(400, "distillation_trigger_invalid", "Unknown distillation trigger.");
   }
-  const digestOf = (/** @type {any} */ run, /** @type {any} */ transcript, /** @type {any} */ shapes, /** @type {any} */ reactions = []) => trajectoryDigest(
-    transcript, run ?? {}, { shapes, reactions },
+  const digestOf = (/** @type {any} */ run, /** @type {any} */ transcript, /** @type {any} */ shapes, /** @type {any} */ reactions = [], /** @type {any} */ toolTraces = null) => trajectoryDigest(
+    transcript, run ?? {}, { shapes, reactions, toolTraces },
   );
   const reactions = reactionsOf(input.feedback);
-  const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions);
+  const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions, input.toolTraces);
   const steered = steeredCorrections(input.transcript, input.run);
   const { sessionId: rootSessionId } = rootSessionOf(input.transcript, input.run);
   const anchored = input.transcript
@@ -413,7 +415,7 @@ export function buildDistillationInput(input) {
     peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map((peer) => ({
       runId: peer.runId,
       transcriptCompleteness: peer.transcript?.header?.completeness ?? "unavailable",
-      trajectory: peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes) : null,
+      trajectory: peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes, [], peer.toolTraces) : null,
     })),
   };
 }
@@ -630,6 +632,7 @@ export class MethodDistillationRuns {
     const files = [...new Set(["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(run?.[field]) ? run[field] : [])
       .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
     const shapes = files.length ? await readArtifactShapes(project, files).catch(() => ({})) : {};
+    const toolTraces = await readToolTraces(project, run.id);
     // The researcher's whole library, ranked by what this lesson is about: a method learnt in another project is the one to amend,
     // not a near-duplicate to write beside it.
     const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, correctionRecords, shapes }));
@@ -648,11 +651,12 @@ export class MethodDistillationRuns {
         runId: peer.runId,
         ...(peerRun ? { run: peerRun } : {}),
         shapes: peerProject && peerFiles.length ? await readArtifactShapes(peerProject, peerFiles).catch(() => ({})) : null,
+        toolTraces: peerProject ? await readToolTraces(peerProject, peer.runId) : [],
         transcript: peerProject ? await readRunTranscript(peerProject, peer.runId).catch(() => null) : null,
       });
     }
     const methodsUsed = this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords, methodsUsed, shapes });
+    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords, methodsUsed, shapes, toolTraces });
     const dispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
     const identity = await this.dispatch({
       userId: job.userId,

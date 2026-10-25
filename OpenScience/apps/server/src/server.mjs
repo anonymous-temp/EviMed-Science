@@ -129,7 +129,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily, runScopeOf } from "./learnedMethodMount.mjs";
 import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
-import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
+import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
@@ -4232,21 +4232,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // below used to take every such run out of the loop's counters, and a method the work of the study used daily looked unused).
           await recordMethodUse({ project, run, sessions });
           if (!reusableClinicalContext) return;
-          // What actually fed what, for the evaluation corpus.
-          //
-          // Every edge in all fifteen tool graphs is `via: "schema"` — a type
-          // that *could* flow — and only an executed edge may carry a task, so
-          // the brief generator honestly produced nothing. This is the receipt
-          // that was missing; it costs one pass over the transcript already in
-          // hand.
+          // What actually fed what, and the order the work's tools ran in. Every edge in the capability tool graphs was `via: "schema"` — a
+          // type that *could* flow — until the receipts below existed; they cost one pass over the transcript already in hand.
           try {
             const written = await persistExecutedToolEdges({ project, run, sessions });
-            // The call sequence itself, not only the pairs it implies. The plan
-            // builds the corpus "execute first, write the task second", and the
-            // run that established the edges is the execution — so the golden
-            // trace it asks for is read off the transcript rather than waiting
-            // for a fixture harness that would only ever be a claim about it.
-            const traced = await persistGoldenTraces({ project, run, sessions });
+            // The call sequence itself, not only the pairs it implies: what the learning loop's trajectory digest reads as the order of
+            // the work's tools (`readToolTraces`, in `MethodDistillationRuns`).
+            const traced = await persistToolTraces({ project, run, sessions });
             if (written.edges || traced.traces) {
               await securityAudit(config, "run.tool.edges", "ok", {
                 userId: project.userId, projectId: project.id, runId: run.id,

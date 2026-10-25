@@ -300,3 +300,24 @@ test("a routine's peer is digested from its own ledger record, and the lesson's 
   assert.deepEqual(first.trajectory.artifacts.map((artifact) => [artifact.path, artifact.shape?.labels]), [["report/weekly.md", ["周报", "总览", "下周计划"]]]);
   assert.equal(second.trajectory, null);
 });
+
+test("the tool order the distillation is shown is the run's executed trace when it has one, and the peer's is its own", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-distill-traces-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { project, run } = await projectWith(root);
+  const { persistToolTraces } = await import("../src/toolExecutionEdges.mjs");
+  const completed = (/** @type {string} */ tool, /** @type {number} */ turn) => ({ role: "tool", turn, parts: [{ type: "tool", tool, status: "completed", input: {}, output: "ok" }] });
+  await persistToolTraces({ project, run, sessions: [{ sessionId: ROOT, capability: null, transcript: { messages: [completed("web_search", 0), completed("evimed_plan", 0), completed("bash", 1)] } }] });
+  // A peer with its own transcript and no trace of its own: the transcript's calls, as before.
+  await writeFile(transcriptPath(project, "run_0"), await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id)));
+  /** @type {any[]} */ const dispatched = [];
+  const distillation = new MethodDistillationRuns({
+    learning: { async listMethods() { return { items: [] }; } },
+    dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
+    readResult: async () => ({ status: "running" }),
+    resolveRun: async (_resolved, runId) => ({ ...run, id: runId }),
+  });
+  await distillation.execute({ project, run, job: { userId: "u1", projectId: "p", payload: { runId: run.id, trigger: "routine", scope: "clinical-evidence-synthesis", peers: [{ runId: "run_0", projectId: "p" }] } } });
+  assert.deepEqual(dispatched[0].input.trajectory.tools, ["web_search", "bash"], "what completed, the platform's own calls out");
+  assert.deepEqual(dispatched[0].input.peerRuns[0].trajectory.tools, ["read"], "a run with no trace reads the transcript's own calls");
+});

@@ -47,6 +47,24 @@ test("the platform's choreography is removed from the tool order in code, the wo
   assert.equal(isPlatformChoreographyTool("bash"), false);
 });
 
+test("the tool order is read from the run's executed trace when there is one: the calls that completed, choreography out, repeats folded", () => {
+  // The transcript holds a call that failed (`flaky`) and the root's own search; the trace is what completed, per session.
+  const transcript = { messages: [user(1, "run it"), call(2, "web_search"), call(3, "flaky"), call(4, "evimed_plan"), call(5, "read")] };
+  const toolTraces = [
+    { capability: null, sessionId: ROOT, steps: [{ turn: 1, tool: "web_search" }, { turn: 1, tool: "evimed_plan" }, { turn: 1, tool: "read" }] },
+    { capability: "meta-analysis", sessionId: CHILD, steps: [{ turn: 1, tool: "mcp__evimed__literature_search" }, { turn: 1, tool: "literature_search" }, { turn: 2, tool: "bash" }] },
+  ];
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces }).tools, ["web_search", "read", "literature_search", "bash"]);
+  assert.deepEqual(trajectoryDigest(transcript, run).tools, ["web_search", "flaky", "read"], "without a trace it is every call the transcript holds, as it was");
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [] }).tools, ["web_search", "flaky", "read"], "an empty trace is no trace");
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [{ steps: [] }] }).tools, ["web_search", "flaky", "read"]);
+  // A trace whose only steps are the platform's own is a run that did no work of its own: the sequence is empty, not the transcript's.
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [{ steps: [{ turn: 1, tool: "evimed_plan" }] }] }).tools, []);
+  // Bounded like the transcript's.
+  const long = [{ steps: Array.from({ length: 200 }, (_, index) => ({ turn: 1, tool: `tool_${index}` })) }];
+  assert.equal(trajectoryDigest(transcript, run, { toolTraces: long }).tools.length, TRAJECTORY_DIGEST_LIMITS.tools);
+});
+
 test("a run that is not a native turn reads every turn; the turns another run owns are not its own", () => {
   const messages = [
     user(1, "earlier question", { turnStartSeq: 1, sourceRequestId: "req_0" }),

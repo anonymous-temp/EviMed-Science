@@ -20,7 +20,10 @@
  *  - `artifacts` — what the run left, with the format and, when the caller read one, the file's structural shape
  *    (`artifactShape.mjs`). A reader that is missing leaves path and format only.
  *  - `tools` — the order of the tools the work called, with the platform's choreography (`PLATFORM_CHOREOGRAPHY_TOOL_NAMES`,
- *    a closed list) removed and runs of the same tool folded into one entry. MCP tools are given by their base name.
+ *    a closed list) removed and runs of the same tool folded into one entry. MCP tools are given by their base name. Read from
+ *    the run's executed tool trace when it has one (`options.toolTraces`: the calls that completed, in the order they completed,
+ *    which is what a workflow is induced from — a call that failed is not a step of the work); from the transcript's own calls
+ *    otherwise, which is every call that was made.
  *  - `outcome` — `{ status, repaired }`.
  *
  * Pure: the transcript and the ledger's record of the run in, plain data out. A request or an intervention whose text carries a
@@ -132,6 +135,26 @@ export function steeredMessages(messages, run) {
 const bounded = (text, max) => String(text ?? '').trim().slice(0, max)
 
 /**
+ * The tools of a run in the order the work called them: the platform's choreography taken out (a closed list, by the name the
+ * call carried and by its MCP base name), runs of one tool folded into one entry, MCP tools by their base name, at most
+ * `TRAJECTORY_DIGEST_LIMITS.tools` of them.
+ * @param {readonly string[]} calls the name of each call, in order
+ * @returns {string[]}
+ */
+function toolSequence(calls) {
+  /** @type {string[]} */
+  const tools = []
+  for (const raw of calls) {
+    if (!raw || isPlatformChoreographyTool(raw)) continue
+    const name = isMcpToolName(raw) ? (mcpToolBaseName(raw) ?? raw) : raw
+    if (isPlatformChoreographyTool(name)) continue
+    if (tools[tools.length - 1] !== name) tools.push(name)
+    if (tools.length >= TRAJECTORY_DIGEST_LIMITS.tools) break
+  }
+  return tools
+}
+
+/**
  * @typedef {object} TrajectoryReaction
  * @property {'follow-up' | 'result-corrected' | 'steer'} kind
  * @property {number | null} [seq]
@@ -154,9 +177,11 @@ const bounded = (text, max) => String(text ?? '').trim().slice(0, max)
  * @param {{ header?: any, messages?: readonly any[] } | null | undefined} transcript the stored transcript (root session lines, then children's)
  * @param {any} run the ledger's record of the run: `sessionId`, `kernelRequestIds`, `nativeTurn`, `status`, `repairRounds`, `artifacts`,
  *   `unverifiedArtifacts`, `outputFiles`
- * @param {{ shapes?: Readonly<Record<string, unknown>> | null, reactions?: readonly TrajectoryReaction[], attempts?: number }} [options]
+ * @param {{ shapes?: Readonly<Record<string, unknown>> | null, reactions?: readonly TrajectoryReaction[], attempts?: number,
+ *   toolTraces?: readonly { steps?: readonly { tool?: unknown }[] }[] | null }} [options]
  *   `shapes`: file path to the shape read from it (`apps/server/src/artifactShapes.mjs`). `reactions`: what the person did after
  *   the run was going that the transcript does not hold. `attempts`: the largest number of submissions any deliverable took.
+ *   `toolTraces`: the run's executed tool trace, one entry per session (`apps/server/src/toolExecutionEdges.mjs`, `readToolTraces`).
  * @returns {TrajectoryDigest}
  */
 export function trajectoryDigest(transcript, run, options = {}) {
@@ -232,19 +257,10 @@ export function trajectoryDigest(transcript, run, options = {}) {
     if (artifacts.length >= limits.artifacts) break
   }
 
-  /** @type {string[]} */
-  const tools = []
-  scan: for (const message of transcript?.messages ?? []) {
-    for (const part of message?.parts ?? []) {
-      if (part?.type !== 'tool') continue
-      const raw = String(part.tool ?? '')
-      if (!raw || isPlatformChoreographyTool(raw)) continue
-      const name = isMcpToolName(raw) ? (mcpToolBaseName(raw) ?? raw) : raw
-      if (isPlatformChoreographyTool(name)) continue
-      if (tools[tools.length - 1] !== name) tools.push(name)
-      if (tools.length >= limits.tools) break scan
-    }
-  }
+  const executed = (options.toolTraces ?? []).flatMap((trace) => (Array.isArray(trace?.steps) ? trace.steps : []).map((step) => String(step?.tool ?? '')))
+  const tools = toolSequence(executed.length
+    ? executed
+    : (transcript?.messages ?? []).flatMap((message) => (message?.parts ?? []).filter((/** @type {any} */ part) => part?.type === 'tool').map((/** @type {any} */ part) => String(part.tool ?? ''))))
 
   const rounds = (Number(run?.repairRounds?.content) || 0) + (Number(run?.repairRounds?.structural) || 0)
   return {
