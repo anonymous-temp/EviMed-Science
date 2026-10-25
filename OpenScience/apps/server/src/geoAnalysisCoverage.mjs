@@ -692,7 +692,7 @@ export function buildGeoCoverageAnalysis(selected, view, context = {}) {
           conditions = geoClaimApplicability(items[0].statement);
         add(
           { topic, engine, claimIdentity, conditions },
-          `${topic ?? "主题未知"} · ${engine} · ${conditions?.population ?? "条件未知"} · 主张版本 ${items[0].statement.claimVersion ?? "未知"} · ${JSON.stringify(conditions?.elements ?? null)}`,
+          `${topic ?? "主题未知"} · ${engine} · ${conditions?.population ?? "条件未知"} · 结论版本 ${items[0].statement.claimVersion ?? "未知"} · ${JSON.stringify(conditions?.elements ?? null)}`,
           {
             wrong: cell(
               items.filter((item) => item.statement.verdict === "wrong"),
