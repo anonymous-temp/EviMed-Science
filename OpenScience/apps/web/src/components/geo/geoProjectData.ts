@@ -40,7 +40,8 @@ export type GeoLoad<T> =
   | { kind: "loading" }
   /** `off`: the module is not open to this account; `missing`: nothing at that address. */
   | { kind: "error"; message: string; off: boolean; missing: boolean; stale?: boolean }
-  | { kind: "ready"; data: T; refreshError?: string };
+  /** `refreshStale`: the refresh was refused because the saved selection it names has changed (409) — asking again cannot help. */
+  | { kind: "ready"; data: T; refreshError?: string; refreshStale?: boolean };
 
 export interface GeoLoadResult<T> {
   state: GeoLoad<T>;
@@ -109,6 +110,10 @@ export class GeoDataCache {
   refreshError = (): string => [...new Set([...this.#entries.values()].flatMap(entry =>
     entry.watchers > 0 && entry.state.kind === "ready" && entry.state.refreshError ? [entry.state.refreshError] : []))].join("；");
 
+  /** Whether an active view's refresh met a saved selection that has changed since: the way out is the range without it. */
+  refreshStale = (): boolean => [...this.#entries.values()].some(entry =>
+    entry.watchers > 0 && entry.state.kind === "ready" && entry.state.refreshStale === true);
+
   /**
    * A consumer begins to read `key`. Returns what ends it. The read starts when nothing has it, when it failed, or when it is older
    * than {@link STALE_MS}; the loader is the consumer's latest.
@@ -161,7 +166,7 @@ export class GeoDataCache {
           const failure = failed(error);
           const denied = error instanceof WebApiError && [401, 403, 404].includes(error.status);
           entry.state = entry.state.kind === "ready" && !denied && failure.kind === "error"
-            ? { ...entry.state, refreshError: failure.message } : failure;
+            ? { ...entry.state, refreshError: failure.message, refreshStale: failure.stale === true } : failure;
           entry.loadedAt = 0;
         },
       )

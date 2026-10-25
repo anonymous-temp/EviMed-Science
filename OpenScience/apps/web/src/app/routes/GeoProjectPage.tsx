@@ -88,7 +88,7 @@ type Loaded =
   | { kind: "off" }
   | { kind: "missing" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; project: GeoProject; scopeKey: string; refreshError?: string; scopeError?: string };
+  | { kind: "ready"; project: GeoProject; scopeKey: string; refreshError?: string; refreshStale?: boolean; scopeError?: string };
 
 /**
  * Every workbench can change while it is open. Active work refreshes more often; quiet visible projects still discover scheduled work.
@@ -192,8 +192,9 @@ function GeoProjectView({ geoId }: { geoId: string }) {
         else {
           const message = webErrorMessage(error, { fallback: "项目暂时无法读取。" });
           const denied = error instanceof WebApiError && [401, 403].includes(error.status);
+          const stale = error instanceof WebApiError && error.status === 409;
           setLoaded(current => current.kind === "ready" && !denied
-            ? current.scopeKey === scopeKey ? { ...current, refreshError: message } : { ...current, scopeError: message }
+            ? current.scopeKey === scopeKey ? { ...current, refreshError: message, refreshStale: stale } : { ...current, scopeError: message }
             : { kind: "error", message });
         }
       },
@@ -239,9 +240,12 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const heldSession = addressedSession ?? new URLSearchParams(location.search).get("session");
   const api = useMemo<GeoFrameApi | null>(
     () => (loaded.kind === "ready" ? { geoId, scope, scopePending: loaded.scopeKey !== scopeKey, scopeError: loaded.scopeError,
-      project: loaded.project, tab, conversation: heldSession ?? loaded.project.sessionId ?? null, step: viewedStep, refreshError: loaded.refreshError, reload, openPanel, data, setToolbar,
+      project: loaded.project, tab, conversation: heldSession ?? loaded.project.sessionId ?? null, step: viewedStep, refreshError: loaded.refreshError,
+      refreshStale: loaded.refreshStale, reload, openPanel, data, setToolbar,
       openAnalysisScope: () => setScopeOpen(true),
       refreshScope: () => {
+        // The stale refusal is answered by leaving the selection: what it said no longer stands, so it is not shown as pending.
+        setLoaded(current => current.kind === "ready" ? { ...current, refreshError: undefined, refreshStale: undefined } : current);
         if (scope?.selectionRef && loaded.project.scope) {
           navigate({ pathname: location.pathname, search: geoSearchWithScope(location.search, { ...loaded.project.scope, selectionRef: undefined }) }, { replace: true });
         } else reload();
@@ -306,6 +310,9 @@ function GeoBand({
   const openConversation = useOpenGeoConversation();
   const monitoring = useGeoMonitoring(geoId);
   const dataRefreshError = useSyncExternalStore(api.data.subscribe, api.data.refreshError, api.data.refreshError);
+  const dataRefreshStale = useSyncExternalStore(api.data.subscribe, api.data.refreshStale, api.data.refreshStale);
+  // A saved selection (`selectionRef`) is refused with 409 once its data changed; 重试更新 would send the same reference forever.
+  const selectionStale = Boolean(api.scope?.selectionRef) && (api.refreshStale === true || dataRefreshStale);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const handledAnchors = useRef(new Set<string>());
@@ -507,7 +514,9 @@ function GeoBand({
       )}
       toolbar={bandToolbar}
     >
-      {(api.refreshError || dataRefreshError) && <Note action={<Button variant="secondary" size="sm" onClick={() => { reload(); api.data.invalidate(); }}>重试更新</Button>}>
+      {selectionStale ? <Note action={<Button variant="secondary" size="sm" onClick={() => api.refreshScope?.()}>读取最新结果</Button>}>
+        所选范围里的数据已经更新，仍显示上次结果。
+      </Note> : (api.refreshError || dataRefreshError) && <Note action={<Button variant="secondary" size="sm" onClick={() => { reload(); api.data.invalidate(); }}>重试更新</Button>}>
         更新暂时失败，仍显示上次结果。{api.refreshError || dataRefreshError}
       </Note>}
       {onChat ? (

@@ -27,6 +27,8 @@ export interface GeoFrameApi {
   /** The business workbench currently viewed; unrelated background work never overrides it. */
   step?: GeoStepKey | null;
   refreshError?: string;
+  /** The project's refresh met a saved selection that changed since (409): 重试 would send it again, `refreshScope` leaves it. */
+  refreshStale?: boolean;
   /** One analytical scope; work queues and publication state remain current state. */
   scope?: GeoReadScope;
   scopePending?: boolean;

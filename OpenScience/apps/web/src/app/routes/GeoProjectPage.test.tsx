@@ -874,3 +874,21 @@ describe("the project's conversation for a role that may not converse", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 });
+
+describe("a saved selection whose data changed", () => {
+  it("offers to read the latest data in the same range, instead of a 重试更新 that sends the stale reference again", async () => {
+    const range = { from: "2026-10-01", to: "2026-10-14" };
+    client.getGeoProject.mockResolvedValueOnce({ ...GEO_PROJECT, scope: { ...range, selectionRef: "gsel_old" } })
+      .mockRejectedValue(new WebApiError("The saved selection changed after measurement.", { status: 409, code: "geo_read_filter_invalid" }));
+    renderProject("/app/geo/geo_masi/visibility?selectionRef=gsel_old&from=2026-10-01&to=2026-10-14");
+    await screen.findByTestId("visibility-tab");
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    const note = await screen.findByText(/所选范围里的数据已经更新/);
+    expect(screen.queryByRole("button", { name: "重试更新" })).not.toBeInTheDocument();
+    client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, scope: range });
+    await userEvent.click(within(note.closest("[data-note]") ?? note.parentElement!).getByRole("button", { name: "读取最新结果" }));
+    await waitFor(() => expect(screen.getByTestId("landed")).not.toHaveTextContent("selectionRef"));
+    expect(screen.getByTestId("landed")).toHaveTextContent("from=2026-10-01");
+    await waitFor(() => expect(screen.queryByText(/所选范围里的数据已经更新/)).not.toBeInTheDocument());
+  });
+});
