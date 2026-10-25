@@ -579,21 +579,26 @@ export function geoAnswerSnapshot(diagnosis) {
 
 /**
  * The ids of the 前沿动态 pages the walk opens, from the lists it reads: the first evidence zone, the first card of the first official
- * zone, that card's author and the first event on the hot list. A missing id is a page not walked, with the reason in the notices.
- * @param {{ zones?: any, cards?: any, links?: any, hot?: any }} read the `data` of each GET
- * @returns {{ zoneId: string | null, official: string | null, cardId: string | null, authorId: string | null, eventId: string | null }}
+ * zone that holds one (an official zone made empty at start — 「热点求证」, c2 2026-10-25 — may come first in the list), that card's
+ * author, the first event on the hot list and the first hot-event topic. A missing id is a page not walked, with the reason in the
+ * notices.
+ * @param {{ zones?: any, cards?: any, links?: any, hot?: any, topics?: any }} read the `data` of each GET
+ * @returns {{ zoneId: string | null, official: string | null, cardId: string | null, authorId: string | null, eventId: string | null, topicId: string | null }}
  */
-export function frontierTargets({ zones, cards, links, hot }) {
+export function frontierTargets({ zones, cards, links, hot, topics }) {
   const text = (value) => (typeof value === "string" && value ? value : null);
   const zoneList = Array.isArray(zones?.items) ? zones.items : [];
   const cardList = Array.isArray(cards?.items) ? cards.items : [];
   const events = Array.isArray(hot?.events) ? hot.events : [];
+  const topicList = Array.isArray(topics?.topics) ? topics.topics : [];
+  const officials = zoneList.filter((zone) => zone?.kind === "official");
   return {
     zoneId: text(zoneList[0]?.id),
-    official: text(zoneList.find((zone) => zone?.kind === "official")?.id),
+    official: text((officials.find((zone) => Number(zone?.evidenceCount) > 0) ?? officials[0])?.id),
     cardId: text(cardList[0]?.id),
     authorId: text(links?.author?.id),
     eventId: text(events[0]?.id),
+    topicId: text(topicList[0]?.id),
   };
 }
 
@@ -739,7 +744,8 @@ async function discoverRoutes(context, base, notices, failures) {
   else skip("frontier-item", "the account has no published frontier article");
   const zones = await readData(context, base, "/api/frontier/zones", failures);
   const hot = await readData(context, base, "/api/frontier/hot", failures);
-  const first = frontierTargets({ zones, hot });
+  const topics = await readData(context, base, "/api/frontier/topics?status=recent&limit=1", failures);
+  const first = frontierTargets({ zones, hot, topics });
   const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`, failures) : null;
   const cardId = frontierTargets({ cards }).cardId;
   const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`, failures) : null;
@@ -752,6 +758,8 @@ async function discoverRoutes(context, base, notices, failures) {
   else skip("frontier-author", "the first card names no author page");
   if (targets.eventId) routes.push(["frontier-event", `/app/frontier/events/${encodeURIComponent(targets.eventId)}`]);
   else skip("frontier-event", "the hot list is empty or not offered");
+  if (targets.topicId) routes.push(["frontier-topic", `/app/frontier/topics/${encodeURIComponent(targets.topicId)}`]);
+  else skip("frontier-topic", "no hot-event topic yet, or topics are not offered");
 
   const matrix = matrixRoute(await readData(context, base, "/api/agent-runs", failures));
   if (!matrix) skip("evidence-matrix", "no run of this account delivered a clinical-evidence package");
