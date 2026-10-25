@@ -182,6 +182,16 @@ const memoryMarkOf = (/** @type {string} */ user) => `(SELECT count(*)::text || 
     FROM evimed_memory.native_files f WHERE f.user_id = ${user})
   || ':' || (SELECT coalesce(max(v.id), 0)::text FROM evimed_memory.native_revisions v WHERE v.user_id = ${user})`;
 
+/**
+ * The mark of one reader's memory now (`memoryMarkOf`): what a profile stores beside itself when it reads the memory, and what the round
+ * compares to know the memory has changed since.
+ * @param {{ query: (sql: string, values: unknown[]) => Promise<{ rows?: any[] }> }} database @param {string} userId @returns {Promise<string>}
+ */
+export async function frontierMemoryMark(database, userId) {
+  const row = (await database.query(`SELECT ${memoryMarkOf("$1")} AS mark`, [userId])).rows?.[0];
+  return String(row?.mark ?? "");
+}
+
 /** The memory files a profile is read from: who the reader is, how they work, what they work with and what their projects are. */
 export const FRONTIER_MEMORY_FILE_TYPES = Object.freeze(["profile", "preferences", "entities", "project_context"]);
 /** What the model is told a line is, by the file it is in (the same word the memory page files it under). */
@@ -939,10 +949,7 @@ export class FrontierProfiles {
   }
 
   /** @param {string} userId @returns {Promise<string>} */
-  async #memoryMark(userId) {
-    const row = (await this.database.query(`SELECT ${memoryMarkOf("$1")} AS mark`, [userId])).rows?.[0];
-    return String(row?.mark ?? "");
-  }
+  async #memoryMark(userId) { return frontierMemoryMark(this.database, userId); }
 
   /**
    * Read, extract, embed and store one reader's profile, then rank for them.

@@ -5,6 +5,7 @@
 // first, one exploration entry with its propensity), how genre affinity is
 // smoothed, and what marks a profile due.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { isResearcherRun } from "../src/agentRuns.mjs";
 import {
@@ -18,40 +19,48 @@ import {
   frontierForYouBlock,
   frontierGenreAffinity,
   frontierPhraseSource,
+  FRONTIER_MEMORY_LINES,
   frontierProfileMemories,
   frontierProfileQuestions,
   frontierReasonText,
   frontierSpecialtyDemotion,
 } from "../src/frontierProfiles.mjs";
 
-const record = (id, overrides = {}) => ({
-  id, scope: "user", scopeId: "", kind: "profile", key: `profile.${id}`, value: `value ${id}`, summary: `心血管专科医生 ${id}`,
-  status: "active", sensitive: false, origin: "explicit", provenance: { basis: "stated" }, ...overrides,
-});
+const lineId = (uri, line) => `native:${uri}#${createHash("sha256").update(line).digest("hex").slice(0, 12)}`;
+const file = (rel, body, overrides = {}) => ({ uri: `viking://user/u1/memories/${rel}`, type: "preferences", body, sensitive: false, projectId: null,
+  modTime: "2026-10-20T00:00:00.000Z", ...overrides });
 
-test("a profile reads memory of every provenance — active, not sensitive, not a run summary, not a paused or internal project", () => {
+test("a profile reads the engine's files that say who a person is, how they work and what they work on: one phrase a line, newest file first, nothing sensitive, paused or internal", () => {
+  const profile = file("profile.md", "---\ntitle: x\n---\n# Profile\n<!-- MEMORY_FIELDS {} -->\n- 心内科主治医师（as of 2026-09-01）\n- 在苏州工作\n", { type: "profile", modTime: "2026-10-01T00:00:00.000Z" });
   const memories = frontierProfileMemories([
-    record("stated"),
-    record("confirmed", { provenance: { basis: "confirmed" } }),
-    record("edited", { origin: "manual", provenance: { basis: "edited" }, summary: "" }),
-    record("inferred", { origin: "inferred", provenance: { basis: "inferred" } }),
-    record("assistant", { origin: "system", provenance: { basis: "assistant" } }),
-    record("tool", { origin: "system", provenance: { basis: "tool" } }),
-    record("pending", { status: "pending" }),
-    record("archived", { status: "archived" }),
-    record("superseded", { status: "superseded" }),
-    record("sensitive", { sensitive: true }),
-    record("summary", { kind: "run_summary" }),
-    record("project", { scope: "project", scopeId: "sglt2-meta", kind: "project_fact" }),
-    record("paused", { scope: "project", scopeId: "paused-project", kind: "project_fact" }),
-    record("internal", { scope: "project", scopeId: "evimed-learning", kind: "project_fact" }),
-    record("session", { scope: "session", scopeId: "s1" }),
-    record("empty", { summary: " ", value: " " }),
+    profile,
+    file("preferences/format.md", "- 回答先给结论，再给依据。\n- 表格不超过五列。", { modTime: "2026-10-20T00:00:00.000Z" }),
+    file("entities/drug/sglt2.md", "# SGLT2 抑制剂\n正在做心衰住院的 Meta 分析", { type: "entities", modTime: "2026-10-10T00:00:00.000Z" }),
+    file("projects/trial.md", "领域：心血管\n## 目标\n- 比较两种他汀", { type: "project_context", projectId: "sglt2-meta", modTime: "2026-10-15T00:00:00.000Z" }),
+    // What is not read: another kind of file, a sensitive one, a paused project's, an internal project's, an empty one.
+    file("preferences/corrections/length.md", "- 摘要不超过两百字。", { type: "corrections" }),
+    file("project_facts/fact.md", "- 纳入十二项随机对照试验。", { type: "project_facts" }),
+    file("preferences/private.md", "- 一件很私人的事情。", { sensitive: true }),
+    file("projects/paused.md", "领域：肿瘤学研究项目", { type: "project_context", projectId: "paused-project" }),
+    file("projects/internal.md", "领域：平台内部评测项目", { type: "project_context", projectId: "evimed-learning" }),
+    file("preferences/empty.md", "  \n#  标题只有标题\n- 短\n"),
   ], { pausedProjects: ["paused-project"] });
-  assert.deepEqual(memories.map((memory) => memory.id), ["stated", "confirmed", "edited", "inferred", "assistant", "tool", "project"],
-    "what the reader said and what was inferred from their conversations both count");
-  assert.equal(memories[2].text, "value edited", "the value stands in for an empty summary");
-  assert.deepEqual(memories[0], { id: "stated", kind: "profile", text: "心血管专科医生 stated" });
+  assert.deepEqual(memories.map((memory) => memory.text), [
+    "回答先给结论，再给依据。", "表格不超过五列。",
+    "领域：心血管", "比较两种他汀",
+    "正在做心衰住院的 Meta 分析",
+    "心内科主治医师", "在苏州工作",
+  ], "newest file first and the file's own order within it; the front matter, the engine's field comment, headings, bullets and an as-of date are the file's dress");
+  assert.deepEqual(memories.map((memory) => memory.kind), ["preference", "preference", "project_fact", "project_fact", "project_fact", "profile", "profile"]);
+  assert.equal(memories[0].id, lineId("viking://user/u1/memories/preferences/format.md", "回答先给结论，再给依据。"), "a line is named by its file and its words: native:<uri>#<12 hex of sha256>");
+  assert.equal(memories[5].id, lineId(profile.uri, "心内科主治医师"));
+  // The same files in another order read the same.
+  assert.deepEqual(frontierProfileMemories([file("a.md", "- 第一件事情很重要"), file("b.md", "- 第二件事情也重要", { modTime: "2026-10-21T00:00:00.000Z" })]).map((memory) => memory.text),
+    ["第二件事情也重要", "第一件事情很重要"]);
+  // At most forty lines of one reader's memory are read.
+  const many = file("preferences/many.md", Array.from({ length: 60 }, (_, index) => `- 第 ${index} 条偏好的说明`).join("\n"));
+  assert.equal(frontierProfileMemories([many]).length, FRONTIER_MEMORY_LINES);
+  assert.deepEqual(frontierProfileMemories(null), []);
 });
 
 const run = (id, startedAt, overrides = {}) => ({ id, startedAt, question: `问题 ${id}`, titleSource: "question", title: `问题 ${id}`, ...overrides });
