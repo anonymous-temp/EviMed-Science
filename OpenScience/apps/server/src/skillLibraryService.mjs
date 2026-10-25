@@ -584,6 +584,8 @@ export class SkillLibraryService {
    * - `deferred` — the saved choices could not be prepared (no runtime image identity, a composition that could not be
    *   published or verified); the project runs on the ordinary baseline and a later start tries again.
    * - `failed` / `rolled-back` — the apply was tried and its proof failed.
+   * - `not-applicable` — a 循证 GEO project whose runtime mounts the shared context generation, which carries none of the
+   *   project's own skill and integration choices; they are kept, and apply if the project becomes its owner's again.
    * @param {any} user @param {any} project @param {any} selection
    */
   async activation(user, project, selection) {
@@ -597,7 +599,8 @@ export class SkillLibraryService {
     const effective = provenLive ?? provenLast;
     const effectiveRevision = effective?.selectionRevision ?? null;
     const desiredHere = state?.payload.desired?.selectionRevision === selection.revision;
-    const phase = effectiveRevision === selection.revision && state?.payload.phase === 'effective' ? (live ? 'effective' : 'ready')
+    const phase = observation?.sharedContext === true ? 'not-applicable'
+      : effectiveRevision === selection.revision && state?.payload.phase === 'effective' ? (live ? 'effective' : 'ready')
       : desiredHere && ['failed', 'rolled-back'].includes(state.payload.phase) ? state.payload.phase
       : desiredHere && UNPREPARED_ERRORS.has(state.payload.error) ? 'deferred'
       : !state && !selection.revision ? 'ready'

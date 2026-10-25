@@ -240,3 +240,23 @@ it("an apply under way on a running runtime is re-read with growing waits, then 
     expect(skills.projectPlatformSkills).toHaveBeenCalledTimes(calls);
   } finally { vi.useRealTimers(); }
 });
+
+it("a 循证 GEO project on its shared settings draws no project switch and says the choices do not apply there", async () => {
+  const notApplicable = { phase: "not-applicable", savedRevision: 3, effectiveRevision: null, error: null, live: true };
+  skills.projectPlatformSkills.mockResolvedValue({ ...project, activation: notApplicable });
+  skills.projectSkills.mockResolvedValue({ revision: 3, payload: { skills: [] }, activation: notApplicable });
+  plugins.inventory.mockResolvedValue({ projectId: "one", groups: [{ id: "tools", title: "对话", items: [
+    { id: "diagrams", title: "Mermaid 图表", use: "呈现流程图", control: { kind: "switch", setting: "mermaid" }, opens: { kind: "drawer" } },
+    { id: "citations", title: "文献引用核对", use: "核对引用", control: { kind: "switch", setting: "dsh-cite" }, opens: { kind: "drawer" } },
+  ] }], researchTools: { count: 0, groups: [] } });
+  plugins.projectBuiltinPlugins.mockResolvedValue({ revision: 3, payload: { disabled: [] }, items: [{ id: "annotation", enabled: true, effective: null, available: true }, { id: "mermaid", enabled: true, effective: null, available: true }], activation: notApplicable });
+  api.listWebPlugins.mockResolvedValue([{ id: "dsh-cite", desired: { revision: 2, enabled: true, settings: {} }, effective: { enabled: true }, phase: "applied", settingsSchema: {} }]);
+  open("/app/extensions/installed");
+  const plot = (await screen.findByRole("button", { name: "科学绘图" })).closest("li")!;
+  expect(within(plot).getByText("循证 GEO 项目中不适用")).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: /科学绘图/ })).not.toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Mermaid 图表" })).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: /Mermaid 图表/ })).not.toBeInTheDocument();
+  // The citation settings travel with the project's own plugin configuration, which a shared start keeps.
+  expect(await screen.findByRole("switch", { name: /文献引用核对/ })).toBeInTheDocument();
+});

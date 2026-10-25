@@ -147,3 +147,17 @@ test('a saved disabled id that left the catalogue never blocks a later save and 
   // A newly named unknown id is still refused.
   await assert.rejects(service.saveProjectPlatform(user, project, { expectedRevision: 2, disabled: ['community:never-shipped'] }), { status: 404 })
 })
+
+test('a 循证 GEO project on its shared context reads every project choice as not applicable, and keeps them', async () => {
+  const { service } = fixture()
+  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['curated:matplotlib'] })
+  const effective = { reference: { generationHash: 'a'.repeat(64) }, selectionRevision: 1, platformSkills: { disabled: ['curated:matplotlib'] } }
+  service.projectActivation = async () => ({ state: { payload: { phase: 'effective', runtimeGeneration: 'geo-runtime', desired: effective, effective } }, runtimeGeneration: 'geo-runtime', captured: null, sharedContext: true })
+  const view = await service.projectPlatform(user, project)
+  assert.equal(view.activation.phase, 'not-applicable')
+  assert.deepEqual(view.payload.disabled, ['curated:matplotlib'], 'the saved choice is kept for when the project is its owner\'s again')
+  assert.equal((await service.projectBuiltins(user, project)).activation.phase, 'not-applicable')
+  // An unknown policy (it could not be read) is not taken for a shared one.
+  service.projectActivation = async () => ({ state: null, runtimeGeneration: null, captured: null, sharedContext: null })
+  assert.equal((await service.projectPlatform(user, project)).activation.phase, 'pending')
+})

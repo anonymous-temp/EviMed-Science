@@ -4865,6 +4865,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (skillLibraryService && personalSkillGenerations) skillLibraryService.projectActivation = async (_user, project) => ({
     state: await personalSkillGenerations.current(project), runtimeGeneration: runtimeManager.runtimeGeneration(project),
     captured: runtimeManager.runtimePersonalSkillGeneration(project), builtins: runtimeManager.runtimes.get(runtimeManager.key(project))?.builtinPlugins,
+    // A 循证 GEO project's runtime mounts its shared context generation, which carries neither the personal generation nor
+    // the project's skill and integration choices: they are saved but do not apply there, and the page says so.
+    sharedContext: await runtimeManager.contextPolicyFor(project).then(policy => policy?.kind === "geo-project", () => null),
   });
   if (productDatabase && config.runtimeMode === "kernel" && extensionDeployment.status === "configured"
     && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32) {

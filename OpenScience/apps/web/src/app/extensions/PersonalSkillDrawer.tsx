@@ -105,11 +105,11 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
               <div className="rounded-card bg-surface-1 p-4"><DrawerSection title="使用">
                 <p role="status" className="text-ui text-text-2">{skillActivationText(!!currentSelection, selection?.activation)}</p>
                 <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between gap-3">
+                  {selection?.activation?.phase !== "not-applicable" && <div className="flex items-center justify-between gap-3">
                     <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={!!currentSelection} disabled={busy || !selection}
                       onChange={checked => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, checked)))} />
                     {stale && <Button size="sm" variant="text" disabled={busy || !selection} onClick={() => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, true)))}>更新到最新内容</Button>}
-                  </div>
+                  </div>}
                   <div className="flex items-center justify-between gap-3">
                     <Switch showLabel label="新项目默认使用" checked={!!defaultSelection} disabled={busy || !defaults}
                       onChange={checked => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, checked)))} />

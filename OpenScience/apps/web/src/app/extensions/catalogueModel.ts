@@ -18,8 +18,16 @@ export function extensionAvailability(installation: ExtensionInstallation, selec
   return "未在当前项目启用";
 }
 
+/** What a 循证 GEO project's rows say in place of a switch: its shared settings carry none of the project's own choices. */
+export const SHARED_PROJECT_TEXT = "循证 GEO 项目中不适用";
+
+/** Whether the project's switches do not apply (a 循证 GEO project on its shared settings), from any of its activations. */
+export const projectChoicesNotApplicable = (...activations: Array<SkillActivation | null | undefined>) =>
+  activations.some(activation => activation?.phase === "not-applicable");
+
 export function skillActivationText(enabled: boolean, activation?: SkillActivation): string {
   if (!activation) return "生效状态待确认";
+  if (activation.phase === "not-applicable") return SHARED_PROJECT_TEXT;
   if (activation.phase === "saved") return "生效状态待确认";
   if (activation.phase === "pending") return "下次对话生效";
   if (activation.phase === "waiting") return "等待当前任务结束后生效";

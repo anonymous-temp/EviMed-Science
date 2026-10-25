@@ -22,7 +22,7 @@ import { useNarrow } from "@/lib/useMediaQuery";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
-import { allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, platformSkillReadOnly, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { SHARED_PROJECT_TEXT, allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, platformSkillReadOnly, projectChoicesNotApplicable, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { SKILL_LOOPX_ICON, SKILL_PACK_ICON } from "./extensionCopy";
 import { inventoryIcon } from "./inventoryIcons";
 import { ExtensionDrawer } from "./ExtensionDrawer";
@@ -80,6 +80,9 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   const inventoryData = inventory.state.status === "ready" ? inventory.state.data : null;
   const catalogueData = catalogue.state.status === "ready" ? catalogue.state.data : null;
   const installedRows = installed.state.status === "ready" ? installed.state.data.items : [];
+  // A 循证 GEO project runs on its shared settings: the project's own skill and plugin switches are kept but do not apply
+  // there, so its rows say so and draw no switch (a switch that saves and never takes effect is a dead control).
+  const shared = projectChoicesNotApplicable(currentPolicy?.activation, currentPersonal?.activation, currentBuiltin?.activation);
   const root = `/app/extensions/${view}`;
   const close = () => { setOpen(null); if (itemId) navigate(root, { replace: true }); };
   const reloadSelections = () => { policy.reload(true); selection.reload(true); builtinPlugins.reload(true); };
@@ -156,7 +159,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     entries.push({ id: skill.id, title: skill.title, description: skill.use, publisher: skillPublisher(skill), type: "skills", group: skill.group, icon,
       origin: skillOrigin(skill), repository: skillOrigin(skill) === "third-party" ? skillRepositoryUrl(skill.provenance?.repository) : null,
       added: true, state: readOnly ? undefined : skillActivationText(enabled, currentPolicy?.activation), open: () => setOpen({ kind: "platform", skill }),
-      action: readOnly ? view === "installed" ? undefined : <Button size="sm" variant="text" onClick={() => setOpen({ kind: "platform", skill })}>查看</Button>
+      action: readOnly || shared ? view === "installed" ? undefined : <Button size="sm" variant="text" onClick={() => setOpen({ kind: "platform", skill })}>查看</Button>
         : view === "installed"
           ? <Switch label={`在“${projectName}”里使用${skill.title}`} checked={enabled} disabled={!!busy || !currentPolicy} onChange={checked => void switchPlatform(skill, checked)} />
           : <Button size="sm" variant="text" onClick={() => setOpen({ kind: "platform", skill })}>管理</Button> });
@@ -171,7 +174,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     const enabled = !!currentPersonal?.payload.skills.some(row => row.skillId === skill.id);
     entries.push({ id: skill.id, title: skill.payload.title, description: skill.payload.description, publisher: "我的技能", type: "skills", group: "我的技能", origin: "personal", added: true,
       state: skillActivationText(enabled, currentPersonal?.activation), open: () => openSkill(skill.id),
-      action: view === "installed" ? <Switch label={`在“${projectName}”里使用${skill.payload.title}`} checked={enabled} disabled={!!busy || !currentPersonal} onChange={checked => void switchPersonal(skill, checked)} /> : undefined });
+      action: view === "installed" && !shared ? <Switch label={`在“${projectName}”里使用${skill.payload.title}`} checked={enabled} disabled={!!busy || !currentPersonal} onChange={checked => void switchPersonal(skill, checked)} /> : undefined });
   }
   for (const entry of catalogueData?.items ?? []) {
     const installation = installedRows.find(item => item.catalogueId === entry.id);
@@ -184,10 +187,10 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     });
     entries.push({ id: entry.id, title: entry.title, description: "查看插件提供的能力、来源与所需账户连接。", publisher, type: "plugins", group: "插件", added: !!installation,
       origin: "third-party", repository: entry.coordinate.kind === "github" ? skillRepositoryUrl(entry.coordinate.repository) : null,
-      state: installation ? currentPlugins ? extensionAvailability(installation, selected) : "生效状态待确认" : undefined,
+      state: installation ? shared && selected ? SHARED_PROJECT_TEXT : currentPlugins ? extensionAvailability(installation, selected) : "生效状态待确认" : undefined,
       open: () => { if (installed.state.status === "ready") openExtension(installation?.id ?? entry.id); else setActionError("请先重试读取已添加插件，再查看此项。"); },
       action: !installation ? <Button size="sm" variant="secondary" loading={busy === entry.id} disabled={!!busy || installed.state.status !== "ready"} onClick={() => void install(entry)}>添加</Button>
-        : view === "installed" && selected ? <Switch label={`在“${projectName}”里使用${entry.title}`} checked={selected.enabled} disabled={!!busy} onChange={checked => void switchPlugin(checked)} /> : undefined });
+        : view === "installed" && selected && !shared ? <Switch label={`在“${projectName}”里使用${entry.title}`} checked={selected.enabled} disabled={!!busy} onChange={checked => void switchPlugin(checked)} /> : undefined });
   }
   // An installation remains manageable after its catalogue descriptor is withdrawn.
   for (const item of installedRows.filter(item => !(catalogueData?.items ?? []).some(entry => entry.id === item.catalogueId))) {
@@ -231,7 +234,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     entries.push({ id: `builtin:${item.id}`, title: item.title, description: item.use, publisher: item.publisher ?? "社区", type: "plugins", group: "插件", added: true, state,
       origin: item.kind === "platform" ? "first-party" : "third-party", repository: skillRepositoryUrl(item.repository), icon: inventoryIcon(item.icon),
       open: () => setOpen({ kind: "item", id: item.id }),
-      action: view === "installed" ? <Switch label={`在“${projectName}”里使用${item.title}`} checked={enabled}
+      action: view === "installed" && (isCitation || !shared) ? <Switch label={`在“${projectName}”里使用${item.title}`} checked={enabled}
         disabled={!!busy || (isCitation ? citation.busy || !citation.plugin?.desired : !selected?.available)}
         onChange={next => { if (isCitation) void citation.save({ enabled: next }); else void switchBuiltin(setting, next); }} /> : undefined });
   }
@@ -308,8 +311,9 @@ function ItemDrawer({ id, inventory, citation, projectName, builtin, busy, onBui
   if (found.item.control.kind === "switch" && found.item.control.setting === "dsh-cite") return <CitationDrawer {...found} citation={citation} projectName={projectName} onClose={onClose} />;
   const setting = found.item.control.kind === "switch" ? found.item.control.setting : "";
   const selected = builtin?.items.find(item => item.id === setting);
+  const shared = projectChoicesNotApplicable(builtin?.activation);
   return <InventoryDrawer {...found} tools={found.item.showsTools ? inventory?.researchTools ?? null : null} onClose={onClose}
-    controls={setting ? <div className="flex flex-col gap-2"><Switch showLabel label={`在“${projectName}”里使用`} checked={selected?.enabled ?? false} disabled={busy || !selected?.available} onChange={next => onBuiltin(setting, next)} />
+    controls={setting ? <div className="flex flex-col gap-2">{!shared && <Switch showLabel label={`在“${projectName}”里使用`} checked={selected?.enabled ?? false} disabled={busy || !selected?.available} onChange={next => onBuiltin(setting, next)} />}
       <p role="status" className="text-ui text-text-2">{selected?.available === false ? "当前环境未提供" : skillActivationText(selected?.enabled ?? false, builtin?.activation)}</p>
       {error && <p role="alert" className="text-ui text-error">{error}</p>}</div> : undefined} />;
 }
