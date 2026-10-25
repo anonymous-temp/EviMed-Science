@@ -244,9 +244,8 @@ export function PageShell<V extends string = string>({
     console.warn("PageShell: a page has one view-switch row — `tabs` and `toolbar.views` are both set.");
   }
 
-  // The tab list's own hairline closes the band when it is the last row; otherwise the band draws one once it is stuck. A toolbar whose
-  // controls stand under its views has a row under the tab list.
-  const lastRowRuled = toolbar ? Boolean(toolbar.views) && !toolbar.controlsBelow : toolbar === null ? false : Boolean(tabs);
+  // The tab list's own hairline closes the band when it is the last row; otherwise the band draws one once it is stuck.
+  const lastRowRuled = toolbar ? Boolean(toolbar.views) : toolbar === null ? false : Boolean(tabs);
   const panel = tabs ?? toolbar?.views;
 
   const page = (

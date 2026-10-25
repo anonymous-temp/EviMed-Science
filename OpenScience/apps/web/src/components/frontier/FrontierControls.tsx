@@ -133,6 +133,6 @@ export function frontierToolbar({
     search,
     summary,
     actions,
-    controlsBelow: true,
+    oneRow: true,
   };
 }
