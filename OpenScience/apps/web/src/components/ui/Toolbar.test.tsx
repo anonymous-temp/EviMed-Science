@@ -422,9 +422,12 @@ describe("one row with a filter button (`oneRow`, 前沿动态 2026-10-25)", () 
     const filters: ToolbarFilter[] = [
       ...extra,
       { kind: "chips", label: "栏目", folded: true, options: [{ value: "", label: "全部" }, ...LANES], value: lane, neutral: "", onChange: setLane },
-      { kind: "chips", multi: true, folded: true, label: "专科", options: SPECIALTIES, value: specialties, onChange: setSpecialties,
-        chosenAction: (value) => ({ label: value === "cardio" ? "已关注" : "关注", disabled: value === "cardio", onClick: () => {} }) },
-      { kind: "chips", label: "热门标签", folded: true, quiet: true, options: [{ value: "hcc", label: "#肝细胞癌" }], value: hot, neutral: "", onChange: setHot },
+      // Several at once is a group of a panel: the panel is folded, and its groups are the sheet's.
+      { kind: "panel", label: "专科", folded: true, groups: [
+        { kind: "chips", multi: true, label: "专科", options: SPECIALTIES, value: specialties, onChange: setSpecialties,
+          chosenAction: (value: string) => ({ label: value === "cardio" ? "已关注" : "关注", disabled: value === "cardio", onClick: () => {} }) },
+        { kind: "chips", label: "热门标签", quiet: true, options: [{ value: "hcc", label: "#肝细胞癌" }], value: hot, neutral: "", onChange: setHot },
+      ] },
       { kind: "toggle", label: "只看收藏", folded: true, pressed: starred, onChange: setStarred },
     ];
     return (
