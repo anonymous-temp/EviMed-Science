@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:891aad42ccbd0275338b4fd99326ba511a1f69fdde692c1572fa6ae29c465c84",
+  "version": "sha256:7867a7ac280e02ccc9c216b0007fe94126604423c9c0cdb96f76d84f9ef33093",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 29,
@@ -1148,18 +1148,10 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project. questions: groups merge into the latest map by name+pool (replace:true = whole map); rows+requestKey save original rows under a measurement contract. start_diagnosis measures a saved version (check diagnosis_progress); recover_diagnosis retries failed cells once with the same requestKey; acknowledgeUnknown only if the user accepts a possible billable duplicate. value merges by id; research runs after this run.",
+      "description": "Write this 循证 GEO project. questions: groups merge into the map by name+pool (data.replace:true = whole map); rows+requestKey save original rows under a measurement contract. start_diagnosis measures a saved version; recover_diagnosis retries failed cells under a new requestKey (reuse one only to retry that call); acknowledgeUnknown only if the user accepts a possible billed duplicate. value merges by id; research runs after this run.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "planContextRef": {
-            "type": "string",
-            "description": "Exact control-plane context from the submitted native request; attribution hint only."
-          },
-          "promptRequestId": {
-            "type": "string",
-            "description": "Actual submitted native request ID accompanying planContextRef."
-          },
           "what": {
             "type": "string",
             "enum": [
@@ -1193,7 +1185,7 @@
           },
           "data": {
             "type": "object",
-            "description": "Imported questions: rows[{text,originalId?,originalGroup?,clientTags?,kind?,sourceUrl?,collectedAt?,pool?,journeyStage?,audience?,isMeasured?,classificationStatus?}], contract{samplingMode:one_shot|recurring,engines,repeats(one_shot=1),metricIds,reportPresentation:summary|detailed,sourceBasis:answers|answers_and_project_sources},requestKey. Preserve original text; kind defaults client; real requires URL and date; classificationStatus is unclassified|suggested|confirmed. start_diagnosis:{version,requestKey}; recover_diagnosis:{roundId,requestKey,jobIds,acknowledgeUnknown?} for failed calls. Read diagnosis_progress with filter.round before recovery. Never default acknowledgeUnknown to true; preserve requestKey on retries."
+            "description": "Imported questions: rows[{text,originalId?,originalGroup?,clientTags?,kind?,sourceUrl?,collectedAt?,pool?,journeyStage?,audience?,isMeasured?,classificationStatus?}], contract{samplingMode:one_shot|recurring,engines,repeats(one_shot=1),metricIds,reportPresentation:summary|detailed,sourceBasis:answers|answers_and_project_sources},requestKey. Preserve original text; kind defaults client; real requires URL and date; classificationStatus is unclassified|suggested|confirmed. start_diagnosis:{version,requestKey}; recover_diagnosis:{roundId,requestKey,jobIds,acknowledgeUnknown?} for failed calls. Read diagnosis_progress with filter.round before recovery. Never default acknowledgeUnknown to true; keep a requestKey only when retrying the same call."
           }
         },
         "required": [
