@@ -183,13 +183,13 @@ describe("记忆胶囊", () => {
     }
   });
 
-  it("keeps sharing, forgotten content, this project and the reset in the header's 「⋯」, in that order — the map is a tab, not a menu item", async () => {
+  it("keeps sharing, the import from another assistant, forgotten content, this project and the reset in the header's 「⋯」, in that order — the map is a tab, not a menu item", async () => {
     const user = userEvent.setup();
     open();
     await screen.findByRole("switch", { name: "记忆" });
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "从其他 AI 导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
     const project = within(menu).getByRole("menuitemcheckbox", { name: "本项目不使用记忆" });
     expect(project).toHaveAttribute("aria-checked", "false");
     await user.click(project);

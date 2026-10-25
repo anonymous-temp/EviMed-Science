@@ -154,7 +154,7 @@ const nextRound = async () => {
 test("a case that anticipates a template change says what must change first, and is reported as pending rather than failed", async () => {
   const { general, by } = await nextRound();
   const pending = general.filter((item) => item.pendingTemplate).map((item) => item.id.split("-")[0]).sort();
-  assert.deepEqual(pending, ["c22"], "the repetition, until the lab holds it in every sample; the import cases held on the lab engine with the templates of 2026-10-25");
+  assert.deepEqual(pending, [], "the repetition and the import cases held on the lab engine in every sample with the templates of 2026-10-25");
   const issues = (patch) => nativeCaseIssues({ ...by("c22"), ...patch }).join("\n");
   assert.match(issues({ pendingTemplate: "soon" }), /pendingTemplate says which decision/);
   assert.equal(issues({}), "");
