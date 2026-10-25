@@ -15,7 +15,7 @@
     "test:mcp": "pnpm test:mcp:research && pnpm test:mcp:memory",
     "test:mcp:research": "python3 -m unittest discover -s runtime/mcp/evimed-research/test -p 'test_*.py'",
     "test:mcp:memory": "python3 -m unittest discover -s runtime/mcp/evimed-memory/test -p 'test_*.py'",
-    "test:evals": "python3 -m unittest discover -s evals/method-quality -p 'test_*.py' && python3 -m unittest discover -s evals/context-fidelity -p 'test_*.py'",
+    "test:evals": "python3 -m unittest discover -s evals/method-quality -p 'test_*.py' && python3 -m unittest discover -s evals/context-fidelity -p 'test_*.py' && node --test evals/context-fidelity/*.test.mjs",
     "test:drug-evidence-eval": "python3 -m unittest discover -s evals/drug-evidence-quality -p 'test_*.py'",
     "test:acceptance-ledger": "python3 -m unittest discover -s evals/capability-audit -p 'test_acceptance_ledger.py'",
     "test:eval-briefs": "python3 -m unittest discover -s evals/capability-audit -p 'test_eval_briefs.py'",
