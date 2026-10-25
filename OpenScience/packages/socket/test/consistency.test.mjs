@@ -1079,7 +1079,7 @@ test("the capsule tools exist on a deployment with no memory service, and answer
   assert.match(result.value.issues[0].message, /未配置记忆服务/);
 });
 
-test("the recall tool names the time of the question only when the question has one, and says what an uncertain answer is", async () => {
+test("the recall tool sends no time of its own, and says what an uncertain answer is", async () => {
   const { apply: applyCapsule } = await import("../plugins/capsule.mjs");
   /** @type {any[]} */
   const bodies = [];
@@ -1098,11 +1098,11 @@ test("the recall tool names the time of the question only when the question has 
     await applyCapsule(ctx, { methodsDir: "", recallUrl: `http://127.0.0.1:${/** @type {any} */ (server.address()).port}/internal/capsules/v1`, tokenFile: "", recallTimeoutMs: 2000 });
     const call = (/** @type {Record<string, unknown>} */ args) => ctx.tools.execute({ agent: { id: "a" }, name: "evimed_capsule_recall", callId: "c", arguments: args, signal: AbortSignal.timeout(2000) });
     assert.equal((await call({ query: "剂量" })).value.ok, true);
+    // A time to read as of is not a parameter any more (the records engine that answered it was deleted on 2026-10-25): it is not sent.
     assert.equal((await call({ query: "剂量", asOf: "2025-06-30" })).value.ok, true);
-    assert.equal("asOf" in bodies[0], false, "a question about now sends no time: the gateway reads absence as now");
-    assert.equal(bodies[1].asOf, "2025-06-30");
+    assert.equal("asOf" in bodies[1], false);
     const tool = ctx.toolDefinition("evimed_capsule_recall");
-    assert.match(JSON.stringify(tool.input ?? tool.parameters ?? tool), /asOf/, "the parameter is declared");
+    assert.doesNotMatch(JSON.stringify(tool.input ?? tool.parameters ?? tool), /asOf/, "the parameter is not declared");
     assert.match(String(tool.description), /uncertain/, "a reader of the tool is told what an uncertain item is");
   } finally {
     server.closeAllConnections();

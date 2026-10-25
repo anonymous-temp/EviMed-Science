@@ -107,7 +107,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
       windows.set(key, window);
       if (++window.count > 120) throw new HttpError(429, "capsule_rate_limited", "Too many memory operations.");
       const body = await readJson(req, 64 * 1024);
-      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "asOf", "limit"]
+      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "limit"]
         : action === "handbook-context" ? ["sessionId", "inputs"]
           : action === "handbook-attached" ? ["sessionId", "receipts"]
         : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];
@@ -197,8 +197,8 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
           ? { ...recalled, items: [...recalled.items, ...reference], sources: { ...recalled.sources, zone: reference.length } } : recalled;
         // Nothing above the relevance floor is an answer, said as one: the model reformulates or goes on, and an empty list
         // is not mistaken for a tool that failed. A recall the researcher paused already carries its own notice, and says so.
-        const answer = !pause?.recall && found.mode !== "disabled" && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
-        recordRecallTool(pause?.recall ? "paused" : recalled.mode === "disabled" ? "disabled" : answer.items.length ? "hit" : "empty", answer.items.length);
+        const answer = !pause?.recall && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
+        recordRecallTool(pause?.recall ? "paused" : answer.items.length ? "hit" : "empty", answer.items.length);
         sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", answer) : answer);
       } else if (writesNothing) {
         // A conversation trying someone else's capsule leaves nothing behind.

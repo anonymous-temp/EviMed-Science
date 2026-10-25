@@ -62,11 +62,11 @@ test("the transcript is captured before anything can decide not to", () => {
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource);
   assert.ok(hook, "onRunFinished is gone; this test now checks nothing");
   const capture = hook[0].indexOf("persistRunTranscript");
-  const memoryGuard = hook[0].indexOf("if (!memorySettings.configured) {");
+  const internalGuard = hook[0].lastIndexOf("if (internalFor(project.userId, project.id)) {");
   assert.ok(capture > 0, "the terminal hook no longer persists the transcript");
-  assert.ok(memoryGuard > 0, "the memory early-return is gone");
-  assert.ok(capture < memoryGuard,
-    "the transcript capture moved below the memory early-return; a deployment without a memory store would stop recording runs");
+  assert.ok(internalGuard > 0, "the internal-project early-return is gone");
+  assert.ok(capture < internalGuard,
+    "the transcript capture moved below the early returns; a run of an internal project or an internal agent would stop being recorded");
 });
 
 test("the transcript capture and the distill enqueue each report their own failure", async () => {
@@ -81,31 +81,26 @@ test("the transcript capture and the distill enqueue each report their own failu
   assert.match(serverSource, /learningTriggers = new LearningTriggers\(\{[\s\S]*?audit: \(event, detail\) => securityAudit\(config, event, "failed", detail\)/);
 });
 
-test("the lessons are queued from the terminal hook by themselves, after the memory write that names a correction", () => {
+test("the lessons are queued from the terminal hook by themselves", () => {
   // The loop never started under defaults: one producer needed two clicks on
   // one deliverable, the other a server-side repair round that defaults to 0
   // (2026-09-19 proposal §2, fact 3). The rules live in learningTriggersFor
   // and are tested there; this asserts the hook actually calls them — wired is
-  // not fed.
+  // not fed. (Until 2026-10-25 the hook first ran the platform's own memory extraction and queued the lessons after it, with the
+  // corrections it reported; what a person corrected now reaches the loop through its own evidence, `learningEvidence.mjs`.)
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource)[0];
-  assert.match(hook, /learningTriggers\.afterRun\(project, run, memoryResult\)/);
-  const extraction = hook.indexOf("memoryIntelligence.recordRun(project, run, messages)");
-  const afterMemory = hook.indexOf("await queueLessons(memoryResult);");
-  assert.ok(extraction > 0 && afterMemory > extraction, "the lessons must be queued after the extractor reports corrections");
-  const noMemory = hook.indexOf("if (!memorySettings.configured) {");
-  assert.ok(hook.indexOf("await queueLessons(null);", noMemory) > noMemory,
-    "a deployment without a memory store still learns from its runs");
-  // The first occurrence of this guard belongs to the inbox; the one that keeps the platform's own projects out of memory and
-  // lessons is the last, below the transcript branch.
+  assert.match(hook, /learningTriggers\.afterRun\(project, run\)/);
+  const afterRun = hook.indexOf("learningTriggers.afterRun(project, run)");
+  // The guard that keeps the platform's own projects out of lessons is the last of its kind, below the transcript branch.
   const internalGuard = hook.lastIndexOf("if (internalFor(project.userId, project.id)) {");
-  assert.ok(internalGuard > 0 && internalGuard < noMemory,
-    "any run in an internal project (an evaluation harness's among them) never queues a lesson or seeds memory");
+  assert.ok(internalGuard > 0 && internalGuard < afterRun,
+    "any run in an internal project (an evaluation harness's among them) never queues a lesson");
   // A conversation that read a clinical source is checked like any other (the reply check is a notice that holds nothing back,
-  // B1-reply) and seeds neither memory nor lessons: its guard sits below the reply check and above both.
+  // B1-reply) and seeds no lessons: its guard sits below the reply check and above the queue.
   const replyCheck = hook.indexOf("review.service.considerReply(");
   const clinicalGuard = hook.indexOf("if (!reusableClinicalContext) {", replyCheck);
-  assert.ok(replyCheck > internalGuard && clinicalGuard > replyCheck && clinicalGuard < noMemory && clinicalGuard < afterMemory,
-    "a clinical conversation's reply is checked, and the same conversation never queues a lesson or seeds memory");
+  assert.ok(replyCheck > internalGuard && clinicalGuard > replyCheck && clinicalGuard < afterRun,
+    "a clinical conversation's reply is checked, and the same conversation never queues a lesson");
 });
 
 test("background work in an internal project never reaches the inbox as a person's research", () => {
@@ -325,8 +320,6 @@ test("a stop reads the bounded run it releases, and the counters reach the metri
   assert.match(serverSource, /summary: productDatabase && config\.learningEnabled \? \(userId\) => learningSummary\(productDatabase, userId\) : null/);
   // L-G7: a run's attributions are read against the methods its runtime carried.
   assert.match(serverSource, /const family = learnedMethodFamilyForRuntime\(\{ projectId: String\(project\.id\), boundedRunId: run\.automated === true \? run\.dispatchId \?\? null : null \}\);/);
-  // L-G3: the correction memories a lesson names reach its input.
-  assert.match(serverSource, /readCorrections: memorySettings\.configured/);
 });
 
 test("a routine's peers are read where they ran, and the evidence a routine is counted from is fed by the runs it is told of", () => {

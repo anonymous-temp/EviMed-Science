@@ -396,10 +396,9 @@ test("with the native engine off in the deployment the gateway is not there", as
 // ------------------------------------------------------------------ admission
 
 /** A research-memory double with the switches the admission reads. */
-function memoryDouble({ engine = "native", settings = {}, trial = null } = {}) {
+function memoryDouble({ settings = {}, trial = null } = {}) {
   return {
     configured: true,
-    memoryEngine: async () => engine,
     settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [], ...settings }),
     sessionState: async (_user, _project, sessionId) => ({ trialCapsuleId: sessionId === trial ? "capsule-x" : null }),
   };
@@ -486,10 +485,10 @@ test("admission: who is learned from and who is read for, by reason", async () =
   const admit = (options, caller = { user, project, engineSessionId }) => createMemoryAdmission({ config: { memoryEnabled: true }, ...options }).admit(caller);
 
   const person = await admit({ memorySettings: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running" }]) });
-  assert.deepEqual([person.native, person.learn, person.recall, person.sessionId], [true, true, true, sid]);
+  assert.deepEqual([person.learn, person.recall, person.sessionId], [true, true, sid]);
 
-  const legacy = await admit({ memorySettings: memoryDouble({ engine: "legacy" }) });
-  assert.deepEqual([legacy.native, legacy.learn, legacy.recall, legacy.learnReason], [false, false, false, "legacy_engine"]);
+  const off = await admit({ memorySettings: { configured: false } });
+  assert.deepEqual([off.learn, off.recall, off.learnReason], [false, false, "memory_off"], "a deployment without the memory store has memory off, a status and no fallback");
 
   const internal = await admit({ memorySettings: memoryDouble() }, { user, project: { id: "evimed-learning", userId: USER }, engineSessionId });
   assert.deepEqual([internal.learn, internal.recall, internal.learnReason], [false, false, "internal_project"]);
