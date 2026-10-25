@@ -235,6 +235,7 @@ import { configurePasswordKdfGate } from "./capsuleContainer.mjs";
 import { CapsuleShareLinks } from "./capsuleShareLinks.mjs";
 import { CapsuleSharing } from "./capsuleSharing.mjs";
 import { capsuleShareMetricFamilies, capsuleStewardshipMetricFamilies } from "./capsuleShareMetrics.mjs";
+import { createReceivedPackOutcomes } from "./capsuleShareOutcomes.mjs";
 import { createGuestInfluence } from "./capsuleShareTrust.mjs";
 import { EvidenceZoneSubscriptions, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
 import { reownOperatorImportedZones } from "./evidenceReown.mjs";
@@ -1432,9 +1433,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // `POST /api/feedback/events` reports a `distillJobId` for work that will
   // never happen. With no queue the ledger still records the fact, which is the
   // half of this that stands on its own, and answers `null` for the job.
+  /** What became of the packs people received, in the runs that opened one (`capsuleShareOutcomes.mjs`); made with the capsule service below. @type {ReturnType<typeof createReceivedPackOutcomes> | null} */
+  let packOutcomes = null;
   const feedbackEvents = productDatabase
     ? new FeedbackEvents({ evolutionSignals, database: productDatabase, jobs: config.learningEnabled ? productJobs : null,
       onRecorded: async event => {
+        // A correction of a run that opened a received pack's method is that pack's `corrected` in the sharing funnel; counting never fails the record.
+        packOutcomes?.onEvidence(event);
         // The learning loop's own evidence (a row per run reacted to, `learningEvidence.mjs`) is not a researcher-feedback signal of the evolution module.
         if (!config.evolutionEnabled || !evolution || !event.runId || !event.projectId || event.trigger === "learning-evidence") return;
         try {
@@ -1662,6 +1667,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // answers nothing.
       onActivationChanged: ({ userId }) => /** @type {any} */ (runtimeManager).refreshCapsuleMethods?.({ userId }) })
     : null;
+  if (capsuleService) packOutcomes = createReceivedPackOutcomes({ capsules: capsuleService });
   // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
@@ -4218,6 +4224,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               userId: project.userId, projectId: project.id, runId: run.id,
               code: typeof error?.code === "string" ? error.code : "source_uses_unrecorded",
             }) });
+          // Which received packs the run opened a method of, for the sharing funnel (`capsuleShareOutcomes.mjs`): off the same transcript, counted
+          // in memory, and never a reason for anything else here to fail.
+          await packOutcomes?.afterRun({ project, run, sessions, skip: internalFor(project.userId, project.id) });
           if (receipt.completeness !== "complete") {
             await securityAudit(config, "run.transcript.persist", "partial", {
               userId: project.userId, projectId: project.id, runId: run.id,
@@ -8696,6 +8705,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcrService: vcr?.service ?? null,
     capsuleService,
     officialPacks,
+    packOutcomes,
     pluginService,
     extensionService,
     skillLibraryService,

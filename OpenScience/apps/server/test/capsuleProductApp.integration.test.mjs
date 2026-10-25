@@ -13,7 +13,7 @@ if (databaseUrl) {
   assert.match(url.pathname, /evimed_test/);
 }
 
-test("the actual app delivers a persisted capsule create, activate and recall workflow", {
+test("the actual app makes the person's one capsule on first use, lists what is written into it, and the runtime recalls and notes through it", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-capsule-app-"));
@@ -31,15 +31,18 @@ test("the actual app delivers a persisted capsule create, activate and recall wo
     assert.equal(login.status, 200);
     const auth = await login.json();
     const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
-    const create = await fetch(`${base}/api/capsules`, { method: "POST", headers, body: JSON.stringify({ title: "Research preferences" }) });
-    assert.equal(create.status, 201);
+    // The capsule is made when the person first needs it, and is the same one every time after.
+    const create = await fetch(`${base}/api/capsules/mine`, { method: "POST", headers, body: "{}" });
+    assert.equal(create.status, 200);
     const capsule = (await create.json()).data;
-    const entry = await fetch(`${base}/api/capsules/${capsule.id}/entries`, { method: "POST", headers,
-      body: JSON.stringify({ factKind: "method_preference", layer: "methods", content: "Preserve confidence intervals." }) });
-    assert.equal(entry.status, 201);
-    assert.equal((await fetch(`${base}/api/capsules/${capsule.id}/activate`, { method: "POST", headers, body: JSON.stringify({ mode: "own" }) })).status, 200);
-    const recall = await fetch(`${base}/api/capsules/recall`, { method: "POST", headers, body: JSON.stringify({ query: "confidence" }) });
-    const recalled = (await recall.json()).data;
+    assert.equal((await (await fetch(`${base}/api/capsules/mine`, { method: "POST", headers, body: "{}" })).json()).data.id, capsule.id);
+    // What the person wrote into it (no page writes an entry by hand now; a statement reaches it as a note), listed with their own words.
+    await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "method_preference", layer: "methods", content: "Preserve confidence intervals.",
+      origin: "explicit", provenance: [{ type: "user", id: user.id }] });
+    const listed = (await (await fetch(`${base}/api/capsules/mine`, { headers })).json()).data;
+    assert.equal(listed.capsule.id, capsule.id);
+    assert.deepEqual(listed.entries.map((entry) => entry.payload.content), ["Preserve confidence intervals."]);
+    const recalled = await app.capsuleService.recall(user.id, { query: "confidence" });
     assert.equal(recalled.items.length, 1);
     assert.equal(recalled.items[0].contextOnly, true);
     const project = await app.store.defaultProject(await app.store.userById(user.id));
@@ -61,7 +64,7 @@ test("the actual app delivers a persisted capsule create, activate and recall wo
       assert.equal(noted.entry.payload.origin, "inferred");
       assert.equal(noted.reviewRequired, false);
     } finally { app.runtimeManager.runtimes.clear(); }
-    assert.equal((await fetch(`${base}/api/capsules`)).status, 401);
+    assert.equal((await fetch(`${base}/api/capsules/mine`)).status, 401);
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
     await app.close();
@@ -89,10 +92,9 @@ test("the actual app takes the capsule store's limits from its configuration: th
     assert.equal(login.status, 200);
     const auth = await login.json();
     const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
-    const capsule = (await (await fetch(`${base}/api/capsules`, { method: "POST", headers, body: JSON.stringify({ title: "Limits" }) })).json()).data;
-    const entry = await fetch(`${base}/api/capsules/${capsule.id}/entries`, { method: "POST", headers,
-      body: JSON.stringify({ factKind: "method_preference", layer: "methods", content: "Preserve confidence intervals." }) });
-    assert.equal(entry.status, 201);
+    const capsule = (await (await fetch(`${base}/api/capsules/mine`, { method: "POST", headers, body: "{}" })).json()).data;
+    await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "method_preference", layer: "methods", content: "Preserve confidence intervals.",
+      origin: "explicit", provenance: [{ type: "user", id: user.id }] });
     const exportOnce = () => fetch(`${base}/api/capsules/${capsule.id}/exports`, { method: "POST", headers, body: JSON.stringify({ password: "test-only-export-password" }) });
     assert.equal((await exportOnce()).status, 201, "the first live snapshot is within the cap the configuration set");
     const refused = await exportOnce();
@@ -139,7 +141,7 @@ test("the actual app puts the platform's starter packs on an ordinary account's 
     assert.equal(daily.enabled, true);
     assert.equal(daily.card.author, "EviMed 证据中心");
     assert.equal(JSON.stringify(shelf).includes("evimed-evidence-center"), false, "the publisher's account id is nobody's to read");
-    assert.deepEqual((await (await fetch(`${base}/api/capsules/active`, { headers })).json()).data.items, []);
+    assert.deepEqual((await app.capsuleService.active(user.id)).items, [], "a starter pack is not one of the eight in force");
     assert.equal((await fetch(`${base}/api/capsules/${encodeURIComponent(daily.id)}/disable`, { method: "POST", headers, body: "{}" })).status, 200);
     assert.equal((await (await fetch(`${base}/api/capsules/received`, { headers })).json()).data.find((pack) => pack.id === daily.id).enabled, false);
     assert.equal((await fetch(`${base}/api/capsules/${encodeURIComponent(daily.id)}/enable`, { method: "POST", headers, body: "{}" })).status, 200);

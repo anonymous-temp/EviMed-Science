@@ -86,7 +86,7 @@ const MOUNTED_METHOD_FILE = /(?:^|\/)(_(?:lm|om)[0-9a-f]{32})\/SKILL\.md$/;
  * costs a method one observation of its harm test; over-counting charges it
  * with a run it never shaped, which is the worse error.
  */
-const READING_PROGRAMS = new Set([
+export const READING_PROGRAMS = new Set([
   "cat", "head", "tail", "sed", "awk", "less", "more", "nl", "grep", "egrep", "rg", "cut", "tac", "bat", "python", "python3", "node",
 ]);
 

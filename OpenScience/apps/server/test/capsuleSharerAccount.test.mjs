@@ -30,9 +30,9 @@ test("withoutSharerAccount drops authorId under transfer and share only, in list
   assert.equal(withoutSharerAccount("text"), "text");
 });
 
-test("every capsule route answers without the sharer's account: the list and the received packs", async (t) => {
+test("every capsule route answers without the sharer's account: the person's capsule and the received packs", async (t) => {
   const service = {
-    list: async () => ({ items: [imported()], nextCursor: null }),
+    mine: async () => ({ capsule: null, capsules: [imported()], entries: [], candidates: [], forgotten: [] }),
     received: async () => ({ items: [imported()] }),
   };
   const store = {
@@ -45,7 +45,7 @@ test("every capsule route answers without the sharer's account: the list and the
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
   const base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}`;
-  for (const route of ["/api/capsules", "/api/capsules/received"]) {
+  for (const route of ["/api/capsules/mine", "/api/capsules/received"]) {
     const answer = await fetch(`${base}${route}`);
     assert.equal(answer.status, 200, route);
     const body = await answer.text();

@@ -166,12 +166,15 @@ test("a lesson is not queued for a conversation that ended before the reset, and
     const shape = [{ format: "md", labels: ["summary", "findings"] }];
     const clean = (run, evidence = "silent") => feedback.recordLearningEvidence(owner, { runId: run.id, key: "settled",
       detail: { evidence, verdict: "none", at: at(10_000), endedAt: run.finishedAt, scope: "clinical-evidence-synthesis", shape, sessionId: run.sessionId } });
-    for (const run of runs.slice(0, 2)) await clean(run);
+    // Silence is unknown (2026-10-25): a run is clean for a routine only when it was accepted, adopted or used, so every run here was used.
+    for (const run of runs.slice(0, 2)) await clean(run, "used");
+    const used = (/** @type {string} */ runId) => { const run = runs.find((candidate) => candidate.id === runId); return feedback.recordLearningEvidence(owner, { runId, key: "used",
+      detail: { evidence: "used", verdict: "none", at: at(5_000), endedAt: run.finishedAt, scope: "clinical-evidence-synthesis", shape, sessionId: run.sessionId } }); };
     const evidence = new LearningEvidence({
       feedback, jobs: { async enqueue() { return { id: "settle" }; } }, agentRuns: { async list() { return runs; } }, triggers: () => triggers, judge: null,
       resolveProject: async () => project, readShapes: async () => ({ "deliverables/a/report.md": shape[0] }), now: () => new Date(ms + 10_000),
     });
-    const settle = (runId) => evidence.settle({ job: { userId: owner, projectId: project.id, payload: { runId } } });
+    const settle = async (runId) => { if (runId !== "run_before_1") await used(runId); return evidence.settle({ job: { userId: owner, projectId: project.id, payload: { runId } } }); };
     assert.deepEqual(await settle("run_before_1"), { settled: null, routine: false, skipped: "before_reset" }, "a conversation that ended before the reset is not settled for the loop");
     const first = await settle("run_after_1");
     assert.deepEqual([first.settled, first.routine], ["silent", false]);

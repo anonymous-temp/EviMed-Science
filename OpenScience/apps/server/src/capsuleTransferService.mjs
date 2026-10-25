@@ -894,7 +894,7 @@ export class CapsuleTransferService {
    * The account's approved learned methods as an Agent Skills pack (`capsuleMethodPack.mjs`): a zip, text only, one folder per
    * method, each with who made it. Not a snapshot a recipient can import — it leaves the platform for any tool that reads the
    * open format — so it is not sealed and cannot be revoked, and the answer to that is in what it carries: only text, and the
-   * author's name.
+   * author's name. Nothing on this platform can open it, so it is no `sent` of the sharing funnel (`capsuleShareMetrics.mjs`).
    * @param {string} userId @param {string} capsuleId @param {{ exportedAt?: Date }} [options]
    */
   async methodPack(userId, capsuleId, { exportedAt = new Date() } = {}) {
@@ -909,7 +909,6 @@ export class CapsuleTransferService {
     const pack = buildAgentSkillsPack({ authorName: author, exportedAt, methods: rows.map((row) => ({
       name: String(row.payload.frontmatter?.name ?? ""), description: String(row.payload.frontmatter?.description ?? ""),
       whenToUse: String(row.payload.frontmatter?.whenToUse ?? ""), body: String(row.payload.body ?? "") })) });
-    recordShared("file");
     return { ...pack, filename: `evimed-methods-${exportedAt.toISOString().slice(0, 10)}.zip` };
   }
 

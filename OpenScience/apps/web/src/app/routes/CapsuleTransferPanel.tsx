@@ -62,6 +62,10 @@ function useAction() {
  * irreversible things. What cannot be taken back is said in that confirmation,
  * and nowhere else.
  *
+ * The panel opens with one line that says the capsule is the person's and can be taken along (the 2026-08 Manus shutdown showed users
+ * told to back up and restore their own agent state, B-landscape 1.9): the file for another account, the method pack for other tools.
+ * Under the export button one more says a file cannot be taken back, which is what decides between a file and a link or a delivery.
+ *
  * 署名 (2026-10-10 review C4c) is the one optional field above the ways of
  * sharing: the name this share is signed with, which every recipient sees. It
  * arrives filled in with the name the account already has, and a share is made
@@ -209,6 +213,9 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
     </div>}
     {notice && <p role="status" className="text-ui text-text-2">{notice}</p>}
 
+    {/* The one line about whose it is: a person's way of working is theirs to take along, to another account or another tool. */}
+    <p className="max-w-measure text-ui text-text-2">这份记忆胶囊是你的，随时可以带走：加密文件能在别的账号里打开，“导出做法”能放进其他支持技能的工具。</p>
+
     <div className="max-w-measure">
       <Input label="署名" value={signature} disabled={busy || !capsuleId} maxLength={CAPSULE_SIGNATURE_MAX_CHARS}
         onChange={event => { signatureTyped.current = true; setSignature(event.target.value); }} />
@@ -267,6 +274,10 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
         </div>
         <Button disabled={busy || !capsuleId || (!password && recipientNames.length === 0) || outgoing?.empty === true || (outgoing !== null && includedCount === 0)} loading={busy} onClick={() => void createExport(password)}>加密导出</Button>
       </div>
+      {/* Said where it helps to choose: a file is the one way out that cannot be taken back; a link or a delivery can. */}
+      <p className="max-w-measure text-ui text-text-3">
+        {sharing ? "文件交出去就由对方保管，收不回来；发给平台里的账号或用分享链接的，之后还可以撤回。" : "文件交出去就由对方保管，收不回来。"}
+      </p>
     </section>
 
     {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} card={signedCard} excludeEntryIds={unticked} />}

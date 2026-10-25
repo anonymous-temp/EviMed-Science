@@ -83,7 +83,7 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
                   <ListRow
                     key={pack.id} title={pack.title} titleProps={{ "data-overview-row": "" }}
                     meta={pack.takenDown
-                      ? <span>{pack.takenDown.by === "operator" ? "已被平台下架并停用" : "已被作者下架并停用"}</span>
+                      ? <span>{pack.takenDown.by === "operator" ? "已被平台下架并停用" : "作者已撤回，这份已停用"}</span>
                       : <span>{[pack.card?.author ? (pack.official ? providedBy(pack.card.author) : fromSender(pack.card.author)) : null, pack.card?.summary || contents(pack)].filter(Boolean).join(" · ")}</span>}
                     trailing={(
                       <Switch

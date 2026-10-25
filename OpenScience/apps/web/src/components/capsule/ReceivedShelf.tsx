@@ -181,7 +181,7 @@ function ReceivedPacks() {
           {/* Who sent it and what it says it holds, from the card its
               sender signed; the counts when a pack carries no card. */}
           {pack.takenDown && <p className="text-danger-strong">
-            {pack.takenDown.by === "operator" ? "已被平台下架并停用" : "已被作者下架并停用"}{pack.takenDown.reason ? `：${pack.takenDown.reason}` : ""}
+            {pack.takenDown.by === "operator" ? "已被平台下架并停用" : "作者已撤回，这份已停用"}{pack.takenDown.reason ? `：${pack.takenDown.reason}` : ""}
           </p>}
           <p>{[
             pack.card?.author ? (pack.official ? providedBy(pack.card.author) : fromSender(pack.card.author)) : null,

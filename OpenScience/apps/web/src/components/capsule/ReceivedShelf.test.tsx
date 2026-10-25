@@ -187,6 +187,19 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
   });
 
+  // The sender's button is 撤回, so that is what the recipient reads when the sender pressed it: withdrawn, and stopped.
+  it("a pack its author withdrew says it was withdrawn and is no longer in force, with the reason when the author gave one", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([{ ...structuredClone(pack), enabled: true, takenDown: { by: "author", at: "2026-10-05T00:00:00Z", reason: "这条做法有误" } }]);
+    const { unmount } = shelf();
+    expect(await screen.findByText("作者已撤回，这份已停用：这条做法有误")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+    unmount();
+    client.fetchReceivedCapsules.mockResolvedValue([{ ...structuredClone(pack), takenDown: { by: "author", at: "2026-10-05T00:00:00Z", reason: null } }]);
+    shelf();
+    expect(await screen.findByText("作者已撤回，这份已停用")).toBeInTheDocument();
+  });
+
   // A delivery reaches a recipient as an inbox notice, but one who did not come through the inbox had no way to find it (flywheel F17).
   describe("待收下的分享", () => {
     const delivery = { id: "dlv_1", state: "delivered", createdAt: "2026-10-05T00:00:00Z", sender: { name: "李主任" }, card: { title: "李主任的工作方式", author: "李主任", summary: "2 条做法" } };

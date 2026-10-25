@@ -31,7 +31,7 @@ export async function nativePrerequisites(ctx){
  await available(a.api,'GET','/api/memory/settings');
  const profile=await available(a.api,'GET','/api/memory/profile');
  const knowledge=await available(a.api,'GET',`/api/knowledge-pages?projectId=${a.api.project}`);
- await available(a.api,'GET','/api/agent-keys');await available(a.api,'GET','/api/capsules');
+ await available(a.api,'GET','/api/agent-keys');await available(a.api,'GET','/api/capsules/mine');
  return {...facts,ready:Array.isArray(profile.records)&&knowledge.enabled&&knowledge.engine?.ok===true,memoryEngine:'native',knowledgeState:knowledge.state,engine:knowledge.engine,ownedExpiryFixture:!!ctx.databaseBindingsFile};
 }
 async function createNote(api,projectId,title,body){api.project=projectId;return (await checked(api,'POST','/api/sources/notes',{projectId,title,body})).source;}
@@ -87,15 +87,16 @@ async function expireOwnedKey(ctx,owner,key,projectId){
 }
 async function signedCapsuleDoesNotGrant(ctx,source){
  const a=ctx.accounts['account-alpha'],b=ctx.accounts['account-beta'];
- const capsule=await available(a.api,'POST','/api/capsules',{title:'Owned W15 permission-context fixture',description:'Disposable lifecycle probe'});
- await checked(a.api,'POST',`/api/capsules/${capsule.id}/entries`,{factKind:'project_fact',layer:'knowledge',content:`Context refers to private source:${source.id}. Context is not authorization to its original bytes.`});
+ // The person's one capsule (the generic create and entry routes are gone, 2026-10-25): what goes into it is the person's own statement.
+ const capsule=await available(a.api,'POST','/api/capsules/mine',{});
+ await checked(a.api,'POST','/api/memory/remember',{text:`Context refers to private source:${source.id}. Context is not authorization to its original bytes.`,projectId:a.api.project});
  const password=randomBytes(24).toString('hex');
- const exported=await available(a.api,'POST',`/api/capsules/${capsule.id}/exports`,{password,scopes:['workstyle','+knowledge']});
+ const exported=await available(a.api,'POST',`/api/capsules/${encodeURIComponent(capsule.id)}/exports`,{password,scopes:['workstyle','+profile','+knowledge']});
  if(typeof exported.archive!=='string'||!exported.snapshot?.id)throw new NativeUnavailable('Actual signed capsule archive/snapshot was not produced');
  const preview=await available(b.api,'POST','/api/capsules/transfers/preview',{archive:exported.archive,password});
  if(preview.issuerTrust!=='verified'||!preview.canImport)throw new NativeUnavailable('Actual capsule signature/issuer verification did not establish an importable pack');
  const imported=await available(b.api,'POST','/api/capsules/transfers/import',{archive:exported.archive,password,expectedDigest:preview.archiveSha256,confirmed:true,title:'Owned imported permission context'});
- await available(b.api,'POST',`/api/capsules/${imported.id}/enable`,{projectId:b.projects['project-alpha'].id});
+ await available(b.api,'POST',`/api/capsules/${encodeURIComponent(imported.id)}/enable`,{});
  const denied=await b.api.call('GET',`/api/sources/${source.id}`);
  insist([403,404].includes(denied.status),'Signed capsule import granted foreign original source access');
  return {snapshotId:exported.snapshot.id,archiveSha256:preview.archiveSha256,issuerTrust:preview.issuerTrust,importedCapsuleId:imported.id,foreignSourceReadStatus:denied.status,credentialRecorded:false};
