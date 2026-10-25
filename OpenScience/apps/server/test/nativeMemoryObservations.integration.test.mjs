@@ -7,12 +7,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { frontierMemoryMark } from "../src/frontierProfiles.mjs";
 import { nativeMemoryCounters } from "../src/nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "../src/nativeMemoryObservations.mjs";
 import { nativeMemoryFile, observationFile } from "../src/openVikingSessions.mjs";
 import { nativeIntegration } from "./helpers/nativeFixture.mjs";
 
-const { options, fixture } = nativeIntegration();
+const { options, fixture, database } = nativeIntegration();
 
 const OBSERVATION = "observations/预算类表格-透视表.md";
 
@@ -192,4 +193,17 @@ test("recent work is the project card's last row: three lines of the newest file
   await f.worker.processCommits({ userId: f.userId });
   assert.equal(f.stub.files.has(stray), false);
   assert.equal(nativeMemoryCounters().checkActions.recent_work_default_project, 1);
+});
+
+test("a note does not move the mark 「与你相关」 reads the memory by: nobody reads a note, so nothing is recomputed for one", options, async (t) => {
+  const f = await scene(t);
+  const before = await frontierMemoryMark(database(), f.userId);
+  await f.commitConversation("a", [{ role: "user", text: "做个 12 个月预算表，要有透视表。" }, { role: "assistant", text: "好的。" }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal((await f.overlay.observationFiles(f.userId)).length, 1);
+  assert.equal(await frontierMemoryMark(database(), f.userId), before, "a note written, a revision of it recorded: the mark stands");
+  // A memory does move it.
+  f.seed("preferences/self/格式.md", "- 先给结论。", { type: "preferences" });
+  await f.overlay.upsertFile({ userId: f.userId, uri: `${f.root}/preferences/self/格式.md`, memoryType: "preferences", body: "- 先给结论。" });
+  assert.notEqual(await frontierMemoryMark(database(), f.userId), before);
 });
