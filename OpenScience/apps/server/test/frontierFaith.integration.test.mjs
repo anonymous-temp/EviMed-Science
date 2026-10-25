@@ -157,7 +157,8 @@ test("a faithful 导读 is stored as written; the study facts are made once per 
   assert.deepEqual([version, at], [FRONTIER_FAITH_VERSION, NOW.toISOString()]);
   assert.deepEqual(lead, { outcome: "clean", candidates: 0, confirmed: 0, remaining: 0, rules: [], calls: 1, error: null });
   assert.equal(editor.counts.facts, 1, "the step made them; the lead step found them stored");
-  assert.deepEqual([pipeline.counters.faithOutcomes, pipeline.counters.studyFacts], [{ clean: 1 }, 1]);
+  // The 导读 and the card's summary are both read against the facts.
+  assert.deepEqual([pipeline.counters.faithOutcomes, pipeline.counters.faithSummaryOutcomes, pipeline.counters.studyFacts], [{ clean: 2 }, { clean: 1 }, 1]);
   // Nothing changed: not asked again (idempotent per text hash).
   const before = { ...editor.counts };
   await pipelineFor(editor).processBatch();
@@ -179,8 +180,34 @@ test("a 导读 that turns the main result over is sent back once; the repaired t
   assert.deepEqual([editor.counts.repair, editor.counts.verify], [1, 1]);
   assert.deepEqual({ outcome: stored.editor_diagnostics.faith.lead.outcome, confirmed: stored.editor_diagnostics.faith.lead.confirmed, rules: stored.editor_diagnostics.faith.lead.rules },
     { outcome: "repaired", confirmed: 1, rules: ["direction-contradiction"] });
-  assert.deepEqual([summary.faithChecked, summary.faithMismatched, summary.faithRepaired, summary.faithTrimmed], [1, 1, 1, 0]);
+  assert.deepEqual([summary.faithChecked, summary.faithMismatched, summary.faithRepaired, summary.faithTrimmed], [2, 1, 1, 0], "the 导读 and the card summary");
   assert.deepEqual(pipeline.counters.faithRules, { "direction-contradiction": 1 });
+});
+
+test("a card summary that turns the main result over loses that sentence, never rewritten; checked once per summary text, again after a new edit", options, async () => {
+  const item = await paper({ summary_zh: BAD });
+  const editor = faithEditor({ lead: GOOD });
+  const pipeline = pipelineFor(editor);
+  await pipeline.processBatch();
+  const stored = await row(item.id);
+  const card = (await database.query("SELECT summary_zh, lexemes::text AS lexemes FROM evimed_frontier.items WHERE id = $1", [item.id])).rows[0];
+  assert.equal(card.summary_zh, "一项随机对照试验纳入 1200 名成人。");
+  assert.doesNotMatch(card.lexemes, /差异/, "search no longer finds the removed sentence");
+  assert.equal(editor.counts.repair, 0, "a card summary is not sent back to a writer");
+  assert.deepEqual([stored.editor_diagnostics.faith.summary.outcome, stored.editor_diagnostics.faith.summary.rules], ["trimmed", ["direction-contradiction"]]);
+  assert.equal(stored.editor_diagnostics.faith.summary.basis, (await database.query("SELECT md5(summary_zh) AS m FROM evimed_frontier.items WHERE id = $1", [item.id])).rows[0].m);
+  assert.deepEqual(pipeline.counters.faithSummaryOutcomes, { trimmed: 1 });
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_frontier.item_changes WHERE item_id = $1 AND reason = 'faith'", [item.id])).rows[0].n, 1);
+
+  const before = { ...editor.counts };
+  await pipelineFor(editor).processBatch();
+  assert.deepEqual(editor.counts, before, "the kept text is not read again");
+  // A new edit writes another summary: it is read again.
+  await set(item.id, { summary_zh: "药物 X 与安慰剂相比无显著差异，研究纳入 1200 名成人。" });
+  await pipelineFor(editor).processBatch();
+  assert.equal(editor.counts.claims, before.claims + 1);
+  assert.equal((await row(item.id)).editor_diagnostics.faith.summary.outcome, "emptied");
+  assert.equal((await database.query("SELECT summary_zh FROM evimed_frontier.items WHERE id = $1", [item.id])).rows[0].summary_zh, "", "nothing left: the card shows its title");
 });
 
 test("a repair the writer's own checks refuse takes the mismatching sentence out; when nothing would be left the previous accepted 导读 stays", options, async () => {

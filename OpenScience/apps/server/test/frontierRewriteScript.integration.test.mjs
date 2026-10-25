@@ -227,8 +227,19 @@ test("c3-faith: facts made for reader-worthy study items; a live 导读 that mis
   assert.deepEqual(editor.asked, { facts: 1, claims: 2, verify: 1, repair: 1 }, "nothing asked twice");
 
   // A 导读 written after its check (the lead step, or the pipeline) is owed a check again; the facts of the unchanged text are reused.
-  await database.query("UPDATE evimed_frontier.items SET lead_zh = $2, lead_at = clock_timestamp() + interval '1 minute' WHERE id = $1", [paper.id, MISSTATED]);
+  await database.query("UPDATE evimed_frontier.items SET lead_zh = $2, lead_at = clock_timestamp() WHERE id = $1", [paper.id, MISSTATED]);
   const rewritten = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["faith"], apply: true });
   assert.deepEqual([rewritten.faith.items, rewritten.faith.outcomes], [1, { repaired: 1 }]);
   assert.equal(editor.asked.facts, 1);
+
+  // A card summary that misstates the study is trimmed, never sent to a writer, and checked once per summary text.
+  await database.query("UPDATE evimed_frontier.items SET summary_zh = $2 WHERE id = $1", [paper.id, MISSTATED]);
+  const carded = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["faith"], apply: true });
+  assert.deepEqual([carded.faith.items, carded.faith.outcomes, carded.faith.changed], [1, { trimmed: 1 }, 1]);
+  const card = (await database.query("SELECT summary_zh, editor_diagnostics FROM evimed_frontier.items WHERE id = $1", [paper.id])).rows[0];
+  assert.equal(card.summary_zh, "一项随机对照试验纳入 1200 名成人。");
+  assert.equal(card.editor_diagnostics.faith.summary.outcome, "trimmed");
+  assert.equal(editor.asked.repair, 2, "only the two 导读 repairs");
+  const settled = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["faith"], apply: true });
+  assert.equal(settled.faith.items, 0);
 });

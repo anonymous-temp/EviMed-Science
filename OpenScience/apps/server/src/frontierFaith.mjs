@@ -462,6 +462,26 @@ export async function frontierFaithLead(editor, { facts, lead, repair, source = 
 }
 
 /**
+ * A card's summary (`summary_zh`, the edit's field) against the facts: its sentences are the units, and it is trimmed, never
+ * rewritten — a rewrite would be a second edit, which scores and selects the item again. A sentence that mismatches is removed;
+ * null when nothing would be left.
+ * @param {{ callJson: Function }} editor
+ * @param {{ facts: ReturnType<typeof import("./frontierStudyFacts.mjs").frontierStudyFactsView>, summary: string, source?: string | null }} input
+ */
+export async function frontierFaithSummary(editor, { facts, summary, source = null }) {
+  return frontierFaithLoop(editor, {
+    facts, draft: summary, source,
+    unitsOf: (text) => frontierSentences(text).map((sentence, index) => ({ id: `summary.${index}`, text: sentence })),
+    repair: async () => null,
+    remove: (text, drop) => {
+      const kept = frontierSentences(text).filter((_, index) => !drop.has(index));
+      const joined = joinFaithSentences(kept);
+      return [...joined.replace(/[\p{P}\s]/gu, "")].length >= 8 ? joined : null;
+    },
+  });
+}
+
+/**
  * The units of a brief: each text field and each item of a list field is one sentence, labelled with the field's label. The
  * authors' quotation is the source's own words and is not read.
  * @param {{ points?: Array<{ key: string, label: string, text?: string, items?: string[] }> } | null} brief @returns {FaithUnit[]}

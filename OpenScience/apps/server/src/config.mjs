@@ -466,8 +466,9 @@ function frontierSettings(overrides) {
     frontierOutsideEventEnabled: overrides.frontierOutsideEventEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_OUTSIDE_EVENT_ENABLED", true),
     // c3-faith 2026-10-25 (frontierStudyFacts.mjs, frontierFaith.mjs): the study facts of paper, preprint, trial and conference items
     // (one flash call each, every field anchored to a quotation code found) and the check of a written 导读 or 要点 against them
-    // (a second call, one repair by the writer, the sentence that still mismatches removed). Both under purpose `frontier` and the
-    // module's budget. The check needs the facts; false on the first makes neither, false on the second keeps the facts only.
+    // (a second call, one repair by the writer, the sentence that still mismatches removed; a card summary is trimmed, never rewritten).
+    // Both under purpose `frontier` and the module's budget. The check needs the facts; false on the first makes neither, false on the
+    // second keeps the facts only.
     frontierStudyFactsEnabled: overrides.frontierStudyFactsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_STUDY_FACTS_ENABLED", true),
     frontierFaithEnabled: overrides.frontierFaithEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_FAITH_ENABLED", true),
     // The re-clustering sweep (c3-cluster 2026-10-25, frontierRecluster.mjs): pairs of events it asks the model about in one run

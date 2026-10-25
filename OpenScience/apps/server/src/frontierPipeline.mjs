@@ -100,7 +100,9 @@ import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasi
 import { FRONTIER_ASK_VERSION, frontierWriteAsk } from "./frontierAsk.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "./frontierLead.mjs";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "./frontierBrief.mjs";
-import { FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead, frontierStudyFactsWanted, frontierWriteFaith } from "./frontierFaithStep.mjs";
+import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead,
+  frontierFaithCheckSummary, frontierStudyFactsWanted, frontierWriteFaith } from "./frontierFaithStep.mjs";
+import { frontierStudyFactsView } from "./frontierStudyFacts.mjs";
 import { FRONTIER_INSIGHT_LIMITS, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight } from "./frontierInsight.mjs";
 import { frontierItemFollowups } from "./frontierEventReading.mjs";
 import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
@@ -242,6 +244,8 @@ const STUDY_FACTS_BATCH = 12;
 /** How far back the facts step looks (a week: the facts of older items are made when their 导读 is written, not in bulk). */
 const STUDY_FACTS_WINDOW_MS = 7 * DAY;
 const STUDY_FACTS_GENRES = ["paper", "preprint", "trial", "conference"];
+/** Card summaries checked against their item's study facts a round (c3-faith: a claims call each, a source call for the few with a suspicion). */
+const FAITH_SUMMARY_BATCH = 12;
 /** Items whose 「就此提问」 questions are written a round, and the score from which an item is asked about before the rest (c3-ask). */
 const ASK_BATCH = 8;
 const ASK_PRIORITY_SCORE = 72;
@@ -842,6 +846,13 @@ function orderedFlags(flags) {
  *             faithMismatched: number, faithRepaired: number, faithTrimmed: number, faithUnchecked: number }} FrontierBatchSummary
  */
 
+/** The words search finds an item by: its titles, card summary, entities and tags. @param {any} item */
+export function frontierLexemeText(item) {
+  const entities = item.entities && typeof item.entities === "object" ? Object.values(item.entities).flat() : [];
+  return [item.title_raw, item.title_zh, item.summary_zh, ...entities, ...(Array.isArray(item.tags) ? item.tags : [])]
+    .filter((part) => typeof part === "string" && part).join("\n");
+}
+
 export class FrontierPipeline {
   /**
    * @param {{ database: any, editor: any, plugin: any, embedder?: any, glossary?: any, config?: Record<string, any>,
@@ -907,6 +918,8 @@ export class FrontierPipeline {
       briefs: 0, briefsEmpty: 0, briefFieldsDropped: /** @type {Record<string, number>} */ ({}),
       // c3-faith: study facts written (and recorded empty), drafts checked, by outcome, and the rules that fired on a first reading.
       studyFacts: 0, studyFactsEmpty: 0, faithOutcomes: /** @type {Record<string, number>} */ ({}), faithRules: /** @type {Record<string, number>} */ ({}),
+      // The card summaries read against the facts, by outcome (trimmed, never rewritten; their outcomes are also in faithOutcomes).
+      faithSummaryOutcomes: /** @type {Record<string, number>} */ ({}),
       // The reader's 「就此提问」 questions (frontierAsk.mjs): items given at least one, items recorded as having none for their
       // text, and the questions code dropped, by why (length, repeat, a number the source lacks, shape).
       asks: 0, asksEmpty: 0, askQuestionsDropped: /** @type {Record<string, number>} */ ({}),
@@ -1021,6 +1034,7 @@ export class FrontierPipeline {
       await this.#readerSummaries(context);
       await this.#tidy(context);
       await this.#studyFacts(context);
+      await this.#faithSummary(context);
       await this.#lead(context);
       await this.#brief(context);
       await this.#insight(context);
@@ -2210,9 +2224,7 @@ export class FrontierPipeline {
 
   /** The words search finds an item by. @param {any} item */
   #lexemeText(item) {
-    const entities = item.entities && typeof item.entities === "object" ? Object.values(item.entities).flat() : [];
-    return [item.title_raw, item.title_zh, item.summary_zh, ...entities, ...(Array.isArray(item.tags) ? item.tags : [])]
-      .filter((part) => typeof part === "string" && part).join("\n");
+    return frontierLexemeText(item);
   }
 
   /**
@@ -2847,6 +2859,76 @@ export class FrontierPipeline {
         // `summary.asks` is added to `counters.asks` when the batch ends.
         if (result.questions.length) summary.asks += 1;
         else this.counters.asksEmpty += 1;
+      }
+      return written;
+    })));
+  }
+
+  /**
+   * The card summary (`summary_zh`, the edit's two or three sentences every list shows) of a published study item of the last week,
+   * read against the study facts made from its settled reader text (c3-faith, `frontierFaithCheckSummary`): a sentence that states a
+   * different design, direction, comparator, population or a stronger certainty than the source's is removed — the summary is
+   * trimmed, never rewritten, because a rewrite is a second edit — and a summary with nothing left becomes empty (the card shows its
+   * title). Checked once per summary text (`editor_diagnostics.faith.summary.basis` = `md5(summary_zh)` of the text kept), so a new
+   * edit is checked again; a check that could not be made is tried again. 精选, safety alerts and items near the selection line first,
+   * the rest while the budget is not throttled; nothing while the provider is paused or the budget is spent.
+   * @param {any} context
+   */
+  async #faithSummary(context) {
+    const { now, budget, summary } = context;
+    if (!this.faithEnabled || !this.studyFactsEnabled || typeof this.editor.callJson !== "function" || budget.state === "exhausted" || this.#providerPause(now)) return;
+    const claimed = (await this.database.query(`WITH picked AS (
+        SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
+          AND i.genre = ANY($7::text[]) AND coalesce(i.summary_zh, '') <> ''
+          AND t.reader_tidy IS NOT NULL AND i.study_facts->>'basis' = t.reader_tidy->>'sha' AND NOT coalesce((i.study_facts->>'empty')::boolean, false)
+          AND (i.editor_diagnostics->'faith'->'summary'->>'version' IS DISTINCT FROM $9
+            OR i.editor_diagnostics->'faith'->'summary'->>'outcome' = 'unchecked'
+            OR i.editor_diagnostics->'faith'->'summary'->>'basis' IS DISTINCT FROM md5(i.summary_zh))
+          AND (NOT $3::boolean OR i.selected OR i.safety_alert OR i.score_total >= $8)
+        ORDER BY (i.selected OR i.safety_alert OR coalesce(i.score_total, 0) >= $8) DESC, i.visible_at DESC, i.id DESC
+        LIMIT $4
+        FOR UPDATE OF i SKIP LOCKED)
+      UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
+      RETURNING i.id, i.title_raw, i.title_zh, i.summary_zh, i.entities, i.tags, i.study_facts, i.platform, i.primary_source_id, i.published_at,
+        i.lease_until, i.genre`,
+    [now, new Date(now.getTime() - STUDY_FACTS_WINDOW_MS), budget.state === "throttled", FAITH_SUMMARY_BATCH, this.workerId,
+      new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN, FRONTIER_FAITH_VERSION])).rows;
+    if (!claimed.length) return;
+    const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
+    await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
+      if (this.#providerPause(now)) return false;
+      const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
+      const reader = frontierReaderText(texts);
+      const sha = texts?.reader_tidy?.sha;
+      if (!reader || !sha || texts.reader_tidy.source !== reader.source || item.study_facts?.basis !== sha) return false;
+      const facts = frontierStudyFactsView(item.study_facts);
+      if (!facts) return false;
+      const source = sources.get(item.primary_source_id);
+      const checked = await frontierFaithCheckSummary(this.editor, { facts, summary: item.summary_zh, source: faithSource({
+        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+        date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, text: reader.text, kind: reader.source }) });
+      const result = checked.result;
+      if (result.error && frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
+      const changed = checked.summary !== item.summary_zh;
+      const written = await this.#writeUnderLease(item, async (client) => {
+        if (changed) {
+          await client.query("UPDATE evimed_frontier.items SET summary_zh = $2, lexemes = $3::tsvector WHERE id = $1",
+            [item.id, checked.summary, tsvectorLiteral(this.#lexemeText({ ...item, summary_zh: checked.summary }))]);
+          await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'faith')", [item.id]);
+        }
+        await client.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
+        await this.#writeFaith(client, item.id, { facts: null, diagnostic: { summary: checked.diagnostic } });
+        if (changed) await bumpFrontierVersion(client);
+      });
+      if (written) {
+        summary.faithChecked += 1;
+        if (result.first.length) summary.faithMismatched += 1;
+        if (result.outcome === "trimmed" || result.outcome === "emptied") summary.faithTrimmed += 1;
+        if (result.outcome === "unchecked") summary.faithUnchecked += 1;
+        this.counters.faithOutcomes[result.outcome] = (this.counters.faithOutcomes[result.outcome] ?? 0) + 1;
+        this.counters.faithSummaryOutcomes[result.outcome] = (this.counters.faithSummaryOutcomes[result.outcome] ?? 0) + 1;
+        for (const mismatch of result.first) this.counters.faithRules[mismatch.rule] = (this.counters.faithRules[mismatch.rule] ?? 0) + 1;
       }
       return written;
     })));

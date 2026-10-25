@@ -7,7 +7,9 @@
  * the pipeline's counters; a failed call leaves the draft as the writer produced it.
  */
 
-import { frontierFaithBrief, frontierFaithLead, FRONTIER_FAITH_VERSION } from "./frontierFaith.mjs";
+import { createHash } from "node:crypto";
+
+import { frontierFaithBrief, frontierFaithLead, frontierFaithSummary, FRONTIER_FAITH_VERSION } from "./frontierFaith.mjs";
 import { frontierRepairBrief } from "./frontierBrief.mjs";
 import { frontierRepairLead } from "./frontierLead.mjs";
 import { FRONTIER_STUDY_FACTS_VERSION, buildStudyFactsInput, frontierStudyFactsView, frontierStudyFactsWanted, frontierWriteStudyFacts } from "./frontierStudyFacts.mjs";
@@ -43,6 +45,26 @@ export async function frontierEnsureStudyFacts(editor, { stored, sha, input }) {
 export function faithDiagnostic(result) {
   return { outcome: result.outcome, candidates: result.candidates, confirmed: result.first.length, remaining: result.remaining.length,
     rules: [...new Set(result.first.map((mismatch) => mismatch.rule))], calls: result.calls, error: result.error ? "check_failed" : null };
+}
+
+/**
+ * The text a card summary's check was made on, as PostgreSQL's `md5(summary_zh)` computes it: the summary has no write time of its
+ * own (the edit writes it with everything else), so its record names the text instead. @param {string} text
+ */
+export function faithTextBasis(text) {
+  return createHash("md5").update(text, "utf8").digest("hex");
+}
+
+/**
+ * Check a card's summary against an item's study facts: trimmed of the sentences that mismatch, never rewritten; an empty string when
+ * nothing would be left (the card then shows its title). The record names the text kept (`basis`), so it is checked once.
+ * @param {{ callJson: Function }} editor
+ * @param {{ facts: ReturnType<typeof frontierStudyFactsView>, summary: string, source: string }} item
+ */
+export async function frontierFaithCheckSummary(editor, { facts, summary, source }) {
+  const result = await frontierFaithSummary(editor, { facts, summary, source });
+  const final = result.outcome === "emptied" ? "" : (result.draft ?? summary);
+  return { summary: final, result, diagnostic: { ...faithDiagnostic(result), basis: faithTextBasis(final) } };
 }
 
 /**

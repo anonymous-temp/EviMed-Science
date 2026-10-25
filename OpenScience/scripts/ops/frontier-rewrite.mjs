@@ -21,11 +21,12 @@
  *   being edited again (`FrontierEditor#writeReason`) — an edit would score and select it again. A refused answer keeps the old one.
  * - `facts` (c3-faith): a reader-worthy item of a study genre (paper, preprint, trial, conference) whose study facts were not made from
  *   its settled reader text gets them (`frontierEnsureStudyFacts`: each field anchored to a quotation code found, or an empty record).
- * - `faith` (c3-faith): a reader-worthy study item whose 导读 or 要点 was written after its last check, or never checked by these
- *   instructions, or whose check could not be made, is read against its study facts (made now when missing) the way the pipeline reads
- *   a new one (`frontierFaithCheckLead` / `frontierFaithCheckBrief`): a mismatch goes back to the writer once, a sentence or point that
- *   still mismatches is left out, and a text with nothing left is cleared (the reader shows the card's summary). The record is
- *   `editor_diagnostics.faith`, never a note on the page. An item whose text has an empty facts record is not asked about again.
+ * - `faith` (c3-faith): a reader-worthy study item whose 导读, 要点 or card summary was written after its last check, or never checked
+ *   by these instructions, or whose check could not be made, is read against its study facts (made now when missing) the way the
+ *   pipeline reads a new one (`frontierFaithCheckLead` / `frontierFaithCheckBrief` / `frontierFaithCheckSummary`): a mismatch in a
+ *   导读 or 要点 goes back to the writer once, a sentence or point that still mismatches is left out, and a text with nothing left is
+ *   cleared (the reader shows the card's summary; a card with no summary shows its title); a card summary is only trimmed. The record
+ *   is `editor_diagnostics.faith`, never a note on the page. An item whose text has an empty facts record is not asked about again.
  *
  * Hidden knowledge:
  *
@@ -47,11 +48,12 @@ import { FRONTIER_GENRES, agendaLocalDate, frontierGenreDecision, frontierGenreF
   from "@evimed/domain";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "../../apps/server/src/frontierBrief.mjs";
 import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief,
-  frontierFaithCheckLead, frontierStudyFactsWanted, frontierWriteFaith } from "../../apps/server/src/frontierFaithStep.mjs";
+  frontierFaithCheckLead, frontierFaithCheckSummary, frontierStudyFactsWanted, frontierWriteFaith } from "../../apps/server/src/frontierFaithStep.mjs";
 import { FRONTIER_GENRE_BATCH, FRONTIER_REASON_VERSION } from "../../apps/server/src/frontierEditor.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
 import { bumpFrontierVersion } from "../../apps/server/src/frontierPersistence.mjs";
-import { FRONTIER_READER_MARGIN, frontierReaderText } from "../../apps/server/src/frontierPipeline.mjs";
+import { FRONTIER_READER_MARGIN, frontierLexemeText, frontierReaderText } from "../../apps/server/src/frontierPipeline.mjs";
+import { tsvectorLiteral } from "../../apps/server/src/kbChunker.mjs";
 
 const DAY_MS = 24 * 3_600_000;
 const REWRITE_LOCK = "evimed-frontier-rewrite";
@@ -310,13 +312,17 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
     const owedText = (/** @type {"lead" | "brief"} */ kind) => `(i.${kind === "lead" ? "lead_zh" : "brief"} IS NOT NULL
       AND (i.editor_diagnostics->'faith'->'${kind}'->>'version' IS DISTINCT FROM $5 OR i.editor_diagnostics->'faith'->'${kind}'->>'outcome' = 'unchecked'
         OR coalesce((i.editor_diagnostics->'faith'->'${kind}'->>'at')::timestamptz < i.${kind}_at, true)))`;
-    const rows = await studyOwing(`(${owedText("lead")} OR ${owedText("brief")})
+    // A card summary has no write time of its own: its record names the text it was made on (`md5(summary_zh)`).
+    const owedSummary = `(coalesce(i.summary_zh, '') <> '' AND (i.editor_diagnostics->'faith'->'summary'->>'version' IS DISTINCT FROM $5
+      OR i.editor_diagnostics->'faith'->'summary'->>'outcome' = 'unchecked' OR i.editor_diagnostics->'faith'->'summary'->>'basis' IS DISTINCT FROM md5(i.summary_zh)))`;
+    const rows = await studyOwing(`(${owedText("lead")} OR ${owedText("brief")} OR ${owedSummary})
         AND NOT coalesce(i.study_facts->>'basis' = t.reader_tidy->>'sha' AND (i.study_facts->>'empty')::boolean, false)`,
-    FRONTIER_FAITH_VERSION, `, ${owedText("lead")} AS lead_owed, ${owedText("brief")} AS brief_owed, ${factsOwed} AS facts_owed`);
+    FRONTIER_FAITH_VERSION, `, i.entities, i.tags, ${owedText("lead")} AS lead_owed, ${owedText("brief")} AS brief_owed, ${owedSummary} AS summary_owed,
+      ${factsOwed} AS facts_owed`);
     /** @type {Record<string, number>} */
     const outcomes = {};
     summary.faith = { items: rows.length, byGenre: genres(rows), texts: 0, outcomes, changed: 0, facts: 0, noFacts: 0 };
-    calls.faith = rows.reduce((total, row) => total + (row.lead_owed ? 1 : 0) + (row.brief_owed ? 1 : 0), 0);
+    calls.faith = rows.reduce((total, row) => total + (row.lead_owed ? 1 : 0) + (row.brief_owed ? 1 : 0) + (row.summary_owed ? 1 : 0), 0);
     // Facts the faith step makes itself (in a report with the facts step, that step has counted them).
     if (!steps.includes("facts")) calls.facts = rows.filter((row) => row.facts_owed).length;
     if (apply) await each(rows, async (row) => {
@@ -341,9 +347,9 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       const source = faithSource(input);
       /** @type {Record<string, any>} */
       const diagnostic = {};
-      let { lead_zh: lead, brief } = row;
-      const tally = (/** @type {"lead" | "brief"} */ kind, /** @type {any} */ result) => {
-        diagnostic[kind] = faithDiagnostic(result);
+      let { lead_zh: lead, brief, summary_zh: card } = row;
+      const tally = (/** @type {"lead" | "brief" | "summary"} */ kind, /** @type {any} */ result, record = faithDiagnostic(result)) => {
+        diagnostic[kind] = record;
         outcomes[result.outcome] = (outcomes[result.outcome] ?? 0) + 1;
         summary.faith.texts += 1;
         if (result.error) throw coded(result.error);
@@ -361,12 +367,22 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
           brief = run.brief;
           tally("brief", run.result);
         }
+        if (row.summary_owed) {
+          const run = await frontierFaithCheckSummary(editor, { facts: ensured.view, summary: card, source });
+          card = run.summary;
+          tally("summary", run.result, run.diagnostic);
+        }
       } catch (error) {
         // The outcome of what was checked is still kept (an unchecked text is asked about again next run); the item counts as failed.
         failure = error;
       }
-      const changed = lead !== row.lead_zh || JSON.stringify(brief) !== JSON.stringify(row.brief);
+      const changed = lead !== row.lead_zh || JSON.stringify(brief) !== JSON.stringify(row.brief) || card !== row.summary_zh;
       await database.transaction(async (/** @type {any} */ client) => {
+        if (card !== row.summary_zh) {
+          await client.query("UPDATE evimed_frontier.items SET summary_zh = $2, lexemes = $3::tsvector WHERE id = $1",
+            [row.id, card, tsvectorLiteral(frontierLexemeText({ ...row, summary_zh: card }))]);
+          await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'faith')", [row.id]);
+        }
         if (lead !== row.lead_zh) await client.query("UPDATE evimed_frontier.items SET lead_zh = $2 WHERE id = $1", [row.id, lead]);
         if (JSON.stringify(brief) !== JSON.stringify(row.brief)) {
           await client.query("UPDATE evimed_frontier.items SET brief = $2::jsonb WHERE id = $1", [row.id, brief ? JSON.stringify(brief) : null]);
