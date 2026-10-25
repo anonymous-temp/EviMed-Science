@@ -19,6 +19,7 @@ import { GeoStore } from "../src/geoStore.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { createGeoRoutes } from "../src/geoRoutes.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { brandRegistry, GEO_PARSER_VERSION, registryKey } from "../src/geoParse.mjs";
 import { sendError } from "../src/security.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -761,52 +762,105 @@ test("the marketplace account is an operator's: others get 403, top-ups are conf
   hooks.market = null;
 });
 
-test("a rival's mention rate over full measurements is a series of its own; the risk pool's issue is never 漏提; sources read full measurements only", options, async () => {
+test("a rival's mention rate over full measurements is a series of its own, judged against each round's frozen evaluation basis; the risk pool's issue is never 漏提; sources read full measurements only", options, async () => {
   const { project } = await seededProject();
   const id = project.id;
   const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
-  const round = (/** @type {string} */ rid, /** @type {string} */ kind, /** @type {string} */ day) => insert(`INSERT INTO evimed_geo.rounds (id, user_id,
-      geo_project_id, kind, set_version, engines, status, planned, done, sample_date, finished_at)
-    VALUES ($1, $2, $3, $4, 1, ARRAY['deepseek','qianwen'], 'done', 10, 10, $5::date, $6::timestamptz)`, [rid, ALICE, id, kind, day, `${day}T12:00:00Z`]);
-  await round(`rw1-${id}`, "baseline", "2026-09-21");
-  await round(`rw2-${id}`, "weekly", "2026-09-28");
-  await round(`rs-${id}`, "sentinel", "2026-09-29");
+  // What a round freezes when it starts (`startRound`): the product and competitors the answers are counted by, and the sites that are ours.
+  const basis = await new GeoMeasureStore(database).evaluationBasis(id);
+  assert.ok(basis);
+  const registry = brandRegistry(basis.product, basis.competitors);
+  const registered = registryKey(registry, basis.owned);
+  const ours = registry.find((entry) => entry.ours)?.name;
+  const rival = registry.find((entry) => !entry.ours)?.name;
+  assert.equal(rival, "替尔泊肽");
+  const engines = ["deepseek", "kimi", "qianwen"];
+  const round = (/** @type {string} */ rid, /** @type {string} */ kind, /** @type {string} */ day, /** @type {boolean} */ frozen) => insert(`INSERT INTO evimed_geo.rounds (id, user_id,
+      geo_project_id, kind, set_version, engines, status, planned, done, sample_date, finished_at, ref)
+    VALUES ($1, $2, $3, $4, 1, $5::text[], 'done', 36, 36, $6::date, $7::timestamptz, $8::jsonb)`,
+  [rid, ALICE, id, kind, engines, day, `${day}T12:00:00Z`, JSON.stringify(frozen ? { evaluationBasis: basis } : {})]);
+  // The unknown control is a full round of the same answers that froze no basis (a round measured before rounds froze one): the
+  // rival's rate over it is not 0, it is not known.
+  await round(`ru-${id}`, "weekly", "2026-09-14", false);
+  await round(`rw1-${id}`, "baseline", "2026-09-21", true);
+  await round(`rw2-${id}`, "weekly", "2026-09-28", true);
+  await round(`rs-${id}`, "sentinel", "2026-09-29", true);
+  // Risk questions only (P4): every engine answers each of them and none of the answers names us, which is the aim there. The rival is
+  // named in the first `mentions` answers of each engine, and the engine looked something up in the first `retrieved`. 千问's sources
+  // come back as titles without a link: its citations cannot be traced (G8). The project's 12 risk questions are widened to 36, so that
+  // an engine alone (not only the three together) has more than the 30 answers a rate needs.
+  const [riskGroup] = (await store.questionMap(id, 1)).filter((group) => group.pool === "P4");
+  await insert(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, pool, text, is_measured)
+    SELECT 'extra-' || $4::text || '-' || n, $1, $2, $3, 1, 'P4', '补充风险问句 ' || n, true FROM generate_series(1, 24) n`, [ALICE, id, riskGroup.id, run]);
+  const p4 = (await store.questionMap(id, 1)).filter((group) => group.pool === "P4").flatMap((group) => group.questions);
+  assert.equal(p4.length, 36);
+  const link = JSON.stringify([{ url: "https://www.example.org/a", domain: "www.example.org", title: "某页" }]);
+  const answers = async (/** @type {string} */ rid, /** @type {string} */ day, /** @type {string[]} */ asking, /** @type {number} */ questions,
+    /** @type {number} */ mentions, /** @type {number} */ retrieved) => {
+    const asked = p4.slice(0, questions).map((question) => question.id);
+    await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
+      SELECT $1::text || '-' || e.engine || '-' || q.n, $2, $1, $3, q.id, e.engine, $4::timestamptz, 'valid', '不推荐自行使用。',
+        CASE WHEN e.engine = 'qianwen' THEN '[{"url":"","domain":"","title":"某百科"}]'::jsonb ELSE $5::jsonb END
+      FROM unnest($6::text[]) WITH ORDINALITY AS q(id, n) CROSS JOIN unnest($7::text[]) AS e(engine)`,
+    [rid, ALICE, id, `${day}T09:00:00Z`, link, asked, asking]);
+    await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours, judged_at, brands, retrieval_triggered, checks,
+        registry_key, parser_version)
+      SELECT s.id, s.user_id, s.geo_project_id, 'omitted', false, now(),
+        jsonb_build_array(jsonb_build_object('name', $2::text, 'ours', true, 'count', 0),
+          jsonb_build_object('name', $3::text, 'competitor', true, 'count', CASE WHEN q.n <= $4 THEN 1 ELSE 0 END)),
+        q.n <= $5, '{"judgementCoverage":{"status":"complete"}}'::jsonb, $6, $7
+      FROM evimed_geo.snapshots s JOIN unnest($8::text[]) WITH ORDINALITY AS q(id, n) ON q.id = s.question_id WHERE s.round_id = $1`,
+    [rid, ours, rival, mentions, retrieved, registered, GEO_PARSER_VERSION, asked]);
+  };
+  // 36 questions × 3 engines = 108 answers a round: 27 of them name the rival in the first round, 54 in the second (9 and 18 of each
+  // engine's 36), and the engines looked something up in 27 of their 36 answers in the weekly.
+  await answers(`ru-${id}`, "2026-09-14", engines, 36, 9, 9);
+  await answers(`rw1-${id}`, "2026-09-21", engines, 36, 9, 9);
+  await answers(`rw2-${id}`, "2026-09-28", engines, 36, 18, 27);
+  // A sentinel's sliver (10 answers, the rival named in every one, a lookup in every one) is not a full measurement and never draws a point.
+  await answers(`rs-${id}`, "2026-09-29", ["deepseek", "kimi"], 5, 5, 5);
+  // The retrieval rate of each engine as the end of a round stores it, which the sources page reads beside the answers: the full
+  // rounds', never the sentinel's.
   const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
       round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at, method_version)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
   [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null,
     row.value ?? null, row.status ?? "ok", row.at, GEO_MEASUREMENT_METHOD_VERSION]);
-  await metric("r1", { round: `rw1-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 31, n: 100, value: 31, at: "2026-09-21T10:00:00Z" });
-  await metric("r2", { round: `rw2-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 34, n: 100, value: 34, at: "2026-09-28T10:00:00Z" });
-  // A sentinel's sliver never draws a point.
-  await metric("r3", { round: `rs-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 9, n: 10, value: 90, at: "2026-09-29T10:00:00Z" });
-  // The retrieval rate the sources page reads: the full rounds', never the sentinel's.
-  await metric("t1", { round: `rw2-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 99, n: 100, value: 99, at: "2026-09-28T10:00:00Z" });
+  await metric("t1", { round: `rw2-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 27, n: 36, value: 75, at: "2026-09-28T10:00:00Z" });
   await metric("t2", { round: `rs-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 5, n: 5, value: 100, status: "insufficient",
     at: "2026-09-29T10:00:00Z" });
-  // 千问's sources come back as titles without a link: its citations cannot be traced (G8).
-  const [group] = (await store.questionMap(id, 1)).filter((entry) => entry.pool === "P4");
-  await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
-    VALUES ($1, $2, $3, $4, $5, 'qianwen', '2026-09-28T09:00:00Z', 'valid', '不推荐自行使用。', $6::jsonb)`,
-  [`sq-${id}`, ALICE, `rw2-${id}`, id, group.questions[0].id, JSON.stringify([{ url: "", domain: "", title: "某百科" }])]);
-  await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours) VALUES ($1, $2, $3, 'omitted', false)`,
-    [`sq-${id}`, ALICE, id]);
 
-  const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
-  // The first full round has no answer to name a coverage from (null: not equal to anything); the second heard from 千问 on a risk question.
-  assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [
-    { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34,
-      coverage: null }] }]);
+  // The rate is read over a date range of the rounds' own answers, the rival's and, over the same eligible answers, ours.
+  const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring?from=2026-09-14&to=2026-09-29`)).payload.data;
+  assert.equal(monitoring.rivals.length, 1, "one rival, one pool: the sentinel's pool is the same");
+  const [series] = monitoring.rivals;
+  assert.deepEqual([series.name, series.entityKey, series.pool], ["替尔泊肽", "替尔泊肽", "P4"]);
+  const reading = (/** @type {any[]} */ points) => points.map((point) => [point.date, point.value, point.k, point.n, point.status]);
+  assert.deepEqual(reading(series.points), [
+    ["2026-09-14", null, null, null, "unknown"], ["2026-09-21", 25, 27, 108, "known"], ["2026-09-28", 50, 54, 108, "known"],
+  ], "the round without a frozen basis is unknown, not 0; the sentinel's day draws nothing");
+  // Ours, over the same eligible answers, has no rate on a risk pool (its mention rate is not defined for P4: not being named there is
+  // the aim), which is a different thing from the unknown of a round that froze no basis.
+  assert.deepEqual(reading(series.ownPoints), [
+    ["2026-09-14", null, null, null, "unknown"], ["2026-09-21", null, null, null, "no_data"], ["2026-09-28", null, null, null, "no_data"],
+  ]);
+  // The key of a point is its pool and the registry it was judged under: the two frozen rounds share it, the unknown one does not.
+  assert.equal(typeof series.points[1].coverage, "string");
+  assert.equal(series.points[1].coverage, series.points[2].coverage);
+  assert.notEqual(series.points[0].coverage, series.points[1].coverage);
+  // The latest round alone (no range) is the weekly's reading.
+  const latest = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  assert.deepEqual(reading(latest.rivals[0].points), [["2026-09-28", 50, 54, 108, "known"]]);
 
   const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
   const deepseek = sources.expectations.find((/** @type {any} */ row) => row.engine === "deepseek");
-  assert.deepEqual([deepseek?.retrieval.value, deepseek?.retrieval.status], [99, "ok"], "the weekly's 99 %, not the sentinel's five answers");
+  assert.deepEqual([deepseek?.retrieval.value, deepseek?.retrieval.status], [75, "ok"], "the weekly's 27 of 36, not the sentinel's five of five");
   assert.deepEqual(sources.linklessEngines, ["qianwen"]);
 
   const diagnosis = (await call("GET", `/api/geo/projects/${id}/diagnosis?round=rw2-${id}`)).payload.data;
   assert.deepEqual(diagnosis.round.linklessEngines, ["qianwen"]);
-  const p4 = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P4");
-  assert.equal(p4.mainIssue, null, "not being named on a risk question is the aim, not an issue (G19)");
+  const p4Reading = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P4");
+  assert.equal(p4Reading.mainIssue, null, "not being named on a risk question is the aim, not an issue (G19)");
 });
 
 test("composed marketplace read hooks expose local records over guarded HTTP without a configured vendor", options, async () => {
@@ -1032,7 +1086,15 @@ test("every point of a trend carries the coverage key of its round, and a change
     await metric(`g${index}`, { round, metricId: "M-19", value: 50 - index * 3, n: 100, k: 50, at });
     await metric(`m${index}`, { round, metricId: "M-01S", value: 30 - index, n: 100, k: 30, at });
     await metric(`k${index}`, { round, scope: "engine", engine: "kimi", metricId: "M-01", value: 20 + index, n: 100, k: 20, at });
-    await metric(`r${index}`, { round, metricId: "M-16", rival: "替尔泊肽", value: 31 + index, n: 100, k: 31, at });
+  }
+  // A rival's rate is read from the answers of the rounds, each judged against the evaluation basis it froze when it started: the first
+  // three froze the registry as it is, the fourth one with a competitor more.
+  const basis = await new GeoMeasureStore(database).evaluationBasis(id);
+  assert.ok(basis);
+  const widened = { ...basis, competitors: [...basis.competitors, { brandName: "司美格鲁肽" }] };
+  for (const [index, round] of rounds.entries()) {
+    await insert(`UPDATE evimed_geo.rounds SET ref = coalesce(ref, '{}'::jsonb) || jsonb_build_object('evaluationBasis', $2::jsonb) WHERE id = $1`,
+      [round, JSON.stringify(index === 3 ? widened : basis)]);
   }
   const keys = (/** @type {any[]} */ points) => points.map((point) => point.coverage);
   const shape = (/** @type {string[]} */ list) => list.map((key, index) => (index === 0 ? 0 : key === list[index - 1] ? 0 : 1)).join("");
@@ -1048,7 +1110,18 @@ test("every point of a trend carries the coverage key of its round, and a change
   const watch = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "gvi").points)), "0010");
   assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "mention").points)), "0010");
-  assert.equal(shape(keys(watch.rivals[0].points)), "0010", "a rival's reading is over the same round");
+  // A rival's reading is of its pool and the registry its round froze (the engines are the other readings' part of the key): joining
+  // the engine set at the third round does not move it, a registry that changed at the fourth does.
+  const ranged = (await call("GET", `/api/geo/projects/${id}/monitoring?from=2026-09-07&to=2026-09-28`)).payload.data;
+  assert.equal(ranged.rivals.length, 1);
+  assert.deepEqual(ranged.rivals[0].points.map((/** @type {any} */ point) => point.date), ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"]);
+  assert.ok(ranged.rivals[0].points.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage));
+  assert.equal(shape(keys(ranged.rivals[0].points)), "0001", "a rival's reading moves where the registry did, not where the engine set did");
+  assert.deepEqual(keys(ranged.rivals[0].ownPoints), keys(ranged.rivals[0].points), "ours, over the same answers, is under the same key");
+  // Read over the range, the headline and mention series are the answers' own and keep the engines in their key: it moves once, where the set did.
+  for (const key of ["gvi", "mention"]) assert.equal(shape(keys(ranged.series.find((/** @type {any} */ line) => line.key === key).points)), "0010", key);
+  const rangedGvi = ranged.series.find((/** @type {any} */ line) => line.key === "gvi").points;
+  assert.ok(rangedGvi[0].coverage.includes("|deepseek,kimi|") && rangedGvi[3].coverage.includes("|deepseek,doubao,kimi|"));
   // An engine's own series is of that engine alone: the others joining the sample is not a change of what it covers.
   const kimi = watch.byEngine.find((/** @type {any} */ line) => line.engine === "kimi");
   assert.equal(shape(keys(kimi.points)), "0000");
