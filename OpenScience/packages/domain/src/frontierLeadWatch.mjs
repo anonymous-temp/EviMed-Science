@@ -17,24 +17,41 @@
 import congressTable from './frontier-congresses.json' with { type: 'json' }
 
 /**
- * Why a lead was made. The standing watches run once a day: `hot-tag` (this week's most-read tags), `specialty` (each
- * specialty's most frequent entity this week), `congress` (a congress in its window), `regulatory-watch` (the Chinese
- * regulatory and industry watch). The follow-ups run through the day: `genre-gap` (yesterday a genre group was under its
- * floor), `event-hot` (an event entered the hot list), `zh-report` (a selected item has no Chinese report in its event),
- * `primary-source` (a selected news or industry item has no primary source in its event).
+ * Why a lead was made. `outside-event` (c2 2026-10-25) is a public hot event in any field — a public figure, a war, an
+ * economic or policy decision, a disaster, a viral health claim — that raises a general medical question: its topic's
+ * searches (`apps/server/src/frontierTopics.mjs`), in waves. The standing watches run once a day: `hot-tag` (this week's
+ * most-read tags), `specialty` (each specialty's most frequent entity this week), `congress` (a congress in its window),
+ * `regulatory-watch` (the Chinese regulatory and industry watch). The follow-ups run through the day: `genre-gap`
+ * (yesterday a genre group was under its floor), `event-hot` (an event entered the feed's own hot list), `zh-report` (a
+ * selected item has no Chinese report in its event), `primary-source` (a selected news or industry item has no primary
+ * source in its event). The order is the order a tiny cap spends its places in.
  */
-export const FRONTIER_LEAD_TRIGGERS = Object.freeze(['hot-tag', 'specialty', 'congress', 'regulatory-watch', 'genre-gap', 'event-hot', 'zh-report', 'primary-source'])
+export const FRONTIER_LEAD_TRIGGERS = Object.freeze(['outside-event', 'hot-tag', 'specialty', 'congress', 'regulatory-watch', 'genre-gap', 'event-hot', 'zh-report', 'primary-source'])
 
 /**
- * Each trigger's share of a day's queries (the cap is `OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES`): standing watches a
- * fixed half, follow-ups the other half, so a busy news day cannot spend the watches' places and a quiet one leaves them
- * unspent rather than searching for filler. An identifier lead (a DOI, a PMID, a trial number) is an address, not a
- * search, and counts against nothing here.
+ * Each trigger's share of a day's queries (the cap is `OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES`): the standing watches a
+ * fixed 0.40, the follow-ups 0.45 and the outside events 0.15 (owner, 2026-10-25: the trigger's share, taken from
+ * `zh-report` 0.20→0.15, `specialty` 0.18→0.13 and `hot-tag` 0.12→0.07), so a busy news day cannot spend the watches'
+ * places and a quiet one leaves them unspent rather than searching for filler. An identifier lead (a DOI, a PMID, a trial
+ * number) is an address, not a search, and counts against nothing here.
  */
 export const FRONTIER_LEAD_SHARES = Object.freeze({
-  'regulatory-watch': 0.10, congress: 0.10, 'hot-tag': 0.12, specialty: 0.18,
-  'genre-gap': 0.08, 'event-hot': 0.12, 'zh-report': 0.20, 'primary-source': 0.10,
+  'outside-event': 0.15,
+  'regulatory-watch': 0.10, congress: 0.10, 'hot-tag': 0.07, specialty: 0.13,
+  'genre-gap': 0.08, 'event-hot': 0.12, 'zh-report': 0.15, 'primary-source': 0.10,
 })
+
+/**
+ * How old a search result may be and still be handed over: the plugin emits no page or article older than this
+ * (`项目代码/knowledge-plugin/knowledge_plugin/leads.py` `FRESH_DAYS`), so an older result is one address of its day's cap
+ * spent on nothing (review 2026-10-25: ~115 of 300 accepted addresses were `stale`). A result with no date is handed
+ * over: the page itself may carry one.
+ */
+export const FRONTIER_LEAD_FRESH_DAYS = 30
+
+/** A host the plugin refused this many times in `FRONTIER_LEAD_REFUSED_DAYS` days is not handed another address. */
+export const FRONTIER_LEAD_REFUSED_LIMIT = 2
+export const FRONTIER_LEAD_REFUSED_DAYS = 7
 
 /** Results a query hands the plugin at most. */
 export const FRONTIER_LEAD_RESULTS_PER_QUERY = 5

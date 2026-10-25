@@ -1412,13 +1412,17 @@ export {
   frontierMixSelect,
   frontierMixSourceCap,
 } from './src/frontierMix.mjs'
-// frontierLeadWatch — 13 exports: what the frontier feed goes looking for and when (lead triggers): the triggers and their
+// frontierLeadWatch — 16 exports: what the frontier feed goes looking for and when (lead triggers): the triggers and their
 // shares of a day's searches, the congress calendar (`frontier-congresses.json`) and its windows, the Chinese regulatory
-// and industry watch, a genre group's gap queries, the identifiers a report names, and the key a query is deduplicated by.
+// and industry watch, a genre group's gap queries, the identifiers a report names, the key a query is deduplicated by, and
+// what is not handed over (a result older than the plugin reads, a host it keeps refusing).
 export {
   FRONTIER_CONGRESS_WINDOW_DAYS,
   FRONTIER_CONGRESSES,
+  FRONTIER_LEAD_FRESH_DAYS,
   FRONTIER_LEAD_GENRE_QUERIES,
+  FRONTIER_LEAD_REFUSED_DAYS,
+  FRONTIER_LEAD_REFUSED_LIMIT,
   FRONTIER_LEAD_REGULATORY_WATCH,
   FRONTIER_LEAD_RESULTS_PER_QUERY,
   FRONTIER_LEAD_SHARES,
