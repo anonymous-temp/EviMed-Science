@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { runContextAuthorityFileFor, runContextAuthorityPublicKey, signRunContextAuthority, verifyRunContextAuthority } from '../src/runContextAuthority.mjs'
+import { ATTENDANCE_RECEIPTS_KEPT, appendAttendanceReceipt, attendanceInputDigest, attendanceReceiptFor, attendanceReceiptsFileFor, runContextAuthorityPublicKey, signRunContextAuthority, verifyRunContextAuthority } from '../src/runContextAuthority.mjs'
 
 const secret = 'server-only-attendance-signing-secret'
 const index = { protocol: 2, runId: 'run-one', sessionId: 'session-one', contextRevision: 'request-one', unattended: true }
@@ -44,11 +44,35 @@ test('malformed signatures and claims fail closed while sequential signatures ha
 })
 
 
-test('request receipt paths are bounded, deterministic and unambiguous across sessions and opaque request IDs', () => {
-  const path = runContextAuthorityFileFor('session-one', '../opaque-request')
+test('one receipts file per session, bounded and unambiguous across sessions', () => {
+  const path = attendanceReceiptsFileFor('session-one')
   assert.match(path, /^\.evimed-brief\/attendance\/[a-f0-9]{64}\.json$/)
-  assert.equal(path, runContextAuthorityFileFor('session-one', '../opaque-request'))
-  assert.notEqual(path, runContextAuthorityFileFor('session-two', '../opaque-request'))
-  assert.notEqual(runContextAuthorityFileFor('a/b', 'c'), runContextAuthorityFileFor('a', 'b/c'))
-  assert.throws(() => runContextAuthorityFileFor('', 'request'))
+  assert.equal(path, attendanceReceiptsFileFor('session-one'))
+  assert.notEqual(path, attendanceReceiptsFileFor('session-two'))
+  assert.throws(() => attendanceReceiptsFileFor(''))
+  // Receipts never accumulate: the file keeps the latest inputs of its session, a repeated request replaces its own.
+  let file = null
+  for (let n = 0; n < ATTENDANCE_RECEIPTS_KEPT + 10; n += 1) file = appendAttendanceReceipt(file, signed({ contextRevision: `request-${n}` }))
+  assert.equal(file.receipts.length, ATTENDANCE_RECEIPTS_KEPT)
+  assert.equal(attendanceReceiptFor(file, 'request-0'), null)
+  assert.equal(attendanceReceiptFor(file, `request-${ATTENDANCE_RECEIPTS_KEPT + 9}`)?.contextRevision, `request-${ATTENDANCE_RECEIPTS_KEPT + 9}`)
+  file = appendAttendanceReceipt(file, signed({ contextRevision: 'request-20', unattended: false }))
+  assert.equal(file.receipts.filter(item => item.contextRevision === 'request-20').length, 1)
+  assert.equal(attendanceReceiptFor(file, 'request-20').unattended, false)
+  // Another session's file, or one that is not a receipts file, is replaced and never read as this session's.
+  assert.deepEqual(appendAttendanceReceipt({ sessionId: 'session-two', receipts: [signed({ contextRevision: 'x' })] }, signed()).receipts.map(item => item.contextRevision), ['request-one'])
+  assert.equal(attendanceReceiptFor('not a file', 'request-one'), null)
+})
+
+test('a receipt binds the exact input text: its digest is signed, and cannot be added, removed or changed', () => {
+  const digest = attendanceInputDigest('每周一提醒我检查新文献')
+  assert.match(digest, /^[a-f0-9]{64}$/)
+  const value = signed({ unattended: false, inputDigest: digest })
+  assert.equal(verifyRunContextAuthority(value, expected)?.inputDigest, digest)
+  assert.equal(verifyRunContextAuthority({ ...value, inputDigest: attendanceInputDigest('another text') }, expected), null)
+  const { inputDigest: _removed, ...stripped } = value
+  assert.equal(verifyRunContextAuthority(stripped, expected), null)
+  assert.equal(verifyRunContextAuthority({ ...signed({ unattended: false }), inputDigest: digest }, expected), null, 'a digest cannot be added to a receipt signed without one')
+  assert.equal(verifyRunContextAuthority(signed({ unattended: false }), expected)?.inputDigest, null, 'a receipt without a digest proves no text')
+  assert.throws(() => signed({ inputDigest: 'not-a-digest' }))
 })

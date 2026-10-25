@@ -14,8 +14,8 @@ import http from "node:http";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
-import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
-import { runContextAuthorityPublicKey, runContextAuthorityFileFor, signRunContextAuthority, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
+import { compactionConfigFromEnv, compactionRuntimeEnv, nativeInputText } from "@evimed/harness-port";
+import { appendAttendanceReceipt, attendanceInputDigest, attendanceReceiptsFileFor, runContextAuthorityPublicKey, signRunContextAuthority, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
 import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
@@ -3757,6 +3757,8 @@ export class RuntimeManager {
     this.workloadTokenRefusals = { token: 0, runtime: 0, superseded: 0, unreadable: 0 };
     /** Attendance receipts that could not be written, by where the prompt came from (`open_science_attendance_receipt_write_failures_total`). */
     this.attendanceReceiptWriteFailures = { native: 0, dispatch: 0 };
+    /** One read-modify-write of a session's receipts file at a time in this process; a race elsewhere costs one receipt, which fails safe. */
+    this.attendanceWrites = new Map();
     /** When each retired background runtime was retired, by project key: what
      *  names a prompt refused behind that stop (`dispatchAdmittedPrompt`) as the
      *  platform's own doing rather than a fault. Dropped when the project's next
@@ -6085,7 +6087,7 @@ export class RuntimeManager {
       });
       dispatchedUnattended = authority?.unattended ?? dispatchedUnattended;
     }
-    await this.writePromptAttendance(project, { sessionId, requestId }, { runId, unattended: dispatchedUnattended, origin: "dispatch" });
+    await this.writePromptAttendance(project, { sessionId, requestId, content: [{ type: "text", text }] }, { runId, unattended: dispatchedUnattended, origin: "dispatch" });
     await this.enforceProjectQuota(project);
     if(runId&&this.config.evolutionEnabled===true&&isEvolutionProject(project.id))await this.captureRunEgressProof({project,runId,phase:'start'});
     this.beginProxy(project);
@@ -6285,26 +6287,43 @@ export class RuntimeManager {
    * missing is treated as unattended by the runtime's run policy (a native turn is still recognised by its route snapshot). So a full
    * disk, a read-only remount, a remote mirror that did not answer or a request id that names no file costs at most one attended
    * turn treated as unattended, and is counted (`open_science_attendance_receipt_write_failures_total{origin}`).
-   * @param {Record<string,any>} project @param {{sessionId:string,requestId:string}} request
+   *
+   * The receipt binds the exact input (`inputDigest`, SHA-256 of the text the kernel will hand the runtime), so a request id used
+   * again with other words proves nothing (review F7), and it is kept in the session's one bounded receipts file (the latest
+   * `ATTENDANCE_RECEIPTS_KEPT`), so receipts never accumulate per request (review F8).
+   * @param {Record<string,any>} project @param {{sessionId:string,requestId:string,content?:unknown}} request
    * @param {{unattended:boolean,runId?:string|null,origin?:"native"|"dispatch"}} options
    * @returns {Promise<boolean>} whether the receipt was written */
   async writePromptAttendance(project, request, { unattended, runId = null, origin = "dispatch" }) {
     const signingSecret = this.config.modelGatewaySigningSecret;
     if (!signingSecret) return false;
-    try {
-      const relative = runContextAuthorityFileFor(request.sessionId, request.requestId);
+    const lock = `${this.key(project)}\u0000${String(request?.sessionId ?? "")}`;
+    const write = async () => {
+      const relative = attendanceReceiptsFileFor(request.sessionId);
       const index = { protocol: RUN_CONTEXT_PROTOCOL, sessionId: request.sessionId, contextRevision: request.requestId,
-        runId: runId || `native_${createHash("sha256").update(request.requestId).digest("hex").slice(0, 32)}`, unattended };
-      const text = `${JSON.stringify({ ...index, attendanceAuthority: signRunContextAuthority(index, {
+        runId: runId || `native_${createHash("sha256").update(request.requestId).digest("hex").slice(0, 32)}`, unattended,
+        inputDigest: attendanceInputDigest(nativeInputText(request.content)) };
+      const receipt = { ...index, attendanceAuthority: signRunContextAuthority(index, {
         signingSecret, userId: String(project.userId), projectId: String(project.id),
-      }) })}\n`;
-      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), text, { encoding: "utf8", mode: 0o444 });
+      }) };
+      const file = path.join(project.workspaceDir, relative);
+      let previous = null;
+      try { previous = JSON.parse(await readTextFileNoFollow(project.workspaceDir, file, "") || "null"); } catch { /* An unreadable file is replaced. */ }
+      const text = `${JSON.stringify(appendAttendanceReceipt(previous, receipt))}\n`;
+      await writeFileAtomicNoFollow(project.workspaceDir, file, text, { encoding: "utf8", mode: 0o444 });
       await this.mirrorWorkspaceWrite(project, relative, text, true);
+    };
+    const pending = (this.attendanceWrites.get(lock) ?? Promise.resolve()).catch(() => {}).then(write);
+    this.attendanceWrites.set(lock, pending);
+    try {
+      await pending;
       return true;
     } catch {
       const key = origin === "native" ? "native" : "dispatch";
       this.attendanceReceiptWriteFailures[key] = (this.attendanceReceiptWriteFailures[key] ?? 0) + 1;
       return false;
+    } finally {
+      if (this.attendanceWrites.get(lock) === pending) this.attendanceWrites.delete(lock);
     }
   }
 

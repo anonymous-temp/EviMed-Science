@@ -149,7 +149,7 @@ import {
   upsertClaim,
 } from '../src/claimTools.mjs'
 import { validateEvidenceClaim } from '@evimed/domain/clinical-evidence'
-import { runContextAuthorityFileFor, verifyRunContextAuthority } from '@evimed/harness-port/run-context-authority'
+import { attendanceReceiptFor, attendanceReceiptsFileFor, verifyRunContextAuthority } from '@evimed/harness-port/run-context-authority'
 
 /**
  * The research server's quote locator (contract C7), by its base name. Given
@@ -780,29 +780,31 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     try {
       const revision = entry.contextRevision
       await loadBrief(ctx, agent, sessionState, config)
+      // The session's one receipts file, read once. A receipt restricts by its request id alone; it lifts a restriction only when it
+      // also signs the exact text the kernel claimed (`inputDigest`): a request id used again with other words proves nobody.
+      const receiptsFile = claimed.inputs.length ? parseJson((await readFileAt(ctx, entry.cwd, attendanceReceiptsFileFor(entry.sessionId))) ?? undefined) : null
       const receipts = await Promise.all(claimed.inputs.map(async input => {
-        const raw = await readFileAt(ctx, entry.cwd, runContextAuthorityFileFor(entry.sessionId, input.requestId))
-        const authority = verifyRunContextAuthority(parseJson(raw ?? undefined), {
+        const authority = verifyRunContextAuthority(attendanceReceiptFor(receiptsFile, input.requestId), {
           publicKey: config.attendancePublicKey ?? '', userId: config.attendanceUserId ?? '',
           projectId: config.attendanceProjectId ?? '', sessionId: entry.sessionId,
         })
-        return authority?.contextRevision === input.requestId ? authority : null
+        if (authority?.contextRevision !== input.requestId) return null
+        return { ...authority, textMatches: authority.inputDigest !== null && authority.inputDigest === await sha256Hex(input.text) }
       }))
       const receiptUnattended = receipts.some(authority => authority?.unattended === true)
-      const receiptsAttended = receipts.length > 0 && receipts.every(authority => authority?.unattended === false)
+      const receiptsAttended = receipts.length > 0 && receipts.every(authority => authority?.unattended === false && authority.textMatches)
       const pending = entry.pendingAttendance
       if (pending && pending.issuedAtMs > entry.attendanceIssuedAtMs
         && claimed.inputs.some(input => input.requestId === pending.contextRevision)) {
         adoptAttendance(entry, pending)
       }
-      // A valid older index proves its own origin, not the attendance of a different input now claimed by the kernel.
+      // A valid index — older, or this very request's — proves its own origin, not the words the kernel now claims: without a
+      // receipt that signs them, the claimed input is unattended until its native route proves a person below.
       // Hold the narrow guard before awaiting native-route proof, including when that lookup fails or is unavailable.
       const authorityEnabled = Boolean(config.attendancePublicKey && config.attendanceUserId && config.attendanceProjectId)
       if (receiptUnattended) entry.unattended = true
       else if (receiptsAttended) entry.unattended = false
-      else if (authorityEnabled && claimed.inputs.length && !claimed.inputs.every(input => input.requestId === entry.attendanceRevision)) {
-        entry.unattended = true
-      }
+      else if (authorityEnabled && claimed.inputs.length) entry.unattended = true
       if (revision !== entry.contextRevision && entry.routedCapability) {
         entry.nativeManagedDispatch = true
         entry.inlineCapabilities.clear()

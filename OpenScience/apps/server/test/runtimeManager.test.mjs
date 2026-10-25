@@ -33,7 +33,12 @@ import { expectedPluginTools, pluginProofMismatch, pluginUpstreamHealth, provenP
 import { renderProfilePatch, runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
 import { RUN_CONTEXT_PROTOCOL } from "@evimed/domain";
-import { runContextAuthorityPublicKey, runContextAuthorityFileFor, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
+import { ATTENDANCE_RECEIPTS_KEPT, attendanceInputDigest, attendanceReceiptFor, attendanceReceiptsFileFor, runContextAuthorityPublicKey, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
+
+/** The signed receipt the control plane wrote for one request, from its session's one receipts file. */
+async function attendanceReceipt(project, sessionId, requestId) {
+  return attendanceReceiptFor(JSON.parse(await readFile(path.join(project.workspaceDir, attendanceReceiptsFileFor(sessionId)), "utf8")), requestId);
+}
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 /**
@@ -2467,7 +2472,7 @@ test("scheduled dispatch authority is session scoped and survives a steer only f
   assert.ok(!JSON.stringify(await index()).includes(manager.config.modelGatewaySigningSecret));
   await manager.dispatchPrompt(project, sessionId, { text: "continue", runId: "run_scheduled", requestId: "req_steer", mode: "steer", strictContext: true });
   assert.equal((await index()).unattended, true);
-  const steerReceipt = JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_steer")), "utf8"));
+  const steerReceipt = await attendanceReceipt(project, sessionId, "req_steer");
   assert.equal(verifyRunContextAuthority(steerReceipt, { publicKey, userId: project.userId, projectId: project.id, sessionId }).unattended, true);
   await manager.dispatchPrompt(project, sessionId, { text: "my follow-up", runId: "run_attended", requestId: "req_attended", strictContext: true, unattended: false });
   assert.notEqual((await index()).unattended, true);
@@ -2485,16 +2490,16 @@ test("a dispatch that does not say whether a person attends it is signed unatten
   // A programme step, a learning job or an evaluation dispatch whose caller forgot to say: nobody is assumed to be there.
   await manager.dispatchPrompt(project, sessionId, { text: "a background step", runId: "run_background", requestId: "req_background", strictContext: true });
   assert.equal(verify(await index()).unattended, true);
-  const receipt = JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_background")), "utf8"));
+  const receipt = await attendanceReceipt(project, sessionId, "req_background");
   assert.equal(verify(receipt).unattended, true);
   // A dispatch without a run of its own (a skill invocation that did not say) is no exception.
   await manager.dispatchPrompt(project, sessionId, { text: "/a-skill", requestId: "req_no_run" });
-  assert.equal(verify(JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_no_run")), "utf8"))).unattended, true);
+  assert.equal(verify(await attendanceReceipt(project, sessionId, "req_no_run")).unattended, true);
   // The person's own dispatch says so, and its steer keeps it.
   await manager.dispatchPrompt(project, sessionId, { text: "my question", runId: "run_person", requestId: "req_person", strictContext: true, unattended: false });
   await manager.dispatchPrompt(project, sessionId, { text: "and also", runId: "run_person", requestId: "req_person_steer", mode: "steer", strictContext: true });
   assert.equal(verify(await index()).unattended, false);
-  assert.equal(verify(JSON.parse(await readFile(path.join(project.workspaceDir, runContextAuthorityFileFor(sessionId, "req_person_steer")), "utf8"))).unattended, false);
+  assert.equal(verify(await attendanceReceipt(project, sessionId, "req_person_steer")).unattended, false);
 });
 
 test("native attendance proof does not depend on optional learning and is mirrored before forwarding", async (t) => {
@@ -2504,15 +2509,32 @@ test("native attendance proof does not depend on optional learning and is mirror
   manager.config.learningEnabled = false;
   const mirrored = [];
   manager.mirrorWorkspaceWrite = async (_project, relative, text, required) => { mirrored.push({ relative, text, required }); };
-  const request = { sessionId: "native_human", requestId: "human-request-without-handbook" };
+  const request = { sessionId: "native_human", requestId: "human-request-without-handbook", content: [{ type: "text", text: "每周一提醒我" }] };
   await manager.writePromptAttendance(project, request, { unattended: false });
-  const relative = runContextAuthorityFileFor(request.sessionId, request.requestId);
-  const proof = JSON.parse(await readFile(path.join(project.workspaceDir, relative), "utf8"));
-  assert.equal(verifyRunContextAuthority(proof, { publicKey: runContextAuthorityPublicKey(manager.config.modelGatewaySigningSecret),
-    userId: project.userId, projectId: project.id, sessionId: request.sessionId }).unattended, false);
+  const relative = attendanceReceiptsFileFor(request.sessionId);
+  const proof = await attendanceReceipt(project, request.sessionId, request.requestId);
+  const verified = verifyRunContextAuthority(proof, { publicKey: runContextAuthorityPublicKey(manager.config.modelGatewaySigningSecret),
+    userId: project.userId, projectId: project.id, sessionId: request.sessionId });
+  assert.equal(verified.unattended, false);
+  assert.equal(verified.inputDigest, attendanceInputDigest("每周一提醒我"), "the receipt signs the exact words of the input");
   assert.equal(proof.contextRevision, request.requestId);
   assert.equal(mirrored[0].relative, relative);
   assert.equal(mirrored[0].required, true);
+});
+
+test("attendance receipts stay one bounded file per session however many prompts it receives", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });
+  manager.config.modelGatewaySigningSecret = "only-the-control-plane-knows-this-fixture-secret";
+  await Promise.all(Array.from({ length: ATTENDANCE_RECEIPTS_KEPT + 8 }, (_, n) => manager.writePromptAttendance(project,
+    { sessionId: "busy_session", requestId: `request-${n}`, content: [{ type: "text", text: `prompt ${n}` }] }, { unattended: false })));
+  await manager.writePromptAttendance(project, { sessionId: "other_session", requestId: "only", content: [] }, { unattended: true });
+  const directory = path.join(project.workspaceDir, ".evimed-brief", "attendance");
+  assert.equal((await readdir(directory)).length, 2, "one file per session, not one per request");
+  const file = JSON.parse(await readFile(path.join(project.workspaceDir, attendanceReceiptsFileFor("busy_session")), "utf8"));
+  assert.equal(file.receipts.length, ATTENDANCE_RECEIPTS_KEPT, "concurrent writes of one session lose no receipt and keep only the latest");
+  assert.equal(attendanceReceiptFor(file, `request-${ATTENDANCE_RECEIPTS_KEPT + 7}`)?.contextRevision, `request-${ATTENDANCE_RECEIPTS_KEPT + 7}`);
+  assert.equal(attendanceReceiptFor(file, "request-0"), null);
 });
 
 test("an attendance receipt that cannot be written is counted and never refuses the prompt", async (t) => {
