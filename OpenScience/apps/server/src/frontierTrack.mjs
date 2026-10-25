@@ -92,18 +92,22 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * @param {import("@evimed/domain").FrontierCongress} congress
  */
 export function frontierCongressPatterns(congress) {
+  // A Latin edge stands alone: not inside a longer word of letters or digits. Lookarounds, not `\y`, whose idea of a word depends on
+  // the database's locale (a Chinese character next to 「ESMO」 must not hide it).
+  const START = "(?<![A-Za-z0-9])";
+  const END = "(?![A-Za-z0-9])";
   /** @param {string} phrase */
   const word = (phrase) => {
     const body = escapeRegex(phrase.normalize("NFKC").trim()).replace(/\s+/g, "\\s*");
-    return /^[A-Za-z0-9]/.test(phrase) ? `\\y${body}` + (/[A-Za-z0-9]$/.test(phrase) ? "\\y" : "") : body;
+    return (/^[A-Za-z0-9]/.test(phrase) ? START : "") + body + (/[A-Za-z0-9]$/.test(phrase) ? END : "");
   };
   const patterns = [...(congress.keywords_zh ?? []), ...(congress.keywords_en ?? [])].filter((phrase) => String(phrase).trim().length >= 3).map(word);
   const code = frontierCongressCode(congress);
   const match = /^([A-Za-z][A-Za-z0-9&./ -]{1,20}?)\s*(\d{4})$/.exec(code);
   if (match) {
     const name = escapeRegex(match[1].trim()).replace(/\s+/g, "\\s*");
-    patterns.push(`\\y${name}\\s{0,2}[-–—·]?\\s{0,2}${match[2]}\\y`, `\\y${match[2]}\\s{0,2}年?\\s{0,2}${name}\\y`,
-      `\\y${name}\\s*(congress|annual meeting|scientific sessions|大会|年会)`);
+    patterns.push(`${START}${name}\\s{0,2}[-–—·]?\\s{0,2}${match[2]}${END}`, `${START}${match[2]}\\s{0,2}年?\\s{0,2}${name}${END}`,
+      `${START}${name}\\s*(congress|annual meeting|scientific sessions|大会|年会)`);
   }
   return [...new Set(patterns)];
 }
