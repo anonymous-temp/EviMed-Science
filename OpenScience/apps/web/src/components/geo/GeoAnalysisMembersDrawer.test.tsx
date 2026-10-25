@@ -172,3 +172,17 @@ it('describes a sampled answer in words: no round id, no raw state, no parser ve
  expect(screen.getByText('网页端、非深度思考、每题新对话')).toBeVisible();
  for(const leak of ['round_internal_41','parser-9.9','claim_internal_8','a_reason_added_later','"population"','{"'])expect(container.textContent).not.toContain(leak);
 });
+
+it('shows the original judgment and the generic names as labelled fields, never as a JSON dump',async()=>{
+ const member:GeoAnalysisMembers={selectionRef:'gsel_judgment',view:{viewId:'V07'},rowKey:'row',columnKey:'answers',expectedDigest:'judgment',unit:'answers',total:1,exact:true};
+ read.mockResolvedValue({unit:'answers',total:1,nextOffset:null,digest:'judgment',items:[{id:'a2',unit:'answers',engine:'kimi',askedAt:'2026-10-02',status:'valid',question:{text:'Which brand?'},
+  judgment:{judgedAt:'2026-10-02 10:00',brands:[{name:'Alpha',ours:true,competitor:false,count:2}],statements:[{text:'Alpha is for adults',verdict:'wrong',claimId:'claim_internal_8',evidence:'Label says adults only'}]},
+  extraction:{parserVersion:'parser-9.9',judgedAt:'2026-10-02',genericMentions:[{name:'semaglutide',ours:true,competitor:false,count:3,matchedNames:['司美格鲁肽']}]}}]});
+ const {container}=render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member} onClose={()=>{}}/></MemoryRouter>);
+ fireEvent.click(await screen.findByText('原始判定'));
+ expect(screen.getByText('Alpha（本品） 2 次')).toBeVisible();expect(screen.getByText('错误')).toBeVisible();expect(screen.getByText('Label says adults only')).toBeVisible();
+ fireEvent.click(screen.getByText('实体提取依据'));
+ expect(screen.getByText('semaglutide（本品） 3 次')).toBeVisible();
+ expect(container.querySelector('pre')).toBeNull();
+ for(const leak of ['claim_internal_8','"verdict"','"name"','[{','{"'])expect(container.textContent).not.toContain(leak);
+});

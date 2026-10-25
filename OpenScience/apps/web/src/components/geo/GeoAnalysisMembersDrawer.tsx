@@ -1,4 +1,5 @@
 import {GeoHistoryMember} from "./GeoHistoryMember";
+import { OriginalJudgment, genericMentionsText } from "./GeoJudgmentView";
 import { GeoFinanceMember } from "./GeoFinanceMember";
 import { useOpenPublication } from "./spine/useOpenPublication";
 import { useState } from "react";
@@ -279,9 +280,9 @@ function Member({
         />
       )}
       {item.source && <Disclosure summary="完整来源页面与原始地址"><Note action={null}>错误与品牌提及仅表示共同出现，不能据此推断来源导致错误。部分判定保留原判定状态。</Note>{item.source.pages.map(page=><article key={page.sourceKey}><p className="text-caption text-text-2">{page.sourceKey}</p>{page.originalUrls.map(url=><a key={url} className="block text-accent" href={safeCitationUrl(url)?url:undefined} target="_blank" rel="noreferrer">{url}</a>)}{page.annotations?.length ? <SourceAnnotations geoId={geoId} annotations={page.annotations} canEdit={canEdit}/> : null}{page.preservedCitations?.map((citation,index)=><p key={index} className="text-caption text-text-2">{citation.marker!=null?`引用标记：${String(citation.marker)}`:""}{citation.position!=null?` · 保留位置：${String(citation.position)}`:""}</p>)}</article>)}</Disclosure>}
-      {!!item.judgment && <Disclosure summary="原始判定"><pre className="whitespace-pre-wrap text-caption">{JSON.stringify(item.judgment,null,2)}</pre></Disclosure>}
+      {!!item.judgment && <Disclosure summary="原始判定"><OriginalJudgment judgment={item.judgment}/></Disclosure>}
       {item.citingAnswers?.map(answer=><Member key={answer.id} canEdit={canEdit} geoId={geoId} item={answer} selectionRef={selectionRef}/>)}
-      {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名原始提取",value:JSON.stringify(item.extraction.genericMentions)}]} /></Disclosure>}
+      {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名提及",value:genericMentionsText(item.extraction.genericMentions)}]} /></Disclosure>}
       {item.expression && <FactList rows={[
         {label:"表达对象",value:item.expression.entity ?? "对象未保留"},
         {label:"分类",value:({recommended:"推荐",conditional:"条件性推荐",reasonable_nonrecommendation:"合理不推荐",mention_only:"仅提及",unknown:"尚未分类"} as Record<string,string>)[item.expression.state] ?? "未知"},
