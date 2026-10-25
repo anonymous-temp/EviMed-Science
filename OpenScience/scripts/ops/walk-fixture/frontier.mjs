@@ -117,6 +117,10 @@ export async function furnishFrontier(app, user, { log }) {
     const names = specialties.flatMap((/** @type {string} */ key) => TAGS[key] ?? []);
     if (names.length) await database.transaction((/** @type {any} */ client) => tagStore.link(client, row.id, names, { origin: "edit", specialties }));
   }
+  // 就此提问 (c3-ask): the questions a reader of a selected item would ask next, as the pipeline's ask step stores them, so the reader
+  // the walk opens carries its 「就此提问」 block.
+  await database.query("UPDATE evimed_frontier.items SET ask_zh = $1::jsonb WHERE selected",
+    [JSON.stringify(["这个结果适用于中国患者吗", "和现有标准治疗相比差在哪", "安全性数据有哪些"])]);
   log(`frontier: ${SOURCES.length} sources, ${ITEMS.length} items`);
 
   // The composer's own loops, once: items into events, the hot list, today's issue.
