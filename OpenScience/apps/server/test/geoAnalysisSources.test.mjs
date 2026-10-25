@@ -117,3 +117,17 @@ test('the admitted upper bound keeps every round zero, unknown timestamp and exa
   assert.equal(item.askedAt,null);assert.equal(item.judgment,null);assert.equal(item.source.pages[0].sourceKey,row.dimensions.sourceKey);
  }
 });
+
+test('V17 type coverage is over every cited answer in scope, before the view filters, and holds the 30-answer floor', () => {
+    // Filtered to one type the coverage used to divide by the answers that type's filter had already kept: 100 % by construction.
+    const filtered = presentGeoAnalysis(sourceFixture(), { viewId: 'V17', sourceType: 'medical' }, context());
+    const medical = filtered.rows.find(row => row.dimensions.sourceType === 'medical');
+    assert.deepEqual([medical.values.coverage.numerator, medical.values.coverage.denominator, medical.values.coverage.value], [1, 2, 50]);
+    assert.equal(medical.values.coverage.state, 'insufficient', 'two cited answers are k of n, not a rate');
+    assert.equal(filtered.chart.denominator, 2);
+    const wide = sourceFixture();
+    for (let n = 0; n < 40; n += 1) wide.rows.push(observation(`wide-${n}`, [citation(n < 10 ? 'https://journal.example/b' : 'https://news.example/c')]));
+    const view = presentGeoAnalysis(wide, { viewId: 'V17' }, context());
+    const journal = view.rows.find(row => row.dimensions.sourceType === 'medical');
+    assert.deepEqual([journal.values.coverage.numerator, journal.values.coverage.denominator, journal.values.coverage.state], [11, 42, 'known']);
+});
