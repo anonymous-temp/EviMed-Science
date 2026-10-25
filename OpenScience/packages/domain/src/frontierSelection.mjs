@@ -200,3 +200,21 @@ export function frontierPracticeAdmit(candidates, { selectedCount }) {
     .sort((a, b) => (Number(b.score ?? -1) - Number(a.score ?? -1)) || String(a.id).localeCompare(String(b.id)))
   return { admit: fresh.slice(0, room).map((item) => item.id), cap }
 }
+
+// ───────────────────────── the tiers a score is drawn in ─────────────────────────
+
+/**
+ * The tiers the 「AI 评分」 pill is drawn in, on the score of 2026-10-25 (owner, 2026-10-23: three tiers, after AIHOT's pill; the
+ * lines moved with the score, from 85 / 70): `high` from 76, `medium` from 60, `low` below. A selected card reads medium at least (the
+ * selection line is 68, a floor place 62), as it did before the move. One table for the server's `scoreBand` and the web's fallback.
+ */
+export const FRONTIER_SCORE_TIERS = Object.freeze({ high: 76, medium: 60 })
+
+/**
+ * The tier a score reads in; null without a score. @param {unknown} score @returns {'high' | 'medium' | 'low' | null}
+ */
+export function frontierScoreTier(score) {
+  if (score == null || score === '' || !Number.isFinite(Number(score))) return null
+  const value = Number(score)
+  return value >= FRONTIER_SCORE_TIERS.high ? 'high' : value >= FRONTIER_SCORE_TIERS.medium ? 'medium' : 'low'
+}

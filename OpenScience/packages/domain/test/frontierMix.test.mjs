@@ -11,6 +11,8 @@ import {
   FRONTIER_MIX_GROUPS,
   FRONTIER_MIX_NEVER,
   FRONTIER_MIX_RULES,
+  FRONTIER_MIX_PREPRINT_MIN_SCORE,
+  FRONTIER_MIX_ZH_MARGIN,
   FRONTIER_MIX_ZH_TARGET,
   frontierMixGenre,
   frontierMixGenreFloors,
@@ -21,6 +23,9 @@ import {
   frontierMixSelect,
   frontierMixSourceCap,
 } from '../index.mjs'
+
+/** The numbers the mix's tests were written with, before the score was recalibrated (c3-select 2026-10-25): the algorithm is the same on any scale. */
+const OLD_SCALE = { floorScore: 60, zhMargin: 8, genreFloorMin: 45, preprintMinScore: 60 }
 
 let serial = 0
 /** @param {Record<string, any>} overrides */
@@ -180,13 +185,13 @@ test('under the Chinese share a Chinese item within the margin ranks higher, may
   const english = Array.from({ length: 30 }, (_, index) => item({ genre: 'paper', score: 84 + (index % 6) }))
   const near = item({ genre: 'paper', zh: true, score: 76 })
   const far = item({ genre: 'paper', zh: true, score: 70 })
-  const result = frontierMixSelect({ candidates: [...english, near, far], threshold: 82 })
+  const result = frontierMixSelect({ candidates: [...english, near, far], threshold: 82, ...OLD_SCALE })
   assert.ok(result.picks.some((pick) => pick.id === near.id && pick.rule === 'zh-target'))
   assert.equal(result.picks.some((pick) => pick.id === far.id), false, '12 under the line is past the margin')
   assert.equal(result.plan.groups.research.after, result.plan.groups.research.ceiling, 'it took a place, it did not add one')
   // At the target no preference is given: a Chinese item under the line stays out.
   const zhDay = [...Array.from({ length: 8 }, () => item({ genre: 'paper', zh: true, score: 90 })), ...Array.from({ length: 4 }, () => item({ genre: 'paper', score: 90 }))]
-  const satisfied = frontierMixSelect({ candidates: [...zhDay, item({ genre: 'paper', zh: true, score: 78 })], threshold: 82 })
+  const satisfied = frontierMixSelect({ candidates: [...zhDay, item({ genre: 'paper', zh: true, score: 78 })], threshold: 82, ...OLD_SCALE })
   assert.equal(satisfied.plan.rules['zh-target'] ?? 0, 0)
 })
 
@@ -253,16 +258,18 @@ test('a preprint under the line comes in only by the preprint lane, never by a f
 
 // ------------------------------------------------------------------------------------ genre floors (c2-fixes 2026-10-25)
 
-test('a floor place under the line asks its genre\'s 80th percentile, held between 45 and the absolute 60', () => {
-  assert.deepEqual(FRONTIER_MIX_GENRE_FLOOR, { percentile: 0.8, min: 45, days: 30, minSample: 30 })
-  assert.equal(FRONTIER_MIX_FLOOR_SCORE, 60)
-  assert.equal(frontierMixGenreFloorScore(52), 52, 'industry\'s own bar, under the 60')
-  assert.equal(frontierMixGenreFloorScore(38), 45, 'never under 45')
-  assert.equal(frontierMixGenreFloorScore(84), 60, 'a genre the editor scores high keeps the 60: its top fifth would be above the line')
-  assert.equal(frontierMixGenreFloorScore(undefined), 60, 'no percentile, no change')
-  assert.equal(frontierMixGenreFloorScore(null), 60)
-  assert.equal(frontierMixGenreFloorScore(Number.NaN), 60)
-  assert.equal(frontierMixGenreFloorScore(52, 55), 52)
+test('a floor place under the line asks its genre\'s 80th percentile, held between 58 and the absolute 62 (the score of 2026-10-25)', () => {
+  assert.deepEqual(FRONTIER_MIX_GENRE_FLOOR, { percentile: 0.8, min: 58, days: 30, minSample: 30 })
+  assert.equal(FRONTIER_MIX_FLOOR_SCORE, 62)
+  assert.equal(FRONTIER_MIX_ZH_MARGIN, 6)
+  assert.equal(FRONTIER_MIX_PREPRINT_MIN_SCORE, 50)
+  assert.equal(frontierMixGenreFloorScore(60), 60, 'a genre whose top fifth starts at 60 asks 60')
+  assert.equal(frontierMixGenreFloorScore(41), 58, 'industry\'s top fifth is 41: it asks 58, never less, so an unfilled floor beats a junk pick')
+  assert.equal(frontierMixGenreFloorScore(74), 62, 'a genre the editor scores high keeps the absolute floor: its top fifth would be above the line')
+  assert.equal(frontierMixGenreFloorScore(undefined), 62, 'no percentile, no change')
+  assert.equal(frontierMixGenreFloorScore(null), 62)
+  assert.equal(frontierMixGenreFloorScore(Number.NaN), 62)
+  assert.equal(frontierMixGenreFloorScore(52, 55, 45), 52, 'the minimum may be given')
   assert.equal(frontierMixGenreFloorScore(70, 55), 55, 'the absolute floor given is the ceiling of the genre\'s')
 })
 
@@ -296,23 +303,23 @@ function industryDay() {
 
 test('industry\'s floor is filled from its own genre\'s top fifth, not from the 60 the clinical score keeps it under', () => {
   const { papers, industry } = industryDay()
-  const before = frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82 })
+  const before = frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82, ...OLD_SCALE })
   assert.equal(before.plan.size, 60)
   assert.equal(before.plan.groups.industry.floor, 4)
   assert.equal(before.plan.groups.industry.after, 0, 'before: nothing is 60 or more, the floor stays empty')
   assert.deepEqual(before.plan.genreFloors, {})
   // Industry's 80th percentile of the last 30 days is 52: a floor place asks 52.
-  const after = frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82, genreFloors: { industry: 52, paper: 63 } })
+  const after = frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82, ...OLD_SCALE, genreFloors: { industry: 52, paper: 63 } })
   const scoreOf = (/** @type {string} */ id) => industry.find((c) => c.id === id)?.score ?? -1
   const picked = after.picks.filter((pick) => pick.group === 'industry')
   assert.deepEqual(picked.map((pick) => pick.rule), ['genre-floor', 'genre-floor', 'genre-floor', 'genre-floor'])
   assert.deepEqual(picked.map((pick) => scoreOf(pick.id)), [57, 56, 55, 54], 'best first, to the floor of 8 %')
   assert.deepEqual(after.plan.genreFloors, { industry: 52, paper: 60 }, 'what each place asked, said in the plan')
   // A percentile under 45 asks 45: the weakest industry items stay out whatever the genre\'s distribution.
-  const low = frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82, genreFloors: { industry: 30 } })
+  const low = frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82, ...OLD_SCALE, genreFloors: { industry: 30 } })
   assert.equal(low.picks.filter((pick) => pick.group === 'industry').every((pick) => scoreOf(pick.id) >= 45), true)
   // The rest of the rules are unchanged: only a floor place reads the genre's bar.
-  assert.deepEqual(frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82, genreFloors: {} }).picks, before.picks)
+  assert.deepEqual(frontierMixSelect({ candidates: [...papers, ...industry], threshold: 82, ...OLD_SCALE, genreFloors: {} }).picks, before.picks)
 })
 
 test('a genre floor lowers a bar for its own genre only, needs the Chinese summary, and leaves preprints and the line alone', () => {
@@ -320,13 +327,13 @@ test('a genre floor lowers a bar for its own genre only, needs the Chinese summa
   const industry = [item({ genre: 'industry', score: 53, summarized: false }), item({ genre: 'industry', score: 53, eligible: false }), item({ genre: 'industry', score: 53 })]
   const policy = [item({ genre: 'policy', score: 53 })]
   const preprint = [item({ genre: 'preprint', score: 53 })]
-  const result = frontierMixSelect({ candidates: [...papers, ...industry, ...policy, ...preprint], threshold: 82, genreFloors: { industry: 50, preprint: 46 } })
+  const result = frontierMixSelect({ candidates: [...papers, ...industry, ...policy, ...preprint], threshold: 82, ...OLD_SCALE, genreFloors: { industry: 50, preprint: 46 } })
   assert.deepEqual(result.picks.filter((pick) => pick.group === 'industry').map((pick) => pick.id), [industry[2].id],
     'a place needs a Chinese summary and an item that is eligible')
   assert.equal(result.picks.some((pick) => pick.id === policy[0].id), false, 'policy has no percentile of its own: it asks the 60')
   assert.equal(result.picks.some((pick) => pick.id === preprint[0].id), false, 'a preprint under the line comes in by the lane (60) only')
   // The line itself, the Chinese margin and the lane keep their numbers: an industry item of 70 under the line is not taken by it.
-  const near = frontierMixSelect({ candidates: [...papers, item({ genre: 'industry', score: 70 })], threshold: 82, genreFloors: { industry: 50 } })
+  const near = frontierMixSelect({ candidates: [...papers, item({ genre: 'industry', score: 70 })], threshold: 82, ...OLD_SCALE, genreFloors: { industry: 50 } })
   assert.deepEqual(near.picks.filter((pick) => pick.group === 'industry').map((pick) => pick.rule), ['genre-floor'], 'by the floor, as before')
 })
 
@@ -338,10 +345,10 @@ test('the replay passes the genre floors to each day: the same export, industry 
     ...Array.from({ length: 40 }, (_, index) => row(`p${index}`, `j${index}`, 'journal', 'journal', 'evidence', 88, 'en')),
     ...[57, 56, 55, 54, 52, 50, 48, 46].map((score, index) => row(`i${index}`, `c${index}`, 'company', 'news', 'pipeline', score)),
   ]
-  const [without] = frontierMixReplay(rows, { threshold: 82 })
+  const [without] = frontierMixReplay(rows, { threshold: 82, ...OLD_SCALE })
   // The percentile of this export's own industry scores (46..57, position 5.6 of 0..7) is 55.6; a replay may be given it.
   assert.equal(frontierMixGenreFloors(rows, { minSample: 8 }).industry, 55.6)
-  const [withFloors] = frontierMixReplay(rows, { threshold: 82, genreFloors: { industry: 52 } })
+  const [withFloors] = frontierMixReplay(rows, { threshold: 82, ...OLD_SCALE, genreFloors: { industry: 52 } })
   assert.equal(without.after.groups.industry ?? 0, 0)
   assert.equal(withFloors.after.groups.industry, 4)
   assert.equal(withFloors.rules['genre-floor'], 4)
@@ -378,14 +385,14 @@ test('an event that already has a selected item takes no pick, whatever put it t
   const separate = item({ genre: 'industry', score: 56, eventId: 'e9' })
   const papers = Array.from({ length: 40 }, () => item({ genre: 'paper', score: 88 }))
   const events = { e21842: eventOf([[earlier.id, 'industry', true], [czech.id, 'industry'], [german.id, 'industry']]), e9: eventOf([[separate.id, 'industry']]) }
-  const result = frontierMixSelect({ candidates: [...papers, earlier, czech, german, separate], threshold: 82, events, genreFloors: { industry: 52 } })
+  const result = frontierMixSelect({ candidates: [...papers, earlier, czech, german, separate], threshold: 82, ...OLD_SCALE, events, genreFloors: { industry: 52 } })
   const picked = result.picks.map((pick) => pick.id)
   assert.equal(picked.includes(czech.id) || picked.includes(german.id), false)
   assert.ok(picked.includes(separate.id), 'an event of its own still has its place')
   // Event 25153: four selected, a fifth four days later (its other members are on other days: only `events` knows them).
   const late = item({ genre: 'paper', score: 95, eventId: 'e25153' })
   const history = eventOf([['a1', 'paper', true], ['a2', 'news', true], ['a3', 'news', true], ['a4', 'industry', true], [late.id, 'paper']])
-  const fifth = frontierMixSelect({ candidates: [late, ...papers], threshold: 82, events: { e25153: history } })
+  const fifth = frontierMixSelect({ candidates: [late, ...papers], threshold: 82, ...OLD_SCALE, events: { e25153: history } })
   assert.equal(fifth.picks.some((pick) => pick.id === late.id), false)
   assert.ok(fifth.plan.eventHeld >= 1)
 })

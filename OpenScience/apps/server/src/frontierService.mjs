@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import {
   FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAG_LABELS_ZH, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH,
-  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, frontierScoreLevel, frontierSourceDisplayName, frontierSpecialtyKey,
+  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, FRONTIER_SCORE_TIERS, frontierScoreLevel, frontierScoreTier, frontierSourceDisplayName, frontierSpecialtyKey,
 } from "@evimed/domain";
 import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.mjs";
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
@@ -63,8 +63,8 @@ import { frontierTopicSummary } from "./frontierTopics.mjs";
  *   as `kbIndex.mjs`). `mode` says which ran. Searching 精选 searches 全部 and
  *   marks what was selected (§4.2).
  * - A card carries the AI score, `score` (0–100), the tier it is drawn in,
- *   `scoreBand` (`high` from 85, `medium` from 70, `low` below — owner
- *   2026-10-23, after AIHOT's pill), and its four parts, `scoreParts` (out of
+ *   `scoreBand` (`high` from 76, `medium` from 60, `low` below — owner
+ *   2026-10-23, after AIHOT's pill, the lines moved with the score on 2026-10-25), and its four parts, `scoreParts` (out of
  *   `FRONTIER_SCORE_MAXIMA`: a lone number told a reader nothing); a safety
  *   alert carries none of them — it is selected whatever it scored. `levels`
  *   stay as the parts' bands for older clients.
@@ -185,17 +185,15 @@ export function frontierAuthor(value) {
   return { name, handle, url, role };
 }
 
-/** The tiers the 「AI 评分」 pill is drawn in (owner, 2026-10-23, after AIHOT's `Score`): from 85, from 70, below. */
-export const FRONTIER_SCORE_TIERS = Object.freeze({ high: 85, medium: 70 });
+/** The tiers the 「AI 评分」 pill is drawn in (`@evimed/domain` `FRONTIER_SCORE_TIERS`: 76 / 60 on the score of 2026-10-25, from 85 / 70). */
+export { FRONTIER_SCORE_TIERS };
 
 /**
- * The tier an AI score reads in: `high` from 85, `medium` from 70, `low` below; null without a score.
+ * The tier an AI score reads in: `high` from 76, `medium` from 60, `low` below; null without a score.
  * @param {unknown} score @returns {"high" | "medium" | "low" | null}
  */
 export function frontierScoreBand(score) {
-  if (score == null || score === "" || !Number.isFinite(Number(score))) return null;
-  const value = Number(score);
-  return value >= FRONTIER_SCORE_TIERS.high ? "high" : value >= FRONTIER_SCORE_TIERS.medium ? "medium" : "low";
+  return frontierScoreTier(score);
 }
 
 /** A score part as a number, or null. @param {unknown} value */

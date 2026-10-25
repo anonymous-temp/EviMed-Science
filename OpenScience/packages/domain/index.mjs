@@ -1488,13 +1488,14 @@ export {
   projectCardKey,
   projectCardSlotOfKey,
 } from './src/projectCard.mjs'
-// frontierSelection — 10 exports: what makes an item fit for 精选 in the parts code decides: the ceilings a fixed fact puts on the
+// frontierSelection — 12 exports: what makes an item fit for 精选 in the parts code decides: the ceilings a fixed fact puts on the
 // model's scores (`frontier-selection.json`), the republishers that take no floor place, and the rare practice-changing label's
 // limits and admission (c3-select, 2026-10-25).
 export {
   FRONTIER_PRACTICE_ELIGIBLE,
   FRONTIER_PRACTICE_LIMITS,
   FRONTIER_REPUBLISHERS,
+  FRONTIER_SCORE_TIERS,
   frontierFloorEligible,
   frontierPracticeAdmissible,
   frontierPracticeAdmit,
@@ -1502,6 +1503,7 @@ export {
   frontierPracticeReason,
   frontierRepublisher,
   frontierScoreCeilings,
+  frontierScoreTier,
 } from './src/frontierSelection.mjs'
 // frontierSourceNames — 2 exports: what a reader calls a source — the
 // institution, by the registry's owner entity, never the feed or interface the

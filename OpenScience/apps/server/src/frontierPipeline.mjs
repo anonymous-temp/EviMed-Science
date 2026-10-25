@@ -170,21 +170,21 @@ export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
  * item under the line, a paper in its rewrite's place: `@evimed/domain` `FRONTIER_MIX_FLOOR_SCORE`). It was the lane
  * floor's until the genre mix replaced the lane floor (ct-mix 2026-10-24).
  */
-export const FRONTIER_LANE_FLOOR_SCORE = 60;
+export const FRONTIER_LANE_FLOOR_SCORE = 62;
 /**
- * The selection line when `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` is unset
- * (config.mjs holds the same number; frontierConfig.test.mjs holds them
- * equal). Calibrated 2026-09-28 from production's first week against the
- * plan's 15-30 selected a day (acceptance 1.4): at 75 the weekdays of
- * 09-23..26 selected 29/56/50/37. Replaying their 2,259 published items
- * through `frontierSelectionDecision`, the source caps and the lane floor
- * gives 22/46/43/32 at 75 (production runs ~19% above the replay: selection
- * is sticky when a re-edit lowers a score, and the floor runs every round),
- * 15/26/30/22 at 80 and 12/22/24/20 at 82 — about 14-29 once that margin is
- * added. Weekends and quiet days fall under 15 whatever the line; the daily
- * never pads (§14.8 #6). Re-read a week's distribution before moving it.
+ * The selection line when `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` is unset (config.mjs holds the same number; frontierConfig.test.mjs
+ * holds them equal). Recalibrated 2026-10-25 (c3-select) with the score: the editor's scoring was rewritten (a ladder for impact and
+ * novelty, a ceiling for each fact the platform holds - `@evimed/domain` `frontierScoreCeilings`), so its totals sit lower and spread
+ * wider than the 82 of 2026-09-28 was drawn for. On the 248-item gold set (two labellers, kappa 0.87) chosen on the dev split alone:
+ * at 68, 15 of 124 items reach the line, 12 of them picks (precision 0.80, recall 0.60; the stored scores of the older prompts
+ * gave 0.145 / 0.50); the same line on the test split, reported once: 17 selected, precision 0.765, recall 0.619. The prompt of
+ * round 2 re-run on the same items puts 2 of 124 on the old line of 82 - a release of round 2 without this move would fill 精选 from
+ * its floors alone. The expected day, from the dev split's weights over the seven days to 2026-10-25, is 57 items a day above the
+ * line before the source caps, the one-pick-per-event rule and the day's size of 60 (90% interval 30-80, wide: the dev split is 124
+ * items); `scripts/ops/frontier-mix-replay.mjs` reads the first real week after the rescore. Re-read a week's distribution before
+ * moving it.
  */
-export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
+export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 68;
 /**
  * The preprint lane (`OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY` / `_MIN_SCORE`; config.mjs holds the same numbers and
  * frontierConfig.test.mjs holds them equal). Review B, D-08: a preprint server tops out at a total of 77 and a company newsroom at 76
@@ -202,7 +202,7 @@ export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
  * (`SELECT max(score_total) ... WHERE source_type IN ('preprint','company') GROUP BY day`) are what to move the floor from.
  */
 export const FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT = 2;
-export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 60;
+export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 50;
 /**
  * The module's own model money per day, in CNY, when `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` is unset (config.mjs holds the same
  * number; frontierConfig.test.mjs holds them equal). The owner's ruling of 2026-10-22: ¥300, from ¥10. At ¥10 the 80% throttle (¥8)
