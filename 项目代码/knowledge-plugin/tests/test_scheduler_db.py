@@ -371,6 +371,71 @@ async def test_budget_refusals_are_not_the_sources_failure(settings, pool):
     assert (await fetch_rows(pool, src.id))[0]["outcome"] == "host-budget"
 
 
+async def _page_reads(pool, source_id, outcomes):
+    """Give a source's entries (newest last) a page read each: ``fail`` (a ``page_…`` note), ``feed`` (the page failed but
+    the feed's text stood in), ``ok`` (text from the page) or ``other`` (an article chain's note: not a page read)."""
+    async with pool.connection() as conn:
+        rows = await (await conn.execute(
+            "SELECT entry_id, revision FROM evimed_knowledge.entries WHERE source_id = %s ORDER BY seq", (source_id,))).fetchall()
+        assert len(rows) == len(outcomes)
+        for row, outcome in zip(rows, outcomes):
+            await schedule_text(conn, row["entry_id"], row["revision"], T0, reset=False)
+            fetched_from, error = {"fail": (None, "page_no_main_text"),
+                                   "feed": (None, "page_http-error:http_404,feed_text"),
+                                   "ok": ("page", None), "other": (None, "pubmed_not_found")}[outcome]
+            await conn.execute("UPDATE evimed_knowledge.entry_texts SET attempts = 1, fetched_from = %s, last_error = %s "
+                               "WHERE entry_id = %s", (fetched_from, error, row["entry_id"]))
+
+
+async def test_a_feed_that_polls_cleanly_but_whose_pages_never_read_is_degraded_until_they_do(settings, pool):
+    """Review G6: hk-chp-press polled ``healthy`` with 67 of 67 pages ``page_no_main_text`` and nothing published in 14 days."""
+    from knowledge_plugin.store import text_outcomes, text_outcomes_all
+
+    clock = Clock()
+    src, other = source(), source("feed-b")
+    await seed(pool, src, other)
+    keys = [f"k{n:02d}" for n in range(12)]
+    adapter = ScriptedAdapter(pages={src.config["url"]: ParseOutput(entries=entries(*keys)),
+                                     other.config["url"]: ParseOutput(entries=entries("z1", "z2"))})
+    fetcher = ScriptedFetcher(clock)
+    fetcher.ok(src.config["url"])
+    fetcher.ok(other.config["url"])
+    crawler = crawler_for(settings, pool, clock, adapter, fetcher)
+    await poll_now(crawler)
+    assert (await state_of(pool, src.id))["health"] == "healthy", "nothing asked a page yet"
+
+    await _page_reads(pool, src.id, ["fail"] * 9 + ["feed", "ok", "ok"])
+    await _page_reads(pool, other.id, ["ok", "other"])
+    async with pool.connection() as conn:
+        assert await text_outcomes(conn, src.id) == [False, False] + [True] * 9, \
+            "newest first; the entry whose feed text stood in is neither a read nor a failure"
+        assert await text_outcomes(conn, other.id) == [False], "a note of another chain is not a page read"
+        assert (await text_outcomes_all(conn))[src.id] == [False, False] + [True] * 9
+    assert await crawler.recheck_health() == 0
+    assert (await state_of(pool, src.id))["health"] == "healthy", "9 of 11 is 82 %: below the 90 % line"
+
+    async with pool.connection() as conn:                           # the two newest pages fail too: 11 of 11
+        await conn.execute("UPDATE evimed_knowledge.entry_texts SET fetched_from = NULL, last_error = 'page_http-error:http_405' "
+                           "WHERE entry_id IN (SELECT entry_id FROM evimed_knowledge.entries WHERE source_id = %s "
+                           "ORDER BY seq DESC LIMIT 2)", (src.id,))
+    assert await crawler.recheck_health() == 1
+    assert (await state_of(pool, src.id))["health"] == "degraded"
+    assert (await state_of(pool, other.id))["health"] == "healthy"
+    assert await crawler.recheck_health() == 0
+
+    clock.advance(hours=2)                                          # a poll that reads cleanly keeps the state
+    adapter.pages[src.config["url"]] = ParseOutput(entries=entries(*keys))
+    await poll_now(crawler)
+    assert (await state_of(pool, src.id))["health"] == "degraded"
+
+    async with pool.connection() as conn:                           # newer pages read: it clears itself
+        await conn.execute("UPDATE evimed_knowledge.entry_texts SET fetched_from = 'page', last_error = NULL "
+                           "WHERE entry_id IN (SELECT entry_id FROM evimed_knowledge.entries WHERE source_id = %s "
+                           "ORDER BY seq DESC LIMIT 6)", (src.id,))
+    assert await crawler.recheck_health() == 1
+    assert (await state_of(pool, src.id))["health"] == "healthy"
+
+
 async def test_a_list_that_parses_to_nothing_twice_is_drifted(settings, pool):
     clock = Clock()
     src = source()

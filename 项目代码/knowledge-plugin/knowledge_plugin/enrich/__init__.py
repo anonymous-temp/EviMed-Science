@@ -43,8 +43,10 @@ Order of work (plan 10.3.4), by entry kind:
 ``page`` (news, regulators, societies, feeds, lists)
     The feed's own text when it is already the full, uncut text; else the main text of the
     entry's page (``page.py``), plus trial facts when the entry names a registered trial.
-    Challenge pages, robots refusals, PDFs and 404s are final (``unavailable``); timeouts, 5xx,
-    429 and the plugin's own budget are transient (``pending``). A WeChat article's page is never
+    Challenge pages, robots refusals and PDFs are final (``unavailable``); timeouts, 5xx, 429 and the
+    plugin's own budget are transient (``pending``); a page answering 4xx is asked three times (an hour,
+    then six hours later) and is then final (``page_retry_s``). A page that is only a ``<meta refresh>`` shell
+    is followed once to an allowed host (``page.py``). A WeChat article's page is never
     read (robots.txt refuses mp.weixin.qq.com): its text is bought through Dajiala by the text
     worker (``social.wechat``), and an enricher handed one anyway answers ``unavailable``.
 ``record`` (openFDA, MedHELM, PREPARE, STAR, and the EviMed API scans — ChiCTR registrations and
@@ -76,6 +78,7 @@ call here (contract rule 8).
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
@@ -104,6 +107,12 @@ from .page import clip_excerpt, page_excerpt, summary_is_full_text
 RETRY_NOT_INDEXED_S = 12 * 3600
 INDEX_SOURCES = frozenset({"pubmed", "europepmc", "crossref", "openalex", "elsevier", "europepmc-fulltext"})
 RETRY_TRANSIENT_S = 3600
+# A page that answers 4xx (404, 405, 410 …) is asked a third time at most (review G6, 2026-10-25: two sciencenet sources
+# answered 405 to every page and every entry was asked 120–135 times, hourly, for the 14 days of the horizon): after the
+# first failure an hour, after the second six hours, after the third it is final. 408, 425 and 429 are the host's
+# pacing, not the page's answer, and stay transient.
+PAGE_4XX_RETRY_S = (RETRY_TRANSIENT_S, 6 * 3600)
+PAGE_4XX_NOT_FINAL = frozenset({408, 425, 429})
 TEXT_HORIZON = timedelta(days=14)
 MIN_RETRY_S = 60
 LANDING_EVERY = 4                 # attempts: the first, then about every two days at the 12-hour cadence
@@ -396,7 +405,8 @@ async def _page(row: dict, fetcher: Any, endpoints: Endpoints) -> EntryTextResul
         return EntryTextResult(status="available" if enrichment else "unavailable", enrichment=enrichment,
                                notes=trace.notes + ["wechat_page_not_read"])
     text, attempt = await page_excerpt(fetcher, url, source_id=row.get("source_id"),
-                                       egress=row.get("source_egress") or "direct", trace=trace)
+                                       egress=row.get("source_egress") or "direct", trace=trace,
+                                       allowed_hosts=(row.get("source_config") or {}).get("allowed_hosts"))
     if not text and summary_is_full_text(summary):
         return feed_text()
     if text:
@@ -405,10 +415,32 @@ async def _page(row: dict, fetcher: Any, endpoints: Endpoints) -> EntryTextResul
                                fetched_at=attempt.result.fetched_at if attempt.result else None,
                                enrichment=enrichment, notes=trace.notes)
     if attempt.transient:
-        return EntryTextResult(status="pending", enrichment=enrichment, retry_after_s=RETRY_TRANSIENT_S,
-                               notes=trace.notes)
+        retry_s = page_retry_s(attempt, int(row.get("attempts") or 0))
+        if retry_s is not None:
+            return EntryTextResult(status="pending", enrichment=enrichment, retry_after_s=retry_s, notes=trace.notes)
+        trace.notes.append("page_4xx_given_up")
     return EntryTextResult(status="available" if enrichment else "unavailable", enrichment=enrichment,
                            notes=trace.notes)
+
+
+def page_http_status(attempt: Any) -> int | None:
+    """The HTTP status a failed page request ended on (the error's own, else the one its ``http_<n>`` detail names)."""
+    error = attempt.error
+    if error is None or error.outcome != "http-error":
+        return None
+    if error.status is not None:
+        return error.status
+    found = re.fullmatch(r"http_(\d{3})", error.detail or "")
+    return int(found.group(1)) if found else None
+
+
+def page_retry_s(attempt: Any, attempts_before: int) -> int | None:
+    """When a transient page failure is asked again, or ``None`` when it is final: a 4xx page after its third answer
+    (``PAGE_4XX_RETRY_S``); any other transient failure — a timeout, a 5xx, the host's pacing — an hour later."""
+    status = page_http_status(attempt)
+    if status is None or not 400 <= status < 500 or status in PAGE_4XX_NOT_FINAL:
+        return RETRY_TRANSIENT_S
+    return PAGE_4XX_RETRY_S[attempts_before] if attempts_before < len(PAGE_4XX_RETRY_S) else None
 
 
 def is_journal_like(row: dict) -> bool:

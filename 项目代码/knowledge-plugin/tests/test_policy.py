@@ -59,6 +59,23 @@ def test_health_states():
     assert policy.health_state(**{**kwargs, "drifted": True}) == "drifted"
 
 
+def test_a_source_whose_pages_cannot_be_read_is_degraded_and_the_rule_needs_a_sample():
+    """Review G6 (2026-10-25): a feed that polls cleanly while its pages never read must not read healthy."""
+    assert policy.text_failing([True] * 10) and policy.text_failing([True] * 18 + [False] * 2)
+    assert not policy.text_failing([True] * 9), "fewer than ten reads say nothing"
+    assert not policy.text_failing([True] * 17 + [False] * 3), "85 % is below the line"
+    assert not policy.text_failing([False] * 5 + [True] * 15), "the newest twenty are read, newest first: a recovery shows"
+    assert policy.text_failing([True] * 20 + [False] * 40), "reads past the window do not count"
+    assert not policy.text_failing([])
+    kwargs = dict(enabled=True, last_ok_at=NOW, failing_since=None, now=NOW, successes_24h=8, failure_episodes_24h=0,
+                  drifted=False)
+    assert policy.health_state(**kwargs, text_failing=True) == "degraded"
+    assert policy.health_state(**kwargs, text_failing=False) == "healthy"
+    assert policy.health_state(**{**kwargs, "drifted": True}, text_failing=True) == "drifted", "the worse state wins"
+    assert policy.health_state(**{**kwargs, "failing_since": NOW - timedelta(days=3)}, text_failing=True) == "unreadable"
+    assert policy.health_state(**{**kwargs, "enabled": False}, text_failing=True) == "disabled"
+
+
 def test_a_source_failing_now_is_degraded_whatever_its_day_looked_like():
     kwargs = dict(enabled=True, last_ok_at=NOW - timedelta(hours=3), now=NOW, drifted=False)
     assert policy.health_state(**kwargs, failing_since=NOW, successes_24h=20, failure_episodes_24h=1) == "degraded"

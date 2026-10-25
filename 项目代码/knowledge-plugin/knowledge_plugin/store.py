@@ -261,6 +261,40 @@ async def reliability_24h_all(conn: AsyncConnection, now: datetime) -> dict[str,
     return {source_id: policy.reliability(values) for source_id, values in outcomes.items()}
 
 
+_PAGE_FAILED = "(coalesce(starts_with(t.last_error, 'page_') AND strpos(t.last_error, 'feed_text') = 0, false))"
+_PAGE_READ = f"(t.fetched_from = 'page' OR {_PAGE_FAILED})"
+
+
+async def text_outcomes(conn: AsyncConnection, source_id: str) -> list[bool]:
+    """The page reads of one source's entries, newest entry first (at most ``policy.TEXT_WINDOW``): ``True`` for a read
+    that failed (``policy.text_failing``). A read that failed is an entry whose last attempt ended in a ``page_…`` note
+    and has no feed text to fall back on; one that read is an entry whose text came from its page. An entry that never
+    asked its page (a record, an article chain, a feed's own text) is neither."""
+    rows = await (await conn.execute(
+        f"""SELECT {_PAGE_FAILED} AS failed
+              FROM evimed_knowledge.entries e JOIN evimed_knowledge.entry_texts t USING (entry_id)
+             WHERE e.source_id = %s AND t.attempts > 0 AND {_PAGE_READ}
+             ORDER BY e.seq DESC LIMIT %s""",
+        (source_id, policy.TEXT_WINDOW))).fetchall()
+    return [bool(row["failed"]) for row in rows]
+
+
+async def text_outcomes_all(conn: AsyncConnection) -> dict[str, list[bool]]:
+    """``text_outcomes`` of every source that has any, in one read (the hourly re-check)."""
+    rows = await (await conn.execute(
+        f"""SELECT source_id, failed FROM (
+              SELECT e.source_id, {_PAGE_FAILED} AS failed,
+                     row_number() OVER (PARTITION BY e.source_id ORDER BY e.seq DESC) AS n
+                FROM evimed_knowledge.entries e JOIN evimed_knowledge.entry_texts t USING (entry_id)
+               WHERE t.attempts > 0 AND {_PAGE_READ}) x
+             WHERE n <= %s ORDER BY source_id, n""",
+        (policy.TEXT_WINDOW,))).fetchall()
+    outcomes: dict[str, list[bool]] = {}
+    for row in rows:
+        outcomes.setdefault(row["source_id"], []).append(bool(row["failed"]))
+    return outcomes
+
+
 # ------------------------------------------------------------------------------------ texts
 
 TEXT_HORIZON = timedelta(days=14)     # the enrichment rule's (``enrich.TEXT_HORIZON``): PubMed's late indexing

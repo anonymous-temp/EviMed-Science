@@ -10,9 +10,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from knowledge_plugin.enrich import enrich, enrich_batch, kind_of
-from knowledge_plugin.enrich.common import Endpoints
-from knowledge_plugin.enrich.page import EXCERPT_MAX, extract_main_text, page_excerpt
+import pytest
+
+from knowledge_plugin.enrich import enrich, enrich_batch, kind_of, page_retry_s
+from knowledge_plugin.enrich.common import Attempt, Endpoints
+from knowledge_plugin.enrich.page import EXCERPT_MAX, extract_main_text, meta_refresh_target, page_excerpt
 from knowledge_plugin.enrich.common import Trace
 from knowledge_plugin.model import FetchError, FetchResult, RequestSpec
 from knowledge_plugin.settings import Settings
@@ -152,3 +154,108 @@ def test_endpoints_come_from_the_core_settings():
 def test_request_spec_of_a_page_is_unconditional():
     spec = RequestSpec(url="https://example.org/", api=False, conditional=False)
     assert spec.conditional is False  # an excerpt is fetched whole: the stored validators belong to the list page
+
+
+# ------------------------------------------------------------------ redirect shells and pages that always answer 4xx (review G6)
+
+CHP_SHELL_URL = "https://www.chp.gov.hk/en/media/116/110525.html"
+CHP_TARGET_URL = "https://www.info.gov.hk/gia/general/202610/23/P2026102300702.htm"
+
+
+class ShellFetcher:
+    """The two real pages of the 香港卫生防护中心 press release of 2026-10-23, read with a plain GET on 2026-10-25 (the bytes
+    in ``fixtures/enrich/page-hk-chp-refresh/``): the link of the feed answers 200 with 477 bytes — a ``<meta
+    http-equiv="refresh">`` to the Government Information Services copy — and the copy is the release. A request for any
+    other address fails the test."""
+
+    def __init__(self, pages: dict[str, bytes]) -> None:
+        self.pages = pages
+        self.calls: list[tuple[str, bool]] = []
+
+    async def fetch(self, spec, **_):
+        self.calls.append((spec.url, spec.api))
+        assert spec.url in self.pages, f"unexpected request {spec.url}"
+        return FetchResult(request=spec, final_url=spec.url, status=200, headers={"content-type": "text/html"},
+                           body=self.pages[spec.url], fetched_at=NOW)
+
+
+def chp_pages() -> dict[str, bytes]:
+    from pathlib import Path
+
+    folder = Path(__file__).resolve().parents[1] / "fixtures" / "enrich" / "page-hk-chp-refresh"
+    return {CHP_SHELL_URL: (folder / "shell.html").read_bytes(), CHP_TARGET_URL: (folder / "target.html").read_bytes()}
+
+
+def chp_row(hosts: list[str]) -> dict:
+    return {"entry_id": "hk-chp-press:x", "revision": 1, "source_id": "hk-chp-press", "external_key": CHP_SHELL_URL,
+            "url": CHP_SHELL_URL, "canonical_url": CHP_SHELL_URL, "doi": None, "pmid": None, "registry_ids": [],
+            "title": "CHP records case of severe paediatric influenza infection", "summary": None, "lang": "en",
+            "published_at": datetime(2026, 10, 23, tzinfo=timezone.utc), "facts": {}, "first_seen_at": NOW,
+            "source_access": "rss", "source_egress": "direct", "source_type": "regulator",
+            "source_config": {"url": "https://www.chp.gov.hk/rss/pressreleases_en_RSS.xml", "allowed_hosts": hosts},
+            "attempts": 0}
+
+
+async def test_a_meta_refresh_shell_is_followed_once_to_an_allowed_host():
+    fetcher = ShellFetcher(chp_pages())
+    result = await enrich(chp_row(["info.gov.hk", "www.chp.gov.hk"]), fetcher, None, now=NOW)
+    assert fetcher.calls == [(CHP_SHELL_URL, False), (CHP_TARGET_URL, False)], "both are page requests: robots.txt applies"
+    assert (result.status, result.text_kind, result.fetched_from) == ("available", "excerpt", "page")
+    assert result.body_text.startswith("CHP records case of severe paediatric influenza infection") and len(result.body_text) > 300
+    assert "Issued at HKT 19:25" in result.body_text
+    assert result.notes == ["page_meta_refresh"]
+
+
+async def test_a_meta_refresh_to_a_host_the_source_does_not_name_is_not_followed():
+    fetcher = ShellFetcher(chp_pages())
+    result = await enrich(chp_row(["www.chp.gov.hk"]), fetcher, None, now=NOW)
+    assert fetcher.calls == [(CHP_SHELL_URL, False)], "the target is outside the source's hosts: no request"
+    assert (result.status, result.body_text) == ("unavailable", None)
+    assert result.notes == ["page_refresh_host_not_allowed", "page_no_main_text"]
+
+
+async def test_only_one_refresh_is_followed():
+    shell = chp_pages()[CHP_SHELL_URL]
+    pages = {CHP_SHELL_URL: shell, CHP_TARGET_URL: shell.replace(b"P2026102300702", b"P2026102300703")}
+    fetcher = ShellFetcher(pages)
+    trace = Trace()
+    text, _ = await page_excerpt(fetcher, CHP_SHELL_URL, source_id="hk-chp-press", egress="direct", trace=trace,
+                                 allowed_hosts=["info.gov.hk"])
+    assert text is None and len(fetcher.calls) == 2, "a shell behind a shell is not chased"
+    assert trace.notes == ["page_meta_refresh", "page_no_main_text"]
+
+
+def test_the_refresh_target_is_read_from_the_refresh_meta_only():
+    base = "https://www.chp.gov.hk/en/media/116/110525.html"
+    shell = chp_pages()[CHP_SHELL_URL].decode("utf-8")
+    assert meta_refresh_target(shell, base) == CHP_TARGET_URL, "the other http-equiv metas (Pragma, no-cache …) are not it"
+    assert meta_refresh_target('<meta HTTP-EQUIV="Refresh" content="5;url=\'/next.html\'">', base) == \
+        "https://www.chp.gov.hk/next.html"
+    assert meta_refresh_target('<meta http-equiv="refresh" content="0, https://other.example/a">', base) == "https://other.example/a"
+    assert meta_refresh_target('<meta http-equiv="refresh" content="30">', base) is None, "a reload is not a redirect"
+    assert meta_refresh_target('<meta http-equiv="refresh" content="0; URL=javascript:alert(1)">', base) is None
+    assert meta_refresh_target('<meta http-equiv="refresh" content="0; URL=https://user:pw@example.org/">', base) is None
+    assert meta_refresh_target("<html><body>no tag</body></html>", base) is None
+
+
+def http_error(status=None, detail=None, outcome="http-error"):
+    return Attempt(error=FetchError(outcome, detail or f"http_{status}", status=status))
+
+
+def test_a_page_answering_4xx_is_asked_three_times_and_then_it_is_final():
+    gone = http_error(405)
+    assert [page_retry_s(gone, n) for n in range(4)] == [3600, 6 * 3600, None, None]
+    assert page_retry_s(http_error(detail="http_404"), 2) is None, "the status is also read from the detail"
+    for transient in (http_error(503), http_error(429, "rate_limited_429"), http_error(408), Attempt(error=FetchError("timeout", "timeout")),
+                      Attempt(error=FetchError("host-budget", "daily_cap"))):
+        assert page_retry_s(transient, 40) == 3600, "a timeout, a 5xx and the host's pacing are asked again, hourly"
+
+
+@pytest.mark.parametrize("attempts_before, status, notes", [
+    (0, "pending", ["page_http-error:http_405"]), (1, "pending", ["page_http-error:http_405"]),
+    (2, "unavailable", ["page_http-error:http_405", "page_4xx_given_up"])])
+async def test_the_entry_of_a_405_page_stops_being_asked(attempts_before, status, notes):
+    row = {**load_case("enrich/page-who-news").rows[0], "attempts": attempts_before}
+    result = await enrich(row, FailingFetcher("http-error", "http_405"), None, now=NOW)
+    assert (result.status, result.notes) == (status, notes)
+    assert result.retry_after_s == ([3600, 6 * 3600, None][attempts_before] if status == "pending" else None)

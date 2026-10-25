@@ -3875,5 +3875,14 @@
   },
   "_why_enabled_20261024": "ct-src: the script-json reading of ndcpa-notices (the same site template) reads 30 dated regulations, newest 2026-05-14 — a slow list of binding rules. Replay case tests/fixtures/html-list/ndcpa-regulations.",
   "_why_tier_20261024": "a list page with a configuration that reads it is a P1 list (the build's rule)"
+ },
+ "hk-chp-press": {
+  "config": {
+   "allowed_hosts": [
+    "info.gov.hk",
+    "www.chp.gov.hk"
+   ]
+  },
+  "_why_allowed_hosts_20261025": "c2-gplug (review G6): every press-release link of the feed is a 477-byte page whose only content is <meta http-equiv=\"refresh\"> to www.info.gov.hk/gia/…, the Government Information Services copy; 67 of 67 entries were page_no_main_text. The page step follows one such refresh to a host this list names (enrich/page.py). Replay: tests/fixtures/enrich/page-hk-chp-refresh."
  }
 }

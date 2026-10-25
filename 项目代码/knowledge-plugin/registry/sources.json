@@ -13505,6 +13505,7 @@
     "url": "https://www.chp.gov.hk/rss/pressreleases_en_RSS.xml",
     "max_pages": 1,
     "allowed_hosts": [
+     "info.gov.hk",
      "www.chp.gov.hk"
     ]
    }
