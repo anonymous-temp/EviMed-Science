@@ -14,7 +14,10 @@ import {
   rankChangeLabel,
   rankLabel,
   rankTone,
+  askDraft,
+  itemLine,
   researchDraft,
+  topicAskDraft,
   metaTime,
   originalLinkLabel,
   sameAddress,
@@ -232,14 +235,15 @@ describe("the daily's header", () => {
 });
 
 describe("the 深入研究 draft", () => {
-  it("carries the item, its source, its link and its identifiers into the composer", () => {
+  it("is the question that fits the item and the item's line: its title, source, day, id for the assistant, and the original", () => {
     const item = frontierItem({ flags: [{ key: "preprint", label: "未经同行评议" }], pmid: "40000001" });
     const draft = researchDraft(item);
     expect(draft.startsWith("这项研究可靠吗？")).toBe(true);
     expect(draft).toContain("它对临床实践和我的研究意味着什么");
-    for (const part of [item.title, item.titleRaw, "来源：NEJM（期刊 · RCT）", "注意：未经同行评议", item.url, "DOI：10.1056/example", "PMID：40000001", `导读：${item.summary}`]) {
-      expect(draft).toContain(part);
-    }
+    expect(draft.endsWith(itemLine(item))).toBe(true);
+    expect(itemLine(item)).toBe(`“${item.title}”（${item.source.name} · ${item.publishedAt!.slice(0, 10)}） frontier:${item.id}\n原文：${item.url}`);
+    // What the assistant needs of the item it reads through its id, not the draft's.
+    for (const absent of [item.titleRaw, "DOI：", "PMID：", "导读：", "注意："]) expect(draft).not.toContain(absent);
   });
 
   it("asks the first question the item can answer: a design for a study, grounds for the rest", () => {
@@ -249,6 +253,25 @@ describe("the 深入研究 draft", () => {
     expect(first({ evidenceType: "guideline" })).toBe("这份指南的推荐依据是什么");
     expect(first({ evidenceType: "safety-notice", sourceType: "regulator" })).toBe("这项决定依据什么");
     expect(first({ evidenceType: "other", sourceType: "media" })).toBe("这条消息的依据是什么");
+  });
+});
+
+describe("就此提问 drafts", () => {
+  const item = { id: "k7q2m9x4t1b8", title: "口服 PCSK9 抑制剂降低心血管事件", source: { name: "NEJM" }, publishedAt: "2026-09-20T00:00:00.000Z", url: "https://www.nejm.org/x" };
+
+  it("a question is followed by the item's line, and the reader's own question is the line alone", () => {
+    expect(askDraft(item, "安全性数据有哪些？")).toBe("安全性数据有哪些？\n\n“口服 PCSK9 抑制剂降低心血管事件”（NEJM · 2026-09-20） frontier:k7q2m9x4t1b8\n原文：https://www.nejm.org/x");
+    expect(askDraft(item, null)).toBe("“口服 PCSK9 抑制剂降低心血管事件”（NEJM · 2026-09-20） frontier:k7q2m9x4t1b8\n原文：https://www.nejm.org/x");
+  });
+
+  it("names what it is not given nothing for: no source or day, no address", () => {
+    expect(itemLine({ id: "k7q2m9x4t1b8", title: "T" })).toBe("“T” frontier:k7q2m9x4t1b8");
+    expect(itemLine({ id: "k7q2m9x4t1b8", title: "T", source: { name: "NEJM" } })).toBe("“T”（NEJM） frontier:k7q2m9x4t1b8");
+  });
+
+  it("a topic's draft is its question and its title; a topic whose question is its title says it once", () => {
+    expect(topicAskDraft({ title: "某药安全吗", question: "某药的心血管风险有多大？" })).toBe("某药的心血管风险有多大？\n\n前沿动态热点话题：“某药安全吗”");
+    expect(topicAskDraft({ title: "某药安全吗", question: "某药安全吗" })).toBe("某药安全吗\n\n前沿动态热点话题");
   });
 });
 

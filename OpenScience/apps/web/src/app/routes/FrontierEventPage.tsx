@@ -1,6 +1,6 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "@/components/frontier/frontierReadingState";
 import { markFrontierEventRead } from "@/lib/frontierClient";
-import { serveFrontierList, useFrontierListTracking } from "@/lib/frontierTracking";
+import { serveFrontierList, trackFrontierItemAction, useFrontierListTracking } from "@/lib/frontierTracking";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock, ChevronLeft, SearchX } from "lucide-react";
@@ -26,6 +26,8 @@ import { StateScreen } from "@/components/ui/StateScreen";
 import { Tag } from "@/components/ui/Tag";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
+import { openItemConversation } from "@/components/frontier/frontierAsk";
+import { ReaderAsk } from "@/components/frontier/FrontierReader";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { Sparkline } from "@/components/frontier/Sparkline";
 import {
@@ -195,6 +197,14 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
   const timeline = useMemo(() => [...event.items]
     .sort((a, b) => (order === "asc" ? 1 : -1) * (Date.parse(a.timelineAt) - Date.parse(b.timelineAt))), [event.items, order]);
   const research = () => navigate("/app/chat", { state: { runtimeUiIntent: { ...newRuntimeUiIntent(eventResearchDraft(event)), originReference: { kind: "frontier-event", id: event.id, title: event.title } } } });
+  // 就此提问: the questions of the event's first-hand report open the conversation with that report as its origin (c3-ask).
+  const askEntry = event.ask ?? null;
+  const askReport = askEntry ? event.items.find((item) => item.id === askEntry.itemId) : undefined;
+  const ask = (question: string | null) => {
+    if (!askEntry) return;
+    trackFrontierItemAction("ask", askEntry.itemId, { surface: "event", detail: question ? "suggested" : "own" });
+    openItemConversation(navigate, { id: askEntry.itemId, title: askEntry.title, source: askReport?.source, publishedAt: askReport?.publishedAt, url: askReport?.url }, question);
+  };
   // From ten reports on, a kind of source narrows the list: the kinds the rows already name, in the order they first appear.
   const [sourceType, setSourceType] = useState<string | null>(null);
   const sourceTypes = useMemo(() => [...new Set(timeline.flatMap((item) => (item.sourceTypeLabel ? [item.sourceTypeLabel] : [])))], [timeline]);
@@ -276,6 +286,8 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
               </p>
             )}
           </Section>
+
+          {askEntry && <ReaderAsk questions={askEntry.questions} onAsk={ask} layout="article" />}
 
           {timeline.length > 0 && (
             <div data-frontier-list="event" className="space-y-8">
