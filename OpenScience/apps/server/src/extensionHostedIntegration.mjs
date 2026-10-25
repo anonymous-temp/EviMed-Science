@@ -35,14 +35,14 @@ export function createHostedExtensionIntegration({ config, database, store, agen
     identities: currentIdentity, proofAuthority: ({ entry, identity }) => qualification.authority(entry, { identity }),
   });
   extensions.proofAuthority = entry => qualification.authority(entry);
-  runtimeManager.rebasePersonalComposite = (project, candidate) => generations.rebasePersonal(project, candidate);
+  runtimeManager.rebasePersonalComposite = (project, candidate, options) => generations.rebasePersonal(project, candidate, options);
   runtimeManager.markPersonalCompositeEffective = (project, candidate, proof, client) => generations.markEffective(project, candidate, proof, client);
   return composeExtensionExecution({config,database,store,agentRuns,runtimeManager,controller,extensions,plugins,pluginWorker,deployment,resolveProject,audit},{qualification,generations});
 }
 /** Shared execution composition; metadata always uses the genuine qualification reader.
  * @param {any} dependencies @param {{qualification:any,generations:any}} services */
 export function composeExtensionExecution({config,database,store,agentRuns,runtimeManager,controller,extensions,pluginWorker,deployment,resolveProject,audit},{qualification,generations}) {
-  runtimeManager.rebasePersonalComposite = (project, candidate) => generations.rebasePersonal(project, candidate);
+  runtimeManager.rebasePersonalComposite = (project, candidate, options) => generations.rebasePersonal(project, candidate, options);
   runtimeManager.markPersonalCompositeEffective = (project, candidate, proof, client) => generations.markEffective(project, candidate, proof, client);
   extensions.proofAuthority = entry => qualification.authority(entry);
   runtimeManager.extensionArtifacts = new Map(deployment.admittedDescriptors.map(item => [item.id, item]));

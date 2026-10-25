@@ -172,7 +172,7 @@ export class ExtensionGenerationService{
   /** Rebuild the existing composite inside the personal worker's exclusive project transaction. Every plugin pin and grant stays authoritative.
    * The personal candidate is already owned by the existing generation ledger; this is not a second apply queue.
    * @param {any} project @param {any} personalCandidate */
-  async rebasePersonal(project,personalCandidate){return this.database.transaction(client=>this.database.withTransactionClient(client,async()=>{
+  async rebasePersonal(project,personalCandidate,{whenUnchanged=false}={}){return this.database.transaction(client=>this.database.withTransactionClient(client,async()=>{
     // Null is the selected ordinary baseline, never permission to resurrect the persisted personal generation.
     const selectedPersonal=personalCandidate??{reference:null,pins:[],platformSkills:{disabled:[],disabledPlugins:[]}};
     const state=await this.current(project),installed=state?.payload.effective;
@@ -193,7 +193,9 @@ export class ExtensionGenerationService{
         && installed.projection.plugins.filter(row=>!manifest.projection.plugins.some(current=>current.extensionId===row.extensionId)).every(row=>row.compatibility!=='legacy-citation-v1'&&manifest.findings.some(item=>item.extensionId===row.extensionId))
       : canonicalJson(functional(manifest.projection.plugins))===canonicalJson(functional(installed.projection.plugins))
         && canonicalJson(functional(manifest.bindings.installations))===canonicalJson(functional(installed.bindings.installations));
-    if(!same)throw new HttpError(409,'product_revision_conflict','Project plugins changed before the skill update.');
+    // A start (`whenUnchanged`) rebases only a composite whose selected plugins are functionally the installed ones; any other
+    // difference is the plugin apply worker's to settle, and the start goes on with the personal generation alone.
+    if(!same){if(whenUnchanged)return null;throw new HttpError(409,'product_revision_conflict','Project plugins changed before the skill update.');}
     await this.publish(project,manifest,client);
     const id=`extensions:generation:${manifest.reference.generationHash}`,immutable=await this.documents.get(project.userId,'extension-generation',id);
     if(!immutable)await this.documents.put(project.userId,'extension-generation',id,manifest,{expectedRevision:0,projectId:project.id,transactionClient:client});

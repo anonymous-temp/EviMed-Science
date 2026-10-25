@@ -3566,6 +3566,9 @@ export class RuntimeManager {
     this.platformSkillOverrides = new Map();
     this.personalSkillGenerations = null;
     /** @type {any} */ this.rebasePersonalComposite = null;
+    /** What an optional part of a start could not do, counted by code (principle 15), and the last one per project. */
+    /** @type {Map<string, number>} */ this.startFindingCounts = new Map();
+    /** @type {Map<string, { code: string, cause: string|null, at: number }>} */ this.lastStartFindings = new Map();
     /** @type {any} */ this.markPersonalCompositeEffective = null;
     this.personalSkillOverrides = new Map();
     /** @type {any} Cold selection reauthorizes current account/project/config state in the composition root. */
@@ -4510,6 +4513,15 @@ export class RuntimeManager {
     return { version, major };
   }
 
+  /** An optional part of a start that degraded instead of failing it: counted, kept per project, and said on stderr by code.
+   * @param {Record<string, any>} project @param {string} code @param {any} [error] */
+  noteStartFinding(project, code, error = null) {
+    const cause = typeof error?.code === "string" ? error.code : null;
+    this.startFindingCounts.set(code, (this.startFindingCounts.get(code) ?? 0) + 1);
+    this.lastStartFindings.set(this.key(project), { code, cause, at: Date.now() });
+    process.stderr.write(`runtime start degraded: ${code}${cause ? ` (${cause})` : ""}\n`);
+  }
+
   async inspectRuntimeImage() {
     if (this.config.runtimeProvider === 'agentbay') {
       const providerImageId = String(this.config.agentbayImageId ?? '');
@@ -5007,9 +5019,16 @@ export class RuntimeManager {
       try { extensionGeneration = await this.extensionGenerationResolver(project); if (extensionGeneration) await this.prepareGeneration(project, extensionGeneration); }
       catch { extensionGeneration = null; }
     }
-    if (!extensionGeneration && !this.extensionGenerationOverrides.has(key) && personalSkillGeneration && this.rebasePersonalComposite) {
-      extensionGeneration = await this.rebasePersonalComposite(project, personalSkillGeneration);
-    }
+    // The installed plugin composite re-stamped with the personal generation this start mounts. Optional, like the rest of
+    // this preparation: it runs only where the project's selected plugins are functionally the installed ones
+    // (`whenUnchanged`; any other difference is the plugin apply worker's), never for a shared 循证 GEO context (which
+    // mounts neither half), and any failure starts the project with the personal generation alone and is recorded.
+    const rebaseComposite = async () => {
+      if (contextGeneration || this.extensionGenerationOverrides.has(key) || !this.rebasePersonalComposite || !personalSkillGeneration) return null;
+      try { return (await this.rebasePersonalComposite(project, personalSkillGeneration, { whenUnchanged: true })) ?? null; }
+      catch (error) { this.noteStartFinding(project, "extension_composite_rebase_failed", error); return null; }
+    };
+    if (!extensionGeneration) extensionGeneration = await rebaseComposite();
     if (contextGeneration) { personalSkillGeneration = null; extensionGeneration = null; }
     if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
       && !samePersonalPackages(extensionGeneration.projection.personal, personalSkillGeneration)) {
@@ -5019,10 +5038,9 @@ export class RuntimeManager {
       // reference of every project's personal skills differs from the one the
       // composite was stamped with while the skills are what they were — and
       // comparing references unmounted the installed extension of every project
-      // that also has personal skills (2026-10-04).
-      if (!this.rebasePersonalComposite) throw new HttpError(409, 'product_revision_conflict', 'The installed plugins must be recomposed with the selected skills.');
-      extensionGeneration = await this.rebasePersonalComposite(project, personalSkillGeneration);
-      if (!extensionGeneration) throw new HttpError(409, 'product_revision_conflict', 'The installed plugin composition is unavailable.');
+      // that also has personal skills (2026-10-04). Rebased where it can be;
+      // otherwise the extension waits and the personal generation starts alone.
+      extensionGeneration = await rebaseComposite();
     }
     if (extensionGeneration) {
       const legacy = extensionGeneration.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');

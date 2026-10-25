@@ -144,3 +144,61 @@ test('a retired installer account is reauthorized through the owner, and unavail
   await assert.rejects(ExtensionGenerationService.prototype.rebasePersonal.call(fake, { id: 'paper', userId: 'owner' }, {}), { status: 403 })
   assert.deepEqual(actors, ['retired-installer', 'owner'])
 })
+
+test('a start never fails on a composite rebase: a refused or failed rebase starts with the personal generation alone, recorded', async () => {
+  const project = { id: 'paper', userId: 'owner' }
+  const personal = { reference: { generationHash: 'c'.repeat(64) }, pins: [], platformSkills: { disabled: ['office:docx'], disabledPlugins: [] } }
+  const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0 })
+  manager.syncCapsuleMethods = async () => ({ count: 0 })
+  manager.personalSkillGenerations = { prepareForRuntime: async () => personal }
+  let observed
+  manager.provider = { preflight: async () => {}, prepare: async (_project, input) => { observed = input; throw new Error('provider boundary') } }
+  // The resolver has nothing to mount (a rolled-back or failed plugin apply): the desired plugins differ from the installed ones.
+  manager.extensionGenerationResolver = async () => null
+  const calls = []
+  manager.rebasePersonalComposite = async (_project, candidate, options) => { calls.push(options); throw Object.assign(new Error('Project plugins changed before the skill update.'), { status: 409, code: 'product_revision_conflict' }) }
+  await assert.rejects(manager.startKernel(project), /provider boundary/)
+  assert.deepEqual(calls, [{ whenUnchanged: true }], 'a start asks for a rebase only of an unchanged plugin selection')
+  assert.equal(observed.extensionGeneration, null)
+  assert.equal(observed.personalSkillGeneration, personal)
+  assert.equal(manager.startFindingCounts.get('extension_composite_rebase_failed'), 1)
+  assert.equal(manager.lastStartFindings.get(manager.key(project)).cause, 'product_revision_conflict')
+  // An installed composite stamped with other personal skills: its rebase fails and the extension waits, the start goes on.
+  manager.extensionGenerationResolver = async () => ({ projection: { plugins: [], personal: { reference: null, pins: [{ skillId: 'old', revision: 1, digest: 'sha256:x' }] } } })
+  manager.prepareGeneration = async () => ({})
+  await assert.rejects(manager.startKernel(project), /provider boundary/)
+  assert.equal(observed.extensionGeneration, null)
+  assert.equal(observed.personalSkillGeneration, personal)
+  assert.equal(manager.startFindingCounts.get('extension_composite_rebase_failed'), 2)
+  // A rebase that answers nothing (the selection changed) is no failure either.
+  manager.rebasePersonalComposite = async () => null
+  await assert.rejects(manager.startKernel(project), /provider boundary/)
+  assert.equal(observed.extensionGeneration, null)
+  assert.equal(manager.startFindingCounts.get('extension_composite_rebase_failed'), 2)
+})
+
+test('a shared 循证 GEO context start never rebases or publishes a composite it would discard', async () => {
+  const project = { id: 'geo', userId: 'owner' }
+  const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0 })
+  manager.contextPolicyFor = async () => ({ kind: 'geo-project' })
+  manager.prepareSharedContext = async () => ({ mounted: { count: 0 } })
+  manager.personalSkillOverrides.set(manager.key(project), { reference: { generationHash: 'd'.repeat(64) }, pins: [] })
+  manager.extensionGenerationResolver = async () => assert.fail('a shared context resolves no extension')
+  let rebased = false
+  manager.rebasePersonalComposite = async () => { rebased = true; return { projection: { plugins: [], personal: {} } } }
+  manager.provider = { preflight: async () => {}, prepare: async () => { throw new Error('provider boundary') } }
+  await manager.startKernel(project).catch(() => null)
+  assert.equal(rebased, false)
+})
+
+test('a rebase asked for at a start answers nothing when the selected plugins differ from the installed ones', async () => {
+  const installed = { reference: {}, scope: { actorId: 'owner', actorAccountCreatedAt: 'a' }, projection: { plugins: [{ extensionId: 'kept' }] }, bindings: { installations: [] } }
+  const fake = {
+    database: { transaction: async work => work({}), withTransactionClient: async (_client, work) => work() },
+    current: async () => ({ payload: { effective: installed } }), verifyManifest: async () => {},
+    snapshot: async () => ({ manifest: { projection: { plugins: [{ extensionId: 'rejected' }] }, bindings: { installations: [] }, findings: [] }, qualification: null }),
+    publish: async () => assert.fail('nothing is published for a changed selection'),
+  }
+  assert.equal(await ExtensionGenerationService.prototype.rebasePersonal.call(fake, { id: 'paper', userId: 'owner' }, null, { whenUnchanged: true }), null)
+  await assert.rejects(ExtensionGenerationService.prototype.rebasePersonal.call(fake, { id: 'paper', userId: 'owner' }, null), { status: 409 })
+})
