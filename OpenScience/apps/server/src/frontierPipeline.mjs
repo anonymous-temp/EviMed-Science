@@ -1645,7 +1645,7 @@ export class FrontierPipeline {
         // G2: the fourth reader text, only for an item with no other (it is then the text its 导读 is written from); NULL beside any other.
         reader_summary: null,
       };
-      if (![texts.body_text, texts.abstract_raw, texts.body_excerpt].some((text) => typeof text === "string" && text.trim())) {
+      if (!([texts.body_text, texts.abstract_raw, texts.body_excerpt].some((column) => typeof column === "string" && column.trim()))) {
         texts.reader_summary = frontierSummaryText(entry, source) ?? "";
       }
       const effectiveInput = buildModelInput(this.#editItem(item, texts, entry, source, glossary), { timeZone: this.editor.timeZone });

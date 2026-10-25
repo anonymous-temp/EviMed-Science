@@ -8,6 +8,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
+import { FrontierEvents } from "../src/frontierEvents.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_TEXT_GIVE_UP_MS, FRONTIER_TEXT_HOLD_MS, FrontierPipeline } from "../src/frontierPipeline.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
@@ -298,4 +299,22 @@ test("G11: an item that failed for another reason is not taken back by a text", 
   const plugin = { text: async () => ({ status: "available", abstract: "Background: a trial. Results: events fell by 20%.", body_excerpt: null, enrichment: {} }) };
   await pipelineFor(editorWith(), { plugin }).processBatch();
   assert.equal((await itemOf(id)).state, "failed", "only the item that gave up for want of a text is taken back by one");
+});
+
+test("G10: the hot list names an event again by the first member with a Chinese title, and never by a raw link", options, async () => {
+  const post = await insertItem(database, { sourceId: "nejm", title: "Breaking: FDA approves first oral GLP-1 https://t.co/AbC123xyz", titleZh: null, visibleAt: "2026-10-24T22:00:00Z", timelineAt: "2026-10-24T22:00:00Z" });
+  const coverage = await insertItem(database, { sourceId: "nejm", title: "FDA clears the first oral GLP-1 for weight loss", titleZh: "FDA批准首个口服GLP-1减重药", visibleAt: "2026-10-24T23:00:00Z", timelineAt: "2026-10-24T23:00:00Z" });
+  // The event was named by its first report, the post whose Chinese title was refused: a raw English title with its link.
+  const event = await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, report_count)
+    VALUES ('384cf3806b8be6d1', $1, 'evidence', $2, $3, 2) RETURNING id`, ["Breaking: FDA approves first oral GLP-1 https://t.co/AbC123xyz", "2026-10-24T22:00:00Z", "2026-10-24T23:00:00Z"]);
+  await database.query(`INSERT INTO evimed_frontier.event_items (event_id, item_id, role, joined_by) VALUES ($1, $2, 'primary', 'identifier'), ($1, $3, 'report', 'model')`,
+    [event.rows[0].id, post.id, coverage.id]);
+  await database.query("UPDATE evimed_frontier.items SET event_id = $1 WHERE id = ANY($2::bigint[])", [event.rows[0].id, [post.id, coverage.id]]);
+  const events = new FrontierEvents({ database, editor: null, embedder: null, now: () => NOW, config: {} });
+  await events.computeHot();
+  assert.equal((await database.query("SELECT title_zh FROM evimed_frontier.events WHERE id = $1", [event.rows[0].id])).rows[0].title_zh, "FDA批准首个口服GLP-1减重药");
+  // An overview's own title still names the event once written.
+  await database.query("UPDATE evimed_frontier.events SET digest_title_zh = '口服GLP-1减重药获批' WHERE id = $1", [event.rows[0].id]);
+  await events.computeHot();
+  assert.equal((await database.query("SELECT title_zh FROM evimed_frontier.events WHERE id = $1", [event.rows[0].id])).rows[0].title_zh, "口服GLP-1减重药获批");
 });
