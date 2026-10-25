@@ -51,7 +51,9 @@ import {
 export const PROGRAMME_CLAIM_EXCLUSIONS = Object.freeze(["run_not_verified", "derived_claim", "refuted", "weakened", "source_unavailable", "claim_shape", "card_not_verified", "headline_unresolved", "calculation_not_verified", "card_limit"]);
 
 /** Why no card is written for an episode, closed for the same reason. `pending` and `deferred` are not refusals: the episode is looked at again. */
-export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap", "no_engine_receipt", "card_refused", "superseded"]);
+export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap", "no_engine_receipt", "card_refused", "superseded",
+  // A hot topic's episode (2026-10-25): its card's title named a person or body of the event, or the topic it answers is gone.
+  "topic_name_in_title", "topic_unavailable"]);
 
 /** The confidence labels a synthesized claim keeps, in the reader's words. */
 const CONFIDENCE_ZH = Object.freeze({ high: "高", moderate: "中", low: "低" });
@@ -248,11 +250,13 @@ function withinCardBounds(entries, made, captured) {
  * inputs make the same card, which is what makes a replay of the settling step harmless.
  *
  * @param {{
- *   zone: { id: string, title: string }, question: string, taskType: string, capabilityId: string | null,
+ *   zone: { id: string, title: string }, question: string, title?: string | null, taskType: string, capabilityId: string | null,
  *   decisionId: string | null, agenda: { id: string }, episode: { id: string }, runId: string, resultVersionId: string,
  *   evaluation: ReturnType<typeof evaluateProgrammeClaims>, captured: Map<string, { text: string | null, digest?: string | null, capturedAt?: string | null }>,
  *   machineValues?: any[], comparisonCandidates?: any[], model: string, at: Date, revising?: boolean,
  *   originalThisWeek?: number, originalPerWeek?: number }} input
+ *   `title`: the card's own title when the question is the reader's headline (a hot topic's card is titled with the topic's question);
+ *   absent, the card is titled with its zone and task type
  * @returns {{ status: "card", card: Record<string, any>, requestId: string, originality: string, replicated: boolean, headlineClaimId: string | null,
  *     excluded: { claimId: string, reason: string }[], includedCount: number }
  *   | { status: "refused", outcome: "no_qualifying_claims", excluded: { claimId: string, reason: string }[] }
@@ -325,7 +329,7 @@ export function buildProgrammeCard(input) {
   const body = programmeCardBody(claims);
 
   const taskTitle = PROGRAMME_CARD_TITLES[/** @type {keyof typeof PROGRAMME_CARD_TITLES} */ (input.taskType)] ?? "证据更新";
-  const title = `${input.zone.title}：${taskTitle}`.slice(0, 300);
+  const title = (typeof input.title === "string" && input.title.trim() ? input.title.trim() : `${input.zone.title}：${taskTitle}`).slice(0, 300);
   const sourcesOut = sources.map((entry) => entry.source);
   const comparisons = programmeComparisons({ candidates: input.comparisonCandidates, machineValues: input.machineValues, sourceCount: sourcesOut.length });
   const reviewed = candidates.some((entry) => entry.agendaClaim?.verification?.status === "recorded");

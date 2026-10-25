@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EvidenceProgrammeWorker, evidenceProgrammeMetricFamilies, fallbackProgrammeAction, parseProgrammeDecision } from "../src/evidenceProgramme.mjs";
-import { EVIDENCE_PROGRAMME_ZONES, PROGRAMME_DECISION_HOUR } from "../src/evidenceProgrammeData.mjs";
+import { EVIDENCE_PROGRAMME_ZONES, PROGRAMME_DECISION_HOUR, PROGRAMME_TOPIC_TASK_TYPE, SELECTOR_ZONES, TOPIC_ZONE } from "../src/evidenceProgrammeData.mjs";
 import { AUTOPILOT_TASK_TYPES } from "@evimed/domain";
 
 const zones = new Map([
@@ -12,15 +12,30 @@ const zones = new Map([
   ["breast-cancer", { choosable: false, allowed: ["evidence-update"] }],
 ]);
 
-test("the official zones are data in one module: six zones, every task type a real one, the operator's three recognised by title and not made", () => {
-  assert.deepEqual(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.title), ["房颤抗凝", "心肾与慢性肾病", "研究解读", "非小细胞肺癌", "乳腺癌", "2 型糖尿病"]);
+test("the official zones are data in one module: seven zones, every task type a real one, the operator's three recognised by title and not made", () => {
+  assert.deepEqual(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.title), ["房颤抗凝", "心肾与慢性肾病", "研究解读", "非小细胞肺癌", "乳腺癌", "2 型糖尿病", "热点求证"]);
   assert.deepEqual(EVIDENCE_PROGRAMME_ZONES.filter((zone) => zone.origin === "imported").map((zone) => zone.key), ["af-anticoagulation", "cardiorenal-ckd", "research-interpretation"]);
   for (const zone of EVIDENCE_PROGRAMME_ZONES) {
     assert.ok(zone.topic.taskTypes.every((type) => AUTOPILOT_TASK_TYPES.includes(type)), `${zone.key}: task types are the domain's`);
     assert.ok(zone.topic.standingQuestion && zone.topic.questionZh, zone.key);
     if (zone.origin === "programme") assert.ok(zone.requestId && zone.description && zone.background, `${zone.key} carries the text it is made with`);
   }
-  assert.equal(new Set(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.key)).size, 6);
+  assert.equal(new Set(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.key)).size, 7);
+  assert.equal(new Set(EVIDENCE_PROGRAMME_ZONES.filter((zone) => zone.requestId).map((zone) => zone.requestId)).size, 4, "each zone the programme makes has its own request id");
+});
+
+test("「热点求证」 answers the day's hot topic: a programme zone with its own text and request id, no terms, a synthesis task type, and never the selector's choice", () => {
+  assert.equal(TOPIC_ZONE?.key, "hot-questions");
+  assert.deepEqual([TOPIC_ZONE.title, TOPIC_ZONE.origin, TOPIC_ZONE.answersTopics, TOPIC_ZONE.requestId], ["热点求证", "programme", true, "evimed-evidence-zone-20261025-hot-questions"]);
+  assert.match(TOPIC_ZONE.requestId, /^evimed-evidence-zone-\d{8}-[a-z0-9-]+$/, "in the form the other programme zones use");
+  assert.deepEqual(TOPIC_ZONE.topic.terms, [], "fed by topics, never by the feed's entity counts");
+  assert.ok(TOPIC_ZONE.topic.taskTypes.includes(PROGRAMME_TOPIC_TASK_TYPE), "a topic's episode is a synthesis the zone allows");
+  assert.ok(!TOPIC_ZONE.topic.taskTypes.includes("signal-monitoring"));
+  for (const text of [TOPIC_ZONE.description, TOPIC_ZONE.background, TOPIC_ZONE.topic.questionZh]) assert.match(text, /[\u4e00-\u9fff]/, "plain Chinese for the reader");
+  assert.match(TOPIC_ZONE.background, /原始研究/);
+  assert.match(TOPIC_ZONE.background, /绝对风险/);
+  assert.ok(!SELECTOR_ZONES.some((zone) => zone.key === "hot-questions"), "the selector never chooses it");
+  assert.equal(SELECTOR_ZONES.length, 6);
 });
 
 test("the decision is parsed against a closed schema: only a zone that can be chosen, a task type it allows, once, within what the budget buys", () => {

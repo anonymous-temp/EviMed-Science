@@ -97,7 +97,7 @@ test("running today's decision makes the day's one decision through runDay, and 
   const page = await call("operator", "GET", "/api/ops/evidence-programme");
   assert.equal(page.status, 200);
   assert.equal(page.body.data.decisions[0].id, first.body.data.decision.id);
-  assert.equal(page.body.data.zones.length, 6);
+  assert.equal(page.body.data.zones.length, 7);
   assert.equal(page.body.data.budget.budgetCny, 30);
   assert.equal(page.body.data.status.enabled, true);
 });

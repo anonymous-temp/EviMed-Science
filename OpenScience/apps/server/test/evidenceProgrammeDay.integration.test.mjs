@@ -44,24 +44,26 @@ test("with the switch off nothing ticks and no table is read", async () => {
   assert.deepEqual(touched, []);
 });
 
-test("the official zones exist: the three the plan adds are made once as the publisher, and the three an operator imported are recognised and left alone", options, async () => {
-  // Nothing imported yet: the programme makes its three and never makes the operator's.
+test("the official zones exist: the four the programme adds are made once as the publisher, and the three an operator imported are recognised and left alone", options, async () => {
+  // Nothing imported yet: the programme makes its four and never makes the operator's.
   const first = await fx.programme.ensureOfficialZones();
   const made = first.filter((zone) => zone.id);
-  assert.deepEqual(made.map((zone) => zone.key).sort(), ["breast-cancer", "nsclc", "type2-diabetes"]);
+  assert.deepEqual(made.map((zone) => zone.key).sort(), ["breast-cancer", "hot-questions", "nsclc", "type2-diabetes"]);
   assert.deepEqual(first.filter((zone) => !zone.id).map((zone) => zone.key).sort(), ["af-anticoagulation", "cardiorenal-ckd", "research-interpretation"], "an import is the operator's act");
   const rows = await zoneRows();
-  assert.deepEqual(rows.map((row) => row.title), ["2 型糖尿病", "乳腺癌", "非小细胞肺癌"]);
+  assert.deepEqual(rows.map((row) => row.title), ["2 型糖尿病", "乳腺癌", "热点求证", "非小细胞肺癌"]);
   assert.ok(rows.every((row) => row.kind === "official" && row.user_id === PLATFORM_PUBLISHER_USER_ID && row.state === "published"), "official, the publisher's, published");
+  const hot = (await fx.database.query("SELECT description, background FROM evimed_frontier.evidence_zones WHERE title = '热点求证'")).rows[0];
+  assert.match(hot.description, /原始研究、指南和官方统计/, "made with its own text");
   // A second run makes nothing.
   const again = await fx.programme.ensureOfficialZones();
   assert.deepEqual(again.map((zone) => zone.id), first.map((zone) => zone.id));
-  assert.equal((await zoneRows()).length, 3, "idempotent");
+  assert.equal((await zoneRows()).length, 4, "idempotent");
   // The operator imports 房颤抗凝 (still owned by them, not yet re-owned) and 研究解读 (re-owned and marked official).
   const imported = await fx.importedZone("房颤抗凝", { owner: fx.operatorId, kind: "user" });
   const reowned = await fx.importedZone("研究解读");
   const found = await fx.programme.ensureOfficialZones();
-  assert.equal((await zoneRows()).length, 5, "recognised, never duplicated: still the three of the programme and the two imported");
+  assert.equal((await zoneRows()).length, 6, "recognised, never duplicated: still the four of the programme and the two imported");
   const af = found.find((zone) => zone.key === "af-anticoagulation");
   assert.deepEqual([af.id, af.writable, af.ownerId], [imported, false, fx.operatorId], "an operator's zone is recognised and is not the programme's to write until it is re-owned");
   const interpretation = found.find((zone) => zone.key === "research-interpretation");

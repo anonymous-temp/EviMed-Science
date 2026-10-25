@@ -32,6 +32,9 @@
  * @property {string} [requestId] the request identity a programme-made zone is created under, so a second run finds the same zone
  * @property {string} [description] shown on the zone (programme-made zones only)
  * @property {string} [background] the zone's scope text (programme-made zones only)
+ * @property {boolean} [answersTopics] the zone answers the day's strongest hot topic of 「前沿动态」 (`evimed_frontier.topics`): the
+ *   selector never chooses it, the code takes the topic before the selector's choice, each topic is its own agenda (its own question,
+ *   no other topic's progress in its brief) and its card is titled with the topic's question
  * @property {{ terms: readonly string[], standingQuestion: string, questionZh: string, taskTypes: readonly string[] }} topic
  *   `terms`: names the entity vocabulary tags into the zone's entity keys; `standingQuestion`: what the zone's agenda is asked, in the
  *   words the run reads; `questionZh`: the same question as a card's reader reads it; `taskTypes`: what the selector may choose for it
@@ -103,7 +106,26 @@ export const EVIDENCE_PROGRAMME_ZONES = Object.freeze([
       taskTypes: WITH_SIGNALS,
     },
   },
+  {
+    // 2026-10-25 (前沿动态 round 2): a public event in any field raises a general medical question the same day; the hot-event trigger
+    // makes it a topic, and the strongest topic of a day is answered here. No terms: the zone is fed by topics, never by the feed's
+    // entity counts, and the standing question below is only the general case its agenda prompt names when no topic is given.
+    key: "hot-questions", title: "热点求证", origin: "programme", requestId: "evimed-evidence-zone-20261025-hot-questions", answersTopics: true,
+    description: "公共事件引出的医学问题，用原始研究、指南和官方统计回答。",
+    background: "一件公共事件常让很多人关心同一个医学问题，比如年轻人猝死、地震后的挤压伤、高温中暑，或网上流传的一种健康说法。这里回答的是问题本身，不讨论事件中的个人：结论来自原始研究、临床指南和官方统计，写给普通读者和临床医生；研究报告了绝对风险的，同时给出绝对风险，并说明哪些人风险更高、出现什么情况应及时就医。",
+    topic: {
+      terms: [],
+      standingQuestion: "When a public event raises a medical question (a sudden death, an outbreak, a disaster, a heat wave, a viral health claim), what do the primary studies, the current guidelines and the official statistics show for the general population: how common the outcome is in absolute terms, who is at higher risk, what can be done to prevent it or respond to it, and when to see a doctor?",
+      questionZh: "公共事件引出的医学问题，原始研究、指南和官方统计怎么说：这种情况在普通人群中有多常见，哪些人风险更高，能做些什么，什么时候该就医？",
+      taskTypes: SYNTHESIS,
+    },
+  },
 ]);
+
+/** The zones the day's selector reads signals for and chooses among: every zone but the one that answers hot topics. */
+export const SELECTOR_ZONES = Object.freeze(EVIDENCE_PROGRAMME_ZONES.filter((zone) => !zone.answersTopics));
+/** The zone that answers the day's strongest hot topic, or none. */
+export const TOPIC_ZONE = EVIDENCE_PROGRAMME_ZONES.find((zone) => zone.answersTopics) ?? null;
 
 /** @param {string} key @returns {EvidenceProgrammeZone | undefined} */
 export const programmeZoneByKey = (key) => EVIDENCE_PROGRAMME_ZONES.find((zone) => zone.key === key);
@@ -179,3 +201,14 @@ export const PROGRAMME_DEMAND_MAX_PROFILES = 5_000;
 export const PROGRAMME_ACTIVE_EPISODE_MS = 6 * 3_600_000;
 /** Decisions of this many days are looked at again for episodes not settled and actions deferred. */
 export const PROGRAMME_SETTLE_DAYS = 14;
+
+/**
+ * How long after a hot topic was accepted the day's decision may still take it (contract §T): a day, because the question is
+ * asked while the event is in the news. A topic the day's action could not start on (no budget or slot all day) is let go when
+ * this has passed since it was queued, and recorded as skipped.
+ */
+export const PROGRAMME_TOPIC_WINDOW_MS = 24 * 3_600_000;
+/** Topics read for one day's pick: a bound, not a sample (a day accepts at most `perDay + surgePerDay` of `FRONTIER_TOPIC_LIMITS`). */
+export const PROGRAMME_TOPIC_CANDIDATES = 50;
+/** The task type a topic's episode runs: a synthesis of the primary studies, guidelines and official statistics the question needs. */
+export const PROGRAMME_TOPIC_TASK_TYPE = "evidence-update";
