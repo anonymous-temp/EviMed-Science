@@ -64,7 +64,7 @@ export class NativeTurnCommit {
   /**
    * @param {{
    *   config: any,
-   *   memorySettings: { configured?: boolean, resetInstant?: (userId: string) => Promise<string | null> },
+   *   memorySettings: { configured?: boolean, resetInstant?: (userId: string) => Promise<string | null>, accountExists?: (userId: string) => Promise<boolean> },
    *   sessions: { configured?: boolean, readSession: (userId: string, sessionId: string) => Promise<any> },
    *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
    *   conversations: { runsOf: (project: any, sessionId: string) => Promise<any[]> },

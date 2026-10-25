@@ -410,7 +410,7 @@ test("native selected-scope export encrypts full engine bodies and imports throu
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Native researcher','development')", [sharer]);
   try {
     const root = nativeMemoryRoot(sharer);
-    let body = "# Cohort\n\nThe explicit project cohort contains 123 participants and preserves the prespecified outcome.";
+    const body = "# Cohort\n\nThe explicit project cohort contains 123 participants and preserves the prespecified outcome.";
     await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'native-cohort','Cohort',1024)", [sharer]);
     const uri = `${root}/projects/cohort.md`;
     const nativeMemory = new NativeMemoryStore({

@@ -10,7 +10,7 @@ import { after, before, test } from "node:test";
 import { METHOD_SKILL_SCHEMA } from "@evimed/domain";
 
 import { AgentApiKeyStore } from "../src/agentApiKeys.mjs";
-import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "../src/agentMemoryBoard.mjs";
+import { memoryBoard, methodAction, methodDetail, noteAction } from "../src/agentMemoryBoard.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LearningService } from "../src/learningService.mjs";
