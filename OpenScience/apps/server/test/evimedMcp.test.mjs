@@ -444,6 +444,7 @@ test("the scheduled-task tools reach a runtime only where the feature is on and 
     assert.deepEqual(disabled(on), []);
     for (const [overrides, reason] of [
       [{ taskToolsEnabled: false }, "off"],
+      [{ autopilotEnabled: false }, "scheduled execution is off"],
       [{ stateStore: "file" }, "no product ledger to keep a task in"],
       [{ publicSourceGatewayInternalUrl: "" }, "the tools authenticate with the source gateway's token; without it they have none"],
     ]) {
@@ -455,6 +456,8 @@ test("the scheduled-task tools reach a runtime only where the feature is on and 
       tasks: "https://evimed.example/runtime-gateway/tasks/v1", adapters: {} } };
     const remoteEnv = dshProfileInput(dshConfig({ taskToolsEnabled: true, stateStore: "postgres" }), project, remote, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
     assert.equal(remoteEnv.EVIMED_TASKS_GATEWAY_URL, "https://evimed.example/runtime-gateway/tasks/v1", "a remote session is given the public prefix");
+    const remoteOff = dshProfileInput(dshConfig({ taskToolsEnabled: true, autopilotEnabled: false, stateStore: "postgres" }), project, remote, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
+    assert.equal(remoteOff.EVIMED_TASKS_GATEWAY_URL, undefined, "a remote address cannot enable a stopped scheduler");
     assert.deepEqual(disabled(remoteEnv), []);
   } finally {
     await rm(tmp, { recursive: true, force: true });

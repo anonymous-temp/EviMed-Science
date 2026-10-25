@@ -314,14 +314,17 @@ test("a task type that keeps failing is paused alone, the agenda stops only when
   assert.equal(jobs.items.length, queued, "recording outcomes and stopping must not enqueue replacement work");
 });
 
-test("naming the task types again lifts the pauses failures put on them", async () => {
+test("an actual type-set change lifts failure pauses while an unchanged form submission preserves them", async () => {
   const { service } = fixture();
   const created = await service.create("user-one", agendaInput);
   let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
   for (const date of ["2026-09-06", "2026-09-08"]) await episodeEnding(service, agenda.id, date, "failed");
   agenda = await service.get("user-one", agenda.id);
   assert.equal(Object.values(agenda.payload.taskTypeState).filter((state) => state.pausedAt).length, 1);
+  const pausedTypes = agenda.payload.taskTypeState;
   agenda = await service.update("user-one", agenda.id, { expectedRevision: agenda.revision, taskTypes: ["literature-sentinel", "evidence-update"] });
+  assert.deepEqual(agenda.payload.taskTypeState, pausedTypes);
+  agenda = await service.update("user-one", agenda.id, { expectedRevision: agenda.revision, taskTypes: ["literature-sentinel", "evidence-update", "writing-pipeline"] });
   assert.deepEqual(agenda.payload.taskTypeState, {});
 });
 
@@ -1434,7 +1437,7 @@ test("a fold the stop cancelled and the process never finished is finished by th
       .map((row) => ({ user_id: row.userId, id: row.id, project_id: row.projectId, payload: row.payload, revision: row.revision })) };
   } };
   await f.service.reconcileStopWork();
-  assert.match(queries[0], /payload->>'status'='canceled' AND jsonb_typeof\(payload->'completion'\)='object'/, "the scan looks for a cancelled episode that still holds its result");
+  assert.match(queries.find(query => query.includes("payload->'completion' IS NOT NULL")), /payload->>'status'='canceled' AND jsonb_typeof\(payload->'completion'\)='object'/, "the scan looks for a cancelled episode that still holds its result");
   await assertFoldClosedByStop(f, folding, briefing);
   assert.equal(f.jobs.items.filter((item) => item.kind === "verify").length, 0, "a cancelled episode books no re-check it would only have to skip");
 
@@ -1579,7 +1582,7 @@ test("the reconcile sweep is what replays a fold left in `verifying`, and a row 
 
   const before = (await f.service.getEpisode("user-one", merged.episode.id)).revision;
   const swept = await f.service.reconcileStopWork();
-  assert.match(queries[0], /kind='episode'.*payload->>'status'='verifying'.*payload->'completion' IS NOT NULL/,
+  assert.match(queries.find(query => query.includes("payload->'completion' IS NOT NULL")), /kind='episode'.*payload->>'status'='verifying'.*payload->'completion' IS NOT NULL/,
     "the sweep must look for folds left unfinished, not for episodes in general");
   assert.equal(swept.scanned, 2);
 
@@ -2499,7 +2502,7 @@ test("routine executions are not research: six in a row neither park the task no
   assert.equal(agenda.payload.episodesWithoutGatedClaim, 0);
 });
 
-test("a recurring job is never answered: after a routine execution the decision chooses what to run but may not stop the task", async () => {
+test("a recurring job keeps its ordinary intent after its first classified execution, while research can still be answered", async () => {
   const types = ["routine", "literature-sentinel", "evidence-update", "data-prospecting"];
   const planner = plannerDouble((input) => choose(input.eligible.includes("routine") ? "routine" : input.eligible[0]));
   const { service } = fixture({ planner });
@@ -2511,8 +2514,9 @@ test("a recurring job is never answered: after a routine execution the decision 
   assert.equal(planner.calls[0].stopAllowed, false);
   agenda = await service.get("user-one", agenda.id);
   await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: first.episode.id, status: "succeeded", gatedClaims: 0 });
-  await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
-  assert.equal(planner.calls[1].stopAllowed, false, "a routine execution completed, and a routine job is never exhausted");
+  const next = await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  assert.equal(next.episode.payload.taskType, "routine");
+  assert.equal(planner.calls.length, 1, "an ordinary job keeps its intent without reclassifying it");
 
   // The control: the same task after a research execution may be answered.
   const researchPlanner = plannerDouble(() => choose("literature-sentinel"));
@@ -2535,6 +2539,6 @@ test("a decision that cannot be had still runs a recurring job as a recurring jo
   for (const date of ["2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09"]) {
     const { episode } = await service.schedule("user-one", agenda.id, { date });
     assert.equal(episode.payload.taskType, "routine", `${date}: the rotation reaches research directions in turn; a news digest is not one`);
-    assert.equal(episode.payload.selection.source, "date-rotation");
+    assert.equal(episode.payload.selection.source, date === "2026-09-06" ? "date-rotation" : "only-choice");
   }
 });

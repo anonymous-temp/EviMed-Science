@@ -15,6 +15,7 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
+import { runContextAuthorityPublicKey, runContextAuthorityFileFor, signRunContextAuthority, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
 import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
@@ -1688,7 +1689,8 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (semanticsGatewayUrl) environment.EVIMED_SEMANTICS_GATEWAY_URL = semanticsGatewayUrl;
     // The two tools that schedule and change a task from a conversation ride the same token, and are given an address on
     // the same terms: the feature on and the product ledger there to keep a task in. Without it they are not offered below.
-    const tasksGatewayUrl = gateways ? String(gateways.tasks ?? "") : taskToolsGatewayProviderUrl(config);
+    const tasksGatewayUrl = taskToolsGatewayProviderUrl(config)
+      ? gateways ? String(gateways.tasks ?? "") : taskToolsGatewayProviderUrl(config) : "";
     if (tasksGatewayUrl) environment.EVIMED_TASKS_GATEWAY_URL = tasksGatewayUrl;
     // So does 「前沿动态」 search, and it is absent for the same reason — and
     // also for an account the module is not open to yet (the operators-only
@@ -2060,7 +2062,7 @@ export function dataSemanticsGatewayProviderUrl(config) {
  * @param {any} config @returns {string}
  */
 export function taskToolsGatewayProviderUrl(config) {
-  if (!config.taskToolsEnabled || config.stateStore !== "postgres") return "";
+  if (!config.taskToolsEnabled || config.autopilotEnabled === false || config.stateStore !== "postgres") return "";
   const url = new URL(modelGatewayProviderUrl(config));
   url.pathname = "/internal/tasks/v1";
   return url.toString().replace(/\/$/, "");
@@ -2193,6 +2195,10 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     evolutionGatewayUrl: plan.platformSkillGeneration ? (gateways?.evolution ?? evolutionGatewayEndpointUrl(config)) : "",
     capsuleGatewayUrl,
     revisionGatewayUrl: gateways ? String(gateways.revision ?? "") : revisionGatewayProviderUrl(config),
+    attendanceAuthority: {
+      publicKey: plan.attendancePublicKey ?? (config.modelGatewaySigningSecret ? runContextAuthorityPublicKey(config.modelGatewaySigningSecret) : ""),
+      userId: String(project.userId ?? ""), projectId: String(project.id ?? ""),
+    },
     publicSourceGatewayUrl: gateways ? String(gateways.publicSource ?? "") : publicSourceGatewayProviderUrl(config),
     webSearchGatewayUrl: gateways ? String(gateways.webSearch ?? "") : webSearchGatewayProviderUrl(config),
     pluginConfig: plan.pluginConfig,
@@ -2570,6 +2576,11 @@ export function pluginUpstreamHealth(value) {
  * `APPLY_PATH_PLUGIN_IDS` in `pluginService.mjs` refuses such a record
  * outright, and `pluginService.test.mjs` is where that is held.
  */
+/** @param {any} config @param {any} project @param {number} port
+ * @param {{modelGatewayProfile?:string,contextGeneration?:any,capsuleGatewayUrl?:string,revisionGatewayUrl?:string,publicSourceGatewayUrl?:string,webSearchGatewayUrl?:string,memoryGatewayUrl?:string,
+ *   attendancePublicKey?:string,geoSkills?:boolean,pluginConfig?:any,platformSkillGeneration?:any,personalSkillGeneration?:any,
+ *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null}} [options]
+ * `attendancePublicKey` is a public Ed25519 verifier, never a runtime signing key. */
 export function buildRuntimeLaunchPlan(config, project, port, {
   modelGatewayProfile = "",
   capsuleGatewayUrl = capsuleGatewayProviderUrl(config),
@@ -2579,6 +2590,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   // The account's memory engine, as an address: the memory gateway's base for an account on the native engine, empty for
   // one on the legacy path. Never a default — only the caller that read the account's engine knows it.
   memoryGatewayUrl = "",
+  // API/direct callers derive the public verifier; the isolated controller receives only this public value.
+  attendancePublicKey = config.modelGatewaySigningSecret ? runContextAuthorityPublicKey(config.modelGatewaySigningSecret) : "",
   // Whether the project is a 「循证 GEO」 project, and so mounts the GEO method pack as a skill root (`EVIMED_GEO_SKILLS`).
   // Never a default either way: only the caller that read the project's kind knows it, and a runtime launched without it
   // carries no pack (the catalogue it would put in front of the model is 51 skills shorter).
@@ -2837,6 +2850,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           platformSkillsDir: platformReference ? PLATFORM_SKILLS_RUNTIME_DIR : "",
           evolutionGatewayUrl: platformReference ? evolutionGatewayEndpointUrl(config) : "",
           capsuleGatewayUrl,
+          attendanceAuthority: { publicKey: attendancePublicKey, userId: String(project.userId ?? ""), projectId: String(project.id ?? "") },
           revisionGatewayUrl,
           publicSourceGatewayUrl,
           webSearchGatewayUrl,
@@ -2891,6 +2905,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       // The other half of the `--env` above, for the profile patch (`dshProfileInput` reads the plan).
       memoryGatewayUrl,
       contextGeneration,
+      attendancePublicKey,
       geoSkills: geoSkills === true,
       runtimeUrl: `http://${RUNTIME_AUTHORITY}`,
       socketPath,
@@ -3409,6 +3424,7 @@ export class DockerRuntimeProvider {
         plan.geoSkills === true,
         plan.modelGatewayProfile,
         plan.contextGeneration?.reference ?? null,
+        String(plan.attendancePublicKey ?? ""),
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3527,6 +3543,7 @@ export class RuntimeManager {
     onSessionAbort = async () => {},
     onRuntimeStart = () => {},
     hasRunningRuns = async () => false,
+    hasUnattendedRuns = async (/** @type {any} */ _project) => false,
     runtimeCreationMutation = async operation => operation(),
     agentbayClient = null,
   } = {}) {
@@ -3694,6 +3711,7 @@ export class RuntimeManager {
      * @type {(project: Record<string, any>) => Promise<boolean>}
      */
     this.hasRunningRuns = hasRunningRuns;
+    this.hasUnattendedRuns = hasUnattendedRuns;
     this.lastOrphanCleanup = null;
     /** Where each pending start is, by project key (`RUNTIME_START_STAGES`). */
     this.startProgress = new Map();
@@ -4305,6 +4323,15 @@ export class RuntimeManager {
       active.runtime?.modelGatewayToken !== token
     ) throw modelGatewayTokenError();
     return payload;
+  }
+
+  /** A shared runtime credential cannot authorize task creation during an unattended turn.
+   * The composition root checks the owned run ledger, never model-supplied prompt text.
+   * @param {{userId:string,projectId:string,runId?:string}} identity */
+  async assertTaskToolsConversation(identity) {
+    if (identity.runId != null || await this.hasUnattendedRuns({ userId: identity.userId, id: identity.projectId })) {
+      throw new HttpError(403, "task_tools_not_in_conversation", "An unattended execution cannot create or change scheduled tasks. Try from an attended conversation after it finishes.");
+    }
   }
 
   /**
@@ -5973,7 +6000,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue", recordPromptActor = null }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, unattended = undefined, mode = "queue", recordPromptActor = null }) {
     // Background work whose runtime a researcher's start just took says so, so
     // its owner waits and asks again instead of counting a failed attempt
     // (`RUNTIME_YIELDED_CODE`). Nothing was sent: the prompt is refused whole.
@@ -6028,14 +6055,18 @@ export class RuntimeManager {
       // socket still reads at every run's start is emptied here: a profile left from before would be handed over again.
       await this.withdrawCapsuleProfileFile(project);
     }
+    let dispatchedUnattended = unattended === true;
     if (typeof runId === "string" && runId) {
-      await this.writeRunBriefIndex(project, runId, {
+      const authority = await this.writeRunBriefIndex(project, runId, {
         sessionId,
         required: strictContext,
         contextRevision: requestId,
         capability: routedCapability,
+        unattended,
       });
+      dispatchedUnattended = authority?.unattended ?? dispatchedUnattended;
     }
+    await this.writePromptAttendance(project, { sessionId, requestId }, { runId, unattended: dispatchedUnattended });
     await this.enforceProjectQuota(project);
     if(runId&&this.config.evolutionEnabled===true&&isEvolutionProject(project.id))await this.captureRunEgressProof({project,runId,phase:'start'});
     this.beginProxy(project);
@@ -6178,15 +6209,26 @@ export class RuntimeManager {
    * says the context was routed nowhere; left out, the index keeps what the
    * run's previous index said, because a steer writes an index and no context.
    * @param {Record<string, any>} project @param {string} runId
-   * @param {{ sessionId?: string, required?: boolean, contextRevision?: string | null, capability?: string | null }} [options] `sessionId` is not optional in practice: it is refused when absent
-   * @returns {Promise<void>}
+   * @param {{ sessionId?: string, required?: boolean, contextRevision?: string | null, capability?: string | null, unattended?: boolean }} [options] `sessionId` is not optional in practice: it is refused when absent
+   * @returns {Promise<{unattended:boolean}|undefined>}
    */
-  async writeRunBriefIndex(project, runId, { sessionId, required = false, contextRevision = null, capability = undefined } = {}) {
+  async writeRunBriefIndex(project, runId, { sessionId, required = false, contextRevision = null, capability = undefined, unattended = undefined } = {}) {
     const session = safeId(sessionId, "session id");
     const write = async () => {
       const relative = `.evimed-brief/sessions/${session}/index.json`;
       const routed = typeof capability === "string" && capability ? safeId(capability, "capability id")
         : capability === undefined ? await keptRoute(project, relative, runId) : "";
+      let withoutReader = unattended === true;
+      const signingSecret = this.config.modelGatewaySigningSecret;
+      const publicKey = signingSecret ? runContextAuthorityPublicKey(signingSecret) : "";
+      const raw = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), "");
+      let previous = null;
+      try { previous = raw ? JSON.parse(raw) : null; } catch { /* An altered workspace index grants no authority. */ }
+      const previousAuthority = publicKey ? verifyRunContextAuthority(previous, {
+        publicKey, userId: String(project.userId), projectId: String(project.id), sessionId: session,
+      }) : null;
+      if (unattended === undefined) withoutReader = previousAuthority?.protocol === RUN_CONTEXT_PROTOCOL
+        && previousAuthority.runId === runId && previousAuthority.unattended === true;
       const index = {
         // The hand-off revision this index was written under; the runtime image reads an index under its own revision and
         // refuses any other by name (`RUN_CONTEXT_PROTOCOL`).
@@ -6195,18 +6237,41 @@ export class RuntimeManager {
         sessionId: session,
         ...(typeof contextRevision === "string" && contextRevision ? { contextRevision } : {}),
         ...(routed ? { capability: routed } : {}),
+        ...(withoutReader ? { unattended: true } : {}),
       };
-      const text = `${JSON.stringify(index, null, 2)}\n`;
+      const signed = signingSecret && contextRevision ? { ...index, attendanceAuthority: signRunContextAuthority(index, {
+        signingSecret, userId: String(project.userId), projectId: String(project.id),
+        ...(previousAuthority ? { issuedAtMs: Math.max(Date.now(), previousAuthority.issuedAtMs + 1) } : {}),
+      }) } : index;
+      const text = `${JSON.stringify(signed, null, 2)}\n`;
       await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), text, {
         encoding: "utf8", mode: 0o444,
       });
       await this.mirrorWorkspaceWrite(project, relative, text, required);
+      return { unattended: withoutReader };
     };
     if (required) return write();
     // isolated: evimed_run_brief_index_write_failures_total
     try {
-      await write();
+      return await write();
     } catch { /* isolated: evimed_run_brief_index_write_failures_total */ }
+  }
+
+  /** Authenticate the exact prompt before it can be claimed by a runtime, independently of optional enrichment.
+   * Remote providers receive the same bytes before the prompt is forwarded.
+   * @param {Record<string,any>} project @param {{sessionId:string,requestId:string}} request
+   * @param {{unattended:boolean,runId?:string|null}} options */
+  async writePromptAttendance(project, request, { unattended, runId = null }) {
+    const signingSecret = this.config.modelGatewaySigningSecret;
+    if (!signingSecret) return;
+    const relative = runContextAuthorityFileFor(request.sessionId, request.requestId);
+    const index = { protocol: RUN_CONTEXT_PROTOCOL, sessionId: request.sessionId, contextRevision: request.requestId,
+      runId: runId || `native_${createHash("sha256").update(request.requestId).digest("hex").slice(0, 32)}`, unattended };
+    const text = `${JSON.stringify({ ...index, attendanceAuthority: signRunContextAuthority(index, {
+      signingSecret, userId: String(project.userId), projectId: String(project.id),
+    }) })}\n`;
+    await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), text, { encoding: "utf8", mode: 0o444 });
+    await this.mirrorWorkspaceWrite(project, relative, text, true);
   }
 
   /**

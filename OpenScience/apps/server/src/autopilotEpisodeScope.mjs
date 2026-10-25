@@ -36,6 +36,7 @@
 
 import { autopilotLogicalDispatchId } from "./autopilotService.mjs";
 import { HttpError } from "./security.mjs";
+import { isVerificationRun } from "@evimed/domain";
 
 /**
  * How the executions of scheduled tasks were placed since this process started, for `/api/ops/metrics`
@@ -53,6 +54,13 @@ export function episodePlacementCounts() { return { ...placements }; }
 
 /** The route reasons the control plane writes for a researcher's scheduled execution (`autopilot:<task type>`); never a re-check's. */
 const EPISODE_ROUTE_PREFIX = "autopilot:";
+
+/** Trusted run-ledger origins, independent of acceptance-fixture visibility markers.
+ * A person's later message in a task conversation has its own ordinary route.
+ * @param {{automated?: boolean,effectiveRouteReason?: string | null}} run */
+export function isUnattendedExecution(run) {
+  return run.automated === true || String(run.effectiveRouteReason ?? "").startsWith(EPISODE_ROUTE_PREFIX) || isVerificationRun(run);
+}
 
 /**
  * The message the researcher sees as the execution's first one.

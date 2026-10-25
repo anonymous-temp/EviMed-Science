@@ -945,6 +945,7 @@ export const SOCKET_TOOL_ERROR_CODES = Object.freeze([
   'contract_kind_ambiguous',
   'attempt_limit_reached',
   'budget_exhausted',
+  'unattended_question_unavailable',
   'path_guard_denied',
   'subagent_failed',
   'capsule_unavailable',
@@ -1294,6 +1295,7 @@ const autopilotMaterialErrorCodes = Object.freeze([
   // not there for this account; the page says so and goes back to its list.
   'autopilot_agenda_not_found',
   'autopilot_episode_not_found',
+  'autopilot_cancellation_failed',
 ])
 
 /**
@@ -2540,6 +2542,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   contract_kind_ambiguous: '这个能力有多种产出，需要在计划里指明契约种类。',
   attempt_limit_reached: '提交次数已用尽，请以部分交付结束。',
   budget_exhausted: '本次运行的预算已用尽。',
+  unattended_question_unavailable: '这次任务无人值守，已按现有资料继续；缺少的信息会在结果中说明。',
   path_guard_denied: '这个路径不允许写入。',
   subagent_failed: '一个分工失败了，已自动重派一次。',
   capsule_unavailable: '记忆胶囊暂不可用，本次未启用。',
@@ -2794,6 +2797,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
   autopilot_agenda_not_found: '找不到这个定时任务。它可能已被删除，回到任务列表刷新后再看。',
   autopilot_episode_not_found: '找不到这次执行。它可能已被清理，刷新任务页后再看。',
+  autopilot_cancellation_failed: '任务计划已暂停或删除，但部分运行尚未停止。请重试停止。',
   autopilot_daily_budget_spent:
     '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
     + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',
@@ -2956,7 +2960,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
   [/^kb_browse_/, '知识库目录这次没能打开；运行会改用资料库检索或直接读取知识库里的文件继续。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
-  [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
+  [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|materials_invalid$|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
   // The engine protocol's per-field issues (`VCR_PROTOCOL_ISSUE_CODES`), last so
   // no earlier family can take one of them. Three families, because each is

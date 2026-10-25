@@ -73,6 +73,7 @@ import {
   isSubagentSession,
   listDirAt,
   onPreStep,
+  parentSessionOf,
   onClaimedPromptAssemble,
   onSessionEvent,
   onSessionStart,
@@ -148,6 +149,7 @@ import {
   upsertClaim,
 } from '../src/claimTools.mjs'
 import { validateEvidenceClaim } from '@evimed/domain/clinical-evidence'
+import { runContextAuthorityFileFor, verifyRunContextAuthority } from '@evimed/harness-port/run-context-authority'
 
 /**
  * The research server's quote locator (contract C7), by its base name. Given
@@ -180,6 +182,9 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents', 'systemPrompt
  * @property {string} [revisionAuthorizeUrl]
  * @property {string} [tokenFile]
  * @property {number} [revisionAuthorizeTimeoutMs]
+ * @property {string} [attendancePublicKey]
+ * @property {string} [attendanceUserId]
+ * @property {string} [attendanceProjectId]
  * @property {boolean} reviewEnabled
  * @property {number} [reviewPollMs]
  * @property {number} [reviewWaitMs]
@@ -221,6 +226,12 @@ export const Config = Schema.object({
     .description('Path to the current workload token used only for the internal revision authorization call.'),
   revisionAuthorizeTimeoutMs: Schema.number().default(3000)
     .description('Bound for the internal revision authorization call.'),
+  attendancePublicKey: Schema.string().default('')
+    .description('Control-plane Ed25519 public verifier for attendance authority; never a signing secret.'),
+  attendanceUserId: Schema.string().default('')
+    .description('The account this runtime belongs to, bound by attendance signatures.'),
+  attendanceProjectId: Schema.string().default('')
+    .description('The project this runtime belongs to, bound by attendance signatures.'),
   // The same switch the review row and the guidance read. A submission runs
   // the review itself now, so this plugin has to know whether the deployment
   // composed one; asking the review plugin is not available to it (a preset row
@@ -381,6 +392,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const state = new Map()
   /** A child may submit only the one parent-plan item that created it. */
   const childOwners = new Map()
+  /** A child keeps the attendance of the trusted parent turn that created it, even if its parent later moves on. */
+  const unattendedChildren = new Map()
 
   /** @param {string} sessionId @returns {Record<string, any>} */
   const sessionState = (sessionId) => {
@@ -396,6 +409,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         knowledgeEntries: 0,
         contextInjected: false,
         contextRevision: '',
+        /** Set only by a matching protected dispatch index, cleared by a later native user input. */
+        unattended: false,
+        attendanceRevision: '',
+        attendanceIssuedAtMs: 0,
+        pendingAttendance: null,
         contextInjection: null,
         /** The dispatch's context block, read and waiting for the step it
          *  belongs to; see `deliverBrief`. */
@@ -475,6 +493,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** @param {string} childSessionId @param {Record<string, any>} entry @param {Record<string, any>} item */
   const bindChildOwner = (childSessionId, entry, item) => {
     if (!childSessionId) return
+    unattendedChildren.set(childSessionId, entry.unattended === true)
     childOwners.set(childSessionId, {
       parentSessionId: entry.sessionId,
       runId: entry.runId,
@@ -761,6 +780,29 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     try {
       const revision = entry.contextRevision
       await loadBrief(ctx, agent, sessionState, config)
+      const receipts = await Promise.all(claimed.inputs.map(async input => {
+        const raw = await readFileAt(ctx, entry.cwd, runContextAuthorityFileFor(entry.sessionId, input.requestId))
+        const authority = verifyRunContextAuthority(parseJson(raw ?? undefined), {
+          publicKey: config.attendancePublicKey ?? '', userId: config.attendanceUserId ?? '',
+          projectId: config.attendanceProjectId ?? '', sessionId: entry.sessionId,
+        })
+        return authority?.contextRevision === input.requestId ? authority : null
+      }))
+      const receiptUnattended = receipts.some(authority => authority?.unattended === true)
+      const receiptsAttended = receipts.length > 0 && receipts.every(authority => authority?.unattended === false)
+      const pending = entry.pendingAttendance
+      if (pending && pending.issuedAtMs > entry.attendanceIssuedAtMs
+        && claimed.inputs.some(input => input.requestId === pending.contextRevision)) {
+        adoptAttendance(entry, pending)
+      }
+      // A valid older index proves its own origin, not the attendance of a different input now claimed by the kernel.
+      // Hold the narrow guard before awaiting native-route proof, including when that lookup fails or is unavailable.
+      const authorityEnabled = Boolean(config.attendancePublicKey && config.attendanceUserId && config.attendanceProjectId)
+      if (receiptUnattended) entry.unattended = true
+      else if (receiptsAttended) entry.unattended = false
+      else if (authorityEnabled && claimed.inputs.length && !claimed.inputs.every(input => input.requestId === entry.attendanceRevision)) {
+        entry.unattended = true
+      }
       if (revision !== entry.contextRevision && entry.routedCapability) {
         entry.nativeManagedDispatch = true
         entry.inlineCapabilities.clear()
@@ -774,6 +816,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           if (claimed.signal?.aborted) return changed
           const matching = contexts.filter((/** @type {any} */ item) => inputs.some(input => input.requestId === item?.requestId && input.textDigest === item?.textDigest)
             && /^[a-f0-9]{64}$/.test(item?.digest ?? '') && typeof item?.route?.effectiveAgentId === 'string')
+          // Only the native UI proxy creates these exact request+text snapshots in the control plane. Scheduled
+          // dispatches never do, so a matching snapshot proves a person is attending this newly claimed input.
+          if (!receiptUnattended && inputs.every(input => matching.some((/** @type {any} */ item) => item.requestId === input.requestId))) entry.unattended = false
           // Adoption uses the initiating input, never a union of queued requests or a later matching route.
           const selected = matching.find((/** @type {any} */ item) => item.requestId === inputs[0]?.requestId && item.textDigest === inputs[0]?.textDigest)
           const capabilityId = selected?.route.effectiveAgentId
@@ -984,7 +1029,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     // A delegated child's own persona prefix and tool mask, or — for a child the kernel's `subagent` started — the
     // orchestration tools it may not use (`NATIVE_CHILD_TOOL_DENY`).
-    if (isSubagentSession(agent)) installChildComposition(agent, { deny: NATIVE_CHILD_TOOL_DENY })
+    if (isSubagentSession(agent)) {
+      const parent = parentSessionOf(agent)
+      unattendedChildren.set(String(agent.session.id ?? ''), unattendedChildren.get(parent) ?? sessionState(parent).unattended === true)
+      installChildComposition(agent, { deny: NATIVE_CHILD_TOOL_DENY })
+    }
     narrowRootTools(agent)
     void loadBrief(ctx, agent, sessionState, config)
   }))
@@ -1260,6 +1309,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     // and a child it started that has not settled. Counted against the run's total once, when the call is admitted.
     entry.nativeChildCalls ??= new Set()
     const decision = toolPolicy(call, {
+      unattended: unattendedChildren.get(call.sessionId) ?? entry.unattended === true,
       budget: entry.budget,
       limits: entry.limits,
       submitAttempts: entry.attempts.get(String(call.args?.deliverableId ?? '')) ?? 0,
@@ -3257,6 +3307,16 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   if (contextRevision && indexedRunId && indexedRunId !== entry.runId) resetRunState(entry, indexedRunId)
   entry.contextInjected = true
   entry.contextRevision = contextRevision
+  const attendance = index?.protocol === RUN_CONTEXT_PROTOCOL ? verifyRunContextAuthority(index, {
+    publicKey: config.attendancePublicKey ?? '', userId: config.attendanceUserId ?? '',
+    projectId: config.attendanceProjectId ?? '', sessionId,
+  }) : null
+  // Workspace bytes can be replaced, including by Python os.replace. A forged revision or a replayed older attended
+  // dispatch never removes a trusted unattended restriction, even while the ordinary run context moves forward.
+  if (attendance && attendance.issuedAtMs > entry.attendanceIssuedAtMs) {
+    if (attendance.unattended) adoptAttendance(entry, attendance)
+    else entry.pendingAttendance = attendance
+  }
   // A native workflow may already have started before a later dispatch binds
   // context. A revision-bearing index is control-plane authority for the new
   // run; a legacy index keeps the native workflow's established identity.
@@ -3313,6 +3373,15 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   // The newest revision's block, for the next step to carry (`deliverBrief`).
   // One the model never saw is superseded, not queued behind it.
   entry.pendingContext = parts.length ? parts.join('\n\n') : null
+}
+
+/** A newly signed attended context is adopted only once its request is actually claimed.
+ * @param {Record<string,any>} entry @param {NonNullable<ReturnType<typeof verifyRunContextAuthority>>} attendance */
+function adoptAttendance(entry, attendance) {
+  entry.unattended = attendance.unattended
+  entry.attendanceRevision = attendance.contextRevision
+  entry.attendanceIssuedAtMs = attendance.issuedAtMs
+  entry.pendingAttendance = null
 }
 
 /** Reset only state owned by one ledger run; the session and in-flight

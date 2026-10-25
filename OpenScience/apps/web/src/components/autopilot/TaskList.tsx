@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
 import { taskPath } from "@/lib/taskLocation";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
+import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
@@ -13,10 +14,11 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/cn";
 import { TaskGroup } from "./TaskGroup";
-import { activeAgenda, inFlight, rowLine, TASK_GROUPS, taskGroupOf } from "./taskPresentation";
+import { activeAgenda, cancellationPending, cancellationRetryLabel, inFlight, rowLine, TASK_GROUPS, taskGroupOf, lastRunLine } from "./taskPresentation";
 
 /** What a row's 「⋯」 does to its task; the page decides how (a confirmation, a request, a dialog). */
 export interface TaskRowActions {
+  recover: (agenda: AgendaRecord) => void;
   run: (agenda: AgendaRecord) => void;
   togglePause: (agenda: AgendaRecord) => void;
   edit: (agenda: AgendaRecord) => void;
@@ -30,8 +32,10 @@ export interface TaskRowActions {
  * a group with nothing in it not drawn. A row is the task's name and one line — when it runs next and how often, that it is running,
  * why it stopped — and its 「⋯」, always visible. It is a link: it opens the task's page, and the open task's row is marked.
  */
-export function TaskList({ agendas, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, firstRun }: {
+export function TaskList({ agendas, available = true, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, firstRun, actionNotice }: {
   agendas: AgendaRecord[] | null;
+  available?: boolean;
+  actionNotice?: ReactNode;
   /** The project's newest executions: which tasks are running now. */
   episodes: readonly EpisodeRecord[];
   selectedId: string | null;
@@ -56,24 +60,26 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
     && `${agenda.payload.title}\n${agenda.payload.prompt ?? agenda.payload.topics.join(" ")}`.toLocaleLowerCase().includes(needle));
   const running = new Set(episodes.filter(inFlight).map(episode => episode.payload.agendaId));
   const now = new Date();
-  const groups = TASK_GROUPS.map(([key, label]) => [label, visible.filter(agenda => taskGroupOf(agenda) === key)
+  const groups = TASK_GROUPS.map(([key, label]) => [!available && key === "upcoming" ? "定时计划" : label, visible.filter(agenda => taskGroupOf(agenda) === key)
     .sort((a, b) => key === "upcoming" ? (a.payload.nextRunAt ?? "z").localeCompare(b.payload.nextRunAt ?? "z") : a.payload.title.localeCompare(b.payload.title, "zh-CN"))] as const)
     .filter(([, items]) => items.length > 0);
   const row = (agenda: AgendaRecord) => {
     const open = agenda.id === selectedId;
     const completed = taskGroupOf(agenda) === "completed";
     const operable = !busy;
+    const recovering = cancellationPending(agenda);
     return <ListRow key={agenda.id} to={taskPath(agenda.id, { search })} title={agenda.payload.title} muted={taskGroupOf(agenda) !== "upcoming"}
       selected={open} titleProps={{ "data-task-id": agenda.id, "aria-current": open ? "page" : undefined }}
       // The dot sits in a gutter every row has, so the names start on one left edge whether or not a task is running.
       leading={running.has(agenda.id) ? <RunStatusDot state="running" labelled /> : <span className="inline-block h-2.5 w-2.5" aria-hidden="true" />}
-      meta={<span className="block line-clamp-2 break-words">{rowLine(agenda, running.has(agenda.id), now)}</span>}
+      meta={<span className="block line-clamp-2 break-words">{rowLine(agenda, running.has(agenda.id), now)}<span className="block text-caption text-text-3">{lastRunLine(agenda, episodes)}</span></span>}
+      actions={recovering ? <Button variant="secondary" size="sm" disabled={busy} onClick={() => actions.recover(agenda)}>{cancellationRetryLabel(agenda)}</Button> : undefined}
       menu={<Menu label={`“${agenda.payload.title}”的更多操作`} items={[
-        { label: "立即运行", disabled: !operable || !activeAgenda(agenda), onSelect: () => actions.run(agenda) },
-        ...(completed ? [] : [{ label: activeAgenda(agenda) ? "暂停" : "启用", disabled: !operable, onSelect: () => actions.togglePause(agenda) }]),
+        { label: "立即运行", disabled: recovering || !available || agenda.payload.schedulingAvailable === false || !operable || !activeAgenda(agenda), onSelect: () => actions.run(agenda) },
+        ...(completed ? [] : [{ label: activeAgenda(agenda) ? "暂停" : "启用", disabled: recovering || !operable || (!activeAgenda(agenda) && (!available || agenda.payload.schedulingAvailable === false)), onSelect: () => actions.togglePause(agenda) }]),
         { label: "编辑", disabled: !operable, onSelect: () => actions.edit(agenda) },
         "separator" as const,
-        { label: "删除", destructive: true, disabled: !operable, onSelect: () => actions.remove(agenda) },
+        { label: "删除", destructive: true, disabled: recovering || !operable, onSelect: () => actions.remove(agenda) },
       ]} />} />;
   };
   // Where the list is the page it is the page column, with the page's own gutter (16 on a phone, 24 from `md`, as `PageShell` has it) on the box
@@ -84,13 +90,14 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
     <PageHeader
       title="定时任务"
       documentTitle={false}
-      scope={projectName ? <span className="block max-w-56 truncate text-caption text-text-3">{projectName}</span> : undefined}
-      actions={<IconButton icon={Plus} label="新建" onClick={onCreate} />}
+      scope={<span className="block max-w-56 truncate text-caption text-text-3"><span>当前项目 · </span><span>{projectName ?? "当前项目"}</span></span>}
+      actions={<IconButton icon={Plus} label="新建" disabled={!available} onClick={onCreate} />}
       className={cn("shrink-0 pb-3 pt-5", inset && "px-4")}
     />
     {/* A search box over nothing to search is not drawn. */}
     {(agendas?.length ?? 0) > 0 && <div className={cn("shrink-0 pb-3", inset && "px-4")}><SearchInput label="搜索任务" value={search} onChange={event => onSearch(event.target.value)} onClear={() => onSearch("")} className="w-full" /></div>}
     <div className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto pb-6", inset && "px-2")}>
+      {actionNotice}
       {error && <LoadError message={error} onRetry={onRetry} className={cn(inset && "mx-2")} />}
       {agendas === null ? <FilesSkeleton /> : <>
         {groups.map(([label, items]) => <TaskGroup key={label} label={label}><List>{items.map(row)}</List></TaskGroup>)}

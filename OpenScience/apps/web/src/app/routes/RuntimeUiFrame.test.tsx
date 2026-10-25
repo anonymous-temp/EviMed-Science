@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1036,6 +1036,18 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: "request-a", ok: true, sessionId: "session-canonical" });
     await waitFor(() => expect(screen.queryByText("正在打开")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-canonical");
+  });
+
+  it("positions task origin failure over its pane and recovers through retry", async () => {
+    mocks.profile.uiOrigin = "";
+    mocks.me.mockRejectedValueOnce(new Error("offline"));
+    taskPane.sessionId = "session-exec";
+    const { container } = mount(null, "/app/autopilot/agenda-one");
+    const alert = await screen.findByRole("alert");
+    expect(alert.closest("[data-task-frame]")).toHaveStyle({ left: "300px", top: "60px", width: "700px", height: "500px" });
+    mocks.me.mockImplementation(async () => { mocks.profile.uiOrigin = "https://host.example:8443"; return {}; });
+    await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
   });
 
   it("shows an explicit unavailable state when the deployment has no native surface", async () => {

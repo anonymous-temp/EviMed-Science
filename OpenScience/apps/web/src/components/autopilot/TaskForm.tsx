@@ -1,22 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY, SCHEDULED_TASK_DEFAULT_TYPES } from "@evimed/domain";
+import { agendaNextOccurrence, agendaDueOccurrence, AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY, SCHEDULED_TASK_DEFAULT_TYPES } from "@evimed/domain";
 import { createAgenda, getAgenda, startAgenda, updateAgenda, type AgendaRecord, type AgendaSchedule } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectLabels } from "@/lib/projectNames";
+import { MaterialPicker } from "./MaterialPicker";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input, Textarea, Select } from "@/components/ui/Input";
-import { inLingdou, lingdou, recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
+import { cancellationPending, inLingdou, lingdou, recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
 
 /**
  * What to keep doing, and how often: the whole of a new task. The platform sets the budget and the stopping rules (the owner's rulings
  * of 2026-09-19 and 2026-09-20), so the form does not ask for them — except when a budget is what stopped the task (`showBudgets`),
  * where the one decision that is the researcher's to make is made in place. Any amount shown is in 灵豆.
  */
-export function TaskForm({ projectId, agenda, recommendation, showBudgets = false, onSaved, onRecorded, onBusyChange, onCancel }: {
+export function TaskForm({ projectId, agenda, recommendation, showBudgets = false, disabled = false, schedulingAvailable = true, onSaved, onRecorded, onBusyChange, onCancel }: {
   projectId: string; agenda?: AgendaRecord; recommendation?: Recommendation;
   /** A budget stopped this task (`budgetBlocks`): the caps are offered, in 灵豆, under 高级设置. */
   showBudgets?: boolean;
+  disabled?: boolean;
+  schedulingAvailable?: boolean;
   onSaved: (record: AgendaRecord) => void; onRecorded: (record: AgendaRecord) => void; onBusyChange: (busy: boolean) => void; onCancel: () => void;
 }) {
   const [title, setTitle] = useState(agenda?.payload.title ?? recommendation?.title ?? "");
@@ -32,6 +35,8 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
   const minimum = lingdou(AGENDA_MIN_EPISODE_BUDGET_CNY);
   const episodeTooSmall = budgets.maxEpisodeCny < AGENDA_MIN_EPISODE_BUDGET_CNY;
   const projectName = useProjectLabels().get(projectId);
+  const [materialIds, setMaterialIds] = useState<string[]>([]);
+  const [pickingMaterials, setPickingMaterials] = useState(false);
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<AgendaRecord | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -47,8 +52,34 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
     && (schedule.kind !== "weekly" || (schedule.weekdays?.length ?? 0) > 0) && (schedule.kind !== "once" || !!schedule.date)
     && budgets.maxEpisodeCny >= AGENDA_MIN_EPISODE_BUDGET_CNY && budgets.maxEpisodeCny <= budgets.dailyBudgetCny && budgets.dailyBudgetCny <= budgets.weeklyBudgetCny;
 
+  const calendar = { kind: schedule.kind, time: schedule.time, timeZone: schedule.timeZone,
+    ...(schedule.kind === "once" ? { date: schedule.date } : schedule.kind === "weekly" ? { weekdays: schedule.weekdays } : {}) };
+  const previous = agenda ? scheduleOf(agenda) : null;
+  const sameSchedule = previous && previous.kind === schedule.kind && previous.time === schedule.time && previous.timeZone === schedule.timeZone
+    && (schedule.kind !== "once" || previous.date === schedule.date)
+    && (schedule.kind !== "weekly" || (previous.weekdays ?? []).join() === (schedule.weekdays ?? []).join());
+  const recovering = agenda ? cancellationPending(agenda) : false;
+  const canSchedule = schedulingAvailable && agenda?.payload.schedulingAvailable !== false && !recovering;
+  const blocked = disabled || (!agenda && !canSchedule);
+  const alreadyCompleted = sameSchedule && agenda?.payload.scheduleState === "completed";
+  let nextRun: string | null = null;
+  let scheduleValid = true;
+  try {
+    const now = new Date();
+    const boundary = sameSchedule && agenda ? agenda.payload.scheduleChangedAt ?? agenda.payload.createdAt ?? agenda.createdAt : now.toISOString();
+    let watermark = sameSchedule ? agenda?.payload.lastScheduledOccurrence ?? null : null;
+    if (sameSchedule && agenda?.payload.lastScheduledDate && !agenda.payload.schedule && !watermark) {
+      watermark = agendaDueOccurrence({ ...calendar, kind: "once", date: agenda.payload.lastScheduledDate, weekdays: undefined }, null,
+        new Date(Date.parse(`${agenda.payload.lastScheduledDate}T00:00:00Z`) + 2 * 86_400_000));
+    }
+    const occurrence = agendaDueOccurrence(calendar, watermark, now, boundary) ?? agendaNextOccurrence(calendar, watermark, now);
+    nextRun = alreadyCompleted ? null : sameSchedule && agenda?.payload.nextRunAt ? agenda.payload.nextRunAt : occurrence?.scheduledAt ?? null;
+  } catch { scheduleValid = false; }
+  const catchingUp = nextRun !== null && Date.parse(nextRun) <= Date.now();
+  const nextText = nextRun && validZone ? new Intl.DateTimeFormat("zh-CN", { timeZone: schedule.timeZone, year: "numeric", month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(nextRun)) : "";
+
   const submit = async (event: React.FormEvent) => {
-    event.preventDefault(); if (!valid || saving || conflict) return;
+    event.preventDefault(); if (!valid || !scheduleValid || saving || blocked || conflict) return;
     setSaving(true); onBusyChange(true); setError(null);
     let record = created;
     try {
@@ -60,7 +91,7 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
         if (live.current) onSaved(updated);
       } else {
         if (!record) {
-          record = await createAgenda({ ...value, projectId });
+          record = await createAgenda({ ...value, projectId, ...(materialIds.length ? { sourceIds: materialIds } : {}) });
           if (!live.current) return;
           setCreated(record); onRecorded(record);
         }
@@ -82,19 +113,24 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
     } finally { if (live.current) { setSaving(false); onBusyChange(false); } }
   };
   return <form className="space-y-5" onSubmit={submit}>
-    <fieldset disabled={saving || !!created || conflict} className="min-w-0 space-y-4">
+    <fieldset disabled={saving || blocked || !!created || conflict} className="min-w-0 space-y-4">
       <Textarea ref={field} label="任务指令" required rows={4} maxLength={20000} value={prompt} placeholder="要定时做的事，说明做什么、关注范围和希望收到的结果" onChange={event => setPrompt(event.target.value)} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select label="重复" value={schedule.kind} onChange={event => setSchedule({ ...schedule, kind: event.target.value as AgendaSchedule["kind"], weekdays: schedule.weekdays ?? [1] })}>
           <option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option>
         </Select>
-        <Input label="时间" type="time" required value={schedule.time} onChange={event => setSchedule({ ...schedule, time: event.target.value })} />
+        <Input label="时间" hint="这是开始执行的时间，完成后结果保留在任务对话中，文件可从最新结果打开；消息通知按你的通知设置发送。" type="time" required value={schedule.time} onChange={event => setSchedule({ ...schedule, time: event.target.value })} />
       </div>
       {schedule.kind === "once" && <Input label="日期" type="date" required value={schedule.date ?? ""} onChange={event => setSchedule({ ...schedule, date: event.target.value })} />}
       {schedule.kind === "weekly" && <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui text-text">星期</legend>{WEEKDAYS.map((day, index) => <label key={day} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={schedule.weekdays?.includes(index + 1) ?? false} onChange={event => setSchedule({ ...schedule, weekdays: event.target.checked ? [...(schedule.weekdays ?? []), index + 1].sort() : schedule.weekdays?.filter(value => value !== index + 1) })} />{day}</label>)}</fieldset>}
+      <Input label="时区" hint={validZone ? zoneName(schedule.timeZone) : undefined} value={schedule.timeZone} error={validZone ? undefined : "请输入有效时区，例如 Asia/Shanghai"} required onChange={event => setSchedule({ ...schedule, timeZone: event.target.value })} />
+      {!agenda && <section aria-label="任务材料" className="space-y-2">
+        <h3 className="text-ui text-text">任务材料（可选）</h3>
+        {pickingMaterials ? <MaterialPicker projectId={projectId} taken={[]} initialChosen={materialIds} busy={saving} onCancel={() => setPickingMaterials(false)} onChoose={ids => { setMaterialIds(ids); setPickingMaterials(false); }} />
+          : <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={() => setPickingMaterials(true)}>从知识库选择</Button>{materialIds.length > 0 && <><span className="text-caption text-text-2">已选择 {materialIds.length} 份资料</span><Button variant="text" onClick={() => setMaterialIds([])}>清除选择</Button></>}</div>}
+      </section>}
       <Disclosure summary={<span>高级设置<span className="ml-2 text-caption text-text-3">{schedule.timeZone}</span></span>} defaultOpen={!validZone || showBudgets}><div className="space-y-4 pt-2">
         <Input label="名称" value={title} maxLength={200} placeholder="不填则取指令的开头" onChange={event => setTitle(event.target.value)} />
-        <Input label="时区" value={schedule.timeZone} error={validZone ? undefined : "请输入有效时区，例如 Asia/Shanghai"} required onChange={event => setSchedule({ ...schedule, timeZone: event.target.value })} />
         <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui text-text">任务类型</legend>{TASK_TYPES.map(([value, label]) => <label key={value} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={taskTypes.includes(value)} onChange={event => setTaskTypes(event.target.checked ? [...taskTypes, value] : taskTypes.filter(item => item !== value))} />{label}</label>)}</fieldset>
         {showBudgets && <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['maxEpisodeCny', '单次上限（灵豆）'], ['dailyBudgetCny', '每日上限（灵豆）'], ['weeklyBudgetCny', '每周上限（灵豆）']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min={key === "maxEpisodeCny" ? String(AGENDA_MIN_EPISODE_BUDGET_CNY) : "0.01"} step="0.01" value={budgets[key]}
@@ -105,8 +141,9 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
     </fieldset>
     {error && <p role="alert" className="text-ui text-error">{error}</p>}
     {/* What saving will set up, in one line, changing as the fields do: where it runs, how often, in which zone. */}
-    <p className="text-caption text-text-3">{[projectName ? `在“${projectName}”运行` : "", schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule),
+    <p className="text-caption text-text-3">{[projectName ? `在“${projectName}”运行` : "在当前项目运行", schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule),
       validZone ? zoneName(schedule.timeZone) : ""].filter(Boolean).join(" · ")}</p>
-    <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="secondary" disabled={saving} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button><Button type="submit" loading={saving} disabled={!valid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
+    {scheduleValid && <p className="text-ui text-text-2" aria-live="polite">{recovering ? "停止尚未完成；保存内容不会启动任务。" : !canSchedule ? agenda ? "定时执行暂不可用，仍可保存任务内容。" : "定时执行暂不可用，恢复后可以创建任务。" : alreadyCompleted ? "任务已完成，保留原计划不会再次执行。" : nextText ? `${catchingUp ? agenda && !agenda.payload.enabled ? "启用后补跑最近一次" : "计划时间已过，将尽快开始；原计划" : agenda && !agenda.payload.enabled ? "启用后预计开始" : "预计开始"}：${nextText} · ${zoneName(schedule.timeZone)}` : "请调整日期或时间。"}</p>}
+    <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="secondary" disabled={saving || disabled} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button><Button type="submit" loading={saving} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
   </form>;
 }

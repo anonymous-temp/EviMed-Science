@@ -307,8 +307,9 @@ import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, V
   autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
-import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
+import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, isUnattendedExecution, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
+import { cancelScheduledRun } from "./autopilotRunCancellation.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextAction.mjs";
 // 「前沿动态」, the frontier feed (plan 2026-09-21 §7): the plugin client, the
@@ -2246,7 +2247,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     report: (code) => process.stderr.write(`${code}\n`) });
   const autopilotPlanner = new AutopilotPlanner(config, { usageLedger, policies:evolutionModulePolicies });
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
-    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService, entityVocabulary,
+    documents: productDocuments, jobs: productJobs, enabled: config.autopilotEnabled, usage: usageLedger, notifications: notificationService, entityVocabulary,
     // The account's own spending caps, which cover everything the researcher spends;
     // an agenda's daily and weekly caps count only the agenda's own (agendaBudget.mjs).
     accountCaps: () => ({ userDailySpendLimit: config.userDailySpendLimit, userWeeklySpendLimit: config.userWeeklySpendLimit }),
@@ -2259,7 +2260,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await resultImpacts.assertContinuation(userId, projectId, binding);
     },
   }) : null;
-  const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes,
+  const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, enabled: config.autopilotEnabled, maxJsonBytes: config.maxJsonBytes,
     // One execution's own stop: the run is stopped the way its own cancel stops it (`stopRunForUser`), so the episode folds as
     // canceled through the ordinary completion. A run that is no longer running is not stopped again.
     stopRun: async (project, runId) => {
@@ -3785,6 +3786,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A runtime whose project still has a run in the ledger never yields its
     // slot to another project: the stop would close that run as cancelled.
     hasRunningRuns: async (project) => Boolean(agentRuns) && (await agentRuns.list(project)).some((run) => run.status === "running"),
+    hasUnattendedRuns: async (scope) => {
+      const user = await store.userById(scope.userId);
+      if (!user) throw new HttpError(401, "unauthorized", "Authentication required.");
+      const project = await store.requireProject(user, scope.id);
+      return Boolean(agentRuns) && (await agentRuns.list(project)).some(run => run.status === "running" && isUnattendedExecution(run));
+    },
     onRuntimeStart: (project, runtime) => {
       independentProductWork(() => {
         runtimeEventPump.attach(project, runtime);
@@ -5209,26 +5216,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           episodeId, verificationId, dispatchId, runId, sessionId, runtimeGeneration,
         });
       }
-      let cancellationError = null;
-      try { await runtimeManager.cancelRuntimeSession(project, sessionId); }
-      catch (error) { cancellationError = error; }
-      let ledgerError = null;
-      try { await agentRuns.cancelSession(project, sessionId); }
-      catch (error) { ledgerError = error; }
-      const boundedScope = runtimeManager.boundedRuntimeScope(project);
-      let stopError = null;
-      if (boundedScope && boundedScope.runId === episodeId) {
-        try { await runtimeManager.endBoundedRuntime(project, episodeId); }
-        catch (error) { stopError = error; }
-        if (!stopError) cancellationError = null;
-      }
-      const failures = [cancellationError, ledgerError, stopError].filter(Boolean);
-      if (failures.length === 1) throw failures[0];
-      if (failures.length > 1) {
-        const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError(failures, "Autopilot cancellation did not complete."));
-        combined.code = failures[0]?.code ?? "autopilot_cancellation_failed";
-        throw combined;
-      }
+      return cancelScheduledRun({ runtimeManager, agentRuns, stopRun: stopRunForUser }, project,
+        { runId, sessionId, episodeId, runtimeGeneration });
     },
     // The second process: an independent re-check of one claim, in a fresh
     // session that was never told what the first run concluded or how, and in a
@@ -5344,7 +5333,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // and strips the markers wherever they are.
             text: `${prompt}\n\n<evimed-autopilot-verification>${verification.verificationId}</evimed-autopilot-verification>\n${budgetMarker}`,
             system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
-            model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
+            model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true, unattended: true,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
         });
@@ -5525,7 +5514,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               system: `${prepared.system}${episodeContextBlock({ brief: episode.prompt, episodeId: episode.episodeId, marker: budgetMarker })}`,
               routedCapability: prepared.routedCapability,
               memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
-              model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+              model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive, unattended: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
             await resident.delivered();
@@ -8871,6 +8860,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ? (await agentRuns.list(project).catch(() => [])).find((run) => run.sessionId === sessionId && run.status === "running") : null;
       await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
+    recordPromptAttendance: async (_user, project, request) => {
+      try { await runtimeManager.writePromptAttendance(project, request, { unattended: false }); }
+      catch { throw new HttpError(503, "runtime_prompt_rejected", "The conversation context could not be saved. Please retry."); }
+    },
     recordPromptActor: recordExtensionPromptActor,
     prepareGeoPlan: async (user, project, request) => {
       if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
@@ -8970,7 +8963,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   const scheduleAutopilot = async () => {
-    if (!autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
+    if (!config.autopilotEnabled || !autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
     const schedule = () => autopilotService.scheduleActive(productDatabase, async (row, error) => {
       await securityAudit(config, "autopilot.schedule", "failed", {
         userId: row.user_id, agendaId: row.id,
@@ -9192,7 +9185,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void foldAllIntoOneCapsule({ database: productDatabase, capsules: capsuleService, withdrawIndex, log: (line) => process.stderr.write(`${line}\n`) })
           .catch((/** @type {any} */ error) => process.stderr.write(`capsule one-capsule failed: ${error?.code ?? error?.name ?? "error"}\n`));
       }
-      evidenceProgramme?.worker?.start();
+      if (config.autopilotEnabled) evidenceProgramme?.worker?.start();
       review?.worker.start();
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
@@ -9214,7 +9207,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       await scheduleAutopilot();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
-      if (autopilotService && !autopilotScheduleTimer) {
+      if (config.autopilotEnabled && autopilotService && !autopilotScheduleTimer) {
         autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000);
         autopilotScheduleTimer.unref();
       }

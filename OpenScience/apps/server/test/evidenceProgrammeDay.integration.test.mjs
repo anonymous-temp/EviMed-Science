@@ -505,3 +505,14 @@ test("when 「热点求证」 cannot be written no topic is taken, and every top
     assert.equal((await sub.topicRow(id)).programme_state, null);
   } finally { await sub.close(); }
 });
+
+test("a retry-pending programme execution holds its slot until it settles, while its own retry may continue", options, async () => {
+  const retry = await programmeFixture({ url, label: "retryslot" });
+  try {
+    const episode = await retry.documents.put(PLATFORM_PUBLISHER_USER_ID, "episode", "programme-retry-slot", { status: "retry_pending" }, { expectedRevision: 0, projectId: EVIDENCE_PROJECT_ID });
+    await assert.rejects(retry.programme.assertAdmitted(PLATFORM_PUBLISHER_USER_ID, { projectId: EVIDENCE_PROJECT_ID }), { code: "evidence_programme_slot_busy" });
+    await retry.programme.assertAdmitted(PLATFORM_PUBLISHER_USER_ID, { projectId: EVIDENCE_PROJECT_ID }, { episodeId: episode.id });
+    await retry.documents.put(PLATFORM_PUBLISHER_USER_ID, "episode", episode.id, { status: "failed" }, { expectedRevision: episode.revision, projectId: EVIDENCE_PROJECT_ID });
+    await retry.programme.assertAdmitted(PLATFORM_PUBLISHER_USER_ID, { projectId: EVIDENCE_PROJECT_ID });
+  } finally { await retry.close(); }
+});

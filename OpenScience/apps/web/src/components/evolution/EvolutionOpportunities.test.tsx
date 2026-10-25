@@ -1,6 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
+import { TaskDialog } from "@/components/autopilot/TaskDialog";
 import { EvolutionOpportunities } from "./EvolutionOpportunities";
 
 const client = vi.hoisted(() => ({ useEvolutionAccess: vi.fn(), listEvolutionOpportunities: vi.fn(), adoptEvolutionOpportunity: vi.fn() }));
@@ -26,6 +28,29 @@ describe("研究机会, a group of the scheduled tasks", () => {
     await userEvent.click(within(group).getByRole("button", { name: "创建研究议程" }));
     await waitFor(() => expect(adopted).toHaveBeenCalledWith("agenda-new"));
     expect(client.adoptEvolutionOpportunity).toHaveBeenCalledWith("project-one", "op-1");
+  });
+
+  it("locks draft creation and templates while adopting an opportunity", async () => {
+    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
+    let finish!: (value: { id: string }) => void;
+    client.adoptEvolutionOpportunity.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const busy = vi.fn(); const adopted = vi.fn();
+    render(<MemoryRouter><TaskDialog projectId="project-one" showBudgets={false} saving={false} onBusyChange={busy} onClose={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={adopted} /></MemoryRouter>);
+    await userEvent.type(screen.getByLabelText("任务指令"), "不要同时创建第二项任务");
+    await userEvent.click(await screen.findByRole("button", { name: "创建研究议程" }));
+    expect(screen.getByRole("button", { name: "创建并启用" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "行业要闻日报" })).toBeDisabled();
+    expect(busy).toHaveBeenLastCalledWith(true);
+    await act(async () => { finish({ id: "adopted-task" }); });
+    expect(adopted).toHaveBeenCalledWith("adopted-task");
+    expect(busy).toHaveBeenLastCalledWith(false);
+  });
+  it("does not allow adoption while a form save is pending", async () => {
+    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
+    render(<MemoryRouter><TaskDialog projectId="project-one" showBudgets={false} saving onBusyChange={() => {}} onClose={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={() => {}} /></MemoryRouter>);
+    const action = await screen.findByRole("button", { name: "创建研究议程" });
+    expect(action).toBeDisabled(); await userEvent.click(action);
+    expect(client.adoptEvolutionOpportunity).not.toHaveBeenCalled();
   });
 
   it("is not drawn when there is nothing to suggest, nor when the account has no evolution, nor while it is being read", async () => {

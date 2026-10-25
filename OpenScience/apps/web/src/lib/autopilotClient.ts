@@ -4,6 +4,8 @@ export interface AgendaSchedule { kind: "once" | "daily" | "weekly"; timeZone: s
 /** What the researcher wrote to the question; `paused` marks a message that asked to hold the research and was answered by pausing it (no episode ran). */
 export interface AgendaMessage { requestId: string; note: string; episodeId?: string | null; runEpisodeId: string | null; outcome?: "paused"; at: string }
 export interface AgendaPayload {
+  schedulingAvailable?: boolean;
+  stopSweep?: { status?: string; requestedAt?: string; completedAt?: string; archiveRequestedAt?: string; cancellationPending?: boolean; cancellationError?: string | null };
   sessionId?: string | null;
   prompt?: string; schedule?: AgendaSchedule; nextRunAt?: string | null;
   scheduleState?: "paused" | "scheduled" | "completed" | "archived"; archivedAt?: string | null;
@@ -13,6 +15,9 @@ export interface AgendaPayload {
   pauseCode?: string | null;
   /** The agenda-zone day (`YYYY-MM-DD`) the scheduler last queued a run for. */
   lastScheduledDate?: string | null;
+  lastScheduledOccurrence?: { key: string; scheduledAt: string; localDate: string } | null;
+  scheduleChangedAt?: string | null;
+  createdAt?: string;
   userSignal?: { score: number; decided: number; rejected: boolean } | null;
   /** Task types paused after repeated failures to run; the others go on. */
   taskTypeState?: Record<string, { consecutiveFailures?: number; pausedAt?: string | null; pauseReason?: string | null }>;
@@ -56,7 +61,7 @@ export interface EpisodePayload {
    */
   interactive?: boolean;
   artifactRefs?: AutopilotArtifactRef[]; claims?: DigestClaim[];
-  resourceDeferrals?: Record<string, { code: string; status: "waiting" | "exhausted"; retryAt?: string | null } | null>;
+  resourceDeferrals?: Record<string, { code: string; status: "waiting" | "exhausted"; attempts?: number; jobId?: string; at?: string; retryAt?: string | null } | null>;
   /** What the episode was chosen to do: by the model from the progress, or by the date rotation when the model could not be asked. */
   selection?: { source: "model" | "date-rotation" | "only-choice"; taskType: string; focus?: string; reason?: string; fallbackReason?: string; priority?: "normal" | "reduced" } | null;
   error?: { code: string } | null; createdAt: string; updatedAt: string }
@@ -64,7 +69,7 @@ export type EpisodeRecord = ProductRecord<EpisodePayload> & { projectId: string 
 export type AgendaRecord = ProductRecord<AgendaPayload> & { projectId: string };
 export type DigestRecord = ProductRecord<DigestPayload> & { projectId: string };
 
-export function listAgendas(projectId: string) { return productRequest<ProductPage<AgendaRecord>>(`/autopilot/agendas?projectId=${encodeURIComponent(projectId)}`); }
+export function listAgendas(projectId: string) { return productRequest<ProductPage<AgendaRecord> & { available?: boolean }>(`/autopilot/agendas?projectId=${encodeURIComponent(projectId)}`); }
 export function createAgenda(input: Record<string, unknown>) { return productRequest<AgendaRecord>("/autopilot/agendas", "POST", input); }
 export function getAgenda(id: string) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}`); }
 export function updateAgenda(id: string, input: Record<string, unknown>) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}`, "PATCH", input); }
@@ -83,8 +88,9 @@ export function cancelEpisode(agendaId: string, episodeId: string, requestId: st
 export function startAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/start`, "POST", { expectedRevision: revision }); }
 export function stopAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/stop`, "POST", { expectedRevision: revision }); }
 export function scheduleAgenda(id: string, date: string) { return productRequest<{ episode: { id: string } }>(`/autopilot/agendas/${encodeURIComponent(id)}/schedule`, "POST", { date }); }
-export function listEpisodes(projectId: string, agendaId?: string) {
-  return productRequest<ProductPage<EpisodeRecord>>(`/autopilot/episodes?projectId=${encodeURIComponent(projectId)}${agendaId ? `&agendaId=${encodeURIComponent(agendaId)}` : ""}`);
+export function getEpisode(id: string) { return productRequest<EpisodeRecord>(`/autopilot/episodes/${encodeURIComponent(id)}`); }
+export function listEpisodes(projectId: string, agendaId?: string, cursor?: string) {
+  return productRequest<ProductPage<EpisodeRecord>>(`/autopilot/episodes?projectId=${encodeURIComponent(projectId)}${agendaId ? `&agendaId=${encodeURIComponent(agendaId)}` : ""}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
 }
 // A briefing is read through the run that produced it (定时任务, 2026-09-23):
 // its address resolves to that conversation, and opening a result records the

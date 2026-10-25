@@ -17,7 +17,7 @@
 export const TASK_INSTRUCTION_MAX_CHARS = 20_000
 /** The longest title a task keeps. */
 export const TASK_TITLE_MAX_CHARS = 200
-/** How many tasks one project may hold before the conversation is told to delete or pause one first (a limit that protects the account's spend from a loop, not the researcher from themselves). */
+/** How many tasks one project may hold before the conversation is told to delete one first (a limit that protects the account's spend from a loop, not the researcher from themselves). */
 export const TASK_TOOLS_DEFAULT_MAX_TASKS = 30
 
 /**
@@ -30,13 +30,13 @@ export const TASK_TOOL_ERROR_CODES = Object.freeze([
   'task_tools_response_invalid', 'task_tools_response_too_large', 'task_tools_upstream_error',
   'task_tools_not_in_conversation', 'task_limit_reached', 'task_revision_conflict',
   'task_tools_request_invalid', 'task_tools_request_too_large', 'task_instruction_invalid', 'task_title_invalid',
-  'task_schedule_invalid', 'task_schedule_in_past', 'task_id_invalid', 'task_not_found', 'task_update_empty', 'task_paused_invalid',
+  'task_schedule_invalid', 'task_schedule_in_past', 'task_materials_invalid', 'task_id_invalid', 'task_not_found', 'task_update_empty', 'task_paused_invalid',
 ])
 
 /** The codes that are the run's to fix: the call said something the tool cannot act on. */
 export const TASK_TOOL_RUN_FIXES = Object.freeze([
   'task_tools_request_invalid', 'task_tools_request_too_large', 'task_instruction_invalid', 'task_title_invalid',
-  'task_schedule_invalid', 'task_schedule_in_past', 'task_id_invalid', 'task_not_found', 'task_update_empty', 'task_paused_invalid',
+  'task_schedule_invalid', 'task_schedule_in_past', 'task_materials_invalid', 'task_id_invalid', 'task_not_found', 'task_update_empty', 'task_paused_invalid',
 ])
 
 /** What a researcher is told when a task tool could not do what was asked; the conversation then says so itself. */

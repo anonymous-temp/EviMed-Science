@@ -45,6 +45,7 @@ import {
   syncRuntimeDshProfile,
 } from "../runtimeManager.mjs";
 import { compactionRuntimeEnv } from "@evimed/harness-port";
+import { runContextAuthorityPublicKey } from "@evimed/harness-port/run-context-authority";
 import { createLinkTunnel } from "./linkTunnel.mjs";
 import { publicRuntimeGatewayUrls } from "../runtimeGatewayEntry.mjs";
 import {
@@ -532,6 +533,8 @@ export class AgentBayRuntimeProvider {
       // The account's memory engine, as the address a session outside this host reaches the memory gateway at: the public
       // prefix's when the account is on the native engine, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
       memoryGatewayUrl: memoryGatewayUrl ? String(publicRuntimeGatewayUrls(this.config)?.memory ?? "") : "",
+      // The same public verifier the bootstrap profile and actual cloud kernel environment read.
+      attendancePublicKey: this.config.modelGatewaySigningSecret ? runContextAuthorityPublicKey(this.config.modelGatewaySigningSecret) : "",
       // Whether the project is a 「循证 GEO」 one, and so mounts the GEO method pack as a skill root.
       geoSkills: geoSkills === true,
       agentbay,
@@ -626,6 +629,8 @@ export class AgentBayRuntimeProvider {
         evolutionGatewayUrl: plan.platformSkillGeneration ? gateways.evolution : "",
         capsuleMethodsDir: plan.capsuleMethodCount ? SESSION_PATHS.capsuleMethods : "",
         capsuleGatewayUrl: gateways.capsule,
+        attendanceAuthority: { publicKey: plan.attendancePublicKey ?? (config.modelGatewaySigningSecret ? runContextAuthorityPublicKey(config.modelGatewaySigningSecret) : ""),
+          userId: String(project.userId ?? ""), projectId: String(project.id ?? "") },
         revisionGatewayUrl: gateways.revision,
         publicSourceGatewayUrl: gateways.publicSource,
         webSearchGatewayUrl: gateways.webSearch,

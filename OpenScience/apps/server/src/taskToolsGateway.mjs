@@ -6,12 +6,13 @@
 // project, so a run can only ever make tasks in the project it runs in, and only ever find tasks of that project: a task of
 // another project or another account is `task_not_found`, exactly as if it did not exist.
 //
-//   POST /internal/tasks/v1/schedule  { instruction, schedule, title? }                              -> the task, made and started
-//   POST /internal/tasks/v1/update    { taskId, instruction?, schedule?, title?, paused? }           -> the task as it now stands
+//   POST /internal/tasks/v1/schedule  { instruction, schedule, title?, sourceIds? }                              -> the task, made and started
+//   POST /internal/tasks/v1/update    { taskId, instruction?, schedule?, title?, paused?, sourceIds? }           -> the task as it now stands
 //
 // Hidden knowledge:
 //
-// - A task made here is the task form's twin: `AutopilotService.create` then `.start`, with the platform's default budgets and
+// - A task made here uses `AutopilotService.createScheduledTask`, which admits the quota and stores the active task atomically,
+//   with the platform's default budgets and
 //   stopping rules (`AGENDA_DEFAULT_BUDGETS`, `SCHEDULED_TASK_DEFAULT_TYPES`), and no step to approve — the owner's rulings of
 //   2026-09-19 and 2026-09-20. The conversation names a thing to keep doing and a moment; it never names a price. An edit goes
 //   through the same service methods and validation as the PATCH / start / stop routes (`autopilotRoutes.mjs`).
@@ -22,7 +23,7 @@
 //   platform's brief), and 「改到每周一 8 点」 said there means the task that execution belongs to.
 // - An execution of a task does not make or change tasks: a bounded runtime's token names a run, and a task that schedules tasks is
 //   a loop nobody asked for. That is `task_tools_not_in_conversation`. (An execution that runs in the researcher's own runtime
-//   carries no such mark; what holds it is the per-minute ceiling and `taskToolsMaxTasks`.)
+//   carries no such mark; the runtime manager refuses calls while its trusted active turn is unattended.)
 // - The answer is facts only: id, title, the schedule as data and in words, the zone, the next run and the state. Nothing in it
 //   tells the model what to do next; that travels in the tool's own summary.
 // - A malformed or impossible call comes back as the run's to fix, with the project's tasks beside a wrong id so the next call can
@@ -36,8 +37,8 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 
 export const TASK_TOOLS_GATEWAY_PATH = "/internal/tasks/v1";
 const OPERATIONS = Object.freeze({
-  schedule: ["instruction", "schedule", "title"],
-  update: ["taskId", "instruction", "schedule", "title", "paused"],
+  schedule: ["instruction", "schedule", "title", "sourceIds"],
+  update: ["taskId", "instruction", "schedule", "title", "paused", "sourceIds"],
 });
 const SCHEDULE_FIELDS = Object.freeze(["kind", "time", "date", "weekdays", "timeZone"]);
 /** An instruction is at most 20,000 characters, which is up to 60 KB of UTF-8; the rest of a call is small. */
@@ -83,6 +84,7 @@ export function createTaskToolsGateway({ config, runtimeManager, store, service,
       taskId: view.id, title: view.payload.title,
       schedule: { kind: schedule.kind, time: schedule.time, ...(schedule.date ? { date: schedule.date } : {}), ...(schedule.weekdays ? { weekdays: schedule.weekdays } : {}), timeZone: schedule.timeZone },
       scheduleText: describeAgendaSchedule(schedule, now()), timeZone: schedule.timeZone, timeZoneName: agendaZoneName(schedule.timeZone),
+      sourceIds: (view.payload.materials ?? []).map((item) => item.sourceId),
       nextRunAt: next, nextRunText: next ? agendaInstantText(next, schedule.timeZone) : null, state: view.payload.scheduleState,
       ...extra,
     };
@@ -108,6 +110,13 @@ export function createTaskToolsGateway({ config, runtimeManager, store, service,
       throw new HttpError(400, "task_title_invalid", `title must be a non-empty string of at most ${TASK_TITLE_MAX_CHARS} characters.`);
     }
     return value.trim();
+  };
+  /** Durable source identifiers from the project's knowledge base, never workspace paths. @param {unknown} value */
+  const sourceIdsOf = (value) => {
+    if (!Array.isArray(value) || value.length < 1 || value.length > 10 || value.some((id) => typeof id !== "string" || !/^src_[a-f0-9]{32}$/.test(id))) {
+      throw new HttpError(400, "task_materials_invalid", "sourceIds must name between one and ten sources (src_…) in this project's knowledge base.");
+    }
+    return [...new Set(value)].sort();
   };
   /**
    * The schedule a call asks for: what it names, over what the task already has (an update says only what changes), the platform's
@@ -175,56 +184,94 @@ export function createTaskToolsGateway({ config, runtimeManager, store, service,
     const instruction = instructionOf(input.instruction);
     const when = scheduleOf(input.schedule);
     const title = input.title === undefined ? (instruction.trim().split(/\r?\n/)[0] ?? "").trim().slice(0, 60) || instruction.trim().slice(0, 60) : titleOf(input.title);
-    const existing = await tasksOf(user, project);
-    const same = existing.find((item) => item.payload.prompt === instruction && JSON.stringify(item.payload.schedule) === JSON.stringify(when));
-    if (same) return facts(same, { created: false });
-    if (existing.length >= maxTasks) {
-      throw new HttpError(409, "task_limit_reached", `This project already holds ${existing.length} scheduled tasks; delete or pause one before scheduling another.`);
-    }
-    const made = await service.create(user.id, { projectId: project.id, title, prompt: instruction, taskTypes: [...TASK_TYPES], ...AGENDA_DEFAULT_BUDGETS, schedule: when });
-    try {
-      return facts(await service.start(user.id, made.id, { expectedRevision: made.revision }), { created: true });
-    } catch (error) {
-      // A task that could not be started is not left behind paused for the researcher to find: they were not asked to approve one.
-      await service.archive(user.id, made.id, { expectedRevision: made.revision }).catch(() => null);
-      throw error;
-    }
+    const { agenda, created } = await service.createScheduledTask(user.id, {
+      projectId: project.id, title, prompt: instruction, taskTypes: [...TASK_TYPES], ...AGENDA_DEFAULT_BUDGETS, schedule: when,
+      ...(input.sourceIds !== undefined ? { sourceIds: sourceIdsOf(input.sourceIds) } : {}),
+    }, { maxTasks });
+    return facts(agenda, { created });
   };
 
   /** One pass of an update over the task as it now stands. @param {any} user @param {any} project @param {Record<string, any>} input */
   const updateOnce = async (user, project, input) => {
-    let agenda = await resolveTask(user, project, input.taskId);
-    /** @type {string[]} */
-    const changed = [];
+    const before = await resolveTask(user, project, input.taskId);
+    let agenda = before;
     /** @type {Record<string, any>} */
     const patch = {};
+    /** @type {Record<string, any>} */
+    const desired = {};
     if (input.instruction !== undefined) {
-      const instruction = instructionOf(input.instruction);
-      if (instruction !== agenda.payload.prompt) { patch.prompt = instruction; changed.push("instruction"); }
+      desired.instruction = instructionOf(input.instruction);
+      if (desired.instruction !== agenda.payload.prompt) patch.prompt = desired.instruction;
     }
     if (input.title !== undefined) {
-      const title = titleOf(input.title);
-      if (title !== agenda.payload.title) { patch.title = title; changed.push("title"); }
+      desired.title = titleOf(input.title);
+      if (desired.title !== agenda.payload.title) patch.title = desired.title;
     }
     if (input.schedule !== undefined) {
       const standing = normalizeAgendaSchedule(agenda.payload);
-      const next = scheduleOf(input.schedule, standing);
-      if (JSON.stringify(next) !== JSON.stringify(standing)) { patch.schedule = next; changed.push("schedule"); }
+      desired.schedule = scheduleOf(input.schedule, standing);
+      if (JSON.stringify(desired.schedule) !== JSON.stringify(standing)) patch.schedule = desired.schedule;
     }
-    if (input.paused !== undefined && typeof input.paused !== "boolean") throw new HttpError(400, "task_paused_invalid", "paused must be true (pause) or false (re-enable).");
-    if (Object.keys(patch).length) agenda = await service.update(user.id, agenda.id, { expectedRevision: agenda.revision, ...patch });
-    const active = agenda.payload.enabled && agenda.payload.status === "active" && !agenda.payload.archivedAt;
-    if (input.paused === true && active) { agenda = await service.stop(user.id, agenda.id, { expectedRevision: agenda.revision }); changed.push("paused"); }
-    else if (input.paused === false && !active) { agenda = await service.start(user.id, agenda.id, { expectedRevision: agenda.revision }); changed.push("resumed"); }
-    return facts(agenda, { changed });
+    if (input.sourceIds !== undefined) {
+      desired.sourceIds = sourceIdsOf(input.sourceIds);
+      if (desired.sourceIds.some((id) => !(agenda.payload.materials ?? []).some((item) => item.sourceId === id))) patch.sourceIds = desired.sourceIds;
+    }
+    if (input.paused !== undefined) {
+      if (typeof input.paused !== "boolean") throw new HttpError(400, "task_paused_invalid", "paused must be true (pause) or false (re-enable).");
+      desired.paused = input.paused;
+    }
+    /** @param {any} row */
+    const active = (row) => Boolean(row.payload.enabled && row.payload.status === "active" && !row.payload.archivedAt);
+    /** The actual persisted changes and the remaining request, including response-loss recovery. @param {any} current */
+    const changes = (current) => {
+      /** @type {string[]} */
+      const changed = [];
+      /** @type {Record<string, any>} */
+      const pending = {};
+      for (const [field, storedField] of [["instruction", "prompt"], ["title", "title"], ["schedule", "schedule"]]) {
+        if (desired[field] === undefined) continue;
+        const currentValue = field === "schedule" ? normalizeAgendaSchedule(current.payload) : current.payload[storedField];
+        const beforeValue = field === "schedule" ? normalizeAgendaSchedule(before.payload) : before.payload[storedField];
+        if (JSON.stringify(currentValue) === JSON.stringify(desired[field]) && JSON.stringify(currentValue) !== JSON.stringify(beforeValue)) changed.push(field);
+        if (JSON.stringify(currentValue) !== JSON.stringify(desired[field])) pending[field] = desired[field];
+      }
+      if (desired.sourceIds !== undefined) {
+        const ids = (current.payload.materials ?? []).map((item) => item.sourceId);
+        if (desired.sourceIds.some((id) => ids.includes(id) && !(before.payload.materials ?? []).some((item) => item.sourceId === id))) changed.push("materials");
+        const missing = desired.sourceIds.filter((id) => !ids.includes(id));
+        if (missing.length) pending.sourceIds = missing;
+      }
+      if (desired.paused !== undefined) {
+        if (active(current) !== active(before)) changed.push(active(current) ? "resumed" : "paused");
+        if (active(current) === desired.paused) pending.paused = desired.paused;
+      }
+      return { changed, pending };
+    };
+    try {
+      if (Object.keys(patch).length) agenda = await service.update(user.id, agenda.id, { expectedRevision: agenda.revision, ...patch });
+      if (desired.paused === true && active(agenda)) agenda = await service.stop(user.id, agenda.id, { expectedRevision: agenda.revision });
+      else if (desired.paused === false && !active(agenda)) agenda = await service.start(user.id, agenda.id, { expectedRevision: agenda.revision });
+      return facts(agenda, { changed: changes(agenda).changed });
+    } catch (error) {
+      // A write can succeed before its reply fails. Read its durable state before describing the outcome or suggesting a retry.
+      const current = await resolveTask(user, project, before.id);
+      const { changed, pending } = changes(current);
+      if (!Object.keys(pending).length) return facts(current, { changed });
+      if (!changed.length) throw error;
+      const known = refusal(error);
+      return facts(current, { outcome: "partial", changed, pending,
+        recovery: { operation: "update", taskId: current.id, ...pending },
+        failure: { code: known instanceof HttpError ? known.code : "task_tools_unavailable", retryable: !(known instanceof HttpError) || known.status >= 500 || known.status === 409 },
+      });
+    }
   };
 
   /** @param {any} user @param {any} project @param {Record<string, any>} input */
   const update = async (user, project, input) => {
-    if (input.taskId !== undefined && !["instruction", "schedule", "title", "paused"].some((field) => input[field] !== undefined)) {
+    if (input.taskId !== undefined && !["instruction", "schedule", "title", "paused", "sourceIds"].some((field) => input[field] !== undefined)) {
       // Still names a task first, so a wrong id is a wrong id and not a call that changes nothing.
       await resolveTask(user, project, input.taskId);
-      throw new HttpError(400, "task_update_empty", "Nothing to change: pass instruction, schedule, title or paused.");
+      throw new HttpError(400, "task_update_empty", "Nothing to change: pass instruction, schedule, title, sourceIds or paused.");
     }
     try {
       return await updateOnce(user, project, input);
@@ -250,9 +297,10 @@ export function createTaskToolsGateway({ config, runtimeManager, store, service,
       }
       // A bounded runtime is a scheduled execution (or a re-check of one): it does not make or change tasks.
       if (identity.runId != null) throw new HttpError(403, "task_tools_not_in_conversation", "A scheduled execution cannot make or change tasks.");
-      if (!config.taskToolsEnabled || !service) {
-        throw new HttpError(503, "task_tools_disabled", "Scheduling a task from a conversation is switched off for this deployment; the researcher can add it on the 定时任务 page.");
+      if (config.autopilotEnabled === false || !config.taskToolsEnabled || !service) {
+        throw new HttpError(503, "task_tools_disabled", "Scheduling a task from a conversation is switched off for this deployment; the scheduler must be enabled before a task can run.");
       }
+      await runtimeManager.assertTaskToolsConversation?.(identity);
       const at = Date.now();
       for (const [key, window] of windows) if (window.until <= at) windows.delete(key);
       const key = `${identity.userId}\u0000${identity.projectId}`;

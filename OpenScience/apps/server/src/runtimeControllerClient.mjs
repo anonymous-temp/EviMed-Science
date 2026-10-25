@@ -26,7 +26,8 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // read-only directory the image already carries is among the session's skill roots.
 // Version 15 adds a read-only observation of this deployment's OpenViking
 // resource-compile configuration and installed implementation.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 15;
+// Version 16 adds only the API's Ed25519 public attendance verifier to a runtime start. No signing secret crosses this boundary.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 16;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -304,7 +305,13 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null) {
+  /** @param {any} project @param {number} port @param {string} password @param {string} [capsuleGatewayUrl]
+   * @param {string} [revisionGatewayUrl] @param {string} [publicSourceGatewayUrl] @param {any} [pluginConfig]
+   * @param {any} [personalSkillGeneration] @param {any} [extensionGeneration] @param {any} [platformSkillGeneration]
+   * @param {string} [memoryGatewayUrl] @param {boolean} [geoSkills] @param {string} [modelGatewayProfile]
+   * @param {any} [contextGeneration] @param {string} [attendancePublicKey]
+   * The controller gets only an Ed25519 public verifier; the API's signing secret stays in the API process. */
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null, attendancePublicKey = "") {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -323,6 +330,8 @@ export class RuntimeControllerClient {
       ...(memoryGatewayUrl ? { memoryGatewayUrl } : {}),
       // Protocol 14: the project is a 「循证 GEO」 one. Sent only then; absent, no method pack is mounted.
       ...(geoSkills === true ? { geoSkills: true } : {}),
+      // Protocol 16: the API signs attendance; this process transports only its bounded public verifier.
+      ...(attendancePublicKey ? { attendancePublicKey } : {}),
     });
   }
 

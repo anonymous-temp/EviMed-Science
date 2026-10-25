@@ -10,12 +10,12 @@ async function bodyOf(req, limit, allowed) {
 }
 
 /**
- * @param {{store:any,service:any,maxJsonBytes:number,
+ * @param {{store:any,service:any,maxJsonBytes:number,enabled?:boolean,
  *   stopRun?: ((project: any, runId: string) => Promise<unknown>) | null}} dependencies
  *   `stopRun` stops one run the way the run's own cancel does (the control plane's `stopRunForUser`); the cancel route of one
  *   execution hands it the run of an execution that is going.
  */
-export function createAutopilotRoutes({ store, service, maxJsonBytes, stopRun = null }) {
+export function createAutopilotRoutes({ store, service, maxJsonBytes, enabled = true, stopRun = null }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -27,19 +27,31 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes, stopRun = 
     try { parts = url.pathname.slice("/api/autopilot".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "autopilot_path_invalid", "Invalid proactive research path."); }
     const method = req.method ?? "GET";
+    const admitsWork = method === "POST" && parts[0] === "agendas" && (parts.length === 1
+      || (parts.length === 3 && ["start", "run-now", "follow-ups", "schedule"].includes(parts[2])));
+    if (!enabled && admitsWork) throw new HttpError(503, "task_tools_disabled", "Scheduled tasks are unavailable on this deployment.");
     const reply = (value, status = 200) => { sendJson(res, status, { data: value }); return true; };
     const requireProject = async (projectId) => { assertClientProject(projectId); await store.requireProject(user, projectId); return projectId; };
+    const cancellationOptions = async agenda => {
+      const project = stopRun ? await store.requireProject(user, agenda.projectId) : null;
+      return { stopRun: stopRun ? ({ runId }) => stopRun(project, runId) : null };
+    };
+    const projectAgenda = agenda => {
+      const projected = service.projectAgenda(agenda);
+      return { ...projected, payload: { ...projected.payload, schedulingAvailable: enabled, ...(!enabled ? { nextRunAt: null } : {}) } };
+    };
 
     if (parts[0] === "agendas" && parts.length === 1) {
       if (method === "GET") {
         const projectId = url.searchParams.get("projectId");
         if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
-        return reply(await service.list(user.id, { projectId: await requireProject(projectId) }));
+        const page = await service.list(user.id, { projectId: await requireProject(projectId) });
+        return reply({ ...page, available: enabled, items: page.items.map(projectAgenda) });
       }
       if (method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["projectId", "title", "topics", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny", "scheduleHour", "timeZone", "prompt", "schedule"]);
+        const body = await bodyOf(req, maxJsonBytes, ["projectId", "title", "topics", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny", "scheduleHour", "timeZone", "prompt", "schedule", "sourceIds", "sha256"]);
         body.projectId = await requireProject(body.projectId);
-        return reply(service.projectAgenda(await service.create(user.id, body)), 201);
+        return reply(projectAgenda(await service.create(user.id, body)), 201);
       }
     }
     if (parts[0] === "agendas" && parts.length === 2 && ["GET", "PATCH", "DELETE"].includes(method)) {
@@ -47,11 +59,12 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes, stopRun = 
       await requireProject(agenda.projectId);
       if (method === "GET") {
         service.assertNotArchived(agenda);
-        return reply(service.projectAgenda(agenda));
+        return reply(projectAgenda(agenda));
       }
       const body = await bodyOf(req, maxJsonBytes, method === "DELETE" ? ["expectedRevision"]
-        : ["expectedRevision", "title", "prompt", "schedule", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"]);
-      return reply(service.projectAgenda(await service[method === "DELETE" ? "archive" : "update"](user.id, agenda.id, body)));
+        : ["expectedRevision", "title", "prompt", "schedule", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny", "sourceIds", "sha256"]);
+      return reply(projectAgenda(method === "DELETE" ? await service.archive(user.id, agenda.id, body, await cancellationOptions(agenda))
+        : await service.update(user.id, agenda.id, body)));
     }
     // The question as the researcher reads it — found, unresolved, the material they
     // added — and the material itself: sources of the question's own project,
@@ -64,8 +77,8 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes, stopRun = 
     if (parts[0] === "agendas" && parts[2] === "materials" && (parts.length === 3 ? method === "POST" : parts.length === 4 && method === "DELETE")) {
       const agenda = await service.get(user.id, parts[1]);
       await requireProject(agenda.projectId);
-      if (method === "DELETE") return reply(service.projectAgenda(await service.removeMaterial(user.id, agenda.id, parts[3])));
-      return reply(service.projectAgenda(await service.addMaterials(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["sourceIds", "sha256"]))));
+      if (method === "DELETE") return reply(projectAgenda(await service.removeMaterial(user.id, agenda.id, parts[3])));
+      return reply(projectAgenda(await service.addMaterials(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["sourceIds", "sha256"]))));
     }
     // One execution of a task, canceled on its own: the task keeps its schedule. Idempotent for an execution that is over.
     if (parts[0] === "agendas" && parts.length === 5 && parts[2] === "episodes" && parts[4] === "cancel" && method === "POST") {
@@ -84,7 +97,9 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes, stopRun = 
       const agenda = await service.get(user.id, parts[1]);
       await requireProject(agenda.projectId);
       if (["start", "stop"].includes(parts[2])) {
-        return reply(service.projectAgenda(await service[parts[2]](user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["expectedRevision"]))));
+        const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
+        return reply(projectAgenda(parts[2] === "stop" ? await service.stop(user.id, agenda.id, body, await cancellationOptions(agenda))
+          : await service.start(user.id, agenda.id, body)));
       }
       if (parts[2] === "run-now") return reply(await service.runNow(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["requestId"])));
       if (parts[2] === "follow-ups") return reply(await service.followUp(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["requestId", "note", "episodeId"])));
@@ -95,7 +110,14 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes, stopRun = 
     if (parts[0] === "episodes" && parts.length === 1 && method === "GET") {
       const projectId = url.searchParams.get("projectId");
       if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
-      return reply(await service.listEpisodes(user.id, { projectId: await requireProject(projectId), agendaId: url.searchParams.get("agendaId") }));
+      const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 100;
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new HttpError(400, "autopilot_payload_invalid", "History page size must be between 1 and 100.");
+      return reply(await service.listEpisodes(user.id, { projectId: await requireProject(projectId), agendaId: url.searchParams.get("agendaId"), cursor: url.searchParams.get("cursor"), limit }));
+    }
+    if (parts[0] === "episodes" && parts.length === 2 && method === "GET") {
+      const episode = await service.getEpisode(user.id, parts[1]);
+      await requireProject(episode.projectId);
+      return reply(service.projectEpisode(episode));
     }
     if (parts[0] === "digests" && parts.length === 1 && method === "GET") {
       const projectId = url.searchParams.get("projectId");

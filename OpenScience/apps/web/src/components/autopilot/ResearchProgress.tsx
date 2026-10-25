@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { LoadError } from "@/components/cards/LoadError";
 import { ClampedText } from "./ClampedText";
-import { FOUND_PREFIX, MATERIAL_STATE, needsMaterial, unresolvedText } from "./taskPresentation";
+import { cancellationPending, FOUND_PREFIX, MATERIAL_STATE, needsMaterial, unresolvedText } from "./taskPresentation";
 
 /**
  * What the researcher reads about the question itself: what was found, what is
@@ -40,7 +40,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
         <IconButton icon={X} label={`移除 ${item.name}`} size="sm" disabled={busy} onClick={() => onRemove(item.sourceId)} />
       </li>)}</ul>}
       <div className="flex flex-wrap gap-1">
-        <Button variant={waiting ? "secondary" : "text"} size="sm" disabled={busy} onClick={onAdd}>{waiting ? "补充材料并继续" : "添加材料"}</Button>
+        <Button variant={waiting ? "secondary" : "text"} size="sm" disabled={busy} onClick={onAdd}>{waiting ? (agenda.payload.schedulingAvailable === false || cancellationPending(agenda)) ? "补充材料" : "补充材料并继续" : "添加材料"}</Button>
         <Button variant="text" size="sm" disabled={busy} onClick={onPick}>从知识库选择</Button>
       </div>
     </section>
