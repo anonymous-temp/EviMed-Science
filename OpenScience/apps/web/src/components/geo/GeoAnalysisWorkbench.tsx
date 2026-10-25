@@ -25,7 +25,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Note } from "@/components/ui/Note";
 import { DocumentExportActions } from "@/components/document/DocumentExportActions";
-import { useGeoReadScope, useGeoFrame } from "./geoFrame";
+import { geoMayConverse, useGeoReadScope, useGeoFrame } from "./geoFrame";
 import { useGeoLoad } from "./geoProjectData";
 import { useGeoPath } from "./useGeoPath";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
@@ -129,6 +129,9 @@ function AnalysisPage({
     frame = useGeoFrame();
   const openPublication = useOpenPublication(project);
   const contextPath = useGeoPath();
+  // 在对话中解释 opens the project's conversation (run and edit); the export of the selected data takes run alone.
+  const mayConverse = geoMayConverse(project);
+  const mayExport = !project.access || project.access.abilities.includes("run");
   const [page, setPage] = useState<{
     offset: number;
     reference: string;
@@ -349,7 +352,7 @@ function AnalysisPage({
         ]}
         search={["V17","V18","V19","V20","V22"].includes(view.viewId)?{label:"搜索引用来源",value:searchText,maxLength:300,onChange:value=>{setSearchText(value);applySearch(value,SEARCH_DEBOUNCE_MS);},onClear:()=>{setSearchText("");applySearch("",0);}}:undefined}
         actions={
-          data ? (
+          data && mayConverse ? (
             <Button
               size="sm"
               variant="secondary"
@@ -551,15 +554,17 @@ function AnalysisPage({
               </Button>
             )}
           </div>
-          <DocumentExportActions
-            source={{
-              geoId,
-              selectionRef: data.selection.reference,
-              view: data.view,
-              expectedDigest: data.digest,
-            }}
-            groupLabel="导出所选数据"
-          />
+          {mayExport && (
+            <DocumentExportActions
+              source={{
+                geoId,
+                selectionRef: data.selection.reference,
+                view: data.view,
+                expectedDigest: data.digest,
+              }}
+              groupLabel="导出所选数据"
+            />
+          )}
         </>
       )}
       {relationshipUrl && <SourceRelationship geoId={geoId} target={{kind:"page",value:relationshipUrl}} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={refresh}/> }

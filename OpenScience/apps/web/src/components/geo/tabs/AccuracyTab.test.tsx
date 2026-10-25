@@ -1,6 +1,8 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { WebApiError } from "@/lib/apiClient";
+import { useToastStore } from "@/lib/toast";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoCitedSource, GeoDiagnosis, GeoErrorFilters, GeoErrorRow, GeoProject } from "@/lib/geoClient";
 import { diagnosisFilled, diagnosisWith, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
@@ -19,14 +21,33 @@ const client = vi.hoisted(() => ({
   releaseGeoArticle: vi.fn(),
   withdrawGeoArticle: vi.fn(),
   runGeoStep: vi.fn(),
+  getGeoProject: vi.fn(),
+  stageGeoPlanContext: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   ...client,
 }));
 
-const conversation = vi.hoisted(() => ({ open: vi.fn(async () => true) }));
+const conversation = vi.hoisted(() => ({ open: vi.fn(async (_target: unknown, _draft?: string) => true), ensure: vi.fn(async (_geoId: string, _projectId: string, sessionId?: string | null) => sessionId ?? "ses_primary") }));
 vi.mock("../useOpenGeoConversation", () => ({ useOpenGeoConversation: () => conversation.open }));
+vi.mock("../geoConversationSession", () => ({ ensureGeoConversationSession: conversation.ensure }));
+
+/** What the control plane answers when the correction's records are staged as the conversation's context. */
+const staged = { referenceId: `gpc_${"c".repeat(64)}`, sessionId: "ses_geo_1", draft: "server draft" };
+
+/** What a person must never be made to send as their own words: a record's identity or its JSON. */
+const MACHINERY = ["err_", "snap_last", "snap_first", "q_brand", "q_safe", "clm_", "errorId", "snapshotId", "claimVersion", "applicability", "{", "}", staged.referenceId];
+function expectStagedHandoff(errorIds: string[], draftHas: string) {
+  expect(client.stageGeoPlanContext).toHaveBeenCalledTimes(1);
+  expect(client.stageGeoPlanContext.mock.calls[0][0]).toBe("geo_1");
+  expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({ mode: "strategy", sessionId: "ses_geo_1", errorIds });
+  expect(conversation.open).toHaveBeenCalledTimes(1);
+  const [target, draft] = conversation.open.mock.calls[0] as unknown as [Record<string, unknown>, string];
+  expect(target).toEqual({ projectId: "prj_geo_1", geoId: "geo_1", sessionId: staged.sessionId, geoPlanContext: { referenceId: staged.referenceId } });
+  expect(draft).toContain(draftHas);
+  for (const machinery of MACHINERY) expect(draft, machinery).not.toContain(machinery);
+}
 
 function Probe() {
   const location = useLocation();
@@ -123,6 +144,10 @@ const correction = actionFixture({
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   conversation.open.mockClear();
+  conversation.ensure.mockClear();
+  useToastStore.setState({ toasts: [] });
+  client.getGeoProject.mockResolvedValue(geoProject());
+  client.stageGeoPlanContext.mockResolvedValue(staged);
   client.getGeoDiagnosis.mockImplementation(async (_geoId: string, _scope: unknown, filters?: GeoErrorFilters) => {
     const errors = filters?.errorFingerprint ? claims().filter(error => error.fingerprint === filters.errorFingerprint) : claims();
     return { ...diagnosisWith(errors), selection: { reference: "gsel_exact" },
@@ -212,16 +237,25 @@ describe("准确与安全: the list is by claim", () => {
     expect(told.querySelector("[data-severity='S4']")).not.toBeNull();
   });
 
-  it("offers 「写纠错稿」 on a claim nobody is correcting, and it opens the conversation with the brief in it, unsent", async () => {
+  it("offers 「写纠错稿」 on a claim nobody is correcting: its records are staged as the conversation's context and the composer holds the sentence, unsent", async () => {
     renderTab();
     const bare = await findClaim("fp_b");
     await userEvent.click(within(bare).getByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
-    const [target, brief] = conversation.open.mock.calls[0] as unknown as [{ projectId: string; sessionId: string | null }, string];
-    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: "ses_geo_1" });
-    expect(brief).toContain("哺乳期可以正常使用信尔美");
-    expect(brief).toContain("原文：哺乳期妇女不得使用本品。");
+    expectStagedHandoff(["err_4"], "哺乳期可以正常使用信尔美");
+    expect((conversation.open.mock.calls[0] as unknown as [unknown, string])[1]).toContain("原文：哺乳期妇女不得使用本品。");
     expect(screen.queryByRole("button", { name: "问 AI" })).toBeNull();
+  });
+
+  it("says so in a toast and gives the button back when the context cannot be staged, and opens nothing", async () => {
+    client.stageGeoPlanContext.mockRejectedValueOnce(new Error("network"));
+    renderTab();
+    const button = within(await findClaim("fp_b")).getByRole("button", { name: "写纠错稿" });
+    await userEvent.click(button);
+    await waitFor(() => expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(conversation.open).not.toHaveBeenCalled();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).not.toHaveAttribute("aria-busy");
   });
 
   it("shows the five gravest first, ten more at a time, says how many more, and says how many the page cannot list", async () => {
@@ -368,6 +402,10 @@ describe("准确与安全: a claim's drawer", () => {
     expect(await within(record).findByText("关于每周一次用法的更正")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "再写一篇纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
+    // A claim three engines tell stages all three errors; the draft is the sentence.
+    expect(client.stageGeoPlanContext.mock.calls[0][1].errorIds).toHaveLength(3);
+    expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({ errorIds: expect.arrayContaining(["err_1", "err_2", "err_3"]) });
+    expectStagedHandoff(client.stageGeoPlanContext.mock.calls[0][1].errorIds, "信尔美需要每天固定时间皮下注射一次");
   });
 
   it("says plainly when a claim has no correction, and starts one with one button", async () => {
@@ -377,6 +415,31 @@ describe("准确与安全: a claim's drawer", () => {
     expect(within(record).getByText("这条说法还没有纠错稿。")).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
+    expectStagedHandoff(["err_4"], "哺乳期可以正常使用信尔美");
+  });
+
+  it("the drawer's 写纠错稿 says so in a toast and gives the button back when the context cannot be staged", async () => {
+    client.stageGeoPlanContext.mockRejectedValueOnce(new Error("network"));
+    renderTab();
+    await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: /哺乳期可以正常使用信尔美/ }));
+    await findErrorRecord();
+    const button = document.querySelector<HTMLButtonElement>("[data-geo-error-handoff]")!;
+    await userEvent.click(button);
+    await waitFor(() => expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(conversation.open).not.toHaveBeenCalled();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).not.toHaveAttribute("aria-busy");
+  });
+
+  it("a claim outside the staged range is still handed over, staged without its errors", async () => {
+    client.stageGeoPlanContext.mockRejectedValueOnce(new WebApiError("outside", { status: 400, code: "geo_plan_focus_invalid" }));
+    renderTab();
+    await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: "写纠错稿" }));
+    await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
+    expect(client.stageGeoPlanContext).toHaveBeenCalledTimes(2);
+    expect(client.stageGeoPlanContext.mock.calls[0][1].errorIds).toEqual(["err_4"]);
+    expect(client.stageGeoPlanContext.mock.calls[1][1].errorIds).toBeUndefined();
+    expect(useToastStore.getState().toasts).toEqual([]);
   });
 
   it("says so when the address names a claim the list no longer holds", async () => {

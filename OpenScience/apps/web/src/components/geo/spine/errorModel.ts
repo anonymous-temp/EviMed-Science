@@ -220,12 +220,24 @@ export function correctionSentence(claim: Pick<ClaimRow, "engines" | "statement"
   return zh`${engines}在回答里说“${claim.statement}”，需要核查${product}的相关依据${claim.evidenceQuote ? `（原文：${claim.evidenceQuote}）` : ""}。${task}`;
 }
 
-/** The brief a person's 「写纠错稿」 hands to the project's conversation, unsent: who said what, and what the label says instead. */
-export function correctionBrief(claim: Pick<ClaimRow, "engines" | "statement" | "evidenceQuote"> & Partial<Pick<ClaimRow, "rows">>, product: string, action: "article" | "conclusion" | "treatment" = "article"): string {
-  const context = claim.rows?.map(row => ({ errorId: row.id, snapshotId: row.firstSnapshotId ?? row.snapshotId, latestSnapshotId: row.snapshotId, questionId: row.questionId ?? null, claimId: row.claimId ?? null, claimVersion: row.originalErrorAssessment ? row.claimVersion ?? null : null, applicability: row.originalErrorAssessment ? row.applicability ?? null : null, originalContextState: row.originalErrorAssessment ? "preserved" : "unknown" })) ?? [];
-  const limitation = context.some(row => row.originalContextState === "unknown" || row.claimVersion == null || row.applicability == null)
-    ? "部分原始判定依据未保留，请先核实当时的结论版本及适用条件；不得用当前结论冒充原始依据。" : "";
-  return zh`${correctionSentence(claim, product, action)}${limitation}提交任务与输出时绑定这些原始对象：${JSON.stringify(context)}`;
+/**
+ * The words of a correction row's original judgment that a reader must hear before the work starts: the part of the original
+ * assessment (the claim's version and its conditions of application) that was not preserved. Empty where every row kept it. The
+ * rows' own values are never copied here — the staged context names the rows, and the conversation reads them from the record.
+ */
+export function correctionLimitation(claim: Partial<Pick<ClaimRow, "rows">>): string {
+  const unknown = claim.rows?.some(row => !row.originalErrorAssessment || row.claimVersion == null || row.applicability == null) ?? false;
+  return unknown ? "部分原始判定依据未保留，请先核实当时的结论版本及适用条件；不得用当前结论冒充原始依据。" : "";
+}
+
+/**
+ * What a person's 「写纠错稿」 puts in the composer, unsent: who said what, what the label says instead, and — where the original
+ * judgment was not kept — that limit, in a sentence. Nothing else: the identity of every record (the errors, their answers, the
+ * claim's version and conditions) is staged as the conversation's context (`stageGeoPlanContext`, see `useCorrectionHandoff`), so
+ * the person never sends a record's JSON as their own words.
+ */
+export function correctionDraft(claim: Pick<ClaimRow, "engines" | "statement" | "evidenceQuote"> & Partial<Pick<ClaimRow, "rows">>, product: string, action: "article" | "conclusion" | "treatment" = "article"): string {
+  return zh`${correctionSentence(claim, product, action)}${correctionLimitation(claim)}`;
 }
 
 /**

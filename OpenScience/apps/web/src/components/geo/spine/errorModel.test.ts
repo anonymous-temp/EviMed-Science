@@ -4,7 +4,8 @@ import { actionFixture } from "../__fixtures__/geoSpine";
 import {
   claimRows,
   claimRowsOfEngine,
-  correctionBrief,
+  correctionDraft,
+  correctionLimitation,
   correctionsOf,
   enginesOf,
   errorSourceCounts,
@@ -149,12 +150,35 @@ describe("corrections", () => {
     expect(correctionsOf(claim, [other])).toEqual([]);
   });
 
-  it("writes the brief with who said what and what the label says, for the conversation to start from", () => {
+  it("drafts who said what and what the label says instead, for the conversation to start from", () => {
     const [claim] = claimRows([row({ id: "a1", engine: "doubao" }), row({ id: "a2", engine: "kimi" })]);
-    const brief = correctionBrief(claim, "信尔美");
-    expect(brief).toContain("“每天注射一次”");
-    expect(brief).toContain("信尔美的相关依据");
-    expect(brief).toContain("原文：每周一次。");
+    const draft = correctionDraft(claim, "信尔美");
+    expect(draft).toContain("“每天注射一次”");
+    expect(draft).toContain("信尔美的相关依据");
+    expect(draft).toContain("原文：每周一次。");
+  });
+
+  it("puts no record in the draft: no ids, no JSON — those are the staged context's", () => {
+    const [claim] = claimRows([row({ id: "err_secret_1", engine: "doubao", snapshotId: "snap_secret", firstSnapshotId: "snap_first", questionId: "q_secret", claimId: "clm_secret", claimVersion: 4,
+      applicability: { population: "Adults", elements: { dose: "10 mg" }, inLabel: false, validUntil: null, evidenceLevel: null },
+      originalErrorAssessment: { statement: { claimVersion: 4, applicability: null }, claim: null, temporalBasis: "first_preserved_error_assessment" } })]);
+    for (const action of ["article", "conclusion", "treatment"] as const) {
+      const draft = correctionDraft(claim, "信尔美", action);
+      for (const machinery of ["err_secret_1", "snap_secret", "snap_first", "q_secret", "clm_secret", "errorId", "snapshotId", "claimVersion", "applicability", "originalContextState", "inLabel", "Adults", "10 mg", "{", "}", "[", "]", "\""]) {
+        expect(draft, `${action}: ${machinery}`).not.toContain(machinery);
+      }
+    }
+  });
+
+  it("says in a sentence, and only where it holds, that the original judgment was not kept", () => {
+    const kept = { population: "Adults", elements: { dose: "10 mg" }, inLabel: false, validUntil: null, evidenceLevel: null };
+    const [whole] = claimRows([row({ id: "kept", claimVersion: 1, applicability: kept, originalErrorAssessment: { statement: { claimVersion: 1, applicability: kept }, claim: null, temporalBasis: "first_preserved_error_assessment" } })]);
+    expect(correctionLimitation(whole)).toBe("");
+    expect(correctionDraft(whole, "信尔美")).not.toContain("部分原始判定依据未保留");
+    const [lost] = claimRows([row({ id: "lost", claimVersion: 3, applicability: kept, originalErrorAssessment: null })]);
+    expect(correctionLimitation(lost)).toContain("不得用当前结论冒充原始依据");
+    // A claim handed over with no rows (the answer page's fallback) has nothing to say about them.
+    expect(correctionLimitation({})).toBe("");
   });
 });
 
@@ -168,13 +192,15 @@ it("keeps withdrawn judgments in history while excluding them from active and se
 it('a correction draft never uses current context as a missing original clinical identity',()=>{
  const current={population:'Children',elements:{dose:'5 mg'},inLabel:true,validUntil:null,evidenceLevel:null};
  const [claim]=claimRows([row({id:'unknown-original',claimVersion:3,applicability:current,originalErrorAssessment:null,currentClaim:{version:3,applicability:current,temporalBasis:'current_claim_context'}})]);
- const brief=correctionBrief(claim,'Product');
- expect(brief).toContain('"claimVersion":null');expect(brief).toContain('"applicability":null');expect(brief).toContain('"originalContextState":"unknown"');
- expect(brief).toContain('不得用当前结论冒充原始依据');expect(brief).not.toContain('Children');expect(brief).not.toContain('5 mg');
+ const draft=correctionDraft(claim,'Product');
+ expect(draft).toContain('不得用当前结论冒充原始依据');expect(draft).not.toContain('Children');expect(draft).not.toContain('5 mg');
+ expect(draft).not.toContain('claimVersion');expect(draft).not.toContain('originalContextState');expect(draft).not.toContain('{');
 });
 
-it('a correction draft preserves original conditions while excluding separate current claim information',()=>{
+it('a correction draft does not copy the original conditions into the composer, nor the separate current claim information',()=>{
  const original={population:'Adults',elements:{dose:'10 mg'},inLabel:false,validUntil:null,evidenceLevel:null};
  const [claim]=claimRows([row({id:'known-original',claimVersion:1,applicability:original,originalErrorAssessment:{statement:{claimVersion:1,applicability:original},claim:null,temporalBasis:'first_preserved_error_assessment'},currentClaim:{version:3,applicability:{...original,population:'Children'},temporalBasis:'current_claim_context'}})]);
- const brief=correctionBrief(claim,'Product');expect(brief).toContain('Adults');expect(brief).toContain('"inLabel":false');expect(brief).toContain('"claimVersion":1');expect(brief).not.toContain('Children');expect(brief).not.toContain('部分原始判定依据未保留');
+ const draft=correctionDraft(claim,'Product');
+ // Those ride in the staged context's records; the draft is the person's sentence.
+ for(const machinery of ['Adults','Children','inLabel','claimVersion','applicability','部分原始判定依据未保留','{'])expect(draft).not.toContain(machinery);
 });

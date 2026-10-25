@@ -28,8 +28,9 @@ import { questionGroupIndex, clusterName } from "@/components/geo/spine/clusterM
 import { ClusterDrawerHost } from "@/components/geo/spine/ClusterDrawerHost";
 import { ClusterLink } from "@/components/geo/spine/ClusterLink";
 import { useGeoDrawerAddress } from "@/components/geo/spine/drawerParams";
-import { claimKeyOf, claimRows, correctionBrief } from "@/components/geo/spine/errorModel";
+import { claimKeyOf, claimRows } from "@/components/geo/spine/errorModel";
 import { ErrorDrawer } from "@/components/geo/spine/ErrorDrawer";
+import { useCorrectionHandoff } from "@/components/geo/spine/useCorrectionHandoff";
 import { useGeoActions, useGeoQuestionSet } from "@/components/geo/spine/spineData";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 import { answerFindings, type AnswerFinding } from "@/components/geo/answerFindings";
@@ -160,6 +161,7 @@ function Answer({
   const navigate = useNavigate();
   const drawer = useGeoDrawerAddress();
   const open = useOpenGeoConversation();
+  const handoff = useCorrectionHandoff(geoId, project);
   const [asking, setAsking] = useState(false);
   const snapshot = data.snapshot;
   const question = data.question?.text || "回答";
@@ -217,9 +219,12 @@ function Answer({
   const ask = () => {
     if (!target) return;
     setAsking(true);
-    const draft = lead
-      ? correctionBrief(lead, productName)
-      : zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`;
+    // A wrong claim stages its records as the conversation's context and drafts only the sentence; talking an answer over has no records to stage.
+    if (lead) {
+      void handoff(lead, productName).finally(() => setAsking(false));
+      return;
+    }
+    const draft = zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`;
     void open({ projectId: target.projectId, sessionId: target.sessionId }, draft).finally(() => setAsking(false));
   };
   const groupMap = useMemo(() => questionGroupIndex(groups), [groups]);

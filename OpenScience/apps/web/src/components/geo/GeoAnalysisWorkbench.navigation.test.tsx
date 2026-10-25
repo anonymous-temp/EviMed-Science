@@ -10,7 +10,7 @@ vi.mock('@/lib/runtimeWarm',()=>({warmWebRuntime:vi.fn()}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:mocks.current,stageGeoPlanContext:mocks.stage}));
 vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:async()=>({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_old'},digest:'digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null}})}));
 vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:()=>null}));
-vi.mock('@/components/geo/geoFrame',()=>({useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>null}));
+vi.mock('@/components/geo/geoFrame',async original=>({...await original<typeof import('@/components/geo/geoFrame')>(),useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>null}));
 function Probe(){return <pre data-testid="path">{useLocation().pathname}</pre>}
 it('keeps the current route when selected-analysis staging finishes after unmount',async()=>{
  const projects=[{id:'default',name:'Default'},{id:'control',name:'GEO'}];

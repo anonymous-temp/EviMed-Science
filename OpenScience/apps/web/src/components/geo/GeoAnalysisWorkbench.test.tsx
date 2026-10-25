@@ -11,7 +11,7 @@ vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.o
 vi.mock('@/lib/geoNativeClient',async original=>({...await original<typeof import('@/lib/geoNativeClient')>(),openGeoConversation:navigation.create}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage}));
 vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:({source}:{source:unknown})=><div data-testid="export">{JSON.stringify(source)}</div>}));
-vi.mock('./geoFrame',()=>({useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>({openAnalysisScope:navigation.scope})}));
+vi.mock('./geoFrame',async original=>({...await original<typeof import('./geoFrame')>(),useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>({openAnalysisScope:navigation.scope})}));
 const project={projectId:'control',sessionId:'session'};
 it('opens both history views and keeps metric selection on the business timeline in the existing workbench',async()=>{
  read.mockReset().mockImplementation(async(_geo,_scope,view)=>({view,selection:{reference:'gsel_history'},digest:'history-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'empty'}}));
@@ -62,6 +62,33 @@ it('resolves the exact GEO primary then stages the exact analysis and unsent dra
   expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({projectId:'control',sessionId:'created-session',geoPlanContext:{referenceId:'gpc_exact'}}),'Selected unsent analysis');
 });
 
+
+describe('what the role may do with the selected analysis',()=>{
+ const access=(abilities:string[])=>({...project,access:{roles:['role'],abilities,owner:false}});
+ const renderAs=async(who:unknown)=>{
+  read.mockResolvedValue({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_role'},digest:'role-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
+  render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={who as never}/></MemoryRouter>);
+  fireEvent.click(screen.getByText('所选数据分析'));
+  await waitFor(()=>expect(read).toHaveBeenCalled());
+  await screen.findByText('所选数据分析');
+ };
+ it('shows a viewer the analysis, with neither the conversation nor the export',async()=>{
+  await renderAs(access(['read']));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'首批数据'})).toBeTruthy());
+  expect(screen.queryByRole('button',{name:'在对话中解释'})).toBeNull();
+  expect(screen.queryByTestId('export')).toBeNull();
+ });
+ it('shows an editor both',async()=>{
+  await renderAs(access(['read','run','edit']));
+  expect(await screen.findByRole('button',{name:'在对话中解释'})).toBeTruthy();
+  expect(screen.getByTestId('export').textContent).toContain('gsel_role');
+ });
+ it('offers a role that may run but not edit the export alone: the conversation takes both',async()=>{
+  await renderAs(access(['read','run']));
+  expect(await screen.findByTestId('export')).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'在对话中解释'})).toBeNull();
+ });
+});
 
 it('retains the selected analysis with a recoverable error if first-session creation fails',async()=>{
   navigation.open.mockReset();navigation.stage.mockReset();

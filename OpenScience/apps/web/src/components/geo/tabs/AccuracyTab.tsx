@@ -30,7 +30,6 @@ import { GeoErrorGroupDrawer } from "../GeoErrorGroupDrawer";
 import {
   claimRows,
   claimRowsOfEngine,
-  correctionBrief,
   correctionsOf,
   enginesOf,
   ERROR_SHOWS,
@@ -43,7 +42,7 @@ import {
 } from "../spine/errorModel";
 import { questionGroupIndex } from "../spine/clusterModel";
 import { useGeoActions, useGeoQuestionSet } from "../spine/spineData";
-import { useOpenGeoConversation } from "../useOpenGeoConversation";
+import { useCorrectionHandoff } from "../spine/useCorrectionHandoff";
 import { ErrorCharts } from "./AccuracyCharts";
 import { metricName, metricUnit } from "./geoTabText";
 import { TabError, TabSkeleton } from "./geoTabKit";
@@ -191,7 +190,7 @@ function Accuracy({
   const change = useGeoSearchChange();
   const [query, setQuery] = useState("");
   const drawer = useGeoDrawerAddress();
-  const open = useOpenGeoConversation();
+  const handoff = useCorrectionHandoff(geoId, project);
   const [busyClaim, setBusyClaim] = useState<string | null>(null);
 
   const actions = useGeoActions(geoId);
@@ -275,7 +274,7 @@ function Accuracy({
   const canRun = !abilities || abilities.includes("run");
   const correctClaim = (claim: ClaimModel) => {
     setBusyClaim(claim.key);
-    void open({ projectId: project.projectId, sessionId: project.sessionId }, correctionBrief(claim, product)).finally(() => setBusyClaim(null));
+    void handoff(claim, product).finally(() => setBusyClaim(null));
   };
 
   const rowOf = (claim: ClaimModel, showEngines: boolean) => (
