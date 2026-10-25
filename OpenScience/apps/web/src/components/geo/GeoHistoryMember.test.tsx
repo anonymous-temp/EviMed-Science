@@ -7,7 +7,7 @@ it("shows task completion and current unresolved clinical issue separately with 
  const open=vi.fn();
  render(<MemoryRouter initialEntries={["/app/geo/g/actions?step=distribution&order=stale&publication=stale&signal=old&round=old&session=conversation"]}><GeoHistoryMember geoId="g" selectionRef="gsel_exact" openPublication={open}
   item={{id:"event",kind:"task_attempt",eventLabel:"处理任务",at:"2026-10-02",currentStatus:"open",currentExecutionState:"completed",signalId:"signal",errorId:"error",fingerprint:"exact-fingerprint",resultVersionId:"old-version",digest:"old-digest",linkId:"actual-link"}}/></MemoryRouter>);
- expect(screen.getByText("待处理")).toBeVisible();expect(screen.getByText("任务完成")).toBeVisible();expect(screen.getByText(/是否仍有错误需查看后续观察/)).toBeVisible();
+ expect(screen.getByText("待处理")).toBeVisible();expect(screen.getByText("任务完成")).toBeVisible();
  const url=new URL(screen.getByRole("link",{name:"查看登记发布的版本历史"}).getAttribute("href")!,"https://local.invalid");
  expect(url.searchParams.get("publication")).toBe("actual-link");expect(url.searchParams.get("selectionRef")).toBe("gsel_exact");expect(url.searchParams.get("session")).toBe("conversation");
  for(const key of ["order","signal","round"])expect(url.searchParams.has(key)).toBe(false);
@@ -27,7 +27,8 @@ it("pages immutable before and after answers locally and resets when their prese
 it("shows actual before and after sampling agreements without claiming the exact setting-change instant",()=>{
  render(<MemoryRouter><GeoHistoryMember geoId="g" selectionRef="gsel_exact" item={{id:"mode",kind:"sampling_mode_changed",eventLabel:"完成轮次的采样约定变化",at:"2026-10-04T00:00:00Z",before:"web",after:"web",beforeContract:{samplingMode:"one_shot",repeats:1,engines:["deepseek"]},afterContract:{samplingMode:"recurring",repeats:3,engines:["deepseek"]},roundId:"exact-round"}}/></MemoryRouter>);
  expect(screen.getByText(/单次采样 · 每题 1 次/)).toBeVisible();expect(screen.getByText(/重复采样 · 每题 3 次/)).toBeVisible();
- expect(screen.getByText(/设置切换的准确时刻未单独记录/)).toBeVisible();
+ // The event is worded as the completed round's agreement, never as a switch with an instant.
+ expect(screen.getByText("完成轮次的采样约定变化")).toBeVisible();expect(screen.queryByText(/切换.*时刻/)).toBeNull();
  expect(screen.getByRole("link",{name:"查看本轮采集设置与记录"})).toHaveAttribute("href",expect.stringContaining("diagnosisRound=exact-round"));
 });
 

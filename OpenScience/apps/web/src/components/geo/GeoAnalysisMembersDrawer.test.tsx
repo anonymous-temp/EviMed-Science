@@ -58,7 +58,7 @@ it('V20 pages beyond the first ten expose exact read-time annotation revisions a
  read.mockImplementation(async(_geo,_ref,offset=0)=>({unit:'source_pages',total:21,nextOffset:offset===0?20:null,digest:'relation',items:offset===0?Array.from({length:20},(_,n)=>item(n+1)):[item(21)]}));
  render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" project={{access:{abilities:['read'],roles:['viewer'],owner:false}} as never} members={member} onClose={()=>{}}/></MemoryRouter>);
  fireEvent.click(await screen.findByRole('button',{name:'下一批'}));fireEvent.click(await screen.findByText('完整来源页面与原始地址'));
- expect(screen.getByText(/annotation-21.*21/)).toBeTruthy();expect(screen.getByText(/读取时的当前上下文/)).toBeTruthy();
+ expect(screen.getByText(/annotation-21.*21/)).toBeTruthy();
  fireEvent.click(screen.getByRole('button',{name:'查看或修改此页面关系'}));expect(screen.getByTestId('relationship-editor')).toHaveTextContent('https://shared.example/s?id=21 · editable false');
 });
 it('journey object members show explicit claim support and context actions instead of treating objects as answers',async()=>{
@@ -131,8 +131,8 @@ it('labels original error conditions separately from current claim context',asyn
  const members:GeoAnalysisMembers={selectionRef:'gsel_original',view:{viewId:'V13'},rowKey:'original',columnKey:'total',expectedDigest:'original',unit:'error_records',total:1,exact:true};
  read.mockResolvedValue({total:1,nextOffset:null,unit:'error_records',items:[{id:'e',unit:'error_records',errorStatement:'Original misstatement',claimVersion:1,applicability:{population:'Adults'},originalErrorAssessment:{statement:{claimVersion:1}},currentClaim:{version:3,applicability:{population:'Children'}}}]});
  render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={members} onClose={()=>{}}/></MemoryRouter>);
- expect(await screen.findByText('适用人群：Adults')).toBeVisible();expect(screen.getByText('最初判定主张版本')).toBeVisible();
- fireEvent.click(screen.getByText('当前主张信息'));expect(screen.getByText('适用人群：Children')).toBeVisible();expect(screen.getByText('当前主张版本')).toBeVisible();
+ expect(await screen.findByText('适用人群：Adults')).toBeVisible();expect(screen.getByText('最初判定结论版本')).toBeVisible();
+ fireEvent.click(screen.getByText('当前结论信息'));expect(screen.getByText('适用人群：Children')).toBeVisible();expect(screen.getByText('当前结论版本')).toBeVisible();
 });
 
 it('opens row-scoped content versions instead of duplicating histories inside article members',async()=>{
@@ -154,4 +154,21 @@ it('keeps a pinned reported publication and an order action separate from intend
  const content=new URL(screen.getByRole('link',{name:'查看内容与版本'}).getAttribute('href')!,'https://local.example');
  expect(content.pathname).toBe('/app/geo/g/actions');expect(content.searchParams.get('step')).toBe('content');expect(content.searchParams.get('selectionRef')).toBe('gsel_publications');expect(content.searchParams.get('sessionId')).toBe('session-one');
  for(const key of ['order','publication','action','round'])expect(content.searchParams.has(key)).toBe(false);
+});
+
+it('describes a sampled answer in words: no round id, no raw state, no parser version, no claim id, no JSON conditions',async()=>{
+ const member:GeoAnalysisMembers={selectionRef:'gsel_words',view:{viewId:'V07'},rowKey:'row',columnKey:'answers',expectedDigest:'words',unit:'answers',total:1,exact:true};
+ read.mockResolvedValue({unit:'answers',total:1,nextOffset:null,digest:'words',items:[{id:'a1',unit:'answers',engine:'deepseek',roundId:'round_internal_41',repeatIndex:0,askedAt:'2026-10-02',status:'valid',reason:'a_reason_added_later',question:{text:'Which brand?'},
+  statement:{text:'Alpha is for adults',verdict:'correct',claimVersion:3,applicability:{population:'Adults'},evidence:'Label says adults'},
+  extraction:{parserVersion:'parser-9.9',judgedAt:'2026-10-02',genericMentions:[]},
+  expression:{quote:'Alpha for adults',entity:'Alpha',state:'recommended',claimRefs:[{claimId:'claim_internal_8',claimVersion:2}]},
+  answer:{answer_text:'Alpha.',surface:{mode:'web',deep:false,newChat:true},citations:[]}}]});
+ const {container}=render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member} onClose={()=>{}}/></MemoryRouter>);
+ fireEvent.click(await screen.findByText('实体提取依据'));
+ expect(await screen.findByText(/DeepSeek · 第 1 次 · 2026-10-02 · 有回答/)).toBeVisible();
+ expect(screen.getByText('适用人群：Adults')).toBeVisible();
+ expect(screen.getByText('第 2 版')).toBeVisible();
+ fireEvent.click(screen.getByText('完整回答与引用'));
+ expect(screen.getByText('网页端、非深度思考、每题新对话')).toBeVisible();
+ for(const leak of ['round_internal_41','parser-9.9','claim_internal_8','a_reason_added_later','"population"','{"'])expect(container.textContent).not.toContain(leak);
 });

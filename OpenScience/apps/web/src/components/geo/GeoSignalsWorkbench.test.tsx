@@ -40,7 +40,7 @@ it('shows each exact source review result and the unhandled remainder beside the
         artifact: { versionId: 'rv_review', path: 'deliverables/review/geo-value.json', digest: 'review-digest', runId: 'exact-run', sessionId: 'original-session' } }] },
   }));
   draw();
-  expect(await screen.findByText(/仍需处理 1 项/)).toBeTruthy();
+  expect((await screen.findByText(/仍需处理/)).closest('[data-note]')).toHaveTextContent('仍需处理 1 项');
   expect(screen.getByText(/已关联更新版本：仅本次所选稿件已更新/)).toBeTruthy();
   expect(screen.getByRole('link', { name: '查看已关联的稿件版本' })).toHaveAttribute('href', '/app/runs/exact-run/files/revised.md?version=rv_after&geoProject=geo&signal=gs_exact');
   expect(screen.getByRole('link', { name: '查看这项核查的原始结果' })).toHaveAttribute('href', '/app/runs/exact-run/files/deliverables/review/geo-value.json?version=rv_review&geoProject=geo&signal=gs_exact');

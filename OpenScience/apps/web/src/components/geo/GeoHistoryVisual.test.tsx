@@ -44,5 +44,5 @@ it("keeps a known reading and its exact member action visible when all plotting 
  const trend=[{roundId:"r",rowKey:"r",columnKey:"reading",at:null,unknownTimes:1,metricId:"M-01",value:50,status:"ok",reason:null,numerator:25,denominator:50}];
  const select=vi.fn();const {container}=render(<GeoHistoryVisual rows={rows} columns={[{key:"reading",label:"品牌提及率"}]} cells={[cell]} timeline={{total:0,dated:0,undated:0,events:[]}} trend={trend} onSelect={select}/>);
  fireEvent.click(screen.getByRole("button",{name:"采样第 1 轮 · 品牌提及率 · 50"}));expect(select).toHaveBeenCalledWith(cell);
- expect(screen.getByRole("status")).toHaveTextContent("已知读数和精确样本仍可查看");expect(container.querySelector("svg")).toBeNull();
+ expect(container.querySelector("[data-note]")).toHaveTextContent("1 条读数没有可定位的观察时间");expect(container.querySelector("svg")).toBeNull();
 });
