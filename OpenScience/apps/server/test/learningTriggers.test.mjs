@@ -12,7 +12,7 @@ import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, METHOD_INDUCTION_MIN_TRAJ
 import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  CONVERSATION_SCOPE, LEARNING_REFUSAL_REASONS, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningRefusal, learningScopeOf,
+  CONVERSATION_SCOPE, LEARNING_REFUSAL_REASONS, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, adoptedLessonFor, correctionLessonFor, deliveredSomething, learningRefusal, learningScopeOf,
   learningTriggersFor, lessonPeers, routineLessonFor, routinePeriodMs, routinePeriodOf,
 } from "../src/learningTriggers.mjs";
 import { sampledByHash } from "../src/runSampling.mjs";
@@ -462,4 +462,77 @@ test("two corrections of one run are two dispatches, and a lesson with no discri
   assert.notEqual(first, second, "the second correction does not adopt the first one's bounded run");
   assert.equal(distillationDispatchId("run_1", "correction"), distillationDispatchId("run_1", "correction", ""));
   assert.match(first, /^method-distillation-[a-f0-9]{32}$/);
+});
+
+// ---------------------------------------------------------------------------------------------------- adopted (2026-10-25)
+
+/** A follow-up the judge read as an adoption, as the ledger holds it. @param {string} [verdict] */
+const adoptEvent = (verdict = "adopt") => ({ id: "feedback:learning-evidence:adopt", trigger: "learning-evidence", runId: "run_orig", subject: { type: "run", id: "run_orig" },
+  detail: { evidence: "follow-up", verdict, rule: "周报都按刚才的做法写", quote: "以后周报都按这个来", concerns: [] } });
+
+test("what a run delivered is a file, or an answer: the ledger's history holds more than the question", () => {
+  assert.equal(deliveredSomething(run({ artifacts: [], outputFiles: ["report/weekly.md"] })), true);
+  assert.equal(deliveredSomething(run({ artifacts: [], unverifiedArtifacts: ["d/x.md"] })), true);
+  assert.equal(deliveredSomething(run({ artifacts: [], transcript: { completeness: "complete", messages: 4 } })), true, "an answer in the conversation: the stored transcript holds more than the question");
+  assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 3 })), true, "or the monitor counted more while the run went");
+  assert.equal(deliveredSomething(run({ artifacts: [], transcript: { completeness: "complete", messages: 1 }, observedMessages: 1 })), false, "only the question");
+  assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 0 })), false);
+  assert.equal(deliveredSomething(run({ status: "failed" })), false, "a run that did not finish has nothing to keep");
+  assert.equal(deliveredSomething(null), false);
+});
+
+test("an adoption is a lesson about the run whose way was kept, queued at once with the person's words as its evidence; nothing else is", () => {
+  const original = run({ id: "run_orig" });
+  const lesson = adoptedLessonFor({ run: original, runs: [original], project: { id: "p1" }, event: adoptEvent() });
+  assert.equal(lesson?.trigger, "adopted");
+  assert.ok(DISTILLATION_TRIGGERS.includes("adopted"));
+  assert.equal(lesson?.idempotencyKey, "distill:run_orig:adopted:feedback:learning-evidence:adopt");
+  assert.deepEqual(lesson?.payload.feedbackEventIds, ["feedback:learning-evidence:adopt"]);
+  assert.equal(lesson?.payload.dispatchKey, "feedback:learning-evidence:adopt");
+  assert.equal(lessonSignal({ trigger: "adopted", feedback: lesson?.payload.feedback }), "researcher", "their own choice, in their own words");
+  // The distillation is handed the run's trajectory with the adoption as an intervention carrying its verdict, and a closing excerpt.
+  const transcript = { header: { completeness: "complete" }, messages: [
+    { sessionId: "session_1", role: "user", source: "user", seq: 1, turnStartSeq: 1, parts: [{ type: "text", text: "写本周周报" }] },
+    { sessionId: "session_1", role: "assistant", source: "user", seq: 2, turnStartSeq: 1, parts: [{ type: "text", text: "结论：本周完成两项。" }] },
+  ] };
+  const input = buildDistillationInput({ run: original, trigger: "adopted", transcript, feedback: lesson?.payload.feedback });
+  assert.equal(input.signal, "researcher");
+  assert.deepEqual(input.trajectory.interventions.map((entry) => [entry.kind, entry.verdict, entry.text, entry.rule]), [["follow-up", "adopt", "以后周报都按这个来", "周报都按刚才的做法写"]]);
+  assert.equal(input.transcriptExcerpts.length, 1, "the closing messages of the run: the reply the person kept");
+  assert.equal(input.transcriptExcerpts[0].anchor.kind, "closing");
+  // Nothing else is an adoption: not a correction, an acceptance, a steer, a silence, a result corrected, and not an event of another kind.
+  for (const verdict of ["correction", "preference", "rejection", "accept", "none"]) assert.equal(adoptedLessonFor({ run: original, runs: [original], event: adoptEvent(verdict) }), null, verdict);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), detail: { evidence: "steer", verdict: "adopt" } } }), null);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), trigger: "deliverable-edited" } }), null);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), id: "" } }), null);
+  // A run that delivered nothing has nothing to keep.
+  const nothing = run({ id: "run_orig", artifacts: [], outputFiles: [], transcript: { completeness: "complete", messages: 1 }, observedMessages: 1 });
+  assert.equal(adoptedLessonFor({ run: nothing, runs: [nothing], event: adoptEvent() }), null);
+});
+
+test("an adoption passes the gates every other lesson passes, and is queued once per event, marked when the run drew on a pack nobody vouched for", async () => {
+  const original = run({ id: "run_orig" });
+  const event = adoptEvent();
+  assert.equal(adoptedLessonFor({ run: run({ id: "run_orig", automated: true }), runs: [], event }), null, "the platform's own work");
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], project: { id: LEARNING_PROJECT_ID }, event }), null, "an internal project");
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event, internalAgent: () => true }), null, "an internal capability");
+  const unread = run({ id: "run_unread", transcript: { completeness: "partial" } });
+  assert.equal(adoptedLessonFor({ run: unread, runs: [unread], event }), null, "a transcript that cannot be read");
+  assert.equal(adoptedLessonFor({ run: run({ id: "r", status: "running" }), runs: [], event }), null);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event, guestInfluence: true })?.payload.guestInfluence.uncorroborated, true);
+
+  const project = { id: "project_1", userId: "user_1" };
+  const enqueued = [];
+  const jobs = { enqueue: async (_userId, kind, payload, options) => { enqueued.push({ kind, payload, options }); return { id: "job" }; } };
+  const refused = [];
+  const triggersWith = (extra = {}) => new LearningTriggers({ jobs, agentRuns: { list: async () => [original] }, onRefused: (reason) => refused.push(reason), ...extra });
+  assert.deepEqual(await triggersWith().afterAdoption(project, { event, runId: "run_orig" }), { queued: ["adopted"], skipped: null });
+  assert.deepEqual([enqueued[0].kind, enqueued[0].payload.trigger, enqueued[0].options.projectId, enqueued[0].options.idempotencyKey], ["distill", "adopted", "project_1", "distill:run_orig:adopted:feedback:learning-evidence:adopt"]);
+  assert.deepEqual(await triggersWith().afterAdoption(project, { event, runId: "run_gone" }), { queued: [], skipped: "run_unavailable" });
+  const paused = { configured: true, settings: async () => ({ learningPaused: true, recallPaused: false, pausedProjects: [] }) };
+  assert.deepEqual(await triggersWith({ memory: paused }).afterAdoption(project, { event, runId: "run_orig" }), { queued: [], skipped: "paused" });
+  assert.deepEqual(await triggersWith({ canReuseRun: async () => false }).afterAdoption(project, { event, runId: "run_orig" }), { queued: [], skipped: "clinical_context" });
+  assert.deepEqual(await triggersWith().afterAdoption(project, { event: adoptEvent("accept"), runId: "run_orig" }), { queued: [], skipped: "not_eligible" });
+  assert.deepEqual(refused, ["run_unavailable", "paused", "clinical_context", "not_eligible"], "every refusal is counted by its reason");
+  assert.equal(enqueued.length, 1);
 });

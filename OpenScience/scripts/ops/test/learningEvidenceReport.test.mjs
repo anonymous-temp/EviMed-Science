@@ -20,6 +20,9 @@ function database() {
           { user_id: "alice", evidence: "follow-up", verdict: "accept", d7: 1, d30: 4, last_at: "2026-10-22T09:00:00.000Z" },
           { user_id: "alice", evidence: "silent", verdict: "none", d7: 3, d30: 9, last_at: "2026-10-22T10:00:00.000Z" },
           { user_id: "alice", evidence: "steer", verdict: "correction", d7: 0, d30: 1, last_at: "2026-10-01T10:00:00.000Z" },
+          { user_id: "alice", evidence: "steer", verdict: "none", d7: 0, d30: 2, last_at: "2026-10-01T10:00:00.000Z" },
+          { user_id: "alice", evidence: "follow-up", verdict: "adopt", d7: 1, d30: 1, last_at: "2026-10-20T09:00:00.000Z" },
+          { user_id: "alice", evidence: "used", verdict: "none", d7: 2, d30: 3, last_at: "2026-10-22T09:30:00.000Z" },
           { user_id: "bob", evidence: "silent", verdict: "none", d7: 0, d30: 2, last_at: "2026-10-05T10:00:00.000Z" },
           { user_id: "bob", evidence: "from-the-future", verdict: "none", d7: 0, d30: 1, last_at: "2026-10-04T10:00:00.000Z" },
         ] };
@@ -46,12 +49,13 @@ test("each account's last evidence, the evidence of seven and thirty days, its l
   const [alice, bob, carol] = rows;
   assert.equal(alice.lastEvidenceAt, "2026-10-22T10:00:00.000Z");
   assert.equal(alice.daysSinceEvidence, 1);
-  assert.deepEqual(alice.evidence7d, { steer: 0, "follow-up": 3, "result-corrected": 0, silent: 3, other: 0 });
-  assert.deepEqual(alice.evidence30d, { steer: 1, "follow-up": 9, "result-corrected": 0, silent: 9, other: 0 });
-  assert.equal(alice.corrections30d, 6, "a steer and the follow-ups that corrected, preferred or rejected");
+  assert.deepEqual(alice.evidence7d, { steer: 0, "follow-up": 4, "result-corrected": 0, silent: 3, used: 2, other: 0 });
+  assert.deepEqual(alice.evidence30d, { steer: 3, "follow-up": 10, "result-corrected": 0, silent: 9, used: 3, other: 0 });
+  assert.equal(alice.corrections30d, 6, "a steer read as a correction and the follow-ups that corrected, preferred or rejected: not a steer read as nothing");
+  assert.equal(alice.kept30d, 8, "an acceptance, an adoption and a file taken: silence is not kept");
   assert.equal(alice.lessonsQueued30d, 5);
   assert.equal(alice.lessonsDistilled30d, 3, "what a lesson ended in: a method written, not a no_change");
-  assert.deepEqual([alice.lessons30d.correction, alice.lessons30d.routine], [4, 1]);
+  assert.deepEqual([alice.lessons30d.correction, alice.lessons30d.routine, alice.lessons30d.adopted], [4, 1, 0]);
   assert.equal(alice.methodsInForce, 4);
   assert.deepEqual([bob.daysSinceEvidence, bob.evidence30d.other], [18, 1], "a kind nobody named is `other`");
   assert.deepEqual([carol.lastEvidenceAt, carol.lessonsFailed30d, carol.lessons30d.other, carol.lessonsDistilled30d], [null, 2, 1, 1]);
@@ -67,7 +71,7 @@ test("the table says never for an account with no evidence and prints no text of
   const table = renderReport(rows);
   assert.match(table, /^account\s+last evidence\s+days/);
   assert.match(table, /carol\s+never\s+-/);
-  assert.match(table, /alice\s+2026-10-22T10:00:00.000Z\s+1\s+6 \(0\/3\/0\/3\)/);
+  assert.match(table, /alice\s+2026-10-22T10:00:00.000Z\s+1\s+9 \(0\/4\/0\/3\/2\)/);
   assert.equal(renderReport([]), "no account has left learning evidence, queued a lesson or holds a learned method\n");
   assert.deepEqual(parseArguments(["--user", "alice", "--json"]), { user: "alice", json: true });
   assert.throws(() => parseArguments(["--user"]), /needs a value/);

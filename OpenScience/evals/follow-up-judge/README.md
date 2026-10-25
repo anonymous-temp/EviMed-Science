@@ -1,43 +1,68 @@
 # Follow-up judge calibration
 
 The follow-up judge is one small-model call in `apps/server/src/learningEvidence.mjs` (`FollowUpJudge`, instructions
-`FOLLOW_UP_JUDGE_INSTRUCTIONS`, parser `followUpVerdictFrom`). It reads the first message of the next turn of a conversation and says
-what it says about the work just delivered; what it decides becomes learning evidence, and a correction, a preference or a rejection
-queues a distillation. Nothing measured how often it is right. This is that measurement: **129 labelled cases** (89 Chinese, 40 English)
-over the five verdicts the module has and `adopt`, the sixth, that another package is adding (the person asks that the way the work was
-just done be kept and reused for future work of this kind).
+`FOLLOW_UP_JUDGE_INSTRUCTIONS`, parser `followUpVerdictFrom`, reader `readFollowUp`). It reads the first message of the next turn of a
+conversation (and, in `steer` mode, a message typed into a run that is still going) and says what it says about the work just delivered;
+what it decides becomes learning evidence, a correction, a preference or a rejection queues a distillation, and `adopt` — the person asks that the
+way the work was just done be kept and reused for work of this kind — queues one at once and makes the run clean. **129 labelled cases** (89
+Chinese, 40 English) over the six verdicts, **split once** into the part that feeds the judge's example bank and the part this harness scores.
 
 ```bash
 cd OpenScience
-node evals/follow-up-judge/run.mjs --dry-run --only fj-001                    # the module's own request, no model call
-node evals/follow-up-judge/run.mjs --key-file <path> [--model deepseek-flash]  # the whole set, one pass
+node evals/follow-up-judge/run.mjs --dry-run --only fj-102                    # the module's own request, no model call
+node evals/follow-up-judge/run.mjs --key-file <path> [--model deepseek-flash]  # the held-out cases, one pass
+node evals/follow-up-judge/run.mjs --key-file <path> --embed-key-file <dashscope key>   # the same, with the examples chosen as production chooses them
+node evals/follow-up-judge/run.mjs --key-file <path> --no-examples --out results/<date>-no-examples.json   # the fixed contrasts alone: what the bank adds
 node evals/follow-up-judge/run.mjs --key-file <path> --instructions-file my.txt --out results/my-wording.json   # try a rewording
 node evals/follow-up-judge/run.mjs --list-ambiguous                            # the cases to review
 node --test evals/follow-up-judge/tests/*.test.mjs                             # unit tests, no model
 ```
 
-Options: `--only id,id`, `--lang zh|en`, `--samples N` (the judge runs at temperature 0, so one is nearly always enough), `--concurrency`
-(default 4), `--out`. The key is read from `--key-file` or `DEEPSEEK_API_KEY`, held in memory and never printed or written.
+Options: `--only id,id` (a case named by id is read whichever part it is in), `--split heldout|train|all` (default `heldout`), `--lang zh|en`,
+`--samples N` (the judge runs at temperature 0, so one is nearly always enough), `--concurrency` (default 4), `--out`, `--no-examples`,
+`--embed-key-file`. The keys are read from `--key-file` / `DEEPSEEK_API_KEY` and `--embed-key-file`, held in memory and never printed or written.
+
+## The split, the bank, and what is scored
+
+`split.json` lists the `train` case ids; every other case is **held out**, and the held-out cases are what the runner scores unless asked
+otherwise. The judge's example bank (`packages/domain/src/follow-up-examples.json`, `@evimed/domain/follow-up-examples`) is the train part and
+nothing else: each example names its case in `id`, carries that case's words, verdict and quotation and a one-line reason, and twelve of them are
+the fixed contrasts (`anchor: true`) the instructions end with; the rest is the pool a request draws its nearest six from. The labels the labeller
+doubted (`ambiguous`) are all held out. A test (`tests/followUpJudge.test.mjs`) holds the two apart: by id, by words, by one containing the other
+and by character-n-gram overlap (a held-out message is never a near duplicate of a bank message), so a score on the held-out cases is a score on
+messages the judge has not been shown. `--split train` or `all` is for looking at the bank's own cases and is not evidence; even then a case is never
+shown its own example. To add an example, write it in the bank with the id of a train case, or move a case into `train` (and so out of the score);
+never copy a held-out case.
+
+The examples are chosen by the meaning of the message (the knowledge base's embedder, the one methods use) and by character n-grams when it is down.
+This harness has no embedder unless `--embed-key-file` is given, so by default it measures the n-gram selection; the production selection is the
+embedding one, and `--embed-key-file` measures that. `--no-examples` runs the judge with its fixed contrasts only.
+
+The controller's calibration target for `adopt` is a precision of at least 0.9 on the held-out cases with the recall reported; adjust the bank (more
+contrasts, better reasons) or the instructions' wording until it holds, re-run, and keep the result file next to this one.
 
 ## What the runner does
 
-Nothing about the judge is copied. `FollowUpJudge.read` builds the request (messages, `temperature 0`, thinking off, JSON mode,
-the truncations), the call is the control plane's own `callModelForControlPlane` (the production path minus the usage ledger), and the
-answer is read by the module's own `followUpVerdictFrom`. A change to the instructions, the parameters or the parser in the tree is
+Nothing about the judge is copied. `readFollowUp` is the module's own reader: it chooses the nearest examples, `FollowUpJudge.read` builds the
+request (messages, `temperature 0`, thinking off, JSON mode, the truncations), the call is the control plane's own `callModelForControlPlane` (the
+production path minus the usage ledger), an `adopt` is asked a second time with the examples in the other order and stands only when the second
+reading says it too (otherwise the second verdict is taken when it is an accept, a preference or a correction, and anything else is no verdict), and
+every answer is read by the module's own `followUpVerdictFrom`. A change to the instructions, the parameters or the parser in the tree is
 therefore what is measured; `--instructions-file` replaces only the system message, to try a rewording before editing it in. The judge
-sees `{ message, previousRequest, methods }` and **not** the one-line summary of what was delivered (`delivered` in the case file is
+sees `{ message, previousRequest, methods, examples }` and **not** the one-line summary of what was delivered (`delivered` in the case file is
 there for the labeller and the reviewer), so a case whose label depends on what the delivery looked like is marked ambiguous.
 
-What the module refuses (an unknown verdict, a quotation that is not a substring of the message, a rule carrying a credential) is
-`unreadable` here, as in production where it is no evidence at all, and the model's own word is kept as `rawVerdict`: a tree without
-`adopt` refuses it, and the report tells that apart from a model that said something else.
+What the module refuses (an unknown verdict, a quotation that is not a substring of the message, a rule carrying a credential, an `adopt` the second
+reading did not confirm) is `unreadable` here, as in production where it is no evidence at all, and the first reading's own word is kept as
+`rawVerdict`: the report tells a refused `adopt` apart from a model that said something else.
 
 ## What it reports
 
 Per-class precision, recall and F1; the confusion matrix (gold rows, predicted columns, `unreadable` last); accuracy strictly, leniently
 (a prediction the label allows as a second choice) and on the unambiguous cases only; by language; quotation validity (accepted by the
 module, and overlap with the gold words); the learned methods a verdict names (`concerns`, over the cases where the run opened one); and
-**`adopt` on its own**: precision (strict and with the labels' second choices), recall, the cases wrongly adopted and the ones missed.
+**`adopt` on its own**: precision (strict and with the labels' second choices), recall, the cases wrongly adopted and the ones missed, and how many
+first-reading adopts the second reading confirmed.
 `adopt` makes a method out of one conversation, so its precision matters more than its recall: a missed adopt costs the person one more
 sentence, a false one teaches the platform something they did not ask for. The near misses the set is built around are tagged in the
 file (`tag`): 「这次就这样吧」 and "Fine for this time" (accept, not adopt), 「好的谢谢」, 「记住我喜欢短的」 (preference), 「格式就按这个，内容再补两条」

@@ -9033,3 +9033,25 @@ test("a run's ledger row keeps why each learned method's card was there, from a 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a steer typed into a running turn keeps its words unless they carry a credential or an identifier by SHAPE: a message that mentions a password column is kept", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-steer-words-"));
+  const project = { id: "steer-words", userId: "researcher", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_steer", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [], monitorIntervalMs: 60_000 });
+  try {
+    await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "steered" }, async () => ({ accepted: true }));
+    await store.recordSteeredInput(project, binding.sessionId, "req_a", "把密码列去掉，token 也不要");
+    await store.recordSteeredInput(project, binding.sessionId, "req_b", "我的手机号 13800138000，发给我");
+    await store.recordSteeredInput(project, binding.sessionId, "req_c", "密码是 hunter2hunter2，登录用");
+    const [run] = await store.list(project);
+    assert.equal(run.corrections, 3, "every steer is counted, whatever it says");
+    assert.deepEqual(run.steers.map((steer) => steer.text), ["把密码列去掉，token 也不要"], "words that are language are kept; a phone number and a secret assigned to a name are shapes, and the count says it happened");
+  } finally {
+    await store.cancelSession(project, binding.sessionId);
+    await store.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
+});

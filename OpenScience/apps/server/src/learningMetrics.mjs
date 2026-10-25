@@ -31,7 +31,7 @@ import { createHash } from "node:crypto";
 
 import { LEARNING_EVIDENCE_KINDS, LEARNING_EVIDENCE_VERDICTS, METHOD_APPLIED_OUTCOMES, METHOD_MOUNT_REASONS, METHOD_RELATION_TYPES } from "@evimed/domain";
 
-import { LEARNING_EVIDENCE_FAILURES } from "./learningEvidence.mjs";
+import { FOLLOW_UP_JUDGE_OUTCOMES, LEARNING_EVIDENCE_FAILURES } from "./learningEvidence.mjs";
 import { LEARNING_REFUSAL_REASONS } from "./learningTriggers.mjs";
 import { REPLAY_OUTCOMES, REPLAY_VERDICTS } from "./methodReplay.mjs";
 import { SCRIPT_OUTCOMES } from "./scriptLessons.mjs";
@@ -81,6 +81,8 @@ export class LearningMetrics {
     /** @type {Record<string, number>} */
     this.evidenceFailed = Object.fromEntries([...LEARNING_EVIDENCE_FAILURES, "other"].map((reason) => [reason, 0]));
     this.evidenceQuotes = { kept: 0, dropped: 0 };
+    /** @type {Record<string, number>} */
+    this.followUpJudge = Object.fromEntries([...FOLLOW_UP_JUDGE_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
     /** @type {Record<string, number>} */
     this.retirements = Object.fromEntries([...RETIREMENT_CODES, "other"].map((code) => [code, 0]));
     /** @type {Record<string, number>} */
@@ -180,6 +182,13 @@ export class LearningMetrics {
     this.evidenceFailed[label] = (this.evidenceFailed[label] ?? 0) + 1;
   }
 
+  /** What the follow-up judging itself did (`FOLLOW_UP_JUDGE_OUTCOMES`): an `adopt` confirmed or not by the second reading, how the examples were
+   *  chosen, a steer read. @param {string} outcome */
+  observeFollowUpJudge(outcome) {
+    const label = closed(outcome, FOLLOW_UP_JUDGE_OUTCOMES);
+    this.followUpJudge[label] = (this.followUpJudge[label] ?? 0) + 1;
+  }
+
   /** The quotations a distilled method names as what it rests on: how many were in what the distillation was shown, and how many were not.
    *  @param {number} kept @param {number} dropped */
   observeEvidenceQuotes(kept, dropped) {
@@ -238,8 +247,11 @@ export class LearningMetrics {
         help: "Finished runs and corrections the learning gates turned away, by reason: not_researcher_work, internal_project, internal_agent, clinical_context, paused, before_reset, trial, transcript_incomplete, not_finished, run_unavailable, not_eligible, enqueue_failed.",
         series: Object.entries(this.triggerRefused).map(([reason, value]) => ({ value, labels: { reason } })) },
       { name: "open_science_learning_evidence_failed_total", type: "counter",
-        help: "Pieces of learning evidence that were not written, by reason: judge_unavailable, judge_failed, judge_unreadable, quote_not_found, rule_unsafe, sensitive, previous_unavailable, busy, record_failed, settle_failed.",
+        help: "Pieces of learning evidence that were not written, by reason: judge_unavailable, judge_failed, judge_unreadable, quote_not_found, rule_unsafe, sensitive, previous_unavailable, busy, record_failed, settle_failed, adopt_unconfirmed (the second reading of an adopt said something that is not accept, preference, correction or adopt), adopt_without_delivery.",
         series: Object.entries(this.evidenceFailed).map(([reason, value]) => ({ value, labels: { reason } })) },
+      { name: "open_science_learning_follow_up_judge_total", type: "counter",
+        help: "What the follow-up judging did, by outcome: adopt_confirmed and adopt_disagreed (the second reading of an adopt, with the examples in the other order), examples_embedding and examples_ngram (how the request's nearest examples were chosen: the knowledge base's embedder, or character n-grams when it is down), steer_judged (a steer typed into a run was read when the run finished).",
+        series: Object.entries(this.followUpJudge).map(([outcome, value]) => ({ value, labels: { outcome } })) },
       { name: "open_science_learning_evidence_quotes_total", type: "counter",
         help: "Quotations a distilled method named as what it rests on, by whether they were in what the distillation was shown (kept) or not (dropped).",
         series: [{ value: this.evidenceQuotes.kept, labels: { outcome: "kept" } }, { value: this.evidenceQuotes.dropped, labels: { outcome: "dropped" } }] },
@@ -431,10 +443,10 @@ export function learningMetricFamilies(enabled, ledger, counters) {
       { name: "open_science_learning_distill_jobs", help: "Distillation lessons queued, by trigger and job status.", type: "gauge",
         series: Object.entries(ledger.lessons).flatMap(([trigger, statuses]) => JOB_STATUSES.map((status) => ({ value: statuses[status] ?? 0, labels: { trigger, status } }))) },
       { name: "open_science_learning_lessons_total", type: "counter",
-        help: "Distillation lessons queued, by trigger (correction, routine, script, repair_accepted, edit_diff; delivered only for jobs queued before 2026-10-23).",
+        help: "Distillation lessons queued, by trigger (correction, adopted, routine, script, repair_accepted, edit_diff; delivered only for jobs queued before 2026-10-23).",
         series: Object.entries(ledger.lessons).map(([trigger, statuses]) => ({ value: Object.values(statuses).reduce((total, value) => total + value, 0), labels: { trigger } })) },
       { name: "open_science_learning_evidence_total", type: "counter",
-        help: "What researchers did to runs, as the learning loop counts it, by evidence (steer, follow_up, result_corrected, silent) and verdict (correction, preference, rejection, accept, none).",
+        help: "What researchers did to runs, as the learning loop counts it, by evidence (steer, follow_up, result_corrected, silent, used) and verdict (correction, preference, rejection, accept, none, adopt). Only accept, adopt and used make a run clean; silent counts for nothing.",
         series: Object.entries(ledger.evidence).flatMap(([evidence, verdicts]) => Object.entries(verdicts).map(([verdict, value]) => ({ value, labels: { evidence: evidence.replaceAll("-", "_"), verdict } }))) },
       { name: "open_science_learning_evidence_last_at", type: "gauge",
         help: "When each account (by a hash of it) last left learning evidence, in seconds since the epoch: an account that works and leaves none is a loop that cannot learn from it.",

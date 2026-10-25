@@ -11,8 +11,9 @@
  *
  * The check is one job per change (`consolidate`, action `replay`; the job kinds are a DDL constraint and `consolidate` was already one):
  *
- *  - Up to five of the person's most recent accepted runs of the method's scope — runs they were left alone with or answered with an
- *    acceptance, never corrected, which is the learning evidence's own definition of clean (`FeedbackEvents.cleanSettledRuns`) — are
+ *  - Up to five of the person's most recent accepted runs of the method's scope — runs they accepted or adopted on the next turn, or whose
+ *    delivered file they opened or downloaded, and never corrected: which is the learning evidence's own definition of clean
+ *    (`FeedbackEvents.cleanSettledRuns`; silence is unknown and not approval since 2026-10-25, so a run nobody reacted to is not one) — are
  *    read back from the ledger as trajectory digests (`trajectoryDigest`: what they asked, what the run left, the order of its tools).
  *  - One small-model call per run asks whether doing that work by the new text would have contradicted what the person accepted in it,
  *    and answers with a quotation from the method and one from the run. Whether a text *contradicts* is language, so the model decides;
@@ -32,7 +33,7 @@
  * @module methodReplay
  */
 
-import { hasSensitiveText, identifierShapesIn, trajectoryDigest } from "@evimed/domain";
+import { identifierShapesIn, trajectoryDigest } from "@evimed/domain";
 
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { CONVERSATION_SCOPE, methodScopeId } from "./learnedMethodMount.mjs";
@@ -75,8 +76,8 @@ export const REPLAY_INSTRUCTIONS = [
 /** @param {unknown} text @returns {string} white space folded: what a quotation is compared as */
 const squashed = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
-/** Whether a text carries a credential or an identifier: a quotation like that is counted as found and never kept in a result. @param {string} text */
-const unsafeToKeep = (text) => hasSensitiveText(text) || identifierShapesIn(text).length > 0;
+/** Whether a text carries a credential or an identifier by shape: a quotation like that is counted as found and never kept in a result. @param {string} text */
+const unsafeToKeep = (text) => identifierShapesIn(text).length > 0;
 
 /**
  * What the judge is shown of a method: what it is called, what it is for, when it applies and does not, and the steps themselves.

@@ -10,13 +10,15 @@
  * [{ id, digest }], at, … }`); this module reads them and moves the counters (`LearningService.recordApplied`,
  * `foldApplied`):
  *
- *  - `corrected`: a correction, preference or rejection on the run whose `concerns` names this method, at the body the run read
- *    (its mounted digest, or its content digest — the judge is shown the cards of what the run opened and may name either);
- *  - `clean`: the conversation moved on — a `silent` event, an acceptance, or a later turn with verdict `none` — and no
- *    correction on the run is left unattributed.
+ *  - `corrected`: a correction, preference or rejection on the run — a follow-up, or a steer typed into it that the judge read that way —
+ *    whose `concerns` names this method, at the body the run read (its mounted digest, or its content digest — the judge is shown the
+ *    cards of what the run opened and may name either);
+ *  - `clean`: the run was kept — accepted or adopted on the next turn, or its delivered file opened or downloaded (`used`) — and no
+ *    correction on the run is left unattributed (`learningRunOutcome`).
  *
  * What is never recorded: a correction that names no method (the researcher corrected the answer, and nothing says it was the
- * method: a missing attribution is not a clean run), a run nobody reacted to (no event: unknown, never clean), a run the
+ * method: a missing attribution is not a clean run), a run nobody reacted to or whose next message was about something else (silence is
+ * unknown, not approval, since 2026-10-25: `silent` and `none` count for nothing, neither clean nor corrected), a run the
  * platform made (`isResearcherOwnedWork`: an acceptance driver's traffic teaches nothing), and a method whose body has changed
  * since the run read it (the counters are about the text it held then).
  *
@@ -28,27 +30,15 @@
 
 import { createHash } from "node:crypto";
 
-import { LEARNING_EVIDENCE_TRIGGER, isLearningCorrection, isResearcherOwnedWork, mountedMethodDigest } from "@evimed/domain";
+import { LEARNING_EVIDENCE_TRIGGER, isLearningCorrection, isResearcherOwnedWork, learningRunOutcome, mountedMethodDigest } from "@evimed/domain";
 
 /** How far back the events are read, and how much of the ledger one settlement may read: bounds, not opinions. */
 const DEFAULT_WINDOW_MS = 72 * 3_600_000;
 const PAGE = 200;
 const MAX_PAGES = 5;
 
-const MOVED_ON_VERDICTS = Object.freeze(["accept", "none"]);
-
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
-
-/**
- * Whether an evidence event says the conversation moved on from the run: nothing was said (`silent`), or what was said accepted
- * the work or was about something else.
- * @param {any} detail @returns {boolean}
- */
-function isMovedOn(detail) {
-  if (isLearningCorrection(detail)) return false;
-  return detail?.evidence === "silent" || MOVED_ON_VERDICTS.includes(String(detail?.verdict ?? ""));
-}
 
 /**
  * @param {{
@@ -129,7 +119,7 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
         if (!opened.length) continue;
         result.runs += 1;
         const corrections = events.filter((event) => isLearningCorrection(event.detail));
-        const movedOn = events.some((event) => isMovedOn(event.detail));
+        const kept = learningRunOutcome(events.map((event) => event.detail)) === "clean";
         const latest = (/** @type {any[]} */ list) => String(list.map((event) => String(event.detail?.at ?? event.occurredAt ?? "")).sort().at(-1) ?? "");
         for (const entry of opened) {
           const document = byName.get(String(entry.name));
@@ -142,7 +132,7 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
           /** @type {"corrected" | "clean" | null} */
           let outcome = null;
           if (named.length) outcome = "corrected";
-          else if (!corrections.length && movedOn) outcome = "clean";
+          else if (kept) outcome = "clean";
           else if (corrections.length) { result.unattributed += 1; continue; }
           if (!outcome) continue;
           const at = latest(named.length ? named : events);

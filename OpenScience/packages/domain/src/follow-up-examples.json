@@ -1,0 +1,530 @@
+{
+ "version": 1,
+ "examples": [
+  {
+   "id": "fj-001",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "message": "太长了，每条不要超过二十个字。",
+   "quote": "每条不要超过二十个字",
+   "why": "Says the work is too long and states the limit it should have met: a change to this piece of work.",
+   "anchor": true
+  },
+  {
+   "id": "fj-002",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "message": "太长了",
+   "quote": "太长了",
+   "why": "Two words of complaint about length still ask for this work to change."
+  },
+  {
+   "id": "fj-004",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "message": "第二个数字不对，P 值应该是 0.003，不是 0.03。",
+   "quote": "P 值应该是 0.003，不是 0.03",
+   "why": "Names a number that is wrong and gives the right one."
+  },
+  {
+   "id": "fj-005",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "格式就按这个，内容再补两条",
+   "quote": "内容再补两条",
+   "why": "Keeps the format but asks for more content: the change asked for is what the message is about, so it is a correction.",
+   "anchor": true
+  },
+  {
+   "id": "fj-006",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "你写的「结果稳健」这句我没说过，删掉。",
+   "quote": "「结果稳健」这句我没说过，删掉",
+   "why": "Quotes a line of the deliverable and asks to delete it."
+  },
+  {
+   "id": "fj-008",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "message": "你漏了结论部分，补上。",
+   "quote": "你漏了结论部分，补上",
+   "why": "Something is missing from the work and they ask for it to be added."
+  },
+  {
+   "id": "fj-010",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "帮我回这封邮件：对方问数据库什么时候锁库。我的情况：11 月 20 日锁库。",
+   "message": "再正式一点。",
+   "quote": "再正式一点",
+   "why": "A short request to change the register of this piece of work."
+  },
+  {
+   "id": "fj-012",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "message": "呵呵，真是「简洁」啊，写了整整三页。",
+   "quote": "写了整整三页",
+   "why": "Sarcasm: read as the complaint it makes (too long)."
+  },
+  {
+   "id": "fj-014",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "message": "字太多了，每页不超过五行。",
+   "quote": "每页不超过五行",
+   "why": "A limit the work broke, stated as a change to make now."
+  },
+  {
+   "id": "fj-016",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "整理会议纪要：讨论了投稿期刊、经费分配两件事。",
+   "message": "漏了第三个议题，补一下。",
+   "quote": "漏了第三个议题，补一下",
+   "why": "An item the work missed, asked for now."
+  },
+  {
+   "id": "fj-018",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "做一个 10 页的组会汇报幻灯片，主题是房颤消融后复发的预测模型。",
+   "message": "颜色太花了，换成蓝灰两色。",
+   "quote": "换成蓝灰两色",
+   "why": "A visual choice in the work they want changed."
+  },
+  {
+   "id": "fj-020",
+   "lang": "zh",
+   "verdict": "correction",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "谢谢，不过第三条可以再短一点。",
+   "quote": "第三条可以再短一点",
+   "why": "Thanks, then a small change: the change is the main act."
+  },
+  {
+   "id": "fj-023",
+   "lang": "en",
+   "verdict": "correction",
+   "previousRequest": "帮我写本周周报：完成了敏感性分析；和统计师讨论了缺失值怎么处理；下周准备投会议摘要。",
+   "message": "Too long.",
+   "quote": "Too long.",
+   "why": "Two words, English: the work is too long."
+  },
+  {
+   "id": "fj-025",
+   "lang": "en",
+   "verdict": "correction",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "message": "The hazard ratio is wrong: it should be 0.78, not 0.87.",
+   "quote": "it should be 0.78, not 0.87",
+   "why": "Gives the right hazard ratio in place of a wrong one."
+  },
+  {
+   "id": "fj-028",
+   "lang": "en",
+   "verdict": "correction",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "message": "Change 'leads to' to 'is associated with'.",
+   "quote": "Change 'leads to' to 'is associated with'.",
+   "why": "Quotes a phrase of the deliverable and gives the one to use instead."
+  },
+  {
+   "id": "fj-031",
+   "lang": "zh",
+   "verdict": "preference",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "记住我喜欢短的。",
+   "quote": "记住我喜欢短的",
+   "why": "States a liking about how they want this kind of work, with no mention of the work just done.",
+   "anchor": true
+  },
+  {
+   "id": "fj-033",
+   "lang": "zh",
+   "verdict": "preference",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "message": "以后给我的邮件结尾都用「顺颂时祺」。",
+   "quote": "以后给我的邮件结尾都用「顺颂时祺」",
+   "why": "A standing rule about a detail they want from now on; it is a new way, not the way just used."
+  },
+  {
+   "id": "fj-035",
+   "lang": "zh",
+   "verdict": "preference",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "message": "代码注释请用英文。",
+   "quote": "代码注释请用英文",
+   "why": "States how code should be commented in general."
+  },
+  {
+   "id": "fj-037",
+   "lang": "zh",
+   "verdict": "preference",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "message": "报告里的数字我习惯保留两位小数。",
+   "quote": "数字我习惯保留两位小数",
+   "why": "A habit about how numbers are shown, not about this piece of work."
+  },
+  {
+   "id": "fj-039",
+   "lang": "zh",
+   "verdict": "preference",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "message": "我是做统计的，解释里不用讲基础概念。",
+   "quote": "解释里不用讲基础概念",
+   "why": "Says who they are and what the explanations should skip."
+  },
+  {
+   "id": "fj-042",
+   "lang": "zh",
+   "verdict": "preference",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "message": "以后都用表格",
+   "quote": "以后都用表格",
+   "why": "A standing way they want (tables) that is not the way just used: a preference, not an adoption.",
+   "anchor": true
+  },
+  {
+   "id": "fj-043",
+   "lang": "en",
+   "verdict": "preference",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "I prefer bullet points over paragraphs.",
+   "quote": "I prefer bullet points over paragraphs.",
+   "why": "States a format they prefer."
+  },
+  {
+   "id": "fj-045",
+   "lang": "en",
+   "verdict": "preference",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "message": "Please keep answers under 200 words for me.",
+   "quote": "keep answers under 200 words",
+   "why": "A length they want answers kept to, in general."
+  },
+  {
+   "id": "fj-049",
+   "lang": "zh",
+   "verdict": "rejection",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "message": "不对，重新来，按表格的形式做。",
+   "quote": "重新来，按表格的形式做",
+   "why": "Throws the work away and asks for a redo in another form.",
+   "anchor": true
+  },
+  {
+   "id": "fj-051",
+   "lang": "zh",
+   "verdict": "rejection",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "message": "整个推翻，我要的是综述不是新闻稿。",
+   "quote": "整个推翻",
+   "why": "Overturns the whole work: they wanted a different kind of text."
+  },
+  {
+   "id": "fj-053",
+   "lang": "zh",
+   "verdict": "rejection",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "message": "方向完全错了，从头来。",
+   "quote": "方向完全错了，从头来",
+   "why": "The direction is wrong from the start: start over."
+  },
+  {
+   "id": "fj-055",
+   "lang": "en",
+   "verdict": "rejection",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "message": "Scrap this and start over with a different structure.",
+   "quote": "Scrap this and start over",
+   "why": "Scrap it and start over with another structure."
+  },
+  {
+   "id": "fj-059",
+   "lang": "zh",
+   "verdict": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "很好，就这样。",
+   "quote": null,
+   "why": "Approves the work as it is.",
+   "anchor": true
+  },
+  {
+   "id": "fj-060",
+   "lang": "zh",
+   "verdict": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "这次就这样吧。",
+   "quote": null,
+   "why": "Approves it and says the scope is this time only, so nothing is kept: accept, not adopt.",
+   "anchor": true
+  },
+  {
+   "id": "fj-061",
+   "lang": "zh",
+   "verdict": "accept",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "message": "可以，发给小王吧。",
+   "quote": null,
+   "why": "Builds on the work: send it on."
+  },
+  {
+   "id": "fj-063",
+   "lang": "zh",
+   "verdict": "accept",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "message": "不错，把它翻译成英文。",
+   "quote": null,
+   "why": "Approves and asks for the next step on the same work (translate it)."
+  },
+  {
+   "id": "fj-065",
+   "lang": "zh",
+   "verdict": "accept",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "message": "行，我先用着。",
+   "quote": null,
+   "why": "Takes the work as it is and will use it."
+  },
+  {
+   "id": "fj-067",
+   "lang": "zh",
+   "verdict": "accept",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "message": "谢谢，这个够用了。",
+   "quote": null,
+   "why": "Says it is enough."
+  },
+  {
+   "id": "fj-070",
+   "lang": "zh",
+   "verdict": "accept",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "就按这个来吧，发出去。",
+   "quote": null,
+   "why": "Points at this version and asks to send it now; there is no future scope: accept.",
+   "anchor": true
+  },
+  {
+   "id": "fj-072",
+   "lang": "en",
+   "verdict": "accept",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "message": "Thanks!",
+   "quote": null,
+   "why": "A plain thanks."
+  },
+  {
+   "id": "fj-075",
+   "lang": "en",
+   "verdict": "accept",
+   "previousRequest": "Write the conference abstract: Background, Methods, Results, Conclusions.",
+   "message": "Great, now translate it into French.",
+   "quote": null,
+   "why": "Approves and builds on it: translate the finished work."
+  },
+  {
+   "id": "fj-076",
+   "lang": "en",
+   "verdict": "accept",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "message": "Good. Send it to Anna.",
+   "quote": null,
+   "why": "Approves and asks to send it to a person."
+  },
+  {
+   "id": "fj-079",
+   "lang": "zh",
+   "verdict": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "顺便帮我查一下阿司匹林的半衰期。",
+   "quote": null,
+   "why": "A new, unrelated question that says nothing about the finished work.",
+   "anchor": true
+  },
+  {
+   "id": "fj-080",
+   "lang": "zh",
+   "verdict": "none",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "message": "另外，明天上海天气怎么样？",
+   "quote": null,
+   "why": "A question about something else entirely."
+  },
+  {
+   "id": "fj-082",
+   "lang": "zh",
+   "verdict": "none",
+   "previousRequest": "把这份随访数据按中心汇总成表。",
+   "message": "再帮我把另一个文件 outcome.xlsx 的第二个 sheet 汇总一下。",
+   "quote": null,
+   "why": "A new task of the same kind on other material: it says nothing about the finished work."
+  },
+  {
+   "id": "fj-084",
+   "lang": "zh",
+   "verdict": "none",
+   "previousRequest": "分析一下这份数据：不同中心的事件率有没有差异。",
+   "message": "我想问下 Cox 模型和 logistic 回归有什么区别？",
+   "quote": null,
+   "why": "A general knowledge question, not about the work."
+  },
+  {
+   "id": "fj-086",
+   "lang": "zh",
+   "verdict": "none",
+   "previousRequest": "整理会议纪要：讨论了投稿期刊、经费分配两件事。",
+   "message": "下周三的会议室订了吗？",
+   "quote": null,
+   "why": "A practical question unrelated to the work."
+  },
+  {
+   "id": "fj-088",
+   "lang": "zh",
+   "verdict": "none",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "帮我把下面这段翻译成英文：本研究纳入了 4200 名患者。",
+   "quote": null,
+   "why": "A new translation task with new text."
+  },
+  {
+   "id": "fj-090",
+   "lang": "zh",
+   "verdict": "none",
+   "previousRequest": "总结一下近三年 SGLT2 抑制剂在 HFpEF 的随机对照试验。",
+   "message": "好，那我们换个话题：帮我想三个基金标题。",
+   "quote": null,
+   "why": "Changes the subject to a new task."
+  },
+  {
+   "id": "fj-094",
+   "lang": "en",
+   "verdict": "none",
+   "previousRequest": "Draft an email to a collaborator asking to meet next Wednesday about the data.",
+   "message": "Can you also write an email to my landlord about the heating?",
+   "quote": null,
+   "why": "A new request for an email on another matter."
+  },
+  {
+   "id": "fj-096",
+   "lang": "en",
+   "verdict": "none",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "message": "Translate this paragraph into French: The study enrolled 4,200 patients.",
+   "quote": null,
+   "why": "A new translation task with new text, in English."
+  },
+  {
+   "id": "fj-100",
+   "lang": "zh",
+   "verdict": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "这个格式很好，以后周报都按这个来。",
+   "quote": "以后周报都按这个来",
+   "why": "Approves the format and asks that every later weekly report follow it: it points at this one and reaches into the future."
+  },
+  {
+   "id": "fj-101",
+   "lang": "zh",
+   "verdict": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "把刚才的做法存下来，以后写这类东西都这样。",
+   "quote": "把刚才的做法存下来，以后写这类东西都这样",
+   "why": "Asks to save what was just done and use it for this kind of work from now on.",
+   "anchor": true
+  },
+  {
+   "id": "fj-105",
+   "lang": "zh",
+   "verdict": "adopt",
+   "previousRequest": "帮我给合作者写一封邮件，约下周三讨论数据。",
+   "message": "以后类似的邮件都按这个风格来。",
+   "quote": "以后类似的邮件都按这个风格来",
+   "why": "Asks that similar e-mails follow this style in future."
+  },
+  {
+   "id": "fj-109",
+   "lang": "zh",
+   "verdict": "adopt",
+   "previousRequest": "写一个 Python 脚本，把文件夹里的 csv 合并成一个 Excel。",
+   "message": "这个脚本的写法以后都沿用。",
+   "quote": "这个脚本的写法以后都沿用",
+   "why": "Asks that this way of writing the script be kept for later ones."
+  },
+  {
+   "id": "fj-111",
+   "lang": "zh",
+   "verdict": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "很好，以后都这样。",
+   "quote": "以后都这样",
+   "why": "Very short: this way, from now on."
+  },
+  {
+   "id": "fj-112",
+   "lang": "zh",
+   "verdict": "adopt",
+   "previousRequest": "帮我写本周周报：完成了队列数据清洗；初步跑了 Cox 模型；下周开始写方法部分。",
+   "message": "以后周报都按这个来。",
+   "quote": "以后周报都按这个来",
+   "why": "Short: weekly reports from now on follow this one.",
+   "anchor": true
+  },
+  {
+   "id": "fj-113",
+   "lang": "zh",
+   "verdict": "adopt",
+   "previousRequest": "帮我写论文摘要，四段式：背景、方法、结果、结论。",
+   "message": "这个摘要的写法就是我要的，存成我的默认做法。",
+   "quote": "存成我的默认做法",
+   "why": "Says this is what they wanted and asks to store it as their default way."
+  },
+  {
+   "id": "fj-116",
+   "lang": "en",
+   "verdict": "adopt",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "message": "From now on, do it like this.",
+   "quote": "From now on, do it like this.",
+   "why": "English: from now on, like this.",
+   "anchor": true
+  },
+  {
+   "id": "fj-118",
+   "lang": "en",
+   "verdict": "adopt",
+   "previousRequest": "Summarise the main findings of this trial report in one paragraph.",
+   "message": "That's exactly how I want these written — use this approach every time.",
+   "quote": "use this approach every time",
+   "why": "Says this is exactly how they want these written and asks for the approach every time."
+  },
+  {
+   "id": "fj-120",
+   "lang": "en",
+   "verdict": "adopt",
+   "previousRequest": "Write this week's status update for my steering group: cohort cleaning is done, the Cox model is running, methods drafting starts next week.",
+   "message": "Always structure these summaries like this one.",
+   "quote": "Always structure these summaries like this one.",
+   "why": "Always structure these summaries like this one."
+  },
+  {
+   "id": "fj-122",
+   "lang": "en",
+   "verdict": "adopt",
+   "previousRequest": "Write an R script that fits a Cox model and plots the survival curves.",
+   "message": "Could you remember this style for future scripts?",
+   "quote": "remember this style for future scripts",
+   "why": "Asks to remember this style for future scripts."
+  }
+ ]
+}

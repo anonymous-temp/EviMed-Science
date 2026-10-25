@@ -92,6 +92,20 @@ test("platform envelopes are not what the person typed, and a message with a cre
   assert.equal(digest.dropped.sensitive, 1);
 });
 
+test("a credential or an identifier is dropped by its shape, never by a word: a request that merely mentions a password column or a token is kept", () => {
+  const transcript = {
+    messages: [
+      user(1, "把表里的密码列去掉，token 也不要，再按科室整理"),
+      user(5, "我的手机号 13800138000，发给我", { sourceRequestId: "req_2" }),
+      user(6, "密码是 hunter2hunter2，登录用", { sourceRequestId: "req_3" }),
+    ],
+  };
+  const digest = trajectoryDigest(transcript, run);
+  assert.equal(digest.requests[0].text, "把表里的密码列去掉，token 也不要，再按科室整理", "the words 密码 and token are language, and what the person asked");
+  assert.deepEqual(digest.interventions, [], "a phone number and a secret assigned to a name are shapes, and dropped");
+  assert.equal(digest.dropped.sensitive, 2);
+});
+
 test("reactions the caller hands in join the transcript's own, in order, and a steer already in the transcript is not listed twice", () => {
   const transcript = { messages: [user(1, "写一份摘要"), user(8, "再短一点", { sourceRequestId: "req_2" })] };
   const digest = trajectoryDigest(transcript, run, {

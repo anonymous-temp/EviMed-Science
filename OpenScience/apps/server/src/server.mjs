@@ -114,6 +114,7 @@ import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { MethodFeedbackService } from "./methodFeedback.mjs";
 import { FollowUpJudge, LearningEvidence } from "./learningEvidence.mjs";
+import { createFollowUpExamples } from "./followUpExamples.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
 import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
@@ -2868,7 +2869,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The selected research package: the result, its recorded dependencies, and the replays and corrections read beside them.
   const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, replays: resultReplays, corrections: resultCorrections,
     maxBytes: config.resultExportMaxBytes, maxFiles: config.resultExportMaxFiles }) : null;
-  const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
+  const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions,
+    // The owner took a result as a package: the file the result is of was used (`LearningEvidence.noteFileUse`), beside the answer.
+    onExported: async (user, projectId, versionId) => {
+      if (!learningEvidence || !resultProvenance) return;
+      const version = await resultProvenance.get(user.id, projectId, versionId);
+      if (typeof version?.path === "string" && version.path) await learningEvidence.noteFileUse(await store.requireProject(user, projectId), { path: version.path });
+    } });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
     runtimeWorkspaceRoot: project => runtimeManager.runtimeWorkspaceRoot(project),
@@ -4387,8 +4394,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
       apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs,
     }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch });
+    const methodEmbed = overrides.methodEmbed ?? (methodEmbedder.configured ? (/** @type {string[]} */ texts) => methodEmbedder.embedDocuments(texts) : null);
     const methodSimilarity = overrides.methodSimilarity ?? createMethodSimilarity({
-      embed: overrides.methodEmbed ?? (methodEmbedder.configured ? (texts) => methodEmbedder.embedDocuments(texts) : null),
+      embed: methodEmbed,
       logger: { warn: (message) => process.stderr.write(`${message}\n`) },
     });
     // The mount ranks the library by the same reading of "close" (`RuntimeManager.syncCapsuleMethods`).
@@ -4476,6 +4484,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       learningEvidence = new LearningEvidence({
         feedback: feedbackEvents, jobs: productJobs, agentRuns, triggers: () => learningTriggers,
         judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch }),
+        // The few examples a reading is shown beside the judge's fixed contrasts, chosen by the meaning of the message with the methods' own
+        // embedder, and by character n-grams when it is down (`followUpExamples.mjs`).
+        examples: createFollowUpExamples({ embed: methodEmbed, logger: { warn: (message) => process.stderr.write(`${message}\n`) } }),
+        observe: (outcome) => learningMetrics.observeFollowUpJudge(outcome),
         // A program a clean run carried is counted toward a script lesson (`scriptLessons.mjs`); the queue is the triggers', given late like the triggers themselves.
         scripts: scriptUses ? new ScriptLessons({ uses: scriptUses, execute: (body, options) => codeController.execVerify(body, options),
           queue: () => (project, run, lesson) => learningTriggers.queue(project, run, lesson), onOutcome: (outcome, times) => learningMetrics.observeScript(outcome, times) }) : null,
@@ -6078,6 +6090,37 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   /**
+   * The owner opened or downloaded a file of their workspace (the files routes the outputs list, the inbox link and the files page all
+   * go through): when a finished run delivered it, that run was used (`LearningEvidence.noteFileUse`). Beside the answer, never in front
+   * of it, and a failure is the evidence ledger's. Only the workspace root: the project's base directory holds no run's deliveries.
+   * @param {any} req @param {{ project: any }} ctx @param {string} rel
+   */
+  function noteDeliveredFileUse(req, ctx, rel) {
+    if (!learningEvidence) return;
+    try {
+      if (normalizeRoot(new URL(req.url ?? "/", "http://files.local").searchParams.get("root")) === "base") return;
+    } catch { return; }
+    void learningEvidence.noteFileUse(ctx.project, { path: rel }).catch(() => null);
+  }
+
+  /**
+   * A person's message that reaches an existing conversation through the control plane's own dispatch — the page's dispatch route, a
+   * messaging channel's question — is the answer to the run before it, read once for what it says about that run exactly as a turn adopted
+   * from the kernel page is (`LearningEvidence.onNewTurn`). Beside the dispatch, never in front of it: the caller does not wait and a
+   * failure is the evidence ledger's. A replay of a dispatch that already started is not read again, and the reservation this dispatch
+   * makes is named so that it is the turn the message opens and not a run still going. Attended turns only: the callers never pass an
+   * automated, scheduled, background, programme or continuation turn.
+   * @param {any} project @param {{ sessionId: string, dispatchId: string, text: string }} turn
+   */
+  function readDispatchedTurn(project, { sessionId, dispatchId, text }) {
+    if (!learningEvidence || !dispatchId) return;
+    void (async () => {
+      const known = (await agentRuns.list(project).catch(() => [])).some((/** @type {any} */ run) => run?.dispatchId === dispatchId);
+      if (!known) await learningEvidence?.onNewTurn(project, { sessionId, text, requestId: dispatchId, dispatchId });
+    })().catch(() => null);
+  }
+
+  /**
    * A question that arrived through a messaging channel (imService), dispatched
    * the way the page's own question is: the same provider and spend checks as
    * `POST /api/agent-runs/dispatch`, the same routing an adopted conversation
@@ -6097,6 +6140,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     else await assertSpendWithinLimits(config, user.id);
     if (!(await researchSessions.get(project, sessionId))) await researchSessions.put(project, sessionId, { mode: "open-domain" });
+    // A question a person sent from their channel is the answer to the run before it; a module's own dispatch (`dispatchFingerprint`) is not a person's reply.
+    if (!options.dispatchFingerprint) readDispatchedTurn(project, { sessionId, dispatchId, text });
     const registry = await agentRegistry;
     const route = await routeAdoptedInput(project, sessionId, text);
     // The same allowance question the page's own dispatch asks (§9.6), after
@@ -7261,6 +7306,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (credits && !(await agentRuns.list(ctx.project)).some((existing) => existing.dispatchId === body.dispatchId)) {
           await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
         }
+        // A message a person typed into their conversation is the answer to the run before it, read beside the dispatch (never an automated one).
+        if (!automated && typeof body.dispatchId === "string") readDispatchedTurn(ctx.project, { sessionId: body.sessionId, dispatchId: body.dispatchId, text });
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
@@ -8082,13 +8129,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (pathname.startsWith("/api/files/preview/") && req.method === "GET") {
         const ctx = await context(req, res);
-        await sendWorkspaceFile(req, res, ctx, decodeTail(pathname, "/api/files/preview/"), false);
+        const rel = decodeTail(pathname, "/api/files/preview/");
+        await sendWorkspaceFile(req, res, ctx, rel, false);
+        noteDeliveredFileUse(req, ctx, rel);
         return;
       }
 
       if (pathname.startsWith("/api/files/download/") && req.method === "GET") {
         const ctx = await context(req, res);
-        await sendWorkspaceFile(req, res, ctx, decodeTail(pathname, "/api/files/download/"), true);
+        const rel = decodeTail(pathname, "/api/files/download/");
+        await sendWorkspaceFile(req, res, ctx, rel, true);
+        noteDeliveredFileUse(req, ctx, rel);
         return;
       }
 
@@ -8191,6 +8242,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     managedBrowser,
     authorizeOpenSession: authorizeOwnedNativeSession,
     recordUploadAttempt: productDocuments ? (project) => recordNativeUploadAttempt(productDocuments, project) : null,
+    // A file the researcher opens in the kernel's own file panel is a use of the run that delivered it (`LearningEvidence.noteFileUse`).
+    noteFileRead: (project, opened) => learningEvidence?.noteFileUse(project, opened) ?? null,
     authorizePrompt: assertPublicSessionPrompt,
     // A turn begun in the kernel's own application never passes through the
     // dispatch route, so the allowance is asked here too (§9.6). The capability

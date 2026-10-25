@@ -14,6 +14,7 @@
     "./answer-evidence-grade": "./src/answerEvidenceGrade.mjs",
     "./clinical-evidence": "./src/clinicalEvidence.mjs",
     "./entity-keys": "./src/entityKeys.mjs",
+    "./follow-up-examples": "./src/followUpExamples.mjs",
     "./method-records": "./src/methodRecords.mjs",
     "./research-tools": "./src/researchToolDisplay.mjs",
     "./runtime-inventory": "./src/runtimeInventory.mjs",

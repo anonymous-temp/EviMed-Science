@@ -10,7 +10,9 @@ import { after, before, test } from "node:test";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FeedbackEvents } from "../src/feedbackEvents.mjs";
+import { learningRunOutcome } from "@evimed/domain";
 import { LearningEvidence, settleKeyFor } from "../src/learningEvidence.mjs";
+import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { LearningWorker } from "../src/learningWorker.mjs";
 import { FEEDBACK_EVENT_TRIGGERS, FEEDBACK_SUBJECT_TYPES, PRODUCT_JOB_KINDS, migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
@@ -99,45 +101,63 @@ test("one reaction is one row; the account's listing does not carry the loop's e
   await assert.rejects(record("run_bad", { evidence: "applause" }), /closed kinds and verdicts/);
 });
 
-test("the clean runs of a scope in a window are the ones nobody corrected, however late, each once, with the shape of what they left", options, async () => {
+test("the clean runs of a scope in a window are the ones the person kept and nobody corrected, however late, each once, with the shape of what they left; silence is not among them", options, async () => {
   const scope = `scope_${randomUUID().slice(0, 8)}`;
   const base = { scope };
-  // Clean: settled in silence, and accepted on the next turn.
-  await record("c_silent", { ...base, evidence: "silent", shape, at: at(5) });
+  // Kept: its file taken in the window; settled in silence and its file taken long after; accepted on the next turn; adopted.
+  await record("c_used", { ...base, evidence: "silent", shape, at: at(5) });
+  await record("c_used", { ...base, evidence: "used", at: at(6) }, "used");
+  await record("c_late_use", { ...base, evidence: "silent", shape, at: at(7) });
+  await record("c_late_use", { ...base, evidence: "used", at: at(300) }, "used");
   await record("c_accept", { ...base, evidence: "follow-up", verdict: "accept", shape, at: at(10) }, "t1");
-  await record("c_new_question", { ...base, evidence: "follow-up", verdict: "none", shape, at: at(12) }, "t2");
+  await record("c_adopt", { ...base, evidence: "follow-up", verdict: "adopt", rule: "周报都按这个写", quote: "以后周报都按这个来", shape, at: at(11) }, "t1");
+  // Silence is unknown, not approval: settled and left alone, answered about something else, a steer the judge read as nothing.
+  await record("u_silent", { ...base, evidence: "silent", shape, at: at(8) });
+  await record("u_new_question", { ...base, evidence: "follow-up", verdict: "none", shape, at: at(12) }, "t2");
+  await record("u_calm_steer", { ...base, evidence: "steer", verdict: "accept", quote: "好，继续", at: at(9) });
+  await record("u_calm_steer", { ...base, evidence: "silent", shape, at: at(9) }, "settled");
   // Silent twice (two settle attempts under different keys) is still one run.
-  await record("c_silent", { ...base, evidence: "silent", shape, at: at(6) }, "again");
-  // Not clean: a steer, a follow-up that corrected it, and a result corrected long after the silence.
+  await record("c_used", { ...base, evidence: "silent", shape, at: at(6) }, "again");
+  // Not clean: a steer, a follow-up that corrected it, a result corrected long after, a steer its judge read as a correction, and a used run corrected afterwards.
   await record("x_steer", { ...base, evidence: "steer", quote: "再短一点" });
+  await record("x_judged_steer", { ...base, evidence: "steer", verdict: "preference", rule: "更短", quote: "再短一点" }, "s2");
+  await record("x_judged_steer", { ...base, evidence: "used", at: at(14) }, "used");
+  await record("x_judged_steer", { ...base, evidence: "silent", shape, at: at(14) }, "settled");
   await record("x_follow", { ...base, evidence: "follow-up", verdict: "preference", rule: "以后用表格", quote: "以后用表格" }, "t3");
   await record("x_late", { ...base, evidence: "silent", shape, at: at(15) });
+  await record("x_late", { ...base, evidence: "used", at: at(15) }, "used");
   await record("x_late", { ...base, evidence: "result-corrected", quote: "把第二节删掉", at: at(55) }, "later");
-  await record("x_follow_then_silent", { ...base, evidence: "silent", shape, at: at(16) });
-  await record("x_follow_then_silent", { ...base, evidence: "follow-up", verdict: "rejection", rule: "重做", quote: "重做" }, "t4");
+  await record("x_follow_then_used", { ...base, evidence: "silent", shape, at: at(16) });
+  await record("x_follow_then_used", { ...base, evidence: "used", at: at(16) }, "used");
+  await record("x_follow_then_used", { ...base, evidence: "follow-up", verdict: "rejection", rule: "重做", quote: "重做" }, "t4");
   // Not in the family: another scope, no shape, outside the window, another account.
-  await record("o_scope", { scope: `${scope}_other`, evidence: "silent", shape, at: at(7) });
-  await record("o_no_shape", { ...base, evidence: "silent", at: at(8) });
-  await record("o_early", { ...base, evidence: "silent", shape, at: "2026-10-01T10:00:00.000Z" });
-  await record("o_stranger", { ...base, evidence: "silent", shape, at: at(9) }, "k", stranger);
+  await record("o_scope", { scope: `${scope}_other`, evidence: "follow-up", verdict: "accept", shape, at: at(7) });
+  await record("o_no_shape", { ...base, evidence: "follow-up", verdict: "accept", at: at(8) });
+  await record("o_early", { ...base, evidence: "follow-up", verdict: "accept", shape, at: "2026-10-01T10:00:00.000Z" });
+  await record("o_stranger", { ...base, evidence: "follow-up", verdict: "accept", shape, at: at(9) }, "k", stranger);
 
   const window = { scope, from: new Date(Date.UTC(2026, 9, 23)), to: new Date(Date.UTC(2026, 9, 24)) };
   const family = await feedback.cleanSettledRuns(owner, window);
-  assert.deepEqual(family.map((member) => member.runId), ["c_silent", "c_accept", "c_new_question"], "oldest first, each run once");
+  assert.deepEqual(family.map((member) => member.runId), ["c_used", "c_late_use", "c_accept", "c_adopt"], "oldest first, each run once; a use that came hours after the settling counts");
   assert.equal(family[0].projectId, PROJECT, "each with the project its transcript is in");
   assert.deepEqual(family[0].shape, shape);
-  assert.equal(family[1].at, new Date(at(10)).toISOString());
+  assert.equal(family[2].at, new Date(at(10)).toISOString());
   assert.deepEqual((await feedback.cleanSettledRuns(stranger, window)).map((member) => member.runId), ["o_stranger"]);
   assert.deepEqual(await feedback.cleanSettledRuns(owner, { ...window, scope: "no-such-scope" }), []);
-  assert.deepEqual((await feedback.cleanSettledRuns(owner, { ...window, limit: 2 })).map((member) => member.runId), ["c_accept", "c_new_question"], "the newest of the family when it is bounded");
+  assert.deepEqual((await feedback.cleanSettledRuns(owner, { ...window, limit: 2 })).map((member) => member.runId), ["c_accept", "c_adopt"], "the newest of the family when it is bounded");
+  // The same definition in code reads the same events.
+  for (const runId of ["c_used", "c_late_use", "c_accept", "c_adopt"]) assert.equal(learningRunOutcome((await feedback.learningEvidenceOf(owner, runId)).map((event) => event.detail)), "clean", runId);
+  for (const runId of ["u_silent", "u_new_question", "u_calm_steer"]) assert.equal(learningRunOutcome((await feedback.learningEvidenceOf(owner, runId)).map((event) => event.detail)), "unknown", runId);
+  for (const runId of ["x_steer", "x_judged_steer", "x_follow", "x_late", "x_follow_then_used"]) assert.equal(learningRunOutcome((await feedback.learningEvidenceOf(owner, runId)).map((event) => event.detail)), "corrected", runId);
 
   // The operator's report reads the same rows: this account, once, with what it left and when.
   const [mine, ...others] = await learningEvidenceReport(database, { user: owner, now: new Date("2026-10-23T12:00:00.000Z") });
   assert.deepEqual(others, []);
   assert.equal(mine.user, owner);
-  assert.equal(mine.lastEvidenceAt, new Date(at(55)).toISOString());
-  assert.ok(mine.evidence7d.silent >= 4 && mine.evidence7d["follow-up"] >= 4 && mine.evidence7d["result-corrected"] >= 1);
-  assert.ok(mine.corrections30d >= 5, "the steer, the corrected follow-ups and the result corrected");
+  assert.equal(mine.lastEvidenceAt, new Date(at(300)).toISOString());
+  assert.ok(mine.evidence7d.silent >= 4 && mine.evidence7d["follow-up"] >= 4 && mine.evidence7d["result-corrected"] >= 1 && mine.evidence7d.used >= 4);
+  assert.ok(mine.corrections30d >= 6, "the steers read as corrections, the corrected follow-ups and the result corrected");
+  assert.ok(mine.kept30d >= 6, "the acceptance, the adoption and the files taken");
 });
 
 test("a delivery is settled by the product queue: not before its window closes, at once when the next turn brings it forward, and a routine follows the third clean run", options, async () => {
@@ -156,7 +176,9 @@ test("a delivery is settled by the product queue: not before its window closes, 
   const earlier = [delivery("s_run_a", 90), delivery("s_run_b", 80)];
   const third = delivery("s_run_c", 1);
   runs.push(...earlier, third);
-  for (const run of earlier) await record(run.id, { evidence: "silent", shape, scope, at: new Date().toISOString() }, "settled");
+  // The two earlier runs were accepted on the next turn; the third's file has been opened since it finished.
+  for (const run of earlier) await record(run.id, { evidence: "follow-up", verdict: "accept", shape, scope, at: new Date().toISOString() }, "turn");
+  await record(third.id, { evidence: "used", scope, at: new Date().toISOString() }, "used");
 
   const due = await jobs.enqueue(owner, "learning-evidence", { runId: third.id, sessionId: third.sessionId }, { idempotencyKey: settleKeyFor(third.id), projectId: PROJECT, runAfter: new Date(Date.now() + 29 * 60_000) });
   assert.equal(await jobs.claim(["learning-evidence"], `w-${randomUUID()}`), null, "not before its window closes");
@@ -169,8 +191,38 @@ test("a delivery is settled by the product queue: not before its window closes, 
   await worker.tick();
   const done = await jobs.get(owner, due.id);
   assert.equal(done?.status, "succeeded", "the worker finishes it: nothing is left running to lapse and be claimed again");
-  assert.deepEqual([done?.result?.settled, done?.result?.routine], ["silent", true]);
+  assert.deepEqual([done?.result?.settled, done?.result?.routine, done?.result?.outcome], ["silent", true, "clean"]);
   assert.equal(lessons.length, 1);
   assert.deepEqual(lessons[0].payload.peers.map((peer) => [peer.runId, peer.projectId]), [["s_run_a", PROJECT], ["s_run_b", PROJECT]]);
   assert.equal(lessons[0].idempotencyKey, `distill:${third.id}:routine`);
+});
+
+test("an adoption on the next turn, through the real triggers and the real queue, is one follow-up row, one adopted lesson naming it, and a clean run", options, async () => {
+  const run = { id: `adopt_run_${randomUUID().slice(0, 8)}`, sessionId: `ses_${randomUUID().slice(0, 8)}`, status: "succeeded", effectiveAgentId: "open-domain-answer", question: "写本周周报",
+    outputFiles: ["report/weekly.docx"], transcript: { completeness: "complete" },
+    finishedAt: new Date(Date.now() - 2 * 60_000).toISOString(), startedAt: new Date(Date.now() - 6 * 60_000).toISOString() };
+  const answer = JSON.stringify({ verdict: "adopt", rule: "周报都按刚才的做法写", quote: "以后周报都按这个来", concerns: [] });
+  /** @type {any} */ let triggers = null;
+  const evidence = new LearningEvidence({
+    feedback, jobs, agentRuns: { list: async () => [run] }, triggers: () => triggers, judge: /** @type {any} */ ({ available: true, read: async () => answer }),
+    resolveProject: async () => ({ id: PROJECT, userId: owner }), readShapes: async () => ({ "report/weekly.docx": shape[0] }), now: () => new Date(),
+  });
+  triggers = new LearningTriggers({ jobs, agentRuns: { list: async () => [run], runWorkflowProjection: async () => null }, evidence });
+  const project = { id: PROJECT, userId: owner };
+  const result = await evidence.onNewTurn(project, { sessionId: run.sessionId, text: "这个格式很好，以后周报都按这个来。", requestId: "req_adopt" });
+  assert.deepEqual([result.recorded, result.verdict, result.queued], [true, "adopt", ["adopted"]]);
+  const rows = await feedback.learningEvidenceOf(owner, run.id);
+  assert.deepEqual(rows.map((row) => [row.detail.evidence, row.detail.verdict, row.detail.quote]), [["follow-up", "adopt", "以后周报都按这个来"]]);
+  assert.deepEqual(rows[0].detail.shape, shape.slice(0, 1));
+  const queued = await database.query("SELECT payload, status FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill' AND payload->>'runId'=$2", [owner, run.id]);
+  assert.equal(queued.rowCount, 1, "one lesson");
+  assert.deepEqual([queued.rows[0].payload.trigger, queued.rows[0].payload.feedbackEventIds, queued.rows[0].payload.feedback[0].detail.verdict], ["adopted", [rows[0].id], "adopt"]);
+  // The same turn read again is the same row and the same lesson.
+  await evidence.onNewTurn(project, { sessionId: run.sessionId, text: "这个格式很好，以后周报都按这个来。", requestId: "req_adopt" });
+  assert.equal((await feedback.learningEvidenceOf(owner, run.id)).length, 1);
+  assert.equal((await database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill' AND payload->>'runId'=$2", [owner, run.id])).rowCount, 1);
+  // Kept, and never corrected: in the family a routine is counted over.
+  const family = await feedback.cleanSettledRuns(owner, { scope: "conversation", from: new Date(Date.now() - 3_600_000), to: new Date(Date.now() + 3_600_000) });
+  assert.ok(family.some((member) => member.runId === run.id));
+  await database.query("DELETE FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill' AND payload->>'runId'=$2", [owner, run.id]);
 });

@@ -62,7 +62,7 @@
 
 import { createHash } from "node:crypto";
 import {
-  LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_SUBJECT_TYPE, LEARNING_EVIDENCE_TRIGGER, cleanLearningEvidence, fitResultCorrection, projectResultCorrection,
+  LEARNING_ACCEPT_VERDICTS, LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_SUBJECT_TYPE, LEARNING_EVIDENCE_TRIGGER, cleanLearningEvidence, fitResultCorrection, projectResultCorrection,
 } from "@evimed/domain";
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HttpError } from "./security.mjs";
@@ -392,10 +392,14 @@ export class FeedbackEvents {
   }
 
   /**
-   * The runs of one scope that were left alone — settled with no reaction (`silent`) or answered with an acceptance or a new question
-   * — and never corrected, in one window of time, oldest first, each with the shape of what it left: the family a routine is counted
-   * over. A run that was corrected at any time, by a steer, a follow-up or a result corrected in the page, is not in it, however
-   * late the correction came.
+   * The runs of one scope that were kept and never corrected, in one window of time, oldest first, each with the shape of what it left:
+   * the family a routine is counted over. Kept is the person's own act: an acceptance or an adoption on the next turn, or one of the run's
+   * delivered files opened or downloaded (`used`). Silence is not in it (a run nobody reacted to is unknown, not approved), and neither is
+   * a next message about something else. A run that was corrected at any time, by a steer or a follow-up read that way or a result corrected
+   * in the page, is not in it, however late the correction came (`learningRunOutcome` says the same in code).
+   *
+   * The shape comes from an event of the run that carries one (the settling `silent` row, or the follow-up), so a use that arrives after
+   * the settling needs none of its own; the window is the one in which that event was recorded.
    *
    * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number }} window
    * @returns {Promise<{ runId: string, projectId: string | null, at: string, endedAt: string | null, shape: any[] }[]>}
@@ -407,14 +411,16 @@ export class FeedbackEvents {
       FROM evimed_product.feedback_events e
       WHERE e.user_id=$1 AND e.trigger_kind='learning-evidence' AND e.subject_type='run' AND e.detail->>'scope'=$2
         AND e.occurred_at >= $3 AND e.occurred_at < $4
-        AND (e.detail->>'evidence'='silent' OR (e.detail->>'evidence'='follow-up' AND e.detail->>'verdict' <> ALL($5::text[])))
-        AND e.detail ? 'shape'
+        AND e.detail->>'evidence' IN ('silent','follow-up','used') AND e.detail ? 'shape'
+        AND EXISTS (SELECT 1 FROM evimed_product.feedback_events k
+          WHERE k.user_id=e.user_id AND k.trigger_kind='learning-evidence' AND k.subject_type='run' AND k.subject_id=e.subject_id
+            AND (k.detail->>'evidence'='used' OR (k.detail->>'evidence'='follow-up' AND k.detail->>'verdict'=ANY($6::text[]))))
         AND NOT EXISTS (SELECT 1 FROM evimed_product.feedback_events c
           WHERE c.user_id=e.user_id AND c.trigger_kind='learning-evidence' AND c.subject_type='run' AND c.subject_id=e.subject_id
-            AND (c.detail->>'evidence' IN ('steer','result-corrected')
-              OR (c.detail->>'evidence'='follow-up' AND c.detail->>'verdict'=ANY($5::text[]))))
+            AND (c.detail->>'evidence'='result-corrected'
+              OR (c.detail->>'evidence' IN ('steer','follow-up') AND c.detail->>'verdict'=ANY($5::text[]))))
       ORDER BY e.subject_id, e.occurred_at, e.id`,
-    [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS]]);
+    [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS], [...LEARNING_ACCEPT_VERDICTS]]);
     return result.rows
       .map((/** @type {any} */ row) => ({ runId: String(row.subject_id), projectId: row.project_id ?? null, at: new Date(row.occurred_at).toISOString(),
         endedAt: Number.isFinite(Date.parse(String(row.ended_at ?? ""))) ? new Date(row.ended_at).toISOString() : null, shape: Array.isArray(row.shape) ? row.shape : [] }))

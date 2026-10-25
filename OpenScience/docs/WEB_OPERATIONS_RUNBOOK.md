@@ -1255,7 +1255,7 @@ The learning loop. `node scripts/ops/learning-evidence-report.mjs [--user <id>] 
 <id> --apply` retires them restorably (reason `stale_feature`) and closes applied handbook candidates, `--user <id> --restore` gives back
 everything it put away. Counters: `open_science_learning_evidence_total{evidence,verdict}`, `…_evidence_last_at{account}` (the time of an
 account's last learning evidence, the account as twelve hex characters), `…_lessons_total{trigger}`, `…_trigger_refused_total{reason}`,
-`…_evidence_failed_total{reason}`, `…_evidence_quotes_total{outcome}`, `…_mount_selected_total{reason}`, `…_mount_ranked_total`,
+`…_evidence_failed_total{reason}` (`adopt_unconfirmed`: the second reading of an `adopt` said something that is not accept, preference, correction or adopt; `adopt_without_delivery`), `…_follow_up_judge_total{outcome}` (`adopt_confirmed` / `adopt_disagreed` are the second reading of an `adopt` with the examples in the other order; `examples_embedding` / `examples_ngram` say how the request's nearest examples were chosen: the knowledge base's embedder, or character n-grams when it is down; `steer_judged`), `…_evidence_quotes_total{outcome}`, `…_mount_selected_total{reason}`, `…_mount_ranked_total`,
 `…_method_applied_total{outcome}`, `…_consolidate_noop_total{reason}`, `…_relations_total{type}`, `…_replay_total{outcome}` and `…_replay_judged_total{verdict}`
 (the replay of a rewritten method against up to five runs the person accepted: two grounded contradictions take the newer version out, restorably),
 `…_script_total{outcome}` (the programs a clean run carried, found by format and normalised by Python in the runtime controller's disposable container; the same
@@ -1263,7 +1263,14 @@ program in three runs of two conversations queues one `script` lesson, whose occ
 (a method that carries scripts is written only after its scripts and their tests have run there: `failed` writes no method, `unavailable` retries the lesson) and the
 retirement codes `superseded`, `unproven_merge_expired`, `library_cap`, `replay_regressed`; `open_science_learning_spend_cny` is where the follow-up judge's calls show (purpose `learning`).
 The job kind `learning-evidence` is the settling of a run 30 minutes after it ended; a memory reset cancels it with the rest of the
-account's learning. `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE` is gone: a run's `delivered` sample no longer exists. A `consolidate` job with
+account's learning. Evidence kinds are `steer` (read by the same judge when the run finishes, at most the newest three, in the background: a steer
+the judge could not read is kept unjudged and is a correction), `follow-up` (verdicts `correction`, `preference`, `rejection`, `accept`, `none` and `adopt`),
+`result-corrected`, `used` (the owner opened or downloaded a delivered file of a finished run through `/api/files/preview|download` or the kernel
+frame's file panel; once per run, no words) and `silent`. Since 2026-10-25 silence is unknown, not approval: a run is clean (for a routine, a script
+lesson and a method's `appliedClean`) only when it was accepted, adopted or used and never corrected, so an account whose files nobody opens and whose
+next messages are about other things teaches no routine. An `adopt` makes the run clean and queues a `distill` lesson with trigger `adopted` at
+once; the judge's example bank is `packages/domain/src/follow-up-examples.json`, calibrated with `node evals/follow-up-judge/run.mjs`. The report script
+counts `kept 30d` (acceptances, adoptions and uses) beside `corrected 30d`. `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE` is gone: a run's `delivered` sample no longer exists. A `consolidate` job with
 `action: "replay"` is one rewrite's replay (queued by a distillation that amended a method and by a pass that merged methods; its result names `outcome`,
 `replayed`, `contradictions` and, when it took the newer version out, `reason: "replay_regressed"` and `restored: "rollback" | "retire"`). The
 consolidation pass's result lives on the job (`evimed_product.jobs`, `kind='consolidate'`): `shortlist.mode`, `shortlist.topScore`, `shortlist.p50` and `shortlist.p90` (the cosines of each method's

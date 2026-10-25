@@ -22,14 +22,19 @@
  *    it as a correction, a preference or a rejection of the previous run
  *    (`learningEvidence.mjs`, `afterCorrection`). Whether a sentence is a correction
  *    is a model's judgement; that it quotes the researcher verbatim is checked in code.
- *  - **the same kind of work, done cleanly, three times** — `routine`. A trajectory is clean
- *    when nobody reacted to it (no steer, no corrected result, no follow-up that
- *    corrected it), and the same kind is the same SCOPE — the capability, or
+ *  - **the researcher asked that the way it was done be kept** — `adopted`, never sampled (2026-10-25, owner decision 4): the first
+ *    message of the next turn when a small model reads it as `adopt` (「以后周报都按这个来」, "from now on, do it like this"),
+ *    after a run that finished and delivered something. It is the strongest signal there is: an acceptance and a lesson at once,
+ *    queued by `afterAdoption` through every refusal below, with the person's words as the distillation's evidence.
+ *  - **the same kind of work, kept cleanly, three times** — `routine`. A trajectory is clean
+ *    when it was accepted, adopted or used (its file opened or downloaded) and nobody corrected it (no steer, no corrected
+ *    result, no follow-up that corrected it): silence is unknown, not approval (2026-10-25), and counts for nothing.
+ *    The same kind is the same SCOPE — the capability, or
  *    `conversation` for the ordinary answer line, which can trigger a routine for the first
  *    time — and the same artifact SHAPE (`@evimed/domain` `artifactShape.mjs`), inside
  *    one fixed period of `ROUTINE_PERIOD_DAYS`. It is decided where cleanness becomes known,
  *    when a run is settled (`learningEvidence.settle`, thirty minutes after it ended or
- *    when its next turn came), by `routineLessonFor` over the family
+ *    when its next turn came; a file used later settles it then), by `routineLessonFor` over the family
  *    the feedback ledger holds; every Nth, not only the Nth.
  *  - **a repaired delivery** — `repair_accepted`, at share 0 (below).
  *
@@ -180,6 +185,18 @@ export function routinePeriodOf(at, periodMs = routinePeriodMs(ROUTINE_PERIOD_DA
  */
 export function leftFiles(run) {
   return ["artifacts", "unverifiedArtifacts", "outputFiles"].some((field) => Array.isArray(run?.[field]) && run[field].length > 0);
+}
+
+/**
+ * Whether a finished run delivered something there is to keep: a file the researcher can open (`leftFiles`), or an answer — the ledger records
+ * more than the question the run began with: the transcript it stored at the end holds more than one message (`transcript.messages`), or the
+ * monitor counted more than one while it ran (`observedMessages`, which a run that finished between two polls never got). What an `adopt` is
+ * about: the way a piece of work was done needs a piece of work.
+ * @param {any} run
+ */
+export function deliveredSomething(run) {
+  return run?.status === "succeeded"
+    && (leftFiles(run) || Number(run?.transcript?.messages) > 1 || Number(run?.observedMessages) > 1);
 }
 
 /**
@@ -354,6 +371,29 @@ export function correctionLessonFor({ run, runs, project = null, event, internal
     trigger: "correction",
     idempotencyKey: `distill:${run.id}:correction:${event.id}`,
     payload: { runId: run.id, trigger: "correction", dispatchKey: event.id, feedbackEventIds: [event.id], feedback: [event],
+      ...(guestInfluence ? { guestInfluence: { uncorroborated: true } } : {}) },
+  };
+}
+
+/**
+ * The lesson one adoption is evidence for, or null: the person asked, on the next turn, that the way a finished run did its work be kept
+ * (a `follow-up` of `learning-evidence` whose verdict is `adopt`). Queued at once and never sampled; the run is the one whose way was
+ * adopted, and the lesson's evidence is the quotation of the person's words that rides in the event. The gates are the ones every other
+ * lesson passes (`learningRefusal`), and the run must have delivered something (`deliveredSomething`). Each adoption is its own dispatch
+ * (`dispatchKey` is the event's id).
+ *
+ * @param {{ run: any, runs: readonly any[], project?: { id?: string | null } | null, event: any,
+ *   internalAgent?: (agentId: string) => boolean, guestInfluence?: boolean }} input
+ * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> } | null}
+ */
+export function adoptedLessonFor({ run, runs, project = null, event, internalAgent = () => false, guestInfluence = false }) {
+  const adopted = event?.trigger === "learning-evidence" && event.detail?.evidence === "follow-up" && event.detail?.verdict === "adopt";
+  if (!run || !event?.id || !adopted || !deliveredSomething(run)) return null;
+  if (learningRefusal({ run, runs, project, internalAgent })) return null;
+  return {
+    trigger: "adopted",
+    idempotencyKey: `distill:${run.id}:adopted:${event.id}`,
+    payload: { runId: run.id, trigger: "adopted", dispatchKey: event.id, feedbackEventIds: [event.id], feedback: [event],
       ...(guestInfluence ? { guestInfluence: { uncorroborated: true } } : {}) },
   };
 }
@@ -582,6 +622,28 @@ export class LearningTriggers {
     const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
     const guestInfluence = await this.#guestInfluenced(project, run);
     const lesson = correctionLessonFor({ run, runs, project, event, internalAgent: () => internal, guestInfluence });
+    if (!lesson) return { queued: [], skipped: this.#refused("not_eligible") };
+    return await this.queue(project, run, lesson) ? { queued: [lesson.trigger], skipped: null } : { queued: [], skipped: "enqueue_failed" };
+  }
+
+  /**
+   * Queue the lesson one adoption is evidence for (`adoptedLessonFor`): the person asked that the way a run did its work be kept. Best
+   * effort, and under the same switches as every other lesson: the researcher's 「停止学习」, someone else's capsule being tried, the
+   * platform's own work, a run that delivered nothing.
+   *
+   * @param {any} project @param {{ event: any, runId: string }} adoption
+   * @returns {Promise<{ queued: string[], skipped: string | null }>}
+   */
+  async afterAdoption(project, { event, runId }) {
+    const runs = await this.agentRuns.list(project).catch(() => []);
+    const run = runs.find((/** @type {any} */ item) => item?.id === runId);
+    if (!run) return { queued: [], skipped: this.#refused("run_unavailable") };
+    const refused = await this.refusalFor(project, run, { runs });
+    if (refused) return { queued: [], skipped: refused };
+    const agentId = String(run.effectiveAgentId ?? "");
+    const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
+    const guestInfluence = await this.#guestInfluenced(project, run);
+    const lesson = adoptedLessonFor({ run, runs, project, event, internalAgent: () => internal, guestInfluence });
     if (!lesson) return { queued: [], skipped: this.#refused("not_eligible") };
     return await this.queue(project, run, lesson) ? { queued: [lesson.trigger], skipped: null } : { queued: [], skipped: "enqueue_failed" };
   }

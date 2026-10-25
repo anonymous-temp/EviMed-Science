@@ -31,7 +31,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, beforeDataCleanup = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, noteFileRead = null, beforeDataCleanup = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const peers = new Set(), clients = new Set();
   let upstream, wss, ui;
@@ -91,7 +91,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt });
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, noteFileRead });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -767,6 +767,57 @@ test("a workspace-file read is held to the workspace on both transports, and the
   assert.equal((await c.next()).type, "end");
   assert.equal(arrived.length, inside.length, "nothing outside the workspace reached the runtime");
   assert.equal(f.received.filter((frame) => frame.type === "open").length, inside.length);
+});
+
+test("a file opened in the kernel's own file panel is noted as opened, on both transports, with a workspace-relative path; a listing, a stat, an embedded asset and a refused path are not", { timeout: 5000 }, async (t) => {
+  // The use signal of the learning loop (`LearningEvidence.noteFileUse`): the researcher reading a file a run delivered. An observation, never a check.
+  const noted = [];
+  const f = await fixture(t, {}, {}, { noteFileRead: async (project, opened) => { noted.push([project.id, opened.path]); } });
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  f.manager.proxy = async (_req, res) => { res.writeHead(200); res.end("{}"); };
+  const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
+  for (const file of ["deliverables/report.md", "reports/report.html", "images/chart.png"]) {
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), "workspace content");
+  }
+  const call = (endpoint, args) => fetch(`${f.base}/api/${endpoint}`, {
+    method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "r1", method: endpoint, payload: { args } }),
+  });
+  await call("workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md`, range: {} });
+  await call("workspaceFiles/readAll", { workspaceFileScopeId: "s", path: "deliverables/report.md" });
+  await call("workspaceFiles/readBytes", { sessionId: "s", path: `${root}/reports/report.html` });
+  await call("workspaceFiles/list", { workspaceFileScopeId: "s", path: root });
+  await call("workspaceFiles/stat", { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md` });
+  await call("workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/reports/report.html`, relativePath: "../images/chart.png" });
+  await call("workspaceFiles/readBytes", { sessionId: "s", path: "../images/chart.png", options: { baseFile: `${root}/reports/report.html` } });
+  assert.equal((await call("workspaceFiles/read", { workspaceFileScopeId: "s", path: "/etc/passwd" })).status, 403);
+  assert.deepEqual(noted, [["default", "deliverables/report.md"], ["default", "deliverables/report.md"], ["default", "reports/report.html"]],
+    "the files opened, relative to the workspace; not the listing, the stat, the sibling asset, the preview's embedded image or the refused path");
+  noted.length = 0;
+  c.send(open("m1", "workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md`, range: {} }));
+  assert.deepEqual((await c.next()).value, { reached: "workspaceFiles/read" });
+  c.send(open("m2", "workspaceFiles/list", { workspaceFileScopeId: "s", path: root }));
+  assert.deepEqual((await c.next()).value, { reached: "workspaceFiles/list" });
+  c.send(open("m3", "workspaceFiles/read", { workspaceFileScopeId: "s", path: "/etc/passwd" }));
+  assert.equal((await c.next()).error?.code, "runtime_ui_method_denied");
+  assert.deepEqual(noted, [["default", "deliverables/report.md"]]);
+});
+
+test("a file the ledger cannot note as opened is still read: the observation never refuses", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t, {}, {}, { noteFileRead: async () => { throw Object.assign(new Error("down"), { code: "evidence_unavailable" }); } });
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  f.manager.proxy = async (_req, res) => { res.writeHead(200); res.end("{}"); };
+  const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
+  await mkdir(path.join(root, "deliverables"), { recursive: true });
+  await writeFile(path.join(root, "deliverables/report.md"), "x");
+  const response = await fetch(`${f.base}/api/workspaceFiles/read`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "r1", method: "workspaceFiles/read", payload: { args: { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md` } } }) });
+  assert.equal(response.status, 200);
+  c.send(open("m1", "workspaceFiles/read", { workspaceFileScopeId: "s", path: "deliverables/report.md" }));
+  assert.deepEqual((await c.next()).value, { reached: "workspaceFiles/read" });
 });
 
 test("native Markdown media uses authenticated bounded workspace reads with inert content", async (t) => {
