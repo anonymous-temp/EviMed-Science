@@ -55,6 +55,15 @@ export function createNativeCapsuleSearch({ service, subscriptions = null }) {
  * credential still fixes the account and the project; a conversation of
  * another project is one with no state here.
  *
+ * `session` also hands a conversation the resident block — the project's card and the capsule's profile entries (`residentProfile.mjs`) —
+ * when the conversation does not already hold it. A turn the control plane dispatched carries that block in its prompt; a turn typed in
+ * the kernel's own composer, which is the product's main path, passes through no dispatch, and this is the first place the control plane
+ * is asked anything for it (2026-10-25: the card never reached such a conversation, so a rule the person gave a project was not in front of
+ * its next one). The block is part of the answer's `context`, and `resident.digest` names it: the plugin says it entered the step
+ * (`session-attached`), and only then does the conversation count as holding it — a step the kernel rejects is asked again and handed it again.
+ * A conversation a dispatch is running has the block already and is told nothing; one the platform started (an automated run) is told the
+ * capsule's profile and no project card, as at a dispatch.
+ *
  * `paused` is the researcher's own 「记忆」 switches (`memoryPausedFor`): the account's, 「本项目不使用记忆」, and a trial conversation's.
  * This is where the capsule half and the note honour them (2026-10-10 review M-1). Recall paused answers `mode: "paused"` and reads nothing; learning paused refuses the note by name. Asked of the one
  * running conversation, or of none when several are running (then the account's and the project's switches only); a switch that
@@ -79,9 +88,13 @@ export function createNativeCapsuleSearch({ service, subscriptions = null }) {
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
- *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
+ *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null,
+ *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
+ *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null }} dependencies
+ *   `resident.forSession` answers the block a conversation is to be handed at its first step, or null when it holds it already (or is not to have one);
+ *   `resident.attached` notes that it has been handed. */
 export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
-  recallLimit = 5, recallMaxLimit = 8 }) {
+  resident = null, recallLimit = 5, recallMaxLimit = 8 }) {
   const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
   const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
   const windows = new Map();
@@ -90,7 +103,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
     try {
       const url = new URL(req.url, "http://evimed.local");
       const action = url.pathname.slice(CAPSULE_GATEWAY_PATH.length + 1);
-      if (req.method !== "POST" || url.search || !["recall", "note", "session", "handbook-context", "handbook-attached"].includes(action)) {
+      if (req.method !== "POST" || url.search || !["recall", "note", "session", "session-attached", "handbook-context", "handbook-attached"].includes(action)) {
         throw new HttpError(404, "not_found", "Capsule operation not found.");
       }
       const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
@@ -110,7 +123,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
       const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "limit"]
         : action === "handbook-context" ? ["sessionId", "inputs"]
           : action === "handbook-attached" ? ["sessionId", "receipts"]
-        : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];
+        : action === "session" ? ["sessionId"] : action === "session-attached" ? ["sessionId", "digest"] : ["factKind", "content", "origin"];
       if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((field) => !allowed.includes(field))) {
         throw new HttpError(400, "capsule_payload_invalid", "Unsupported memory fields.");
       }
@@ -132,7 +145,24 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // An unreadable selection cannot silently widen the knowledge-base scope.
         const notes = sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId)
           .catch(() => [SOURCE_SCOPE_UNAVAILABLE_CONTEXT]) : [];
-        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "session-memory", { context: notes.join("\n\n") }) : { context: notes.join("\n\n") });
+        // The block a conversation of this project is handed up front, once. Best effort: a block that cannot be read is no reason for the
+        // conversation not to start (the memory is an enhancement, and the next step asks again).
+        const block = resident ? await resident.forSession(currentUser, project, body.sessionId).catch(() => null) : null;
+        const context = [...(block?.text ? [block.text] : []), ...notes].join("\n\n");
+        const answer = evaluationIsolation ? await evaluationIsolation.filter(identity, "session-memory", { context }) : { context };
+        // What the plugin is to acknowledge once the step has entered; absent when there is no block, so a step with none acknowledges nothing.
+        sendJson(res, 200, block?.text ? { ...answer, resident: { digest: block.digest } } : answer);
+        return;
+      }
+      if (action === "session-attached") {
+        if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId) || typeof body.digest !== "string" || !/^[a-f0-9]{64}$/.test(body.digest)) {
+          throw new HttpError(400, "capsule_payload_invalid", "Invalid session receipt.");
+        }
+        // The block as it was when it was handed: asked again, and noted only if it is still the block the plugin names (a card that changed
+        // between the two calls is handed again, with its own digest, at the next step).
+        const current = resident ? await resident.forSession(currentUser, project, body.sessionId).catch(() => null) : null;
+        if (resident && current && current.digest === body.digest) await resident.attached(currentUser, project, body.sessionId, { digest: current.digest, memories: current.memories });
+        sendJson(res, 200, { attached: Boolean(current && current.digest === body.digest) });
         return;
       }
       // Whose conversation this is, as far as the ledger can say (see above).

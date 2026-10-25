@@ -6,7 +6,8 @@ description: |
   用 R"), how a collaborator wants the work delivered ("导师要先看摘要，第一页放摘要"), a
   definition or convention their group uses, an arrangement that holds across their projects.
   If the fact names one project or one piece of work, it is a line of that project's
-  PROJECT_CONTEXT card and is not written here as well; if it is about how the user's team or
+  PROJECT_CONTEXT card and is not written here as well (a rule for what one project delivers —
+  its language, format, house style, a date the user set — is that card's 约束); if it is about how the user's team or
   practice works across projects, it is written here.
   Only what the user stated in a user-role message. People appear by role and working
   responsibility or working convention only: no contact details, no health, no private details.

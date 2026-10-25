@@ -168,7 +168,7 @@ import { createMemoryRoutes } from "./memoryRoutes.mjs";
 import { capabilityUse, projectWorks } from "./projectOverview.mjs";
 import { memoryMetricFamilies, recordMethodsRetired } from "./memoryMetrics.mjs";
 import { resetLearnedMemory } from "./memoryReset.mjs";
-import { ResidentProfiles } from "./residentProfile.mjs";
+import { ResidentProfiles, nativeResidentMemos, nativeSessionResident } from "./residentProfile.mjs";
 import { eraseRetiredMemos } from "./retiredMemos.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryMapRoutes } from "./memoryMap.mjs";
@@ -418,6 +418,7 @@ import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
+import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
@@ -1641,7 +1642,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, store: memorySettings, capsules: capsuleService,
     // The project's card, read as the memory page's 项目 tab reads it: the engine's own project-context file. Handed to a
     // conversation a person is in (`ResidentProfiles.forDispatch`); a deployment without the engine has no card to hand over.
-    projectCard: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.projectCard(userId, projectId) : null,
+    // What a conversation of the project is handed up front is the card and the project's other standing files (`residentCard`); the
+    // 项目 tab keeps reading the card alone (`projectCard`).
+    projectCard: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.residentCard(userId, projectId) : null,
   });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     nativeMemory: config.memoryEngineEnabled ? nativeMemory : null,
@@ -4109,6 +4112,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
+          // A turn typed in the kernel's own composer was handed the project's card and the capsule's profile at its first step, before
+          // there was a run to name them on: the conversation's state kept what they held, and the run says it recalled them.
+          if (memorySettings.configured && run.sessionId && !run.dispatchId) {
+            const held = nativeResidentMemos(run, await memorySettings.residentState(project.userId, project.id, String(run.sessionId)).catch(() => null));
+            if (held.length) await agentRuns.recordLearning(project, run.id, { recalledMemories: held }).catch((error) => securityAudit(config, "run.resident.record", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id, code: typeof error?.code === "string" ? error.code : "resident_unrecorded",
+            }));
+          }
           if (evolution && reusableClinicalContext) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
           // The web pages the run read (contract X5), off the same transcript:
           // each `web_read` result carries the gateway's receipt. A write of
@@ -5080,6 +5091,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The recall tool answers with at most this many (review M6): five unless the model asks, and never more than the most.
     recallLimit: config.memoryRecallToolLimit, recallMaxLimit: config.memoryRecallToolMaxLimit,
     subscriptions: recallSubscriptions,
+    // The resident block for a turn typed in the kernel's own composer, handed at the conversation's first step (`capsuleGateway.mjs`).
+    // A turn the control plane dispatched carries the block in its prompt already, and a run it started itself is nobody's to be asked
+    // a project card of: the ledger says which, by what the platform dispatched (`dispatchId`, `isPlatformStartedRun`).
+    resident: memorySettings.configured ? nativeSessionResident({ residentProfiles, activeRuns: (project) => agentRuns.activeRuns(project), startedByPlatform: isPlatformStartedRun }) : null,
     clinicalContext: vcrPrivacyStore ? (identity, runs) => vcrPrivacyStore.hasClinicalContext(identity.userId, identity.projectId,
       runs.map(run => ({ sessionId: run.sessionId, runId: run.id }))) : null,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the

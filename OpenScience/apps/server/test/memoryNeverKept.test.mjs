@@ -123,3 +123,36 @@ test("the lab variant says the never-kept block once, in the profile, and is nev
   assert.notEqual(refused.status, 0);
   assert.match(refused.stderr, /never over the deployed templates/);
 });
+
+test("a rule given for one project is that project's card, said in the card's template and in the three that could take it instead (M8)", async () => {
+  const directory = path.join(root, "deploy/web/openviking/memory-templates");
+  const text = async (name) => readFile(path.join(directory, `${name}.yaml`), "utf8");
+  const card = await text("project_context");
+  assert.match(card, /A rule the user gives for "this project" or for the named work \("这个项目的所有文字交付物一律用英文写"/);
+  assert.match(card, /is a line under 约束\s+of that project's card — also when it comes with a request for something small/);
+  assert.match(card, /also when no card exists yet/);
+  assert.match(await text("project_facts"), /a rule for what one project delivers —\s+its language, format, house style, a date the user set — is that card's 约束/);
+  assert.match(await text("decisions"), /a rule for what one project\s+delivers — its language, format, house style — is that card's 约束/);
+  assert.match(await text("preferences"), /A rule the user gives for one project \("这个项目的所有文字交付物一律用英文写"\) is not a preference of\s+theirs: it is that project's card/);
+});
+
+test("a remembered layout keeps its places as places, and the two types of 2026-10-25 say what they are for (M2, M3, M4)", async () => {
+  const directory = path.join(root, "deploy/web/openviking/memory-templates");
+  const text = async (name) => readFile(path.join(directory, `${name}.yaml`), "utf8");
+  for (const name of ["preferences", "corrections"]) {
+    const body = await text(name);
+    assert.match(body, /每条先写结论；依据只写用户给过的，没给就不写/, `${name} writes the layout as places the person fills`);
+    assert.match(body, /never as\s+content\s+to\s+produce/, name);
+  }
+  assert.doesNotMatch(await text("preferences"), /- 报告先给结论，再给依据。/, "the example no longer promises a basis");
+  const observations = await text("observations");
+  assert.match(observations, /a NOTE, not a memory/);
+  assert.match(observations, /never shown, never recalled and never a premise/);
+  assert.match(observations, /Each conversation that shows\s+the choice adds ITS OWN line to the file/);
+  assert.match(observations, /^directory: "viking:\/\/user\/\{\{ user_space \}\}\/memories\/observations"$/m);
+  const recent = await text("recent_work");
+  assert.match(recent, /at most three lines, newest first/);
+  assert.match(recent, /Never\s+the content of the work/);
+  assert.match(recent, /The lines REPLACE each other/);
+  assert.match(recent, /^directory: "viking:\/\/user\/\{\{ user_space \}\}\/memories\/recent_work"$/m);
+});

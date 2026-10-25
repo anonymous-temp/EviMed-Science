@@ -360,7 +360,7 @@ export class MemorySettingsStore {
    * @returns {Promise<{ digest: string | null, deliveredAt: string | null, compactedAt: string | null, compactedSince: boolean }>}
    */
   async residentState(userId, projectId, sessionId) {
-    const result = await this.#query(`SELECT resident_digest, resident_delivered_at, compacted_at,
+    const result = await this.#query(`SELECT resident_digest, resident_delivered_at, compacted_at, resident_memos,
         (compacted_at IS NOT NULL AND (resident_delivered_at IS NULL OR compacted_at > resident_delivered_at)) AS compacted_since
       FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2 AND session_id=$3`,
     [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId)]);
@@ -370,6 +370,8 @@ export class MemorySettingsStore {
       deliveredAt: row?.resident_delivered_at ? new Date(row.resident_delivered_at).toISOString() : null,
       compactedAt: row?.compacted_at ? new Date(row.compacted_at).toISOString() : null,
       compactedSince: row?.compacted_since === true,
+      /** What the block held, as `{ id, kind, scope }` (the run record's own shape), for the run a turn typed in the kernel's composer becomes. */
+      memos: Array.isArray(row?.resident_memos) ? row.resident_memos : [],
     };
   }
 
@@ -377,14 +379,16 @@ export class MemorySettingsStore {
    * The conversation was handed the profile whose digest this is, now. Called after the prompt that carried it was accepted,
    * so a dispatch that failed leaves the next one to hand it over.
    * @param {string} userId @param {string} projectId @param {string} sessionId @param {string} digest
+   * @param {readonly { id: string, kind?: string, scope?: string }[]} [memos] what the block held, for the run record
    */
-  async noteResidentDelivered(userId, projectId, sessionId, digest) {
+  async noteResidentDelivered(userId, projectId, sessionId, digest, memos = []) {
     if (!/^[a-f0-9]{64}$/.test(String(digest))) throw invalid("digest");
-    await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, resident_digest, resident_delivered_at)
-      VALUES ($1, $2, $3, $4, clock_timestamp())
-      ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET resident_digest = $4, resident_delivered_at = clock_timestamp(),
+    const held = memos.slice(0, 40).map((memo) => ({ id: String(memo.id).slice(0, 200), ...(memo.kind ? { kind: String(memo.kind).slice(0, 60) } : {}), ...(memo.scope ? { scope: String(memo.scope).slice(0, 60) } : {}) }));
+    await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, resident_digest, resident_delivered_at, resident_memos)
+      VALUES ($1, $2, $3, $4, clock_timestamp(), $5::jsonb)
+      ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET resident_digest = $4, resident_delivered_at = clock_timestamp(), resident_memos = $5::jsonb,
         updated_at = date_trunc('second', clock_timestamp())`,
-    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId), digest]);
+    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId), digest, JSON.stringify(held)]);
   }
 
   /**

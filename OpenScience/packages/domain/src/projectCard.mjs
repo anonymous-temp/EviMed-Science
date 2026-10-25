@@ -41,7 +41,7 @@ import { FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH } from './frontierVo
 /** @typedef {'field'|'goal'|'subject'|'data_source'|'stage'|'constraints'} ProjectCardGeneralSlot */
 /** @typedef {'population'|'intervention'|'comparator'|'outcome'|'design'} ProjectCardClinicalSlot */
 /** @typedef {ProjectCardGeneralSlot|ProjectCardClinicalSlot} ProjectCardSlot */
-/** @typedef {ProjectCardSlot|'recent_work'} ProjectCardRow */
+/** @typedef {ProjectCardSlot|'recent_work'|'decisions'|'project_facts'|'follow_ups'} ProjectCardRow */
 
 /** The slots every project can have, in the order the card reads. */
 export const PROJECT_CARD_GENERAL_SLOTS = /** @type {readonly ProjectCardGeneralSlot[]} */ (Object.freeze([
@@ -60,7 +60,10 @@ export const PROJECT_CARD_SLOTS = /** @type {readonly ProjectCardSlot[]} */ (Obj
 
 /**
  * What each row of the card is called (the words of the OpenViking project-context template). `recent_work` is not a slot of the card's
- * own file: it is the project's last three tasks (`recent_work` memory type), read beside the card and put last (2026-10-25).
+ * own file: it is the project's last three tasks (`recent_work` memory type), read beside the card (2026-10-25). `decisions`,
+ * `project_facts` and `follow_ups` are the project's other standing files, which what a conversation of the project is handed up front
+ * carries after the card (`NativeMemoryStore.residentCard`): a rule the person stated for the project may be filed in any of them, and the
+ * plugin's own start-of-session listing names none.
  */
 export const PROJECT_CARD_SLOT_LABELS_ZH = /** @type {Readonly<Record<ProjectCardRow, string>>} */ (Object.freeze({
   field: '领域',
@@ -75,6 +78,9 @@ export const PROJECT_CARD_SLOT_LABELS_ZH = /** @type {Readonly<Record<ProjectCar
   outcome: '结局',
   design: '设计',
   recent_work: '最近在做',
+  decisions: '决定',
+  project_facts: '项目事实',
+  follow_ups: '待跟进',
 }))
 
 /** The memory key a slot is written under. */

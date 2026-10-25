@@ -73,6 +73,9 @@ export function versionOfHash(hash) {
   return Number.parseInt(String(hash).slice(0, 12), 16) + 1;
 }
 
+/** What the control plane says to the engine for a choice two conversations made: the person's explicit request to keep it (`keepRepeatedChoice`; the write-quality replay says it the same way). @param {string} choice */
+export const repeatedChoiceMessage = (choice) => `请记住（这是我在两次不同的对话里都做出的选择，以后默认这样做）：${choice}`;
+
 /** The id that ties together the revisions of one forget (`actOf` reads it back from a reason). */
 const newAct = () => randomUUID().replace(/-/g, "").slice(0, 12);
 /** The marker for a reason, or nothing when there is no act. @param {string | null} act */
@@ -229,6 +232,94 @@ function conversationEvidence(history, sessionProjects, { line = null } = {}) {
   return evidence;
 }
 const BODY_ACCOUNTS = 100;
+
+/**
+ * The rows of a project's card (`{ slot, label?, recordId, text, updatedAt }`), read off the sections of the project's own project-context
+ * files, whose headings are the card's words (the template writes them), then the project's last three tasks (`recent_work`).
+ *
+ * The labels the template has the engine write are Chinese in a Chinese conversation and these English ones in an English one
+ * (`project_context.yaml`). A section whose heading is none of them — a card written in another language, or under a heading of the
+ * model's own ("交付约定") — is a row of its own named by that heading, never dropped: it is what the person said about the project, and
+ * the next conversation of the project is handed it as it is handed the rest.
+ * @param {readonly any[]} everything the account's records @param {string} projectId
+ * @returns {{ slot: string, label?: string, recordId: string, text: string, updatedAt: string | null }[]}
+ */
+export function projectCardRows(everything, projectId) {
+  const records = everything.filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
+  const SLOT_OF_HEADING = { "目标": "goal", "范围或对象": "subject", "材料与数据": "data_source", "阶段": "stage", "约束": "constraints",
+    "goal": "goal", "scope": "subject", "materials and data": "data_source", "stage": "stage", "constraints": "constraints" };
+  const SLOT_OF_ELEMENT = { "人群": "population", "干预或暴露": "intervention", "对照": "comparator", "结局": "outcome", "设计": "design",
+    "population": "population", "intervention or exposure": "intervention", "comparator": "comparator", "outcome": "outcome", "design": "design" };
+  const ELEMENTS = new Set(["研究要素", "study elements"]);
+  /** @type {Map<string, { slot: string, label?: string, recordId: string, text: string, updatedAt: string | null }>} */
+  const card = new Map();
+  /** The sections the closed list does not know, by their own heading. @type {Map<string, { slot: string, label: string, recordId: string, text: string, updatedAt: string | null }>} */
+  const others = new Map();
+  for (const record of records) {
+    let section = "";
+    let sectionLabel = "";
+    for (const line of String(record.value).split("\n")) {
+      const trimmed = line.trim();
+      const heading = /^##\s+(.+)$/.exec(trimmed);
+      if (heading) { sectionLabel = heading[1].replace(/[（(].*$/, "").trim(); section = sectionLabel.toLowerCase(); continue; }
+      const field = /^(?:领域|field)[：:]\s*(.+)$/i.exec(trimmed);
+      if (field && !card.has("field")) { card.set("field", { slot: "field", recordId: record.id, text: field[1].trim(), updatedAt: record.updatedAt }); continue; }
+      if (!/^[-*+]\s+\S/.test(trimmed)) continue;
+      const item = trimmed.replace(/^[-*+]\s+/, "");
+      const element = /^([^：:]{1,24})[：:]\s*(.+)$/.exec(item);
+      const inElements = ELEMENTS.has(section) && element;
+      const slot = inElements ? /** @type {Record<string, string>} */ (SLOT_OF_ELEMENT)[element[1].trim().toLowerCase()] : /** @type {Record<string, string>} */ (SLOT_OF_HEADING)[section];
+      if (!slot) {
+        if (section && !ELEMENTS.has(section) && sectionLabel) {
+          const held = others.get(sectionLabel);
+          others.set(sectionLabel, held && held.recordId === record.id ? { ...held, text: `${held.text}；${item}`.slice(0, 600) }
+            : held ?? { slot: "other", label: sectionLabel.slice(0, 24), recordId: record.id, text: item.slice(0, 600), updatedAt: record.updatedAt });
+        }
+        continue;
+      }
+      const value = inElements ? element[2].trim() : item;
+      const held = card.get(slot);
+      card.set(slot, held && held.recordId === record.id ? { ...held, text: `${held.text}；${value}`.slice(0, 600) } : held ?? { slot, recordId: record.id, text: value.slice(0, 600), updatedAt: record.updatedAt });
+    }
+  }
+  const order = ["field", "goal", "subject", "data_source", "stage", "constraints", "population", "intervention", "comparator", "outcome", "design"];
+  const rows = [...order.filter((slot) => card.has(slot)).map((slot) => /** @type {any} */ (card.get(slot))), ...[...others.values()].slice(0, 8)];
+  // What the project was last worked on (`recent_work`), after the card's own rows: its own files, never the card's.
+  const recent = recentWorkRow(everything.filter((record) => record.nativeType === "recent_work" && record.scopeId === projectId));
+  return recent ? [...rows, recent] : rows;
+}
+
+/** The project's other standing files a conversation of it is handed (`residentCard`): the types, and the lines of each that one row carries. */
+const PROJECT_EXTRA_TYPES = Object.freeze(["decisions", "project_facts", "follow_ups"]);
+const PROJECT_EXTRA_LINES = 6;
+const PROJECT_EXTRA_LINE_CHARS = 160;
+
+/**
+ * One row for each of the project's decisions, working facts and open items: the lines of its files, the most recently changed file first,
+ * each cut short, six at most to a row. A project with none has no row.
+ * @param {readonly any[]} everything @param {string} projectId
+ * @returns {{ slot: string, recordId: string, text: string, updatedAt: string | null }[]}
+ */
+export function projectExtraRows(everything, projectId) {
+  /** @type {{ slot: string, recordId: string, text: string, updatedAt: string | null }[]} */
+  const rows = [];
+  for (const type of PROJECT_EXTRA_TYPES) {
+    const files = everything.filter((record) => record.nativeType === type && record.scopeId === projectId)
+      .sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+    /** @type {string[]} */
+    const lines = [];
+    for (const record of files) {
+      for (const line of statements(record.value)) {
+        const text = line.replace(AS_OF, "").replace(/\s+/g, " ").trim().slice(0, PROJECT_EXTRA_LINE_CHARS);
+        if (text && !lines.includes(text)) lines.push(text);
+        if (lines.length >= PROJECT_EXTRA_LINES) break;
+      }
+      if (lines.length >= PROJECT_EXTRA_LINES) break;
+    }
+    if (lines.length) rows.push({ slot: type, recordId: files[0].id, text: lines.join("；"), updatedAt: files[0].updatedAt ?? null });
+  }
+  return rows;
+}
 
 export class NativeMemoryStore {
   /** @type {Map<string, { epoch: number, promise: Promise<any[]> }>} */
@@ -591,42 +682,21 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} projectId
    */
   async projectCard(userId, projectId) {
+    return projectCardRows(await this.records(userId), projectId);
+  }
+
+  /**
+   * What a conversation of the project is handed up front: the card's rows as the page shows them, then what the project's other standing
+   * files say — its decisions, its working facts and what is still open — in rows of their own (`projectExtraRows`). A rule the person
+   * stated for the project (its language, its format, its house style, a date they set) is a line of the card when the engine files it
+   * there and a line of one of those files when it does not, and the plugin's own start-of-session listing names neither (it lists
+   * `profile.md`, `preferences/` and `entities/`): without these rows it would reach a new conversation only if the model went looking.
+   * The memory page's 项目 tab lists those files itself and keeps reading `projectCard`.
+   * @param {string} userId @param {string} projectId
+   */
+  async residentCard(userId, projectId) {
     const everything = await this.records(userId);
-    const records = everything.filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
-    // The labels the template has the engine write: Chinese in a Chinese conversation, these English ones in an English one
-    // (`project_context.yaml`). Any other language writes translations of them, which this closed list does not read: that card
-    // shows as the file it is, in full, on the memory page, and has no slots here.
-    const SLOT_OF_HEADING = { "目标": "goal", "范围或对象": "subject", "材料与数据": "data_source", "阶段": "stage", "约束": "constraints",
-      "goal": "goal", "scope": "subject", "materials and data": "data_source", "stage": "stage", "constraints": "constraints" };
-    const SLOT_OF_ELEMENT = { "人群": "population", "干预或暴露": "intervention", "对照": "comparator", "结局": "outcome", "设计": "design",
-      "population": "population", "intervention or exposure": "intervention", "comparator": "comparator", "outcome": "outcome", "design": "design" };
-    const ELEMENTS = new Set(["研究要素", "study elements"]);
-    /** @type {Map<string, { slot: string, recordId: string, text: string, updatedAt: string | null }>} */
-    const card = new Map();
-    for (const record of records) {
-      let section = "";
-      for (const line of String(record.value).split("\n")) {
-        const trimmed = line.trim();
-        const heading = /^##\s+(.+)$/.exec(trimmed);
-        if (heading) { section = heading[1].replace(/[（(].*$/, "").trim().toLowerCase(); continue; }
-        const field = /^(?:领域|field)[：:]\s*(.+)$/i.exec(trimmed);
-        if (field && !card.has("field")) { card.set("field", { slot: "field", recordId: record.id, text: field[1].trim(), updatedAt: record.updatedAt }); continue; }
-        if (!/^[-*+]\s+\S/.test(trimmed)) continue;
-        const item = trimmed.replace(/^[-*+]\s+/, "");
-        const element = /^([^：:]{1,24})[：:]\s*(.+)$/.exec(item);
-        const inElements = ELEMENTS.has(section) && element;
-        const slot = inElements ? /** @type {Record<string, string>} */ (SLOT_OF_ELEMENT)[element[1].trim().toLowerCase()] : /** @type {Record<string, string>} */ (SLOT_OF_HEADING)[section];
-        if (!slot) continue;
-        const value = inElements ? element[2].trim() : item;
-        const held = card.get(slot);
-        card.set(slot, held && held.recordId === record.id ? { ...held, text: `${held.text}；${value}`.slice(0, 600) } : held ?? { slot, recordId: record.id, text: value.slice(0, 600), updatedAt: record.updatedAt });
-      }
-    }
-    const order = ["field", "goal", "subject", "data_source", "stage", "constraints", "population", "intervention", "comparator", "outcome", "design"];
-    const rows = order.filter((slot) => card.has(slot)).map((slot) => card.get(slot));
-    // What the project was last worked on (`recent_work`), after the card's own slots: its own files, never the card's.
-    const recent = recentWorkRow(everything.filter((record) => record.nativeType === "recent_work" && record.scopeId === projectId));
-    return recent ? [...rows, recent] : rows;
+    return [...projectCardRows(everything, projectId), ...projectExtraRows(everything, projectId)];
   }
 
   /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, no conflicts, no usage. @param {string} userId */
@@ -1271,7 +1341,7 @@ export class NativeMemoryStore {
   async keepRepeatedChoice(userId, choice) {
     const words = maskIdentifiers(String(choice ?? "").replace(/\s+/g, " ").trim()).slice(0, 600);
     if (!words) throw new HttpError(400, "memory_payload_invalid", "There is nothing to keep.");
-    const commit = await this.#submitWords(userId, { content: `请记住（这是我在两次不同的对话里都做出的选择，以后默认这样做）：${words}`, projectId: null, origin: "promotion", prefix: "evimed-promote-" });
+    const commit = await this.#submitWords(userId, { content: repeatedChoiceMessage(words), projectId: null, origin: "promotion", prefix: "evimed-promote-" });
     return { archiveUri: commit.archiveUri };
   }
 

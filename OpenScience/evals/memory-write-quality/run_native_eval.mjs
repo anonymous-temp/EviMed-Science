@@ -15,6 +15,13 @@
  *   follow_up     bullets under 阶段 of a project card + bullets under follow_ups/
  *   project_fact  every other bullet, and the 领域 line, of a project card + bullets under project_facts/
  *   entity        files under entities/ (no old kind; listed so a case can refuse it)
+ *   recent_work   bullets under recent_work/ (a project's last three tasks, the project card's 最近在做; counted as project_fact too)
+ *
+ * The notes of the `observations` type (a choice made in a request and never called a rule) are written by the engine and counted by
+ * the control plane (`nativeMemoryObservations.mjs`); they are never a memory, so no check below sees them: not as a kind, not in the
+ * text, not in the operations. How many there are is printed beside the result. A case that expects a choice to become a preference after
+ * two conversations (c22) is replayed with that counting: the runner keeps the revisions of the notes as the overlay would, and when two
+ * conversations wrote one it hands the words to the engine as the control plane does (`repeatedChoiceMessage`, a session of its own).
  *
  * The decided checks are the corpus's own (`expect`, read by `scoreNative`); the cases that need a reading print what was
  * written beside their `judge` question and are counted apart. Nothing here matches prose for meaning.
@@ -78,7 +85,7 @@ const bullets = (/** @type {string} */ text) => text.split("\n").filter((line) =
  */
 export function kindsOf(files) {
   /** @type {Record<string, string[]>} */
-  const out = { profile: [], preference: [], correction: [], decision: [], follow_up: [], project_fact: [], entity: [], other: [] };
+  const out = { profile: [], preference: [], correction: [], decision: [], follow_up: [], project_fact: [], recent_work: [], entity: [], other: [] };
   for (const [rel, raw] of Object.entries(files)) {
     const text = body(raw);
     if (rel === "profile.md") out.profile.push(...bullets(text));
@@ -87,6 +94,7 @@ export function kindsOf(files) {
     else if (rel.startsWith("decisions/")) out.decision.push(...bullets(text));
     else if (rel.startsWith("follow_ups/")) out.follow_up.push(...bullets(text));
     else if (rel.startsWith("project_facts/")) out.project_fact.push(...bullets(text));
+    else if (rel.startsWith("recent_work/")) { out.recent_work.push(...bullets(text)); out.project_fact.push(...bullets(text)); }
     else if (rel.startsWith("entities/")) out.entity.push(rel);
     else if (rel.startsWith("projects/")) {
       let section = "";
@@ -104,6 +112,11 @@ export function kindsOf(files) {
   return out;
 }
 
+/** The memory files without the notes of the observations type. @param {Record<string, string>} files */
+export function withoutObservations(files) {
+  return Object.fromEntries(Object.entries(files).filter(([rel]) => !rel.startsWith("observations/")));
+}
+
 /** What differs between two sets of memory files, by path: added, removed and changed. @param {Record<string, string>} before @param {Record<string, string>} after */
 export function changedFiles(before, after) {
   const paths = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
@@ -115,8 +128,10 @@ export function changedFiles(before, after) {
  * @param {any} item @param {Record<string, string>} files @param {number} operations the extraction's adds, updates and deletes
  * @param {Record<string, string> | null} [seedFiles] the files the case's seed conversation left (`replay.seed`), when it has one
  */
-export function scoreNative(item, files, operations, seedFiles = null) {
+export function scoreNative(item, allFiles, operations, seedFiles = null) {
   const expect = item.expect ?? {};
+  // A note of the observations type is never a memory: no kind, no text, no operation of it is counted (`withoutObservations`).
+  const files = withoutObservations(allFiles);
   const written = kindsOf(files);
   const counts = Object.fromEntries(Object.entries(written).map(([kind, list]) => [kind, list.length]));
   const text = Object.values(files).map(body).join("\n");
@@ -125,6 +140,7 @@ export function scoreNative(item, files, operations, seedFiles = null) {
   // The seed is what the case starts from: a seed that did not store what it was written to store makes the replay void, and
   // says so as the failure it is rather than passing a case about a memory nobody held.
   if (seedFiles) {
+    seedFiles = withoutObservations(seedFiles);
     const seedText = Object.values(seedFiles).map(body).join("\n");
     for (const needle of expect.seedKeeps ?? []) if (!seedText.includes(needle)) failures.push(`the seed did not store "${needle}", so the replay starts from nothing`);
     if (expect.unchangedSinceSeed === true) {
@@ -207,11 +223,13 @@ async function main() {
     .filter((item) => !options.only || options.only.split(",").some((part) => item.id.includes(part)));
   const issues = cases.flatMap(nativeCaseIssues);
   if (issues.length) throw new Error(`the corpus has ${issues.length} shape problem(s):\n${issues.join("\n")}`);
-  const [{ OpenVikingClient }, { OpenVikingSessions }, { filterCapturedMessage }, { identifierShapesIn }] = await Promise.all([
+  const [{ OpenVikingClient }, { OpenVikingSessions, observationFile }, { filterCapturedMessage }, { identifierShapesIn, maskIdentifiers }, { NativeMemoryObservations }, { repeatedChoiceMessage }] = await Promise.all([
     import(pathToFileURL(path.join(serverSrc, "openVikingClient.mjs")).href),
     import(pathToFileURL(path.join(serverSrc, "openVikingSessions.mjs")).href),
     import(pathToFileURL(path.join(serverSrc, "memoryGateway.mjs")).href),
     import(pathToFileURL(domainIndex).href),
+    import(pathToFileURL(path.join(serverSrc, "nativeMemoryObservations.mjs")).href),
+    import(pathToFileURL(path.join(serverSrc, "nativeMemoryStore.mjs")).href),
   ]);
   const unmet = offlineVerdicts(cases, { filterCapturedMessage, identifierShapesIn });
   if (unmet.length) throw new Error(`the corpus relies on what the code does not do:\n${unmet.join("\n")}`);
@@ -230,6 +248,8 @@ async function main() {
     for (const message of forwarded) await sessions.addMessage(userId, sessionId, message);
     const committed = (await sessions.commit(userId, sessionId, { timeoutMs: 60_000 }))?.result ?? {};
     let operations = 0;
+    /** The notes of the observations type this conversation wrote, by file: what the overlay's revisions would hold. @type {{ uri: string, change: string }[]} */
+    const noted = [];
     /** @type {Record<string, any> | null} */
     let task = null;
     if (committed.status === "accepted" && committed.task_id) {
@@ -241,9 +261,44 @@ async function main() {
         await new Promise((resolve) => setTimeout(resolve, 2_000));
       }
       const diffText = task?.result?.memory_diff_uri ? await sessions.read(userId, task.result.memory_diff_uri) : null;
-      try { const diff = diffText ? JSON.parse(diffText) : null; operations = (diff?.summary?.total_adds ?? 0) + (diff?.summary?.total_updates ?? 0) + (diff?.summary?.total_deletes ?? 0); } catch { operations = 0; }
+      try {
+        const diff = diffText ? JSON.parse(diffText) : null;
+        const root = sessions.memoryRoot(userId);
+        // The notes of the observations type are not memories: neither counted as operations nor scored; kept for the counting below.
+        for (const [list, change] of [["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]]) {
+          for (const operation of Array.isArray(diff?.operations?.[list]) ? diff.operations[list] : []) {
+            if (observationFile(String(operation?.uri ?? ""), root)) noted.push({ uri: String(operation.uri), change }); else operations += 1;
+          }
+        }
+        if (!diff?.operations) operations = (diff?.summary?.total_adds ?? 0) + (diff?.summary?.total_updates ?? 0) + (diff?.summary?.total_deletes ?? 0);
+      } catch { operations = 0; }
     }
-    return { operations, task, status: committed.status };
+    return { operations, task, status: committed.status, sessionId, noted };
+  };
+  /** The overlay's revisions of the observation notes, per account, as the control plane would hold them (E3). @type {Map<string, { uri: string, change: string, engineSession: string }[]>} */
+  const noteRevisions = new Map();
+  /** After a conversation: the control plane's own counting, over the real engine. Two different conversations that wrote one note hand its words to the engine. */
+  const countRepeats = async (/** @type {string} */ userId, /** @type {{ sessionId: string, noted: { uri: string, change: string }[] }} */ conversation) => {
+    const revisions = noteRevisions.get(userId) ?? [];
+    for (const change of conversation.noted) revisions.push({ ...change, engineSession: conversation.sessionId });
+    noteRevisions.set(userId, revisions);
+    const kept = new Set(revisions.filter((revision) => revision.change !== "deleted").map((revision) => revision.uri));
+    const gone = new Set();
+    const promoter = new NativeMemoryObservations({
+      sessions,
+      overlay: {
+        observationFiles: async () => [...kept].filter((uri) => !gone.has(uri)).map((uri) => ({ uri })),
+        revisionsOf: async (_user, uri) => (noteRevisions.get(userId) ?? []).filter((revision) => revision.uri === uri).map((revision) => ({ actor: "engine", change: revision.change, undoneAt: null, engineSession: revision.engineSession, archiveUri: null })),
+        conversationOf: async (_user, engineSession) => (String(engineSession).startsWith("evmq-") ? String(engineSession) : null),
+        removeFile: async (_user, uri) => { gone.add(uri); },
+        addRevision: async () => null,
+      },
+      keepRepeatedChoice: async (_user, choice) => {
+        await converse(userId, `evimed-promote-${run}-${randomBytes(4).toString("hex")}`, throughTheDoor([{ role: "user", content: repeatedChoiceMessage(maskIdentifiers(String(choice))) }]).forwarded);
+        return { archiveUri: "" };
+      },
+    });
+    return promoter.promote(userId);
   };
   /** The memory files an account holds now, by path under `memories/`. @param {string} userId @returns {Promise<Record<string, string>>} */
   const readMemoryFiles = async (userId) => {
@@ -286,22 +341,28 @@ async function main() {
       let seedFiles = null;
       if (item.replay.seed?.messages?.length) {
         // A case that starts from a memory has the engine write it: a conversation of its own, through the same door.
-        await converse(userId, `evmq-${run}-${item.id}${suffix}-seed`, throughTheDoor(item.replay.seed.messages.map((message) => ({ role: message.role, content: message.text }))).forwarded);
+        await countRepeats(userId, await converse(userId, `evmq-${run}-${item.id}${suffix}-seed`, throughTheDoor(item.replay.seed.messages.map((message) => ({ role: message.role, content: message.text }))).forwarded));
         seedFiles = await readMemoryFiles(userId);
       } else if (item.replay.existingKeys?.length) {
         // A case that restates a fact the account already holds stores it first, through a conversation of its own.
-        await converse(userId, `evmq-${run}-${item.id}${suffix}-seed`, [
+        await countRepeats(userId, await converse(userId, `evmq-${run}-${item.id}${suffix}-seed`, [
           { role: "user", parts: [{ type: "text", text: "我们这个 GEO 项目里，说明书那一块目前核对的是转载页，不是官方原件；等拿到官方原件，要替换引用并把文章升版。" }] },
-          { role: "assistant", parts: [{ type: "text", text: "明白，说明书目前按转载页核对，拿到官方原件后替换引用并升版。" }] }]);
+          { role: "assistant", parts: [{ type: "text", text: "明白，说明书目前按转载页核对，拿到官方原件后替换引用并升版。" }] }]));
       }
-      const { operations, task, status } = await converse(userId, `evmq-${run}-${item.id}${suffix}`, forwarded);
+      const conversation = await converse(userId, `evmq-${run}-${item.id}${suffix}`, forwarded);
+      const { operations, task, status } = conversation;
       const committed = { status };
+      // Two conversations that wrote one note make a preference, as the control plane makes it; the answer of the engine to that is awaited too.
+      const promoted = task && task.status === "completed" ? await countRepeats(userId, conversation) : null;
       const files = await readMemoryFiles(userId);
+      const notes = Object.entries(files).filter(([rel]) => rel.startsWith("observations/"));
       const failed = task && task.status !== "completed";
       const failures = failed ? [`extraction ${task?.status}: ${String(task?.error ?? "").slice(0, 120)}`] : scoreNative(item, files, operations, seedFiles);
       Object.assign(row, { operations, taskStatus: task?.status ?? (committed.status === "accepted" ? "unknown" : String(committed.status ?? "no commit")),
         counts: Object.fromEntries(Object.entries(kindsOf(files)).filter(([, list]) => list.length).map(([kind, list]) => [kind, list.length])), files,
         ...(seedFiles ? { seedFiles } : {}),
+        // The notes of the observations type are no memory and no check sees them; how many there are is what to read for noise.
+        observations: { files: notes.length, lines: notes.reduce((sum, [, text]) => sum + bullets(body(text)).length, 0), promoted: promoted?.promoted ?? 0 },
         failures, verdict: row.decidable ? (failures.length ? (item.pendingTemplate ? "pending-template" : "FAIL") : "pass") : "needs-reading", expected: item.expected, judge: item.judge ?? null,
         ...(item.pendingTemplate ? { pendingTemplate: item.pendingTemplate } : {}) });
     } catch (error) {
@@ -310,7 +371,7 @@ async function main() {
       if (!options.keep) await sessions.eraseUser(userId, { waitMs: 20_000 }).catch(() => null);
     }
     rows.push(row);
-    process.stdout.write(`${JSON.stringify({ id: row.id, verdict: row.verdict, failures: row.failures, operations: row.operations, counts: row.counts })}\n`);
+    process.stdout.write(`${JSON.stringify({ id: row.id, verdict: row.verdict, failures: row.failures, operations: row.operations, counts: row.counts, observations: row.observations })}\n`);
   }
   const decided = rows.filter((row) => row.decidable);
   /** @type {Record<string, { passes: number, samples: number }>} */
