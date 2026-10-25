@@ -71,9 +71,10 @@ test('a republisher\'s authority is capped, it takes no floor place, and its tab
 
 test('every ceiling in the table is a whole number within its part\'s scale', async () => {
   const table = (await import('../src/frontier-selection.json', { with: { type: 'json' } })).default
+  /** @type {Array<Record<string, any>>} */
   const rows = [...Object.values(table.ceilings.genre), ...Object.values(table.ceilings.evidenceType), ...Object.values(table.ceilings.sourceClass),
     ...Object.values(table.ceilings.design), table.ceilings.smallStudy]
-  for (const row of rows) for (const part of ['impact', 'novelty', 'relevance']) {
+  for (const row of rows) for (const part of /** @type {const} */ (['impact', 'novelty', 'relevance'])) {
     if (row[part] === undefined) continue
     assert.ok(Number.isInteger(row[part]) && row[part] >= 0 && row[part] <= FRONTIER_SCORE_MAXIMA[part], `${part} ${row[part]}`)
   }
@@ -112,7 +113,7 @@ test('only a decision or a result from a source that can carry it is admissible'
 })
 
 test('the day\'s labels: the best scored proposals up to the cap; an admitted label stays and counts', () => {
-  const c = (id, score, extra = {}) => ({ id, score, proposed: true, admissible: true, ...extra })
+  const c = (/** @type {string} */ id, /** @type {number} */ score, extra = {}) => ({ id, score, proposed: true, admissible: true, ...extra })
   assert.deepEqual(frontierPracticeAdmit([c('a', 80), c('b', 90), c('c', 70), c('d', 85)], { selectedCount: 60 }), { admit: ['b', 'd', 'a'], cap: 3 })
   assert.deepEqual(frontierPracticeAdmit([c('a', 80), c('b', 90)], { selectedCount: 20 }), { admit: ['b'], cap: 1 })
   assert.deepEqual(frontierPracticeAdmit([c('old', 60, { admitted: true }), c('a', 80), c('b', 90)], { selectedCount: 40 }), { admit: ['b'], cap: 2 }, 'the one admitted counts against the cap')
@@ -131,7 +132,7 @@ test('the reason is one line within its limit, or nothing', () => {
 // ───────────────────────── the mix ─────────────────────────
 
 let serial = 0
-const item = (overrides = {}) => {
+const item = (/** @type {Record<string, any>} */ overrides = {}) => {
   serial += 1
   return { id: `s${serial}`, genre: 'paper', zh: false, score: 80, selected: false, rule: null, safety: false, sourceId: `src${serial}`, sourceCap: 3,
     eligible: true, summarized: true, besideSelected: false, eventId: null, ...overrides }
