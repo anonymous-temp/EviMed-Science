@@ -191,7 +191,7 @@ test("a changed text or changed instructions write the questions again; an uncha
   assert.equal(editor.asked.length, 3);
 });
 
-test("an answer with no question, or none that code keeps, is recorded as none and not asked again; a failed call records nothing", options, async () => {
+test("an answer with no question, or none that code keeps, or a call that failed for its own reason, is recorded as none and not asked again", options, async () => {
   const empty = await paper("Item with nothing to ask");
   const refused = await paper("Item whose questions carry a number it lacks");
   const failing = await paper("Item whose call fails");
@@ -209,19 +209,22 @@ test("an answer with no question, or none that code keeps, is recorded as none a
   assert.equal(refusedRow.ask_zh, null);
   assert.ok(refusedRow.ask_basis);
   assert.deepEqual(pipeline.counters.askQuestionsDropped, { number: 1, length: 1 });
-  assert.equal(pipeline.counters.asksEmpty, 2);
+  assert.equal(pipeline.counters.asksEmpty, 3, "the two answered with none and the one whose call failed");
+  // A cut-off answer is the text's own failure: recorded as none for it, so a text that always fails is not asked every round (c3 review).
   const failed = await row(failing.id);
-  assert.equal(failed.ask_basis, null, "a call that could not be made is asked again");
+  assert.equal(failed.ask_zh, null);
+  assert.ok(failed.ask_basis, "recorded as asked for this text");
   assert.equal(failed.lease_owner, null);
   await pipelineFor(editor).processBatch();
-  assert.equal(editor.asked.length, 4, "only the one that failed");
+  assert.equal(editor.asked.length, 3, "nothing is asked twice");
 });
 
-test("a provider that is out of balance pauses the questions without recording any", options, async () => {
+test("a provider that is out of balance, or a spent quota, pauses the questions without recording any", options, async () => {
   const item = await paper("Item asked while the provider is out of balance");
-  const editor = askEditor({ fail: () => "insufficient_quota" });
-  await pipelineFor(editor).processBatch();
-  assert.equal((await row(item.id)).ask_basis, null);
+  for (const code of ["model_gateway_payment_required", "insufficient_quota", "usage_budget_exceeded"]) {
+    await pipelineFor(askEditor({ fail: () => code })).processBatch();
+    assert.equal((await row(item.id)).ask_basis, null, code);
+  }
 });
 
 test("the reader's detail is served the questions and a list card never is", options, async () => {

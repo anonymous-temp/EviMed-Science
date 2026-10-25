@@ -273,3 +273,34 @@ test("a provider that cannot be reached leaves the draft as the writer produced 
   assert.equal(stored.study_facts, null, "asked again later");
   assert.equal(stored.editor_diagnostics?.faith ?? null, null);
 });
+
+test("c3 review: a facts call that fails for its own reason is recorded as asked for that text; new instructions ask again; a text read from reports is never read for facts", options, async () => {
+  const item = await paper({ lead_zh: GOOD });
+  const editor = faithEditor({ lead: GOOD });
+  const call = editor.callJson.bind(editor);
+  let cut = true;
+  editor.callJson = async (/** @type {any[]} */ messages) => {
+    if (cut && String(messages[0].content).includes("研究设计审读员")) { editor.counts.facts += 1; throw Object.assign(new Error("cut"), { code: "frontier_model_incomplete" }); }
+    return call(messages);
+  };
+  await pipelineFor(editor).processBatch();
+  const failed = (await row(item.id)).study_facts;
+  assert.deepEqual([failed.empty, failed.failed, failed.basis], [true, "frontier_model_incomplete", (await row(item.id)).reader_tidy.sha]);
+  const asked = editor.counts.facts;
+  await pipelineFor(editor).processBatch();
+  assert.equal(editor.counts.facts, asked, "a text that always fails is not asked every round");
+  // New instructions: the record of the old ones is made again.
+  cut = false;
+  await set(item.id, { study_facts_version: "frontier-study-facts-0.000000000000" });
+  await pipelineFor(editor).processBatch();
+  assert.equal((await row(item.id)).study_facts.design, "rct");
+  assert.equal(editor.counts.facts, asked + 1);
+
+  // A paper read through its reports (c3-primary): its 导读 is not checked and no facts are made from the reports.
+  const held = await paper();
+  await set(held.id, {}, { abstract_raw: null, reader_reports: "据医学媒体报道，药物 X 在试验中降低了 LDL。", reader_tidy: { sha: "reports-abc", source: "reports", drop: [] } });
+  const before = editor.counts.facts;
+  await pipelineFor(editor).processBatch();
+  assert.equal((await row(held.id)).study_facts, null);
+  assert.equal(editor.counts.facts, before, "no facts call for a reports text");
+});

@@ -217,7 +217,7 @@ export async function frontierWriteCongressRecap(editor, { congress, refs }) {
 /**
  * @typedef {{ database: any, now?: () => Date, timeZone?: string, calendar?: readonly import("@evimed/domain").FrontierCongress[] }} FrontierTrackOptions
  * @typedef {{ editor: any, workerId: string, leaseMs: number, now: Date, budget: { state: string },
- *   providerPaused: () => boolean, onProviderRefused: (code: string) => void,
+ *   providerPaused: () => boolean, onProviderRefused: (code: string) => void, providerUnavailable?: (code: string) => boolean,
  *   readerText: (texts: any) => ({ source: string, text: string } | null), itemGenre: (item: any) => string,
  *   sources: (ids: string[]) => Promise<Map<string, any>> }} FrontierTrackRound
  */
@@ -299,17 +299,21 @@ export class FrontierTrack {
       this.counters.asked += result.asked ? 1 : 0;
       if (result.error) {
         // A call the provider or the budget prevented records nothing: the item is asked again.
-        if (["usage_budget_exceeded", "frontier_editor_unavailable"].includes(result.error)) return false;
-        round.onProviderRefused(result.error);
+        if (["usage_budget_exceeded", "insufficient_quota", "frontier_editor_unavailable"].includes(result.error)) return false;
         this.counters.failed += 1;
         this.lastError = result.error;
-        return false;
+        if (!round.providerUnavailable || round.providerUnavailable(result.error)) {
+          round.onProviderRefused(result.error);
+          return false;
+        }
       }
       for (const { key, reason } of result.dropped) {
         const name = `${key}:${reason}`;
         this.counters.droppedFields[name] = (this.counters.droppedFields[name] ?? 0) + 1;
       }
-      const facts = result.facts;
+      // A call that failed for its own reason (a cut-off answer, a timeout) is recorded as no record for this text, so it is not asked
+      // every round (c3 review); a new text or new instructions ask again.
+      const facts = result.error ? { version: FRONTIER_TRACK_FACTS_VERSION, basis, kind: genre, none: true, failed: result.error } : result.facts;
       if (!facts) return false;
       const done = await this.#writeUnderLease(item, workerId, async (client) => {
         await client.query(`UPDATE evimed_frontier.items SET track_facts = $2::jsonb, track_facts_version = $3, lease_owner = NULL, lease_until = NULL WHERE id = $1`,

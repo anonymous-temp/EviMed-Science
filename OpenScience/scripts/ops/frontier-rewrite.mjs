@@ -326,8 +326,9 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
   }
 
   if (steps.includes("brief")) {
+    // No 要点 from the reports of a paper (c3-primary), as the pipeline: the 导读 alone says whose reports it rests on.
     const rows = (await owing(`(i.brief_version IS DISTINCT FROM $5 OR i.brief_basis IS NULL
-      OR i.brief_basis NOT LIKE (t.reader_tidy->>'sha') || ':%')`, FRONTIER_BRIEF_VERSION)).filter((row) => frontierBriefWanted(genreOf(row)));
+      OR i.brief_basis NOT LIKE (t.reader_tidy->>'sha') || ':%') AND t.reader_tidy->>'source' <> 'reports'`, FRONTIER_BRIEF_VERSION)).filter((row) => frontierBriefWanted(genreOf(row)));
     summary.brief = { items: rows.length, byGenre: genres(rows), written: 0, empty: 0 };
     calls.brief = rows.length;
     if (apply) await each(rows, async (row) => {
@@ -377,7 +378,7 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
   const studyOwing = async (owed, version = null, extra = "") => (await database.query(`SELECT ${ITEM_FIELDS}, i.lead_zh, i.brief, i.study_facts${extra}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id JOIN evimed_frontier.item_texts t ON t.item_id = i.id
       WHERE i.state = 'published' AND i.visible_at >= $1 AND i.visible_at < $2 AND t.reader_tidy IS NOT NULL
-        AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND ${owed}
+        AND t.reader_tidy->>'source' <> 'reports' AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND ${owed}
       ORDER BY i.visible_at, i.id LIMIT $4`, [since, until, worthy, limit, ...(version === null ? [] : [version])])).rows
     .filter((row) => frontierStudyFactsWanted(genreOf(row)));
   /** What the facts call reads. @param {any} row @param {{ text: string, source: any }} reader */
@@ -385,7 +386,10 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
   /** A coded error out of a step's work (counted as failed by `each`). @param {string} code */
   const coded = (code) => Object.assign(new Error(code), { code });
 
-  const factsOwed = "(i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha')";
+  // The version is a hash of the instructions (letters, digits, dots and dashes): written into the predicate, which both steps share.
+  if (!/^[a-z0-9.-]+$/.test(FRONTIER_STUDY_FACTS_VERSION)) throw new Error("the study facts version is not a plain word");
+  const factsOwed = `(i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha'
+    OR i.study_facts_version IS DISTINCT FROM '${FRONTIER_STUDY_FACTS_VERSION}')`;
   if (steps.includes("facts")) {
     const rows = await studyOwing(factsOwed);
     summary.facts = { items: rows.length, byGenre: genres(rows), written: 0, empty: 0 };
@@ -418,7 +422,7 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       ${factsOwed} AS facts_owed`);
     /** @type {Record<string, number>} */
     const outcomes = {};
-    summary.faith = { items: rows.length, byGenre: genres(rows), texts: 0, outcomes, changed: 0, facts: 0, noFacts: 0 };
+    summary.faith = { items: rows.length, byGenre: genres(rows), texts: 0, outcomes, changed: 0, facts: 0, noFacts: 0, raced: 0 };
     calls.faith = rows.reduce((total, row) => total + (row.lead_owed ? 1 : 0) + (row.brief_owed ? 1 : 0) + (row.summary_owed ? 1 : 0), 0);
     // Facts the faith step makes itself (in a report with the facts step, that step has counted them).
     if (!steps.includes("facts")) calls.facts = rows.filter((row) => row.facts_owed).length;
@@ -427,8 +431,11 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       const reader = frontierReaderText(texts);
       const sha = texts?.reader_tidy?.sha;
       if (!reader || !sha) return;
+      // The texts as they are now: the step's list was read when it began, and the pipeline may have written since.
+      const now = (await database.query("SELECT lead_zh, brief, summary_zh, study_facts FROM evimed_frontier.items WHERE id = $1", [row.id])).rows[0];
+      if (!now) return;
       const input = factsInput(row, reader);
-      const ensured = await frontierEnsureStudyFacts(editor, { stored: row.study_facts, sha, input });
+      const ensured = await frontierEnsureStudyFacts(editor, { stored: now.study_facts, sha, input });
       if (ensured.error) throw coded(ensured.error);
       const facts = ensured.fresh ? ensured.record : null;
       if (facts) summary.faith.facts += 1;
@@ -444,7 +451,8 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       const source = faithSource(input);
       /** @type {Record<string, any>} */
       const diagnostic = {};
-      let { lead_zh: lead, brief, summary_zh: card } = row;
+      const checked = { lead: now.lead_zh, brief: now.brief, card: now.summary_zh };
+      let { lead, brief, card } = checked;
       const tally = (/** @type {"lead" | "brief" | "summary"} */ kind, /** @type {any} */ result, record = faithDiagnostic(result)) => {
         diagnostic[kind] = record;
         outcomes[result.outcome] = (outcomes[result.outcome] ?? 0) + 1;
@@ -453,18 +461,18 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       };
       let failure = null;
       try {
-        if (row.lead_owed) {
+        if (row.lead_owed && lead) {
           const run = await frontierFaithCheckLead(editor, { facts: ensured.view, lead, previous: null, source,
             input: { ...writing, briefed: frontierBriefWanted(genre) } });
           lead = run.lead;
           tally("lead", run.result);
         }
-        if (row.brief_owed) {
+        if (row.brief_owed && brief) {
           const run = await frontierFaithCheckBrief(editor, { facts: ensured.view, brief, previous: null, source, input: writing });
           brief = run.brief;
           tally("brief", run.result);
         }
-        if (row.summary_owed) {
+        if (row.summary_owed && card) {
           const run = await frontierFaithCheckSummary(editor, { facts: ensured.view, summary: card, source });
           card = run.summary;
           tally("summary", run.result, run.diagnostic);
@@ -473,20 +481,25 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
         // The outcome of what was checked is still kept (an unchecked text is asked about again next run); the item counts as failed.
         failure = error;
       }
-      const changed = lead !== row.lead_zh || JSON.stringify(brief) !== JSON.stringify(row.brief) || card !== row.summary_zh;
-      await database.transaction(async (/** @type {any} */ client) => {
-        if (card !== row.summary_zh) {
+      const changed = lead !== checked.lead || JSON.stringify(brief) !== JSON.stringify(checked.brief) || card !== checked.card;
+      const written = await database.transaction(async (/** @type {any} */ client) => {
+        // Nothing written over a text the pipeline wrote while this one was read: the check is of the text it read.
+        const current = (await client.query("SELECT lead_zh, brief, summary_zh FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [row.id])).rows[0];
+        if (!current || current.lead_zh !== checked.lead || JSON.stringify(current.brief) !== JSON.stringify(checked.brief) || current.summary_zh !== checked.card) return false;
+        if (card !== checked.card) {
           await client.query("UPDATE evimed_frontier.items SET summary_zh = $2, lexemes = $3::tsvector WHERE id = $1",
             [row.id, card, tsvectorLiteral(frontierLexemeText({ ...row, summary_zh: card }))]);
           await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'faith')", [row.id]);
         }
-        if (lead !== row.lead_zh) await client.query("UPDATE evimed_frontier.items SET lead_zh = $2 WHERE id = $1", [row.id, lead]);
-        if (JSON.stringify(brief) !== JSON.stringify(row.brief)) {
+        if (lead !== checked.lead) await client.query("UPDATE evimed_frontier.items SET lead_zh = $2 WHERE id = $1", [row.id, lead]);
+        if (JSON.stringify(brief) !== JSON.stringify(checked.brief)) {
           await client.query("UPDATE evimed_frontier.items SET brief = $2::jsonb WHERE id = $1", [row.id, brief ? JSON.stringify(brief) : null]);
         }
         await frontierWriteFaith(client, row.id, { facts, diagnostic }, new Date());
         if (changed) await bumpFrontierVersion(client);
+        return true;
       });
+      if (!written) { summary.faith.raced += 1; return; }
       if (changed) summary.faith.changed += 1;
       if (failure) throw failure;
     });

@@ -142,7 +142,8 @@ test("a republisher's authority grade is capped at its table's; every other sour
 });
 
 test("the label a card carries is the admitted one with its reason; a proposal that was not admitted is never served", () => {
-  assert.deepEqual(frontierPracticeLabel({ practice_changing: true, practice_zh: " 国内首个获批\n用于 HER2 阳性患者 " }), { reason: "国内首个获批 用于 HER2 阳性患者" });
+  assert.deepEqual(frontierPracticeLabel({ practice_changing: true, selected: true, practice_zh: " 国内首个获批\n用于 HER2 阳性患者 " }), { reason: "国内首个获批 用于 HER2 阳性患者" });
+  assert.equal(frontierPracticeLabel({ practice_changing: true, selected: false, practice_zh: "taken out of 精选 since" }), null, "a label of 精选 only");
   assert.equal(frontierPracticeLabel({ practice_changing: false, practice_zh: "reason held, not admitted" }), null);
   assert.equal(frontierPracticeLabel({ practice_changing: true, practice_zh: null }), null);
   assert.equal(frontierPracticeLabel({ practice_changing: true, practice_zh: "   " }), null);

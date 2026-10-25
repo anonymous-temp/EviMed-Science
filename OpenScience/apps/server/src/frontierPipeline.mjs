@@ -182,6 +182,15 @@ export function frontierProviderUnavailable(error) {
   return code === "frontier_model_failed" && typeof networkCode === "string"
     && /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EHOSTDOWN|ETIMEDOUT|EPIPE|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|UND_ERR_SOCKET)$/.test(networkCode);
 }
+/**
+ * Whether a failed call was prevented rather than answered wrongly: the provider or the transport (`frontierProviderUnavailable`),
+ * the module's budget, a quota, no editor. Such a call records nothing and the item is asked again; any other failure is recorded
+ * as asked for that text (c3 review: a text that always fails is not asked every round).
+ * @param {unknown} code
+ */
+export function frontierCallDeferred(code) {
+  return frontierProviderUnavailable(code) || ["usage_budget_exceeded", "insufficient_quota", "frontier_editor_unavailable"].includes(String(code));
+}
 /** The 72-hour rule of `timeline_at` (plan §6.1). */
 export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
 /**
@@ -2426,6 +2435,7 @@ export class FrontierPipeline {
         const rows = (await client.query(`SELECT i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags,
             i.safety_alert, i.lane, i.lang, i.title_raw, i.score_total, i.verification, i.selected, i.selected_rule,
             i.primary_source_id, i.event_id, i.practice_changing, i.practice_zh, length(btrim(coalesce(i.summary_zh, ''))) > 0 AS summarized,
+            i.editor_diagnostics->>'scoreVersion' AS score_version,
             (to_jsonb(i)->'event_selection'->>'addsValue')::boolean AS adds_value,
             s.authority AS source_authority, s.source_type AS source_source_type, t.publication_types,
             ${frontierBesideSelectedSql("i")} AS beside_selected
@@ -2458,7 +2468,10 @@ export class FrontierPipeline {
           return {
             id: String(row.id), genre: frontierMixGenre(row),
             zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw),
-            score: row.score_total == null ? null : Number(row.score_total),
+            // A score is weighed against the line only once the scoring of 2026-10-25 wrote it (`scoreVersion`): an older score sits on
+            // another scale, and selection is sticky, so a total of 64-81 from the old prompts would fill the day until the rescore
+            // (`frontier-rewrite.mjs --steps score`) reached it. Such an item waits for that, or for its next edit; a safety alert does not.
+            score: row.score_total == null || !row.score_version ? null : Number(row.score_total),
             selected: row.selected === true, rule: row.selected_rule ?? null, safety: row.safety_alert === true,
             sourceId: String(row.primary_source_id), sourceCap: frontierMixSourceCap(source),
             eligible: ["passed", "repaired"].includes(row.verification) && !flags.includes("retracted")
@@ -2515,8 +2528,9 @@ export class FrontierPipeline {
     const { admit } = frontierPracticeAdmit(candidates, { selectedCount: candidates.length });
     let admitted = 0;
     for (const id of admit) {
+      // Still selected in this transaction: a pick a safety alert of its event took the place of just above carries no label.
       const updated = await client.query(`UPDATE evimed_frontier.items SET practice_changing = true, updated_at = clock_timestamp()
-        WHERE id = $1 AND state = 'published' AND NOT practice_changing AND practice_zh IS NOT NULL`, [id]);
+        WHERE id = $1 AND state = 'published' AND selected AND NOT practice_changing AND practice_zh IS NOT NULL`, [id]);
       if (!updated.rowCount) continue;
       await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'practice')", [id]);
       admitted += 1;
@@ -2738,10 +2752,12 @@ export class FrontierPipeline {
   async #reviveDroppedPrimaries(context) {
     const { now } = context;
     const limits = FRONTIER_PRIMARY_LIMITS;
+    // Aged by `first_seen_at`, as the text decision ages an entry: an entry received late (a backfill) but first seen more than the
+    // give-up ago would be revived, held and dropped again every round (c3 review).
     const rows = (await this.database.query(`SELECT e.* FROM evimed_frontier.entries e JOIN evimed_frontier.sources s ON s.id = e.source_id
       WHERE e.state = 'dropped' AND e.state_reason = 'no-text' AND e.item_id IS NOT NULL AND s.source_type = 'journal' AND s.authority >= $1
-        AND e.received_at > $2 AND (e.hold_until IS NULL OR e.hold_until <= $3)
-      ORDER BY e.received_at DESC LIMIT $4`, [limits.authority, new Date(now.getTime() - FRONTIER_PRIMARY_GIVE_UP_MS), now, limits.revisit])).rows;
+        AND e.first_seen_at > $2 AND (e.hold_until IS NULL OR e.hold_until <= $3)
+      ORDER BY e.first_seen_at DESC LIMIT $4`, [limits.authority, new Date(now.getTime() - FRONTIER_PRIMARY_GIVE_UP_MS), now, limits.revisit])).rows;
     for (const entry of rows) {
       let status = "error";
       try { status = (await this.plugin.text(entry.plugin_entry_id))?.status ?? "error"; } catch { /* asked again at the next look */ }
@@ -2925,7 +2941,7 @@ export class FrontierPipeline {
         FOR UPDATE OF i SKIP LOCKED)
       UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
       RETURNING i.id, i.title_raw, i.title_zh, i.platform, i.primary_source_id, i.published_at, i.lease_until,
-        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.selected, i.score_total, i.lead_zh, i.study_facts`,
+        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.selected, i.score_total, i.lead_zh, i.lead_basis, i.study_facts`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", LEAD_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs)])).rows;
     if (!claimed.length) return;
@@ -2950,7 +2966,10 @@ export class FrontierPipeline {
       }
       let lead = result.verification === "passed" || result.verification === "repaired" ? result.lead : null;
       // c3-faith: the written 导读 read against what the source says about the study (never a note on the page).
-      const faith = lead ? await this.#faith("lead", { item, texts, reader, sha, sourceName: leadInput.sourceName, draft: lead, previous: item.lead_zh ?? null, input: leadInput, context }) : null;
+      // A 导读 written from the reports of a paper (c3-primary, a basis `reports-…`) is not what an emptied check keeps once the
+      // paper's own text is read: the reports' claims would stand as the paper's under its abstract's basis.
+      const previous = String(item.lead_basis ?? "").startsWith("reports-") && reader.source !== "reports" ? null : item.lead_zh ?? null;
+      const faith = lead ? await this.#faith("lead", { item, texts, reader, sha, sourceName: leadInput.sourceName, draft: lead, previous, input: leadInput, context }) : null;
       if (faith) lead = faith.draft;
       const written = await this.#writeUnderLease(item, async (client) => {
         await client.query(`UPDATE evimed_frontier.items SET lead_zh = $2, lead_basis = $3, lead_at = $4, lead_version = $5, lease_owner = NULL, lease_until = NULL
@@ -3057,8 +3076,8 @@ export class FrontierPipeline {
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
           AND i.genre = ANY($7::text[])
-          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
-          AND (i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha')
+          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL} AND t.reader_tidy->>'source' <> 'reports'
+          AND (i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha' OR i.study_facts_version IS DISTINCT FROM $9)
           AND (NOT $3::boolean OR i.selected OR i.safety_alert OR i.score_total >= $8)
         ORDER BY (i.selected OR i.safety_alert OR coalesce(i.score_total, 0) >= $8) DESC, i.visible_at DESC, i.id DESC
         LIMIT $4
@@ -3066,7 +3085,7 @@ export class FrontierPipeline {
       UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
       RETURNING i.id, i.title_raw, i.platform, i.primary_source_id, i.published_at, i.lease_until, i.genre`,
     [now, new Date(now.getTime() - STUDY_FACTS_WINDOW_MS), budget.state === "throttled", STUDY_FACTS_BATCH, this.workerId,
-      new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN])).rows;
+      new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN, FRONTIER_STUDY_FACTS_VERSION])).rows;
     if (!claimed.length) return;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
@@ -3074,24 +3093,26 @@ export class FrontierPipeline {
       const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
       const reader = frontierReaderText(texts);
       const sha = texts?.reader_tidy?.sha;
-      if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
+      if (!reader || !sha || texts.reader_tidy.source !== reader.source || reader.source === "reports") return false;
       const source = sources.get(item.primary_source_id);
       const ensured = await frontierEnsureStudyFacts(this.editor, { stored: null, sha, input: {
         sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, text: reader.text, kind: reader.source } });
-      if (ensured.error || !ensured.record) {
-        if (ensured.error && (frontierProviderUnavailable(ensured.error) || ensured.error === "usage_budget_exceeded" || ensured.error === "frontier_editor_unavailable")) {
-          if (frontierProviderUnavailable(ensured.error)) this.#pauseForProvider(now, ensured.error);
-        }
+      if (ensured.error && frontierCallDeferred(ensured.error)) {
+        // The provider or the budget prevented the call: nothing is recorded, the item is asked again.
+        if (frontierProviderUnavailable(ensured.error)) this.#pauseForProvider(now, ensured.error);
         return false;
       }
+      // A call that failed for its own reason (a cut-off answer, a timeout) is recorded as asked for this text, as the 导读's is,
+      // so a text that always fails is not asked every round (c3 review); a new text or new instructions ask again.
+      const record = ensured.record ?? { version: FRONTIER_STUDY_FACTS_VERSION, basis: sha, empty: true, failed: ensured.error ?? "frontier_model_failed" };
       const written = await this.#writeUnderLease(item, async (client) => {
         await client.query(`UPDATE evimed_frontier.items SET study_facts = $2::jsonb, study_facts_version = $3, lease_owner = NULL, lease_until = NULL
-          WHERE id = $1`, [item.id, JSON.stringify(ensured.record), FRONTIER_STUDY_FACTS_VERSION]);
+          WHERE id = $1`, [item.id, JSON.stringify(record), FRONTIER_STUDY_FACTS_VERSION]);
       });
       if (written) {
         summary.studyFacts += 1;
-        if (ensured.record.empty) this.counters.studyFactsEmpty += 1;
+        if (record.empty) this.counters.studyFactsEmpty += 1;
       }
       return written;
     })));
@@ -3114,7 +3135,7 @@ export class FrontierPipeline {
     const claimed = (await this.database.query(`WITH picked AS (
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
-          AND i.lead_zh IS NOT NULL
+          AND i.lead_zh IS NOT NULL AND i.lead_basis = t.reader_tidy->>'sha'
           AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
           AND (NOT $3::boolean OR i.selected OR i.safety_alert)
           AND (i.ask_basis IS DISTINCT FROM t.reader_tidy->>'sha' OR i.ask_version IS DISTINCT FROM $7)
@@ -3139,10 +3160,12 @@ export class FrontierPipeline {
         sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, genre: frontierItemGenre(item),
         titleRaw: item.title_raw, titleZh: item.title_zh, lead: item.lead_zh, text: reader.text, kind: reader.source, post: item.platform === "x" });
-      if (result.error) {
+      if (result.error && frontierCallDeferred(result.error)) {
         if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
         return false;
       }
+      // A call that failed for its own reason is recorded as none for this text (its `questions` are empty), so it is not asked every
+      // round; a new text or new instructions ask again (c3 review).
       for (const [reason, count] of Object.entries(result.dropped)) {
         if (count) this.counters.askQuestionsDropped[reason] = (this.counters.askQuestionsDropped[reason] ?? 0) + count;
       }
@@ -3179,8 +3202,10 @@ export class FrontierPipeline {
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
           AND i.genre = ANY($7::text[]) AND coalesce(i.summary_zh, '') <> ''
           AND t.reader_tidy IS NOT NULL AND i.study_facts->>'basis' = t.reader_tidy->>'sha' AND NOT coalesce((i.study_facts->>'empty')::boolean, false)
+          AND i.study_facts_version = $10
           AND (i.editor_diagnostics->'faith'->'summary'->>'version' IS DISTINCT FROM $9
-            OR i.editor_diagnostics->'faith'->'summary'->>'outcome' = 'unchecked'
+            OR (i.editor_diagnostics->'faith'->'summary'->>'outcome' = 'unchecked'
+              AND (i.editor_diagnostics->'faith'->'summary'->>'at')::timestamptz < $1::timestamptz - interval '6 hours')
             OR i.editor_diagnostics->'faith'->'summary'->>'basis' IS DISTINCT FROM md5(i.summary_zh))
           AND (NOT $3::boolean OR i.selected OR i.safety_alert OR i.score_total >= $8)
         ORDER BY (i.selected OR i.safety_alert OR coalesce(i.score_total, 0) >= $8) DESC, i.visible_at DESC, i.id DESC
@@ -3190,7 +3215,7 @@ export class FrontierPipeline {
       RETURNING i.id, i.title_raw, i.title_zh, i.summary_zh, i.entities, i.tags, i.study_facts, i.platform, i.primary_source_id, i.published_at,
         i.lease_until, i.genre`,
     [now, new Date(now.getTime() - STUDY_FACTS_WINDOW_MS), budget.state === "throttled", FAITH_SUMMARY_BATCH, this.workerId,
-      new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN, FRONTIER_FAITH_VERSION])).rows;
+      new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN, FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION])).rows;
     if (!claimed.length) return;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
@@ -3245,7 +3270,8 @@ export class FrontierPipeline {
   async #faith(kind, { item, reader, sha, sourceName, draft, previous, input, context }) {
     const { now, summary } = context;
     const genre = frontierItemGenre(item);
-    if (!this.faithEnabled || !frontierStudyFactsWanted(genre) || typeof this.editor.callJson !== "function" || this.#providerPause(now)) return null;
+    // A paper read through its reports (c3-primary) is not checked: its facts would be the reports', read as the paper's own.
+    if (!this.faithEnabled || !frontierStudyFactsWanted(genre) || reader.source === "reports" || typeof this.editor.callJson !== "function" || this.#providerPause(now)) return null;
     try {
       const factsInput = { sourceName, date: input.date ?? null, titleRaw: item.title_raw, text: reader.text, kind: reader.source };
       const ensured = await frontierEnsureStudyFacts(this.editor, { stored: item.study_facts, sha, input: factsInput });
@@ -3302,6 +3328,7 @@ export class FrontierPipeline {
     /** @type {import("./frontierTrack.mjs").FrontierTrackRound} */
     const round = { editor: this.editor, workerId: this.workerId, leaseMs: this.leaseMs, now, budget,
       providerPaused: () => Boolean(this.#providerPause(now)),
+      providerUnavailable: (code) => frontierCallDeferred(code),
       onProviderRefused: (code) => { if (frontierProviderUnavailable(code)) this.#pauseForProvider(now, code); },
       readerText: (texts) => frontierReaderText(texts), itemGenre: (item) => frontierItemGenre(item), sources: (ids) => this.#sources(ids) };
     try {

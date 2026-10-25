@@ -435,3 +435,22 @@ test("the service serves a congress's hub: its days newest first with the recap'
   assert.equal(list.congresses.find((congress) => congress.id === "esmo-2026")?.itemCount, 2);
   assert.deepEqual(list.congresses.filter((congress) => congress.status === "ongoing").map((congress) => congress.id).sort(), ["asn-kidney-week-2026", "esmo-2026"]);
 });
+
+test("c3 review: a call that fails for its own reason is recorded as no record for that text; a deferred one records nothing", options, async () => {
+  const cut = await item({ text: "FDA approved Drug Q for condition R on October 22, 2026.", publishedAt: "2026-10-22T04:00:00Z" });
+  const quota = await item({ text: "FDA approved Drug S for condition T on October 23, 2026.", publishedAt: "2026-10-23T04:00:00Z" });
+  let asked = 0;
+  const editor = { available: true, model: "deepseek-flash", writeJson: async () => null, callJson: async (/** @type {any[]} */ messages) => {
+    asked += 1;
+    const input = String(messages[1].content);
+    throw Object.assign(new Error("no"), { code: /Drug Q/.test(input) ? "frontier_model_incomplete" : "insufficient_quota" });
+  } };
+  const deferred = (/** @type {string} */ code) => ["insufficient_quota", "usage_budget_exceeded", "model_gateway_payment_required"].includes(code);
+  await track().extractRound(round({ editor, providerUnavailable: deferred }));
+  const failed = (await record(cut.id)).track_facts;
+  assert.deepEqual([failed.none, failed.failed, failed.kind], [true, "frontier_model_incomplete", "approval"]);
+  assert.equal((await record(quota.id)).track_facts, null, "a spent quota records nothing: asked again");
+  const before = asked;
+  await track().extractRound(round({ editor, providerUnavailable: deferred }));
+  assert.equal(asked, before + 1, "only the deferred one is asked again");
+});

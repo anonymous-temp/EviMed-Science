@@ -197,7 +197,8 @@ export function frontierAuthor(value) {
  */
 export function frontierPracticeLabel(row) {
   const reason = typeof row?.practice_zh === "string" ? row.practice_zh.replace(/\s+/g, " ").trim() : "";
-  return row?.practice_changing === true && reason ? { reason } : null;
+  // A label of 精选 only: an item a later rule took out of it (a safety alert of its event, one pick an event, a merge) shows none.
+  return row?.practice_changing === true && row?.selected === true && reason ? { reason } : null;
 }
 
 /** The tiers the 「AI 评分」 pill is drawn in (`@evimed/domain` `FRONTIER_SCORE_TIERS`: 76 / 60 on the score of 2026-10-25, from 85 / 70). */

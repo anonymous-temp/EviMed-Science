@@ -30,7 +30,8 @@ function emptyRecord(basis) {
  */
 export async function frontierEnsureStudyFacts(editor, { stored, sha, input }) {
   const row = stored && typeof stored === "object" && !Array.isArray(stored) ? /** @type {any} */ (stored) : null;
-  if (row && row.basis === sha) return { record: row, view: frontierStudyFactsView(row), fresh: false, error: null, calls: 0 };
+  // The stored record stands when these instructions made it from this very text; a prompt change asks again (c3 review).
+  if (row && row.basis === sha && row.version === FRONTIER_STUDY_FACTS_VERSION) return { record: row, view: frontierStudyFactsView(row), fresh: false, error: null, calls: 0 };
   const written = await frontierWriteStudyFacts(editor, input);
   if (written.error) return { record: null, view: null, fresh: false, error: written.error, calls: written.attempts ?? 1 };
   const record = written.facts ? { ...written.facts, basis: sha } : emptyRecord(sha);

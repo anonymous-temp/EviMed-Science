@@ -298,3 +298,29 @@ test("score: items an older scoring wrote are scored again under the ceilings, t
   assert.equal(again.score.items, 1, "only the refused one is owed");
   assert.deepEqual(asked, ["The model fails on this one"]);
 });
+
+test("c3 review: the faith step writes nothing over a 导读 the pipeline wrote while it was checking, and leaves it owed", options, async () => {
+  const paper = await insertItem(database, { title: "Oral drug X versus placebo for LDL", selected: true, visibleAt: "2026-10-12T00:00:00Z" });
+  await database.query(`UPDATE evimed_frontier.items SET score_total = 90, editor_version = $2, genre = 'paper', genre_basis = 'code', lead_zh = $3,
+    lead_version = $4, lead_at = '2026-10-12T01:00:00Z' WHERE id = $1`, [paper.id, FRONTIER_EDITOR_VERSION, MISSTATED, FRONTIER_LEAD_VERSION]);
+  await database.query("UPDATE evimed_frontier.item_texts SET abstract_raw = $2, reader_tidy = $3::jsonb WHERE item_id = $1",
+    [paper.id, STUDY, JSON.stringify({ sha: `sha-${paper.id}`, source: "abstract", drop: [] })]);
+  const editor = checkingEditor();
+  const call = editor.callJson.bind(editor);
+  let raced = false;
+  editor.callJson = async (/** @type {any[]} */ messages) => {
+    // The pipeline writes a new 导读 while the script's check is under way.
+    if (!raced && String(messages[0].content).includes("稿件已经按句编号")) {
+      raced = true;
+      await database.query("UPDATE evimed_frontier.items SET lead_zh = '流水线刚写的导读。', lead_at = clock_timestamp() WHERE id = $1", [paper.id]);
+    }
+    return call(messages);
+  };
+  const run = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["facts", "faith"], apply: true });
+  assert.deepEqual([run.faith.raced, run.faith.changed], [1, 0]);
+  const stored = (await database.query("SELECT lead_zh, editor_diagnostics FROM evimed_frontier.items WHERE id = $1", [paper.id])).rows[0];
+  assert.equal(stored.lead_zh, "流水线刚写的导读。", "the newer text stands");
+  assert.equal(stored.editor_diagnostics?.faith?.lead ?? null, null, "and is not marked checked");
+  const again = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["faith"] });
+  assert.equal(again.faith.items, 1, "still owed a check");
+});

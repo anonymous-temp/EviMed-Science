@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, FRONTIER_SCORE_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { frontierAuthorityScore } from "@evimed/domain";
 import { FrontierDaily } from "../src/frontierDaily.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
@@ -606,6 +606,28 @@ test("selection: three a day per source, and a genre group short of its floor ta
   assert.equal(summary.genreFloor, 1);
   assert.equal(pipeline.counters.mix["genre-floor"], 1);
   assert.equal(pipeline.status().mix.groups.policy.after, 1, "the operators see today's mix");
+});
+
+test("c3 review: a total the scoring of 2026-10-25 did not write is not weighed against the line until it is scored again", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const round = async (/** @type {string} */ doi) => {
+    const delivered = await deliver({ source_id: "j-small", doi, title: `A paper of the day ${doi} [score:20]`, summary: "P".repeat(200) });
+    plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+    await pipeline.processBatch();
+    return Number((await entry(delivered.id)).item_id);
+  };
+  const old = await round("10.1000/scale.1");
+  // As production holds an item before the rescore: a total from the old prompts, high on today's line, no scoreVersion.
+  await database.query(`UPDATE evimed_frontier.items SET score_total = 90, selected = false, selected_rule = NULL, selected_at = NULL,
+    editor_diagnostics = editor_diagnostics - 'scoreVersion' WHERE id = $1`, [old]);
+  await round("10.1000/scale.2");
+  assert.equal((await item(old)).selected, false, "an old-scale 90 is no pick: selection is sticky, and the old scale fills the day");
+  await database.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb) || jsonb_build_object('scoreVersion', $2::text)
+    WHERE id = $1`, [old, FRONTIER_SCORE_VERSION]);
+  await round("10.1000/scale.3");
+  assert.deepEqual([(await item(old)).selected, (await item(old)).selected_rule], [true, "threshold"], "scored again, it is weighed like any other");
 });
 
 test("c2-fixes: a floor place under the line asks the genre's own 80th percentile of the last 30 days, read once a round from the published scores", options, async () => {
