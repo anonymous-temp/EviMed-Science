@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { frontierWeekWindow, latestFrontierWeek, frontierWeeklyRows } from '../src/frontierWeekly.mjs';
-import { frontierNoticeHref } from '@evimed/domain';
+import { FRONTIER_ARRIVAL, frontierNoticeHref } from '@evimed/domain';
 import { notificationSwitches } from '../src/notificationService.mjs';
 import { FrontierComposer } from '../src/frontierComposer.mjs';
 test('completed calendar week respects Monday due time, year boundary and DST', () => {
@@ -23,10 +23,18 @@ test('optional frontier switches inherit legacy opt-out but remain independent',
     assert.equal(notificationSwitches({ frontier: false, frontierSafety: true }).frontierSafety, true);
 });
 test('closed notice targets route daily, weekly and safety to the frontier', () => {
-    assert.equal(frontierNoticeHref({ type: 'digest', id: 'frontier-weekly:2026-09-21' }), '/app/frontier?view=weekly&week=2026-09-21');
-    assert.equal(frontierNoticeHref({ type: 'system', id: 'frontier-safety:fi_123' }), '/app/frontier?item=fi_123');
+    assert.equal(frontierNoticeHref({ type: 'digest', id: 'frontier-weekly:2026-09-21' }), '/app/frontier?view=weekly&week=2026-09-21&from=push');
+    assert.equal(frontierNoticeHref({ type: 'system', id: 'frontier-safety:fi_123' }), '/app/frontier?item=fi_123&from=push');
     assert.equal(frontierNoticeHref({ type: 'digest', id: 'frontier-weekly:2026-02-31' }), null);
     assert.equal(frontierNoticeHref({ type: 'system', id: 'frontier-safety:../../private' }), null);
+});
+test('G12: every link a notification carries to the frontier page ends in the one arrival marker the tracking reads; a zone card has none', () => {
+    const marker = `${FRONTIER_ARRIVAL.param}=${FRONTIER_ARRIVAL.push}`;
+    assert.equal(marker, 'from=push');
+    assert.equal(frontierNoticeHref({ type: 'digest', id: 'frontier-daily:2026-09-23' }), `/app/frontier?view=daily&day=2026-09-23&${marker}`);
+    assert.equal(frontierNoticeHref({ type: 'digest', id: 'frontier-weekly:2026-09-21' }), `/app/frontier?view=weekly&week=2026-09-21&${marker}`);
+    assert.equal(frontierNoticeHref({ type: 'system', id: 'frontier-safety:fi_123' }), `/app/frontier?item=fi_123&${marker}`);
+    assert.equal(frontierNoticeHref({ type: 'system', id: 'frontier-zone:ez_1:ec_1' }), '/app/frontier/zones/ez_1/evidence/ec_1', 'a zone card is not a frontier item page');
 });
 test('new loops share maintenance admission, isolate failures and expose outcomes', async () => {
     const calls = [];

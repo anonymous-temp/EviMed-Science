@@ -168,10 +168,10 @@ it("opens a digest, the frontier daily and a memory where each lives, without de
   expect(await screen.findByRole("link", { name: "DeepSeek 把玛仕度肽说成每天注射一次" })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_1");
   expect(screen.queryByRole("link", { name: "一条来路不明的通知" })).toBeNull();
   expect(await screen.findByRole("link", { name: "主动科研简报：GLP-1" })).toHaveAttribute("href", "/app/autopilot?digest=digest-owned");
-  expect(screen.getByRole("link", { name: "今日前沿 · 9月23日" })).toHaveAttribute("href", "/app/frontier?view=daily&day=2026-09-23");
+  expect(screen.getByRole("link", { name: "今日前沿 · 9月23日" })).toHaveAttribute("href", "/app/frontier?view=daily&day=2026-09-23&from=push");
   expect(screen.getByRole("link", { name: "一条记忆被改写" })).toHaveAttribute("href", "/app/memory?record=rec_1");
-  expect(screen.getByRole("link", { name: "本周医学进展" })).toHaveAttribute("href", "/app/frontier?view=weekly&week=2026-09-21");
-  expect(screen.getByRole("link", { name: "相关安全公告" })).toHaveAttribute("href", "/app/frontier?item=item1");
+  expect(screen.getByRole("link", { name: "本周医学进展" })).toHaveAttribute("href", "/app/frontier?view=weekly&week=2026-09-21&from=push");
+  expect(screen.getByRole("link", { name: "相关安全公告" })).toHaveAttribute("href", "/app/frontier?item=item1&from=push");
   expect(api.resolveInboxItem).not.toHaveBeenCalled();
   expect(api.markInboxRead).not.toHaveBeenCalled();
 });

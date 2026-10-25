@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   flushFrontierEvents,
+  frontierArrival,
   pendingFrontierEvents,
   resetFrontierTracking,
   serveFrontierList,
@@ -185,6 +186,57 @@ describe("opens join the list and hand their view to the reading page", () => {
     reader.unmount();
     trackFrontierItemAction("research", "eeeeeeeeeeee");
     expect(ofType("research").map((event) => [event.surface, event.view]), "the reading page gone: no view any more").toEqual([["direct", null]]);
+  });
+});
+
+describe("push: a reading page reached from a notification (G12, 2026-10-25)", () => {
+  function ReaderFrom({ item, arrival }: { item: string; arrival?: "push" | null }) {
+    useFrontierReadTracking(item, { arrival });
+    return <article data-frontier-reader="" aria-label="正文" />;
+  }
+
+  it("reads only the closed marker a notification's link carries", () => {
+    expect(frontierArrival("?view=daily&day=2026-09-23&from=push")).toBe("push");
+    expect(frontierArrival(new URLSearchParams("item=aaaaaaaaaaaa&from=push"))).toBe("push");
+    for (const search of ["", "?from=direct", "?from=Push", "?from=push%20", "?src=push", "?from=daily"]) expect(frontierArrival(search), search).toBeNull();
+  });
+
+  it("a page no list handed opens as push when its address carries the marker, and as direct otherwise", () => {
+    const pushed = render(<ReaderFrom item="aaaaaaaaaaaa" arrival="push" />);
+    expect(ofType("open").map((event) => [event.item, event.surface, event.list, event.view?.slice(0, 5)])).toEqual([["aaaaaaaaaaaa", "push", null, "view_"]]);
+    pushed.unmount();
+    const direct = render(<ReaderFrom item="bbbbbbbbbbbb" arrival={null} />);
+    expect(ofType("open").map((event) => [event.item, event.surface])).toEqual([["aaaaaaaaaaaa", "push"], ["bbbbbbbbbbbb", "direct"]]);
+    direct.unmount();
+  });
+
+  it("a page a list handed keeps the list's open: the marker never adds a second one", () => {
+    serveFrontierList("for-you", LIST, [{ id: "cccccccccccc", slot: "personal" }]);
+    const feed = render(<Feed ids={["cccccccccccc"]} />);
+    fireEvent.click(feed.getByText("cccccccccccc"));
+    feed.unmount();
+    const reader = render(<ReaderFrom item="cccccccccccc" arrival="push" />);
+    expect(ofType("open").map((event) => event.surface)).toEqual(["for-you"]);
+    reader.unmount();
+  });
+
+  it("a notification's card is the place of the open (surface push, position 0) and counts no impression: nothing on it is scrolled", () => {
+    function Linked() {
+      const root = useRef<HTMLDivElement>(null);
+      useFrontierListTracking(root, []);
+      return (
+        <div ref={root}>
+          <ul data-frontier-list="push"><li data-frontier-item="dddddddddddd"><a href="/app/frontier/items/dddddddddddd">linked</a></li></ul>
+        </div>
+      );
+    }
+    const linked = render(<Linked />);
+    show(linked.container.querySelector("[data-frontier-item]")!, 1);
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(ofType("impression")).toHaveLength(0);
+    fireEvent.click(linked.getByText("linked"));
+    expect(ofType("open").map((event) => [event.item, event.surface, event.position, event.list])).toEqual([["dddddddddddd", "push", 0, null]]);
+    linked.unmount();
   });
 });
 

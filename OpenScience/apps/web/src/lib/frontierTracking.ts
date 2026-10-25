@@ -1,8 +1,10 @@
 import { useEffect, useRef, type RefObject } from "react";
 import {
+  FRONTIER_ARRIVAL,
   FRONTIER_DWELL,
   FRONTIER_IMPRESSION,
   FRONTIER_INTERACTION_BATCH,
+  FRONTIER_LIST_SURFACES,
   FRONTIER_READ_DEPTHS,
   FRONTIER_SESSION_IDLE_MS,
   frontierInteraction,
@@ -42,6 +44,15 @@ import { getWebApiRequestHeaders, webApiBase, WEB_SESSION_ENDED_EVENT, WEB_SESSI
  */
 
 export type FrontierTrackSurface = FrontierInteraction["surface"];
+
+/**
+ * How the reader arrived, when the address says so: `push` for a link a notification carried here (`frontierNoticeHref` ends each in
+ * `from=push`), else null. A reading page reached that way without a list opens as `push`, not `direct` (G12, 2026-10-25).
+ */
+export function frontierArrival(search: string | URLSearchParams): "push" | null {
+  const params = typeof search === "string" ? new URLSearchParams(search) : search;
+  return params.get(FRONTIER_ARRIVAL.param) === FRONTIER_ARRIVAL.push ? "push" : null;
+}
 export type FrontierTrackSlot = NonNullable<FrontierInteraction["slot"]>;
 type TrackInput = Partial<Omit<FrontierInteraction, "id" | "at" | "session" | "device">> & Pick<FrontierInteraction, "type" | "surface">;
 
@@ -375,6 +386,8 @@ export function useFrontierListTracking(root: RefObject<HTMLElement | null>, dep
     if (!element || typeof IntersectionObserver === "undefined") return undefined;
     const contexts = new Map<Element, { key: string; target: Target; context: ReturnType<typeof listContext> }>();
     for (const container of element.querySelectorAll("[data-frontier-list]")) {
+      // `push` marks where an open came from (a notification's card), not a list a reader scrolls: nothing is seen on it.
+      if (!FRONTIER_LIST_SURFACES.includes((container as HTMLElement).dataset.frontierList as FrontierTrackSurface)) continue;
       for (const { element: entry, target, position } of entriesOf(container)) {
         const context = listContext(container, target, position);
         contexts.set(entry, { key: `${context.list ?? context.surface}:${target.kind}:${target.id}`, target, context });
@@ -431,12 +444,16 @@ function readerRoot(): Element | null {
  * on hide / page hide / leaving, read depth of the body (25/50/75/100) and the end reached, the language switch, the body
  * opened, a star or a hide, the original followed, another report opened. Hooks onto `[data-frontier-reader]`.
  */
-export function useFrontierReadTracking(itemId: string | null | undefined, { language, expanded, url, state }: {
+export function useFrontierReadTracking(itemId: string | null | undefined, { language, expanded, url, state, arrival }: {
   language?: string; expanded?: boolean; url?: string | null; state?: { starred?: boolean; hidden?: boolean };
+  /** How the page was reached when its address says so (`frontierArrival`): the open of a page no list handed is then `push`. */
+  arrival?: "push" | null;
 } = {}): void {
   const viewRef = useRef<string | null>(null);
   const urlRef = useRef(url ?? null);
   urlRef.current = url ?? null;
+  const arrivalRef = useRef(arrival ?? null);
+  arrivalRef.current = arrival ?? null;
 
   useEffect(() => {
     if (!itemId) return undefined;
@@ -444,7 +461,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
     const view = handed ?? randomId("view");
     viewRef.current = view;
     reader = { item: itemId, view };
-    if (!handed) trackFrontier({ type: "open", surface: "direct", item: itemId, view });
+    if (!handed) trackFrontier({ type: "open", surface: arrivalRef.current === "push" ? "push" : "direct", item: itemId, view });
     const base = { surface: "reader" as const, item: itemId, view };
     let visibleNow = typeof document === "undefined" || document.visibilityState === "visible";
     let lastTick = Date.now();

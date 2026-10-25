@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import type { FrontierEvent } from "@/lib/frontierClient";
+import { pendingFrontierEvents, resetFrontierTracking } from "@/lib/frontierTracking";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierEventPage } from "./FrontierEventPage";
 import { expectComposed } from "@/test/expectComposed";
@@ -61,9 +62,11 @@ function renderEvent(id = "ev1", search = "") {
 }
 
 beforeEach(() => {
+  resetFrontierTracking();
   client.useFrontierFeature.mockReset().mockReturnValue("on");
   client.fetchFrontierEvent.mockReset().mockResolvedValue(event());
 });
+afterEach(() => resetFrontierTracking());
 
 describe("an event", () => {
   it("heads the page with the way back, the title, one line of facts and 深入研究", async () => {
@@ -313,5 +316,28 @@ describe("the event page's composition", () => {
     expect(container.querySelector("[data-state-screen]")).not.toBeNull();
     expect(screen.getByRole("link", { name: "看热榜" })).toHaveAttribute("href", "/app/frontier?view=hot");
     expect(screen.getByRole("link", { name: "回到前沿动态" })).toHaveAttribute("href", "/app/frontier");
+  });
+});
+
+describe("tracking (G12, 2026-10-25)", () => {
+  it("registers its reports as a list: an open from a report is an `event` open at its place in the order shown, not a direct arrival", async () => {
+    const user = userEvent.setup();
+    const base = event();
+    // Public ids as the server makes them (the validator refuses any other shape).
+    client.fetchFrontierEvent.mockResolvedValue({ ...base, items: [{ ...base.items[0], id: "a1b2c3d4e5f60718" }, { ...base.items[1], id: "0f1e2d3c4b5a6978" }] });
+    renderEvent();
+    const others = await screen.findByRole("list", { name: "其他报道" });
+    await user.click(within(others).getByRole("link", { name: "缓释脂质体注射剂在大鼠中实现持续神经阻滞" }));
+    const opens = pendingFrontierEvents().filter((entry) => entry.type === "open");
+    // The parties' own text is first on the page, so the other report is the second entry of the list.
+    expect(opens.map((entry) => [entry.item, entry.surface, entry.position, entry.list])).toEqual([["0f1e2d3c4b5a6978", "event", 1, null]]);
+    expect(opens[0].view).toMatch(/^view_/);
+  });
+
+  it("does not count a link to a related event as a report of the list", async () => {
+    const user = userEvent.setup();
+    renderEvent();
+    await user.click(await screen.findByRole("link", { name: "同类缓释制剂的早先报道" }));
+    expect(pendingFrontierEvents().filter((entry) => entry.type === "open" && entry.surface === "event")).toEqual([]);
   });
 });

@@ -141,7 +141,7 @@ test("the notice: the day and the selected count in the title, the lead's title 
   assert.deepEqual(notice.actions, [{ id: "open", label: "查看日报", style: "primary" }]);
   assert.doesNotMatch(`${notice.title}${notice.body}`, /因为|与你相关/, "nothing personal: a Feishu binding may be a group chat");
   const config = { publicUrl: "https://science.example.com" };
-  assert.equal(noticeLink(config, { source: notice.source }), "https://science.example.com/app/frontier?view=daily&day=2026-09-22");
+  assert.equal(noticeLink(config, { source: notice.source }), "https://science.example.com/app/frontier?view=daily&day=2026-09-22&from=push");
   assert.equal(noticeLink(config, { source: { type: "digest", id: "frontier-daily:not-a-day" } }), "https://science.example.com/app/autopilot?digest=frontier-daily%3Anot-a-day");
 });
 
