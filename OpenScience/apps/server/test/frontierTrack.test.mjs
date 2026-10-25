@@ -23,6 +23,7 @@ test("the recap call is shown the congress and the day's items, numbered, with t
   assert.match(input, /\[1\] 医脉通｜药物 A 三期试验公布\n    导读：药物 A/);
   assert.match(input, /\[2\] OncLive｜Drug B early data/);
   assert.match(FRONTIER_CONGRESS_RECAP_INSTRUCTIONS, /设计局限/);
+  assert.match(FRONTIER_CONGRESS_RECAP_INSTRUCTIONS, /每句只讲一项研究/);
   assert.match(FRONTIER_CONGRESS_RECAP_INSTRUCTIONS, /不写日期/);
 });
 
@@ -42,11 +43,14 @@ test("a number the items do not have is refused, and so is a mark that names no 
   assert.ok(unmarked.issues.some((issue) => issue.includes("没有标注")));
 });
 
-test("a recap is three to six sentences of one paragraph within its length, and empty is a valid answer", () => {
+test("a recap is one paragraph within its length, however many sentences it takes; empty is a valid answer", () => {
+  // Sentence count is guidance in the instructions, not a release condition: measured on ESMO days the model joined studies with
+  // semicolons into two long sentences, and refusing that withheld two of three days' recaps for a format.
+  const [first, second, third] = GOOD.split("。");
+  const two = `${first}。${second}，${third}。`;
+  assert.deepEqual(verifyCongressRecap({ recap_zh: two }, input, refs).issues, []);
   const short = verifyCongressRecap({ recap_zh: "药物 A 使死亡风险降低 32%[1]。药物 B 的客观缓解率为 45%[2]。" }, input, refs);
-  assert.ok(short.issues.some((issue) => issue.includes("太短") || issue.includes("3 到 6 句")));
-  const twoSentences = verifyCongressRecap({ recap_zh: `${GOOD.split("。")[0]}。${GOOD.split("。")[1]}。` }, input, refs);
-  assert.ok(twoSentences.issues.some((issue) => issue.includes("3 到 6 句")));
+  assert.ok(short.issues.some((issue) => issue.includes("太短")));
   const broken = verifyCongressRecap({ recap_zh: GOOD.replace("。药物 B", "。\n药物 B") }, input, refs);
   assert.ok(broken.issues.some((issue) => issue.includes("一段话")));
   const empty = verifyCongressRecap({ recap_zh: "" }, input, refs);
