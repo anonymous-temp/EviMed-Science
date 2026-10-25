@@ -216,7 +216,7 @@ async def test_a_meta_refresh_to_a_host_the_source_does_not_name_is_not_followed
 
 async def test_only_one_refresh_is_followed():
     shell = chp_pages()[CHP_SHELL_URL]
-    pages = {CHP_SHELL_URL: shell, CHP_TARGET_URL: shell.replace(b"P2026102300702", b"P2026102300703")}
+    pages = {CHP_SHELL_URL: shell, CHP_TARGET_URL: shell.replace(b"/P2026102300702", b"/P2026102300703")}
     fetcher = ShellFetcher(pages)
     trace = Trace()
     text, _ = await page_excerpt(fetcher, CHP_SHELL_URL, source_id="hk-chp-press", egress="direct", trace=trace,
@@ -234,7 +234,7 @@ def test_the_refresh_target_is_read_from_the_refresh_meta_only():
     assert meta_refresh_target('<meta http-equiv="refresh" content="0, https://other.example/a">', base) == "https://other.example/a"
     assert meta_refresh_target('<meta http-equiv="refresh" content="30">', base) is None, "a reload is not a redirect"
     assert meta_refresh_target('<meta http-equiv="refresh" content="0; URL=javascript:alert(1)">', base) is None
-    assert meta_refresh_target('<meta http-equiv="refresh" content="0; URL=https://user:pw@example.org/">', base) is None
+    assert meta_refresh_target('<meta http-equiv="refresh" content="0; URL=https://user:fake@example.org/">', base) is None
     assert meta_refresh_target("<html><body>no tag</body></html>", base) is None
 
 
