@@ -57,6 +57,7 @@
  */
 
 import { DISPLAY_TIME_ZONE, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import { FrontierJobRearm } from "./frontierJobRearm.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -510,7 +511,7 @@ export class FrontierDaily {
     // 「（openFDA 药品召回（enforcement）API）」 to every recall.
     /** @type {FrontierDailyRow[]} */
     const rows = ((await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.selected_rule, i.safety_alert,
-        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner,
+        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS},
         e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest,
         e.first_at AS event_first_at
       FROM evimed_frontier.items i
@@ -519,7 +520,7 @@ export class FrontierDaily {
       WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $1::timestamptz AND i.visible_at < $2::timestamptz
         AND i.verification IN ('passed', 'repaired') AND i.summary_zh IS NOT NULL AND (i.selected OR i.safety_alert OR i.lane = 'ai')
       ORDER BY i.visible_at DESC, i.id DESC LIMIT 500`, [window.start, window.end])).rows ?? [])
-      .map((/** @type {any} */ row) => ({ ...row, source_name: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.source_owner }) }));
+      .map((/** @type {any} */ row) => ({ ...row, source_name: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }) }));
     /** @type {string[]} */
     let hotEventIds = [];
     try {

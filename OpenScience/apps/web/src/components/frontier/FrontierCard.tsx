@@ -18,6 +18,7 @@ import {
   CARD_MAX_TAGS,
   INLINE_ACTION,
   PLATFORM_LABELS,
+  PRACTICE_LABEL,
   SCORE_LABEL,
   SCORE_NOTE,
   cardEyebrow,
@@ -211,6 +212,10 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
         <div className="flex gap-4">
           <div className="min-w-0 flex-1">
             <h3 id={titleId} data-row-title data-prose="" className="mt-1.5 text-body font-semibold leading-6">
+              {/* Content, not provenance: what the item may change, said where the eye starts and not in the meta row, which a phone has no
+                * room for (the source's name went to 「国…」). The reason is on hover; a touch screen reads it in the reader. It sits above the
+                * card's stretched link, or the pointer never reaches it. */}
+              {item.practice && <Tag tone="accent" title={item.practice.reason} className={cn(ABOVE, "mr-2 align-middle")}>{PRACTICE_LABEL}</Tag>}
               <Link
                 to={articlePath(item.id)}
                 state={articleState}

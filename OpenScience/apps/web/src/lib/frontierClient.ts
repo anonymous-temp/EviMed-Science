@@ -44,6 +44,7 @@ import {
   FRONTIER_LANE_LABELS_ZH,
   FRONTIER_LANES as LANE_KEYS,
   FRONTIER_SCORE_MAXIMA,
+  FRONTIER_SCORE_TIERS,
   FRONTIER_SPECIALTIES as SPECIALTY_KEYS,
   FRONTIER_SPECIALTY_GROUPS as SPECIALTY_GROUP_TABLE,
   FRONTIER_SPECIALTY_LABELS_ZH,
@@ -201,6 +202,8 @@ export interface FrontierItem {
   titleZh: string | null;
   summary: string | null;
   reason: string | null;
+  /** 「可能改变实践」 (c3-select): the label and its one-line reason, only once the day's mix admitted it; content, not provenance. */
+  practice: { reason: string } | null;
   lang: string;
   lane: string;
   laneLabel: string;
@@ -876,9 +879,16 @@ function parseTags(value: unknown): FrontierTagRef[] {
   return out;
 }
 
-/** The tier of a score (85 / 70), for a server that sent a score and no tier. */
+/** 「可能改变实践」 as the server sends it: `{ reason }` with a reason a reader can read, else none (a label without its reason is not shown). */
+function parsePractice(value: unknown): { reason: string } | null {
+  const raw = record(value);
+  const reason = raw ? text(raw.reason)?.trim() ?? null : null;
+  return reason ? { reason } : null;
+}
+
+/** The tier of a score (`FRONTIER_SCORE_TIERS`: 76 / 60), for a server that sent a score and no tier. */
 export function scoreTier(score: number): FrontierScoreBand {
-  return score >= 85 ? "high" : score >= 70 ? "medium" : "low";
+  return score >= FRONTIER_SCORE_TIERS.high ? "high" : score >= FRONTIER_SCORE_TIERS.medium ? "medium" : "low";
 }
 
 /** The four parts of a score, each a whole number within its maximum; null when any is missing. */
@@ -1007,6 +1017,7 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     titleZh,
     summary: text(raw.summary),
     reason: text(raw.reason),
+    practice: parsePractice(raw.practice),
     lang: text(raw.lang) ?? "und",
     lane,
     laneLabel: text(raw.laneLabel) ?? LANE_LABELS[lane] ?? "",

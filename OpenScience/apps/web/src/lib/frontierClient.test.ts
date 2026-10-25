@@ -669,6 +669,12 @@ describe("an item's specialties, tags and score parts (2026-10-23)", () => {
     // A safety alert carries no score, and so no parts.
     expect(parseFrontierItem(rawItem({ safetyAlert: true, score: 90, scoreParts: { authority: 30, impact: 30, novelty: 15, relevance: 15 } }))).toMatchObject({ score: null, scoreParts: null, scoreBand: null });
   });
+
+  it("reads 「可能改变实践」 as a reason or as nothing", () => {
+    expect(parseFrontierItem(rawItem())!.practice).toBeNull();
+    expect(parseFrontierItem(rawItem({ practice: { reason: " 国内首个获批 " } }))!.practice).toEqual({ reason: "国内首个获批" });
+    for (const bad of [{ reason: "" }, { reason: "   " }, { reason: 7 }, {}, "yes", null, []]) expect(parseFrontierItem(rawItem({ practice: bad }))!.practice).toBeNull();
+  });
 });
 
 describe("the tag tree", () => {

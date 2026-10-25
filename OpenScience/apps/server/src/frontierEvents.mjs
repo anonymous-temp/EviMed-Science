@@ -111,6 +111,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import {
   DISPLAY_TIME_ZONE,
   FRONTIER_HEAT_BILINGUAL_FACTOR,
@@ -230,7 +231,7 @@ const PUBLIC_ID = /^[a-z0-9]{12,32}$/;
 /** What clustering reads of an item it places. */
 const PENDING_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.lang,
   i.source_type, i.evidence_type, i.identity_key, i.registry_ids, i.entity_keys, i.published_at, i.timeline_at, i.visible_at,
-  i.doi AS doi, i.pmid AS pmid, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS owner_entity,
+  i.doi AS doi, i.pmid AS pmid, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS owner_entity, ${FRONTIER_SOURCE_STREAM_COLUMNS},
   s.platform_produced AS platform_produced`;
 const CLUSTER_LOCK = "evimed-frontier-cluster";
 /** How an item link reads as an edge between the two items' events: the direction is from → to. */
@@ -779,7 +780,7 @@ export function frontierGroupPlan(candidates, decisions) {
  */
 function groupReport(row, { text = null } = {}) {
   return {
-    sourceName: frontierSourceDisplayName({ id: row.source_id ?? row.primary_source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+    sourceName: frontierSourceDisplayName({ id: row.source_id ?? row.primary_source_id, name: row.source_name, ownerEntity: row.owner_entity, access: row.source_access, journal: row.item_journal }),
     primary: frontierEventRole({ sourceType: row.source_type, evidenceType: row.evidence_type, platformProduced: row.platform_produced === true }) === "primary",
     titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, publishedAt: row.published_at ?? row.timeline_at,
     doi: row.doi, pmid: row.pmid, registryIds: row.registry_ids, evidenceType: row.evidence_type, milestone: frontierMilestone(row.identity_key), text,
@@ -2277,7 +2278,7 @@ export class FrontierEvents {
 
   /** The reports a digest is written from, primary sources first. @param {string} eventId */
   async #digestReports(eventId) {
-    const rows = (await this.database.query(`SELECT ei.role, s.id AS source_id, s.name AS source_name, s.owner_entity, s.source_type,
+    const rows = (await this.database.query(`SELECT ei.role, s.id AS source_id, s.name AS source_name, s.owner_entity, ${FRONTIER_SOURCE_STREAM_COLUMNS}, s.source_type,
         i.published_at, i.timeline_at, i.title_raw, i.title_zh, i.summary_zh, t.abstract_raw, t.body_excerpt
       FROM evimed_frontier.event_items ei
       JOIN evimed_frontier.items i ON i.id = ei.item_id
@@ -2287,7 +2288,7 @@ export class FrontierEvents {
       ORDER BY (ei.role = 'primary') DESC, i.timeline_at DESC, i.id DESC LIMIT ${DIGEST_REPORTS}`, [eventId])).rows ?? [];
     return rows.map((row) => ({
       // The digest is prose a reader reads: the institution, never the feed (plan 2026-09-23 §6.5 #5).
-      role: row.role, sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+      role: row.role, sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity, access: row.source_access, journal: row.item_journal }),
       sourceTypeLabel: null, publishedAt: iso(row.published_at ?? row.timeline_at),
       titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, text: row.abstract_raw || row.body_excerpt || null,
     }));
@@ -2380,7 +2381,7 @@ export class FrontierEvents {
       const row = frontierRepresentative(reports.get(id) ?? []);
       return row ? [{
         eventId: String(row.event_public_id), itemId: String(row.public_id), title: String(row.title_zh || row.title_raw),
-        sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity, access: row.source_access, journal: row.item_journal }),
         at: new Date(row.timeline_at).toISOString(), relation: /** @type {const} */ ("follows"),
         position: /** @type {"earlier" | "later"} */ (new Date(row.event_first_at).getTime() < new Date(event.first_at).getTime() ? "earlier" : "later"),
       }] : [];

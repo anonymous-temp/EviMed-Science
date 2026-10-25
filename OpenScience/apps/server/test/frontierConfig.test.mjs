@@ -30,7 +30,7 @@ test("the defaults are the build spec's: off, open to all once on, and no plugin
   }, {
     frontierEnabled: false, frontierAudience: "all", frontierPreviewUsers: [], frontierPollMs: 5_000, frontierLeaseMs: 600_000,
     frontierModel: "deepseek-flash", frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 300,
-    frontierProcessConcurrency: 2, frontierOffpeak: false, frontierSelectThreshold: 82, frontierPreprintLanePerDay: 2, frontierPreprintLaneMinScore: 60,
+    frontierProcessConcurrency: 2, frontierOffpeak: false, frontierSelectThreshold: 64, frontierPreprintLanePerDay: 2, frontierPreprintLaneMinScore: 50,
     frontierSafetyPushDailyCap: 3, knowledgePluginUrl: "",
     knowledgePluginTokenFile: "/run/secrets/knowledge-plugin-token", knowledgePluginPollMs: 60_000, knowledgePluginTimeoutMs: 8_000,
     knowledgePluginMinContract: "1.0",
@@ -75,8 +75,11 @@ test("the preprint lane has one default for each number: the config's, the pipel
     assert.equal([...example.matchAll(new RegExp(`^${name}=(\\d+)$`, "gm"))].map((match) => Number(match[1])).join(), String(value), `${name}: the example names the default once`);
     assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), `${name} reaches the web container value-less`);
   }
-  // A selected card never reads as low: the floor is the lower edge of the medium band, the lane floor's own line.
-  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, FRONTIER_LANE_FLOOR_SCORE);
+  // The lane asks what the domain's mix asks of a preprint, and the lane floor is the mix's floor (c3-select 2026-10-25: the
+  // preprint's own bar is lower than the floor's, because a preprint's score is capped by what is known of it).
+  const { FRONTIER_MIX_FLOOR_SCORE, FRONTIER_MIX_PREPRINT_MIN_SCORE } = await import("@evimed/domain");
+  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, FRONTIER_MIX_PREPRINT_MIN_SCORE);
+  assert.equal(FRONTIER_LANE_FLOOR_SCORE, FRONTIER_MIX_FLOOR_SCORE);
 });
 
 test("the safety push ceiling has one default: the config's, the notifier's fallback and the example .env agree, and it is the owner's three", async () => {
@@ -129,7 +132,7 @@ test("every lever is read from the environment, and an empty value reads as unse
   assert.equal(config.frontierDailyBudgetCny, 0);
   assert.equal(config.frontierOffpeak, false);
   assert.equal(config.frontierPreprintLanePerDay, 3);
-  assert.equal(config.frontierPreprintLaneMinScore, 60, "an empty value is the default, not 0");
+  assert.equal(config.frontierPreprintLaneMinScore, 50, "an empty value is the default, not 0");
   assert.equal(config.frontierSafetyPushDailyCap, 5);
   assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY: "0" }).frontierPreprintLanePerDay, 0, "0 is no lane");
   assert.equal(config.knowledgePluginUrl, "http://evimed-knowledge-plugin:8080", "the trailing slash is not part of the origin");

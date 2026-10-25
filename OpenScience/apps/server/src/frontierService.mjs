@@ -1,4 +1,5 @@
 import { FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, frontierEventEvidenceCounts } from '@evimed/domain';
+import { FRONTIER_SOURCE_STREAM_COLUMNS, frontierSourceStreamColumns } from "./frontierSourceColumns.mjs";
 import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
@@ -10,7 +11,7 @@ import { createHash } from "node:crypto";
 import {
   FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAG_LABELS_ZH, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH,
-  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, frontierScoreLevel, frontierSourceDisplayName, frontierSpecialtyKey,
+  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, FRONTIER_SCORE_TIERS, frontierScoreLevel, frontierScoreTier, frontierSourceDisplayName, frontierSpecialtyKey,
 } from "@evimed/domain";
 import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.mjs";
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
@@ -64,8 +65,8 @@ import { frontierTopicSummary } from "./frontierTopics.mjs";
  *   as `kbIndex.mjs`). `mode` says which ran. Searching 精选 searches 全部 and
  *   marks what was selected (§4.2).
  * - A card carries the AI score, `score` (0–100), the tier it is drawn in,
- *   `scoreBand` (`high` from 85, `medium` from 70, `low` below — owner
- *   2026-10-23, after AIHOT's pill), and its four parts, `scoreParts` (out of
+ *   `scoreBand` (`high` from 76, `medium` from 60, `low` below — owner
+ *   2026-10-23, after AIHOT's pill, the lines moved with the score on 2026-10-25), and its four parts, `scoreParts` (out of
  *   `FRONTIER_SCORE_MAXIMA`: a lone number told a reader nothing); a safety
  *   alert carries none of them — it is selected whatever it scored. `levels`
  *   stay as the parts' bands for older clients.
@@ -186,17 +187,25 @@ export function frontierAuthor(value) {
   return { name, handle, url, role };
 }
 
-/** The tiers the 「AI 评分」 pill is drawn in (owner, 2026-10-23, after AIHOT's `Score`): from 85, from 70, below. */
-export const FRONTIER_SCORE_TIERS = Object.freeze({ high: 85, medium: 70 });
+/**
+ * The 「可能改变实践」 label of an item: `{ reason }` once the mix admitted it (`practice_changing`) and a reason is held; otherwise null.
+ * A proposal that was not admitted is never served.
+ * @param {{ practice_changing?: unknown, practice_zh?: unknown }} row @returns {{ reason: string } | null}
+ */
+export function frontierPracticeLabel(row) {
+  const reason = typeof row?.practice_zh === "string" ? row.practice_zh.replace(/\s+/g, " ").trim() : "";
+  return row?.practice_changing === true && reason ? { reason } : null;
+}
+
+/** The tiers the 「AI 评分」 pill is drawn in (`@evimed/domain` `FRONTIER_SCORE_TIERS`: 76 / 60 on the score of 2026-10-25, from 85 / 70). */
+export { FRONTIER_SCORE_TIERS };
 
 /**
- * The tier an AI score reads in: `high` from 85, `medium` from 70, `low` below; null without a score.
+ * The tier an AI score reads in: `high` from 76, `medium` from 60, `low` below; null without a score.
  * @param {unknown} score @returns {"high" | "medium" | "low" | null}
  */
 export function frontierScoreBand(score) {
-  if (score == null || score === "" || !Number.isFinite(Number(score))) return null;
-  const value = Number(score);
-  return value >= FRONTIER_SCORE_TIERS.high ? "high" : value >= FRONTIER_SCORE_TIERS.medium ? "medium" : "low";
+  return frontierScoreTier(score);
 }
 
 /** A score part as a number, or null. @param {unknown} value */
@@ -465,12 +474,12 @@ export function frontierCardFacts(raw) {
 // owner entity — its latest mention — and never the card's own institution
 // under another feed. `mention_count` is how many there are; `mentions` names
 // the five latest.
-const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.tags, i.lang, i.lane, i.source_type, i.identity_key,
+const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.practice_changing, i.practice_zh, i.tags, i.lang, i.lane, i.source_type, i.identity_key,
   i.channel, i.platform, i.author, i.media,
   i.evidence_type, i.evidence_basis, i.specialties, i.entities, i.flags, i.doi, i.pmid, i.registry_ids, i.canonical_url,
   i.published_at, i.date_precision, i.timeline_at, i.visible_at, i.selected, i.selected_rule, i.safety_alert, i.verification, i.editor_diagnostics,
   i.score_authority, i.score_impact, i.score_novelty, i.score_relevance, i.score_total, i.primary_source_id,
-  s.name AS source_name, s.owner_entity AS source_owner, s.homepage AS source_homepage, s.platform_produced AS source_platform_produced,
+  s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}, s.homepage AS source_homepage, s.platform_produced AS source_platform_produced,
   t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url, t.enrichment - '{${CARD_HIDDEN_ENRICHMENT.join(",")}}'::text[] AS card_enrichment,
   CASE WHEN e.report_count > 1 THEN e.public_id END AS event_public_id, e.title_zh AS event_title,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceId', r.source_id, 'sourceName', r.name, 'ownerEntity', r.owner_entity, 'url', r.url)
@@ -651,6 +660,8 @@ export class FrontierService {
       summary: row.summary_zh ?? null,
       // The 推荐理由 is the reader's, for selected and near-line items only (frontierEditor.mjs: why it was retired, and came back).
       reason: frontierReaderWorthy(row, this.selectThreshold) ? row.reason_zh ?? null : null,
+      // 「可能改变实践」 (c3-select, contract §P): the label and its one-line reason, only once the day's mix admitted it; content, not provenance.
+      practice: frontierPracticeLabel(row),
       // What the item is as a reader names it (ct-write 2026-10-24): the stored genre, else code's from the item's fields — never null.
       genre: frontierItemGenre(row),
       genreLabel: FRONTIER_GENRE_LABELS_ZH[frontierItemGenre(row)],
@@ -673,7 +684,7 @@ export class FrontierService {
       entities: { drugs: stringList(entities.drugs), trials: stringList(entities.trials), orgs: stringList(entities.orgs), diseases: stringList(entities.diseases) },
       // `platformProduced`: the source's content is EviMed's own (contract 1.3.0) — the label 「EviMed 出品」, and the reason such
       // an item is never counted as another institution's report of anything.
-      source: { id: row.primary_source_id, name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }),
+      source: { id: row.primary_source_id, name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }),
         homepage: row.source_homepage ?? null, platformProduced: row.source_platform_produced === true },
       url: row.canonical_url,
       doi: row.doi ?? null,
@@ -1070,14 +1081,14 @@ export class FrontierService {
     if (!text) return null;
     const cited = Array.isArray(row.insight_refs) ? row.insight_refs.filter((ref) => Number.isSafeInteger(ref?.n) && /^\d{1,19}$/.test(String(ref?.item_id ?? ""))) : [];
     const found = cited.length ? (await client.query(`SELECT i.id, i.public_id, coalesce(i.title_zh, i.title_raw) AS title, i.timeline_at,
-        i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner
+        i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.id = ANY($1::bigint[]) AND i.state = 'published'`, [cited.map((ref) => String(ref.item_id))])).rows : [];
     const byId = new Map(found.map((/** @type {any} */ item) => [String(item.id), item]));
     const refs = cited.flatMap((ref) => {
       const item = byId.get(String(ref.item_id));
       return item ? [{ n: ref.n, publicId: String(item.public_id), title: String(item.title),
-        source: frontierSourceDisplayName({ id: item.primary_source_id, name: item.source_name, ownerEntity: item.source_owner }),
+        source: frontierSourceDisplayName({ id: item.primary_source_id, name: item.source_name, ownerEntity: item.source_owner, access: item.source_access, journal: item.item_journal }),
         at: new Date(item.timeline_at).toISOString() }] : [];
     });
     return { text, refs };
@@ -1142,7 +1153,7 @@ export class FrontierService {
     const external = /** @type {any} */ (frontierEventReading).frontierItemFollowups;
     if (typeof external === "function") return (await external(client, rowId, { limit: 8 })) ?? null;
     const rows = (await client.query(`SELECT e.public_id AS event_id, o.public_id, coalesce(o.title_zh, o.title_raw) AS title, s.id AS source_id,
-        s.name AS source_name, s.owner_entity, o.timeline_at
+        s.name AS source_name, s.owner_entity, ${frontierSourceStreamColumns("o")}, o.timeline_at
       FROM evimed_frontier.event_items me
       JOIN evimed_frontier.events e ON e.id = me.event_id AND e.merged_into IS NULL
       JOIN evimed_frontier.event_items oe ON oe.event_id = me.event_id AND oe.item_id <> me.item_id
@@ -1154,7 +1165,7 @@ export class FrontierService {
     return {
       eventId: rows[0].event_id,
       rows: rows.slice(0, 8).map((/** @type {any} */ other) => ({ itemId: other.public_id, title: other.title,
-        sourceName: frontierSourceDisplayName({ id: other.source_id, name: other.source_name, ownerEntity: other.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: other.source_id, name: other.source_name, ownerEntity: other.owner_entity, access: other.source_access, journal: other.item_journal }),
         at: /** @type {string} */ (iso(other.timeline_at)), relation: /** @type {const} */ ("same-event") })),
       more: rows.length > 8,
     };

@@ -90,12 +90,12 @@ describe("what a card carries", () => {
     expect(cardEyebrow(frontierItem({ safetyAlert: true, evidenceType: "safety-notice", evidenceTypeLabel: "安全通告" }))).toBeNull();
   });
 
-  it("reads the score in the server's tier, or in the fixed tiers (85, 70) without one, and nothing without a score", () => {
+  it("reads the score in the server's tier, or in the fixed tiers (76, 60) without one, and nothing without a score", () => {
     expect(scoreBand({ score: 86, scoreBand: "high" })).toBe("high");
-    expect(scoreBand({ score: 85, scoreBand: null })).toBe("high");
-    expect(scoreBand({ score: 84, scoreBand: null })).toBe("medium");
-    expect(scoreBand({ score: 70, scoreBand: null })).toBe("medium");
-    expect(scoreBand({ score: 69, scoreBand: null })).toBe("low");
+    expect(scoreBand({ score: 76, scoreBand: null })).toBe("high");
+    expect(scoreBand({ score: 75, scoreBand: null })).toBe("medium");
+    expect(scoreBand({ score: 60, scoreBand: null })).toBe("medium");
+    expect(scoreBand({ score: 59, scoreBand: null })).toBe("low");
     expect(scoreBand({ score: null, scoreBand: null })).toBeNull();
   });
 

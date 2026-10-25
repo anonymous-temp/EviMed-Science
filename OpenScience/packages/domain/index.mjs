@@ -1488,11 +1488,29 @@ export {
   projectCardKey,
   projectCardSlotOfKey,
 } from './src/projectCard.mjs'
-// frontierSourceNames — 2 exports: what a reader calls a source — the
+// frontierSelection — 12 exports: what makes an item fit for 精选 in the parts code decides: the ceilings a fixed fact puts on the
+// model's scores (`frontier-selection.json`), the republishers that take no floor place, and the rare practice-changing label's
+// limits and admission (c3-select, 2026-10-25).
+export {
+  FRONTIER_PRACTICE_ELIGIBLE,
+  FRONTIER_PRACTICE_LIMITS,
+  FRONTIER_REPUBLISHERS,
+  FRONTIER_SCORE_TIERS,
+  frontierFloorEligible,
+  frontierPracticeAdmissible,
+  frontierPracticeAdmit,
+  frontierPracticeCap,
+  frontierPracticeReason,
+  frontierRepublisher,
+  frontierScoreCeilings,
+  frontierScoreTier,
+} from './src/frontierSelection.mjs'
+// frontierSourceNames — 3 exports: what a reader calls a source — the
 // institution, by the registry's owner entity, never the feed or interface the
 // plugin reads it through (the table is `frontier-source-names.json`).
 export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
+  frontierIsStreamSource,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
 // geoVocabulary — 84 exports: 「循证 GEO」's closed vocabularies (pools, engines,

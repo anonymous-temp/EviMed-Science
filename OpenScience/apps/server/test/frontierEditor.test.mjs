@@ -691,7 +691,7 @@ test("the edit asks each genre for its title formula and its place on the scales
     assert.ok(FRONTIER_EDIT_INSTRUCTIONS.includes(FRONTIER_TITLE_GUIDES_ZH[genre]), genre);
     assert.ok(FRONTIER_EDIT_INSTRUCTIONS.includes(FRONTIER_SCORE_ANCHORS_ZH[genre]), genre);
   }
-  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /满分只留给少见的条目/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /精选只占全部条目的 3% 到 5%，所以多数条目应落在量表的中下段，满分一周也难得出现几次/);
   // An out-of-scale first answer is sent back once; the rewrite's scores are used, and the model's own numbers are diagnostics only.
   const { callModel, calls } = stubModel([() => answer({ scores: { impact: 55, novelty: 40, relevance: 45 } }), () => answer({ scores: { impact: 18, novelty: 9, relevance: 12 } })]);
   const result = await new FrontierEditor(config, { owner, callModel }).edit(item());

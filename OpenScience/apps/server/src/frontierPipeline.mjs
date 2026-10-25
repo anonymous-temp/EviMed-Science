@@ -1,4 +1,5 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 /**
  * The frontier feed's processing pipeline (「前沿动态」 处理管线, plan §10.3).
  *
@@ -71,6 +72,11 @@ import {
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   doiOf,
   frontierAuthorityScore,
+  frontierFloorEligible,
+  frontierPracticeAdmissible,
+  frontierPracticeAdmit,
+  frontierRepublisher,
+  frontierScoreCeilings,
   FRONTIER_MENTION_REGISTRY_IDS,
   FRONTIER_MENTION_SOURCE_TYPES,
   frontierEvidenceFromPublicationTypes,
@@ -89,7 +95,7 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
-import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH } from "./frontierEditor.mjs";
+import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION } from "./frontierEditor.mjs";
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
@@ -184,19 +190,63 @@ export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
  */
 export const FRONTIER_LANE_FLOOR_SCORE = 60;
 /**
- * The selection line when `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` is unset
- * (config.mjs holds the same number; frontierConfig.test.mjs holds them
- * equal). Calibrated 2026-09-28 from production's first week against the
- * plan's 15-30 selected a day (acceptance 1.4): at 75 the weekdays of
- * 09-23..26 selected 29/56/50/37. Replaying their 2,259 published items
- * through `frontierSelectionDecision`, the source caps and the lane floor
- * gives 22/46/43/32 at 75 (production runs ~19% above the replay: selection
- * is sticky when a re-edit lowers a score, and the floor runs every round),
- * 15/26/30/22 at 80 and 12/22/24/20 at 82 — about 14-29 once that margin is
- * added. Weekends and quiet days fall under 15 whatever the line; the daily
- * never pads (§14.8 #6). Re-read a week's distribution before moving it.
+ * The parts an item is written with: the model's three parts and the authority term, under the ceilings the platform holds
+ * (`@evimed/domain` `frontierScoreCeilings`: the genre, a decided evidence type, a preprint, a registry-class source, the study's design
+ * when c3-faith has read it) and a republisher's grade capped. One function for the pipeline's score and the rescore command.
+ * @param {{ scores: { impact: number, novelty: number, relevance: number }, source: any, itemSourceId?: string | null, evidenceType: string | null,
+ *   evidenceFixed: boolean, genre: string | null, studyFacts?: any }} input
+ * @returns {{ parts: { authority: number, impact: number, novelty: number, relevance: number }, reasons: string[] }}
  */
-export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
+export function frontierFinalScore({ scores, source, itemSourceId = null, evidenceType, evidenceFixed, genre, studyFacts = null }) {
+  const preprint = source?.source_type === "preprint";
+  // The registry's own grade: the ceilings cap a republisher's, and say so (`republisher`).
+  const authority = frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint });
+  return frontierScoreCeilings({ parts: { authority, ...scores }, genre, evidenceType, evidenceFixed, sourceType: source?.source_type ?? null,
+    authority: source?.authority, sourceId: source?.id ?? itemSourceId, preprint, studyFacts: studyFacts && typeof studyFacts === "object" ? studyFacts : null });
+}
+
+/**
+ * What the day's practice admission reads of the day's published items (`#admitPractice`, and the rescore command's): the selected ones,
+ * with their score, whether a label is admitted already, whether the editor proposed one (`practice_zh` holds its reason) and whether
+ * they may carry it (`frontierPracticeAdmissible`). Rows need the mix query's columns (`evidence_type`, `flags`, `source_authority`,
+ * `source_source_type`, `genre` inputs).
+ * @param {any[]} rows @param {Set<string>} [chosen] ids selected by this round, not yet in `rows`' `selected`
+ */
+export function frontierPracticeCandidates(rows, chosen = new Set()) {
+  return rows.filter((row) => row.selected === true || chosen.has(String(row.id))).map((row) => {
+    const flags = Array.isArray(row.flags) ? row.flags : [];
+    return { id: String(row.id), score: row.score_total == null ? null : Number(row.score_total), admitted: row.practice_changing === true,
+      proposed: typeof row.practice_zh === "string" && row.practice_zh.trim() !== "",
+      admissible: frontierPracticeAdmissible({ genre: frontierMixGenre(row), evidenceType: row.evidence_type, authority: row.source_authority,
+        preprint: row.source_source_type === "preprint", flags }) };
+  });
+}
+
+/**
+ * A source's authority grade (1-5) as the score reads it: the registry's, and for a republisher (`frontier-selection.json`: a feed whose
+ * texts are another feed's rewrite) capped at its table's grade.
+ * @param {any} source @param {string | null} [fallbackId] the item's primary source id, for a source row that came without its id
+ */
+export function frontierSourceGrade(source, fallbackId = null) {
+  const republisher = frontierRepublisher(source?.id ?? fallbackId);
+  const grade = Number(source?.authority);
+  return republisher ? Math.min(Number.isFinite(grade) && grade > 0 ? grade : 1, republisher.authorityCap) : source?.authority;
+}
+
+/**
+ * The selection line when `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` is unset (config.mjs holds the same number; frontierConfig.test.mjs
+ * holds them equal). Recalibrated 2026-10-25 (c3-select) with the score: the editor's scoring was rewritten (a ladder for impact and
+ * novelty, a ceiling for each fact the platform holds - `@evimed/domain` `frontierScoreCeilings`), so its totals sit lower and spread
+ * wider than the 82 of 2026-09-28 was drawn for. On the 248-item gold set (two labellers, kappa 0.87) chosen on the dev split alone as
+ * the highest line that keeps the stored scores' recall of 0.50: at 64, 16 of 124 items reach the line, 12 of them picks (precision
+ * 0.75, recall 0.60; the stored scores of the older prompts gave 0.145 / 0.50); the same line on the test split, reported once: 20
+ * selected, precision 0.750, recall 0.714. The prompt of round 2 re-run on the same items puts 2 of 124 on the old line of 82 - a
+ * release of round 2 without this move would fill 精选 from its floors alone. The expected day, from the dev split's weights over the
+ * seven days to 2026-10-25, is 62 items a day above the line before the source caps, the one-pick-per-event rule and the day's size of
+ * 60 (90% interval 38-87, wide: the dev split is 124 items); `scripts/ops/frontier-mix-replay.mjs` reads the first real week after the
+ * rescore. Re-read a week's distribution before moving it.
+ */
+export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 64;
 /**
  * The preprint lane (`OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY` / `_MIN_SCORE`; config.mjs holds the same numbers and
  * frontierConfig.test.mjs holds them equal). Review B, D-08: a preprint server tops out at a total of 77 and a company newsroom at 76
@@ -214,7 +264,7 @@ export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
  * (`SELECT max(score_total) ... WHERE source_type IN ('preprint','company') GROUP BY day`) are what to move the floor from.
  */
 export const FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT = 2;
-export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 60;
+export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 50;
 /**
  * The module's own model money per day, in CNY, when `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` is unset (config.mjs holds the same
  * number; frontierConfig.test.mjs holds them equal). The owner's ruling of 2026-10-22: ¥300, from ¥10. At ¥10 the 80% throttle (¥8)
@@ -947,7 +997,7 @@ export class FrontierPipeline {
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       // The day's mix (`#mix`): items it selected, by rule; and rounds whose 30-day genre percentiles could not be read (the
       // floor places then ask the absolute floor, as before).
-      mix: /** @type {Record<string, number>} */ ({}), mixGenreFloorFailures: 0,
+      mix: /** @type {Record<string, number>} */ ({}), mixGenreFloorFailures: 0, scoreCeilings: 0, practiceAdmitted: 0, supersededBySafety: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
       providerRefusedWaits: 0,
@@ -1757,7 +1807,7 @@ export class FrontierPipeline {
             text_arrived_at = CASE WHEN $6::boolean THEN clock_timestamp() ELSE text_arrived_at END,
             updated_at = clock_timestamp()
           WHERE id = $1`, [itemId, flags, evidenceType, evidence.fixed?.basis ?? item.evidence_basis,
-          frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint: source?.source_type === "preprint" }), inputChanged]);
+          frontierAuthorityScore({ authority: frontierSourceGrade(source, item.primary_source_id), evidenceType, preprint: source?.source_type === "preprint" }), inputChanged]);
       }
       if (item.state === "failed" && item.editor_diagnostics?.giveUp === "no-text" && frontierItemReadable({ texts, entry, source })) {
         // An item that waited for a text and left the queue (G11) has one now: it takes its place again, as a waiting item does.
@@ -1854,7 +1904,7 @@ export class FrontierPipeline {
       titleRaw: item.title_raw,
       // The institution, not the feed: the summary is prose a reader reads, and
       // the model repeats the source's name as it was shown it (plan 2026-09-23 §6.5 #5).
-      sourceName: frontierSourceDisplayName({ id: source?.id ?? item.primary_source_id, name: source?.name, ownerEntity: source?.owner_entity }),
+      sourceName: frontierSourceDisplayName({ id: source?.id ?? item.primary_source_id, name: source?.name, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
       sourceTypeLabel: /** @type {Record<string, string>} */ (FRONTIER_SOURCE_TYPE_LABELS_ZH)[source?.source_type] ?? null,
       publishedAt: item.published_at ? new Date(item.published_at).toISOString() : null,
       datePrecision: item.date_precision,
@@ -2177,8 +2227,12 @@ export class FrontierPipeline {
     const evidenceType = evidence.fixed?.type ?? output?.evidenceType ?? (item.state === "published" ? item.evidence_type : null);
     const evidenceBasis = evidence.fixed?.basis ?? (output?.evidenceType ? "model" : item.state === "published" ? item.evidence_basis : null);
     const isChinese = isChineseTitle(item.title_raw);
-    const scoreAuthority = frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint: source?.source_type === "preprint" });
     const scores = output?.scores ?? null;
+    // The study's design and size when c3-faith has read them (`items.study_facts`): a ceiling reads them, and nothing here needs them.
+    const studyFacts = item.study_facts && typeof item.study_facts === "object" ? item.study_facts : null;
+    // The reader's 「可能改变实践」 proposal rides in `practice_zh` until the day's mix admits it (`#admitPractice`); the model's answer
+    // is the only thing that sets or clears it, so a re-score without a new edit leaves it alone.
+    const practiceReason = output ? output.practice?.reasonZh ?? null : undefined;
     const safetyAlert = frontierSafetyAlert({ source, evidenceType, lane: output?.lane ?? item.lane, facts: entry?.facts });
     const entities = output?.entities ?? item.entities ?? {};
     const glossary = context.glossary;
@@ -2203,11 +2257,23 @@ export class FrontierPipeline {
       // edit keeps the genre an earlier edit gave it.
       const genre = frontierGenreDecision({ platform: item.platform, channel: item.channel, source_type: item.source_type, evidence_type: evidenceType,
         flags, safety_alert: safetyAlert, lane: fields.lane }, output ? output.genre ?? null : item.genre_basis === "model" ? item.genre : null);
+      // The score the card shows: the model's three parts and the authority term, with the ceilings the platform holds (the genre,
+      // a decided evidence type, a preprint, a registry-class source, the study's design when read) and a republisher's authority
+      // capped (`@evimed/domain` `frontierScoreCeilings`). The model's own numbers stay in `editor_diagnostics.scoresRaw`.
+      const ceiled = scores ? frontierFinalScore({ scores, source, itemSourceId: item.primary_source_id, evidenceType,
+        evidenceFixed: evidenceBasis === "pubmed-types" || evidenceBasis === "registry", genre: genre.genre, studyFacts }) : null;
+      // A title-only stand-in has no parts to cap: its authority term alone is written, with a republisher's grade capped.
+      const scoreAuthority = ceiled ? ceiled.parts.authority : frontierAuthorityScore({
+        authority: frontierSourceGrade(source, item.primary_source_id), evidenceType, preprint: source?.source_type === "preprint" });
+      const finalParts = ceiled?.parts ?? null;
+      if (ceiled?.reasons.length) this.counters.scoreCeilings += 1;
       await client.query(`UPDATE evimed_frontier.items SET title_zh = $2, summary_zh = $3, reason_zh = $4, lane = $5, specialties = $6,
           evidence_type = $7, evidence_basis = $8, entities = $9::jsonb, entity_keys = $10, flags = $11,
           score_authority = $12, score_impact = $13, score_novelty = $14, score_relevance = $15, score_total = $16,
           safety_alert = $17, verification = $18, editor_version = $19, editor_model = $20, tags = $22,
           genre = $23, genre_basis = $24, reason_version = CASE WHEN $25::boolean THEN $26::text ELSE reason_version END,
+          practice_changing = CASE WHEN $27::boolean AND $28::text IS NULL THEN false ELSE practice_changing END,
+          practice_zh = CASE WHEN $27::boolean THEN $28::text ELSE practice_zh END,
           state = CASE WHEN state = 'screened' THEN 'scored' ELSE state END,
           rescored_at = CASE WHEN state = 'published' AND $19::text IS NOT NULL THEN $21::timestamptz ELSE rescored_at END,
           lease_owner = CASE WHEN state = 'published' THEN NULL ELSE lease_owner END,
@@ -2216,10 +2282,18 @@ export class FrontierPipeline {
           updated_at = clock_timestamp()
         WHERE id = $1`, [item.id, fields.titleZh, fields.summaryZh, fields.reasonZh, fields.lane, fields.specialties,
         evidenceType, evidenceBasis, JSON.stringify(fields.entities), fields.entityKeys, flags,
-        scoreAuthority, scores?.impact ?? null, scores?.novelty ?? null, scores?.relevance ?? null,
-        scores ? scoreAuthority + scores.impact + scores.novelty + scores.relevance : null,
+        scoreAuthority, finalParts?.impact ?? null, finalParts?.novelty ?? null, finalParts?.relevance ?? null,
+        finalParts ? finalParts.authority + finalParts.impact + finalParts.novelty + finalParts.relevance : null,
         safetyAlert, fields.verification, fields.editorVersion,
-        fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION]);
+        fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION,
+        practiceReason !== undefined, practiceReason ?? null]);
+      if (output && ceiled) {
+        // Which scoring wrote the parts, and what lowered one, are kept with the model's raw numbers, for the operator and for fitting a
+        // ceiling; neither is served.
+        await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = CASE WHEN editor_diagnostics->>'schemaVersion' = '1'
+            THEN editor_diagnostics || $2::jsonb ELSE editor_diagnostics END WHERE id = $1`,
+        [item.id, JSON.stringify({ scoreVersion: FRONTIER_SCORE_VERSION, ...(ceiled.reasons.length ? { capped: ceiled.reasons } : {}) })]);
+      }
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
           [item.id, result.modelInput, result.modelInputSha256]);
@@ -2346,7 +2420,7 @@ export class FrontierPipeline {
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
         const rows = (await client.query(`SELECT i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags,
             i.safety_alert, i.lane, i.lang, i.title_raw, i.score_total, i.verification, i.selected, i.selected_rule,
-            i.primary_source_id, i.event_id, length(btrim(coalesce(i.summary_zh, ''))) > 0 AS summarized,
+            i.primary_source_id, i.event_id, i.practice_changing, i.practice_zh, length(btrim(coalesce(i.summary_zh, ''))) > 0 AS summarized,
             (to_jsonb(i)->'event_selection'->>'addsValue')::boolean AS adds_value,
             s.authority AS source_authority, s.source_type AS source_source_type, t.publication_types,
             ${frontierBesideSelectedSql("i")} AS beside_selected
@@ -2356,11 +2430,11 @@ export class FrontierPipeline {
           WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2`, [start, end])).rows;
         if (!rows.length) return;
         const eventIds = [...new Set(rows.map((/** @type {any} */ row) => row.event_id).filter((id) => id != null).map(String))];
-        /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null, selected: boolean }>>} */
+        /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null, selected: boolean, rule: string | null, safety: boolean }>>} */
         const events = {};
         if (eventIds.length) {
           const members = (await client.query(`SELECT ei.event_id, i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type,
-              i.flags, i.safety_alert, i.lane, i.selected
+              i.flags, i.safety_alert, i.lane, i.selected, i.selected_rule
             FROM evimed_frontier.event_items ei
             JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
             JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
@@ -2368,7 +2442,8 @@ export class FrontierPipeline {
           for (const member of members) {
             const key = String(member.event_id);
             const list = events[key] ?? [];
-            list.push({ id: String(member.id), genre: frontierMixGenre(member), evidenceType: member.evidence_type ?? null, selected: member.selected === true });
+            list.push({ id: String(member.id), genre: frontierMixGenre(member), evidenceType: member.evidence_type ?? null, selected: member.selected === true,
+              rule: member.selected_rule ?? null, safety: member.safety_alert === true });
             events[key] = list;
           }
         }
@@ -2385,6 +2460,8 @@ export class FrontierPipeline {
               && !frontierJournalWithoutAbstract({ source, flags })
               && !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote,
             summarized: row.summarized === true, besideSelected: row.beside_selected === true,
+            // A republisher (frontier-selection.json) takes no place under the line.
+            floorEligible: frontierFloorEligible(row.primary_source_id),
             addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null,
             eventId: row.event_id == null ? null : String(row.event_id),
           };
@@ -2399,7 +2476,16 @@ export class FrontierPipeline {
           await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'selected')", [pick.id]);
           picked[pick.rule] = (picked[pick.rule] ?? 0) + 1;
         }
-        if (result.picks.length) await bumpFrontierVersion(client);
+        // A safety alert of an event takes the place of an arithmetic pick of the same event (S7).
+        for (const gone of result.superseded) {
+          const updated = await client.query(`UPDATE evimed_frontier.items SET selected = false, selected_rule = NULL, selected_at = NULL,
+              same_event_item_id = $2, updated_at = clock_timestamp() WHERE id = $1 AND selected AND NOT safety_alert`, [gone.id, gone.by]);
+          if (!updated.rowCount) continue;
+          await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'same-event')", [gone.id]);
+          this.counters.supersededBySafety += 1;
+        }
+        const practice = await this.#admitPractice(client, rows, result.picks);
+        if (result.picks.length || result.superseded.length || practice) await bumpFrontierVersion(client);
         if (day === today.day) this.lastMix = { day, at: now.toISOString(), ...result.plan, excluded: result.excluded.length };
       });
     }
@@ -2408,6 +2494,30 @@ export class FrontierPipeline {
       this.counters.selected += count;
     }
     return picked;
+  }
+
+  /**
+   * The day's 「可能改变实践」 labels (c3-select S4, contract §P): of the day's selected items that the editor proposed it for
+   * (`practice_zh` holds the proposal's reason) and that may carry it (`frontierPracticeAdmissible`: an eligible genre and evidence
+   * type, a source of grade 3 or more, no preprint, no press release), the best scored are admitted up to the day's cap
+   * (`FRONTIER_PRACTICE_LIMITS`: at most 3 and 5% of the day's 精选). A label already admitted stays and counts. Inside the mix's
+   * transaction, so the cap is counted with the selection lock held. Returns how many were admitted.
+   * @param {any} client @param {any[]} rows the day's published items @param {Array<{ id: string }>} picks the round's new picks
+   */
+  async #admitPractice(client, rows, picks) {
+    const chosen = new Set(picks.map((pick) => String(pick.id)));
+    const candidates = frontierPracticeCandidates(rows, chosen);
+    const { admit } = frontierPracticeAdmit(candidates, { selectedCount: candidates.length });
+    let admitted = 0;
+    for (const id of admit) {
+      const updated = await client.query(`UPDATE evimed_frontier.items SET practice_changing = true, updated_at = clock_timestamp()
+        WHERE id = $1 AND state = 'published' AND NOT practice_changing AND practice_zh IS NOT NULL`, [id]);
+      if (!updated.rowCount) continue;
+      await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'practice')", [id]);
+      admitted += 1;
+    }
+    this.counters.practiceAdmitted += admitted;
+    return admitted;
   }
 
   /**
@@ -2823,7 +2933,7 @@ export class FrontierPipeline {
       if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
       const source = sources.get(item.primary_source_id);
       const leadInput = {
-        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, titleZh: item.title_zh,
         text: reader.text, kind: reader.source, post: item.platform === "x", genre: frontierItemGenre(item),
         // Above an 「AI 要点」 (an item whose reader is read, of a genre with fields) the 导读 leaves the details to it.
@@ -2898,7 +3008,7 @@ export class FrontierPipeline {
       if (frontierBriefWanted(genre)) {
         const source = sources.get(item.primary_source_id);
         const briefInput = {
-          genre, sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+          genre, sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
           date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, titleZh: item.title_zh,
           text: reader.text, kind: reader.source, post: item.platform === "x" };
         const result = await frontierWriteBrief(this.editor, briefInput);
@@ -2962,7 +3072,7 @@ export class FrontierPipeline {
       if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
       const source = sources.get(item.primary_source_id);
       const ensured = await frontierEnsureStudyFacts(this.editor, { stored: null, sha, input: {
-        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, text: reader.text, kind: reader.source } });
       if (ensured.error || !ensured.record) {
         if (ensured.error && (frontierProviderUnavailable(ensured.error) || ensured.error === "usage_budget_exceeded" || ensured.error === "frontier_editor_unavailable")) {
@@ -3021,7 +3131,7 @@ export class FrontierPipeline {
       if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
       const source = sources.get(item.primary_source_id);
       const result = await frontierWriteAsk(this.editor, {
-        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, genre: frontierItemGenre(item),
         titleRaw: item.title_raw, titleZh: item.title_zh, lead: item.lead_zh, text: reader.text, kind: reader.source, post: item.platform === "x" });
       if (result.error) {
@@ -3088,7 +3198,7 @@ export class FrontierPipeline {
       if (!facts) return false;
       const source = sources.get(item.primary_source_id);
       const checked = await frontierFaithCheckSummary(this.editor, { facts, summary: item.summary_zh, source: faithSource({
-        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, text: reader.text, kind: reader.source }) });
       const result = checked.result;
       if (result.error && frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
@@ -3217,7 +3327,7 @@ export class FrontierPipeline {
         const source = sources.get(item.primary_source_id);
         this.counters.insightsAsked += 1;
         const result = await frontierWriteInsight(this.editor, {
-          sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+          sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
           date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, title: item.title_zh || item.title_raw,
           lead: item.lead_zh || item.summary_zh || null, text: reader.text, refs });
         if (result.error && (frontierProviderUnavailable(result.error) || result.error === "usage_budget_exceeded" || result.error === "frontier_editor_unavailable")) {
@@ -3282,14 +3392,14 @@ export class FrontierPipeline {
     const chosen = wanted.slice(0, FRONTIER_INSIGHT_LIMITS.refs);
     if (!chosen.length) return [];
     const rows = (await this.database.query(`SELECT i.id, i.public_id, coalesce(i.title_zh, i.title_raw) AS title, coalesce(i.lead_zh, i.summary_zh) AS summary,
-        i.timeline_at, i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner
+        i.timeline_at, i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.public_id = ANY($1::text[]) AND i.state = 'published'`, [chosen.map((entry) => entry.publicId)])).rows;
     const byPublic = new Map(rows.map((row) => [String(row.public_id), row]));
     return chosen.flatMap((entry) => { const row = byPublic.get(entry.publicId); return row ? [row] : []; }).map((row, index) => ({
       n: index + 1, itemId: String(row.id), publicId: String(row.public_id),
       relation: chosen.find((entry) => entry.publicId === String(row.public_id))?.relation ?? "entity",
-      sourceName: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }),
+      sourceName: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }),
       date: row.timeline_at ? isoDayIn(row.timeline_at, this.timeZone) : null, title: String(row.title), summary: row.summary ?? null,
     }));
   }

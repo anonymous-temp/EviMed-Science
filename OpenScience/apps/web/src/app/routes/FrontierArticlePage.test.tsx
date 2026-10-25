@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -192,6 +192,21 @@ describe("an X post with every block", () => {
     expect(screen.queryByRole("navigation", { name: "阅读工具" })).not.toBeInTheDocument();
     await userEvent.click(within(rail).getByRole("button", { name: "深入研究" }));
     expect(screen.getByTestId("where")).toHaveTextContent("/app/chat");
+  });
+
+  it("says 「可能改变实践」 in the meta row and, with its reason, in the notes where a touch screen reads it", async () => {
+    wide();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawXPost({ practice: { reason: "国内首个获批，改变一线用药选择。" } })));
+    show("/app/frontier/items/x-post-0001");
+    const notes = await screen.findByRole("complementary", { name: "文章操作与推荐" });
+    const reason = within(notes).getByRole("region", { name: "推荐理由" });
+    expect(reason).toHaveTextContent("可能改变实践：国内首个获批，改变一线用药选择。");
+    expect(screen.getAllByText("可能改变实践").length).toBe(2);
+    cleanup();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawXPost()));
+    show("/app/frontier/items/x-post-0001");
+    await screen.findByRole("complementary", { name: "文章操作与推荐" });
+    expect(screen.queryByText("可能改变实践")).not.toBeInTheDocument();
   });
 
   it("on a narrow screen puts the actions in a bar at the window's bottom and the notes under the text", async () => {

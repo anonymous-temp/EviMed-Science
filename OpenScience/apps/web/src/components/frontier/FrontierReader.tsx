@@ -36,6 +36,7 @@ import {
   EXTERNAL,
   INLINE_ACTION,
   PLATFORM_LABELS,
+  PRACTICE_LABEL,
   SCORE_LABEL,
   dateClock,
   evidenceTag,
@@ -192,6 +193,7 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
       {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
       {genre && <Tag>{genre}</Tag>}
       {evidence && <Tag>{evidence}</Tag>}
+      {item.practice && <Tag tone="accent">{PRACTICE_LABEL}</Tag>}
     </div>
   );
 }
@@ -837,7 +839,7 @@ export function ReaderSameEvent({ item, className }: { item: FrontierItemDetail;
 }
 
 /** 推荐理由 is drawn: the item has a reason or a score, and it is not the other report of an occurrence selected through another one. */
-const hasVerdict = (item: FrontierItemDetail) => !item.sameEvent && Boolean(item.reason || item.score !== null);
+const hasVerdict = (item: FrontierItemDetail) => !item.sameEvent && Boolean(item.reason || item.score !== null || item.practice);
 
 function RailBlock({ label, children }: { label: string; children: ReactNode }) {
   const id = useId();
@@ -877,6 +879,7 @@ export function ReaderNotes({ item, outline }: { item: FrontierItemDetail; outli
           </div>
           {parts.length > 0 && <ScoreBars parts={parts} className="mt-3" />}
           {item.reason && <p className="mt-3 text-ui text-text-2">{item.reason}</p>}
+          {item.practice && <p className="mt-3 text-ui text-text-2"><span className="font-medium text-text">{PRACTICE_LABEL}</span>：{item.practice.reason}</p>}
         </RailBlock>
       )}
       {item.specialties.length > 0 && (
