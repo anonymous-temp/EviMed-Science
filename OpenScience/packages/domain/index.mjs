@@ -1430,6 +1430,21 @@ export {
   frontierLeadPlaces,
   frontierLeadQueryKey,
 } from './src/frontierLeadWatch.mjs'
+// frontierTopics — 11 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
+// labels, the hot lists it is first seen on, a topic's states, its items' roles and origins, the evidence programme's states
+// for it, and the limits it lives within.
+export {
+  FRONTIER_HOT_BOARDS,
+  FRONTIER_TOPIC_DOMAIN_LABELS_ZH,
+  FRONTIER_TOPIC_DOMAINS,
+  FRONTIER_TOPIC_ITEM_ROLES,
+  FRONTIER_TOPIC_ITEM_VIA,
+  FRONTIER_TOPIC_LIMITS,
+  FRONTIER_TOPIC_PROGRAMME_STATES,
+  FRONTIER_TOPIC_STATUSES,
+  isFrontierTopicDomain,
+} from './src/frontierTopics.mjs'
+/** @typedef {import('./src/frontierTopics.mjs').FrontierTopicDomain} FrontierTopicDomain */
 // projectCard — the slots a project's memory is read in: six general ones for any kind of
 // work, the clinical elements as an extension written only when a study was described,
 // `project.ext.<name>` for the extras of other kinds of work, and the one check on a

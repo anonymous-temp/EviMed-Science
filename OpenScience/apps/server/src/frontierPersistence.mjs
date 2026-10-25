@@ -684,6 +684,52 @@ DELETE FROM evimed_frontier.user_follows f WHERE f.kind = 'specialty' AND f.key 
 UPDATE evimed_frontier.user_follows SET key = 'general-surgery', label = '普通外科' WHERE kind = 'specialty' AND key = 'surgery-anesthesia';
 DELETE FROM evimed_frontier.user_follows WHERE kind = 'specialty' AND key IN ('geriatrics', 'public-health');
 
+-- c2-base 2026-10-25: hot-event topics (@evimed/domain frontierTopics.mjs) — a public hot event's general medical question,
+-- written as the question; the event as one attributed line; the reports and evidence the lead triggers found for it, and its
+-- overview. `group_key` is the normalised key a re-sighting of the same event is recognised by; `subject_names` are the people
+-- or bodies the event names, kept so code can hold them out of evidence queries and titles, and never served to a reader.
+CREATE TABLE IF NOT EXISTS evimed_frontier.topics (
+  id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  public_id         text NOT NULL UNIQUE CHECK (public_id ~ '^[a-z0-9]{12,32}$'),
+  group_key         text NOT NULL UNIQUE CHECK (char_length(group_key) BETWEEN 1 AND 200),
+  title_zh          text NOT NULL CHECK (char_length(title_zh) BETWEEN 1 AND 60),
+  question_zh       text NOT NULL CHECK (char_length(question_zh) BETWEEN 1 AND 160),
+  peg_zh            text CHECK (char_length(peg_zh) <= 200),
+  peg_source        jsonb,
+  domain            text NOT NULL,
+  entity_keys       text[] NOT NULL DEFAULT '{}',
+  subject_names     text[] NOT NULL DEFAULT '{}',
+  boards            jsonb NOT NULL DEFAULT '[]'::jsonb,
+  surge             boolean NOT NULL DEFAULT false,
+  status            text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed')),
+  first_seen_at     timestamptz(3) NOT NULL,
+  accepted_at       timestamptz(3) NOT NULL,
+  closed_at         timestamptz(3),
+  queries           jsonb NOT NULL DEFAULT '{}'::jsonb,
+  waves             jsonb NOT NULL DEFAULT '[]'::jsonb,
+  overview_zh       text CHECK (char_length(overview_zh) <= 800),
+  overview_refs     jsonb,
+  overview_basis    text,
+  overview_at       timestamptz(3),
+  programme_state   text CHECK (programme_state IN ('queued', 'taken', 'card', 'skipped')),
+  programme_card_id text,
+  programme_at      timestamptz(3),
+  updated_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS frontier_topics_recent_idx ON evimed_frontier.topics (status, accepted_at DESC);
+CREATE TABLE IF NOT EXISTS evimed_frontier.topic_items (
+  topic_id  bigint NOT NULL REFERENCES evimed_frontier.topics(id) ON DELETE CASCADE,
+  item_id   bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+  role      text NOT NULL CHECK (role IN ('report', 'evidence', 'background')),
+  via       text NOT NULL CHECK (via IN ('lead', 'corpus')),
+  added_at  timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (topic_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS frontier_topic_items_item_idx ON evimed_frontier.topic_items (item_id);
+-- c2-base 2026-10-25: why a reader hid an item, when they said (@evimed/domain FRONTIER_HIDE_REASONS); null = no reason given.
+ALTER TABLE evimed_frontier.user_state ADD COLUMN IF NOT EXISTS hidden_reason text
+  CHECK (hidden_reason IN ('not-relevant', 'already-seen', 'low-quality', 'promotional', 'not-my-specialty', 'source'));
+
 ${FRONTIER_INTERACTIONS_SQL}
 `;
 }
