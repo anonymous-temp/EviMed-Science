@@ -2,6 +2,7 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { GEO_NOTIFY_SEVERITIES, errorNoticeKey } from "./geoErrors.mjs";
+import { GEO_PROBE_HOST_FAILURE_CODES } from "./geoProbeQueue.mjs";
 import { budgetOpen } from "./geoMarketStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -1745,9 +1746,9 @@ export class GeoOrchestrator {
 
   /**
    * Today's sentinel asked again on an engine it skipped (paused, or no
-   * channel), once that engine has answered again since (G1, 2026-09-26: the
-   * 09-26 sentinel picked 千问 and DeepSeek, DeepSeek was paused, and its ten
-   * questions were simply gone). A make-up is a round of its own, keyed by
+   * channel) or whose asks the probe host never took, once that engine has
+   * answered again since (G1, 2026-09-26: the 09-26 sentinel picked 千问 and
+   * DeepSeek, DeepSeek was paused, and its ten questions were simply gone). A make-up is a round of its own, keyed by
    * the day and the engine and made once; the first round keeps its counts.
    * Only today's: a day that has passed is the next day's sentinel's to cover.
    * @param {any} project @param {string} sentinelKey @param {string} day
@@ -1757,9 +1758,11 @@ export class GeoOrchestrator {
     if (!mark?.round_id) return 0;
     const round = (await this.store.query(`SELECT id, status, finished_at FROM evimed_geo.rounds WHERE id = $1`, [mark.round_id])).rows[0];
     if (!round || !["done", "partial"].includes(String(round.status)) || !round.finished_at) return 0;
+    // Skipped on a paused or unreachable engine, or failed because the probe host did not answer (2026-10-25): never put to the engine.
     const skipped = (await this.store.query(`SELECT engine, array_agg(DISTINCT question_id) AS questions FROM evimed_geo.probe_jobs
-      WHERE round_id = $1 AND status = 'skipped' AND error_code IN ('engine_paused', 'engine_unavailable') GROUP BY engine ORDER BY engine`,
-    [round.id])).rows;
+      WHERE round_id = $1 AND ((status = 'skipped' AND error_code IN ('engine_paused', 'engine_unavailable'))
+        OR (status = 'failed' AND error_code = ANY($2::text[]))) GROUP BY engine ORDER BY engine`,
+    [round.id, [...GEO_PROBE_HOST_FAILURE_CODES]])).rows;
     let made = 0;
     for (const row of skipped) {
       const engine = String(row.engine);

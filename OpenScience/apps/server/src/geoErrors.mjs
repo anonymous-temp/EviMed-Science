@@ -454,11 +454,15 @@ export async function tickErrors(deps) {
     // Wait until every answer the round got has been read.
     if (answers.some((answer) => (answer.status === "valid" || answer.status === "refusal") && !answer.parsed)) continue;
     const valid = answers.filter((answer) => (answer.status === "valid" && answer.judged) || answer.status === "refusal");
-    // A round that never asked the engine (paused, or no channel) confirmed
-    // nothing: the confirmation is skipped, not read as 「未确认」, and it is
-    // asked again once the engine is back (G1). The round itself stays as it
-    // was — a new round is queued, and no count of this one is rewritten.
-    if (!valid.length && (await store.roundSkippedEngines(roundId)).includes(error.engine)) {
+    // A round that got no answer from the engine — never asked it (paused,
+    // or no channel), or asked and heard nothing back (the probe host down,
+    // every ask failed or suspect) — confirmed nothing: the confirmation is
+    // skipped, not read as 「未确认」, and it is asked again once the engine is
+    // back (G1; the second half 2026-10-25, when every ask of a round failed
+    // at an unreachable host and the error read 「未确认」 for good). The round
+    // itself stays as it was — a new round is queued, and no count of this
+    // one is rewritten.
+    if (!answers.some((answer) => answer.status === "valid" || answer.status === "refusal")) {
       const skippedRounds = [...new Set([...(Array.isArray(error.confirm?.skippedRounds) ? error.confirm.skippedRounds : []), roundId])];
       await store.updateError(error.id, {
         confirm: { ...error.confirm, status: "skipped", stability: "unconfirmed", tries: Number(error.confirm?.tries ?? 1), skippedRounds,

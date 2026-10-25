@@ -1098,6 +1098,68 @@ test("an unconfigured probe is a wait, not an absence; an unreachable one fails 
   }
 });
 
+test("an unreachable probe host pauses every engine through the breaker: its round closes once a re-check fails, and the engines resume when the host answers again (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_h");
+  const h = await harness({ answers: () => ({ answer: A_Q3 }) });
+  /** @type {Awaited<ReturnType<typeof startFakeProbe>> | null} */
+  let back = null;
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_h", kind: "sentinel" });
+    await h.probe.close();
+    const down = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(down.failed, 5);
+    assert.deepEqual(h.state.breaker.paused(), ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"], "every engine, as the module says");
+    assert.equal(down.roundsFinished, 0, "a fresh pause holds the round");
+
+    // Ten minutes on the re-check finds the host still down: the round closes, its asks skipped, not spent.
+    h.clock.advance(10 * 60_000 + 1_000);
+    const checked = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(checked.asked, 0);
+    assert.equal(checked.roundsFinished, 1);
+    const jobs = await rows(`SELECT status, error_code FROM evimed_geo.probe_jobs WHERE round_id = $1`, [round.roundId]);
+    assert.ok(jobs.length === 6 && jobs.every((job) => job.status === "skipped" && job.error_code === "engine_paused"), JSON.stringify(jobs));
+
+    // The host is back: the next re-check resumes the engines it has a tab for, by itself.
+    back = await startFakeProbe({ ask: () => ({ answer: A_Q3 }) });
+    h.config.geoProbeUrl = back.url;
+    h.clock.advance(10 * 60_000 + 1_000);
+    const resumed = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.deepEqual(resumed.resumed, ["deepseek", "doubao"]);
+    assert.deepEqual(h.state.breaker.paused(), ["kimi", "qianwen", "yuanbao"], "no tab, still paused");
+  } finally {
+    await h.probe.close().catch(() => {});
+    await back?.close();
+  }
+});
+
+test("a confirmation whose every ask failed at the probe host was not asked: it is skipped and asked again, never read as 「未确认」 (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_f");
+  const h = await harness();
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_f", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    const [error] = await rows(`SELECT id, confirm FROM evimed_geo.errors`);
+    const round = String(error.confirm.roundId);
+    for (const job of await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id = $1`, [round])) {
+      await store.finishJob(String(job.id), { now: h.clock.now(), status: "failed", errorCode: "geo_probe_unavailable" });
+    }
+    assert.equal((await store.finishRound(round, { now: h.clock.now(), skip: [] }))?.status, "partial");
+    await tickErrors(h.deps);
+    const [read] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id = $1`, [error.id]);
+    assert.deepEqual([read.confirm.status, read.confirm.stability, read.confirm.tries], ["skipped", "unconfirmed", 1]);
+    h.clock.advance(60_000);
+    h.state.breaker.checked("deepseek", h.clock.now().getTime(), true);
+    assert.equal((await tickErrors(h.deps)).confirmsRequeued, 1, "asked again once the engine answers");
+  } finally {
+    await h.probe.close();
+  }
+});
+
 // ---------------------------------------------------------------- a judge that fails
 
 test("a provider outage stops the judge without spending attempts; an answer the judge keeps failing on is written unjudged and counted as unparsed", options, async () => {

@@ -823,6 +823,31 @@ test("a sentinel that skipped a paused engine is asked again on that engine the 
   assert.equal(makeUps().length, 1, "made once");
 });
 
+test("a sentinel whose asks the probe host never took is made up like a skipped one, once the engine answers again (2026-10-25)", options, async () => {
+  const { world, project } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  world.setClock("2026-10-01T00:10:00Z"); // 08:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const sentinel = world.enqueued.find((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id);
+  assert.ok(sentinel);
+  const [engine] = sentinel.engines;
+  const [question] = (await store.questionMap(project.id, 1))[0].questions;
+  // Every ask of the engine failed at the host (connection refused), its attempts spent; the round closed partial.
+  await q(`UPDATE evimed_geo.rounds SET status = 'partial', done = 0, failed = 1,
+      finished_at = (SELECT greatest('2026-10-01T00:30:00Z'::timestamptz, coalesce(max(asked_at), 'epoch'::timestamptz)) FROM evimed_geo.snapshots WHERE engine = $2)
+    WHERE id = $1`, [sentinel.id, engine]);
+  await q(`INSERT INTO evimed_geo.probe_jobs (id, user_id, round_id, geo_project_id, question_id, engine, status, attempts, error_code)
+    VALUES ($1, $2, $3, $4, $5, $6, 'failed', 3, 'geo_probe_unavailable')`, [`job-h-${sentinel.id}`, project.userId, sentinel.id, project.id, question.id, engine]);
+  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface) VALUES ($1, $2, $3, $4,
+    (SELECT finished_at + interval '5 minutes' FROM evimed_geo.rounds WHERE id = $5), 'valid', '{"mode":"web"}'::jsonb)`,
+  [`back-h-${project.id}`, project.userId, project.id, engine, sentinel.id]);
+  world.setClock("2026-10-01T01:10:00Z");
+  await world.orchestrator.tickSchedules();
+  const makeUps = world.enqueued.filter((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id && entry.ref?.retryOf === sentinel.id);
+  assert.deepEqual(makeUps.map((entry) => [entry.engines, entry.questionIds]), [[[engine], [question.id]]]);
+});
+
 /** A published article of a project: its order, its publication, the URL an engine may cite. @param {{ project: any, userId: string }} made */
 async function publishedArticle({ project, userId }) {
   await q(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, title, safety, status) VALUES ($1, $2, $3, '稿件 微秒', 'clear', 'published')`,
