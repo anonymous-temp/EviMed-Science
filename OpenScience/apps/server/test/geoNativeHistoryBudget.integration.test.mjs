@@ -10,6 +10,8 @@ const options={skip:!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL&&'Disposable Pos
 async function setup(t) {
  const f=await fixture(t),app=f.app,manager=app.runtimeManager;
  const geo=(await f.call('owner','POST','/api/geo/projects',{})).body.data;
+ // A shared GEO project: one with a member (a one-person GEO project is an owned project, owner ruling 2026-10-25).
+ assert.equal((await f.call('owner','POST',`/api/geo/projects/${geo.id}/members`,{userId:'editor',role:'editor'})).status,201);
  const primary=(await f.call('owner','POST',`/api/geo/projects/${geo.id}/conversation/open`,{target:{kind:'primary'}})).body.data.sessionId;
  const owner=await app.store.userById('owner'),project=await app.store.requireProject(owner,geo.projectId);
  const memory=await app.nativeMemoryContexts.forProject(project),agent=(await app.agentRegistry).get('geo-insight');
