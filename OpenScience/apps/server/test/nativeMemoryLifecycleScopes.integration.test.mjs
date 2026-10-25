@@ -29,7 +29,8 @@ async function fixture(t) {
   await accounts.createProject(owner, 'project-b', 'B');
   const projects = [await accounts.requireProject(owner, 'default'), await accounts.requireProject(owner, 'project-b')];
   const geo = new GeoStore({ database: accounts.database }); await geo.ready();
-  for (const project of projects) await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+  // A shared GEO project: one with a member (a one-person GEO project is an owned project, owner ruling 2026-10-25).
+  for (const project of projects) await geo.addMember({ geoId: (await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 })).id, userId: 'member', role: 'editor', invitedBy: owner.id });
   const stub = await startOpenVikingStub(t);
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });

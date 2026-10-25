@@ -2706,23 +2706,35 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (action === "sources" || action === "source-scope") {
           const knowledge = await sharedKnowledgeContext?.forProject(project);
           if (!knowledge) throw new HttpError(503, "product_state_unavailable", "The project sources are unavailable.");
+          // A shared project's sources are its context's; a GEO project its owner works in alone reads its knowledge base as
+          // any conversation of theirs does — its own documents and what is shared with it.
+          const shared = knowledge.kind === "geo-project";
+          const readable = async candidate => {
+            if (shared) return knowledge.acceptSource(candidate);
+            const source = await sourceService.get(project.userId, candidate.id).catch(() => null);
+            return Boolean(source && source.deletedAt == null && (source.projectId === project.id || (await sourceService.isShared(project.userId, source)) === true));
+          };
           if (action === "sources") {
             const items = []; let cursor = null;
             do {
               const page = await sourceService.list(project.userId, { projectId: project.id, state: "ready", limit: 100, cursor });
-              for (const item of page.items) if (await knowledge.acceptSource(item)) items.push({ id: item.id, title: item.title ?? item.name ?? item.id });
+              for (const item of page.items) if (!shared || await knowledge.acceptSource(item)) items.push({ id: item.id, title: item.title ?? item.name ?? item.id });
               cursor = page.nextCursor;
             } while (cursor);
             return { items };
           }
           if (body) {
-            if (!Array.isArray(body.sourceIds) || body.sourceIds.length > 50 || !body.sourceIds.every(id => /^src_[a-f0-9]{32}$/.test(id))) throw new HttpError(400, "invalid_payload", "The source selection is invalid.");
-            for (const id of body.sourceIds) if (!await knowledge.acceptSource({ id })) throw new HttpError(404, "source_not_found", "Source not found.");
+            if (!Array.isArray(body.sourceIds) || body.sourceIds.length > 50 || !body.sourceIds.every(id => /^src_[a-f0-9]{32}$/.test(id))
+              || (body.sourceScopeMode !== undefined && body.sourceScopeMode !== "project" && body.sourceScopeMode !== "selected")) throw new HttpError(400, "invalid_payload", "The source selection is invalid.");
+            // `selected` with no document is "no document", as on the personal route; only `project` (or no mode and no id) lifts it.
+            const ids = requestedSourceScope(body.sourceIds, body.sourceScopeMode);
+            for (const id of ids ?? []) if (!await readable({ id })) throw new HttpError(404, "source_not_found", "Source not found.");
             // The exact module identity is rechecked immediately before the existing session writer.
             await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: geoId, sessionId });
-            await researchSessions.setSourceScope(project, sessionId, body.sourceIds);
+            await researchSessions.setSourceScope(project, sessionId, ids, ids === null ? "project" : "selected");
           }
-          return { sourceScope: await knowledge.sourceScope(sessionId), originReference: null };
+          const sourceScope = shared ? await knowledge.sourceScope(sessionId) : (await researchSessions.get(project, sessionId))?.sourceScope ?? null;
+          return { sourceScope, sourceScopeMode: sourceScope == null ? "project" : "selected", originReference: null };
         }
         const runs = (await agentRuns.list(project)).filter(run => run.sessionId === sessionId);
         if (action === "history") return preservedConversationHistory(project, sessionId, runs);

@@ -24,10 +24,17 @@ async function fixture(t) {
   dataDir = await mkdtemp(path.join(os.tmpdir(), 'native-store-scopes-'));
   accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 2 }));
   await accounts.createUser('owner', 'fixture-password', 'Owner'); const owner = await accounts.userById('owner');
-  await accounts.createProject(owner, 'project-b', 'B');
+  await accounts.createUser('editor', 'fixture-password', 'Editor');
+  await accounts.createProject(owner, 'project-b', 'B'); await accounts.createProject(owner, 'solo', 'Solo');
   const projects = [await accounts.requireProject(owner, 'default'), await accounts.requireProject(owner, 'project-b')];
   const geo = new GeoStore({ database: accounts.database }); await geo.ready();
-  for (const project of projects) await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+  // Two shared GEO projects (a member each) and one the owner works in alone.
+  for (const project of projects) {
+    const row = await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+    await geo.addMember({ geoId: row.id, userId: 'editor', role: 'editor', invitedBy: owner.id });
+  }
+  const solo = await accounts.requireProject(owner, 'solo');
+  const soloGeo = await geo.createProject({ userId: owner.id, projectId: solo.id, engines: ['deepseek'], coverageDays: 30 });
   const stub = await startOpenVikingStub(t);
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
@@ -39,8 +46,41 @@ async function fixture(t) {
   await sessions.register(owner.id);
   const store = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts });
   const seed = (context, relPath, body, tags = []) => stub.seedMemory(context.namespaceId, relPath, body, { tags });
-  return { accounts, owner, projects, contexts, a, b, personal, overlay, sessions, store, stub, seed };
+  return { accounts, owner, projects, contexts, a, b, personal, overlay, sessions, store, stub, seed, geo, solo, soloGeo, documents, policies };
 }
+
+test('a one-person GEO project keeps the owner\'s own memory: its card, records, rejections and resident profile are the account\'s', options, async t => {
+  const f = await fixture(t), user = f.owner.id;
+  const context = await f.contexts.forProject(f.solo);
+  assert.equal(context.kind, 'owned'); assert.equal(context.namespaceId, f.personal.namespaceId);
+  assert.equal(context.projectId, f.solo.id, 'the project is a label on the owner\'s own memory');
+  // Written before v3 in the person's own memory with the project's tag: still the project's card and records.
+  f.seed(f.personal, 'projects/solo.md', '# Solo\n## Goal\n- Owner goal', [`project=${f.solo.id}`]);
+  const uri = f.seed(f.personal, 'project_facts/item.md', 'Owner statement', [`project=${f.solo.id}`]);
+  f.seed(f.personal, 'profile.md', 'Owner profile');
+  assert.equal((await f.store.projectCard(user, f.solo.id))[0].text, 'Owner goal');
+  assert.equal((await f.store.listRecords(user, { scopes: ['project'], scopeId: f.solo.id })).length, 2);
+  // A correction there is the account's own rejection, as in any project of theirs.
+  const id = nativeFileId(uri), original = await f.store.getRecord(user, id);
+  await f.store.update(user, id, { value: 'Edited statement', expectedVersion: original.version });
+  assert.equal((await f.overlay.rejectedFingerprints(user, 'project_facts')).size, 1);
+  for (const namespace of [f.a.namespaceId, f.b.namespaceId]) assert.equal((await f.overlay.rejectedFingerprints(user, `${namespace}:project_facts`)).size, 0);
+  // The resident block carries the capsule's profile facts and the card, as for an owned project.
+  const { ResidentProfiles } = await import('../src/residentProfile.mjs');
+  const profiles = new ResidentProfiles({ config: { memoryResidentCardTimeoutMs: 30_000 }, store: { memoryEngine: async () => 'native' }, contextPolicies: f.policies,
+    capsules: { profileFacts: async () => [{ id: 'f1', factKind: 'profile', content: 'Owner capsule profile', updatedAt: '2026-10-01T00:00:00Z', origin: 'explicit' }] },
+    projectCard: (owner, projectId) => f.store.projectCard(owner, projectId) });
+  const block = await profiles.forDispatch(user, { projectId: f.solo.id, attended: true });
+  assert.match(block.text, /Owner capsule profile/); assert.match(block.text, /Owner goal/);
+  // The first member makes it a shared project; the owner's earlier memory stays theirs and is not the project's.
+  await f.geo.addMember({ geoId: f.soloGeo.id, userId: 'editor', role: 'editor', invitedBy: user });
+  const shared = await f.contexts.forProject(f.solo);
+  assert.equal(shared.kind, 'geo-project'); assert.notEqual(shared.namespaceId, f.personal.namespaceId);
+  assert.doesNotMatch((await profiles.forDispatch(user, { projectId: f.solo.id, attended: true })).text, /Owner capsule profile/);
+  await f.geo.removeMember({ geoId: f.soloGeo.id, userId: 'editor', role: 'editor' });
+  assert.equal((await f.contexts.forProject(f.solo)).namespaceId, f.personal.namespaceId);
+  assert.ok((await f.contexts.all(user)).some(item => item.namespaceId === shared.namespaceId), 'what the shared project kept stays on the owner\'s page');
+});
 
 test('the owner page includes registered namespaces while project views use their real namespace rather than tags', options, async t => {
   const f = await fixture(t), user = f.owner.id;
@@ -241,7 +281,8 @@ test('a registered but unused namespace has an empty readable page and initializ
   const f = await fixture(t), user = f.owner.id;
   await f.accounts.createProject(f.owner, 'new-project', 'New');
   const geo = new GeoStore({ database: f.accounts.database });
-  await geo.createProject({ userId: user, projectId: 'new-project', engines: ['deepseek'], coverageDays: 30 });
+  const row = await geo.createProject({ userId: user, projectId: 'new-project', engines: ['deepseek'], coverageDays: 30 });
+  await geo.addMember({ geoId: row.id, userId: 'editor', role: 'editor', invitedBy: user });
   const context = await f.contexts.forProject({ userId: user, id: 'new-project' });
   assert.deepEqual(await f.store.files(user, { context }), []);
   await f.contexts.configure(context, { learning: false });

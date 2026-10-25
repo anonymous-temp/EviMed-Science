@@ -550,3 +550,23 @@ test("directory grep uses root-relative compiled paths and hides unauthorized tr
   assert.equal(bounded.body.data.truncated, false, "hidden engine hits cannot expose their threshold");
   assert.equal(bounded.body.data.partialScan, true);
 });
+
+test("a sessionless shared-context browse is refused while a conversation of the project holds a selection", async t => {
+  const { resources, roots } = await engine();
+  const scoped = Object.create(resources);
+  scoped.roots = () => ({ ...roots, library: null });
+  let held = true, proved = 0;
+  const context = { kind: "geo-project", includeLibrary: false, resources: scoped, current: async () => {}, acceptSource: async () => true,
+    neutral: value => String(value), sourceScope: async () => { proved += 1; return []; } };
+  const { call } = await withGateway(t, { resources, dependencies: { contextFor: async () => context,
+    sourceScope: async (_identity, sessionId) => {
+      if (sessionId) throw new Error("A session is the shared context's to prove");
+      if (held) throw new Error("Knowledge tools require native session context.");
+      return null;
+    } } });
+  assert.equal((await call({ op: "list", root: "sources" })).status, 503, "leaving the session out never broadens a selection");
+  const selected = await call({ op: "list", root: "sources", sessionId: "ses_selected" });
+  assert.equal(selected.status, 200); assert.deepEqual(selected.body.data.entries, []); assert.equal(proved, 1);
+  held = false;
+  assert.equal((await call({ op: "list", root: "sources" })).status, 200);
+});

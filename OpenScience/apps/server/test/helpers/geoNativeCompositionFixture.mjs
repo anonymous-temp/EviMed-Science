@@ -32,7 +32,8 @@ async function fixture(t, geoEnabled = true, configOverrides = {}) {
       manager.assertContextPolicyGeneration = async project => {
         assert.equal(typeof project.workspaceDir,"string","proof uses the canonical full owner project");
         const policy = await manager.contextPolicies.forProject(project);
-        assert.equal(policy.kind, 'geo-project');
+        // As in RuntimeManager: an owned project (a GEO project its owner works in alone) needs no shared launch proof.
+        if (policy.kind !== 'geo-project') return null;
         if (manager.runtimeGeneration(project) !== 'fixture-generation') throw Object.assign(new Error('Old generation'), {status:409});
         const identity={recordType:'geo-runtime-context-launch',version:1,state:'launched',generation:'fixture-generation',digest:'1'.repeat(64),policy:contextPolicyIdentity(policy)};
         const referenceId=`gcr_${createHash('sha256').update(canonicalJson(identity)).digest('hex')}`;

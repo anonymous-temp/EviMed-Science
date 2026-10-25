@@ -86,7 +86,8 @@ test("shared sources, fresh compile targets, exact mirrors, lease publication an
   const user = await app.store.createUser(username, "fixture-password", "Shared KB fixture");
   const project = await app.store.defaultProject(await app.store.userById(user.id));
   const geoStore = new GeoStore({ database: app.store.database }); await geoStore.ready();
-  await geoStore.createProject({ userId: user.id, projectId: project.id, engines: ["deepseek"], coverageDays: 30 });
+  // A shared GEO project: one with a member (a one-person GEO project is an owned project, owner ruling 2026-10-25).
+  await geoStore.addMember({ geoId: (await geoStore.createProject({ userId: user.id, projectId: project.id, engines: ["deepseek"], coverageDays: 30 })).id, userId: "member", role: "editor", invitedBy: user.id });
   const docs = new ProductDocuments(app.store.database);
   const executionDependencies = { client, controller, documents: docs, ensureOwner: () => ensureOpenVikingProject(app.store), readConfigurationDigest: async () => hash(configuration.content) };
   executionService = new OpenVikingCompileExecution(executionDependencies);

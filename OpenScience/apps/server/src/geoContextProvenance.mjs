@@ -104,7 +104,9 @@ export class GeoContextProvenance {
     if(policy?.kind==='owned')return this.ordinaryDocument(policy.ownerId,document);
     return this.contextItems?.authorize(policy,kind,document,new Set())??false;
   }
-  async ordinaryDocument(userId,row) {
+  /** Whether a method is the owner's own: no version of it was learnt in a shared project, by its durable provenance or by
+   * the current policy of a project it names. `policies` caches policy reads within one selection. */
+  async ordinaryDocument(userId,row,policies=null) {
     const versions=[row];let beforeRevision=null;
     for(let page=0;page<this.maxPages;page+=1) {
       const saved=await this.documents.history(userId,'method',row.id,{limit:100,beforeRevision,fields:CONTEXT_ITEM_FIELDS});
@@ -114,9 +116,16 @@ export class GeoContextProvenance {
       if(beforeRevision!==null&&next>=beforeRevision||page===this.maxPages-1)return false;
       beforeRevision=next;
     }
+    const policyOf=id=>{
+      if(!policies)return this.policyFor({userId,id});
+      if(!policies.has(id))policies.set(id,this.policyFor({userId,id}));
+      return policies.get(id);
+    };
     for(const version of versions) {
+      // Distilled under a shared policy: still the shared project's after its last member left (owner ruling 2026-10-25).
+      if(version.payload?.provenance?.contextPolicy?.kind==='geo-project')return false;
       const ids=[version.payload?.source?.projectId,version.payload?.provenance?.sourceProjectId,...(version.payload?.provenance?.sourceProjectIds??[])].filter(Boolean);
-      for(const id of ids)if((await this.policyFor({userId,id})).kind==='geo-project')return false;
+      for(const id of ids)if((await policyOf(id)).kind==='geo-project')return false;
     }
     return true;
   }

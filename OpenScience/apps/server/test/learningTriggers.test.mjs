@@ -470,3 +470,31 @@ test("two corrections of one run are two dispatches, and a lesson with no discri
   assert.equal(distillationDispatchId("run_1", "correction"), distillationDispatchId("run_1", "correction", ""));
   assert.match(first, /^method-distillation-[a-f0-9]{32}$/);
 });
+
+test("a programme run of a shared GEO project is a counted refusal with its reason, never a failed enqueue", async () => {
+  const programme = run({ corrections: 1, automated: true, effectiveRouteReason: "geo:evidence" });
+  const enqueued = [], refused = [], audits = [];
+  const jobs = { enqueue: async (userId, kind, payload) => { enqueued.push({ kind, payload }); return { id: "job" }; } };
+  const agentRuns = { list: async () => [programme], runWorkflowProjection: async () => null };
+  const project = { id: "project_1", userId: "user_1" };
+  const policy = { kind: "geo-project", ownerId: "user_1", controlProjectId: "project_1" };
+  const contextProvenance = {
+    policyFor: async () => policy,
+    resolveSourceRun: async () => programme,
+    // What the shared path does with a run nobody typed into: it cannot be attributed to a person.
+    observeRun: async () => { throw Object.assign(new Error("The shared learning source cannot be verified."), { code: "geo_learning_source_unverified" }); },
+  };
+  const triggers = new LearningTriggers({ jobs, agentRuns, contextProvenance, onRefused: (reason) => refused.push(reason),
+    audit: async (event, detail) => { audits.push([event, detail.code]); } });
+  assert.deepEqual(await triggers.afterRun(project, programme), { queued: [], skipped: "shared_automated" });
+  assert.ok(LEARNING_REFUSAL_REASONS.includes("shared_automated"));
+  assert.deepEqual(refused, ["shared_automated"]);
+  assert.deepEqual(enqueued, []); assert.deepEqual(audits, []);
+  // A routine or correction lesson that names it as a source is refused the same way.
+  refused.length = 0;
+  assert.equal(await triggers.queue(project, run({ corrections: 1 }), { trigger: "routine", idempotencyKey: "k", payload: { sourceRunIds: [programme.id] } }), false);
+  assert.deepEqual(refused, ["shared_automated"]); assert.deepEqual(audits, []);
+  // The same run of a one-person (owned) project is the researcher's managed work, as before.
+  const owned = new LearningTriggers({ jobs, agentRuns, contextProvenance: { ...contextProvenance, policyFor: async () => ({ kind: "owned", ownerId: "user_1", controlProjectId: "project_1" }) } });
+  assert.deepEqual(await owned.afterRun(project, programme), { queued: ["correction"], skipped: null });
+});

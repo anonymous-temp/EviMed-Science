@@ -23,7 +23,8 @@ async function fixture(t) {
   await accounts.createUser('owner', 'fixture-password', 'Owner');
   const owner = await accounts.userById('owner'), project = await accounts.requireProject(owner, 'default');
   const geo = new GeoStore({ database: accounts.database }); await geo.ready();
-  await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+  // A shared GEO project: one with a member (a one-person GEO project is an owned project, owner ruling 2026-10-25).
+  await geo.addMember({ geoId: (await geo.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 })).id, userId: 'member', role: 'editor', invitedBy: owner.id });
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
   const sent = [], commits = [], sessionIds = new Map();
   let mode = 'completed', beforeMcp = async () => {}, ledgerFails = false;

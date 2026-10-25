@@ -16,4 +16,6 @@ export const startGeoConversation = (scope: GeoConversationScope) => productRequ
 export const geoConversationCapability = async (scope: GeoConversationScope) => (await productRequest<{capabilityId:string|null}>(`${base(scope)}/capability`)).capabilityId;
 export const geoConversationChecks = async (scope: GeoConversationScope) => (await productRequest<{checks:ReplyCheck[]}>(`${base(scope)}/reply-checks`)).checks;
 export const geoConversationSources = async (scope: GeoConversationScope) => (await productRequest<{items:Array<{id:string;title:string}>}>(`${base(scope)}/sources`)).items;
-export const geoConversationSourceScope = (scope: GeoConversationScope, sourceIds?: string[]) => productRequest<{sourceScope:string[]|null;originReference?:null}>(`${base(scope)}/source-scope`, sourceIds === undefined ? "GET" : "PUT", sourceIds === undefined ? undefined : {sourceIds});
+export type GeoConversationSourceScopeMode = "project" | "selected";
+/** A selection names its mode as the personal route's does: `selected` with no ids is "no document", never the whole project. */
+export const geoConversationSourceScope = (scope: GeoConversationScope, sourceIds?: string[], sourceScopeMode?: GeoConversationSourceScopeMode) => productRequest<{sourceScope:string[]|null;sourceScopeMode?:GeoConversationSourceScopeMode;originReference?:null}>(`${base(scope)}/source-scope`, sourceIds === undefined ? "GET" : "PUT", sourceIds === undefined ? undefined : {sourceIds, ...(sourceScopeMode === undefined ? {} : {sourceScopeMode})});

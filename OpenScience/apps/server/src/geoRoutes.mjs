@@ -327,7 +327,7 @@ export function createGeoRoutes(dependencies) {
         return reply(await dependencies.projects.conversationRead(user, id, parts[3], action));
       }
       if (method === "PUT" && action === "source-scope") {
-        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action, await bodyOf(req, maxJsonBytes, ["sourceIds"])));
+        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action, await bodyOf(req, maxJsonBytes, ["sourceIds", "sourceScopeMode"])));
       }
       throw new HttpError(404, "not_found", "GEO conversation route not found.");
     }

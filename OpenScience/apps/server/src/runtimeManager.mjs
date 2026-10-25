@@ -3933,7 +3933,9 @@ export class RuntimeManager {
     }
     if (policy?.kind !== 'owned' && (this.contextSharedProjects.has(key) || this.runtimes.get(key)?.contextGeneration
       || await this.geoProjectOf?.(String(project.userId), String(project.id)))) throw new HttpError(409, 'runtime_context_unverified', 'The persistent shared context policy is unavailable.');
-    if (this.contextSharedProjects.has(key)) throw new HttpError(409, 'runtime_context_unverified', 'A shared project cannot return to personal context.');
+    // An owned verdict of the policy resolver is authoritative: a GEO project whose last member left is its owner's again
+    // (owner ruling 2026-10-25). A runtime launched with the shared context is replaced once idle (`ensureContextPolicyGeneration`).
+    this.contextSharedProjects.delete(key);
     return policy ?? {kind:'owned',ownerId:project.userId,controlProjectId:project.id};
   }
 
@@ -4038,9 +4040,13 @@ export class RuntimeManager {
     const key=this.key(project), previous=this.contextRefreshes.get(key) ?? Promise.resolve();
     const task=previous.catch(()=>{}).then(async()=>{
       const policy=await this.contextPolicyFor(project);
-      if(policy.kind!=='geo-project' || !this.runtimes.has(key)) return {adopted:false};
-      const desired=await this.prepareSharedContext(project,policy), runtime=this.runtimes.get(key);
-      if(runtime?.contextLaunchReceipt && runtime.contextGeneration?.digest===desired.digest
+      if(!this.runtimes.has(key)) return {adopted:false};
+      // A runtime launched with a shared context in a project that is its owner's again carries no one else's context: work
+      // in it goes on, and it is replaced by an owned launch at an idle moment.
+      const returned=policy.kind!=='geo-project';
+      if(returned && !this.runtimes.get(key)?.contextGeneration) return {adopted:false};
+      const desired=returned ? null : await this.prepareSharedContext(project,policy), runtime=this.runtimes.get(key);
+      if(desired && runtime?.contextLaunchReceipt && runtime.contextGeneration?.digest===desired.digest
         && runtime.contextLaunchReceipt.generation===this.runtimeGeneration(project)) {
         await verifyContextGeneration(this.config,project,runtime.contextGeneration.reference,policy); return {adopted:false};
       }
@@ -4058,7 +4064,10 @@ export class RuntimeManager {
         }});
         return replaced?{adopted:true}:{adopted:false,pending:true};
       };
-      if(!this.pluginService) throw new HttpError(409,'runtime_context_unverified','The shared context replacement fence is unavailable.');
+      if(!this.pluginService) {
+        if(returned) return {adopted:false};
+        throw new HttpError(409,'runtime_context_unverified','The shared context replacement fence is unavailable.');
+      }
       const operation=()=>this.pluginService.database.transaction(async client=>{
         const locked=await client.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired',[`plugin-project:${project.userId}:${project.id}`]);
         if(!locked.rows[0]?.acquired)return{adopted:false,pending:true};
@@ -4066,7 +4075,9 @@ export class RuntimeManager {
         // Reuse the fence client: selecting methods or recording the launch must work with a one-connection pool.
         return this.pluginService.database.withTransactionClient(client,refresh);
       });
-      return typeof this.pluginService.database.withoutTransactionClient==='function'?this.pluginService.database.withoutTransactionClient(operation):operation();
+      const outcome=await (typeof this.pluginService.database.withoutTransactionClient==='function'?this.pluginService.database.withoutTransactionClient(operation):operation());
+      // Only a shared launch makes work wait for its cutover; the owner's own runtime is replaced at a later idle moment.
+      return returned && outcome?.pending ? {adopted:false} : outcome;
     });
     this.contextRefreshes.set(key,task);
     try{return await task;}finally{if(this.contextRefreshes.get(key)===task)this.contextRefreshes.delete(key);}

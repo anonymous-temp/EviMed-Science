@@ -290,7 +290,7 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  * pulled in by similarity can be read against a real library; and `kept`, above.
  *
  * @param {any} learning `LearningService`
- * @param {{userId: string, contextPolicy?: any, contextItems?: any, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
+ * @param {{userId: string, contextPolicy?: any, contextItems?: any, contextProvenance?: any, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
  *   scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null, keep?: Iterable<string> | null,
  *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null}} scope
  * @returns {Promise<MountedLearnedMethod[] & { mode?: "embedding" | "lexical" | "recent", topScore?: number | null, kept?: MountedLearnedMethod[] }>}
@@ -344,8 +344,17 @@ export async function selectLearnedMethods(learning, scope) {
         library.delete(id); changed=true;
       }
     }
-  } else for (const document of await learning.approvedMethods(scope.userId) ?? []) {
-    if (!library.has(document.id)) library.set(document.id, document);
+  } else {
+    // The owner's own library, without what a shared GEO project learnt: a member's correction is that project's method and
+    // never one of the owner's other conversations (`GeoContextProvenance.ordinaryDocument`; owner ruling 2026-10-25).
+    const provenance = scope.contextProvenance ?? learning.contextProvenance ?? null;
+    /** @type {Map<string, Promise<any>>} */
+    const policies = new Map();
+    for (const document of await learning.approvedMethods(scope.userId) ?? []) {
+      if (library.has(document.id)) continue;
+      if (provenance && !await provenance.ordinaryDocument(scope.userId, document, policies)) continue;
+      library.set(document.id, document);
+    }
   }
 
   /** @typedef {MountedLearnedMethod & { payload: any, approvedAt: number, carried: number, dependencies: {name: string, digest?: string}[], source: any }} Entry */
