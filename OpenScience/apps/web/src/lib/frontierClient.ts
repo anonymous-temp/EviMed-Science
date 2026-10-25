@@ -37,6 +37,9 @@
 import {
   FRONTIER_EVIDENCE_TYPE_LABELS_ZH,
   FRONTIER_EVIDENCE_TYPES as EVIDENCE_TYPE_KEYS,
+  FRONTIER_FOLLOW_KINDS,
+  FRONTIER_FOLLOW_LABEL_MAX,
+  FRONTIER_FOLLOW_QUERY_KINDS,
   FRONTIER_GENRE_LABELS_ZH,
   FRONTIER_GENRES,
   FRONTIER_HIDE_REASONS,
@@ -521,19 +524,33 @@ export interface FrontierSources {
   sources: FrontierSource[];
 }
 
+/** How the words of a typed follow were read (c3-watch): the kind, and the first names of each thing it is about. */
+export interface FrontierFollowReading {
+  kind: (typeof FRONTIER_FOLLOW_QUERY_KINDS)[number];
+  concepts: string[][];
+}
+
 export interface FrontierFollow {
   id: string;
-  /** `tag`: one of the tag tree's tags, keyed by its slug (2026-10-23). */
-  kind: "topic" | "specialty" | "drug" | "source" | "event" | "tag";
+  /**
+   * `tag`: one of the tag tree's tags, keyed by its slug (2026-10-23). `query`: words the reader typed (a drug, a trial, a question;
+   * c3-watch, 2026-10-25), its `key` the words case-folded and `query` how they were read.
+   */
+  kind: "topic" | "specialty" | "drug" | "source" | "event" | "tag" | "query";
   key: string;
   label: string;
   muted: boolean;
   /**
    * How many items arrived for it since the reader last looked, where the server says so (c2-band, 2026-10-25): 关注's list shows it
-   * beside the follow. Absent from a server that does not count, and then no number is shown.
+   * beside the follow. Absent from a server that does not count, and then no number is shown. The server stops counting at 99.
    */
   newItems?: number;
+  /** Only a typed follow: how its words were read. */
+  query?: FrontierFollowReading;
 }
+
+/** The longest a typed follow may be (`@evimed/domain`). */
+export const FOLLOW_LABEL_MAX = FRONTIER_FOLLOW_LABEL_MAX;
 
 /** One row of `GET /api/frontier/tags`: a tag, how many items carried it in the last 30 days, and (for a search) its specialties. */
 export interface FrontierTagCount extends FrontierTagRef {
@@ -1546,9 +1563,18 @@ function parseFollow(value: unknown): FrontierFollow | null {
   const follow = record(value);
   const followId = text(follow?.id) ?? (typeof follow?.id === "number" ? String(follow.id) : null);
   const key = text(follow?.key);
-  const kind = orNull(follow?.kind, ["topic", "specialty", "drug", "source", "event", "tag"] as const);
+  const kind = orNull(follow?.kind, FRONTIER_FOLLOW_KINDS);
   const fresh = typeof follow?.newItems === "number" && Number.isInteger(follow.newItems) && follow.newItems > 0 ? follow.newItems : undefined;
-  return followId && key && kind ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true, ...(fresh ? { newItems: fresh } : {}) } : null;
+  const reading = record(follow?.query);
+  const concepts = (Array.isArray(reading?.concepts) ? reading.concepts : []).flatMap((names): string[][] => {
+    const kept = (Array.isArray(names) ? names : []).filter((name): name is string => typeof name === "string" && name.length > 0).slice(0, 3);
+    return kept.length ? [kept] : [];
+  }).slice(0, 3);
+  const query = kind === "query" && reading && concepts.length
+    ? { kind: orNull(reading.kind, FRONTIER_FOLLOW_QUERY_KINDS) ?? "topic", concepts } satisfies FrontierFollowReading : undefined;
+  return followId && key && kind
+    ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true, ...(fresh ? { newItems: fresh } : {}), ...(query ? { query } : {}) }
+    : null;
 }
 
 export const FRONTIER_FOLLOWS_CHANGED = "evimed:frontier-follows-changed";
@@ -1558,7 +1584,10 @@ export async function listFrontierFollows(): Promise<FrontierFollow[]> {
   return (Array.isArray(raw?.follows) ? raw.follows : []).map(parseFollow).filter((follow): follow is FrontierFollow => follow !== null);
 }
 
-/** Follow — or, with `muted`, see less of — a topic, specialty, drug, source or event. Following again updates, never duplicates. */
+/**
+ * Follow — or, with `muted`, see less of — a topic, specialty, drug, source or event; or, as `query`, words the reader typed (the label
+ * is what they wrote, the server reads it). Following again updates, never duplicates.
+ */
 export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; key: string; label: string; muted?: boolean }): Promise<FrontierFollow> {
   const follow = parseFollow(record(await productRequest<unknown>("/frontier/follows", "POST", {
     kind: input.kind, key: input.key, label: input.label, muted: input.muted === true,
@@ -1566,6 +1595,19 @@ export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; k
   if (!follow) throw new WebApiError("The frontier follow was malformed.", { status: 502 });
   window.dispatchEvent(new Event(FRONTIER_FOLLOWS_CHANGED));
   return follow;
+}
+
+/** A follow was looked at: the counts beside the follows are read again. Not `FRONTIER_FOLLOWS_CHANGED`: no list of items changes with it. */
+export const FRONTIER_FOLLOWS_SEEN = "evimed:frontier-follows-seen";
+
+/** The reader opened a follow's feed: what arrived before now stops counting as new (c3-watch). Never throws: a count that stays is not worth an error. */
+export async function markFrontierFollowSeen(followId: string): Promise<void> {
+  try {
+    await productRequest<unknown>(`/frontier/follows/${id(followId)}/seen`, "POST", {});
+    window.dispatchEvent(new Event(FRONTIER_FOLLOWS_SEEN));
+  } catch {
+    /* the count stays until the next look */
+  }
 }
 
 export async function removeFrontierFollow(followId: string): Promise<void> {

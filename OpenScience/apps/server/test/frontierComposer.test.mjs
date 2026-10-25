@@ -145,3 +145,26 @@ test("D-01: a composer that only offers tick() is still one loop, compose", asyn
   assert.equal(worker.status().loops.compose.runs, 1);
   assert.equal(Object.keys(worker.status().loops).some((loop) => loop.startsWith("compose-")), false);
 });
+
+test("typed follows are swept once a minute, beside the notices, and a sweep that fails fails alone (c3-watch)", async () => {
+  const calls = [];
+  let now = new Date("2026-10-25T00:00:00Z");
+  let failing = false;
+  const follows = { sweep: async () => { calls.push("follows"); if (failing) throw Object.assign(new Error("scan"), { code: "test_follows_failed" }); return { followed: 0 }; }, status: () => ({ counters: {} }) };
+  const notifications = { queueWeekly: async () => ({}), scanSafety: async () => ({}), deliverDue: async () => { calls.push("notices"); return {}; }, status: () => ({}) };
+  const reports = [];
+  const composer = new FrontierComposer({ follows, notifications, now: () => now, report: (loop, code) => reports.push([loop, code]) });
+  assert.equal(FRONTIER_COMPOSER_CADENCES.follows, 60_000);
+  await composer.tick();
+  assert.deepEqual(calls, ["follows", "notices"]);
+  calls.length = 0;
+  now = new Date(now.getTime() + 30_000);
+  await composer.tick();
+  assert.deepEqual(calls.filter((name) => name === "follows"), [], "not due after thirty seconds");
+  now = new Date(now.getTime() + 31_000);
+  failing = true;
+  await assert.rejects(composer.tick(), { code: "test_follows_failed" });
+  assert.ok(calls.includes("notices"), "the deliveries still ran");
+  assert.deepEqual(reports, [["follows", "test_follows_failed"]]);
+  assert.deepEqual(composer.status().follows, { counters: {} });
+});

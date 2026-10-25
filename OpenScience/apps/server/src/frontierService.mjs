@@ -1469,8 +1469,8 @@ export class FrontierService {
   async markFollowSeen(user, followId) {
     if (!/^\d{1,18}$/.test(String(followId ?? ""))) throw failure(404, "frontier_follow_not_found", "No such follow.");
     await this.ready();
-    const row = (await this.database.query(`UPDATE evimed_frontier.user_follows SET seen_at = clock_timestamp() WHERE user_id=$1 AND id=$2
-      RETURNING id, kind, key, label, muted, created_at, query, seen_at`, [user.id, followId])).rows[0];
+    const row = (await this.database.query(`UPDATE evimed_frontier.user_follows SET seen_at = $3::timestamptz WHERE user_id=$1 AND id=$2
+      RETURNING id, kind, key, label, muted, created_at, query, seen_at`, [user.id, followId, this.now().toISOString()])).rows[0];
     if (!row) throw failure(404, "frontier_follow_not_found", "No such follow.");
     this.counters.writes += 1;
     return { follow: this.#follow(row, 0) };
@@ -1608,8 +1608,8 @@ export class FrontierService {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`frontier-follows:${user.id}`]);
       const count = Number((await client.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1", [user.id])).rows[0].n);
       if (count >= MAX_FOLLOWS) throw failure(409, "frontier_follow_limit", `At most ${MAX_FOLLOWS} follows per account.`);
-      const saved = (await client.query(`INSERT INTO evimed_frontier.user_follows AS f (user_id, kind, key, label, muted, query) VALUES ($1,'query',$2,$3,false,$4::jsonb)
-        ON CONFLICT (user_id, kind, key) DO UPDATE SET label = EXCLUDED.label RETURNING ${columns}`, [user.id, key, label, JSON.stringify(parsed.query)])).rows[0];
+      const saved = (await client.query(`INSERT INTO evimed_frontier.user_follows AS f (user_id, kind, key, label, muted, query, created_at) VALUES ($1,'query',$2,$3,false,$4::jsonb,$5::timestamptz)
+        ON CONFLICT (user_id, kind, key) DO UPDATE SET label = EXCLUDED.label RETURNING ${columns}`, [user.id, key, label, JSON.stringify(parsed.query), this.now().toISOString()])).rows[0];
       await this.#bumpState(client, user.id);
       await client.query("UPDATE evimed_frontier.user_profiles SET for_you_at=NULL WHERE user_id=$1", [user.id]);
       return saved;

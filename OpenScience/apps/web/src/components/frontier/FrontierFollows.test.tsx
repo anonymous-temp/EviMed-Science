@@ -13,15 +13,17 @@ const client = vi.hoisted(() => ({ listFrontierFollows: vi.fn(), addFrontierFoll
 vi.mock("@/lib/frontierClient", async (original) => ({ ...await original<typeof import("@/lib/frontierClient")>(), ...client }));
 const followed = { id: "7", kind: "topic", key: "obesity", label: "肥胖研究", muted: false };
 beforeEach(() => { vi.clearAllMocks(); client.listFrontierFollows.mockResolvedValue([followed]); client.addFrontierFollow.mockResolvedValue(followed); client.removeFrontierFollow.mockResolvedValue(undefined); });
-it("selects an owned follow and creates a reader's topic only on explicit submission", async () => {
+it("selects an owned follow and follows what the reader typed only on explicit submission, then opens it", async () => {
   const select = vi.fn(), change = vi.fn();
+  client.addFrontierFollow.mockResolvedValue({ id: "9", kind: "query", key: "心衰研究", label: "心衰研究", muted: false });
   render(<FrontierFollows selected={null} onSelect={select} onChanged={change} />);
   fireEvent.click(await screen.findByRole("button", { name: "肥胖研究" }));
   expect(select).toHaveBeenCalledWith("7");
-  fireEvent.change(screen.getByLabelText("关注内容"), { target: { value: "心衰研究" } });
+  fireEvent.change(screen.getByLabelText("关注一个药物、试验或问题"), { target: { value: "  心衰研究 " } });
   expect(client.addFrontierFollow).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "添加关注" }));
-  await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "topic", key: "心衰研究", label: "心衰研究" }));
+  fireEvent.click(screen.getByRole("button", { name: "关注" }));
+  await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "query", key: "心衰研究", label: "心衰研究" }));
+  await waitFor(() => expect(select).toHaveBeenLastCalledWith("9"));
   expect(change).toHaveBeenCalled();
 });
 it("muting preserves identity and removes the selected filter", async () => {
@@ -58,36 +60,67 @@ it("preserves a newer selection when an earlier mute finishes late", async () =>
   expect(select).not.toHaveBeenCalledWith(null);
 });
 
-it("gives each kind its example, and a specialty its list", async () => {
+it("has one input for what is typed, and a specialty its list", async () => {
   render(<FrontierFollows selected={null} onSelect={vi.fn()} onChanged={vi.fn()} />);
   await screen.findByRole("button", { name: "肥胖研究" });
-  expect(screen.getByLabelText("关注内容")).toHaveAttribute("placeholder", "例如：房颤抗凝");
-  fireEvent.change(screen.getByLabelText("关注类型"), { target: { value: "drug" } });
-  expect(screen.getByLabelText("关注内容")).toHaveAttribute("placeholder", "例如：司美格鲁肽");
-  fireEvent.change(screen.getByLabelText("关注类型"), { target: { value: "specialty" } });
-  expect(screen.queryByLabelText("关注内容")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("关注专科").tagName).toBe("SELECT");
+  expect(screen.getByLabelText("关注一个药物、试验或问题")).toHaveAttribute("placeholder", expect.stringContaining("司美格鲁肽"));
+  expect(screen.getByLabelText("按专科关注").tagName).toBe("SELECT");
+  expect(screen.queryByLabelText("关注类型")).not.toBeInTheDocument();
 });
 
-it("says 「已经关注了」 and makes no request when the follow is already held, whatever its case", async () => {
+it("says 「已经关注了」 and makes no request when the same words are held already, whatever their case or spacing", async () => {
+  client.listFrontierFollows.mockResolvedValue([{ id: "11", kind: "query", key: "glp-1 和胰腺炎", label: "GLP-1 和胰腺炎", muted: false }]);
   render(<FrontierFollows selected={null} onSelect={vi.fn()} onChanged={vi.fn()} />);
-  await screen.findByRole("button", { name: "肥胖研究" });
-  fireEvent.change(screen.getByLabelText("关注内容"), { target: { value: "OBESITY" } });
-  fireEvent.click(screen.getByRole("button", { name: "添加关注" }));
-  expect(await screen.findByText("已经关注了“肥胖研究”")).toBeInTheDocument();
+  await screen.findByRole("button", { name: "GLP-1 和胰腺炎" });
+  fireEvent.change(screen.getByLabelText("关注一个药物、试验或问题"), { target: { value: "glp-1   和胰腺炎" } });
+  fireEvent.click(screen.getByRole("button", { name: "关注" }));
+  expect(await screen.findByText("已经关注了“GLP-1 和胰腺炎”")).toBeInTheDocument();
   expect(client.addFrontierFollow).not.toHaveBeenCalled();
-  // Typing something else takes the message away; a muted follow is turned back on by adding it.
-  fireEvent.change(screen.getByLabelText("关注内容"), { target: { value: "心衰" } });
+  // Typing something else takes the message away.
+  fireEvent.change(screen.getByLabelText("关注一个药物、试验或问题"), { target: { value: "心衰" } });
   expect(screen.queryByText(/已经关注了/)).not.toBeInTheDocument();
 });
 
-it("turns a muted follow back on when it is added again", async () => {
-  client.listFrontierFollows.mockResolvedValue([{ ...followed, muted: true }]);
+it("shows a failed add where the reader is looking and keeps their words", async () => {
+  client.addFrontierFollow.mockRejectedValue(new Error("busy"));
   render(<FrontierFollows selected={null} onSelect={vi.fn()} onChanged={vi.fn()} />);
   await screen.findByRole("button", { name: "肥胖研究" });
-  fireEvent.change(screen.getByLabelText("关注内容"), { target: { value: "obesity" } });
-  fireEvent.click(screen.getByRole("button", { name: "添加关注" }));
-  await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "topic", key: "obesity", label: "obesity" }));
+  fireEvent.change(screen.getByLabelText("关注一个药物、试验或问题"), { target: { value: "心衰" } });
+  fireEvent.click(screen.getByRole("button", { name: "关注" }));
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByLabelText("关注一个药物、试验或问题")).toHaveValue("心衰");
+});
+
+it("turns a muted specialty back on when it is added again, and says so when it is already followed", async () => {
+  client.listFrontierFollows.mockResolvedValue([{ id: "5", kind: "specialty", key: "cardiology", label: "心血管内科", muted: true }]);
+  render(<FrontierFollows selected={null} onSelect={vi.fn()} onChanged={vi.fn()} />);
+  await screen.findByText("心血管内科");
+  fireEvent.change(screen.getByLabelText("按专科关注"), { target: { value: "cardiology" } });
+  fireEvent.click(screen.getByRole("button", { name: "关注专科" }));
+  await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "specialty", key: "cardiology", label: "心血管" }));
+  client.listFrontierFollows.mockResolvedValue([{ id: "5", kind: "specialty", key: "cardiology", label: "心血管内科", muted: false }]);
+  await act(async () => { window.dispatchEvent(new Event("evimed:frontier-follows-changed")); });
+  await screen.findByText("心血管内科");
+  client.addFrontierFollow.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "关注专科" }));
+  expect(await screen.findByText("已经关注了“心血管内科”")).toBeInTheDocument();
+  expect(client.addFrontierFollow).not.toHaveBeenCalled();
+});
+
+it("says how a typed follow was read and how many items are new, and offers no mute for it", async () => {
+  client.listFrontierFollows.mockResolvedValue([
+    { id: "11", kind: "query", key: "glp-1 和胰腺炎", label: "GLP-1 和胰腺炎", muted: false, newItems: 3,
+      query: { kind: "question", concepts: [["GLP-1受体激动剂", "司美格鲁肽"], ["胰腺炎", "pancreatitis"]] } },
+    { id: "12", kind: "query", key: "司美格鲁肽", label: "司美格鲁肽", muted: false, newItems: 99, query: { kind: "drug", concepts: [["司美格鲁肽", "semaglutide"]] } },
+  ]);
+  render(<FrontierFollows selected={null} onSelect={vi.fn()} onChanged={vi.fn()} />);
+  const row = (await screen.findByRole("button", { name: "GLP-1 和胰腺炎" })).closest("tr")!;
+  expect(within(row).getByText("匹配：GLP-1受体激动剂、司美格鲁肽 ＋ 胰腺炎、pancreatitis")).toBeInTheDocument();
+  expect(within(row).getByText("关注词 · 问题")).toBeInTheDocument();
+  expect(within(row).getByText("关注中 · 3 条新动态")).toBeInTheDocument();
+  expect(within(row).queryByRole("button", { name: /屏蔽/ })).not.toBeInTheDocument();
+  expect(within(row).getByRole("button", { name: "移除 GLP-1 和胰腺炎" })).toBeInTheDocument();
+  expect(screen.getByText("关注中 · 99+ 条新动态")).toBeInTheDocument();
 });
 
 it("names the kind of each follow, and says where the followed zones are managed", async () => {

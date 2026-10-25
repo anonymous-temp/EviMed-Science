@@ -14,11 +14,13 @@ import {
   FRONTIER_FOLLOWS_CHANGED,
   FRONTIER_WINDOWS,
   listFrontierItems,
+  markFrontierFollowSeen,
   markFrontierItemRead,
   saveFrontierItemToLibrary,
   starFrontierItem,
   unstarFrontierItem,
   useFrontierFeature,
+  type FrontierFollow,
   type FrontierForYou,
   type FrontierHotWindow,
   type FrontierItem,
@@ -159,6 +161,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   useEffect(() => { setManageFollows(false); }, [view]);
   // The 关注 feed is asked for only once the reader follows something to put in it (one narrowed follow is its own proof).
   const following = useFollowing(ready && view === "following");
+  // Opening one follow's feed is looking at what is new in it: the server forgets the count (c3-watch, 2026-10-25).
+  const openedFollow = ready && choice?.kind === "follow" ? choice.id : null;
+  useEffect(() => { if (openedFollow) void markFrontierFollowSeen(openedFollow); }, [openedFollow]);
   const listingView = view === "selected" || view === "all"
     || (view === "following" && (choice?.kind === "follow" || (choice?.kind === "all" && following.topics.length > 0)));
   const q = (params.get("q") ?? "").trim();
@@ -748,8 +753,17 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const showAllFollows = () => setParams((current) => {
     const updated = new URLSearchParams(current); updated.set("follow", "all"); return updated;
   });
+  /** A follow the reader just typed opens: its feed, with the words they typed. */
+  const openFollow = (follow: FrontierFollow) => setParams((current) => {
+    const updated = new URLSearchParams(current);
+    updated.set("view", "following");
+    updated.set("follow", follow.id);
+    for (const name of ["q", "sort", "day", "week", "window", "item", "scope", "request"]) updated.delete(name);
+    return updated;
+  });
   const followList = (onPick?: () => void, onManage?: () => void) => choice && (
     <FollowList state={following} choice={choice} hrefFor={followHref} onManage={onManage ?? (() => setManageFollows(true))} titled={Boolean(onPick)}
+      onAdded={(follow) => { trackFrontierFilter("follow", "follows"); onPick?.(); openFollow(follow); }}
       onPick={() => { trackFrontierFilter("follow", "follows"); onPick?.(); }} />
   );
   // The onboarding card's answer becomes the first follows; then the view and 与我相关 are read again.

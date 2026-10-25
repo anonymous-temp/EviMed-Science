@@ -49,8 +49,6 @@ export const FRONTIER_FOLLOW_PARSE_PER_HOUR = 20;
 export const FRONTIER_FOLLOW_COUNT_CAP = 99;
 /** A notice names matches published in the last three days. */
 export const FRONTIER_FOLLOW_NOTICE_WINDOW_MS = 3 * DAY;
-/** The follow lines one notice carries; the rest are one 「另有 N 个关注」 line. */
-export const FRONTIER_FOLLOW_NOTICE_LINES = 3;
 /**
  * The starting cosine for the embedding leg. Not measured on the production embedder (the box that built it holds no embedding
  * key); it sits above the 与我相关 floor (`FRONTIER_FOR_YOU_MIN_COSINE`, 0.4) because a watch is read for what is new and a wrong
@@ -99,23 +97,6 @@ export function followQueryIsThin(query) {
   return (Array.isArray(query?.concepts) ? query.concepts : []).every((/** @type {any} */ concept) => !(concept?.keys?.length));
 }
 
-/** The line of a daily notice about one follow. @param {string} label @param {number} count */
-export function followNoticeLine(label, count) {
-  return `你关注的“${label}”有 ${count} 条新动态`;
-}
-
-/**
- * The lines a notice carries for the follows with news: one per follow, the busiest first, at most `FRONTIER_FOLLOW_NOTICE_LINES`, and
- * one line for the rest.
- * @param {Array<{ label: string, count: number }>} news
- */
-export function followNoticeLines(news) {
-  const ordered = [...news].filter((entry) => entry.count > 0).sort((left, right) => right.count - left.count);
-  const lines = ordered.slice(0, FRONTIER_FOLLOW_NOTICE_LINES).map((entry) => followNoticeLine(entry.label, entry.count));
-  if (ordered.length > FRONTIER_FOLLOW_NOTICE_LINES) lines.push(`另有 ${ordered.length - FRONTIER_FOLLOW_NOTICE_LINES} 个关注有新动态`);
-  return lines;
-}
-
 export class FrontierFollowWatch {
   /**
    * @param {{ database: any, editor?: any, embedder?: any, glossary?: { current: () => Promise<any> } | null, budget?: (() => Promise<{ state: string }>) | null,
@@ -131,8 +112,8 @@ export class FrontierFollowWatch {
     this.config = config;
     this.now = now;
     this.dimension = Number(dimension) || Number(config.kbEmbeddingDimension) || Number(embedder?.dimension) || 1024;
-    const cosine = Number(config.frontierFollowMinCosine);
-    this.minCosine = Number.isFinite(cosine) && cosine >= 0.3 && cosine <= 0.95 ? cosine : FRONTIER_FOLLOW_MIN_COSINE_DEFAULT;
+    const percent = Number(config.frontierFollowMinCosinePercent);
+    this.minCosine = Number.isFinite(percent) && percent >= 30 && percent <= 95 ? percent / 100 : FRONTIER_FOLLOW_MIN_COSINE_DEFAULT;
     /** Parses by the model an account made lately. @type {Map<string, number[]>} */
     this.parses = new Map();
     this.counters = { parsed: 0, parsedByModel: 0, parseFallbacks: 0, parseRateLimited: 0, scans: 0, matched: 0, vectorMatched: 0, failures: 0,

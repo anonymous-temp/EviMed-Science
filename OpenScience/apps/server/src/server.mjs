@@ -304,6 +304,7 @@ import { KnowledgePluginClient } from "./knowledgePluginClient.mjs";
 import { FrontierIngest } from "./frontierIngest.mjs";
 import { FrontierMonthly } from "./frontierMonthly.mjs";
 import { FrontierEditor } from "./frontierEditor.mjs";
+import { FrontierFollowWatch } from "./frontierFollowMatches.mjs";
 import { FrontierPipeline } from "./frontierPipeline.mjs";
 import { FrontierTagStore } from "./frontierTags.mjs";
 import { FrontierTagUpkeep } from "./frontierTagUpkeep.mjs";
@@ -2252,9 +2253,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The second wave (build spec D): events and the hot list, the daily and
     // its push, 与你相关, and the two reader actions — every model call the
     // editor's, under the pipeline's budget; the worker's compose hook ticks them.
+    // Typed follows (c3-watch 2026-10-25): their words read by the editor under the feed's budget, matched to published items by the
+    // shared glossary's keys and the search vector, counted new, and named in the daily notice.
+    const followWatch = new FrontierFollowWatch({ database: productDatabase, editor, embedder, glossary: entityVocabulary.glossaryStore, budget, config,
+      dimension: config.kbEmbeddingDimension });
     const events = new FrontierEvents({ database: productDatabase, editor, embedder, config, budget });
     const daily = new FrontierDaily({ database: productDatabase, jobs: productJobs, notifications: notificationService, editor, events, config,
-      owner: () => editor.owner, budget, workerId: randomId("frontier-daily-") });
+      owner: () => editor.owner, budget, watch: followWatch, workerId: randomId("frontier-daily-") });
     const weekly = new FrontierWeekly({ database: productDatabase, jobs: productJobs, owner: () => editor.owner, config,
       workerId: randomId("frontier-weekly-") });
     // The monthly (2026-10-22): compiled from the month's dailies; its writer is the editor, its sentences held to the entries.
@@ -2290,8 +2295,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // budget, the shared vocabulary's keys; their searches ride the lead triggers below, their reading the service.
     const topics = new FrontierTopics({ database: productDatabase, plugin: client, editor, entityVocabulary, budget, config });
     const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder, policies:evolutionModulePolicies, topics,
-      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions, tags: tagStore, tagUpkeep, interactions });
-    const composer = new FrontierComposer({ events, daily, weekly, monthly, profiles, notifications: frontierNotifications,
+      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions, tags: tagStore, tagUpkeep, interactions, watch: followWatch });
+    const composer = new FrontierComposer({ events, daily, weekly, monthly, profiles, notifications: frontierNotifications, follows: followWatch,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     // Official zones belong to the platform publisher; a zone and its cards are tagged with the shared entity keys.
