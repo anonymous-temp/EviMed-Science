@@ -67,3 +67,10 @@ it("a switch never re-sends a disabled id the page has no row for", () => {
   expect(nextDisabled(policy, "office:xlsx", false)).toEqual(["office:docx", "office:xlsx"]);
   expect(nextDisabled(policy, "office:docx", true)).toEqual([]);
 });
+
+it("an idle project's activation says when the saved choice takes effect, in plain words", () => {
+  expect(skillActivationText(false, { phase: "ready", savedRevision: 2, effectiveRevision: 2, error: null, live: false })).toBe("已关闭");
+  expect(skillActivationText(true, { phase: "ready", savedRevision: 0, effectiveRevision: null, error: null, live: false })).toBe("已启用");
+  expect(skillActivationText(true, { phase: "pending", savedRevision: 3, effectiveRevision: null, error: null, live: false })).toBe("下次对话生效");
+  expect(skillActivationText(false, { phase: "deferred", savedRevision: 3, effectiveRevision: null, error: "runtime_composition_unavailable", live: true })).toBe("暂未生效，稍后会自动再试");
+});

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { ChevronDown, Folder, Plus, Upload } from "lucide-react";
 import { searchMatches } from "@evimed/domain";
@@ -29,6 +29,7 @@ import { PlatformSkillDrawer } from "./PlatformSkillDrawer";
 import { SkillEditor } from "./SkillEditor";
 import { PendingSkillTransfers, SkillImportForm } from "./SkillImport";
 import { useCitationPlugin } from "./useCitationPlugin";
+import { useActivationPoll } from "./useActivationPoll";
 import { useLoad } from "./useLoad";
 
 type View = "discover" | "installed";
@@ -212,15 +213,16 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     }
     if (alive.current) openSkill(skill.id);
   });
-  // Poll only a pending activation; ready catalogues are not periodically reloaded.
+  // Poll only an apply under way on a running runtime, with growing waits and a stop; a project with nothing running reads
+  // 「下次对话生效」 and is not polled. Ready catalogues are never periodically reloaded.
   const pending = currentPolicy?.activation.phase === "waiting" || currentPersonal?.activation?.phase === "waiting" || currentBuiltin?.activation.phase === "waiting"
-    || currentPlugins?.selections.some(item => item.phase === "waiting" || item.phase === "applying");
+    || !!currentPlugins?.selections.some(item => item.phase === "waiting" || item.phase === "applying");
   const refreshPolicy = policy.reload, refreshPersonalSelection = selection.reload, refreshPlugins = projectPlugins.reload, refreshBuiltin = builtinPlugins.reload;
-  useEffect(() => {
-    if (!pending) return;
-    const timer = setTimeout(() => { refreshPolicy(true); refreshPersonalSelection(true); refreshPlugins(true); refreshBuiltin(true); }, 3000);
-    return () => clearTimeout(timer);
-  }, [pending, currentPolicy, currentPersonal, currentPlugins, currentBuiltin, refreshPolicy, refreshPersonalSelection, refreshPlugins, refreshBuiltin]);
+  const refreshPending = useCallback(() => { refreshPolicy(true); refreshPersonalSelection(true); refreshPlugins(true); refreshBuiltin(true); },
+    [refreshPolicy, refreshPersonalSelection, refreshPlugins, refreshBuiltin]);
+  const observedActivation = useMemo(() => [currentPolicy, currentPersonal, currentPlugins, currentBuiltin], [currentPolicy, currentPersonal, currentPlugins, currentBuiltin]);
+  useActivationPoll(pending, refreshPending, observedActivation,
+    `${currentPolicy?.revision ?? 0}:${currentPersonal?.revision ?? 0}:${currentPlugins?.revision ?? 0}:${currentBuiltin?.revision ?? 0}`);
   const loading = platform.state.status === "loading" && catalogue.state.status === "loading" && installed.state.status === "loading";
   const failures = [
     { load: platform, label: "重试技能目录" }, { load: policy, label: "重试项目技能设置" },

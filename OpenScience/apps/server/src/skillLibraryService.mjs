@@ -51,6 +51,8 @@ const contentDigests = value => skillContentDigests({
 /** The one-line label of a catalogue item's package: state, words, and where it came from. @param {any} view */
 const catalogueLabel = view => view && ({ state: view.state, label: view.label, text: view.text, reason: view.reason, notes: view.notes,
   version: view.package?.version ?? null, sourceText: view.package?.sourceText ?? null, licenceText: view.package?.licenceText ?? null });
+/** What a generation state records when the saved choices could not be prepared at all, and a later start tries again. */
+const UNPREPARED_ERRORS = new Set(["runtime_image_unavailable", "runtime_composition_unavailable"]);
 /** Where a repository preview recorded what it fetched, keyed by the upload it made: an account document, not a path. @param {string} resourceId */
 const sourceDocumentId = resourceId => `skill-source:${sha256(resourceId)}`;
 
@@ -569,21 +571,41 @@ export class SkillLibraryService {
       ?? { id: `skills:project:${project.id}`, revision: 0, payload: { skills: [] } };
     return { ...selection, activation: await this.activation(user, project, selection) };
   }
-  /** Saved choices and worker readback are distinct facts. @param {any} user @param {any} project @param {any} selection */
+  /**
+   * Saved choices and worker readback are distinct facts, and so are the two readbacks: proven on the live runtime, and
+   * applied in the last proven generation. Runtimes are reaped when idle, so most projects rest with no runtime; the
+   * generation the worker last proved (`effective`, persisted) is what the next start mounts again
+   * (`personalGenerationForStart`), and a stopped runtime does not un-apply it.
+   *
+   * - `effective` — the live runtime was proven to mount the saved choices.
+   * - `ready` — no runtime runs; the last proven generation carries the saved choices (or nothing was ever chosen).
+   * - `pending` — no runtime runs; the saved choices are applied when the next conversation starts it.
+   * - `waiting` — a runtime runs and the saved choices are applied once its current work ends.
+   * - `deferred` — the saved choices could not be prepared (no runtime image identity, a composition that could not be
+   *   published or verified); the project runs on the ordinary baseline and a later start tries again.
+   * - `failed` / `rolled-back` — the apply was tried and its proof failed.
+   * @param {any} user @param {any} project @param {any} selection
+   */
   async activation(user, project, selection) {
     const observation = this.projectActivation ? await this.projectActivation(user, project) : null;
     const state = observation?.state;
     const historical = state?.payload.effective;
-    const effective = observation?.runtimeGeneration && observation.runtimeGeneration === state?.payload.runtimeGeneration
+    const live = typeof observation?.runtimeGeneration === 'string' && observation.runtimeGeneration.length > 0;
+    const provenLive = live && observation.runtimeGeneration === state?.payload.runtimeGeneration
       && observation.captured?.reference?.generationHash === historical?.reference?.generationHash ? historical : null;
+    const provenLast = !live && historical && ['effective', 'rolled-back'].includes(state?.payload.phase) ? historical : null;
+    const effective = provenLive ?? provenLast;
     const effectiveRevision = effective?.selectionRevision ?? null;
-    const same = effectiveRevision === selection.revision;
-    const phase = same && state?.payload.phase === 'effective' ? 'effective'
-      : state?.payload.desired?.selectionRevision === selection.revision && ['failed', 'rolled-back'].includes(state.payload.phase) ? state.payload.phase : selection.revision ? 'waiting' : 'saved';
-    return { phase, savedRevision: selection.revision, effectiveRevision, error: state?.payload.error ?? null,
+    const desiredHere = state?.payload.desired?.selectionRevision === selection.revision;
+    const phase = effectiveRevision === selection.revision && state?.payload.phase === 'effective' ? (live ? 'effective' : 'ready')
+      : desiredHere && ['failed', 'rolled-back'].includes(state.payload.phase) ? state.payload.phase
+      : desiredHere && UNPREPARED_ERRORS.has(state.payload.error) ? 'deferred'
+      : !state && !selection.revision ? 'ready'
+      : live ? 'waiting' : 'pending';
+    return { phase, live, savedRevision: selection.revision, effectiveRevision, error: state?.payload.error ?? null,
       lastEffectiveRevision: historical?.selectionRevision ?? null,
       effectiveDisabled: effective ? effective.platformSkills?.disabled ?? [] : null,
-      effectiveBuiltins: effective ? observation.builtins ?? Object.fromEntries(['annotation', 'mermaid'].map(id => [id, !(effective.platformSkills?.disabledPlugins ?? []).includes(id)])) : null };
+      effectiveBuiltins: effective ? (provenLive ? observation.builtins : null) ?? Object.fromEntries(['annotation', 'mermaid'].map(id => [id, this.builtinAvailability[id] !== false && !(effective.platformSkills?.disabledPlugins ?? []).includes(id)])) : null };
   }
   /** The ids of the platform skills this account is offered now, or null when the list cannot be read. @param {any} user */
   async platformSkillIds(user) {

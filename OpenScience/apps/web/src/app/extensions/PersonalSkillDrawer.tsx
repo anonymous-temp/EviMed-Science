@@ -24,6 +24,7 @@ import { MissingRecord, orMissing, RecordMissing } from "./MissingRecord";
 import { DrawerSection } from "./PlatformSkillDrawer";
 import { SkillEditor } from "./SkillEditor";
 import { skillActivationText } from "./catalogueModel";
+import { useActivationPoll } from "./useActivationPoll";
 
 /** The browser downloads a file the way a link would, from a menu item that cannot be one. */
 function download(url: string) {
@@ -79,11 +80,8 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
   const defaultSelection = defaults?.payload.skills.find(item => item.skillId === skillId);
   const stale = skill && currentSelection && currentSelection.revision !== skill.revision;
   const staleDefault = skill && defaultSelection && defaultSelection.revision !== skill.revision;
-  useEffect(() => {
-    if (selection?.activation?.phase !== "waiting") return;
-    const timer = setTimeout(() => void load(), 3000);
-    return () => clearTimeout(timer);
-  }, [selection, load]);
+  const reloadQuietly = useCallback(() => { void load(); }, [load]);
+  useActivationPoll(selection?.activation?.phase === "waiting", reloadQuietly, selection, String(selection?.revision ?? 0));
   const menu = skill && !editing && (
     <Menu label="更多操作" items={[
       { label: "编辑", icon: Pencil, onSelect: () => { setView("content"); setEditing(true); } },

@@ -29,7 +29,9 @@ test('optional platform choices persist in the existing project selection, retai
   assert.equal(saved.revision, 2)
   assert.equal(saved.items.find(item => item.id === 'office:docx').enabled, false)
   assert.equal(saved.items.find(item => item.id === 'office:docx').effective, null)
-  assert.equal(saved.activation.phase, 'waiting')
+  // No runtime runs and nothing was proven: the choice takes effect when the next conversation starts one.
+  assert.equal(saved.activation.phase, 'pending')
+  assert.equal(saved.activation.live, false)
   assert.deepEqual((await service.projectSelections(user, project)).payload.skills, [{ skillId: 'existing' }])
   const fresh = new SkillLibraryService(null, { documents, projectAccess: service.projectAccess, platformCatalogue: service.platformCatalogue })
   assert.deepEqual((await fresh.projectPlatform(user, project)).payload.disabled, ['office:docx'])
@@ -78,19 +80,39 @@ test('platform provenance identifies a verbatim publisher, derived upstream and 
   assert.equal(byId('curated:matplotlib').provenance.kind, 'upstream-adapted')
 })
 
-test('persisted effect is historical when the current runtime is missing or has a different captured generation', async () => {
+test('with no runtime running the last proven generation is in effect; a live runtime that differs is waiting', async () => {
   const { service } = fixture()
   await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['office:docx'] })
   const effective = { reference: { generationHash: 'a'.repeat(64) }, selectionRevision: 1, platformSkills: { disabled: ['office:docx'] } }
   const state = { payload: { phase: 'effective', runtimeGeneration: 'old-runtime', desired: effective, effective } }
+  // The runtime was reaped: the generation the worker proved is what the next start mounts again, so it reads as in effect.
   service.projectActivation = async () => ({ state, runtimeGeneration: null, captured: null })
-  assert.equal((await service.projectPlatform(user, project)).items.find(item => item.id === 'office:docx').effective, null)
+  const idle = await service.projectPlatform(user, project)
+  assert.equal(idle.activation.phase, 'ready')
+  assert.equal(idle.activation.live, false)
+  assert.equal(idle.activation.effectiveRevision, 1)
+  assert.equal(idle.items.find(item => item.id === 'office:docx').effective, false)
   service.projectActivation = async () => ({ state, runtimeGeneration: 'new-runtime', captured: { reference: null, platformSkills: { disabled: [] } } })
   const fallback = await service.projectPlatform(user, project)
   assert.equal(fallback.activation.phase, 'waiting')
+  assert.equal(fallback.activation.live, true)
   assert.equal(fallback.activation.effectiveRevision, null)
+  assert.equal(fallback.items.find(item => item.id === 'office:docx').effective, null)
   service.projectActivation = async () => ({ state, runtimeGeneration: 'old-runtime', captured: effective })
-  assert.equal((await service.projectPlatform(user, project)).items.find(item => item.id === 'office:docx').effective, false)
+  const live = await service.projectPlatform(user, project)
+  assert.equal(live.activation.phase, 'effective')
+  assert.equal(live.items.find(item => item.id === 'office:docx').effective, false)
+  // A saved choice the last proven generation does not carry, with nothing running: applied at the next start.
+  await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: [] })
+  service.projectActivation = async () => ({ state: { payload: { ...state.payload, phase: 'waiting', desired: { selectionRevision: 2 } } }, runtimeGeneration: null, captured: null })
+  assert.equal((await service.projectPlatform(user, project)).activation.phase, 'pending')
+  // A choice that could not be prepared: deferred, not waiting for a task that is not running.
+  service.projectActivation = async () => ({ state: { payload: { ...state.payload, phase: 'waiting', error: 'runtime_composition_unavailable', desired: { reference: null, selectionRevision: 2 } } }, runtimeGeneration: 'baseline-runtime', captured: { reference: null } })
+  assert.equal((await service.projectPlatform(user, project)).activation.phase, 'deferred')
+  // A project that never chose anything and never started is the platform's own composition.
+  const { service: fresh } = fixture()
+  fresh.projectActivation = async () => ({ state: null, runtimeGeneration: null, captured: null })
+  assert.equal((await fresh.projectPlatform(user, { id: 'never', userId: user.id })).activation.phase, 'ready')
 })
 
 test('optional builtin controls share project revision, preserve skills, and cannot enable a deployment-disabled integration', async () => {

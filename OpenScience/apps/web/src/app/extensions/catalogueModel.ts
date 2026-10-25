@@ -21,10 +21,18 @@ export function extensionAvailability(installation: ExtensionInstallation, selec
 export function skillActivationText(enabled: boolean, activation?: SkillActivation): string {
   if (!activation) return "生效状态待确认";
   if (activation.phase === "saved") return "生效状态待确认";
+  if (activation.phase === "pending") return "下次对话生效";
   if (activation.phase === "waiting") return "等待当前任务结束后生效";
+  if (activation.phase === "deferred") return "暂未生效，稍后会自动再试";
   if (activation.phase === "failed" || activation.phase === "rolled-back") return "更改未生效，请重试";
   return enabled ? "已启用" : "已关闭";
 }
+
+/**
+ * How long the page waits before each re-read of a pending activation, then it stops: an apply the running runtime has
+ * not reached in about four minutes is read again on the reader's next action, not every three seconds for good.
+ */
+export const ACTIVATION_POLL_DELAYS_MS: readonly number[] = [3000, 6000, 12000, 24000, 48000, 60000, 60000];
 
 /**
  * The disabled list a switch sends: what the project holds, without the one being switched and without any id the page was

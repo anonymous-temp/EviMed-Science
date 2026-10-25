@@ -10,6 +10,7 @@ import { copyPlatformSkill, readPlatformSkill, projectPlatformSkills, saveProjec
 import { productErrorMessage } from "@/lib/productClient";
 import { nextDisabled, skillActivationText, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { RepositoryLink } from "./CatalogueView";
+import { useActivationPoll } from "./useActivationPoll";
 import { useLoad } from "./useLoad";
 
 export function DrawerSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -35,11 +36,8 @@ export function PlatformSkillDrawer({ skill, projectId, projectName, onClose, on
   const [copying, setCopying] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState<string | null>(null);
   const refreshPolicy = policy.reload;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => {
-    if (current?.activation.phase !== "waiting") return;
-    const timer = setTimeout(() => refreshPolicy(true), 3000);
-    return () => clearTimeout(timer);
-  }, [current, refreshPolicy]);
+  const refreshQuietly = useCallback(() => refreshPolicy(true), [refreshPolicy]);
+  useActivationPoll(current?.activation.phase === "waiting", refreshQuietly, current, String(current?.revision ?? 0));
   const save = async (checked: boolean) => {
     if (!current || running.current) return;
     running.current = true; setSaving(true); setError(null);

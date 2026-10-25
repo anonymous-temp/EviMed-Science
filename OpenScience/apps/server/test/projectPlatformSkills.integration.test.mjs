@@ -65,7 +65,10 @@ test('PostgreSQL optional policy survives restart, waits for current work, publi
   assert.equal(effective.activation.phase, 'effective')
   assert.equal(effective.items.find(item => item.id === 'office:docx').effective, false)
   captured = null
-  assert.equal((await skills.projectPlatform(user, project)).items.find(item => item.id === 'office:docx').effective, null)
+  // The runtime was reaped: the generation the worker proved stays what the next start mounts, and reads as in effect.
+  const idle = await skills.projectPlatform(user, project)
+  assert.equal(idle.activation.phase, 'ready')
+  assert.equal(idle.items.find(item => item.id === 'office:docx').effective, false)
   captured = candidate; epoch = 'cold-runtime'
   assert.equal((await skills.projectPlatform(user, project)).activation.phase, 'waiting')
   const proofJob = await service.requestRuntimeProof(project, captured, epoch)

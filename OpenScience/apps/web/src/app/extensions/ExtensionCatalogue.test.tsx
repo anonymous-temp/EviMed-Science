@@ -210,3 +210,31 @@ it("closing a changed plugin drawer leaves the list current and its next switch 
   await waitFor(() => expect(plugins.saveProjectExtensions).toHaveBeenCalledTimes(2));
   expect(plugins.saveProjectExtensions.mock.calls[1][1]).toBe(6);
 });
+
+it("a project with no runtime running says when its saved choice takes effect and is not polled", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const idle = { ...project, payload: { disabled: [skill.id] }, items: [{ ...skill, enabled: false, effective: null }], activation: { phase: "pending", savedRevision: 4, effectiveRevision: null, error: null, live: false } };
+    skills.projectPlatformSkills.mockResolvedValue(idle);
+    open("/app/extensions/installed");
+    expect(await screen.findByText("下次对话生效")).toBeInTheDocument();
+    expect(screen.queryByText("等待当前任务结束后生效")).not.toBeInTheDocument();
+    await act(async () => { vi.advanceTimersByTime(10 * 60 * 1000); });
+    expect(skills.projectPlatformSkills).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});
+
+it("an apply under way on a running runtime is re-read with growing waits, then no more", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    skills.projectPlatformSkills.mockResolvedValue({ ...project, activation: { ...activation, phase: "waiting", savedRevision: 4, effectiveRevision: 3, live: true } });
+    open("/app/extensions/installed");
+    expect(await screen.findByText("等待当前任务结束后生效")).toBeInTheDocument();
+    for (let round = 0; round < 12; round++) await act(async () => { vi.advanceTimersByTime(61000); });
+    const calls = skills.projectPlatformSkills.mock.calls.length;
+    expect(calls).toBeGreaterThan(1);
+    expect(calls).toBeLessThanOrEqual(8);
+    await act(async () => { vi.advanceTimersByTime(30 * 60 * 1000); });
+    expect(skills.projectPlatformSkills).toHaveBeenCalledTimes(calls);
+  } finally { vi.useRealTimers(); }
+});
