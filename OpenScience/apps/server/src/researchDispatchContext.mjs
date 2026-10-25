@@ -1,8 +1,5 @@
 /**
- * The context a dispatch hands a conversation: what `prepareResearchContext` writes, with the conversation's own sources read first.
- *
- * It was `ownedResearchContext.mjs`, which also selected the account's capability handbooks and the platform's handbook on probation for a sampled
- * run. Nothing files a handbook any more (the one lesson that did, a repaired delivery, is deleted, 2026-10-25), so what is left is the part every
+ * The context a dispatch hands a conversation: what `prepareResearchContext` writes, with the conversation's own sources read first. What every
  * dispatch needs: the capability the run was routed to, the sources the conversation selected (`sourceConversationContext`) and the context.
  */
 import { sourceConversationContext } from "./sourceConversationContext.mjs";

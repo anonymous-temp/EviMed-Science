@@ -32,7 +32,7 @@ function database() {
           { user_id: "alice", trigger: "correction", status: "succeeded", n: 3, operation: "create" },
           { user_id: "alice", trigger: "correction", status: "succeeded", n: 1, operation: "no_change" },
           { user_id: "alice", trigger: "routine", status: "queued", n: 1, operation: "" },
-          { user_id: "carol", trigger: "delivered", status: "failed", n: 2, operation: "" },
+          { user_id: "carol", trigger: "edit_diff", status: "failed", n: 2, operation: "" },
           { user_id: "carol", trigger: "something-new", status: "succeeded", n: 1, operation: "amend" },
         ] };
       }

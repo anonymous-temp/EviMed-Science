@@ -1,12 +1,10 @@
 /**
  * The route of an input typed in the kernel's own window, frozen when the prompt is prepared and read back when the committed input becomes a run.
  *
- * Hidden knowledge: this was `nativeHandbookContext.mjs`, which froze two things in one envelope — the route the input would take (the capability
- * it goes to, its version and reason) and the account's capability handbooks selected for that capability, to be injected into the step that
- * claims the input. The handbooks are gone (nothing files one any more, 2026-10-25); the route is not. Two readers need it and neither can compute
- * it late: the capsule plugin's `evimedNativeRoute` service tells the run policy which capability the current input belongs to, and the adoption of
- * the turn files the run under that same capability (`routeFor`). A route computed again at adoption could read another capability than the one the
- * plan was made under, because routing reads the conversation as it stands and the conversation has moved on.
+ * Hidden knowledge: the route is the capability the input goes to, its version and reason. Two readers need it and neither can compute it late: the
+ * capsule plugin's `evimedNativeRoute` service tells the run policy which capability the current input belongs to, and the adoption of the turn files
+ * the run under that same capability (`routeFor`). A route computed again at adoption could read another capability than the one the plan was made
+ * under, because routing reads the conversation as it stands and the conversation has moved on.
  *
  * So the envelope is the route and the identity of the input it belongs to — the session, the request, the digest of the text and of the whole
  * thing — and nothing else. It lives outside the runtime workspace, in the project's own meta directory, expires after a day, is bounded in number,

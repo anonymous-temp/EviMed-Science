@@ -185,7 +185,7 @@ test("what runs say counts across accounts: a body that is corrected again and a
 
 test("a pack an account deleted is not made again, and a taken-down copy stays down", options, async () => {
   const review = await capsules.get(person, "official-copy:review");
-  await capsules.remove(person, review.id, review.revision);
+  await capsules.documents.remove(person, "capsule", review.id, review.revision);
   official.settled.clear();
   const shelf = await capsules.received(person);
   assert.deepEqual(shelf.map((pack) => pack.official?.packId), ["daily"]);

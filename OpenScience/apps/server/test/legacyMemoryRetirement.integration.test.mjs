@@ -89,6 +89,7 @@ test("empty tables and no legacy account: the tables and the engine columns are 
   const first = await retireLegacyMemory({ database, withdrawals, report: (line) => lines.push(line) });
   const accounts = await everyone(database);
   assert.deepEqual([first.tables, first.jobs, first.withdrawn, first.accounts, first.failed], ["dropped", 2, "queued", accounts.length, undefined]);
+  assert.equal(first.ledger, "absent", "a database that never had the retired usememos erasure ledger finds nothing to drop");
   assert.deepEqual(await tablesLeft(database), []);
   assert.deepEqual(await columnsLeft(database), []);
   assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE kind='memory-record-index'")).rows[0].n, 0, "nothing claims them any more");
@@ -131,6 +132,33 @@ test("a table that still holds a record is kept with its columns, one line names
   const again = await retireLegacyMemory({ database, withdrawals, report: () => {} });
   assert.deepEqual([again.tables, again.jobs, again.withdrawn], ["kept_records", 0, "done_before"]);
   assert.equal((await owedTo(database)).length, everyAccount * 3);
+});
+
+test("the retired usememos erasure ledger is dropped whatever became of the legacy tables, and no migration makes it again", options, async (t) => {
+  resetMemoryMetrics();
+  const { database, withdrawals } = await oldDeployment(t, { accounts: 1, seed: async (db, [owner]) => {
+    // The legacy tables are kept (a record is held), so the ledger's drop does not ride on theirs.
+    await db.query("INSERT INTO evimed_memory.records (id, user_id, value) VALUES ('rec_held', $1, '一条还在的记忆')", [owner]);
+    await db.query(`CREATE TABLE evimed_memory.retired_erasures (namespace text PRIMARY KEY, tag text NOT NULL, erased_at timestamptz(3) NOT NULL DEFAULT now())`);
+    await db.query("INSERT INTO evimed_memory.retired_erasures (namespace, tag) VALUES ('evimed-science-' || repeat('a', 24), repeat('b', 24))");
+  } });
+  const ledger = async () => (await database.query("SELECT to_regclass('evimed_memory.retired_erasures') AS found")).rows[0].found;
+  assert.notEqual(await ledger(), null, "the fixture is a database that still holds the ledger");
+  const lines = [];
+  const first = await retireLegacyMemory({ database, withdrawals, report: (line) => lines.push(line) });
+  assert.deepEqual([first.tables, first.ledger, first.failed], ["kept_records", "dropped", undefined]);
+  assert.equal(await ledger(), null);
+  assert.match(lines.at(-1), /; the retired usememos erasure ledger dropped$/);
+  assert.equal(counted("erasure_ledger_dropped"), 1);
+
+  // The next start finds nothing, and the memory migration the retirement runs first does not make it again.
+  await migrateMemorySettings(database);
+  const quiet = [];
+  const second = await retireLegacyMemory({ database, withdrawals, report: (line) => quiet.push(line) });
+  assert.equal(second.ledger, "absent");
+  assert.equal(await ledger(), null);
+  assert.equal(counted("erasure_ledger_dropped"), 1);
+  assert.deepEqual(quiet.filter((line) => /erasure ledger/.test(line)), []);
 });
 
 test("a database that kept its records hands them over in the person's own export, and one that dropped them hands over only the switches", options, async (t) => {

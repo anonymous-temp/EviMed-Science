@@ -44,15 +44,6 @@ CREATE TABLE IF NOT EXISTS evimed_memory.settings (
   paused_projects text[] NOT NULL DEFAULT '{}' CHECK (cardinality(paused_projects) <= ${MEMORY_PAUSED_PROJECT_LIMIT}),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
--- The accounts erased since the retired usememos store was left behind (2026-10-10, review M-11), by the two digests that
--- store knew them by. No foreign key to the account, on purpose: this outlives it. It is what the retirement's archive (an
--- encrypted dump, which cannot have a row cut out of it in place) is re-sealed against by \`scripts/ops/retire-usememos-tables.py
--- --forget-erased\`. A digest of an account id names no one to a reader who does not already hold the id.
-CREATE TABLE IF NOT EXISTS evimed_memory.retired_erasures (
-  namespace text PRIMARY KEY CHECK (namespace ~ '^evimed-science-[a-f0-9]{24}$'),
-  tag text NOT NULL CHECK (tag ~ '^[a-f0-9]{24}$'),
-  erased_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
-);
 -- The instant of the account's last 「重置记忆」 (2026-10-10, review M-11). A reset
 -- deletes what the account holds; this is what keeps the platform from learning
 -- it again out of the conversations that were already over when the researcher

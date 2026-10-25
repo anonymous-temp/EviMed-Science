@@ -141,7 +141,7 @@ export function createGuestInfluence({ database, documents = null, minAccounts =
     },
 
     /**
-     * Leave the marker `evolutionLearningCoupling` reads: this run used a pack no other account has vouched for. Idempotent: a
+     * Leave the marker the learning triggers and `guestMarkedRuns` read: this run used a pack no other account has vouched for. Idempotent: a
      * second marker for the run is the first.
      * @param {{ id: string, userId: string }} project @param {{ id: string }} run
      * @param {{ guest: any[], uncorroborated: string[] }} assessment

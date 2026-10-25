@@ -4,8 +4,7 @@
  * Hidden knowledge: `evals/tool-graph/` holds a capability graph per capability and every edge in them was `via: "schema"` — a
  * type an upstream tool *could* produce filling a parameter a downstream tool requires — until this producer existed; `executed`
  * is the only source a task may be built on, and nothing wrote one. The receipts below are written for every finished run, and
- * merged into the corpus by hand (`scripts/dev/collect-executed-edges.mjs`); the corpus the evaluation harness was to build tasks
- * from (`generate-briefs.mjs`, deleted 2026-10-23, never produced a brief) is gone, and the graphs' own consumer is the 循证进化
+ * merged into the corpus by hand (`scripts/dev/collect-executed-edges.mjs`); the graphs' own consumer is the 循证进化
  * opportunity de-duplication. The second half of the file, the tool traces, is read by the learning loop.
  *
  * This reads the artefact we already keep: the run transcript. The claim the edge receipts make is deliberately the narrow,
@@ -262,11 +261,9 @@ export async function persistExecutedToolEdges({ project, run, sessions }) {
 /**
  * The call sequence a finished run actually performed: per session, the calls that completed, in the order they completed.
  *
- * Hidden knowledge: this was the "golden trace" of the paired-evaluation corpus — each step with its arguments, a digest of its
- * result and the keys of a structured one, "so a replay is checkable" — and the brief generator that was to build tasks on it
- * (`generate-briefs.mjs`) was deleted on 2026-10-23 without ever having produced one. Nothing read the arguments or the digests
- * in the months they were written. What reads a trace now is the trajectory digest the learning loop's distillation is shown
- * (`trajectoryDigest`, `options.toolTraces`): the order of the tools the work called, which is what a routine is induced from.
+ * Hidden knowledge: what reads a trace is the trajectory digest the learning loop's distillation is shown (`trajectoryDigest`,
+ * `options.toolTraces`): the order of the tools the work called, which is what a routine is induced from, so only the call and its
+ * order are kept, never its arguments or a digest of its result.
  * A call that failed is not a step of the work, and this is the one place that already knows which calls completed, so the
  * digest takes its sequence from here and falls back to the transcript's own calls (every call that was made) when a run has no
  * trace. Only the tool and its turn are kept: the arguments of a call are the person's data and a trace is written for every run.

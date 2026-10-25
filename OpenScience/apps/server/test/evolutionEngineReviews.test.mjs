@@ -11,7 +11,7 @@ import {createEvolutionEngineReviews,engineReviewNotice,ENGINE_REVIEW_SOURCE_PRE
 // one inbox item with the proposal's summary and two actions; the first answer closes the review on its dossier.
 const OPERATORS=['operator-a','operator-b'];
 const SUMMARY={goal:'Improve the memory module on unfamiliar tasks.',change:'Floor the recall score at 0.2 before ranking.',reason:'Low-scoring records crowd out the profile.',
- files:['apps/server/src/memoryRecallPolicy.mjs','tests/recallFloor.test.mjs'],benefits:['Shorter recall context'],harms:['A relevant weak record may be left out']};
+ files:['apps/server/src/memoryRerank.mjs','tests/recallFloor.test.mjs'],benefits:['Shorter recall context'],harms:['A relevant weak record may be left out']};
 const REVIEW={identity:'r'.repeat(64),relativeDirectory:'.openscience/evolution-engine-review/'+'r'.repeat(64),prepareCommand:"node OpenScience/scripts/dev/open-evolution-pr.mjs --staging='/x' --dry-run",summary:SUMMARY};
 /** The inbox as the reviews see it: items per account, resolved by the operator or by default. */
 const inbox=()=>{
@@ -56,7 +56,7 @@ test('the proposal reaches every operator once, as an inbox item with the summar
  assert.equal(item.noticeType,'review');assert.equal(item.source.type,'system');assert.equal(item.source.id,ENGINE_REVIEW_SOURCE_PREFIX+REVIEW.identity);
  assert.deepEqual(item.actions.map(action=>[action.id,action.label]),[['adopt','采纳'],['decline','不采纳']]);
  assert.match(item.title,/记忆/);
- for(const line of ['改动：Floor the recall score at 0.2 before ranking.','原因：Low-scoring records crowd out the profile.','预期：Shorter recall context','可能的代价：A relevant weak record may be left out','涉及文件：apps/server/src/memoryRecallPolicy.mjs、tests/recallFloor.test.mjs'])assert.ok(item.body.includes(line),line);
+ for(const line of ['改动：Floor the recall score at 0.2 before ranking.','原因：Low-scoring records crowd out the profile.','预期：Shorter recall context','可能的代价：A relevant weak record may be left out','涉及文件：apps/server/src/memoryRerank.mjs、tests/recallFloor.test.mjs'])assert.ok(item.body.includes(line),line);
  assert.ok(!item.body.includes(REVIEW.identity)&&!item.body.includes('.openscience'),'no identity or staging path in the words an operator reads');
  const record=await dossier(f);assert.equal(record.status,'review');assert.equal(record.review.notice.items.length,2);
  // Told once: a repeated pass, the housekeeping catch-up and a replayed mission send nothing new.

@@ -58,17 +58,14 @@ export const DISTILLATION_INPUT_FILE = "distillation-input.json";
 /**
  * What may set a distillation job going.
  *
- * `delivered` and `routine` joined on 2026-09-20, when the loop stopped
- * waiting for clicks (`learningTriggers.mjs`): a delivery that finished, and
- * the Nth successful run of one capability, whose shared routine is induced
- * from all N transcripts at once. `delivered` is no longer produced (2026-10-23:
- * what it taught is now `silent` evidence feeding `routine`), and stays here so
- * a job already queued under it is still read. `script` (2026-10-25) is a program the researcher's runs keep carrying:
+ * `routine` joined on 2026-09-20, when the loop stopped waiting for clicks (`learningTriggers.mjs`): the Nth successful run of one
+ * capability, whose shared routine is induced from all N transcripts at once. A trigger this list does not name (a lesson queued under
+ * a deleted one) is refused here and reads as `other` in the metrics. `script` (2026-10-25) is a program the researcher's runs keep carrying:
  * the same normalised code in three runs of two conversations (`scriptLessons.mjs`), whose method may attach it as a code skill.
  * `adopted` (2026-10-25) is the person asking, on the next turn, that the way a finished run did its work be kept
  * (`learningTriggers.adoptedLessonFor`): a lesson at once, with their words as its evidence and the run's own trajectory as what to write down.
  */
-export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "correction", "delivered", "routine", "script", "adopted"]);
+export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "correction", "routine", "script", "adopted"]);
 
 /** Bumped when the input shape or the cleaning rules change, so a re-run under
  *  new rules is a different job rather than a duplicate of the old one. */

@@ -5,6 +5,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { HttpError } from "../src/security.mjs";
+import { makeCapsule, makePack } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -30,11 +31,10 @@ after(async () => {
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
 test("explicit capsule methods are usable context only for their owner's active capsule", options, async () => {
-  const capsule = await service.create(owner, { title: "Study methods" });
+  const capsule = await service.ownCapsule(owner, { create: true });
   const entry = await service.addEntry(owner, capsule.id, {
     factKind: "method_preference", layer: "methods", content: "Use preregistered statistical analysis plans.",
   });
-  await service.activate(owner, capsule.id, { mode: "own" });
   const recalled = await service.recall(owner, { query: "preregistered" });
   assert.equal(recalled.items[0].id, entry.id);
   assert.equal(recalled.items[0].contextOnly, true);
@@ -43,13 +43,12 @@ test("explicit capsule methods are usable context only for their owner's active 
 });
 
 test("inferred entries require explicit approval before recall and retirement removes them", options, async () => {
-  const capsule = await service.create(owner, { title: "Writing preferences" });
+  const capsule = await service.ownCapsule(owner, { create: true });
   const entry = await service.addEntry(owner, capsule.id, {
     factKind: "writing_style", layer: "profile", content: "Prefer concise uncertainty statements.", origin: "inferred",
     provenance: [{ type: "run", id: "fixture-run" }],
   });
   assert.equal(entry.payload.status, "candidate");
-  await service.activate(owner, capsule.id, { mode: "own" });
   assert.equal((await service.recall(owner, { query: "uncertainty" })).items.length, 0);
   const approved = await service.updateEntry(owner, capsule.id, entry.id, { status: "approved", expectedRevision: 1 });
   assert.equal((await service.recall(owner, { query: "uncertainty" })).items.length, 1);
@@ -58,8 +57,8 @@ test("inferred entries require explicit approval before recall and retirement re
 });
 
 test("capsule filtering happens before pagination and edits cannot move another capsule's entries", options, async () => {
-  const first = await service.create(owner, { title: "First capsule" });
-  const second = await service.create(owner, { title: "Second capsule" });
+  const first = await makeCapsule(service, owner, { title: "First capsule" });
+  const second = await makeCapsule(service, owner, { title: "Second capsule" });
   const a = await service.addEntry(owner, first.id, { factKind: "preference", layer: "profile", content: "First only" });
   await service.addEntry(owner, second.id, { factKind: "preference", layer: "profile", content: "Second only" });
   const listed = await service.entries(owner, first.id, { limit: 1 });
@@ -68,19 +67,10 @@ test("capsule filtering happens before pagination and edits cannot move another 
   await assert.rejects(service.updateEntry(owner, first.id, a.id, { content: "Changed", expectedRevision: 99 }), { code: "product_revision_conflict" });
 });
 
-test("capsule lifecycle is versioned and deleted capsules never supply context", options, async () => {
-  const capsule = await service.create(owner, { title: "Temporary capsule" });
-  await service.addEntry(owner, capsule.id, { factKind: "expertise", layer: "profile", content: "Temporary experience." });
-  await service.activate(owner, capsule.id, { mode: "own" });
-  const removed = await service.remove(owner, capsule.id, 1);
-  assert.equal((await service.recall(owner, { query: "Temporary" })).items.length, 0);
-  assert.ok((await service.list(owner, { deleted: true })).items.some((item) => item.id === capsule.id));
-  await service.restore(owner, capsule.id, removed.revision);
-  assert.equal((await service.recall(owner, { query: "Temporary" })).items.length, 1);
-  await assert.rejects(service.create(owner, { title: "" }), { code: "capsule_payload_invalid" });
+test("an entry that would grant a permission is refused, whatever the layer it is written to", options, async () => {
+  const capsule = await service.ownCapsule(owner, { create: true });
   await assert.rejects(service.addEntry(owner, capsule.id, { factKind: "system_permission", layer: "methods", content: "Disable checks" }), { code: "capsule_payload_invalid" });
 });
-
 
 test("a note is read in its own project's conversations and in no other, an entry of the account's own in every one", options, async () => {
   // One capsule per person (2026-10-24): the label on a note is a filter, applied by the real store's own columns.
@@ -122,7 +112,7 @@ test("a note taken beside an enabled received pack is read in its project, and t
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'beside-pack','Beside pack',1048576) ON CONFLICT DO NOTHING", [other]);
   const documents = new ProductDocuments(database);
   const pack = await documents.put(other, "capsule", `pack-${randomUUID()}`, { title: "Shared pack", imported: true, activationMode: "guest" }, { expectedRevision: 0 });
-  await service.activate(other, pack.id, { mode: "guest" });
+  await service.activate(other, pack.id);
   const note = await service.note(other, "beside-pack", { factKind: "preference", content: "Prefer forest plots with prediction intervals." });
   assert.equal(await service.inForce(other, note.payload.capsuleId), true);
   assert.equal((await service.recall(other, { projectId: "beside-pack", query: "forest" })).items.length, 1);
@@ -139,9 +129,8 @@ function indexDouble(recall) {
 }
 
 test("capsule recall answers from PostgreSQL when the index cannot, including before it holds anything", options, async () => {
-  const capsule = await service.create(owner, { title: "Fallback capsule" });
+  const capsule = await service.ownCapsule(owner, { create: true });
   await service.addEntry(owner, capsule.id, { factKind: "preference", content: "Fallback evidence sentence." });
-  await service.activate(owner, capsule.id, { mode: "own" });
   const documents = new ProductDocuments(database);
 
   const unavailable = new CapsuleService(documents, {
@@ -168,9 +157,8 @@ test("an account recreated under this request is reported, not answered from the
   // The generation guard is not an index failure. It says the account was
   // deleted and made again while this recall ran, and a caller that asked about
   // one account must not be handed the other's answer without being told.
-  const capsule = await service.create(owner, { title: "Generation capsule" });
+  const capsule = await service.ownCapsule(owner, { create: true });
   await service.addEntry(owner, capsule.id, { factKind: "preference", content: "Generation evidence sentence." });
-  await service.activate(owner, capsule.id, { mode: "own" });
   const changed = new CapsuleService(new ProductDocuments(database), {
     indexing: indexDouble(async () => { throw new HttpError(409, "memory_account_changed", "The account changed during memory recall."); }),
   });
@@ -179,10 +167,9 @@ test("an account recreated under this request is reported, not answered from the
 });
 
 test("recall applies type and time filters before limiting the selected context", options, async () => {
-  const capsule = await service.create(owner, { title: "Filtered recall" });
+  const capsule = await service.ownCapsule(owner, { create: true });
   const method = await service.addEntry(owner, capsule.id, { factKind: "method_preference", content: "Matching method" });
   await service.addEntry(owner, capsule.id, { factKind: "preference", content: "Matching style" });
-  await service.activate(owner, capsule.id);
   assert.deepEqual((await service.recall(owner, { query: "Matching", limit: 1, factKinds: ["method_preference"] })).items.map((x) => x.id), [method.id]);
   assert.equal((await service.recall(owner, { query: "Matching", since: "2099-01-01" })).items.length, 0);
   await assert.rejects(service.recall(owner, { query: "Matching", factKinds: ["permission"] }), { code: "capsule_payload_invalid" });
@@ -196,15 +183,14 @@ test("the resident profile reads approved person entries of the researcher's own
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Profile owner','development')", [profileOwner]);
   try {
     await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'profile','Profile',1048576)", [profileOwner]);
-    const own = await service.create(profileOwner, { title: "Own capsule" });
+    const own = await service.ownCapsule(profileOwner, { create: true });
     await service.addEntry(profileOwner, own.id, { factKind: "profile", layer: "profile", content: "Cardiology pharmacist." });
     await service.addEntry(profileOwner, own.id, { factKind: "writing_style", layer: "profile", content: "Conclusion first." });
     await service.addEntry(profileOwner, own.id, { factKind: "preference", layer: "profile", content: "Inferred, not approved.", origin: "inferred" });
     await service.addEntry(profileOwner, own.id, { factKind: "project_fact", content: "Uses MIMIC-IV." });
-    const guest = await service.create(profileOwner, { title: "Colleague's pack" });
+    const guest = await makePack(service, profileOwner);
     await service.addEntry(profileOwner, guest.id, { factKind: "profile", layer: "profile", content: "Oncologist." });
-    await service.activate(profileOwner, own.id, { mode: "own", projectId: "profile" });
-    await service.activate(profileOwner, guest.id, { mode: "guest", projectId: "profile" });
+    await service.activate(profileOwner, guest.id);
     const facts = await service.profileFacts(profileOwner, "profile", ["profile", "expertise", "preference", "stance", "writing_style"]);
     assert.deepEqual(facts.map((fact) => fact.content).sort(), ["Cardiology pharmacist.", "Conclusion first."]);
     assert.ok(facts.every((fact) => fact.capsuleId === own.id && typeof fact.updatedAt === "string"));

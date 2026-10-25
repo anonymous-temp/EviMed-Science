@@ -108,7 +108,7 @@ jobs:
           pnpm test:phi-masking
 
       # The host scripts under `scripts/ops/` (the Postgres backup, the recovery
-      # volume, the image archive inventory, the usememos retirement) carry
+      # volume, the image archive inventory, the extension acceptance archive) carry
       # their own Python suites, and until this step nothing ran them: a
       # regression in the backup script would first be seen on the host.
       # `deploy.test.mjs` fails if a `test_*.py` lands there that `test:ops`

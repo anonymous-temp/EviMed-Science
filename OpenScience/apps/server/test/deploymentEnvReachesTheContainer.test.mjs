@@ -176,10 +176,8 @@ const operatorLevers = {
   // controller, which writes it into every runtime, never saw it. The gateway
   // body limit reaches the controller because the request-size guard is a
   // share of it.
-  OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_THRESHOLD_RATIO: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO: ["open-science-web", "open-science-runtime-controller"],
-  OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ["open-science-web", "open-science-runtime-controller"],

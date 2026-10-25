@@ -6,9 +6,8 @@
  * and is the only thing this module decides: `builtin` ranks by term overlap inside the capsule service, `openviking` delegates
  * the ranking to the context engine's hierarchical retrieval.
  *
- * This was the head of `memorySubstrate.mjs`, which also ranked the legacy engine's structured records. That engine is deleted
- * (2026-10-25): an account's memory is the engine's own, read through `nativeMemoryStore.mjs` and the memory gateway, and what
- * is left of the index is the capsule's.
+ * An account's own memory is the engine's, read through `nativeMemoryStore.mjs` and the memory gateway; the only index left here is
+ * the capsule's.
  */
 
 /** `builtin` ranks by term overlap inside the capsule service. `openviking` delegates ranking to the OpenViking context database's

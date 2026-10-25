@@ -15,6 +15,7 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -52,12 +53,12 @@ before(async () => {
   doctor = { id: account.userId };
 
   // The institution's shelf: one school, with a method and a fact.
-  school = (await capsules.create(hospital, { title: "经方思路" })).id;
+  school = (await makeCapsule(capsules, hospital, { title: "经方思路" })).id;
   await capsules.addEntry(hospital, school, { factKind: "method_preference", layer: "methods", origin: "explicit",
     content: "先核对方证眼目，不吻合时不得套用经方名。" });
   await capsules.addEntry(hospital, school, { factKind: "expertise", layer: "profile", origin: "explicit",
     content: "代表方示例：桂枝汤、小柴胡汤。" });
-  foreign = (await capsules.create(stranger, { title: "别人的胶囊" })).id;
+  foreign = (await makeCapsule(capsules, stranger, { title: "别人的胶囊" })).id;
 
   // The doctor's own habit, learned.
   await learning.createCandidate(doctor.id, {
@@ -122,9 +123,8 @@ test("a capsule nobody on this key may read is refused, and says nothing about w
 });
 
 test("the budget is spent in the mount's order: the doctor's own capsule methods, then their habits, then a school's", options, async () => {
-  const own = (await capsules.create(doctor.id, { title: "我的记忆胶囊" })).id;
+  const own = (await capsules.ownCapsule(doctor.id, { create: true })).id;
   await capsules.addEntry(doctor.id, own, { factKind: "method_preference", layer: "methods", origin: "explicit", content: "复诊先问睡眠。" });
-  await capsules.activate(doctor.id, own, { mode: "own" });
   const result = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x" });
   assert.deepEqual(result.methods.map((method) => [method.source, method.capsuleId ?? null]), [["capsule", own], ["learned", null]]);
   const withSchool = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } },

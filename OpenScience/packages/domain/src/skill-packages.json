@@ -809,11 +809,11 @@
       "id": "capability/method-distillation",
       "name": "method-distillation",
       "origin": "capability",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "source": {"kind":"release"},
-      "digest": "sha256:ca30bfa0560a0764286b8fb9dfdb44039396de65bcf0c5ba509142cb3deccc3e",
+      "digest": "sha256:84a1eefbc2e09856d563d671f1f451ee4dfb72af4af6d2cf2361f848081da029",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"ad7939ff9be5d7c8bdba801ad92e05de608056128e72655defa2178c7327605e"}],
+      "references": [{"path":"capability.yaml","sha256":"b2e37c55c2aacb7d7c916813b1f4bc64af520a50849b624dcc0926c27d5b423c"}],
       "operations": [
         {
           "name": "method-candidate",

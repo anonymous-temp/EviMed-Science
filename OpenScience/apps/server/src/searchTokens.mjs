@@ -2,8 +2,6 @@
  * The one tokenizer for a question and for text searched against it: Latin words and CJK runs, plus every CJK bigram of a run of
  * three or more — a two-character Chinese term is a word, and splitting on whitespace alone would find none. The knowledge base's
  * chunker and its index read their terms from here (`kbChunker.mjs`, `kbIndex.mjs`).
- *
- * It lived in `memoryRecallPolicy.mjs`, the legacy engine's recall budget, until that engine was deleted (2026-10-25).
  */
 
 /** Query terms: the first 64 of a question's tokens. @param {unknown} value @returns {string[]} */

@@ -70,7 +70,7 @@ test("the input says which methods the run read, what became of their results an
 });
 
 test("the input says nothing of a handbook any more: no length limit for one, no handbooks among the methods the run used, no gate findings", () => {
-  const input = buildDistillationInput({ run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "delivered", transcript: null });
+  const input = buildDistillationInput({ run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "edit_diff", transcript: null });
   assert.equal(input.signal, "run");
   assert.equal("maxHandbookChars" in input.authoringLimits, false);
   assert.equal("handbooks" in input.methodsUsed, false);
@@ -123,7 +123,7 @@ test("a correction lesson keeps the candidate's scope and the pair of result ver
 
 test("a lesson with no correction in it names no result versions, and a candidate with no scope declares none", async () => {
   const store = learning();
-  await distiller(store).applyCandidate({ userId: "u1", projectId: "p1", payload: { trigger: "delivered" } }, { id: "run_1" }, { candidate: { operation: "create" }, skill: SKILL });
+  await distiller(store).applyCandidate({ userId: "u1", projectId: "p1", payload: { trigger: "edit_diff" } }, { id: "run_1" }, { candidate: { operation: "create" }, skill: SKILL });
   const [created] = store.calls.created;
   assert.equal("results" in created.provenance, false);
   assert.deepEqual(created.scope, { applicability: undefined, counterexamples: undefined });

@@ -89,10 +89,10 @@ test("ten notes capsules become ten project-labelled entries of one capsule, the
   assert.ok(total.accounts >= 2 && total.failed === 0, JSON.stringify(total));
 
   // One capsule: the account's, and no notes capsule is left in force.
-  const own = (await capsules.list(USER, { limit: 100 })).items.filter((item) => item.payload.imported !== true);
+  const own = (await capsules.documents.list(USER, "capsule", { limit: 100 })).items.filter((item) => item.payload.imported !== true);
   assert.deepEqual(own.map((item) => item.id), [(await capsules.ownCapsule(USER)).id], "one capsule of the person's own");
   assert.equal(own[0].id.startsWith("account-capsule:"), true);
-  assert.equal((await capsules.list(USER, { limit: 100, deleted: true })).items.filter((item) => String(item.id).startsWith("runtime-notes:")).length, 10, "the ten emptied capsules are in the trash");
+  assert.equal((await capsules.documents.list(USER, "capsule", { limit: 100, deleted: true })).items.filter((item) => String(item.id).startsWith("runtime-notes:")).length, 10, "the ten emptied capsules are in the trash");
 
   // Ten entries of it, each with its project, its id, its text and the revision that moved it.
   const mine = await capsules.mine(USER);

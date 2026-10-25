@@ -333,14 +333,14 @@ test("the researcher's line a candidate carries travels to the store beside the 
 
 test("a learnt method records where it was learnt and from which capability, and its passes run in the learning project", async () => {
   const { distillation, learning, enqueued } = runs();
-  await distillation.applyCandidate({ userId: "u1", projectId: "paper", payload: { trigger: "delivered" } },
+  await distillation.applyCandidate({ userId: "u1", projectId: "paper", payload: { trigger: "edit_diff" } },
     { id: "run_1", effectiveAgentId: "meta-analysis" },
     { candidate: { operation: "create", display: { title: "先报等级", summary: "先报证据等级再报效应量。", steps: "1. 先报等级\n2. 再报效应量" } }, skill: SKILL });
   const written = learning.created[0];
   assert.equal(written.projectId, "paper", "the source project, which the store records as provenance");
   assert.equal(written.provenance.sourceProjectId, "paper");
   assert.equal(written.provenance.capabilityId, "meta-analysis", "the family a later launch filters by (L-G7)");
-  assert.equal(written.provenance.trigger, "delivered");
+  assert.equal(written.provenance.trigger, "edit_diff");
   assert.equal(written.provenance.signal, "run");
   assert.equal(written.steps, "1. 先报等级\n2. 再报效应量", "the steps travel beside the method (M-5)");
   assert.ok(enqueued.every((entry) => entry.opts.projectId === LEARNING_PROJECT_ID),
@@ -349,11 +349,11 @@ test("a learnt method records where it was learnt and from which capability, and
   // A lesson that moved to the learning project when its project was deleted
   // still names the project it came from.
   const moved = runs();
-  await moved.distillation.applyCandidate({ userId: "u1", projectId: LEARNING_PROJECT_ID, payload: { trigger: "delivered", sourceProjectId: "gone" } },
+  await moved.distillation.applyCandidate({ userId: "u1", projectId: LEARNING_PROJECT_ID, payload: { trigger: "edit_diff", sourceProjectId: "gone" } },
     { id: "run_2" }, { candidate: { operation: "create" }, skill: SKILL });
   assert.equal(moved.learning.created[0].provenance.sourceProjectId, "gone");
   const orphan = runs();
-  await orphan.distillation.applyCandidate({ userId: "u1", projectId: LEARNING_PROJECT_ID, payload: { trigger: "delivered" } },
+  await orphan.distillation.applyCandidate({ userId: "u1", projectId: LEARNING_PROJECT_ID, payload: { trigger: "edit_diff" } },
     { id: "run_3" }, { candidate: { operation: "create" }, skill: SKILL });
   assert.equal(orphan.learning.created[0].provenance.sourceProjectId, undefined, "the learning project is never a source");
 });
@@ -361,7 +361,7 @@ test("a learnt method records where it was learnt and from which capability, and
 test("a lesson that carries no word of the researcher's is a run's, and writes a method like any other: there is no handbook for it to be filed as", async () => {
   // Both methods production learnt in September came from the reviewer's findings alone and were filed as 「我的做法」 (L-G3); the one trigger that
   // produced such a lesson, and the handbook it was kept for, are deleted (2026-10-25), so what is left of that evidence is "a run's own".
-  const runJob = { userId: "u1", projectId: "meta", payload: { trigger: "delivered" } };
+  const runJob = { userId: "u1", projectId: "meta", payload: { trigger: "edit_diff" } };
   const created = runs();
   const applied = await created.distillation.applyCandidate(runJob, { id: "run_1", effectiveAgentId: "meta-analysis" },
     { candidate: { operation: "create" }, skill: SKILL });
@@ -405,9 +405,11 @@ test("the researcher's own corrections and edits open the input, before the tran
   ], "their own words, unwrapped; a message carrying a patient's phone number is dropped whole");
   assert.equal(input.correctionsDropped.sensitive, 1);
   assert.equal(input.signal, "researcher");
-  assert.throws(() => buildDistillationInput({ run: { id: "r" }, trigger: "repair_accepted", transcript: null }), { code: "distillation_trigger_invalid" });
-  assert.equal(buildDistillationInput({ run: { id: "r" }, trigger: "delivered", transcript: null }).signal, "run");
-  assert.equal(lessonSignal({ trigger: "delivered", feedback: [{ id: "fe" }] }), "researcher");
+  for (const deleted of ["repair_accepted", "delivered"]) {
+    assert.throws(() => buildDistillationInput({ run: { id: "r" }, trigger: deleted, transcript: null }), { code: "distillation_trigger_invalid" }, deleted);
+  }
+  assert.equal(buildDistillationInput({ run: { id: "r" }, trigger: "edit_diff", transcript: null }).signal, "run");
+  assert.equal(lessonSignal({ trigger: "edit_diff", feedback: [{ id: "fe" }] }), "researcher");
 });
 
 test("a correction lesson hands the run the researcher's own typed words first, and reads no memory record for them", async () => {

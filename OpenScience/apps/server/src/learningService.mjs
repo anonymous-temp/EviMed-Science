@@ -855,7 +855,7 @@ export class LearningService {
   /**
    * The lessons that taught a method, newest first: the one its current body was learnt from, then the ones each earlier body was
    * (an amendment overwrites `provenance.runId`, so the saved revisions are where the older lessons are). Each is the run that
-   * taught it and the trigger that queued the distillation (`delivered`, `repair_accepted`, `correction`, `routine`; null on a
+   * taught it and the trigger that queued the distillation (`edit_diff`, `correction`, `routine`, `script`, `adopted`; null on a
    * revision older than the field). Only names — a method's text is never read through this.
    * @param {string} userId @param {string} methodId
    * @returns {Promise<{ projectId: string, runId: string, trigger: string | null }[]>}

@@ -5,16 +5,12 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// Optional, for a run that has to shape the kernel itself (`evals/context-fidelity/compaction_ab.mjs`): `model` with `contextWindow` states the window the kernel
-// is told it has (the platform declares one the same way, `dshProfilePatch.mjs`), `env` is added to the kernel's environment (the socket's compaction rows read
-// `EVIMED_COMPACTION_*` from it), `dshHome` is a seeded home to run in (the default is a fresh one under `root`), `profile` names the profile in it, and
-// `timeoutMs` is how long one turn may take. None of them changes what the other evaluations do.
-export async function createNativeDsh({root,executable,dump,gateway,token,maxTokens=4000,mcpGateway=null,reasoningEffort='off',model=null,contextWindow=null,env={},dshHome=null,profile=null,timeoutMs=180000}) {
+export async function createNativeDsh({root,executable,dump,gateway,token,maxTokens=4000,mcpGateway=null,reasoningEffort='off'}) {
   const disabled=[...dump.matchAll(/^- id: (tool-[^\n]+)/gm)].map(row=>row[1]).concat([
     'session-telemetry-otel','session-title-llm','llm-deepseek-account','skill-filesystem',
     'agent-instructions','permission','session-log-deepseek','plugin-package-inventory-deepseek']);
   let patch=[...disabled.map(id=>`- id: ${id}\n  disabled: true`),
-    `- id: llm-deepseek\n  config:\n    baseURL: ${JSON.stringify(gateway)}\n    apiKeyEnv: CLINICAL_EVAL_WORKLOAD_TOKEN\n    thinking: ${reasoningEffort === 'off' ? 'disabled' : 'enabled'}\n    reasoningEffort: ${reasoningEffort}\n    maxTokens: ${maxTokens}${model&&contextWindow?`\n    models:\n      - id: ${JSON.stringify(model)}\n        contextWindow: ${Number(contextWindow)}`:''}`,
+    `- id: llm-deepseek\n  config:\n    baseURL: ${JSON.stringify(gateway)}\n    apiKeyEnv: CLINICAL_EVAL_WORKLOAD_TOKEN\n    thinking: ${reasoningEffort === 'off' ? 'disabled' : 'enabled'}\n    reasoningEffort: ${reasoningEffort}\n    maxTokens: ${maxTokens}`,
     '- id: approval\n  config:\n    policy: never'].join('\n');
   if(mcpGateway){
     const tokenFile=path.join(root,'workload-token');await fs.writeFile(tokenFile,token,{mode:0o600});
@@ -23,12 +19,12 @@ export async function createNativeDsh({root,executable,dump,gateway,token,maxTok
   await fs.writeFile(path.join(root,'patch.yml'),patch,{mode:0o600});
   return async({prompt,filename,sessionId=null})=>{
     const cwd=path.join(root,'workspace');await fs.mkdir(cwd,{recursive:true});
-    const args=[...(profile?['--profile',profile]:[]),'headless','--patch',path.join(root,'patch.yml'),'--json',...(sessionId?['--session-id',sessionId]:[]),prompt];
-    const child=spawn(executable,args,{cwd,env:{PATH:process.env.PATH,DSH_HOME:dshHome??path.join(root,'sessions'),DSH_TELEMETRY_MODE:'DISABLED',CLINICAL_EVAL_WORKLOAD_TOKEN:token,OPEN_SCIENCE_WORKSPACE_DIR:cwd,...env},stdio:['ignore','pipe','pipe']});
+    const args=['headless','--patch',path.join(root,'patch.yml'),'--json',...(sessionId?['--session-id',sessionId]:[]),prompt];
+    const child=spawn(executable,args,{cwd,env:{PATH:process.env.PATH,DSH_HOME:path.join(root,'sessions'),DSH_TELEMETRY_MODE:'DISABLED',CLINICAL_EVAL_WORKLOAD_TOKEN:token,OPEN_SCIENCE_WORKSPACE_DIR:cwd},stdio:['ignore','pipe','pipe']});
     let output='',diagnostics='';child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>diagnostics+=x);
     let timedOut=false;
-    const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');},timeoutMs);const started=Date.now();
-    const forceTimer=setTimeout(()=>child.kill('SIGKILL'),timeoutMs+5000);
+    const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');},180000);const started=Date.now();
+    const forceTimer=setTimeout(()=>child.kill('SIGKILL'),185000);
     const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',resolve);});clearTimeout(timer);clearTimeout(forceTimer);
     await fs.writeFile(path.join(root,filename+'.events.jsonl'),output,{mode:0o600});
     await fs.writeFile(path.join(root,filename+'.diagnostics.log'),diagnostics,{mode:0o600});

@@ -170,7 +170,6 @@ import { capabilityUse, projectWorks } from "./projectOverview.mjs";
 import { memoryMetricFamilies, recordMethodsRetired } from "./memoryMetrics.mjs";
 import { resetLearnedMemory } from "./memoryReset.mjs";
 import { ResidentProfiles, nativeResidentMemos, nativeSessionResident } from "./residentProfile.mjs";
-import { eraseRetiredMemos } from "./retiredMemos.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryMapRoutes } from "./memoryMap.mjs";
 import { MapEdgeCorrections } from "./memoryMapEdges.mjs";
@@ -3453,10 +3452,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     // Recorded, not merely published: the browser shows a compaction card and
     // forgets it, while "does compaction ever fire, and what does it cost"
-    // needs the ledger. Today the answer is expected to be "never" — the
-    // control plane declares a 1,000,000-token window against a 400,000-token
-    // run budget — and an empty column is exactly the measurement §6.5 asks for
-    // before any threshold is touched.
+    // needs the ledger (`evals/context-fidelity/report.py` reads it).
     onCompaction: (project, runId, record) => {
       void agentRuns?.recordLearning(project, runId, {
         appendCompaction: {
@@ -3464,7 +3460,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           seq: record.seq,
           replaced: record.replaced,
           tokens: record.tokens,
-          policy: config.runtimeCompactionPolicy ?? "basic",
         },
       }).catch(() => {});
       // A compaction takes the resident profile out of the history it was written into, so the conversation's next dispatch hands
@@ -7651,14 +7646,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // The engine's copies of the account's documents, and the wiki and graphs compiled from them: one attempt, never waited on.
         void sourceSync?.forgetAccount(user.id);
         let memoryIndexPurge = null;
-        /** @type {{ tables: Record<string, number>, ledgered: boolean } | null} */
-        let retiredMemos = null;
         /** @type {string[]} */
         let geoScreenshots = [];
         /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
         let vcrArtifacts = null;
-        // The ledger of erased accounts lives in the memory schema; it has to exist before the transaction that writes it opens.
-        if (productDatabase) await migrateMemorySettings(productDatabase);
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
@@ -7671,9 +7662,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
             if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
-            // What the retired usememos store still holds of the account — its records and notes sit in tables that no foreign
-            // key reaches — and the ledger the retirement's archive is re-sealed against (review M-11).
-            if (client) retiredMemos = await eraseRetiredMemos(client, id);
             // The account's GEO rows, whether or not the module is on today.
             if (client) geoScreenshots = (await deleteGeoUserRows(client, id)).screenshots;
             // And its 虚拟临床研究 rows, on the same terms: the schema outlives the
@@ -7693,8 +7681,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void memoryIndexWorker?.drainWithdrawals();
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
-        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryIndexPurge, subjectsDeleted,
-          retiredMemos: retiredMemos?.tables ?? null });
+        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryIndexPurge, subjectsDeleted });
         sendJson(res, 200, { data });
         return;
       }
@@ -11366,11 +11353,11 @@ async function readinessRuntime(config, runtimeManager) {
   // branch. There is one kernel now, but "what am I actually running" is still
   // a question an operator must be able to answer without reading env files.
   //
-  // `compactionPolicy` and `capabilitySkillsDir` ride along because they are
-  // the two settings a paired evaluation declares about the deployment it ran
-  // on and cannot set over HTTP. Without them in readiness the harness could
-  // only write the word "declaredOnly" in its report, which reads like a
-  // result and is an admission that nobody checked.
+  // `capabilitySkillsDir` rides along because it is a setting a paired
+  // evaluation declares about the deployment it ran on and cannot set over
+  // HTTP. Without it in readiness the harness could only write the word
+  // "declaredOnly" in its report, which reads like a result and is an
+  // admission that nobody checked.
   // The threshold and the request-size guard are what a launched runtime is
   // given (runtimeCompactionSettings), read back here so a lever set in .env
   // can be seen to have reached the launch plan.
@@ -11378,7 +11365,6 @@ async function readinessRuntime(config, runtimeManager) {
   const kernel = {
     kernel: RUNTIME_KERNEL_NAME,
     kernelVersion: config.dshVersion,
-    compactionPolicy: config.runtimeCompactionPolicy,
     compactionThresholdRatio: compaction.config.thresholdRatio,
     compactionMaxRequestBytes: compaction.maxRequestBytes,
     capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,

@@ -49,10 +49,9 @@ async function projectFixture() {
 /** The researcher's own capsule in force for p1: one profile line and one approved work-style method. */
 async function ownCapsule() {
   const capsules = new CapsuleService(/** @type {any} */ (productDocumentsDouble()));
-  const own = await capsules.create(USER, { title: "我的记忆胶囊" });
+  const own = await capsules.ownCapsule(USER, { create: true });
   await capsules.addEntry(USER, own.id, { factKind: "profile", layer: "profile", content: "心内科临床药师" });
   await capsules.addEntry(USER, own.id, { factKind: "method_preference", layer: "methods", content: "先做敏感性分析再下结论" });
-  await capsules.activate(USER, own.id, { mode: "own", projectId: "p1" });
   return capsules;
 }
 

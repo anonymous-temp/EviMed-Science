@@ -1134,10 +1134,10 @@ function normalizeRepairRounds(value) {
   return { content, structural };
 }
 
-/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number, policy: string}[] | undefined} */
+/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number}[] | undefined} */
 function normalizeCompactionRecords(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{at: string, seq: number, replaced: number, tokens: number, policy: string}[]} */
+  /** @type {{at: string, seq: number, replaced: number, tokens: number}[]} */
   const entries = [];
   for (const item of value.slice(-maxCompactionRecords)) {
     if (!item || typeof item !== "object") continue;
@@ -1147,7 +1147,6 @@ function normalizeCompactionRecords(value) {
       seq: item.seq,
       replaced: Number.isSafeInteger(item.replaced) && item.replaced >= 0 ? item.replaced : 0,
       tokens: Number.isSafeInteger(item.tokens) && item.tokens >= 0 ? item.tokens : 0,
-      policy: typeof item.policy === "string" ? item.policy.slice(0, 32) : "",
     });
   }
   return entries;
@@ -4732,7 +4731,7 @@ export class AgentRunStore {
 
   /**
    * Every conversation of a project with its runs, newest first: one read of the ledger for what `conversationRuns` answers one
-   * conversation at a time. What reading older memories against the conversations they came from asks (`memoryEvidenceProvenance.mjs`).
+   * conversation at a time. What naming the conversations a native memory file came from asks of the ledger (`nativeConversationTitles` in `server.mjs`).
    * @param {any} project @returns {Promise<Map<string, Record<string, any>[]>>}
    */
   async conversationIndex(project) {

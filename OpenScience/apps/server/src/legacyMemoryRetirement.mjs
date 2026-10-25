@@ -26,6 +26,10 @@ import { recordLegacyRetirement } from "./memoryMetrics.mjs";
  *    marked: a later start with the engine does it.
  *  - **The queued jobs of the retired index kind are deleted** (`memory-record-index`): nothing claims them any more, and each
  *    names a record that is gone.
+ *  - **The erasure ledger of the retired usememos store is dropped** (`evimed_memory.retired_erasures`, unconditionally): it held the
+ *    two digests of every account erased since that store was left behind, only so that an archive of the store could be re-sealed
+ *    against it, and production never made the archive. Nothing reads it and no migration makes it any more; the table is dropped in
+ *    the same transaction as the rest, and a database that never had it finds nothing.
  *
  * Idempotent: on a database that has none of it, every statement finds nothing. Never throws into the start: a failure is reported
  * and counted (`failed`) and the next start asks again.
@@ -50,11 +54,12 @@ async function tableExists(client, table) {
 /**
  * @param {{ database: any, withdrawals?: { migrate: () => Promise<void>, enqueue: (client: any, userId: string, uris: readonly string[]) => Promise<void> } | null,
  *   report?: (line: string) => void }} dependencies
- * @returns {Promise<{ tables: "dropped" | "absent" | "kept_records" | "kept_legacy_accounts", jobs: number, withdrawn: "queued" | "done_before" | "not_composed", accounts: number, failed?: string }>}
+ * @returns {Promise<{ tables: "dropped" | "absent" | "kept_records" | "kept_legacy_accounts", jobs: number, withdrawn: "queued" | "done_before" | "not_composed", accounts: number,
+ *   ledger: "dropped" | "absent", failed?: string }>}
  */
 export async function retireLegacyMemory({ database, withdrawals = null, report = () => {} }) {
   /** @type {Awaited<ReturnType<typeof retireLegacyMemory>>} */
-  const result = { tables: "absent", jobs: 0, withdrawn: "not_composed", accounts: 0 };
+  const result = { tables: "absent", jobs: 0, withdrawn: "not_composed", accounts: 0, ledger: "absent" };
   try {
     await migrateMemorySettings(database);
     await migrateProductStore(database);
@@ -84,7 +89,13 @@ export async function retireLegacyMemory({ database, withdrawals = null, report 
       // 2. The queued jobs of the retired index kind.
       result.jobs = Number((await client.query("DELETE FROM evimed_product.jobs WHERE kind='memory-record-index'")).rowCount ?? 0);
 
-      // 3. The index's copies of the records, once.
+      // 3. The erasure ledger of the retired usememos store, which nothing reads.
+      if (await tableExists(client, "retired_erasures")) {
+        await client.query("DROP TABLE evimed_memory.retired_erasures");
+        result.ledger = "dropped";
+      }
+
+      // 4. The index's copies of the records, once.
       if (withdrawals) {
         const done = (await client.query("SELECT 1 FROM evimed_product.schema_migrations WHERE name=$1", [LEGACY_INDEX_WITHDRAWN])).rowCount === 1;
         if (done) result.withdrawn = "done_before";
@@ -105,8 +116,9 @@ export async function retireLegacyMemory({ database, withdrawals = null, report 
     recordLegacyRetirement(result.tables);
     if (result.withdrawn === "queued") recordLegacyRetirement("index_withdrawals_queued");
     if (result.jobs > 0) recordLegacyRetirement("jobs_deleted");
-    if (result.tables === "dropped" || result.withdrawn === "queued" || result.jobs > 0) {
-      report(`legacy memory: tables ${result.tables}; ${result.jobs} retired index job(s) deleted; index copies of the records ${result.withdrawn}${result.withdrawn === "queued" ? ` for ${result.accounts} account(s)` : ""}`);
+    if (result.ledger === "dropped") recordLegacyRetirement("erasure_ledger_dropped");
+    if (result.tables === "dropped" || result.withdrawn === "queued" || result.jobs > 0 || result.ledger === "dropped") {
+      report(`legacy memory: tables ${result.tables}; ${result.jobs} retired index job(s) deleted; index copies of the records ${result.withdrawn}${result.withdrawn === "queued" ? ` for ${result.accounts} account(s)` : ""}${result.ledger === "dropped" ? "; the retired usememos erasure ledger dropped" : ""}`);
     }
   } catch (error) {
     result.failed = String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 200);

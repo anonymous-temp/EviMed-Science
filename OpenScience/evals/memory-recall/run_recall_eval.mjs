@@ -6,8 +6,7 @@
  * question (whether memory changes a delivered package, which the memory-ablation
  * study of 2026-09 asked and git history keeps) — but it is the cheap one, and a
  * provider that cannot win here cannot win there either. Two modes remain
- * (the third, the platform's own records recall behind `memorySubstrate`, was deleted with the legacy
- * memory engine on 2026-10-25; its results are in git history).
+ * (the third, the legacy engine's own records recall, was deleted with that engine on 2026-10-25; its results are in git history).
  *
  * `--mode capsule` (the default) asks the question of capsule facts, whose fallback is not a term matcher but the lexical
  * PostgreSQL search `ProductDocuments.search` runs — a whole-query substring match, so it answers nothing at all to a

@@ -422,7 +422,7 @@ export function learningMetricFamilies(enabled, ledger, counters) {
       { name: "open_science_learning_distill_jobs", help: "Distillation lessons queued, by trigger and job status.", type: "gauge",
         series: Object.entries(ledger.lessons).flatMap(([trigger, statuses]) => JOB_STATUSES.map((status) => ({ value: statuses[status] ?? 0, labels: { trigger, status } }))) },
       { name: "open_science_learning_lessons_total", type: "counter",
-        help: "Distillation lessons queued, by trigger (correction, adopted, routine, script, edit_diff; delivered only for jobs queued before 2026-10-23).",
+        help: "Distillation lessons queued, by trigger (correction, adopted, routine, script, edit_diff; a trigger that was deleted since the job was queued reads as other).",
         series: Object.entries(ledger.lessons).map(([trigger, statuses]) => ({ value: Object.values(statuses).reduce((total, value) => total + value, 0), labels: { trigger } })) },
       { name: "open_science_learning_evidence_total", type: "counter",
         help: "What researchers did to runs, as the learning loop counts it, by evidence (steer, follow_up, result_corrected, silent, used) and verdict (correction, preference, rejection, accept, none, adopt). Only accept, adopt and used make a run clean; silent counts for nothing.",

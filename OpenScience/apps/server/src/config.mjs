@@ -3154,11 +3154,6 @@ export function loadConfig(overrides = {}) {
     mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
-    // `basic` is the kernel's own engine; `structured` is ours, which preserves
-    // the run's durable handles across a compaction. It stays `basic` until the
-    // context-fidelity report has a real distribution to argue from (§6.5).
-    runtimeCompactionPolicy: String(overrides.runtimeCompactionPolicy
-      ?? process.env.OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY ?? "basic"),
     // The context window the kernel is told it has.
     //
     // It was the literal 1,000,000 while a run's own budget was 400,000, and

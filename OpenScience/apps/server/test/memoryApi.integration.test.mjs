@@ -12,11 +12,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { LearningService } from "../src/learningService.mjs";
-import { retiredMemosOwner } from "../src/retiredMemos.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
+import { makePack } from "./helpers/capsuleFixtures.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -159,8 +159,7 @@ test("a reset clears every kind the memory page shows — memories, learned meth
     await app.capsuleService.updateEntry(owner, capsule.id, forgotten.id, { status: "retired", expectedRevision: forgotten.revision });
     const document = await app.capsuleService.addEntry(owner, capsule.id, { factKind: "project_fact", layer: "sources", origin: "inferred", content: "据资料：抗凝前查肾功能",
       derivedFrom: { sourceId: `src_${"a".repeat(32)}`, projectId: "default" } });
-    const received = await app.capsuleService.create(owner, { title: "李主任的工作方式" });
-    await documents.put(owner, "capsule", received.id, { ...received.payload, imported: true }, { expectedRevision: received.revision });
+    const received = await makePack(app.capsuleService, owner, { title: "李主任的工作方式" });
     const shared = await app.capsuleService.addEntry(owner, received.id, { factKind: "method_preference", layer: "methods", content: "别人的做法" });
     return { method, note, document, shared, received };
   };
@@ -281,34 +280,6 @@ test("turning recall off asks the runtime manager to let go of the account's idl
   assert.deepEqual(asked, [user.id, user.id], "turning it back on asks for nothing");
 });
 
-// 2026-10-10 review M-11: the retired usememos tables sit in `public`, reach nothing in `evimed_control`, and outlived every
-// account. Erasing an account takes its rows with it where the tables are still there.
-test("deleting an account takes its rows out of the retired usememos tables and leaves the digests an archive is re-sealed against", options, async (t) => {
-  const { app, base, headers, user } = await fixture(t);
-  const database = app.store.database;
-  const owner = retiredMemosOwner(user.id);
-  const stranger = retiredMemosOwner(`someone-else-${randomUUID()}`);
-  await database.query("CREATE TABLE IF NOT EXISTS public.memory_record (id serial PRIMARY KEY, namespace text, value text)");
-  await database.query("CREATE TABLE IF NOT EXISTS public.memo (id serial PRIMARY KEY, content text)");
-  try {
-    await database.query("INSERT INTO public.memory_record (namespace, value) VALUES ($1,'mine'),($2,'theirs')", [owner.namespace, stranger.namespace]);
-    await database.query("INSERT INTO public.memo (content) VALUES ($1),($2)", [`mine\n\n#evimed-user-${owner.tag}`, `theirs\n\n#evimed-user-${stranger.tag}`]);
-
-    const deleted = await fetch(`${base}/api/account`, {
-      method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: "test-only-memory-password" }),
-    });
-    assert.equal(deleted.status, 200, await deleted.clone().text());
-    assert.deepEqual((await database.query("SELECT value FROM public.memory_record")).rows, [{ value: "theirs" }]);
-    assert.deepEqual((await database.query("SELECT content FROM public.memo")).rows.map((row) => row.content.startsWith("theirs")), [true]);
-    assert.deepEqual((await database.query("SELECT namespace, tag FROM evimed_memory.retired_erasures WHERE namespace=$1", [owner.namespace])).rows,
-      [{ namespace: owner.namespace, tag: owner.tag }]);
-  } finally {
-    // Inside the test: the fixture closes the pool when the test ends.
-    await database.query("DROP TABLE IF EXISTS public.memory_record, public.memo");
-    await database.query("DELETE FROM evimed_memory.retired_erasures WHERE namespace=ANY($1::text[])", [[owner.namespace, stranger.namespace]]);
-  }
-});
-
 // The index is derived and owns no record: every hit is re-read from PostgreSQL
 // and a copy whose row is gone is dropped there. So a slow index must not decide
 // whether a project can be deleted. Until 2026-10-05 the route asked the index to
@@ -356,9 +327,8 @@ test("erasing an account never waits on the index: the account goes and its copi
 test("an index that cannot answer a capsule recall is visible in readiness and in the degraded gauge, and clears when it answers", options, async (t) => {
   const index = slowIndex();
   const { app, base, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index, operatorMetricsToken: "metrics-secret" });
-  const capsule = await app.capsuleService.create(user.id, { title: "Index outage" });
+  const capsule = await app.capsuleService.ownCapsule(user.id, { create: true });
   await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "preference", layer: "profile", content: "Prefer forest plots." });
-  await app.capsuleService.activate(user.id, capsule.id, { mode: "own" });
   const account = (await app.store.userById(user.id)).accountCreatedAt;
   const readiness = async () => (await (await fetch(`${base}/api/ready`)).json()).data.checks.memoryIndex;
   const gauge = async () => (await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer metrics-secret" } })).text())

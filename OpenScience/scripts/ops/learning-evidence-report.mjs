@@ -24,7 +24,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const DAY_MS = 86_400_000;
 /** The evidence kinds and lesson triggers the report names; anything else is `other`, as the metrics do. */
 const KINDS = ["steer", "follow-up", "result-corrected", "silent", "used"];
-const TRIGGERS = ["correction", "adopted", "routine", "script", "repair_accepted", "edit_diff", "delivered"];
+const TRIGGERS = ["correction", "adopted", "routine", "script", "edit_diff"];
 /** The verdicts that say the run was not right, and the ones that say the work was kept (`@evimed/domain` `learningEvidence.mjs`). */
 const CORRECTION_VERDICTS = ["correction", "preference", "rejection"];
 const KEPT_VERDICTS = ["accept", "adopt"];

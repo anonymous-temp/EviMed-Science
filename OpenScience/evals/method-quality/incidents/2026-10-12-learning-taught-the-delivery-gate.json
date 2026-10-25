@@ -56,7 +56,7 @@
     "distillation": [
       {
         "name": "the repair was an anchor offset moved after citation numbers were renumbered",
-        "trigger": "delivered",
+        "trigger": "routine",
         "signal": "run",
         "lesson": "Gate issues: quote location off by one line after the reference list was renumbered; the run re-anchored three claims and resubmitted.",
         "expect": { "operation": "no_change", "reason": "platform bookkeeping" }

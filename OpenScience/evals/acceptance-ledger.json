@@ -357,7 +357,6 @@
       },
       "relatedEvidence": [
         "capabilities/method-distillation/capability.yaml",
-        "evals/method-quality/splits.json",
         "PROGRESS.md@2026-09-07 13:45",
         "PROGRESS.md@2026-09-07 11:30"
       ],
@@ -377,7 +376,6 @@
       "relatedEvidence": [
         "evals/method-quality/results/2026-09-27-method-relations-screen/run.json",
         "capabilities/method-relations/capability.yaml",
-        "evals/method-quality/splits.json",
         "PROGRESS.md@2026-09-07 11:30"
       ],
       "note": "Internal: dispatched only by a consolidate job; exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). All four production runs succeeded (decide 09-21, 09-22, 09-26; screen 09-27). Evidence is the decide run of 2026-09-26 (run_750263e09fae, 1.0.0, 2 minutes, ¥0.17), dispatched by integrate job 951f6e71 for the newly created reporting-checklist-addressability: accepted on its first submission, and the job applied its answer (relations 0, neighbours 1 — the two methods are not related, and nothing was written). Its package equals its archived receipt; its transcript was not kept, so whether it read the gate cannot be checked. The screen run of 2026-09-27 (run_aba2ab612b91, all three candidate pairs dropped, applied by consolidate job bb03844b) is kept beside it but not cited: its transcript shows it read the method-relations validator in contractRegistry.mjs eight times through a slashless directory the read guard missed (fixed in 7f6298bf5). The build action has not run in production."
