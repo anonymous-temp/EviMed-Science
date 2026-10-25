@@ -3238,7 +3238,7 @@ export class FrontierPipeline {
    * not apply (off, not a study genre, the provider paused or unable to answer): the writer's draft is stored as it came. The
    * outcome is counters and `editor_diagnostics.faith`, never a note on the page.
    * @param {"lead" | "brief"} kind
-   * @param {{ item: any, reader: { text: string, source: "body" | "abstract" | "excerpt" | "summary" }, sha: string, sourceName: string, draft: any,
+   * @param {{ item: any, reader: { text: string, source: "body" | "abstract" | "excerpt" | "summary" | "reports" }, sha: string, sourceName: string, draft: any,
    *           previous: any, input: any, context: any, texts?: any }} work
    * @returns {Promise<{ draft: any, facts: any | null, diagnostic: any | null, kind: "lead" | "brief" } | null>}
    */

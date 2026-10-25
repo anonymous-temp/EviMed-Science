@@ -50,13 +50,13 @@ export const FRONTIER_ASK_INSTRUCTIONS = [
 /** Which instructions wrote a set of questions (`items.ask_version`): a change writes them again, within the budget. */
 export const FRONTIER_ASK_VERSION = `frontier-ask-1.${createHash("sha256").update(JSON.stringify([FRONTIER_ASK_INSTRUCTIONS, FRONTIER_ASK_LIMITS])).digest("hex").slice(0, 12)}`;
 
-const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要" });
+const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要", reports: "媒体报道摘编" });
 
 /**
  * What one call shows the model: the source, the date, the kind of item, the title (and its Chinese), the 导读 when there is one and
  * the head of the reader text.
  * @param {{ sourceName: string, date?: string | null, genre?: string | null, titleRaw: string, titleZh?: string | null, lead?: string | null,
- *           text: string, kind: "body" | "abstract" | "excerpt" | "summary", post?: boolean }} input
+ *           text: string, kind: "body" | "abstract" | "excerpt" | "summary" | "reports", post?: boolean }} input
  */
 export function buildAskInput({ sourceName, date = null, genre = null, titleRaw, titleZh = null, lead = null, text, kind, post = false }) {
   const body = String(text ?? "").trim();

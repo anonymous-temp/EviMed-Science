@@ -87,12 +87,12 @@ export function frontierStudyFactsInstructions() {
   return FACTS_INSTRUCTIONS;
 }
 
-const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要" });
+const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要", reports: "媒体报道摘编" });
 
 /**
  * What one call shows the model: the source, the date, the title and the reader text, its head when longer than
  * `FRONTIER_STUDY_FACTS_LIMITS.input`. The same layout as the 导读's input, so `readerNumberSource` reads both.
- * @param {{ sourceName: string, date?: string | null, titleRaw: string, text: string, kind: "body" | "abstract" | "excerpt" | "summary" }} input
+ * @param {{ sourceName: string, date?: string | null, titleRaw: string, text: string, kind: "body" | "abstract" | "excerpt" | "summary" | "reports" }} input
  */
 export function buildStudyFactsInput({ sourceName, date = null, titleRaw, text, kind }) {
   const body = String(text ?? "").trim();
