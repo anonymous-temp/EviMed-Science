@@ -1,0 +1,5707 @@
+{
+ "model": "deepseek-flash",
+ "ranAt": "2026-10-25T05:09:11.962Z",
+ "usage": {
+  "calls": 58,
+  "cacheHit": 34549,
+  "cacheMiss": 14257,
+  "output": 18860,
+  "cny": 0.18077595999999999
+ },
+ "runs": [
+  {
+   "repeat": 1,
+   "summary": {
+    "labels": 26,
+    "positives": 16,
+    "negatives": 10,
+    "precision": 1,
+    "recall": 1,
+    "missed": [],
+    "falseAccepts": [],
+    "mustRejectHeld": [
+     "李雪健已无法说话: not_medical",
+     "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了: private_health"
+    ],
+    "fieldOk": "16/16",
+    "topicsWritten": 16,
+    "topicsDropped": 0,
+    "firstAnswerLeaks": 1,
+    "finalLeaks": 0,
+    "entityKeys": {
+     "topics": 16,
+     "withKeys": 15,
+     "keys": 40,
+     "wellFormed": 40
+    },
+    "unlabelledAccepted": 4,
+    "errors": []
+   },
+   "rounds": [
+    {
+     "id": "zxf-2026-03-24",
+     "day": "2026-03-24",
+     "groups": [
+      {
+       "titles": [
+        "张雪峰去世",
+        "心源性猝死",
+        "4成心源性猝死患者不到40岁",
+        "黄金四分钟是心源性猝死抢救关键",
+        "张雪峰近日在朋友圈打卡跑步7公里",
+        "张雪峰公司发布讣告",
+        "张雪峰女儿还那么小",
+        "张老师一路走好"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "张雪峰"
+       ],
+       "question": "心源性猝死的年轻化趋势、高危人群识别与现场心肺复苏（黄金四分钟）如何影响救治成功率？",
+       "medicalMembers": 3,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "心源性猝死为何盯上年轻人？黄金四分钟能救回多少人",
+         "question": "中青年人群发生心源性猝死时，哪些因素决定能否在黄金四分钟内获得心肺复苏并存活？",
+         "peg": "据其公司发布的讣告，张雪峰于3月24日因心源性猝死离世。",
+         "pegEntry": 6,
+         "queries": {
+          "zh_reports": [
+           "张雪峰 心源性猝死",
+           "心源性猝死 年轻化 40岁"
+          ],
+          "zh_evidence": [
+           "心源性猝死 心肺复苏 专家共识",
+           "心脏骤停 黄金四分钟 急救指南"
+          ],
+          "en_evidence": [
+           "sudden cardiac death young adults epidemiology",
+           "bystander CPR survival out-of-hospital cardiac arrest systematic review"
+          ],
+          "stats": [
+           "心源性猝死 发病率 存活率 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心源性猝死",
+           "心脏骤停"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心源性猝死",
+         "disease:心脏骤停"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "黄金为什么越战越跌"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "外交部回应日方拟将中日关系降级"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "外交部"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "太空加油站新进展"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "文淇 年轻女演员演主角等于没票房"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "文淇"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "以色列被打穿了"
+       ],
+       "domain": "conflict",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "以色列"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "张凌赫陈哲远将军造型对比"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "张凌赫",
+        "陈哲远"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "张雪峰去世",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "entertainment",
+        "education",
+        "society"
+       ],
+       "names": [
+        "张雪峰"
+       ],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "public-figure",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "黄金为什么越战越跌",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "zxf-2026-03-25",
+     "day": "2026-03-25",
+     "groups": [
+      {
+       "titles": [
+        "张雪峰去世当天最后一个视频",
+        "心源性猝死与跑步有什么关系",
+        "运动性心源性猝死的典型画像"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "张雪峰"
+       ],
+       "question": "运动性心源性猝死的危险因素、预警信号与现场急救（心肺复苏与AED）应如何识别和开展？",
+       "medicalMembers": 2,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "运动性心源性猝死有哪些预警信号，现场如何急救？",
+         "question": "普通人在运动中出现哪些症状提示心源性猝死风险，旁人应如何识别并开展心肺复苏与AED急救？",
+         "peg": null,
+         "pegEntry": null,
+         "queries": {
+          "zh_reports": [
+           "张雪峰 去世 心源性猝死",
+           "运动性心源性猝死 跑步"
+          ],
+          "zh_evidence": [
+           "运动性心源性猝死 专家共识",
+           "心脏骤停 心肺复苏 AED 指南"
+          ],
+          "en_evidence": [
+           "exercise-related sudden cardiac death risk factors",
+           "bystander CPR AED survival out-of-hospital cardiac arrest"
+          ],
+          "stats": [
+           "心源性猝死 发病率 存活率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心源性猝死",
+           "心脏骤停"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心源性猝死",
+         "disease:心脏骤停"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "8个月婴儿喝蜂蜜水中毒"
+       ],
+       "domain": "food-safety",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "1岁以下婴儿食用蜂蜜导致肉毒杆菌中毒的风险与预防措施是什么？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "1岁以下婴儿吃蜂蜜会中毒吗？风险有多大",
+         "question": "1岁以下婴儿食用蜂蜜后发生肉毒杆菌中毒的风险有多高，家长应如何识别和预防？",
+         "peg": "据微博热搜，8个月婴儿喝蜂蜜水中毒。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "8个月婴儿 蜂蜜水 中毒",
+           "婴儿 蜂蜜 肉毒杆菌 中毒"
+          ],
+          "zh_evidence": [
+           "婴儿肉毒杆菌中毒 诊治 专家共识",
+           "1岁以下婴儿 蜂蜜 肉毒杆菌 预防"
+          ],
+          "en_evidence": [
+           "infant botulism honey risk systematic review",
+           "infant botulism clinical management guideline"
+          ],
+          "stats": [
+           "infant botulism incidence rate"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "婴儿肉毒杆菌中毒",
+           "肉毒中毒"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:婴儿肉毒杆菌中毒",
+         "disease:肉毒中毒"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "金价"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "习近平总书记赴雄安新区考察纪实"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "习近平总书记"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "第一次知道玻璃厂不能停电"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "我国自研新一代超大型油船交付"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "日方回应自卫队人员强闯我大使馆"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "逐玉 删减",
+        "江山大同"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "市监局回应专柜买4个LV包为假货"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "Uzi自曝与iG管理层沟通"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "Uzi"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "张雪峰去世当天最后一个视频",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "entertainment",
+        "education",
+        "society"
+       ],
+       "names": [
+        "张雪峰"
+       ],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "public-figure",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "8个月婴儿喝蜂蜜水中毒",
+       "expect": "accept",
+       "domains": [
+        "food-safety",
+        "society",
+        "accident"
+       ],
+       "names": [],
+       "field": "food safety",
+       "grouped": true,
+       "accepted": true,
+       "domain": "food-safety",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "金价",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "zhong-pet-2026-10-20",
+     "day": "2026-10-20",
+     "groups": [
+      {
+       "titles": [
+        "钟南山心梗后仍每周运动3次",
+        "医生回应钟南山心梗后每周运动3次"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "钟南山"
+       ],
+       "question": "心肌梗死后患者进行规律运动康复的安全性与获益如何？",
+       "medicalMembers": 2,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "心肌梗死后规律运动康复安全吗？能带来哪些获益",
+         "question": "心肌梗死后患者进行规律运动康复，安全性和心血管获益如何？",
+         "peg": "据微博热搜，钟南山心梗后仍每周运动3次，有医生对此作出回应。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "钟南山 心梗 运动 医生回应",
+           "心梗后 每周运动 康复"
+          ],
+          "zh_evidence": [
+           "心肌梗死 心脏康复 运动处方 指南",
+           "心肌梗死 运动康复 安全性 共识"
+          ],
+          "en_evidence": [
+           "exercise-based cardiac rehabilitation after myocardial infarction systematic review meta-analysis",
+           "physical activity after myocardial infarction mortality cohort study"
+          ],
+          "stats": [
+           "心肌梗死 心脏康复 参与率 死亡率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心肌梗死",
+           "冠心病"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心肌梗死",
+         "disease:冠心病"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "27岁宠物爱心博主感染罕见真菌离世"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.8,
+       "subjectNames": [],
+       "question": "罕见真菌感染的传播途径、高危人群与早期识别要点是什么？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "罕见真菌感染如何传播，哪些人风险更高？",
+         "question": "普通人通过什么途径感染罕见真菌，哪些人群更易发展为重症，早期如何识别？",
+         "peg": "据微博热搜条目，一名27岁宠物爱心博主因感染罕见真菌离世。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "宠物博主 罕见真菌 感染 离世",
+           "27岁 博主 真菌感染"
+          ],
+          "zh_evidence": [
+           "罕见真菌感染 诊疗 专家共识",
+           "侵袭性真菌感染 高危人群 早期识别"
+          ],
+          "en_evidence": [
+           "rare fungal infection transmission risk factors review",
+           "invasive fungal infection early diagnosis guideline"
+          ],
+          "stats": [
+           "罕见真菌感染 发病率 病死率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "真菌感染",
+           "罕见真菌感染"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:真菌感染",
+         "disease:罕见真菌感染"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "女子被流浪狗咬伤后几分钟狗死亡"
+       ],
+       "domain": "accident",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "被犬咬伤后如何规范处理伤口并评估狂犬病暴露风险？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "被狗咬伤后，伤口该怎么处理、狂犬病风险怎么评估？",
+         "question": "普通人被犬咬伤后，应如何规范处理伤口并评估狂犬病暴露风险，以降低感染和死亡风险？",
+         "peg": "据微博热搜条目描述，一名女子被流浪狗咬伤，几分钟后该狗死亡。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "女子被流浪狗咬伤后狗死亡",
+           "被狗咬伤 狂犬病 处置"
+          ],
+          "zh_evidence": [
+           "狂犬病暴露预防处置工作规范",
+           "狂犬病暴露 伤口处理 专家共识"
+          ],
+          "en_evidence": [
+           "rabies post-exposure prophylaxis guideline",
+           "rabies exposure wound management systematic review"
+          ],
+          "stats": [
+           "狂犬病 暴露后 发病率 死亡率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "狂犬病"
+          ],
+          "drugs": [
+           "狂犬病疫苗",
+           "狂犬病免疫球蛋白"
+          ]
+         }
+        },
+        "entities": [
+         "disease:狂犬病",
+         "drug:狂犬病疫苗",
+         "drug:狂犬病免疫球蛋白"
+        ],
+        "entitiesWellFormed": 3,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "在新的长征路上继续奋勇前进",
+        "伟大长征精神何以永恒"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "油车电车10年成本账怎么算"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "理想汽车发布电池保障政策"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "理想汽车"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "美人余大结局可太解气了"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "到底谁把微信变成工作软件的"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "井柏然最有腔调的红毯来了"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "井柏然"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "法国乱成一锅粥了还有人威胁中国"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "钟南山心梗后仍每周运动3次",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "society"
+       ],
+       "names": [
+        "钟南山"
+       ],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "public-figure",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "27岁宠物爱心博主感染罕见真菌离世",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "society",
+        "outbreak",
+        "entertainment"
+       ],
+       "names": [],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "女子被流浪狗咬伤后几分钟狗死亡",
+       "expect": "accept",
+       "domains": [
+        "society",
+        "accident",
+        "outbreak"
+       ],
+       "names": [],
+       "field": "accident (rabies)",
+       "grouped": true,
+       "accepted": true,
+       "domain": "accident",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "torsion-2026-10-22",
+     "day": "2026-10-22",
+     "groups": [
+      {
+       "titles": [
+        "16岁男孩睡梦中睾丸扭转720度"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "青少年睾丸扭转的早期识别与手术时机对睾丸存活率的影响如何？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "青少年睡梦中睾丸扭转，能保住睾丸吗？",
+         "question": "青少年发生睾丸扭转后，早期识别并及时手术能否提高睾丸存活率、减少睾丸切除？",
+         "peg": "据微博热搜，一名16岁男孩在睡梦中发生睾丸扭转720度。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "16岁男孩 睡梦中 睾丸扭转720度",
+           "睾丸扭转 720度 手术 保住"
+          ],
+          "zh_evidence": [
+           "睾丸扭转 诊治 指南 专家共识",
+           "睾丸扭转 手术时机 睾丸存活率"
+          ],
+          "en_evidence": [
+           "testicular torsion orchiectomy salvage systematic review",
+           "testicular torsion time to surgery testicular salvage cohort"
+          ],
+          "stats": [
+           "睾丸扭转 发病率 睾丸切除率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "睾丸扭转",
+           "睾丸坏死"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:睾丸扭转",
+         "disease:睾丸坏死"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "黄金"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "长征伟大胜利之路的四个依靠"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "九尾 50呢"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "九尾"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "人民日报谈星巴克消费入座"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "人民日报",
+        "星巴克"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "我国面向全球的自贸网络已经初步成型"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "赵丽颖霍建华 剧播不好别怪妆造"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "赵丽颖",
+        "霍建华"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "厉娜恨过许飞非常久"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "厉娜",
+        "许飞"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "银行回应每天仅营业3.5小时"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "明天尚公主就抬嫁金钗在单更什么"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "16岁男孩睡梦中睾丸扭转720度",
+       "expect": "accept",
+       "domains": [
+        "society",
+        "accident",
+        "other"
+       ],
+       "names": [],
+       "field": "society",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "黄金",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "rh-quake-2026-10-23",
+     "day": "2026-10-23",
+     "groups": [
+      {
+       "titles": [
+        "西藏巴青地震16死76伤",
+        "西藏7级地震",
+        "习近平对西藏7.0级地震作出重要指示"
+       ],
+       "domain": "disaster",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "西藏巴青",
+        "习近平"
+       ],
+       "question": "地震灾害中的创伤救治、挤压综合征与灾后防疫和心理援助应如何开展？",
+       "medicalMembers": 0,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "地震灾害中创伤救治与灾后防疫应如何开展？",
+         "question": "地震灾害发生后，受伤人员如何开展创伤救治、挤压综合征识别与灾后防疫和心理援助？",
+         "peg": "据微博热搜条目，西藏发生7.0级地震，已造成16人死亡、76人受伤。",
+         "pegEntry": 2,
+         "queries": {
+          "zh_reports": [
+           "西藏巴青地震 伤员救治",
+           "西藏7.0级地震 医疗救援"
+          ],
+          "zh_evidence": [
+           "地震灾害 创伤救治 专家共识",
+           "挤压综合征 诊治 指南"
+          ],
+          "en_evidence": [
+           "crush syndrome management earthquake systematic review",
+           "earthquake disaster medical response guidelines"
+          ],
+          "stats": [
+           "地震 挤压综合征 发病率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "挤压综合征",
+           "创伤",
+           "急性肾损伤",
+           "创伤后应激障碍"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:挤压综合征",
+         "disease:创伤",
+         "disease:急性肾损伤",
+         "disease:创伤后应激障碍"
+        ],
+        "entitiesWellFormed": 4,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "多方回应熊猫血孕妇在医院胎死腹中"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.7,
+       "subjectNames": [],
+       "question": "稀有血型孕妇的产科用血保障与胎死腹中的相关风险因素有哪些？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "稀有血型孕妇的产科用血如何保障，胎死腹中的风险因素有哪些",
+         "question": "稀有血型（如Rh阴性）孕妇在孕期和分娩时，面临哪些产科用血保障问题，以及哪些因素与胎死腹中相关？",
+         "peg": "据微博热搜，多方回应熊猫血孕妇在医院胎死腹中。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "熊猫血孕妇 胎死腹中 回应",
+           "Rh阴性血 孕妇 用血保障"
+          ],
+          "zh_evidence": [
+           "Rh阴性血型孕妇 产科管理 专家共识",
+           "胎死腹中 危险因素 诊治指南"
+          ],
+          "en_evidence": [
+           "RhD negative pregnancy management guideline",
+           "stillbirth risk factors systematic review"
+          ],
+          "stats": [
+           "stillbirth incidence rate China"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "胎死腹中",
+           "Rh血型不合"
+          ],
+          "drugs": [
+           "抗D免疫球蛋白"
+          ]
+         }
+        },
+        "entities": [
+         "disease:胎死腹中",
+         "disease:Rh血型不合",
+         "drug:抗D免疫球蛋白"
+        ],
+        "entitiesWellFormed": 3,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "金价跌破870元"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "中共中央政治局召开会议"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "尚公主首播反响"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "尚公主"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "人一旦在有地铁的城市待久了"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.8,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "从消费数据看经济向好态势"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "王楚钦2026WTT多次退赛"
+       ],
+       "domain": "sports",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.6,
+       "subjectNames": [
+        "王楚钦"
+       ],
+       "question": "运动员频繁退赛与过度训练、伤病及赛程负荷之间有何关系？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "最高法通报牟某虐待案细节"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.55,
+       "subjectNames": [
+        "牟某"
+       ],
+       "question": "虐待行为对受害者造成的身体与心理伤害及干预措施有哪些？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "减缓人工智能应用就业替代影响"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "NEON改了盛艾敬梁淅沥Intro"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "NEON",
+        "盛艾敬",
+        "梁淅沥"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "多方回应熊猫血孕妇在医院胎死腹中",
+       "expect": "accept",
+       "domains": [
+        "society",
+        "accident",
+        "other"
+       ],
+       "names": [],
+       "field": "society",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "西藏巴青地震16死76伤",
+       "expect": "accept",
+       "domains": [
+        "disaster"
+       ],
+       "names": [
+        "习近平"
+       ],
+       "field": "disaster",
+       "grouped": true,
+       "accepted": true,
+       "domain": "disaster",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "金价跌破870元",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "stroke-2026-10-24",
+     "day": "2026-10-24",
+     "groups": [
+      {
+       "titles": [
+        "父亲突发脑梗儿子用AI抢出救命时间"
+       ],
+       "domain": "technology",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "AI 辅助识别脑卒中症状并协助急救调度，能否缩短院前延误、改善卒中结局？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "AI辅助识别脑卒中症状，能缩短急救时间、改善结局吗？",
+         "question": "普通人或家属借助AI工具识别脑卒中症状并呼叫急救，能否缩短院前延误、改善患者结局？",
+         "peg": "据微博热搜条目描述，一位父亲突发脑梗，其儿子借助AI工具争取到救治时间。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "AI 脑梗 急救 抢时间",
+           "AI 识别 脑卒中 症状 急救调度"
+          ],
+          "zh_evidence": [
+           "急性缺血性卒中 院前延误 专家共识",
+           "脑卒中 早期识别 急救 指南"
+          ],
+          "en_evidence": [
+           "artificial intelligence prehospital stroke recognition delay systematic review",
+           "machine learning stroke triage emergency dispatch outcomes cohort"
+          ],
+          "stats": [
+           "卒中 院前延误 时间 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "脑梗死",
+           "脑卒中",
+           "急性缺血性卒中"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:脑梗死",
+         "disease:脑卒中",
+         "disease:急性缺血性卒中"
+        ],
+        "entitiesWellFormed": 3,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "S16抽签 内战"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "翘首木船见证革命信仰"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "尚公主编剧水平"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "徐嘉余50米仰泳破世界纪录"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "徐嘉余"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "二十届五中全会是什么会"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "小说里为什么没有广东霸总"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "去年全国结婚登记676万对"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "王沪宁陪同金正恩访问丹东"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "王沪宁",
+        "金正恩"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "王俊凯特别的人 好听"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "王俊凯"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "父亲突发脑梗儿子用AI抢出救命时间",
+       "expect": "accept",
+       "domains": [
+        "technology",
+        "society"
+       ],
+       "names": [],
+       "field": "technology",
+       "grouped": true,
+       "accepted": true,
+       "domain": "technology",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "S16抽签 内战",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "sports (esports draw)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "sports",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "live-2026-10-25",
+     "day": null,
+     "groups": [
+      {
+       "titles": [
+        "女排国手李盈莹因心脏问题接受手术"
+       ],
+       "domain": "sports",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "李盈莹"
+       ],
+       "question": "运动员出现心脏问题并接受手术，常见于哪些心脏疾病，术后康复与重返赛场如何评估？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "运动员因心脏问题接受手术，常见于哪些疾病？",
+         "question": "运动员出现心脏问题并接受手术，可能涉及哪些心脏疾病，术后康复和重返赛场如何评估？",
+         "peg": "据微博热搜，女排国手李盈莹因心脏问题接受手术。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "李盈莹 心脏问题 手术",
+           "女排 李盈莹 心脏 手术 康复"
+          ],
+          "zh_evidence": [
+           "运动员 心脏疾病 重返赛场 专家共识",
+           "运动员 心律失常 术后 康复 评估 指南"
+          ],
+          "en_evidence": [
+           "athlete cardiac surgery return to play consensus",
+           "athletes heart disease return to sport systematic review"
+          ],
+          "stats": [
+           "运动员 心脏性猝死 发病率 流行病学"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心脏疾病",
+           "心律失常",
+           "心肌病",
+           "冠状动脉疾病"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心脏疾病",
+         "disease:心律失常",
+         "disease:心肌病",
+         "disease:冠状动脉疾病"
+        ],
+        "entitiesWellFormed": 4,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "李雪健已无法说话"
+       ],
+       "domain": "public-figure",
+       "medical": false,
+       "privateHealth": true,
+       "confidence": 0.2,
+       "subjectNames": [
+        "李雪健"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "日剧Vivant抹黑中国"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "国考排名第一的岗位竞争超6000:1"
+       ],
+       "domain": "education",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "张雪刷新吉尼斯纪录"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "张雪"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "向英雄致敬迎英雄回家"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "深圳水贝被挤爆"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "唐朝诡事录之蜀道开机了"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "江苏姑娘网购鹤岗房搬进去后傻眼"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "柯淳李柯以短剧顶流首搭"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "华为换苹果卡在办手机卡"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "宋慧乔从出现开始就美得在发光"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "宋慧乔"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "女排国手李盈莹因心脏问题接受手术",
+       "expect": "accept",
+       "domains": [
+        "sports",
+        "public-figure"
+       ],
+       "names": [
+        "李盈莹"
+       ],
+       "field": "sports",
+       "grouped": true,
+       "accepted": true,
+       "domain": "sports",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "李雪健已无法说话",
+       "expect": "must-reject",
+       "domains": [],
+       "names": [
+        "李雪健"
+       ],
+       "field": "a named person's health nobody stated",
+       "grouped": true,
+       "accepted": false,
+       "domain": "public-figure",
+       "refusal": "not_medical",
+       "fieldOk": null
+      },
+      {
+       "title": "日剧Vivant抹黑中国",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "entertainment",
+       "grouped": true,
+       "accepted": false,
+       "domain": "international",
+       "refusal": "not_medical",
+       "fieldOk": null
+      },
+      {
+       "title": "国考排名第一的岗位竞争超6000:1",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "education (civil service exam)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "education",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "gaza-2025-08-05",
+     "day": "2025-08-05",
+     "groups": [
+      {
+       "titles": [
+        "加沙儿童严重脱水哭时没有一滴眼泪",
+        "密密麻麻的不是蚂蚁是加沙饥民",
+        "以色列总理计划全面占领加沙"
+       ],
+       "domain": "conflict",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "加沙",
+        "以色列"
+       ],
+       "question": "武装冲突与封锁下，儿童严重脱水与人群饥荒的识别、救治和公共卫生应对证据是什么？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "repaired",
+        "attempts": 2,
+        "firstLeaks": [
+         "stats"
+        ],
+        "finalLeaks": [],
+        "output": {
+         "title": "武装冲突与封锁下，儿童严重脱水和饥荒如何识别与救治",
+         "question": "在武装冲突与封锁环境中，儿童严重脱水和人群饥荒如何识别、救治，公共卫生应如何应对？",
+         "peg": "据微博热搜条目描述，加沙儿童出现严重脱水，哭时没有一滴眼泪；当地饥民密集出现。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "加沙 儿童 严重脱水 饥荒",
+           "加沙 饥民 封锁 人道危机"
+          ],
+          "zh_evidence": [
+           "儿童 严重脱水 识别 救治 指南",
+           "饥荒 营养不良 公共卫生 应对 共识"
+          ],
+          "en_evidence": [
+           "severe dehydration children conflict settings management guideline",
+           "famine malnutrition humanitarian response public health evidence review"
+          ],
+          "stats": [
+           "儿童 严重脱水 营养不良 患病率 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "严重脱水",
+           "饥荒",
+           "营养不良"
+          ],
+          "drugs": [
+           "口服补液盐"
+          ]
+         }
+        },
+        "entities": [
+         "disease:严重脱水",
+         "disease:饥荒",
+         "disease:营养不良",
+         "drug:口服补液盐"
+        ],
+        "entitiesWellFormed": 4,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "习近平就网民对十五五建议作出重要指示"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "习近平"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "浙大一青年博导被曝坠楼身亡"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": true,
+       "confidence": 0.6,
+       "subjectNames": [
+        "浙大一青年博导"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "香港无头男尸头部已找到"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "逐步推行免费学前教育"
+       ],
+       "domain": "education",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "转账竟然是可以拦截的"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "再见爱人 王浩信"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "王浩信"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "房主任哽咽呼吁大家不要买黄牛票"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "房主任"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "巴厘岛快艇倾覆2名中国公民遇难"
+       ],
+       "domain": "accident",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.8,
+       "subjectNames": [],
+       "question": "快艇倾覆事故中溺水者的现场救援、心肺复苏与后续救治证据是什么？",
+       "medicalMembers": 0,
+       "refusal": null
+      }
+     ],
+     "labels": [
+      {
+       "title": "加沙儿童严重脱水哭时没有一滴眼泪",
+       "expect": "accept",
+       "domains": [
+        "conflict",
+        "international"
+       ],
+       "names": [],
+       "field": "war / conflict",
+       "grouped": true,
+       "accepted": true,
+       "domain": "conflict",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": [
+      [
+       "巴厘岛快艇倾覆2名中国公民遇难"
+      ]
+     ]
+    },
+    {
+     "id": "heat-chik-2025-07-16",
+     "day": "2025-07-16",
+     "groups": [
+      {
+       "titles": [
+        "陕西高温已突破历史极值",
+        "高温中暑用这三招救命",
+        "中东部高温天气进入最强时段"
+       ],
+       "domain": "environment",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "极端高温天气下，中暑的识别与现场急救（降温、补液、何时送医）有哪些循证依据？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "极端高温下如何识别中暑并正确急救？",
+         "question": "在极端高温天气下，普通人和旁观者如何识别中暑、进行现场降温与补液，以及什么情况下必须送医？",
+         "peg": "据微博热搜，陕西高温已突破历史极值，中东部高温天气进入最强时段。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "陕西 高温 突破历史极值 中暑",
+           "高温中暑 三招救命 急救"
+          ],
+          "zh_evidence": [
+           "中暑 热射病 急救 专家共识",
+           "热射病 现场降温 补液 指南"
+          ],
+          "en_evidence": [
+           "heat stroke prehospital cooling systematic review",
+           "exertional heat stroke cooling guidelines"
+          ],
+          "stats": [
+           "中暑 发病率 热射病 病死率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "中暑",
+           "热射病",
+           "热衰竭"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:中暑",
+         "disease:热射病",
+         "disease:热衰竭"
+        ],
+        "entitiesWellFormed": 3,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "佛山顺德区确诊478例基孔肯雅热",
+        "基孔肯雅热和花斑蚊是什么关系"
+       ],
+       "domain": "outbreak",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "佛山顺德区"
+       ],
+       "question": "基孔肯雅热的传播媒介、临床表现、重症风险与防蚊灭蚊等防控措施的证据是什么？",
+       "medicalMembers": 2,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "基孔肯雅热如何传播，重症风险有多大？",
+         "question": "普通人群在蚊媒活跃地区感染基孔肯雅热后，临床表现和重症风险如何，防蚊灭蚊措施能否有效阻断传播？",
+         "peg": "据微博热搜条目，佛山顺德区确诊478例基孔肯雅热。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "佛山顺德 基孔肯雅热 478例",
+           "基孔肯雅热 花斑蚊 传播"
+          ],
+          "zh_evidence": [
+           "基孔肯雅热 诊疗指南 共识",
+           "基孔肯雅热 防蚊灭蚊 防控 科普"
+          ],
+          "en_evidence": [
+           "chikungunya transmission Aedes clinical severity systematic review",
+           "chikungunya vector control prevention guidelines"
+          ],
+          "stats": [
+           "基孔肯雅热 重症率 发病率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "基孔肯雅热"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:基孔肯雅热"
+        ],
+        "entitiesWellFormed": 1,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "建设现代化人民城市有6个关键词"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "黄杨某甜有关问题最新通报",
+        "黄杨钿甜母亲发声"
+       ],
+       "domain": "public-figure",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "黄杨钿甜"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "微观链博会"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "演唱会前夕亲人离世平台拒退票"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "印度大规模猥亵事件478人被捕"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.8,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "钟美美说爸爸不喜欢我总打我"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.7,
+       "subjectNames": [
+        "钟美美"
+       ],
+       "question": "儿童期遭受家庭暴力对心理健康与行为发展的长期影响，以及受暴儿童的心理干预与保护措施有哪些证据？",
+       "medicalMembers": 0,
+       "refusal": null
+      },
+      {
+       "titles": [
+        "田栩宁轮流宠"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "田栩宁"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "陕西高温已突破历史极值",
+       "expect": "accept",
+       "domains": [
+        "environment",
+        "disaster"
+       ],
+       "names": [],
+       "field": "weather",
+       "grouped": true,
+       "accepted": true,
+       "domain": "environment",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "佛山顺德区确诊478例基孔肯雅热",
+       "expect": "accept",
+       "domains": [
+        "outbreak"
+       ],
+       "names": [],
+       "field": "outbreak",
+       "grouped": true,
+       "accepted": true,
+       "domain": "outbreak",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": [
+      [
+       "钟美美说爸爸不喜欢我总打我"
+      ]
+     ]
+    },
+    {
+     "id": "policy-2025-07-24",
+     "day": "2025-07-24",
+     "groups": [
+      {
+       "titles": [
+        "国家医保目录药品数达3159种"
+       ],
+       "domain": "policy",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "国家医保目录药品数量增加对患者用药可及性、药品价格和医保基金支出有何影响？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "医保目录药品增至3159种，对患者用药和费用有何影响？",
+         "question": "国家医保目录药品数量增加，对患者用药可及性、药品价格和医保基金支出有什么影响？",
+         "peg": "据微博热搜，国家医保目录药品数达3159种。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "国家医保目录药品数达3159种",
+           "医保目录调整 药品可及性"
+          ],
+          "zh_evidence": [
+           "国家医保药品目录调整 政策解读",
+           "医保药品准入谈判 患者用药可及性 研究"
+          ],
+          "en_evidence": [
+           "national reimbursement drug list China accessibility",
+           "drug price negotiation reimbursement list impact China"
+          ],
+          "stats": [
+           "国家医保目录 药品数量 3159种 医保基金支出"
+          ]
+         },
+         "entities": {
+          "diseases": [],
+          "drugs": []
+         }
+        },
+        "entities": [],
+        "entitiesWellFormed": 0,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "中欧建交50年的重要经验和启示"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "富豪CEO被大象踩踏身亡"
+       ],
+       "domain": "accident",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.6,
+       "subjectNames": [],
+       "question": "大型野生动物袭击致伤致死案例中，创伤救治与现场急救的关键措施有哪些？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "王一博 演唱会"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "王一博"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "李佳琦承诺赔付铂爵旅拍订单"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "李佳琦"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "美国骚猪肉"
+       ],
+       "domain": "food-safety",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.7,
+       "subjectNames": [],
+       "question": "进口猪肉的食品安全风险（如兽药残留、病原微生物污染）及监管检测措施是否可靠？",
+       "medicalMembers": 0,
+       "refusal": null
+      },
+      {
+       "titles": [
+        "一诺获EWC全场MVP"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "一诺"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "曝boss直聘再次涉黄"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "boss直聘"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "30万存款定律"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "国家医保目录药品数达3159种",
+       "expect": "accept",
+       "domains": [
+        "policy",
+        "economy"
+       ],
+       "names": [],
+       "field": "national policy / economy",
+       "grouped": true,
+       "accepted": true,
+       "domain": "policy",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": [
+      [
+       "美国骚猪肉"
+      ]
+     ]
+    },
+    {
+     "id": "lead-2026-10-16",
+     "day": "2026-10-16",
+     "groups": [
+      {
+       "titles": [
+        "甘肃天水幼儿园铅中毒案1人无期"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "甘肃天水幼儿园"
+       ],
+       "question": "儿童铅中毒的暴露来源、血铅筛查与驱铅治疗应如何规范开展？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "儿童铅中毒如何发现、筛查和治疗？",
+         "question": "儿童铅中毒的常见暴露来源有哪些，血铅筛查和驱铅治疗应如何规范开展？",
+         "peg": "据微博热搜，甘肃天水幼儿园铅中毒案有1人被判无期徒刑。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "甘肃天水幼儿园铅中毒案 判决",
+           "天水幼儿园铅中毒 血铅筛查"
+          ],
+          "zh_evidence": [
+           "儿童铅中毒 诊疗指南 血铅筛查",
+           "儿童高铅血症 驱铅治疗 专家共识"
+          ],
+          "en_evidence": [
+           "childhood lead poisoning screening guidelines systematic review",
+           "lead exposure children blood lead level management cohort study"
+          ],
+          "stats": [
+           "儿童血铅水平 检出率 流行病学"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "儿童铅中毒",
+           "铅暴露"
+          ],
+          "drugs": [
+           "驱铅治疗药物"
+          ]
+         }
+        },
+        "entities": [
+         "disease:儿童铅中毒",
+         "disease:铅暴露",
+         "drug:驱铅治疗药物"
+        ],
+        "entitiesWellFormed": 3,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "习近平在乌兰察布考察"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "习近平"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "母亲将大一儿子生活费从4000降至2000"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.1,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "河北卫视靠孙颖莎收视登顶了",
+        "日乒唯一乒乓奥运金牌出自伊藤美诚"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "孙颖莎",
+        "伊藤美诚"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "中央红军长征路线全览"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "iPhoneDuo首批黑色溢价16000元"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "傅首尔新片投资5000万票房仅8万",
+        "嫁金钗 配音"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "傅首尔"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "甘肃天水幼儿园铅中毒案1人无期",
+       "expect": "accept",
+       "domains": [
+        "food-safety",
+        "society",
+        "environment"
+       ],
+       "names": [],
+       "field": "food safety",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "death-cause-2026-03-26",
+     "day": "2026-03-26",
+     "groups": [
+      {
+       "titles": [
+        "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": true,
+       "confidence": 0.3,
+       "subjectNames": [
+        "张雪峰"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "private_health"
+      },
+      {
+       "titles": [
+        "罗马仕宣布召回超49万台充电宝"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.1,
+       "subjectNames": [
+        "罗马仕"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "罗技回应发布侮辱性广告"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "罗技"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "2026中国网络媒体论坛"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "白敬亭郑合惠子互动"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "白敬亭",
+        "郑合惠子"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "伊朗导弹2小时内4次密集砸向以本土"
+       ],
+       "domain": "conflict",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.7,
+       "subjectNames": [
+        "伊朗",
+        "以色列"
+       ],
+       "question": "导弹袭击与爆炸伤中，创伤救治、挤压伤与心理应激的处置证据是什么？",
+       "medicalMembers": 0,
+       "refusal": null
+      },
+      {
+       "titles": [
+        "央视新闻夸了张凌赫雉鸡领造型"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "张凌赫"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "奥运女子比赛仅限生理女性"
+       ],
+       "domain": "sports",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.5,
+       "subjectNames": [],
+       "question": "生理性别与性别发育差异对女子项目参赛资格及运动员健康管理有何医学证据？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "LPL进入大回归时代"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "因抢玩具殴打2岁女童女子被行拘"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.4,
+       "subjectNames": [],
+       "question": "幼儿遭受暴力殴打后的伤情评估与儿童保护干预有哪些医学证据？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      }
+     ],
+     "labels": [
+      {
+       "title": "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了",
+       "expect": "must-reject",
+       "domains": [],
+       "names": [
+        "张雪峰"
+       ],
+       "field": "a 「死因曝光」 framing",
+       "grouped": true,
+       "accepted": false,
+       "domain": "public-figure",
+       "refusal": "private_health",
+       "fieldOk": null
+      },
+      {
+       "title": "罗马仕宣布召回超49万台充电宝",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "product recall (power banks)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "technology",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": [
+      [
+       "伊朗导弹2小时内4次密集砸向以本土"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "repeat": 2,
+   "summary": {
+    "labels": 26,
+    "positives": 16,
+    "negatives": 10,
+    "precision": 1,
+    "recall": 1,
+    "missed": [],
+    "falseAccepts": [],
+    "mustRejectHeld": [
+     "李雪健已无法说话: not_medical",
+     "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了: private_health"
+    ],
+    "fieldOk": "16/16",
+    "topicsWritten": 16,
+    "topicsDropped": 0,
+    "firstAnswerLeaks": 1,
+    "finalLeaks": 0,
+    "entityKeys": {
+     "topics": 16,
+     "withKeys": 15,
+     "keys": 44,
+     "wellFormed": 44
+    },
+    "unlabelledAccepted": 3,
+    "errors": []
+   },
+   "rounds": [
+    {
+     "id": "zxf-2026-03-24",
+     "day": "2026-03-24",
+     "groups": [
+      {
+       "titles": [
+        "张雪峰去世",
+        "心源性猝死",
+        "4成心源性猝死患者不到40岁",
+        "黄金四分钟是心源性猝死抢救关键",
+        "张雪峰近日在朋友圈打卡跑步7公里",
+        "张雪峰公司发布讣告",
+        "张雪峰女儿还那么小",
+        "张老师一路走好"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "张雪峰"
+       ],
+       "question": "心源性猝死的年轻化趋势、高危人群识别与现场心肺复苏（黄金四分钟）如何影响救治成功率？",
+       "medicalMembers": 3,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "心源性猝死为何盯上年轻人？黄金四分钟能救回多少人",
+         "question": "中青年人群发生心源性猝死的风险有多高，现场心肺复苏和及时除颤能把救治成功率提高多少？",
+         "peg": "据其公司发布的讣告，张雪峰于3月24日因心源性猝死离世。",
+         "pegEntry": 6,
+         "queries": {
+          "zh_reports": [
+           "张雪峰 心源性猝死",
+           "心源性猝死 年轻化 黄金四分钟"
+          ],
+          "zh_evidence": [
+           "心源性猝死 心肺复苏 专家共识",
+           "心脏骤停 黄金四分钟 急救指南"
+          ],
+          "en_evidence": [
+           "sudden cardiac death young adults incidence risk",
+           "bystander CPR early defibrillation survival out-of-hospital cardiac arrest"
+          ],
+          "stats": [
+           "心源性猝死 发病率 存活率 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心源性猝死",
+           "心脏骤停"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心源性猝死",
+         "disease:心脏骤停"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "黄金为什么越战越跌"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "外交部回应日方拟将中日关系降级"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "外交部"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "太空加油站新进展"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "文淇 年轻女演员演主角等于没票房"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "文淇"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "以色列被打穿了"
+       ],
+       "domain": "conflict",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.4,
+       "subjectNames": [
+        "以色列"
+       ],
+       "question": "武装冲突中的爆炸伤与创伤救治、平民伤亡的应急医疗应对有哪些证据？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "张凌赫陈哲远将军造型对比"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "张凌赫",
+        "陈哲远"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "张雪峰去世",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "entertainment",
+        "education",
+        "society"
+       ],
+       "names": [
+        "张雪峰"
+       ],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "public-figure",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "黄金为什么越战越跌",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "zxf-2026-03-25",
+     "day": "2026-03-25",
+     "groups": [
+      {
+       "titles": [
+        "张雪峰去世当天最后一个视频",
+        "心源性猝死与跑步有什么关系",
+        "运动性心源性猝死的典型画像"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "张雪峰"
+       ],
+       "question": "运动性心源性猝死的危险因素、预警信号与现场急救（心肺复苏与AED）应如何识别和开展？",
+       "medicalMembers": 2,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "运动性心源性猝死有哪些预警信号，现场如何急救",
+         "question": "普通人在运动中出现哪些症状提示心源性猝死风险，旁人应如何识别并实施心肺复苏与AED急救？",
+         "peg": null,
+         "pegEntry": null,
+         "queries": {
+          "zh_reports": [
+           "张雪峰 心源性猝死",
+           "运动性心源性猝死 跑步"
+          ],
+          "zh_evidence": [
+           "运动性心源性猝死 专家共识",
+           "心脏骤停 心肺复苏 AED 指南"
+          ],
+          "en_evidence": [
+           "exercise-related sudden cardiac death risk factors review",
+           "bystander CPR AED survival out-of-hospital cardiac arrest systematic review"
+          ],
+          "stats": [
+           "心源性猝死 发病率 存活率 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心源性猝死",
+           "心脏骤停"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心源性猝死",
+         "disease:心脏骤停"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "8个月婴儿喝蜂蜜水中毒"
+       ],
+       "domain": "food-safety",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "1岁以下婴儿食用蜂蜜导致肉毒杆菌中毒的风险与预防措施是什么？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "1岁以下婴儿吃蜂蜜会中毒吗？风险有多大",
+         "question": "1岁以下婴儿食用蜂蜜后发生肉毒杆菌中毒的风险有多高，家长应如何识别和预防？",
+         "peg": "据微博热搜，8个月婴儿喝蜂蜜水中毒。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "8个月婴儿 蜂蜜水 中毒",
+           "婴儿 蜂蜜 肉毒杆菌 中毒"
+          ],
+          "zh_evidence": [
+           "婴儿肉毒杆菌中毒 诊治 专家共识",
+           "1岁以下婴儿 蜂蜜 肉毒杆菌 预防"
+          ],
+          "en_evidence": [
+           "infant botulism honey risk systematic review",
+           "infant botulism clinical management guideline"
+          ],
+          "stats": [
+           "infant botulism incidence rate"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "婴儿肉毒杆菌中毒",
+           "肉毒中毒"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:婴儿肉毒杆菌中毒",
+         "disease:肉毒中毒"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "金价"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "习近平总书记赴雄安新区考察纪实"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "习近平总书记"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "第一次知道玻璃厂不能停电"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "我国自研新一代超大型油船交付"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "日方回应自卫队人员强闯我大使馆"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "逐玉 删减",
+        "江山大同"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "市监局回应专柜买4个LV包为假货"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "Uzi自曝与iG管理层沟通"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "Uzi"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "张雪峰去世当天最后一个视频",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "entertainment",
+        "education",
+        "society"
+       ],
+       "names": [
+        "张雪峰"
+       ],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "public-figure",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "8个月婴儿喝蜂蜜水中毒",
+       "expect": "accept",
+       "domains": [
+        "food-safety",
+        "society",
+        "accident"
+       ],
+       "names": [],
+       "field": "food safety",
+       "grouped": true,
+       "accepted": true,
+       "domain": "food-safety",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "金价",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "zhong-pet-2026-10-20",
+     "day": "2026-10-20",
+     "groups": [
+      {
+       "titles": [
+        "钟南山心梗后仍每周运动3次",
+        "医生回应钟南山心梗后每周运动3次"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "钟南山"
+       ],
+       "question": "心肌梗死后患者如何安全开展运动康复，运动频率与强度应如何把握？",
+       "medicalMembers": 2,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "心肌梗死后如何安全运动？频率和强度怎么把握",
+         "question": "心肌梗死后患者能否规律运动，运动频率与强度应如何把握才能既获益又避免风险？",
+         "peg": "据微博热搜，钟南山心梗后仍每周运动3次，有医生对此作出回应。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "钟南山 心梗后 每周运动3次",
+           "钟南山 心梗 运动 医生回应"
+          ],
+          "zh_evidence": [
+           "心肌梗死 心脏康复 运动处方 指南",
+           "心肌梗死 运动康复 强度 共识"
+          ],
+          "en_evidence": [
+           "exercise-based cardiac rehabilitation after myocardial infarction systematic review",
+           "exercise training intensity after myocardial infarction guideline"
+          ],
+          "stats": [
+           "心肌梗死 心脏康复 参与率 死亡率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心肌梗死",
+           "冠心病"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心肌梗死",
+         "disease:冠心病"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "27岁宠物爱心博主感染罕见真菌离世"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.8,
+       "subjectNames": [],
+       "question": "罕见真菌感染的传播途径、易感人群与早期识别有哪些证据？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "罕见真菌感染如何传播，哪些人容易中招？",
+         "question": "普通人通过什么途径感染罕见真菌，哪些人群风险更高，早期如何识别？",
+         "peg": "据微博热搜条目，一名27岁宠物爱心博主因感染罕见真菌离世。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "宠物博主 罕见真菌 感染 离世",
+           "宠物 真菌感染 传播 途径"
+          ],
+          "zh_evidence": [
+           "罕见真菌感染 诊疗 专家共识",
+           "侵袭性真菌感染 高危人群 早期识别"
+          ],
+          "en_evidence": [
+           "rare fungal infection transmission risk factors review",
+           "invasive fungal infection early diagnosis guidelines"
+          ],
+          "stats": [
+           "罕见真菌感染 发病率 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "真菌感染",
+           "罕见真菌感染"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:真菌感染",
+         "disease:罕见真菌感染"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "女子被流浪狗咬伤后几分钟狗死亡"
+       ],
+       "domain": "accident",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "被犬咬伤后如何规范处置伤口并评估狂犬病暴露风险与疫苗接种？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "被狗咬伤后该如何处置伤口并评估狂犬病风险？",
+         "question": "人被犬咬伤后，应如何规范处理伤口、评估狂犬病暴露风险并决定是否接种疫苗？",
+         "peg": "据微博热搜条目描述，一名女子被流浪狗咬伤，几分钟后该狗死亡。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "女子被流浪狗咬伤 狗几分钟后死亡",
+           "被流浪狗咬伤 狂犬病暴露处置"
+          ],
+          "zh_evidence": [
+           "狂犬病暴露预防处置工作规范",
+           "犬咬伤 伤口处理 狂犬病暴露分级 专家共识"
+          ],
+          "en_evidence": [
+           "rabies post-exposure prophylaxis guidelines wound washing",
+           "rabies exposure risk assessment dog bite systematic review"
+          ],
+          "stats": [
+           "狂犬病 暴露后预防 发病率 存活率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "狂犬病",
+           "犬咬伤"
+          ],
+          "drugs": [
+           "狂犬病疫苗",
+           "狂犬病免疫球蛋白"
+          ]
+         }
+        },
+        "entities": [
+         "disease:狂犬病",
+         "disease:犬咬伤",
+         "drug:狂犬病疫苗",
+         "drug:狂犬病免疫球蛋白"
+        ],
+        "entitiesWellFormed": 4,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "在新的长征路上继续奋勇前进",
+        "伟大长征精神何以永恒"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "油车电车10年成本账怎么算"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "理想汽车发布电池保障政策"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "理想汽车"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "美人余大结局可太解气了"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "到底谁把微信变成工作软件的"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "井柏然最有腔调的红毯来了"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "井柏然"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "法国乱成一锅粥了还有人威胁中国"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "钟南山心梗后仍每周运动3次",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "society"
+       ],
+       "names": [
+        "钟南山"
+       ],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "public-figure",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "27岁宠物爱心博主感染罕见真菌离世",
+       "expect": "accept",
+       "domains": [
+        "public-figure",
+        "society",
+        "outbreak",
+        "entertainment"
+       ],
+       "names": [],
+       "field": "public figure",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "女子被流浪狗咬伤后几分钟狗死亡",
+       "expect": "accept",
+       "domains": [
+        "society",
+        "accident",
+        "outbreak"
+       ],
+       "names": [],
+       "field": "accident (rabies)",
+       "grouped": true,
+       "accepted": true,
+       "domain": "accident",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "torsion-2026-10-22",
+     "day": "2026-10-22",
+     "groups": [
+      {
+       "titles": [
+        "16岁男孩睡梦中睾丸扭转720度"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "青少年睾丸扭转的早期识别与手术时机对睾丸存活率的影响如何？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "青少年睾丸扭转如何早期识别，手术时机怎样影响睾丸存活",
+         "question": "青少年发生睾丸扭转时，早期识别和手术时机如何影响睾丸存活率？",
+         "peg": "据微博热搜，16岁男孩睡梦中发生睾丸扭转720度。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "16岁男孩 睾丸扭转720度",
+           "睾丸扭转 睡梦中 青少年"
+          ],
+          "zh_evidence": [
+           "睾丸扭转 诊治 指南 专家共识",
+           "睾丸扭转 早期识别 手术时机"
+          ],
+          "en_evidence": [
+           "testicular torsion diagnosis and management guideline",
+           "testicular torsion orchiectomy rate time to surgery systematic review"
+          ],
+          "stats": [
+           "睾丸扭转 睾丸切除率 存活率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "睾丸扭转",
+           "睾丸坏死"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:睾丸扭转",
+         "disease:睾丸坏死"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "黄金"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "长征伟大胜利之路的四个依靠"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "九尾 50呢"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "九尾"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "人民日报谈星巴克消费入座"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "人民日报",
+        "星巴克"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "我国面向全球的自贸网络已经初步成型"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "赵丽颖霍建华 剧播不好别怪妆造"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "赵丽颖",
+        "霍建华"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "厉娜恨过许飞非常久"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "厉娜",
+        "许飞"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "银行回应每天仅营业3.5小时"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "明天尚公主就抬嫁金钗在单更什么"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "16岁男孩睡梦中睾丸扭转720度",
+       "expect": "accept",
+       "domains": [
+        "society",
+        "accident",
+        "other"
+       ],
+       "names": [],
+       "field": "society",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "黄金",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "rh-quake-2026-10-23",
+     "day": "2026-10-23",
+     "groups": [
+      {
+       "titles": [
+        "西藏巴青地震16死76伤",
+        "西藏7级地震",
+        "习近平对西藏7.0级地震作出重要指示"
+       ],
+       "domain": "disaster",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "西藏巴青",
+        "习近平"
+       ],
+       "question": "地震灾害中如何开展创伤救治、挤压综合征处置与灾后心理援助？",
+       "medicalMembers": 0,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "地震灾害中如何开展创伤救治、挤压综合征处置与灾后心理援助？",
+         "question": "地震灾害发生后，受伤群众如何开展创伤救治、挤压综合征处置与灾后心理援助？",
+         "peg": "据微博热搜条目，西藏发生7.0级地震，已致16人死亡、76人受伤。",
+         "pegEntry": 2,
+         "queries": {
+          "zh_reports": [
+           "西藏巴青地震 16死76伤 救援",
+           "西藏7.0级地震 医疗救治"
+          ],
+          "zh_evidence": [
+           "地震灾害 创伤救治 专家共识",
+           "挤压综合征 诊治 指南"
+          ],
+          "en_evidence": [
+           "crush syndrome management earthquake systematic review",
+           "post-earthquake mental health psychological first aid guidelines"
+          ],
+          "stats": [
+           "地震 挤压综合征 发病率 死亡率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "挤压综合征",
+           "创伤",
+           "急性肾损伤",
+           "创伤后应激障碍"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:挤压综合征",
+         "disease:创伤",
+         "disease:急性肾损伤",
+         "disease:创伤后应激障碍"
+        ],
+        "entitiesWellFormed": 4,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "多方回应熊猫血孕妇在医院胎死腹中"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.8,
+       "subjectNames": [],
+       "question": "稀有血型（Rh阴性）孕妇的孕期管理与产科用血保障存在哪些循证问题？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "稀有血型孕妇的孕期管理和产科用血如何保障",
+         "question": "Rh阴性（稀有血型）孕妇在孕期和分娩时，面临哪些母婴风险和用血保障问题，循证管理策略是什么？",
+         "peg": "据微博热搜条目，多方回应熊猫血孕妇在医院胎死腹中。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "熊猫血孕妇 胎死腹中 多方回应",
+           "Rh阴性孕妇 产科用血 保障"
+          ],
+          "zh_evidence": [
+           "Rh阴性孕妇 孕期管理 专家共识",
+           "稀有血型 产科 备血 指南"
+          ],
+          "en_evidence": [
+           "RhD negative pregnancy management guideline",
+           "anti-D immunoglobulin prophylaxis systematic review"
+          ],
+          "stats": [
+           "Rh阴性 孕妇 胎死宫内 发生率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "胎死宫内",
+           "Rh同种免疫",
+           "新生儿溶血病"
+          ],
+          "drugs": [
+           "抗D免疫球蛋白"
+          ]
+         }
+        },
+        "entities": [
+         "disease:胎死宫内",
+         "disease:Rh同种免疫",
+         "disease:新生儿溶血病",
+         "drug:抗D免疫球蛋白"
+        ],
+        "entitiesWellFormed": 4,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "金价跌破870元"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "中共中央政治局召开会议"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "尚公主首播反响"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "人一旦在有地铁的城市待久了"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "从消费数据看经济向好态势"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "王楚钦2026WTT多次退赛"
+       ],
+       "domain": "sports",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.6,
+       "subjectNames": [
+        "王楚钦"
+       ],
+       "question": "运动员频繁退赛与赛程负荷相关的运动损伤和过劳风险应如何评估与预防？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "最高法通报牟某虐待案细节"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.55,
+       "subjectNames": [],
+       "question": "虐待行为对受害者造成的心理创伤应如何识别与干预？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "减缓人工智能应用就业替代影响"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "NEON改了盛艾敬梁淅沥Intro"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "多方回应熊猫血孕妇在医院胎死腹中",
+       "expect": "accept",
+       "domains": [
+        "society",
+        "accident",
+        "other"
+       ],
+       "names": [],
+       "field": "society",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "西藏巴青地震16死76伤",
+       "expect": "accept",
+       "domains": [
+        "disaster"
+       ],
+       "names": [
+        "习近平"
+       ],
+       "field": "disaster",
+       "grouped": true,
+       "accepted": true,
+       "domain": "disaster",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "金价跌破870元",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "economy (gold price)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "economy",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "stroke-2026-10-24",
+     "day": "2026-10-24",
+     "groups": [
+      {
+       "titles": [
+        "父亲突发脑梗儿子用AI抢出救命时间"
+       ],
+       "domain": "technology",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "AI 在急性脑卒中早期识别与院前急救中能否缩短救治延迟并改善预后？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "AI能在脑梗急救中抢出救命时间吗？",
+         "question": "急性脑卒中患者借助AI辅助的早期识别与院前急救，能否缩短救治延迟并改善预后？",
+         "peg": "据微博热搜条目，一位父亲突发脑梗，其儿子借助AI争取到救治时间。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "AI 脑梗 急救 抢时间",
+           "AI 识别 脑卒中 院前急救"
+          ],
+          "zh_evidence": [
+           "急性缺血性卒中 院前急救 指南",
+           "人工智能 脑卒中 早期识别 专家共识"
+          ],
+          "en_evidence": [
+           "artificial intelligence prehospital stroke triage systematic review",
+           "machine learning large vessel occlusion detection prehospital outcomes"
+          ],
+          "stats": [
+           "急性缺血性卒中 院前延迟 溶栓率 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "急性脑卒中",
+           "脑梗死"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:急性脑卒中",
+         "disease:脑梗死"
+        ],
+        "entitiesWellFormed": 2,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "S16抽签 内战"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "翘首木船见证革命信仰"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "尚公主编剧水平"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "徐嘉余50米仰泳破世界纪录"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "徐嘉余"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "二十届五中全会是什么会"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "小说里为什么没有广东霸总"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "去年全国结婚登记676万对"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "王沪宁陪同金正恩访问丹东"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "王沪宁",
+        "金正恩"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "王俊凯特别的人 好听"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "王俊凯"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "父亲突发脑梗儿子用AI抢出救命时间",
+       "expect": "accept",
+       "domains": [
+        "technology",
+        "society"
+       ],
+       "names": [],
+       "field": "technology",
+       "grouped": true,
+       "accepted": true,
+       "domain": "technology",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "S16抽签 内战",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "sports (esports draw)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "sports",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "live-2026-10-25",
+     "day": null,
+     "groups": [
+      {
+       "titles": [
+        "女排国手李盈莹因心脏问题接受手术"
+       ],
+       "domain": "sports",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "李盈莹"
+       ],
+       "question": "运动员出现心脏问题并接受手术后，其心脏疾病的诊断、治疗与运动回归评估有哪些循证依据？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "运动员查出心脏问题并接受手术后，还能安全回到赛场吗？",
+         "question": "运动员确诊心脏疾病并接受手术后，如何评估病因、选择治疗方式，并判断能否以及何时安全重返竞技运动？",
+         "peg": "据微博热搜，女排国手李盈莹因心脏问题接受手术。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "李盈莹 心脏问题 手术"
+          ],
+          "zh_evidence": [
+           "运动员 心脏疾病 重返运动 专家共识",
+           "运动员 心律失常 诊疗 指南"
+          ],
+          "en_evidence": [
+           "athlete cardiac disease return to play consensus",
+           "athlete arrhythmia ablation return to sport outcomes"
+          ],
+          "stats": [
+           "运动员 心源性猝死 发病率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "心脏疾病",
+           "心律失常",
+           "心肌病"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:心脏疾病",
+         "disease:心律失常",
+         "disease:心肌病"
+        ],
+        "entitiesWellFormed": 3,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "李雪健已无法说话"
+       ],
+       "domain": "public-figure",
+       "medical": false,
+       "privateHealth": true,
+       "confidence": 0.2,
+       "subjectNames": [
+        "李雪健"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "日剧Vivant抹黑中国"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "国考排名第一的岗位竞争超6000:1"
+       ],
+       "domain": "education",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "张雪刷新吉尼斯纪录"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "张雪"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "向英雄致敬迎英雄回家"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "深圳水贝被挤爆"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "唐朝诡事录之蜀道开机了"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "江苏姑娘网购鹤岗房搬进去后傻眼"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "柯淳李柯以短剧顶流首搭"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "华为换苹果卡在办手机卡"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "华为",
+        "苹果"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "宋慧乔从出现开始就美得在发光"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "宋慧乔"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "女排国手李盈莹因心脏问题接受手术",
+       "expect": "accept",
+       "domains": [
+        "sports",
+        "public-figure"
+       ],
+       "names": [
+        "李盈莹"
+       ],
+       "field": "sports",
+       "grouped": true,
+       "accepted": true,
+       "domain": "sports",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "李雪健已无法说话",
+       "expect": "must-reject",
+       "domains": [],
+       "names": [
+        "李雪健"
+       ],
+       "field": "a named person's health nobody stated",
+       "grouped": true,
+       "accepted": false,
+       "domain": "public-figure",
+       "refusal": "not_medical",
+       "fieldOk": null
+      },
+      {
+       "title": "日剧Vivant抹黑中国",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "entertainment",
+       "grouped": true,
+       "accepted": false,
+       "domain": "international",
+       "refusal": "not_medical",
+       "fieldOk": null
+      },
+      {
+       "title": "国考排名第一的岗位竞争超6000:1",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "education (civil service exam)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "education",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "gaza-2025-08-05",
+     "day": "2025-08-05",
+     "groups": [
+      {
+       "titles": [
+        "加沙儿童严重脱水哭时没有一滴眼泪",
+        "密密麻麻的不是蚂蚁是加沙饥民",
+        "以色列总理计划全面占领加沙"
+       ],
+       "domain": "conflict",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "加沙",
+        "以色列"
+       ],
+       "question": "武装冲突与封锁下，儿童严重脱水与人群饥荒的识别、急救和营养干预证据是什么？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "武装冲突与封锁下，儿童严重脱水和饥荒如何识别与救治？",
+         "question": "在武装冲突与封锁环境中，儿童严重脱水和人群饥荒如何早期识别、现场急救和营养干预，结局如何？",
+         "peg": "据微博热搜条目描述，加沙儿童出现严重脱水，哭时没有一滴眼泪；当地饥民密集出现。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "加沙 儿童 严重脱水 饥荒",
+           "加沙 饥民 营养不良 援助"
+          ],
+          "zh_evidence": [
+           "儿童严重脱水 识别 口服补液盐 指南",
+           "饥荒 营养不良 儿童 营养干预 共识"
+          ],
+          "en_evidence": [
+           "severe dehydration children oral rehydration guideline",
+           "famine malnutrition children nutritional intervention systematic review"
+          ],
+          "stats": [
+           "儿童严重脱水 病死率 营养不良 死亡率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "严重脱水",
+           "营养不良",
+           "饥荒",
+           "腹泻"
+          ],
+          "drugs": [
+           "口服补液盐",
+           "锌剂"
+          ]
+         }
+        },
+        "entities": [
+         "disease:严重脱水",
+         "disease:营养不良",
+         "disease:饥荒",
+         "disease:腹泻",
+         "drug:口服补液盐",
+         "drug:锌剂"
+        ],
+        "entitiesWellFormed": 6,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "习近平就网民对十五五建议作出重要指示"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "习近平"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "浙大一青年博导被曝坠楼身亡"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": true,
+       "confidence": 0.6,
+       "subjectNames": [
+        "浙大一青年博导"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "private_health"
+      },
+      {
+       "titles": [
+        "香港无头男尸头部已找到"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "逐步推行免费学前教育"
+       ],
+       "domain": "education",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "转账竟然是可以拦截的"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "再见爱人 王浩信"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "王浩信"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "房主任哽咽呼吁大家不要买黄牛票"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "房主任"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "巴厘岛快艇倾覆2名中国公民遇难"
+       ],
+       "domain": "accident",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "快艇倾覆事故中溺水者的现场救援、心肺复苏与低温症处理证据是什么？",
+       "medicalMembers": 0,
+       "refusal": null
+      }
+     ],
+     "labels": [
+      {
+       "title": "加沙儿童严重脱水哭时没有一滴眼泪",
+       "expect": "accept",
+       "domains": [
+        "conflict",
+        "international"
+       ],
+       "names": [],
+       "field": "war / conflict",
+       "grouped": true,
+       "accepted": true,
+       "domain": "conflict",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": [
+      [
+       "巴厘岛快艇倾覆2名中国公民遇难"
+      ]
+     ]
+    },
+    {
+     "id": "heat-chik-2025-07-16",
+     "day": "2025-07-16",
+     "groups": [
+      {
+       "titles": [
+        "陕西高温已突破历史极值",
+        "高温中暑用这三招救命",
+        "中东部高温天气进入最强时段"
+       ],
+       "domain": "environment",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [],
+       "question": "极端高温天气下，中暑的识别与现场急救（降温、补液、何时呼叫急救）有哪些循证要点？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "极端高温下如何识别中暑并正确急救？",
+         "question": "普通人在高温天气中如何识别中暑、现场降温补液，以及什么情况需要立即呼叫急救？",
+         "peg": "据微博热搜，陕西高温已突破历史极值，中东部高温天气进入最强时段。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "陕西 高温 突破历史极值 中暑",
+           "中东部 高温 最强时段 中暑 急救"
+          ],
+          "zh_evidence": [
+           "中暑 现场急救 专家共识",
+           "热射病 诊断 治疗 指南"
+          ],
+          "en_evidence": [
+           "heat stroke prehospital cooling management guideline",
+           "exertional heat illness recognition treatment systematic review"
+          ],
+          "stats": [
+           "中暑 发病率 热射病 病死率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "中暑",
+           "热射病",
+           "热衰竭"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:中暑",
+         "disease:热射病",
+         "disease:热衰竭"
+        ],
+        "entitiesWellFormed": 3,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "佛山顺德区确诊478例基孔肯雅热",
+        "基孔肯雅热和花斑蚊是什么关系"
+       ],
+       "domain": "outbreak",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.95,
+       "subjectNames": [
+        "佛山顺德区"
+       ],
+       "question": "基孔肯雅热的传播媒介、临床表现、重症风险与防蚊灭蚊等防控措施的证据是什么？",
+       "medicalMembers": 2,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "基孔肯雅热如何传播，重症风险有多大？",
+         "question": "普通人群在蚊媒活跃地区感染基孔肯雅热后，临床表现和重症风险如何，防蚊灭蚊措施是否有效？",
+         "peg": "据微博热搜条目，佛山顺德区确诊478例基孔肯雅热。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "佛山顺德 基孔肯雅热 478例",
+           "基孔肯雅热 花斑蚊 传播"
+          ],
+          "zh_evidence": [
+           "基孔肯雅热 诊疗方案 共识",
+           "基孔肯雅热 防蚊 灭蚊 防控 指南"
+          ],
+          "en_evidence": [
+           "chikungunya transmission Aedes clinical severity systematic review",
+           "chikungunya vector control prevention guidelines"
+          ],
+          "stats": [
+           "基孔肯雅热 重症率 发病率"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "基孔肯雅热"
+          ],
+          "drugs": []
+         }
+        },
+        "entities": [
+         "disease:基孔肯雅热"
+        ],
+        "entitiesWellFormed": 1,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "建设现代化人民城市有6个关键词"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "黄杨某甜有关问题最新通报",
+        "黄杨钿甜母亲发声"
+       ],
+       "domain": "public-figure",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "黄杨钿甜"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "微观链博会"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "演唱会前夕亲人离世平台拒退票"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "印度大规模猥亵事件478人被捕"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.8,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "钟美美说爸爸不喜欢我总打我"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.7,
+       "subjectNames": [
+        "钟美美"
+       ],
+       "question": "儿童期遭受家庭暴力对心理健康与行为发展的长期影响，以及受暴儿童的心理干预与保护措施有哪些证据？",
+       "medicalMembers": 0,
+       "refusal": null
+      },
+      {
+       "titles": [
+        "田栩宁轮流宠"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "田栩宁"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "陕西高温已突破历史极值",
+       "expect": "accept",
+       "domains": [
+        "environment",
+        "disaster"
+       ],
+       "names": [],
+       "field": "weather",
+       "grouped": true,
+       "accepted": true,
+       "domain": "environment",
+       "refusal": null,
+       "fieldOk": true
+      },
+      {
+       "title": "佛山顺德区确诊478例基孔肯雅热",
+       "expect": "accept",
+       "domains": [
+        "outbreak"
+       ],
+       "names": [],
+       "field": "outbreak",
+       "grouped": true,
+       "accepted": true,
+       "domain": "outbreak",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": [
+      [
+       "钟美美说爸爸不喜欢我总打我"
+      ]
+     ]
+    },
+    {
+     "id": "policy-2025-07-24",
+     "day": "2025-07-24",
+     "groups": [
+      {
+       "titles": [
+        "国家医保目录药品数达3159种"
+       ],
+       "domain": "policy",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.85,
+       "subjectNames": [
+        "国家医保目录"
+       ],
+       "question": "国家医保目录扩容至3159种药品后，对患者用药可及性、药品价格和医保基金支出有何影响？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "repaired",
+        "attempts": 2,
+        "firstLeaks": [
+         "question",
+         "stats"
+        ],
+        "finalLeaks": [],
+        "output": {
+         "title": "医保药品目录扩容到3159种，对患者用药和费用有什么影响？",
+         "question": "医保药品目录药品数增至3159种后，对患者用药可及性、药品价格和医保基金支出会产生什么影响？",
+         "peg": "据微博热搜条目，国家医保目录药品数达3159种。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "国家医保目录 3159种 药品 扩容",
+           "医保目录 新增药品 落地 患者"
+          ],
+          "zh_evidence": [
+           "医保药品目录 调整 政策 解读",
+           "医保药品目录 准入 谈判 指南"
+          ],
+          "en_evidence": [
+           "national reimbursement drug list expansion access affordability",
+           "health insurance drug list coverage impact cost"
+          ],
+          "stats": [
+           "医保药品目录 药品数量 3159种 统计"
+          ]
+         },
+         "entities": {
+          "diseases": [],
+          "drugs": []
+         }
+        },
+        "entities": [],
+        "entitiesWellFormed": 0,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "中欧建交50年的重要经验和启示"
+       ],
+       "domain": "international",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "富豪CEO被大象踩踏身亡"
+       ],
+       "domain": "other",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.55,
+       "subjectNames": [],
+       "question": "野生动物（如大象）攻击致人伤亡时，创伤救治与现场急救有哪些要点？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "王一博 演唱会"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "王一博"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "李佳琦承诺赔付铂爵旅拍订单"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "李佳琦",
+        "铂爵旅拍"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "美国骚猪肉"
+       ],
+       "domain": "food-safety",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.7,
+       "subjectNames": [],
+       "question": "网传「美国骚猪肉」是否成立，进口猪肉的食品安全风险应如何评估？",
+       "medicalMembers": 1,
+       "refusal": null
+      },
+      {
+       "titles": [
+        "一诺获EWC全场MVP"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "一诺"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "曝boss直聘再次涉黄"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "boss直聘"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "30万存款定律"
+       ],
+       "domain": "economy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "国家医保目录药品数达3159种",
+       "expect": "accept",
+       "domains": [
+        "policy",
+        "economy"
+       ],
+       "names": [],
+       "field": "national policy / economy",
+       "grouped": true,
+       "accepted": true,
+       "domain": "policy",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": [
+      [
+       "美国骚猪肉"
+      ]
+     ]
+    },
+    {
+     "id": "lead-2026-10-16",
+     "day": "2026-10-16",
+     "groups": [
+      {
+       "titles": [
+        "甘肃天水幼儿园铅中毒案1人无期"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.9,
+       "subjectNames": [
+        "甘肃天水幼儿园"
+       ],
+       "question": "儿童铅中毒的暴露来源、血铅筛查与驱铅治疗应如何规范开展？",
+       "medicalMembers": 1,
+       "refusal": null,
+       "topic": {
+        "verification": "passed",
+        "attempts": 1,
+        "firstLeaks": [],
+        "finalLeaks": [],
+        "output": {
+         "title": "儿童铅中毒如何发现、筛查和治疗？",
+         "question": "儿童铅暴露后如何识别中毒来源、规范进行血铅筛查和驱铅治疗，以避免不可逆的神经发育损害？",
+         "peg": "据微博热搜，甘肃天水幼儿园铅中毒案有1人被判无期徒刑。",
+         "pegEntry": 1,
+         "queries": {
+          "zh_reports": [
+           "甘肃天水幼儿园铅中毒案 判决",
+           "天水幼儿园铅中毒 血铅"
+          ],
+          "zh_evidence": [
+           "儿童铅中毒 诊疗指南 血铅筛查",
+           "儿童高铅血症 驱铅治疗 专家共识"
+          ],
+          "en_evidence": [
+           "childhood lead poisoning screening and management guideline",
+           "blood lead level chelation children systematic review"
+          ],
+          "stats": [
+           "儿童血铅水平 超标率 流行病学"
+          ]
+         },
+         "entities": {
+          "diseases": [
+           "铅中毒",
+           "儿童铅中毒",
+           "铅暴露"
+          ],
+          "drugs": [
+           "依地酸钙钠",
+           "二巯丁二酸"
+          ]
+         }
+        },
+        "entities": [
+         "disease:铅中毒",
+         "disease:儿童铅中毒",
+         "disease:铅暴露",
+         "drug:依地酸钙钠",
+         "drug:二巯丁二酸"
+        ],
+        "entitiesWellFormed": 5,
+        "issues": []
+       }
+      },
+      {
+       "titles": [
+        "习近平在乌兰察布考察"
+       ],
+       "domain": "policy",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "习近平"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "母亲将大一儿子生活费从4000降至2000"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.1,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "河北卫视靠孙颖莎收视登顶了",
+        "日乒唯一乒乓奥运金牌出自伊藤美诚"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "孙颖莎",
+        "伊藤美诚"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "中央红军长征路线全览"
+       ],
+       "domain": "other",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "iPhoneDuo首批黑色溢价16000元"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "傅首尔新片投资5000万票房仅8万",
+        "嫁金钗 配音"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "傅首尔"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      }
+     ],
+     "labels": [
+      {
+       "title": "甘肃天水幼儿园铅中毒案1人无期",
+       "expect": "accept",
+       "domains": [
+        "food-safety",
+        "society",
+        "environment"
+       ],
+       "names": [],
+       "field": "food safety",
+       "grouped": true,
+       "accepted": true,
+       "domain": "society",
+       "refusal": null,
+       "fieldOk": true
+      }
+     ],
+     "unlabelledAccepted": []
+    },
+    {
+     "id": "death-cause-2026-03-26",
+     "day": "2026-03-26",
+     "groups": [
+      {
+       "titles": [
+        "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了"
+       ],
+       "domain": "public-figure",
+       "medical": true,
+       "privateHealth": true,
+       "confidence": 0.3,
+       "subjectNames": [
+        "张雪峰"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "private_health"
+      },
+      {
+       "titles": [
+        "罗马仕宣布召回超49万台充电宝"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.1,
+       "subjectNames": [
+        "罗马仕"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "罗技回应发布侮辱性广告"
+       ],
+       "domain": "technology",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "罗技"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "2026中国网络媒体论坛"
+       ],
+       "domain": "society",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "白敬亭郑合惠子互动"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "白敬亭",
+        "郑合惠子"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "伊朗导弹2小时内4次密集砸向以本土"
+       ],
+       "domain": "conflict",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.6,
+       "subjectNames": [
+        "伊朗",
+        "以色列"
+       ],
+       "question": "导弹袭击与爆炸伤中，创伤救治和伤员分级转运有哪些循证要点？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "央视新闻夸了张凌赫雉鸡领造型"
+       ],
+       "domain": "entertainment",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [
+        "张凌赫"
+       ],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "奥运女子比赛仅限生理女性"
+       ],
+       "domain": "sports",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.5,
+       "subjectNames": [],
+       "question": "生理性别与性别发育差异对女子项目参赛资格和运动医学评估有何影响？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      },
+      {
+       "titles": [
+        "LPL进入大回归时代"
+       ],
+       "domain": "sports",
+       "medical": false,
+       "privateHealth": false,
+       "confidence": 0.05,
+       "subjectNames": [],
+       "question": "",
+       "medicalMembers": 0,
+       "refusal": "not_medical"
+      },
+      {
+       "titles": [
+        "因抢玩具殴打2岁女童女子被行拘"
+       ],
+       "domain": "society",
+       "medical": true,
+       "privateHealth": false,
+       "confidence": 0.5,
+       "subjectNames": [],
+       "question": "幼儿遭受暴力殴打后，如何识别和处置儿童身体伤害与心理创伤？",
+       "medicalMembers": 0,
+       "refusal": "low_confidence"
+      }
+     ],
+     "labels": [
+      {
+       "title": "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了",
+       "expect": "must-reject",
+       "domains": [],
+       "names": [
+        "张雪峰"
+       ],
+       "field": "a 「死因曝光」 framing",
+       "grouped": true,
+       "accepted": false,
+       "domain": "public-figure",
+       "refusal": "private_health",
+       "fieldOk": null
+      },
+      {
+       "title": "罗马仕宣布召回超49万台充电宝",
+       "expect": "reject",
+       "domains": [],
+       "names": [],
+       "field": "product recall (power banks)",
+       "grouped": true,
+       "accepted": false,
+       "domain": "technology",
+       "refusal": "not_medical",
+       "fieldOk": null
+      }
+     ],
+     "unlabelledAccepted": []
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,1047 @@
+{
+ "version": 1,
+ "built": "2026-10-25",
+ "rounds": [
+  {
+   "id": "zxf-2026-03-24",
+   "day": "2026-03-24",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-03-24.json",
+   "entries": [
+    {
+     "title": "张雪峰去世",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "心源性猝死",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "4成心源性猝死患者不到40岁",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "黄金四分钟是心源性猝死抢救关键",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "张雪峰近日在朋友圈打卡跑步7公里",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "黄金为什么越战越跌",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "外交部回应日方拟将中日关系降级",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "太空加油站新进展",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "文淇 年轻女演员演主角等于没票房",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "张雪峰公司发布讣告",
+     "board": "weibo",
+     "rank": 10
+    },
+    {
+     "title": "以色列被打穿了",
+     "board": "weibo",
+     "rank": 11
+    },
+    {
+     "title": "张雪峰女儿还那么小",
+     "board": "weibo",
+     "rank": 12
+    },
+    {
+     "title": "张凌赫陈哲远将军造型对比",
+     "board": "weibo",
+     "rank": 13
+    },
+    {
+     "title": "张老师一路走好",
+     "board": "weibo",
+     "rank": 14
+    }
+   ],
+   "labels": [
+    {
+     "title": "张雪峰去世",
+     "expect": "accept",
+     "domains": [
+      "public-figure",
+      "entertainment",
+      "education",
+      "society"
+     ],
+     "names": [
+      "张雪峰"
+     ],
+     "field": "public figure"
+    },
+    {
+     "title": "黄金为什么越战越跌",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "economy (gold price)"
+    }
+   ]
+  },
+  {
+   "id": "zxf-2026-03-25",
+   "day": "2026-03-25",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-03-25.json",
+   "entries": [
+    {
+     "title": "张雪峰去世当天最后一个视频",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "心源性猝死与跑步有什么关系",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "运动性心源性猝死的典型画像",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "8个月婴儿喝蜂蜜水中毒",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "金价",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "习近平总书记赴雄安新区考察纪实",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "第一次知道玻璃厂不能停电",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "我国自研新一代超大型油船交付",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "日方回应自卫队人员强闯我大使馆",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "逐玉 删减",
+     "board": "weibo",
+     "rank": 10
+    },
+    {
+     "title": "江山大同",
+     "board": "weibo",
+     "rank": 11
+    },
+    {
+     "title": "市监局回应专柜买4个LV包为假货",
+     "board": "weibo",
+     "rank": 12
+    },
+    {
+     "title": "Uzi自曝与iG管理层沟通",
+     "board": "weibo",
+     "rank": 13
+    }
+   ],
+   "labels": [
+    {
+     "title": "张雪峰去世当天最后一个视频",
+     "expect": "accept",
+     "domains": [
+      "public-figure",
+      "entertainment",
+      "education",
+      "society"
+     ],
+     "names": [
+      "张雪峰"
+     ],
+     "field": "public figure"
+    },
+    {
+     "title": "8个月婴儿喝蜂蜜水中毒",
+     "expect": "accept",
+     "domains": [
+      "food-safety",
+      "society",
+      "accident"
+     ],
+     "names": [],
+     "field": "food safety"
+    },
+    {
+     "title": "金价",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "economy (gold price)"
+    }
+   ]
+  },
+  {
+   "id": "zhong-pet-2026-10-20",
+   "day": "2026-10-20",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-10-20.json",
+   "entries": [
+    {
+     "title": "钟南山心梗后仍每周运动3次",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "医生回应钟南山心梗后每周运动3次",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "27岁宠物爱心博主感染罕见真菌离世",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "女子被流浪狗咬伤后几分钟狗死亡",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "在新的长征路上继续奋勇前进",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "油车电车10年成本账怎么算",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "理想汽车发布电池保障政策",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "伟大长征精神何以永恒",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "美人余大结局可太解气了",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "到底谁把微信变成工作软件的",
+     "board": "weibo",
+     "rank": 10
+    },
+    {
+     "title": "井柏然最有腔调的红毯来了",
+     "board": "weibo",
+     "rank": 11
+    },
+    {
+     "title": "法国乱成一锅粥了还有人威胁中国",
+     "board": "weibo",
+     "rank": 12
+    }
+   ],
+   "labels": [
+    {
+     "title": "钟南山心梗后仍每周运动3次",
+     "expect": "accept",
+     "domains": [
+      "public-figure",
+      "society"
+     ],
+     "names": [
+      "钟南山"
+     ],
+     "field": "public figure"
+    },
+    {
+     "title": "27岁宠物爱心博主感染罕见真菌离世",
+     "expect": "accept",
+     "domains": [
+      "public-figure",
+      "society",
+      "outbreak",
+      "entertainment"
+     ],
+     "names": [],
+     "field": "public figure"
+    },
+    {
+     "title": "女子被流浪狗咬伤后几分钟狗死亡",
+     "expect": "accept",
+     "domains": [
+      "society",
+      "accident",
+      "outbreak"
+     ],
+     "names": [],
+     "field": "accident (rabies)"
+    }
+   ]
+  },
+  {
+   "id": "torsion-2026-10-22",
+   "day": "2026-10-22",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-10-22.json",
+   "entries": [
+    {
+     "title": "16岁男孩睡梦中睾丸扭转720度",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "黄金",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "长征伟大胜利之路的四个依靠",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "九尾 50呢",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "人民日报谈星巴克消费入座",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "我国面向全球的自贸网络已经初步成型",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "赵丽颖霍建华 剧播不好别怪妆造",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "厉娜恨过许飞非常久",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "银行回应每天仅营业3.5小时",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "明天尚公主就抬嫁金钗在单更什么",
+     "board": "weibo",
+     "rank": 10
+    }
+   ],
+   "labels": [
+    {
+     "title": "16岁男孩睡梦中睾丸扭转720度",
+     "expect": "accept",
+     "domains": [
+      "society",
+      "accident",
+      "other"
+     ],
+     "names": [],
+     "field": "society"
+    },
+    {
+     "title": "黄金",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "economy (gold price)"
+    }
+   ]
+  },
+  {
+   "id": "rh-quake-2026-10-23",
+   "day": "2026-10-23",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-10-23.json",
+   "entries": [
+    {
+     "title": "多方回应熊猫血孕妇在医院胎死腹中",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "西藏巴青地震16死76伤",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "西藏7级地震",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "习近平对西藏7.0级地震作出重要指示",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "金价跌破870元",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "中共中央政治局召开会议",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "尚公主首播反响",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "人一旦在有地铁的城市待久了",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "从消费数据看经济向好态势",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "王楚钦2026WTT多次退赛",
+     "board": "weibo",
+     "rank": 10
+    },
+    {
+     "title": "最高法通报牟某虐待案细节",
+     "board": "weibo",
+     "rank": 11
+    },
+    {
+     "title": "减缓人工智能应用就业替代影响",
+     "board": "weibo",
+     "rank": 12
+    },
+    {
+     "title": "NEON改了盛艾敬梁淅沥Intro",
+     "board": "weibo",
+     "rank": 13
+    }
+   ],
+   "labels": [
+    {
+     "title": "多方回应熊猫血孕妇在医院胎死腹中",
+     "expect": "accept",
+     "domains": [
+      "society",
+      "accident",
+      "other"
+     ],
+     "names": [],
+     "field": "society"
+    },
+    {
+     "title": "西藏巴青地震16死76伤",
+     "expect": "accept",
+     "domains": [
+      "disaster"
+     ],
+     "names": [
+      "习近平"
+     ],
+     "field": "disaster"
+    },
+    {
+     "title": "金价跌破870元",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "economy (gold price)"
+    }
+   ]
+  },
+  {
+   "id": "stroke-2026-10-24",
+   "day": "2026-10-24",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-10-24.json",
+   "entries": [
+    {
+     "title": "父亲突发脑梗儿子用AI抢出救命时间",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "S16抽签 内战",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "翘首木船见证革命信仰",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "尚公主编剧水平",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "徐嘉余50米仰泳破世界纪录",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "二十届五中全会是什么会",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "小说里为什么没有广东霸总",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "去年全国结婚登记676万对",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "王沪宁陪同金正恩访问丹东",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "王俊凯特别的人 好听",
+     "board": "weibo",
+     "rank": 10
+    }
+   ],
+   "labels": [
+    {
+     "title": "父亲突发脑梗儿子用AI抢出救命时间",
+     "expect": "accept",
+     "domains": [
+      "technology",
+      "society"
+     ],
+     "names": [],
+     "field": "technology"
+    },
+    {
+     "title": "S16抽签 内战",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "sports (esports draw)"
+    }
+   ]
+  },
+  {
+   "id": "live-2026-10-25",
+   "day": null,
+   "source": "the live boards read from this box on 2026-10-25 04:32 UTC (Weibo, Baidu; NetEase for 李盈莹 per the research)",
+   "entries": [
+    {
+     "title": "女排国手李盈莹因心脏问题接受手术",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "李雪健已无法说话",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "日剧Vivant抹黑中国",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "国考排名第一的岗位竞争超6000:1",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "张雪刷新吉尼斯纪录",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "向英雄致敬迎英雄回家",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "深圳水贝被挤爆",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "唐朝诡事录之蜀道开机了",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "江苏姑娘网购鹤岗房搬进去后傻眼",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "柯淳李柯以短剧顶流首搭",
+     "board": "weibo",
+     "rank": 10
+    },
+    {
+     "title": "华为换苹果卡在办手机卡",
+     "board": "weibo",
+     "rank": 11
+    },
+    {
+     "title": "宋慧乔从出现开始就美得在发光",
+     "board": "weibo",
+     "rank": 12
+    }
+   ],
+   "labels": [
+    {
+     "title": "女排国手李盈莹因心脏问题接受手术",
+     "expect": "accept",
+     "domains": [
+      "sports",
+      "public-figure"
+     ],
+     "names": [
+      "李盈莹"
+     ],
+     "field": "sports"
+    },
+    {
+     "title": "李雪健已无法说话",
+     "expect": "must-reject",
+     "domains": [],
+     "names": [
+      "李雪健"
+     ],
+     "field": "a named person's health nobody stated"
+    },
+    {
+     "title": "日剧Vivant抹黑中国",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "entertainment"
+    },
+    {
+     "title": "国考排名第一的岗位竞争超6000:1",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "education (civil service exam)"
+    }
+   ]
+  },
+  {
+   "id": "gaza-2025-08-05",
+   "day": "2025-08-05",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2025-08-05.json",
+   "entries": [
+    {
+     "title": "加沙儿童严重脱水哭时没有一滴眼泪",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "密密麻麻的不是蚂蚁是加沙饥民",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "以色列总理计划全面占领加沙",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "习近平就网民对十五五建议作出重要指示",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "浙大一青年博导被曝坠楼身亡",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "香港无头男尸头部已找到",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "逐步推行免费学前教育",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "转账竟然是可以拦截的",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "再见爱人 王浩信",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "房主任哽咽呼吁大家不要买黄牛票",
+     "board": "weibo",
+     "rank": 10
+    },
+    {
+     "title": "巴厘岛快艇倾覆2名中国公民遇难",
+     "board": "weibo",
+     "rank": 11
+    }
+   ],
+   "labels": [
+    {
+     "title": "加沙儿童严重脱水哭时没有一滴眼泪",
+     "expect": "accept",
+     "domains": [
+      "conflict",
+      "international"
+     ],
+     "names": [],
+     "field": "war / conflict"
+    }
+   ]
+  },
+  {
+   "id": "heat-chik-2025-07-16",
+   "day": "2025-07-16",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2025-07-16.json",
+   "entries": [
+    {
+     "title": "陕西高温已突破历史极值",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "高温中暑用这三招救命",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "中东部高温天气进入最强时段",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "佛山顺德区确诊478例基孔肯雅热",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "基孔肯雅热和花斑蚊是什么关系",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "建设现代化人民城市有6个关键词",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "黄杨某甜有关问题最新通报",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "微观链博会",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "黄杨钿甜母亲发声",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "演唱会前夕亲人离世平台拒退票",
+     "board": "weibo",
+     "rank": 10
+    },
+    {
+     "title": "印度大规模猥亵事件478人被捕",
+     "board": "weibo",
+     "rank": 11
+    },
+    {
+     "title": "钟美美说爸爸不喜欢我总打我",
+     "board": "weibo",
+     "rank": 12
+    },
+    {
+     "title": "田栩宁轮流宠",
+     "board": "weibo",
+     "rank": 13
+    }
+   ],
+   "labels": [
+    {
+     "title": "陕西高温已突破历史极值",
+     "expect": "accept",
+     "domains": [
+      "environment",
+      "disaster"
+     ],
+     "names": [],
+     "field": "weather"
+    },
+    {
+     "title": "佛山顺德区确诊478例基孔肯雅热",
+     "expect": "accept",
+     "domains": [
+      "outbreak"
+     ],
+     "names": [],
+     "field": "outbreak"
+    }
+   ]
+  },
+  {
+   "id": "policy-2025-07-24",
+   "day": "2025-07-24",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2025-07-24.json",
+   "entries": [
+    {
+     "title": "国家医保目录药品数达3159种",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "中欧建交50年的重要经验和启示",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "富豪CEO被大象踩踏身亡",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "王一博 演唱会",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "李佳琦承诺赔付铂爵旅拍订单",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "美国骚猪肉",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "一诺获EWC全场MVP",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "曝boss直聘再次涉黄",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "30万存款定律",
+     "board": "weibo",
+     "rank": 9
+    }
+   ],
+   "labels": [
+    {
+     "title": "国家医保目录药品数达3159种",
+     "expect": "accept",
+     "domains": [
+      "policy",
+      "economy"
+     ],
+     "names": [],
+     "field": "national policy / economy"
+    }
+   ]
+  },
+  {
+   "id": "lead-2026-10-16",
+   "day": "2026-10-16",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-10-16.json",
+   "entries": [
+    {
+     "title": "甘肃天水幼儿园铅中毒案1人无期",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "习近平在乌兰察布考察",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "母亲将大一儿子生活费从4000降至2000",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "河北卫视靠孙颖莎收视登顶了",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "中央红军长征路线全览",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "iPhoneDuo首批黑色溢价16000元",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "傅首尔新片投资5000万票房仅8万",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "嫁金钗 配音",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "日乒唯一乒乓奥运金牌出自伊藤美诚",
+     "board": "weibo",
+     "rank": 9
+    }
+   ],
+   "labels": [
+    {
+     "title": "甘肃天水幼儿园铅中毒案1人无期",
+     "expect": "accept",
+     "domains": [
+      "food-safety",
+      "society",
+      "environment"
+     ],
+     "names": [],
+     "field": "food safety"
+    }
+   ]
+  },
+  {
+   "id": "death-cause-2026-03-26",
+   "day": "2026-03-26",
+   "source": "https://raw.githubusercontent.com/justjavac/weibo-trending-hot-search/master/raw/2026-03-26.json",
+   "entries": [
+    {
+     "title": "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了",
+     "board": "weibo",
+     "rank": 1
+    },
+    {
+     "title": "罗马仕宣布召回超49万台充电宝",
+     "board": "weibo",
+     "rank": 2
+    },
+    {
+     "title": "罗技回应发布侮辱性广告",
+     "board": "weibo",
+     "rank": 3
+    },
+    {
+     "title": "2026中国网络媒体论坛",
+     "board": "weibo",
+     "rank": 4
+    },
+    {
+     "title": "白敬亭郑合惠子互动",
+     "board": "weibo",
+     "rank": 5
+    },
+    {
+     "title": "伊朗导弹2小时内4次密集砸向以本土",
+     "board": "weibo",
+     "rank": 6
+    },
+    {
+     "title": "央视新闻夸了张凌赫雉鸡领造型",
+     "board": "weibo",
+     "rank": 7
+    },
+    {
+     "title": "奥运女子比赛仅限生理女性",
+     "board": "weibo",
+     "rank": 8
+    },
+    {
+     "title": "LPL进入大回归时代",
+     "board": "weibo",
+     "rank": 9
+    },
+    {
+     "title": "因抢玩具殴打2岁女童女子被行拘",
+     "board": "weibo",
+     "rank": 10
+    }
+   ],
+   "labels": [
+    {
+     "title": "41岁张雪峰去世，死因曝光，他曾有3次活命机会，全被耽误了",
+     "expect": "must-reject",
+     "domains": [],
+     "names": [
+      "张雪峰"
+     ],
+     "field": "a 「死因曝光」 framing"
+    },
+    {
+     "title": "罗马仕宣布召回超49万台充电宝",
+     "expect": "reject",
+     "domains": [],
+     "names": [],
+     "field": "product recall (power banks)"
+    }
+   ]
+  }
+ ]
+}
