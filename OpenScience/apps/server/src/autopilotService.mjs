@@ -1217,24 +1217,45 @@ export class AutopilotService {
       } catch (error) { if (isConflict(error)) continue; throw error; }
       if (!input.retrying) {
         await this.jobs.cancelQueued?.(userId, "episode", { episodeId: saved.id });
-        await this.recordOutcome(userId, saved.payload.agendaId, {
-          expectedRevision: (await this.get(userId, saved.payload.agendaId)).revision,
-          episodeId: saved.id, taskType: saved.payload.taskType, status: "failed", gatedClaims: 0,
-        });
-        // The agenda keeps only a bounded outcome window. This episode's receipt makes an old terminal attempt permanent.
-        for (let receiptAttempt = 0; receiptAttempt < 5; receiptAttempt += 1) {
-          const current = await this.documents.get(userId, "episode", saved.id);
-          if (current.payload.dispatchOutcomeRecordedAt || current.payload.status !== "failed") return current;
-          try {
-            saved = await this.documents.put(userId, "episode", saved.id, { ...current.payload, dispatchOutcomeRecordedAt: this.now().toISOString() },
-              { expectedRevision: current.revision, projectId: current.projectId });
-            break;
-          } catch (error) { if (!isConflict(error)) throw error; }
+        // A task deleted, stopped or gone takes no outcome and sends no notice: what it would say is about work nobody keeps.
+        // A fold that cannot be written still settles the episode below, with the reason, so recovery never selects it again.
+        let skipped = null;
+        let skippedCode = null;
+        try {
+          const agenda = await this.get(userId, saved.payload.agendaId);
+          if (agenda.payload.archivedAt || agenda.payload.status === "stopped") skipped = "agenda_unavailable";
+          else await this.recordOutcome(userId, agenda.id, {
+            expectedRevision: agenda.revision,
+            episodeId: saved.id, taskType: saved.payload.taskType, status: "failed", gatedClaims: 0,
+          });
+        } catch (error) {
+          skipped = error?.code === "autopilot_agenda_not_found" ? "agenda_unavailable" : "outcome_unrecorded";
+          skippedCode = typeof error?.code === "string" ? error.code.slice(0, 100) : "autopilot_outcome_failed";
         }
+        saved = await this.settleDispatchOutcome(userId, saved.id, skipped ? { skipped, code: skippedCode } : null) ?? saved;
       }
       return saved;
     }
     throw new HttpError(409, "autopilot_episode_state_conflict", "The episode changed while recording its dispatch failure.");
+  }
+
+  /**
+   * The episode's own receipt that its terminal dispatch is settled: the agenda keeps only a bounded outcome window, so this is what
+   * makes an old terminal attempt permanent, and what keeps `reconcileStopWork` from selecting it again. `skip` says why the agenda
+   * was not told (`agenda_unavailable`, `outcome_unrecorded`) and is page state, never an outcome.
+   * @param {string} userId @param {string} episodeId @param {{skipped:string,code?:string|null}|null} [skip]
+   */
+  async settleDispatchOutcome(userId, episodeId, skip = null) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await this.documents.get(userId, "episode", episodeId);
+      if (!current || current.payload.dispatchOutcomeRecordedAt || current.payload.status !== "failed") return current;
+      try {
+        return await this.documents.put(userId, "episode", current.id, { ...current.payload, dispatchOutcomeRecordedAt: this.now().toISOString(),
+          ...(skip ? { dispatchOutcomeSkipped: skip.skipped, ...(skip.code ? { dispatchOutcomeError: skip.code } : {}) } : {}),
+        }, { expectedRevision: current.revision, projectId: current.projectId });
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    return null;
   }
 
   /** @param {string} userId @param {string} episodeId */
@@ -2049,9 +2070,12 @@ export class AutopilotService {
     const database = this.documents.database;
     if (!database) return { scanned: 0, enqueued: 0 };
     // A queue settlement and its episode write can be separated by a crash. Recover from the durable job, including exhausted leases.
+    // Only an episode whose launch job this lifecycle recorded (`launchJobId`, written at enqueue since 2026-10-25) is recovered:
+    // an older release's failed dispatch is history — already on its page from its job — and folding it now, after the task's
+    // later successes, would pause a healthy task and send a notice about a failure weeks old.
     const dispatches = await database.query(`SELECT d.user_id,d.id,j.id AS job_id,j.status AS job_status,j.error,j.result,j.attempts,j.run_after
       FROM evimed_product.documents d JOIN evimed_product.jobs j ON j.user_id=d.user_id AND j.kind='episode'
-        AND j.payload->>'episodeId'=d.id AND j.payload->>'action' IS DISTINCT FROM 'cancel'
+        AND j.id=d.payload->>'launchJobId' AND j.payload->>'action' IS DISTINCT FROM 'cancel'
       WHERE d.kind='episode' AND d.deleted_at IS NULL AND d.payload->>'status' IN ('queued','retry_pending','failed')
         AND d.payload->>'runId' IS NULL AND d.payload->>'digestId' IS NULL
         AND ((j.status='failed' AND d.payload->>'dispatchOutcomeRecordedAt' IS NULL)

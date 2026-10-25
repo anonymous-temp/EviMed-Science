@@ -203,3 +203,40 @@ test("a failed disabled deletion remains visible and the original request can re
   assert.ok(retried.payload.archivedAt);assert.equal(retried.payload.stopSweep.cancellationPending,false);
   assert.equal((await service.list(owner,{projectId:agenda.projectId})).items.some(item=>item.id===agenda.id),false);
 });
+
+test("the recovery pass leaves an older release's failed dispatches as history: no outcome, no pause, no inbox notice",options,async()=>{
+  const agenda=await active({prompt:"Historical dispatch failures"});
+  const before=await service.get(owner,agenda.id),noticesBefore=notices.size;
+  const episodes=[];
+  for(const name of ["old-one","old-two"]){
+    const episodeId=`episode-${name}-${randomUUID()}`;
+    // What an older release wrote: no launch-job identity on the episode, and a launch job that failed for good weeks ago.
+    await documents.put(owner,"episode",episodeId,{schemaVersion:2,agendaId:agenda.id,taskType:"routine",date:"2026-10-01",status:"failed",
+      runId:null,claims:[],error:{code:"autopilot_capability_unavailable"},createdAt:"2026-10-01T07:00:00.000Z",updatedAt:"2026-10-01T07:05:00.000Z"},
+    {expectedRevision:0,projectId:agenda.projectId});
+    const job=await jobs.enqueue(owner,"episode",{agendaId:agenda.id,episodeId,taskType:"routine"},{idempotencyKey:`episode:${episodeId}`,projectId:agenda.projectId,maxAttempts:3});
+    await database.query(`UPDATE evimed_product.jobs SET status='failed',attempts=3,error='{"code":"autopilot_capability_unavailable"}'::jsonb,
+      updated_at=timestamptz '2026-10-01T07:05:00Z',finished_at=timestamptz '2026-10-01T07:05:00Z' WHERE id=$1`,[job.id]);
+    episodes.push(episodeId);
+  }
+  await service.reconcileStopWork();await service.reconcileStopWork();
+  const after=await service.get(owner,agenda.id);
+  assert.deepEqual([after.payload.status,after.payload.enabled],["active",true],"a healthy task keeps running");
+  assert.deepEqual(after.payload.outcomes??[],before.payload.outcomes??[]);assert.deepEqual(after.payload.taskTypeState??{},before.payload.taskTypeState??{});
+  assert.equal(after.revision,before.revision,"the task was not written at all");assert.equal(notices.size,noticesBefore,"and nobody was told about weeks-old failures");
+  for(const id of episodes){const stored=await documents.get(owner,"episode",id);assert.equal(stored.payload.status,"failed");assert.equal(stored.payload.dispatchOutcomeRecordedAt,undefined);}
+});
+
+test("a crash-orphaned final failure of a deleted task is settled once and never selected again",options,async()=>{
+  const agenda=await active({prompt:"Deleted before recovery"}),execution=await service.runNow(owner,agenda.id,{requestId:"deleted-crash"});
+  const claimed=await jobs.claim(["episode"],"test-crashed-worker",{leaseMs:1000});assert.equal(claimed.id,execution.job.id);
+  await jobs.fail(owner,claimed.id,claimed.leaseToken,{code:"autopilot_capability_unavailable",message:"missing"},{retry:false});
+  const current=await documents.get(owner,"agenda",agenda.id);await documents.remove(owner,"agenda",agenda.id,current.revision);
+  const noticesBefore=notices.size;
+  await service.reconcileStopWork();
+  const settled=await documents.get(owner,"episode",execution.episode.id);
+  assert.equal(settled.payload.status,"failed");assert.ok(settled.payload.dispatchOutcomeRecordedAt);assert.equal(settled.payload.dispatchOutcomeSkipped,"agenda_unavailable");
+  const revision=settled.revision;await service.reconcileStopWork();
+  assert.equal((await documents.get(owner,"episode",execution.episode.id)).revision,revision,"a settled row is not selected again");
+  assert.equal(notices.size,noticesBefore);
+});

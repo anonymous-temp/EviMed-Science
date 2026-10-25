@@ -256,3 +256,23 @@ test("disabled cancellation remains replayable if retiring its durable queue job
   f.jobs.cancel=cancel;await disabled.stop("u",row.id,{expectedRevision:current.revision},{stopRun:async()=>{}});
   assert.equal((await f.service.getEpisode("u",execution.episode.id)).payload.cancellation.status,"completed");assert.ok(f.queue.filter(job=>job.payload.action==="cancel").every(job=>job.status==="canceled"));
 });
+
+test("a terminal dispatch failure of a deleted or stopped task settles its episode without an outcome or a notice",async()=>{
+  const f=fixture(),row=await f.create(),execution=await f.service.runNow("u",row.id,{requestId:"before-delete"});
+  const current=await f.documents.get("u","agenda",row.id);
+  // The researcher deleted the task while its last attempt was still in a worker's hands.
+  await f.documents.put("u","agenda",row.id,{...current.payload,archivedAt:"2026-10-25T12:00:00.000Z",enabled:false,status:"stopped"},{expectedRevision:current.revision,projectId:current.projectId});
+  f.queue[0].status="failed";
+  const settled=await f.service.markEpisodeFailed("u",execution.episode.id,{code:"autopilot_capability_unavailable"});
+  const agenda=await f.service.get("u",row.id);
+  assert.equal((agenda.payload.outcomes??[]).length,0,"a deleted task takes no outcome");assert.equal(f.notices.size,0,"and sends no notice");
+  assert.ok(settled.payload.dispatchOutcomeRecordedAt);assert.equal(settled.payload.dispatchOutcomeSkipped,"agenda_unavailable");
+});
+
+test("a dispatch failure whose fold cannot be written is still settled, so recovery never selects it again",async()=>{
+  const f=fixture(),row=await f.create(),execution=await f.service.runNow("u",row.id,{requestId:"poison"});f.queue[0].status="failed";
+  f.service.recordOutcome=async()=>{throw Object.assign(Error("changed repeatedly"),{code:"autopilot_outcome_conflict"});};
+  const settled=await f.service.markEpisodeFailed("u",execution.episode.id,{code:"autopilot_capability_unavailable"});
+  assert.equal(settled.payload.status,"failed");assert.ok(settled.payload.dispatchOutcomeRecordedAt);
+  assert.equal(settled.payload.dispatchOutcomeSkipped,"outcome_unrecorded");assert.equal(settled.payload.dispatchOutcomeError,"autopilot_outcome_conflict");
+});
