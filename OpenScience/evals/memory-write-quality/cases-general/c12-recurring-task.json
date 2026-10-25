@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C12); every name, number and identifier is invented",
   "expected": "A recurring task is the scheduler's: no line carries the schedule. At most a format line for it (five items at most, with links).",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

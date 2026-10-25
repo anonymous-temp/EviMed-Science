@@ -129,14 +129,12 @@ const operatorLevers = {
   OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS: ["open-science-web"],
   OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED: ["open-science-web"],
   // Read by config.mjs and passed by no compose file until 2026-09-16: turning
   // memory off, opening the agent memory API, or excluding an evaluation's
   // projects from extraction all did nothing from .env. The last one reached
   // production only through a private override's environment map.
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
   // The standing profile a conversation is handed up front and the recall tool's answer size (review M6, 2026-10-10): limits on what
   // reaches the model, which an operator tunes and which must not fall back to the default unseen.
   OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS: ["open-science-web"],
@@ -227,7 +225,6 @@ const operatorLevers = {
   // mem stream (2026-09-20): with no confirmation step, how long an unrepeated
   // inference stays in force is the lever that bounds what automatic memory
   // keeps.
-  OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS: ["open-science-web"],
   // rt (2026-09-20): the sign-in warm start's off switch. It starts a runtime
   // per sign-in, which is exactly why a deployment must be able to stop it.
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["open-science-web"],

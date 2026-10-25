@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * The native arm of the write-quality evaluation: the same incidents and the ten general cases, replayed the way a
+ * The write-quality evaluation: the incidents and the general cases, replayed the way a
  * conversation reaches OpenViking's engine — one session, the messages through the memory gateway's door, one commit — and
  * judged on the files the engine's own extraction wrote under the policy templates (`deploy/web/openviking/memory-templates/`).
  *
- * The legacy arm (`run_write_quality_eval.mjs`) scores the platform's extractor on record kinds. The engine writes files, so a
- * kind is counted as bullets in the place that kind now lives:
+ * The corpus was written against the platform's own extractor (deleted on 2026-10-25), which scored record kinds. The engine
+ * writes files, so a kind is counted as bullets in the place that kind now lives:
  *
  *   profile       bullets of profile.md
  *   preference    bullets under preferences/ (not those under preferences/corrections/)
@@ -39,7 +39,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { GENERAL_EXPECT_FIELDS, generalCaseIssues, runsOnArm } from "./caseShape.mjs";
+import { GENERAL_EXPECT_FIELDS, generalCaseIssues } from "./caseShape.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverSrc = path.resolve(here, "../../apps/server/src");
@@ -51,8 +51,8 @@ export const NATIVE_CASE_DIRECTORIES = Object.freeze(["cases", "cases-general"])
 /** The tag a platform-started brief wears; the gateway's door must drop a message that carries it. */
 const PLATFORM_TAG = "<evimed-geo-run>geo_eval_run</evimed-geo-run>";
 
-/** The checks this arm decides: the corpus's shared vocabulary less the legacy extractor's own (`requireConflictWith`). */
-const FIELD_EXPECTATIONS = Object.freeze(GENERAL_EXPECT_FIELDS.filter((field) => field !== "requireConflictWith"));
+/** The checks this runner decides: the corpus's whole vocabulary. */
+const FIELD_EXPECTATIONS = GENERAL_EXPECT_FIELDS;
 
 /** What a project-card key looks like in the card's text. */
 export const CARD_PATTERNS = Object.freeze(/** @type {Record<string, RegExp>} */ ({
@@ -159,8 +159,7 @@ async function loadDirectory(directory) {
 /** What is wrong with one case for this arm, or []. @param {any} item */
 export function nativeCaseIssues(item) {
   const issues = generalCaseIssues(item);
-  // A case for the legacy arm alone may ask what only that arm decides.
-  if (runsOnArm(item, "native")) for (const field of Object.keys(item.expect ?? {})) if (!FIELD_EXPECTATIONS.includes(field)) issues.push(`${item.file}: expect.${field} is not a check this arm decides`);
+  for (const field of Object.keys(item.expect ?? {})) if (!FIELD_EXPECTATIONS.includes(field)) issues.push(`${item.file}: expect.${field} is not a check this runner decides`);
   return [...new Set(issues)];
 }
 
@@ -205,7 +204,6 @@ export function parseArguments(argv) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map((name) => loadDirectory(path.join(here, name))))).flat()
-    .filter((item) => runsOnArm(item, "native"))
     .filter((item) => !options.only || options.only.split(",").some((part) => item.id.includes(part)));
   const issues = cases.flatMap(nativeCaseIssues);
   if (issues.length) throw new Error(`the corpus has ${issues.length} shape problem(s):\n${issues.join("\n")}`);

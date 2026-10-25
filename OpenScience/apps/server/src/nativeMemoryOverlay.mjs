@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import {
   NATIVE_COMMIT_ORIGINS, NATIVE_REVISION_ACTORS, NATIVE_REVISION_CHANGES, NATIVE_TEXT_LIMIT, migrateNativeMemory,
 } from "./nativeMemoryPersistence.mjs";
@@ -102,7 +102,7 @@ export class NativeMemoryOverlay {
   /** @param {string} text @param {any[]} [values] */
   async #query(text, values = []) {
     if (!this.database) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
-    await migrateResearchMemory(this.database);
+    await migrateMemorySettings(this.database);
     await migrateNativeMemory(this.database);
     return this.database.query(text, values);
   }
@@ -161,13 +161,14 @@ export class NativeMemoryOverlay {
     return result.rows.map(admissionRow);
   }
 
-  /** Recheck the current owner, engine, project and immutable candidate revision before extraction or a retry.
+  /** Recheck the current owner, project and immutable candidate revision before extraction or a retry.
    * @param {string} userId @param {any} admission */
   async admissionAuthority(userId, admission) {
-    const policy = await this.#query(`SELECT s.engine,s.learning_paused,s.paused_projects FROM evimed_memory.settings s
-      JOIN evimed_control.users u ON u.id=s.user_id WHERE s.user_id=$1`, [owner(userId)]);
+    // The settings row is optional (an account that never changed a switch has none), the account is not.
+    const policy = await this.#query(`SELECT s.learning_paused,s.paused_projects FROM evimed_control.users u
+      LEFT JOIN evimed_memory.settings s ON s.user_id=u.id WHERE u.id=$1`, [owner(userId)]);
     const settings = policy.rows[0];
-    if (!settings || settings.engine !== "native") return { allowed: false, state: "cancelled", reason: "memory_engine_changed" };
+    if (!settings) return { allowed: false, state: "cancelled", reason: "account_unavailable" };
     if (settings.learning_paused || (admission.projectId && (settings.paused_projects ?? []).includes(admission.projectId))) {
       return { allowed: false, state: "suspended", reason: "learning_paused" };
     }
@@ -175,20 +176,12 @@ export class NativeMemoryOverlay {
       const project = await this.#query("SELECT 1 FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [userId, admission.projectId]);
       if (!project.rows.length) return { allowed: false, state: "cancelled", reason: "project_unavailable" };
     }
-    if (String(admission.candidateId).startsWith("record:")) {
-      const found = await this.#query("SELECT version,status,scope,scope_id FROM evimed_memory.records WHERE user_id=$1 AND id=$2", [userId, admission.candidateId.slice(7)]);
-      const candidate = found.rows[0];
-      if (!candidate || candidate.version !== admission.revision || candidate.status !== "pending"
-        || (candidate.scope === "project" ? candidate.scope_id : null) !== admission.projectId) {
-        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
-      }
-    } else {
-      const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
-      const candidate = found.rows[0];
-      if (!candidate || candidate.revision !== admission.revision || candidate.payload?.status !== "candidate"
-        || candidate.payload?.transfer || candidate.project_id !== admission.projectId) {
-        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
-      }
+    // A candidate is a note of the capsule that an outside agent proposed; it is admitted only as the revision that was read.
+    const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
+    const candidate = found.rows[0];
+    if (!candidate || candidate.revision !== admission.revision || candidate.payload?.status !== "candidate"
+      || candidate.payload?.transfer || candidate.project_id !== admission.projectId) {
+      return { allowed: false, state: "cancelled", reason: "candidate_changed" };
     }
     return { allowed: true, state: null, reason: null };
   }
@@ -210,7 +203,35 @@ export class NativeMemoryOverlay {
   async account(userId) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_accounts WHERE user_id=$1", [owner(userId)]);
     const row = result.rows[0];
-    return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at), migratedAt: instant(row?.migrated_at) };
+    return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at) };
+  }
+
+  /**
+   * The accounts the memory plane knows: every account with a row in one of the overlay's per-account tables — registered with the
+   * engine by the gateway, the page or this worker, a conversation noted, a commit or an admission recorded. The worker's pass is over
+   * these; an account none of them has ever touched has nothing in the engine to scan, to settle or to erase.
+   * @param {{ limit?: number }} [options] @returns {Promise<string[]>}
+   */
+  async accounts({ limit = 100_000 } = {}) {
+    const result = await this.#query(`SELECT user_id FROM (
+        SELECT user_id FROM evimed_memory.native_accounts UNION SELECT user_id FROM evimed_memory.native_commits
+        UNION SELECT user_id FROM evimed_memory.native_sessions UNION SELECT user_id FROM evimed_memory.native_admissions
+      ) known ORDER BY user_id LIMIT $1`, [Math.max(1, Math.min(1_000_000, Math.trunc(Number(limit)) || 100_000))]);
+    return result.rows.map((/** @type {any} */ row) => String(row.user_id));
+  }
+
+  /**
+   * Whether the memory plane has ever touched this account (`accounts`): whether the engine can hold anything of it that a deletion
+   * owes it. An account that never used memory is erased without asking the engine, so that a deletion does not depend on a service
+   * the account never used.
+   * @param {string} userId @returns {Promise<boolean>}
+   */
+  async touched(userId) {
+    const result = await this.#query(`SELECT (EXISTS (SELECT 1 FROM evimed_memory.native_accounts WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_sessions WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_admissions WHERE user_id=$1)) AS held`, [owner(userId)]);
+    return result.rows[0]?.held === true;
   }
 
   // ---------------------------------------------------------- consolidation
@@ -262,7 +283,7 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1`, [owner(userId), succeeded === true, fingerprint, at.toISOString()]);
   }
 
-  /** @param {string} userId @param {"registered_at" | "scanned_at" | "migrated_at"} column */
+  /** @param {string} userId @param {"registered_at" | "scanned_at"} column */
   async #stamp(userId, column) {
     await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, ${column}) VALUES ($1, clock_timestamp())
       ON CONFLICT (user_id) DO UPDATE SET ${column}=clock_timestamp(), updated_at=date_trunc('second', clock_timestamp())`, [owner(userId)]);
@@ -271,8 +292,6 @@ export class NativeMemoryOverlay {
   noteRegistered(userId) { return this.#stamp(userId, "registered_at"); }
   /** @param {string} userId */
   noteScanned(userId) { return this.#stamp(userId, "scanned_at"); }
-  /** @param {string} userId */
-  noteMigrated(userId) { return this.#stamp(userId, "migrated_at"); }
 
   /** The account was erased from the engine: whatever it is next is a new registration. @param {string} userId */
   async forgetAccount(userId) {

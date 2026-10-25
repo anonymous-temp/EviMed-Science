@@ -1,7 +1,8 @@
 /**
  * What an account that has been used for a few weeks holds besides the modules' own data, for the walk's fixture: the things remembered
  * about the person and the project (the memory page and its map), three scheduled tasks, and an inbox of forty-odd notices from two
- * sources. Written through the platform's own stores (`researchMemory.upsertRecord`, `autopilotService.create`,
+ * sources. The memories are files of the memory engine's, written into the engine's stand-in the way the engine's own extraction would
+ * have (each with the overlay's revision that dates it); the rest through the platform's own stores (`autopilotService.create`,
  * `notificationService.create`); every sentence is invented.
  */
 
@@ -49,34 +50,73 @@ const METHODS = [
 ];
 
 /**
- * @param {any} app @param {any} user @param {{ geoProjectId: string, studies: { finished: string, mixed: string, empty: string }, projects: { geo: string, finished: string, mixed: string } }} ids
- * @param {{ log: (line: string) => void }} context
+ * Where a memory of each kind lives in the engine, and the type the engine files it under.
+ * @type {Record<string, { directory: string, type: string, project: boolean } | null>}
  */
-export async function furnishAccount(app, user, ids, { log }) {
+const PLACES = {
+  profile: null, // lines of one document, `profile.md`
+  preference: { directory: "preferences", type: "preferences", project: false },
+  behavior: { directory: "preferences", type: "preferences", project: false },
+  correction: { directory: "preferences/corrections", type: "preferences", project: false },
+  project_fact: { directory: "project_facts", type: "project_facts", project: true },
+  analysis: { directory: "project_facts", type: "project_facts", project: true },
+  decision: { directory: "decisions", type: "decisions", project: true },
+  follow_up: { directory: "follow_ups", type: "follow_ups", project: true },
+};
+
+/**
+ * Write the account's memories into the engine's stand-in, each as a file with its date in the overlay.
+ * @param {any} app @param {any} user @param {any} engine the engine's stand-in (`createOpenVikingStub`)
+ * @param {Array<[string, string, string, string, string, number, number]>} memories
+ * @returns {Promise<number>} how many files
+ */
+async function furnishMemory(app, user, engine, memories) {
+  const root = app.nativeMemory.sessions.memoryRoot(user.id);
+  const overlay = app.nativeMemory.overlay;
+  const now = Date.now();
+  /** @type {string[]} */ const profile = [];
+  let profileAt = now;
+  let files = 0;
+  const write = async (/** @type {string} */ rel, /** @type {string} */ type, /** @type {string} */ body, /** @type {boolean} */ project, /** @type {string} */ origin, /** @type {number} */ daysAgo) => {
+    const uri = `${root}/${rel}`;
+    engine.put(uri, body, [`memory_type=${type}`, ...(project ? ["project=default"] : [])]);
+    const changedAt = new Date(now - daysAgo * DAY).toISOString();
+    await overlay.upsertFile({ userId: user.id, uri, memoryType: type, body, ...(project ? { projectId: "default" } : {}) });
+    await overlay.addRevision({ userId: user.id, uri, memoryType: type, change: "added", actor: origin === "explicit" ? "user" : "engine", reason: "walk fixture", after: body, changedAt, ...(project ? { projectId: "default" } : {}) });
+    files += 1;
+  };
+  for (const [, kind, key, value, origin, , daysAgo] of memories) {
+    if (kind === "profile") { profile.push(`- ${value}`); profileAt = Math.min(profileAt, now - daysAgo * DAY); continue; }
+    const place = PLACES[kind];
+    if (!place) continue;
+    await write(`${place.directory}/${key.replace(/[^a-z0-9_]+/gi, "_")}.md`, place.type, `- ${value}`, place.project, origin, daysAgo);
+  }
+  if (profile.length) await write("profile.md", "profile", `# Profile\n${profile.join("\n")}`, false, "explicit", Math.round((now - profileAt) / DAY));
+  return files;
+}
+
+/**
+ * @param {any} app @param {any} user @param {{ geoProjectId: string, studies: { finished: string, mixed: string, empty: string }, projects: { geo: string, finished: string, mixed: string } }} ids
+ * @param {{ log: (line: string) => void, engine: any }} context `engine` is the memory engine's stand-in
+ */
+export async function furnishAccount(app, user, ids, { log, engine }) {
   const now = Date.now();
   // The account's own project exists from its first request; here nobody has made one yet.
   await app.store.defaultProject(user);
 
   // ---- memory
-  for (const [scope, kind, key, value, origin, importance, daysAgo] of MEMORIES) {
-    await app.researchMemory.upsertRecord(user.id, {
-      scope, ...(scope === "project" ? { scopeId: "default" } : {}), kind, key, value, origin, status: "active", confidence: origin === "explicit" ? 0.95 : 0.7, importance,
-      validFrom: new Date(now - daysAgo * DAY).toISOString(),
-    }, null, { by: "user", reason: "walk fixture" });
-  }
   // An account in use for months holds a hundred and more: the page's lists, its search and its first screen are measured on more than
   // twenty-three (the owner's memory page took more than 30 s to answer) — but not so many that the 记忆地图 folds its marks into clusters: the walk presses the first mark and expects a record's drawer.
-  for (let index = 0; index < 60; index += 1) {
+  const more = Array.from({ length: 60 }, (_, index) => {
     const project = index % 3 === 0;
-    await app.researchMemory.upsertRecord(user.id, {
-      scope: project ? "project" : "user", ...(project ? { scopeId: "default" } : {}), kind: project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior",
-      key: `${project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior"}.walk_${index}`,
-      value: project ? `第 ${index} 项研究事实：纳入第 ${index} 个中心的随访数据，主要结局为糖化血红蛋白较基线的变化。` : index % 3 === 1 ? `偏好 ${index}：引用文献时给出 PMID，比较药物时用表格。` : `习惯 ${index}：每次整理文献都先核对原文数字。`,
-      origin: index % 4 === 0 ? "inferred" : "explicit", status: "active", confidence: 0.8, importance: 0.3 + (index % 7) / 10,
-      validFrom: new Date(now - (40 + index) * DAY / 3).toISOString(),
-    }, null, { by: "user", reason: "walk fixture" }).catch((/** @type {any} */ error) => { if (index === 0) log(`account: more memory — ${String(error?.message ?? error).slice(0, 160)}`); });
-  }
-  log(`account: ${MEMORIES.length + 60} memory records`);
+    const kind = project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior";
+    return /** @type {[string, string, string, string, string, number, number]} */ ([project ? "project" : "user", kind, `${kind}.walk_${index}`,
+      project ? `第 ${index} 项研究事实：纳入第 ${index} 个中心的随访数据，主要结局为糖化血红蛋白较基线的变化。`
+        : index % 3 === 1 ? `偏好 ${index}：引用文献时给出 PMID，比较结果时写出效应量与置信区间。` : `习惯 ${index}：每次整理文献后先写一句结论再列依据。`,
+      index % 4 === 0 ? "inferred" : "explicit", 0.3 + (index % 7) / 10, Math.round((40 + index) / 3)]);
+  });
+  const memories = await furnishMemory(app, user, engine, [...MEMORIES, ...more]);
+  log(`account: ${memories} memory files`);
 
   // ---- what the platform learned from the work (做法)
   const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");

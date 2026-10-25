@@ -40,7 +40,6 @@ function candidateScore(seed,proposition,value){
 }
 export async function seedMemoryProof(seeds,profile,{judge,selectedRecords}={}){
  if(typeof judge!=='function')throw Error('Semantic seed judge is required');
- if(profile.engine!=='native')throw Error('Authenticated native memory profile is required');
  const records=profile.records??[];
  if(records.length>64||seeds.length>64)throw Error('Semantic seed proof record bound exceeded');
  const native=records.map(record=>({record,uri:record.document?.uri??record.uri??record.id,value:record.value??record.body}))

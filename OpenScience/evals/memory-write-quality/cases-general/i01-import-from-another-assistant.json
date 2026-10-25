@@ -4,9 +4,6 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "The lines of a memory export the person pasted and asked to import are kept as theirs: the role and research focus as profile, the two habits as preferences (owner decision 3, 2026-10-25).",
   "decidable": true,
-  "arms": [
-    "native"
-  ],
   "judge": "Is each of the four imported lines written as the person's own, and none of them attributed to a document or to the other assistant?",
   "pendingTemplate": "owner decision 3 (2026-10-25): an explicit import is the person's own statement. The templates treat a pasted document's content as the document's (c16, c19), so this is expected to fail until the memory package's templates name an import the person asked for as their statement.",
   "replay": {

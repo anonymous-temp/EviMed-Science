@@ -84,21 +84,6 @@ export function linkStateOf(status) {
 }
 
 /**
- * Which states a link may leave for the state a check found. A check moves a link only where it adds knowledge: a
- * retraction outranks a correction, a correction is never turned back into `unknown` by a check that could not be
- * made, and `unknown` is the one state a later clean check may set right. Nothing here lowers a retraction.
- * @param {string} next
- * @returns {string[]}
- */
-export function linkStatesLeftFor(next) {
-  if (next === "retracted") return ["current", "unknown", "changed", "expired"];
-  if (next === "changed") return ["current", "unknown", "expired"];
-  if (next === "unknown") return ["current"];
-  if (next === "current") return ["unknown"];
-  return [];
-}
-
-/**
  * The short machine reason a link is labelled with: what kind of notice, or why the check could not answer.
  * @param {{ state?: unknown, reason?: unknown, updates?: unknown } | null | undefined} status
  * @returns {string}

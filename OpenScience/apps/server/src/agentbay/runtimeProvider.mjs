@@ -529,8 +529,8 @@ export class AgentBayRuntimeProvider {
       platformSkillGeneration,
       platformSkillsRuntimeDir: platformSkillGeneration ? `/opt/evimed/platform-skill-generations/${platformSkillGeneration.reference.generationHash}/skills` : "",
       gateways: publicRuntimeGatewayUrls(this.config),
-      // The account's memory engine, as the address a session outside this host reaches the memory gateway at: the public
-      // prefix's when the account is on the native engine, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
+      // The memory engine, as the address a session outside this host reaches the memory gateway at: the public prefix's when
+      // the deployment has one, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
       memoryGatewayUrl: memoryGatewayUrl ? String(publicRuntimeGatewayUrls(this.config)?.memory ?? "") : "",
       // Whether the project is a 「循证 GEO」 one, and so mounts the GEO method pack as a skill root.
       geoSkills: geoSkills === true,

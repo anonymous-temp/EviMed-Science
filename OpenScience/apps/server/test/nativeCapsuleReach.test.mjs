@@ -20,10 +20,8 @@ const PROJECT = "p_notes";
 
 /** A native account's research-memory store, as the resident profile reads one. */
 const nativeStore = () => ({
-  async memoryEngine() { return "native"; },
   async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
   async sessionState() { return { trialCapsuleId: null }; },
-  async residentRecords() { throw new Error("a native account's records are the engine's"); },
   async lookupCounts() { throw new Error("a native account's records are the engine's"); },
   async residentState() { return { digest: null, compactedSince: false }; },
   async noteResidentDelivered() {},

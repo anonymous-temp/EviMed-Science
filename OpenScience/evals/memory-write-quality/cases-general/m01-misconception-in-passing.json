@@ -4,9 +4,6 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "Nothing is written: a popular misbelief stated in passing (only a tenth of the brain is used) is neither a fact about the world nor a trait of the person, and the assistant's correction is not their statement either.",
   "decidable": true,
-  "arms": [
-    "native"
-  ],
   "judge": "Does any written line say the person believes only part of the brain is used, or state it as true? None may.",
   "replay": {
     "synthetic": true,

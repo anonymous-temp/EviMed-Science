@@ -34,11 +34,12 @@
  * conversation nobody prepared, and for a control plane that predates the selection file.
  *
  * Two switches, because the row carries two things. The memory half — the
- * recall and note tools — is the model's way into the person's memory, and an
- * account whose memory OpenViking's native engine keeps already has one: the
- * official plugin's five `mcp__openviking__*` tools. Both sets side by side made
- * the model call both every time, the old one answering nothing (LAB-MEM,
- * 2026-10-13), so that half stands aside for such an account (`memoryEnabled`).
+ * recall and note tools — is the model's way into the person's memory, and a
+ * deployment that keeps it in OpenViking's engine (every deployment with one: the legacy engine that
+ * did not was deleted on 2026-10-25) already has one: the official plugin's five `mcp__openviking__*`
+ * tools. Both sets side by side made the model call both every time, the old one answering nothing
+ * (LAB-MEM, 2026-10-13), so that half stands aside there (`memoryEnabled`); it is the capsule's own
+ * recall and notes only where there is no engine.
  * The other half — the user's methods, the conversation's scope and the
  * handbook context — is not memory and stays (`enabled`).
  *
@@ -347,7 +348,6 @@ async function registerMemoryTools(ctx, config) {
       query: { type: 'string', required: true, description: '要回忆什么。' },
       factKinds: { type: 'array', items: { type: 'string' }, description: '限定事实种类，例如 preference、stance、project_fact。' },
       since: { type: 'string', description: 'ISO 日期；只看这之后记录的内容。' },
-      asOf: { type: 'string', description: 'ISO 日期；问题所指的时间点（默认现在）。只对用户的科研记忆记录生效：返回当时有效的那一版。' },
       scope: { type: 'string', enum: ['capsule', 'conversation', 'all'], description: '检索范围，默认 all。capsule 只搜记忆胶囊里的事实；conversation 只搜用户的科研记忆记录；all 两者都搜。' },
       limit: { type: 'number', description: '要几条；不填用默认，超过上限按上限给。' },
     },
@@ -359,8 +359,6 @@ async function registerMemoryTools(ctx, config) {
         factKinds: args.factKinds ?? [],
         since: args.since ?? null,
         scope: args.scope ?? 'all',
-        // Only when the question names a time: the gateway reads absence as now.
-        ...(args.asOf ? { asOf: args.asOf } : {}),
         // Only when the model asked for a number: absence is the default.
         ...(Number.isFinite(Number(args.limit)) && Number(args.limit) >= 1 ? { limit: Math.trunc(Number(args.limit)) } : {}),
       })

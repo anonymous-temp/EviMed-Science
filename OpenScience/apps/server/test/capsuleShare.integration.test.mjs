@@ -20,7 +20,7 @@ import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -47,7 +47,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-share-int-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type) VALUES
     ($1,'李主任','development'),($2,'Alice Reader','development'),($3,'Bob Reader','development'),($4,'Carol Reader','development'),($5,'Dave Reader','development')`,
   [author, alice, bob, carol, dave]);

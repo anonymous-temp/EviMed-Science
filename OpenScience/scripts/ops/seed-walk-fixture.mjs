@@ -127,7 +127,7 @@ async function main() {
     // The knowledge base: documents read by the platform's worker (a PDF through the parser's stand-in), pages and a graph compiled by the engine's.
     sourceIngestionEnabled: true, sourceIngestionPollMs: 200, sourceIngestionLeaseMs: 5_000, documentParserUrl: "http://parser.test", documentParserToken: "sk-walk-fixture",
     documentParserFetch: parserStandIn, sourceMetadataFetch: async () => new Response("{}", { status: 404 }),
-    memoryIndexProvider: "builtin", ovKnowledgeEnabled: true, openVikingClient: client, knowledgePagesDebounceMs: 0, knowledgePagesMinSources: 2, knowledgePagesPollMs: 200,
+    memoryIndexProvider: "builtin", ovKnowledgeEnabled: true, openVikingClient: client, memoryEngineEnabled: true, knowledgePagesDebounceMs: 0, knowledgePagesMinSources: 2, knowledgePagesPollMs: 200,
     kbSearchEnabled: false,
     // The kernel's window, as production has it (the shell places its frame over a conversation's pane: 定时任务's task page). The origin
     // answers nothing — port 9, nothing listens — so a frame is minted and placed and never loads: no walk starts a runtime anyway.
@@ -182,7 +182,7 @@ async function passwordOf(file) {
  * @param {{ password: string, base: string, engine: any, setCompile: (script: (request: any, stub: any) => void) => void }} context
  */
 async function furnish(app, user, { password, base, engine, setCompile }) {
-  const context = { log };
+  const context = { log, engine };
   const studies = await furnishVcr(app, user, context);
   await writeFile(path.join(app.config.vcrDataPlaneDir, "walk-calculation-fixture.json"), `${JSON.stringify(studies.calculation, null, 2)}\n`, { mode: 0o600 });
   const geo = await furnishGeo(app, user, context);

@@ -4,9 +4,6 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "Nothing is written: one patient's presentation, told in order to ask for talking points, is not a project fact, a decision, a profile line or a standing trait (one question about chest pain does not make the person 'someone who treats chest pain').",
   "decidable": true,
-  "arms": [
-    "native"
-  ],
   "judge": "Does any written line describe this patient, or say the person manages acute chest pain as a speciality? None may.",
   "replay": {
     "synthetic": true,

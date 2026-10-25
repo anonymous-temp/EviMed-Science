@@ -7,14 +7,11 @@ instruction) in separate conversations, waits until the memory has settled, read
 or a pattern over that text, never a model's judgement, and the statements are invented. Projects and account are deleted at
 the end. The password and the session cookie are never printed or written.
 
-  python3 run.py --base-url https://host --out-dir /tmp/memory-policy                  # the account's default engine
-  python3 run.py --base-url ... --engine native --engine-ready-file /tmp/ready          # wait for the controller to move it
+  python3 run.py --base-url https://host --out-dir /tmp/memory-policy                  # a new throwaway account
   python3 run.py --base-url ... --account NAME --password-file FILE [--delete-account]  # an existing throwaway account
   python3 run.py --cases-only                                                           # check the case file, touch nothing
 
-`--engine native|legacy`: the controller moves an account between engines (`scripts/ops/memory-engine.mjs`), so the runner
-registers the account, prints `ENGINE-WAIT <engine> <account>` and waits for `--engine-ready-file` to exist (up to
-`--engine-wait` seconds) before the first case. `--group B` runs the cases that cannot share an account with the default group.
+`--group B` runs the cases that cannot share an account with the default group.
 The native engine extracts minutes after a conversation ends: scoring waits until every keep is found and the memory has been
 unchanged for `--stable-polls` polls, but at least `--min-settle` and at most `--settle` seconds after the last case.
 Writes `memory-policy-<engine>.json` and `.md` to `--out-dir`; the exit status is 0 when every scored case passed.
@@ -335,7 +332,7 @@ class Session:
         for label, project in self.projects.items():
             overview = self.api.call(f"/api/memory/projects/{project}/overview", tolerate=True)
             cards[label] = [{"slot": slot.get("slot"), "text": slot.get("text")} for slot in ((overview.get("data") or {}).get("card") or [])]
-        return {"engine": data.get("engine"), "records": records, "cards": cards, "error": profile.get("error")}
+        return {"records": records, "cards": cards, "error": profile.get("error")}
 
     def run_turns(self, case, view_fn):
         sessions = {}
@@ -424,7 +421,7 @@ def run(args, log=print):
     username = args.account or "mempol-" + secrets.token_hex(4)
     delete_account = not args.account or args.delete_account
     user_id = None
-    report = {"startedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "baseUrl": args.base_url, "group": args.group, "engine": args.engine, "cases": []}
+    report = {"startedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "baseUrl": args.base_url, "group": args.group, "engine": "native", "cases": []}
     skipped = {}
     try:
         if not args.account:
@@ -435,16 +432,7 @@ def run(args, log=print):
         user_id = (me.get("user") or {}).get("id") or me.get("id") or username
         report["account"] = username
         log(f"ACCOUNT {username}")
-        if args.engine != "default":
-            log(f"ENGINE-WAIT {args.engine} {username}")
-            deadline = time.time() + args.engine_wait
-            while args.engine_ready_file and not os.path.exists(args.engine_ready_file) and time.time() < deadline:
-                time.sleep(2)
         report["release"] = (api.call("/api/ready", tolerate=True).get("data") or {}).get("release")
-        seen = session.snapshot().get("engine")
-        report["engineSeen"] = seen
-        # The engine the memory is on, as the memory page says it (the legacy profile names none).
-        report["engine"] = seen or "legacy"
         for case in cases:
             log(f"CASE {case['id']}")
             view_fn = lambda snap: build_view(snap, session.projects)  # noqa: E731
@@ -495,9 +483,6 @@ def parse(argv):
     parser.add_argument("--cases-only", action="store_true", help="check the case file and exit")
     parser.add_argument("--only", nargs="*", default=[], help="case ids or their prefixes (K01 N03)")
     parser.add_argument("--group", default="A")
-    parser.add_argument("--engine", choices=("default", "legacy", "native"), default="default")
-    parser.add_argument("--engine-ready-file")
-    parser.add_argument("--engine-wait", type=int, default=900)
     parser.add_argument("--account")
     parser.add_argument("--password-file")
     parser.add_argument("--delete-account", action="store_true")

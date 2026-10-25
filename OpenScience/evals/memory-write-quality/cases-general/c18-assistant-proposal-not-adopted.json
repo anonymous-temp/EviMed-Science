@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C18); every name, number and identifier is invented",
   "expected": "Nothing is filed: the assistant's offer was not taken up in the person's own reply.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

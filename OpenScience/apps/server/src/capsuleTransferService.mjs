@@ -11,12 +11,10 @@ import { CapsuleScanner } from "./capsuleScan.mjs";
 import { SCAN_METER_PROJECT } from "./capsuleService.mjs";
 import { nativeMemoryFile, PROJECT_MEMORY_TYPES } from "./openVikingSessions.mjs";
 import { nativeMemoryRoot } from "./openVikingLayout.mjs";
-import { LEGACY_KIND_OF_TYPE, SOURCE_LABEL_PREFIX, versionOfHash } from "./nativeMemoryStore.mjs";
-import { flatStatement, MIGRATED_KINDS, replayedForm } from "./nativeMemoryMigration.mjs";
+import { PAGE_KIND_OF_TYPE, versionOfHash } from "./nativeMemoryStore.mjs";
 import { reachableAccounts } from "./capsuleRecipients.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
-import { boundedText } from "./researchMemory.mjs";
-import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 import { recordAccountCleanup, recordKdfRefused, recordShareImported, recordShareRefused, recordShared, recordSnapshotFile } from "./capsuleShareMetrics.mjs";
@@ -44,48 +42,28 @@ function scopesOf(value = ["workstyle"]) {
 }
 function kindsFor(scopes) { return [...WORKSTYLE, ...(scopes.includes("+profile") ? PROFILE : []), ...(scopes.includes("+knowledge") ? KNOWLEDGE : [])]; }
 /**
- * Entries the sender unticked, by the ids the preview gave them (`fact:`, `method:`, `record:` or `native:` and the source's own id).
+ * Entries the sender unticked, by the ids the preview gave them (`fact:`, `method:` or `native:` and the source's own id).
  * An id that matches nothing any more is not an error: what is left out is what the sender looked at, and the pack changes under them.
  * @param {unknown} value @returns {Set<string>}
  */
 function excludedIds(value) {
   if (value == null) return new Set();
-  if (!Array.isArray(value) || value.length > 500 || value.some((id) => typeof id !== "string" || id.length > 100 || !/^(?:fact|method|record|native):\S+$/.test(id))) throw invalid();
+  if (!Array.isArray(value) || value.length > 500 || value.some((id) => typeof id !== "string" || id.length > 100 || !/^(?:fact|method|native):\S+$/.test(id))) throw invalid();
   return new Set(value);
 }
 
 /**
  * Why a kind of entry is not in the pack, said to the sender in one plain sentence each (no back-office words: what the platform
  * calls an entry's origin is not what a person calls it). The sentence carries its count.
- * @type {Record<"inferred" | "document" | "sensitive" | "received" | "unconfirmed" | "paused", (count: number) => string>}
+ * @type {Record<"inferred" | "document" | "sensitive" | "received" | "paused", (count: number) => string>}
  */
 const EXCLUDED_TEXT = Object.freeze({
   inferred: (count) => `助手替你记下、你还没有确认或改过的 ${count} 条内容没有放进来。`,
   document: (count) => `从你上传的资料里整理出来的 ${count} 条内容没有放进来。`,
   sensitive: (count) => `你标为敏感的 ${count} 条内容没有放进来。`,
   received: (count) => `别人分享给你的 ${count} 条内容不会再转发。`,
-  unconfirmed: (count) => `从旧记忆整理过来、没法确认是你原话的 ${count} 条内容没有放进来。`,
   paused: (count) => `你暂停了记忆的项目里的 ${count} 条内容没有放进来。`,
 });
-
-/** The statements of a memory file's body: its lines without headings and the platform's own label lines. @param {string} body */
-function statementLines(body) {
-  return String(body ?? "").split("\n").map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#") && !line.startsWith(SOURCE_LABEL_PREFIX.trim()));
-}
-
-/**
- * Whether a file the migration replay touched says only what the person said before the migration: every statement of its body is
- * (in the form the replay wrote it) a legacy record of theirs that they stated or edited themselves. The replay also carried the
- * records an assistant had inferred, and the engine may have worded or merged what it was told, so a body that holds anything else
- * is not their statement and stays out.
- * @param {string} body @param {ReadonlySet<string>} legacy `replayedForm` of each statement of the person's own
- */
-function bodyIsOwnLegacyStatement(body, legacy) {
-  const lines = statementLines(body);
-  if (!lines.length) return false;
-  return legacy.has(lines.map(flatStatement).join(" ")) || lines.every((line) => legacy.has(flatStatement(line)));
-}
 
 function location(kind) {
   return kind === "method_preference" ? { layer: "methods", path: null }
@@ -306,13 +284,13 @@ async function exportableMethods(client, userId, rows) {
 /** Portable snapshots are immutable ciphertext; online state can be revoked, offline copies cannot. */
 export class CapsuleTransferService {
   /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string,
-   *   nativeMemory?: import("./nativeMemoryStore.mjs").NativeMemoryStore | null, memoryEngine?: ((userId: string) => Promise<string>) | null,
+   *   nativeMemory?: import("./nativeMemoryStore.mjs").NativeMemoryStore | null,
    *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null, privateAccountCleanup?: ((userId:string)=>Promise<void>) | null,
    *   maxLiveSnapshots?: number, now?: () => number, report?: (event: "rolled_back" | "cleanup_failed", details: { userId: string, code?: string }) => void}} options */
-  constructor({ documents, capsules, identities, dataDir, scanner = null, nativeMemory = null, memoryEngine = null, privateAccountCleanup = null, maxLiveSnapshots = MAX_LIVE_SNAPSHOTS, now = Date.now, report = () => {} }) {
+  constructor({ documents, capsules, identities, dataDir, scanner = null, nativeMemory = null, privateAccountCleanup = null, maxLiveSnapshots = MAX_LIVE_SNAPSHOTS, now = Date.now, report = () => {} }) {
     this.documents = documents; this.capsules = capsules; this.identities = identities; this.dataDir = dataDir;
     this.scanner = scanner;
-    this.nativeMemory = nativeMemory; this.memoryEngine = memoryEngine;
+    this.nativeMemory = nativeMemory;
     this.privateAccountCleanup = privateAccountCleanup;
     this.maxLiveSnapshots = maxLiveSnapshots;
     this.now = now;
@@ -354,17 +332,18 @@ export class CapsuleTransferService {
    */
   async #assemble(userId, capsuleId, kinds, { tally = false, exclude = new Set() } = {}) {
     // Native bytes are hydrated before the database snapshot. These are two stores, not a cross-engine atomic read.
-    // Engine failures must remain failures: an account on native memory must never export stale legacy copies.
-    const native = await this.memoryEngine?.(userId) === "native";
+    // Engine failures must remain failures: the account's memory is the engine's, and a pack made while it cannot be read would
+    // silently leave the person's own words out. A deployment without the engine has no memory file to carry.
+    const native = Boolean(this.nativeMemory?.configured);
     const snapshot = native ? await this.#nativeSnapshot(userId, kinds) : null;
     const nativeFacts = snapshot?.facts ?? null;
-    await migrateResearchMemory(this.documents.database);
+    await migrateMemorySettings(this.documents.database);
     const assembled = await this.documents.database.transaction(async client => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const capsule = await client.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='capsule' AND id=$2 AND deleted_at IS NULL", [productId(userId), productId(capsuleId)]);
       if (!capsule.rows[0]) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
       /** What the rules keep out, by reason (counted only when `tally`). */
-      const held = { inferred: 0, document: 0, sensitive: snapshot?.sensitive ?? 0, received: 0, unconfirmed: 0, paused: 0 };
+      const held = { inferred: 0, document: 0, sensitive: snapshot?.sensitive ?? 0, received: 0, paused: 0 };
       // A note a run wrote takes effect without anyone approving it, and the
       // researcher who never acted on it has not adopted it: the export promises
       // 「只分享已采用的研究方法与工作偏好 … 运行记录不会随包导出」. So an
@@ -399,76 +378,33 @@ export class CapsuleTransferService {
       // A method learned in a run that drew on a pack nobody had vouched for yet does not leave either: shared text would
       // otherwise be re-shared as this account's own once the loop had restated it (capsuleShareTrust.mjs).
       methods.rows = await exportableMethods(client, userId, methods.rows);
-      const stated = native ? { rows: [] } : await client.query(`SELECT id,version,kind,value,summary FROM evimed_memory.records WHERE user_id=$1
-        AND scope='user' AND status='active' AND NOT sensitive AND origin IN ('explicit','manual') AND kind=ANY($2::text[])
-        ORDER BY updated_at DESC,id LIMIT 50`, [userId, kinds.filter((kind) => !KNOWLEDGE.includes(kind))]);
-      // 「知识与项目事实」 (build spec §9.1), only when the sender ticked it:
-      // the same predicate as above — active, their own, never sensitive, and
-      // said, edited or confirmed by them — but read from the projects too,
-      // because a project fact, a decision or a follow-up is recorded against
-      // the project it is about (`memoryIntelligence.mjs`). Reading only
-      // account-level records, the box was offered and carried nothing. Not
-      // from a project the platform works in for itself, nor from one the
-      // researcher paused memory for, and never a conversation's own notes.
-      // Newest first, into whatever room the default layer leaves.
-      const knowledgeKinds = kinds.filter((kind) => KNOWLEDGE.includes(kind));
-      const known = !native && knowledgeKinds.length ? await client.query(`SELECT id,version,kind,value,summary,scope,scope_id FROM evimed_memory.records r
-        WHERE user_id=$1 AND scope IN ('user','project') AND status='active' AND NOT sensitive AND origin IN ('explicit','manual')
-          AND kind=ANY($2::text[]) AND NOT (scope='project' AND scope_id=ANY(COALESCE(
-            (SELECT paused_projects FROM evimed_memory.settings s WHERE s.user_id=r.user_id), '{}'::text[])))
-        ORDER BY updated_at DESC,id LIMIT $3`, [userId, knowledgeKinds, MAX_ENTRIES + 1]) : { rows: [] };
       const selectedNative = [];
       if (nativeFacts) {
         const policy = await client.query("SELECT paused_projects FROM evimed_memory.settings WHERE user_id=$1", [userId]);
         const paused = new Set(policy.rows[0]?.paused_projects ?? []);
         const projects = await client.query("SELECT id FROM evimed_control.projects WHERE user_id=$1", [userId]);
         const owned = new Set(projects.rows.map((row) => row.id));
-        // Migration replayed old records as user messages, including inferred records. That erases line provenance.
-        // Follow replay lineage and conservatively omit those files unless the person edited this exact body.
-        const migrated = await client.query(`WITH RECURSIVE migration AS (
-          SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND origin='migration'
-          UNION
-          SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN migration m ON c.archive_uri=m.replayed_as
-            WHERE c.user_id=$1
-        ) SELECT DISTINCT r.uri FROM evimed_memory.native_revisions r JOIN migration m ON r.archive_uri=m.archive_uri
-          WHERE r.user_id=$1 AND r.uri=ANY($2::text[])`, [userId, nativeFacts.map((row) => row.nativeUri)]);
-        const migrationFiles = new Set(migrated.rows.map((row) => row.uri));
-        // Once the migration is complete (`migrated_at`) the replay's files stop being out for good: a file whose body is the
-        // person's own legacy statement — what they stated or edited before the move, which the legacy rows still hold — is
-        // theirs, and so is a profile line a later conversation brought. Until then, and for anything else the replay wrote, the
-        // rule above stands (the account's own export used to be empty for ever after a migration).
-        const complete = migrationFiles.size > 0
-          && Boolean((await client.query("SELECT migrated_at FROM evimed_memory.native_accounts WHERE user_id=$1", [userId])).rows[0]?.migrated_at);
-        const legacy = complete ? await this.#legacyStatements(client, userId) : null;
-        const theirs = (/** @type {any} */ row) => row.adoptedBody || (legacy !== null && (row.nativeType === "profile"
-          ? row.conversations > 0 || legacy.has(flatStatement(row.payload.content))
-          : bodyIsOwnLegacyStatement(row.payload.content, legacy)));
         for (const row of nativeFacts) {
           if (!kinds.includes(row.payload.factKind)) continue;
           const knowledgeOfProject = row.scope !== "user";
           if (knowledgeOfProject && !(KNOWLEDGE.includes(row.payload.factKind) && owned.has(row.scopeId) && !isInternalProject(row.scopeId))) continue;
           if (knowledgeOfProject && paused.has(row.scopeId)) { held.paused += 1; continue; }
-          if (migrationFiles.has(row.nativeUri) && !theirs(row)) { held.unconfirmed += 1; continue; }
           selectedNative.push(row);
         }
       }
-      if (tally) await this.#tallyHeld(client, userId, kinds, native, held);
-      const recorded = (/** @type {any} */ row) => ({ id: row.id, entryId: `record:${row.id}`, revision: row.version, payload: {
-        factKind: row.kind, origin: "explicit", content: boundedText(row.summary || row.value, 20_000) } });
+      if (tally) await this.#tallyHeld(client, userId, kinds, held);
       const workstyle = [
         ...facts.rows.map((row) => ({ ...row, entryId: `fact:${row.id}` })),
         ...methods.rows.map((row) => ({ id: row.id, entryId: `method:${row.id}`, revision: row.revision, payload: {
           factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload) } })),
-        ...stated.rows.map(recorded),
         ...selectedNative.filter((row) => !KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` })),
       ];
-      const knowledge = [...selectedNative.filter((row) => KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` })),
-        ...known.rows.filter((row) => row.scope === "user" || !isInternalProject(row.scope_id)).map(recorded)];
+      const knowledge = selectedNative.filter((row) => KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` }));
       // What the sender unticked is out before the bound is read: leaving entries out is how a pack that is too big gets small.
       const unticked = [...workstyle, ...knowledge].filter((fact) => exclude.has(fact.entryId));
       const ticked = (/** @type {any[]} */ list) => list.filter((fact) => !exclude.has(fact.entryId));
       const kept = ticked(workstyle);
-      const room = ticked(knowledge).slice(0, Math.max(0, MAX_ENTRIES + (native ? 1 : 0) - kept.length));
+      const room = ticked(knowledge).slice(0, Math.max(0, MAX_ENTRIES + 1 - kept.length));
       return { revision: capsule.rows[0].revision, facts: [...kept, ...room], unticked, held };
     });
     await this.#verifyNativeSnapshot(userId, snapshot?.facts ?? []);
@@ -476,30 +412,13 @@ export class CapsuleTransferService {
   }
 
   /**
-   * What the account's own words were before its migration to the native engine: the legacy records it stated or edited itself,
-   * in the form the replay wrote them into files (`replayedForm`), each statement and each line of a longer one.
-   * @param {{ query: Function }} client @param {string} userId @returns {Promise<Set<string>>}
-   */
-  async #legacyStatements(client, userId) {
-    const rows = await client.query(`SELECT value FROM evimed_memory.records WHERE user_id=$1 AND status='active' AND NOT sensitive
-      AND origin IN ('explicit','manual') AND kind=ANY($2::text[])`, [userId, MIGRATED_KINDS]);
-    const forms = new Set();
-    for (const row of rows.rows) {
-      forms.add(replayedForm(row.value));
-      for (const line of String(row.value ?? "").split("\n")) if (line.trim()) forms.add(replayedForm(line));
-    }
-    forms.delete("");
-    return forms;
-  }
-
-  /**
    * Count, by reason, what the rules kept out of a pack of these kinds, for the sender's preview: the assistant's own notes the
    * person never confirmed, what a document yielded, what they marked sensitive, what someone else shared with them. Counts only;
    * nothing of those entries is read into the answer.
-   * @param {{ query: Function }} client @param {string} userId @param {readonly string[]} kinds @param {boolean} native
+   * @param {{ query: Function }} client @param {string} userId @param {readonly string[]} kinds
    * @param {Record<string, number>} held
    */
-  async #tallyHeld(client, userId, kinds, native, held) {
+  async #tallyHeld(client, userId, kinds, held) {
     const facts = (await client.query(`SELECT
         count(*) FILTER (WHERE payload->'share' IS NOT NULL)::integer AS received,
         count(*) FILTER (WHERE payload->'share' IS NULL AND payload->>'layer'='sources')::integer AS document,
@@ -511,14 +430,6 @@ export class CapsuleTransferService {
     held.received += Number(facts?.received) || 0;
     held.document += Number(facts?.document) || 0;
     held.inferred += Number(facts?.inferred) || 0;
-    // A native account's records are the engine's files (counted above); the legacy rows it left behind are not its memory.
-    if (native) return;
-    const records = (await client.query(`SELECT
-        count(*) FILTER (WHERE sensitive AND origin IN ('explicit','manual'))::integer AS sensitive,
-        count(*) FILTER (WHERE NOT sensitive AND origin='inferred')::integer AS inferred
-      FROM evimed_memory.records WHERE user_id=$1 AND scope IN ('user','project') AND status='active' AND kind=ANY($2::text[])`, [userId, kinds])).rows[0];
-    held.sensitive += Number(records?.sensitive) || 0;
-    held.inferred += Number(records?.inferred) || 0;
   }
 
   /**
@@ -552,16 +463,16 @@ export class CapsuleTransferService {
     // A correction lives under `preferences/corrections/` and is a `correction` here (its own kind, in the knowledge scope), never
     // a `preference` for sharing its directory's name.
     const eligible = records.filter((row) => (!PROJECT_MEMORY_TYPES.includes(row.nativeType) || (row.scope === "project" && Boolean(row.scopeId)))
-      && kinds.includes(row.kind) && row.engine === "native" && row.status === "active" && !row.share
+      && kinds.includes(row.kind) && row.status === "active" && !row.share
       && ["explicit", "manual"].includes(row.origin) && ["user", "project"].includes(row.scope)
-      && row.kind === LEGACY_KIND_OF_TYPE[row.nativeType] && row.version === versionOfHash(row.contentHash));
+      && row.kind === PAGE_KIND_OF_TYPE[row.nativeType] && row.version === versionOfHash(row.contentHash));
     const facts = eligible.filter((row) => !row.sensitive)
       .map((row) => {
         const file = files.find((item) => item.uri === row.uri);
         if (!file || file.hash !== row.contentHash || (row.nativeType !== "profile" && row.value !== file.body))
           throw new HttpError(503, "memory_engine_unavailable", "The memory snapshot could not be verified.");
         // The capsule wire uses int32 revisions; retain the engine's full hash-derived token beside it.
-        // A profile edit changes one line; it cannot adopt the other migrated statements in that document.
+        // A profile edit changes one line; it cannot adopt the other statements in that document.
         // Undo/restore likewise is not an adoption of the restored text.
         // revisionsOfMany orders by the unique revision id DESC (not changedAt, which may tie).
         // Only the latest operation can attest this body; an older edit cannot adopt a later engine write or undo.
@@ -571,7 +482,7 @@ export class CapsuleTransferService {
           && typeof latest.after === "string" && digest(latest.after) === file.hash;
         return { id: row.id, revision: Number.parseInt(file.hash.slice(0, 7), 16) + 1, scope: row.scope, scopeId: row.scopeId,
           nativeUri: file.uri, adoptedBody,
-          // How many conversations of the person's wrote this line (a profile line's own commit; none for a migration's or a replay's).
+          // How many conversations of the person's wrote this line (a profile line's own commit).
           conversations: Array.isArray(row.evidence) ? row.evidence.length : 0,
           nativeSource: { engine: "native", sha256: file.hash, version: row.version },
           payload: { factKind: row.kind, origin: "explicit", content: checkedText(row.value) } };

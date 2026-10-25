@@ -10,22 +10,20 @@
  * @module memoryMapSources/topics
  */
 
-import { MAP_RECORD_LIMIT, drawable } from "./records.mjs";
+import { drawable } from "./records.mjs";
 import { nodeId } from "./common.mjs";
 
 /**
- * @param {{ topics: import("../memoryTopics.mjs").MemoryTopics | null, researchMemory: any, accountRecords?: ((userId: string) => Promise<any[]>) | null }} dependencies
- *   `accountRecords`: the account's memories from whichever engine holds them, as the map draws them; the store's own rows by default.
- *   An account's topics are the same view whichever engine keeps its memories.
+ * @param {{ topics: import("../memoryTopics.mjs").MemoryTopics | null, accountRecords?: ((userId: string) => Promise<any[]>) | null }} dependencies
+ *   `accountRecords`: the account's memories as the map draws them (the engine's files); without it (no memory engine) there are no topics.
  * @returns {import("./common.mjs").MapSource}
  */
-export function createTopicsSource({ topics, researchMemory, accountRecords = null }) {
-  const recordsOf = accountRecords ?? ((/** @type {string} */ userId) => researchMemory.mapRecords(userId, { projectId: null, limit: MAP_RECORD_LIMIT }));
+export function createTopicsSource({ topics, accountRecords = null }) {
   return {
     name: "topics",
-    applies: () => Boolean(topics?.configured) && (typeof accountRecords === "function" || typeof researchMemory?.mapRecords === "function"),
+    applies: () => Boolean(topics?.configured) && typeof accountRecords === "function",
     async read(request) {
-      const all = await request.memo("records:account", () => recordsOf(request.user.id));
+      const all = await request.memo("records:account", () => /** @type {NonNullable<typeof accountRecords>} */ (accountRecords)(request.user.id));
       const found = await /** @type {NonNullable<typeof topics>} */ (topics).read(request.user.id, all.filter(drawable));
       return {
         facets: {

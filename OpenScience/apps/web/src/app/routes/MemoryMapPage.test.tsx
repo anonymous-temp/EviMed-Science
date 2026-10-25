@@ -74,7 +74,7 @@ function busyMap(over: Partial<MemoryMap> = {}): MemoryMap {
 
 const record = (id: string): WebStructuredMemory => ({
   id, scope: "user", scopeId: "", kind: "preference", key: `k.${id}`, value: `记忆 ${id}`, summary: `记忆 ${id}`, origin: "inferred", status: "active", confidence: 1, importance: 0.5,
-  sensitive: false, evidenceCount: 0, version: 1, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-10T00:00:00Z", lastConfirmedAt: null, expiresAt: null, evidence: [], revisions: [],
+  sensitive: false, evidenceCount: 0, version: 1, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-10T00:00:00Z", lastConfirmedAt: null, expiresAt: null, evidence: [], revisions: [], document: { id: "nm_profile" },
 });
 
 function Where() {
@@ -121,20 +121,7 @@ describe("the landing's header: the verbs of a capsule are on the map too", () =
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
     expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
-    // No 记住这一条 for an account whose memory is not the engine's own.
-    expect(screen.queryByRole("button", { name: "记住这一条" })).toBeNull();
-  });
-
-  it("offers 记住这一条 to an account on the engine's own memory, and only then", async () => {
-    fetchMemoryMap.mockResolvedValue(busyMap({ engine: "native" }));
-    open();
-    expect(await screen.findByRole("button", { name: "记住这一条" })).toBeInTheDocument();
-    cleanup();
-    fetchMemoryMap.mockResolvedValue(busyMap({ engine: "postgres" }));
-    open();
-    await screen.findByRole("switch", { name: "记忆" });
-    await screen.findByText(/EviMed 记住了你的/u);
-    expect(screen.queryByRole("button", { name: "记住这一条" })).toBeNull();
+    expect(screen.getByRole("button", { name: "记住这一条" })).toBeInTheDocument();
   });
 
   it("pauses the project the map is narrowed to, and a map of every project the project the shell is in", async () => {

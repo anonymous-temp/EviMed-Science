@@ -95,8 +95,8 @@ export async function listAllMethods(status?: string): Promise<WebMethod[]> {
  * free-text form under 方法 and a SKILL.md editor on the methods page — and the
  * owner's ruling on 2026-09-20 is that a method is what the model learns over
  * time and that the page must never ask anyone to write one. Someone who wants
- * a standing instruction says it in a conversation and the extractor records it
- * as a preference (see the extraction instructions in `memoryIntelligence.mjs`).
+ * a standing instruction says it in a conversation and the memory engine keeps it
+ * as a preference.
  * `POST /api/methods` stays on the server for the operator path that seeds an
  * evaluation account.
  */

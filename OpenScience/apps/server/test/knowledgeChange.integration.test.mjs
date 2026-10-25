@@ -1,9 +1,9 @@
 // A source change reaching memories, methods and result versions against the real stores (N15).
 //
 // What the unit tests cannot say: the dependents of a calculation and the versions that read a document are jsonb
-// containment lookups on the real result ledger; the memory links are rows moved by one conditional statement; a method's
-// label is a telemetry write that leaves its history, status and body as they were. These run the real
-// `ProductDocuments`, `ResearchMemoryStore` and `LearningService` under the real impact service.
+// containment lookups on the real result ledger; a method's label is a telemetry write that leaves its history, status and body
+// as they were. These run the real `ProductDocuments` and `LearningService` under the real impact service; the memory engine's side
+// is a double (`helpers/nativeSourceLinks.mjs`), whose real counterpart is tested with the engine.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -14,7 +14,7 @@ import { KnowledgeChangeService, producingAgenda } from "../src/knowledgeChange.
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { nativeSourceLinks } from "./helpers/nativeSourceLinks.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -27,7 +27,7 @@ const SRC_OLD = `src_${hex("a", 32)}`;
 const SRC_NEW = `src_${hex("b", 32)}`;
 const BYTES_OLD = hex("c");
 const DOI = "10.9999/knowledge.change";
-/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let memory; /** @type {any} */ let learning;
+/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let native; /** @type {any} */ let learning;
 const owners = [];
 
 before(async () => {
@@ -35,7 +35,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
   await migrateProductStore(database);
   documents = new ProductDocuments(database);
-  memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  native = nativeSourceLinks();
   learning = new LearningService({ documents });
 });
 after(async () => {
@@ -93,15 +93,14 @@ async function setup({ runId = null } = {}) {
   const method = await learning.createCandidate(owner, { frontmatter: parsed.frontmatter, body: parsed.body,
     provenance: { origin: "inferred", runId: "run-1", results: [{ role: "original", versionId: rv(1), digest: hex("9") }, { role: "successor", versionId: rv(9), digest: hex("8") }] } });
   const notices = [];
-  const knowledge = new KnowledgeChangeService({ memory, methods: learning });
+  const knowledge = new KnowledgeChangeService({ native, methods: learning });
   const impacts = new ResultImpactService({ documents, results, knowledge, now: () => new Date("2026-10-04T12:00:00Z"),
     notifications: { async create(_user, input) { notices.push(input); } } });
-  const fact = (key, links) => memory.upsertRecord(owner, { scope: "project", scopeId: project, kind: "project_fact", key, value: `${key} finding`, summary: key,
-    origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false }, null, { sourceLinks: links });
+  const fact = async (_key, links) => ({ id: native.file(owner, { scope: "project", scopeId: project, kind: "project_fact", links }) });
   return { owner, project, impacts, notices, method, fact, documents };
 }
 const correction = (kind = "correction") => ({ state: "changed", checkedAt: "2026-10-04T00:00:00Z", updates: [{ kind, noticeDoi: "10.9999/notice", date: "2026-10-01", source: "publisher" }] });
-const linkStates = async (f, recordId) => (await memory.sourceLinks(f.owner, recordId)).map(link => [link.type, link.state, link.stateReason]);
+const linkStates = async (_f, recordId) => native.states(recordId);
 
 test("Postgres: a correction labels the memory and the method, finds the report through its calculation and nothing else, and moves no version", options, async () => {
   const f = await setup();
@@ -117,8 +116,8 @@ test("Postgres: a correction labels the memory and the method, finds the report 
   assert.deepEqual(report.affected.calculations.items.map(item => [item.versionId, item.boundValues]), [[rv(1), 2]]);
   assert.deepEqual(reply.items.find(item => item.payload.versionId === rv(1)).payload.affected.dependents.items.map(item => item.versionId), [rv(2)]);
 
-  assert.deepEqual(await linkStates(f, resting.id), [["doi", "changed", "correction"]]);
-  assert.deepEqual(await linkStates(f, independent.id), [["doi", "current", ""]], "a memory that rests on another source is not touched");
+  assert.deepEqual(await linkStates(f, resting.id), [["doi", "changed"]]);
+  assert.deepEqual(await linkStates(f, independent.id), [["doi", "current"]], "a memory that rests on another source is not touched");
   assert.deepEqual(report.affected.memories.items.map(item => [item.recordId, item.state]), [[resting.id, "changed"]]);
 
   const after = await learning.getMethod(f.owner, f.method.id);
@@ -135,24 +134,25 @@ test("Postgres: a correction labels the memory and the method, finds the report 
   assert.equal((await learning.getMethod(f.owner, f.method.id)).payload.sourceChanges.length, 1);
 });
 
-test("Postgres: a retraction outranks a correction, an unanswered check lowers neither, and a clean answer clears only an unknown", options, async () => {
+test("Postgres: a retraction outranks a correction, an unanswered check undoes neither, and a clean answer clears the label", options, async () => {
   const f = await setup();
   const resting = await f.fact("project.pooled", [{ type: "doi", id: DOI }]);
   const status = (state, extra = {}) => ({ state, checkedAt: "2026-10-04T00:00:00Z", updates: [], ...extra });
   const check = status_ => f.impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: status_ });
   await check(status("unavailable", { reason: "timeout" }));
-  assert.deepEqual(await linkStates(f, resting.id), [["doi", "unknown", "check_timeout"]], "a check that could not answer is recorded as unknown");
+  assert.deepEqual(await linkStates(f, resting.id), [["doi", "unknown"]], "a check that could not answer is recorded as unknown");
   await check(status("no_update"));
-  assert.deepEqual(await linkStates(f, resting.id), [["doi", "current", "no_update"]], "a clean answer sets right the unknown");
+  assert.deepEqual(await linkStates(f, resting.id), [["doi", "current"]], "a clean answer sets right the unknown");
   await check(correction());
   assert.equal((await linkStates(f, resting.id))[0][1], "changed");
   await check(status("unavailable", { reason: "timeout" }));
-  await check(status("no_update"));
-  assert.equal((await linkStates(f, resting.id))[0][1], "changed", "neither an outage nor a clean answer undoes a correction");
+  assert.equal((await linkStates(f, resting.id))[0][1], "changed", "an outage does not undo a correction");
   await check(correction("retraction"));
-  assert.deepEqual(await linkStates(f, resting.id), [["doi", "retracted", "retraction"]]);
+  assert.deepEqual(await linkStates(f, resting.id), [["doi", "retracted"]]);
   await check(correction());
   assert.equal((await linkStates(f, resting.id))[0][1], "retracted", "a later correction notice does not lower a retraction");
+  await check(status("no_update"));
+  assert.equal((await linkStates(f, resting.id))[0][1], "current", "a clean answer clears what was found: the engine's label is taken off (NativeMemoryWorker.labelSource)");
   const methodLabels = (await learning.getMethod(f.owner, f.method.id)).payload.sourceChanges;
   assert.deepEqual(methodLabels.map(label => label.state).sort(), ["changed", "retracted"], "one label per state the source was found in");
 });
@@ -164,7 +164,7 @@ test("Postgres: a replaced knowledge-base file finds what read its bytes and the
   assert.deepEqual(reply.items.map(item => item.payload.versionId), [rv(3)], "the version that recorded the file's digest as its input");
   assert.equal(reply.items[0].payload.source.replacedBy, SRC_NEW);
   assert.equal(reply.items[0].payload.sourceStatus.updates[0].kind, "replaced");
-  assert.deepEqual(await linkStates(f, memoryRow.id), [["knowledge_source", "changed", "replaced"]]);
+  assert.deepEqual(await linkStates(f, memoryRow.id), [["knowledge_source", "changed"]]);
   assert.equal(f.notices.length, 1);
   assert.match(f.notices[0].body, /资料库里这份文件有了新版本/);
   const other = await f.impacts.reconcileReplacement(f.owner, { projectId: f.project, replaced: { sourceId: `src_${hex("e", 32)}`, sha256: hex("e") } });
@@ -176,13 +176,12 @@ test("Postgres: the memory lookup is one account's, and a failed one is unknown 
   const f = await setup();
   const other = `knowledge_change_${randomUUID()}`; owners.push(other);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Other account','development')", [other]);
-  await memory.upsertRecord(other, { scope: "user", scopeId: null, kind: "preference", key: "preference.other", value: "someone else's", summary: "someone else's", origin: "explicit",
-    status: "active", confidence: 1, importance: 0.5, sensitive: false }, null, { sourceLinks: [{ type: "doi", id: DOI }] });
+  native.file(other, { scope: "user", kind: "preference", links: [{ type: "doi", id: DOI }] });
   const reply = await f.impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction() });
   assert.equal(reply.items[0].payload.affected.memories.status, "none", "another account's link is not this account's dependent");
-  assert.equal((await memory.dependentsOfSource(other, { type: "doi", id: DOI }))[0].state, "current", "and it was not labelled");
+  assert.equal((await native.dependentsOfSource(other, { type: "doi", id: DOI }))[0].state, "current", "and it was not labelled");
   const broken = new ResultImpactService({ documents: f.documents, results: f.impacts.results, now: () => new Date("2026-10-04T12:00:00Z"),
-    knowledge: new KnowledgeChangeService({ memory: { configured: true, async dependentsOfSource() { throw new Error("memory store down"); } }, methods: learning }) });
+    knowledge: new KnowledgeChangeService({ native: { async labelSource() { return 0; }, async dependentsOfSource() { throw new Error("memory store down"); } }, methods: learning }) });
   const degraded = await broken.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction("retraction") });
   assert.equal(degraded.items.length, 2);
   assert.equal(degraded.items[0].payload.affected.memories.status, "unknown");
@@ -202,7 +201,7 @@ test("Postgres: the running agenda whose episode produced a result rechecks only
     return started;
   };
   const results = f.impacts.results;
-  impacts = new ResultImpactService({ documents, results, autopilot, knowledge: new KnowledgeChangeService({ memory, methods: learning }),
+  impacts = new ResultImpactService({ documents, results, autopilot, knowledge: new KnowledgeChangeService({ native, methods: learning }),
     authorizeContinuation: producingAgenda({ results, autopilot }), now: () => new Date("2026-10-04T12:00:00Z") });
 
   // Not started: the agenda exists and has produced nothing yet, so no standing authorization exists.

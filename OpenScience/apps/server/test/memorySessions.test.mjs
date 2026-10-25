@@ -22,11 +22,11 @@ const capsules = {
 
 test("a conversation trying someone else's capsule is handed it, and an ordinary one is handed nothing", async () => {
   assert.deepEqual(
-    await sessionDispatchNotes({ researchMemory: memoryDouble({ trialCapsuleId: "cap_shared" }), capsules }, "usr_1", "prj_1", "ses_1"),
+    await sessionDispatchNotes({ memorySettings: memoryDouble({ trialCapsuleId: "cap_shared" }), capsules }, "usr_1", "prj_1", "ses_1"),
     ["<evimed-capsule-trial>张医生的胶囊</evimed-capsule-trial>"],
   );
   assert.deepEqual(
-    await sessionDispatchNotes({ researchMemory: memoryDouble({ trialCapsuleId: null }), capsules }, "usr_1", "prj_1", "ses_1"),
+    await sessionDispatchNotes({ memorySettings: memoryDouble({ trialCapsuleId: null }), capsules }, "usr_1", "prj_1", "ses_1"),
     [],
     "no trial, nothing added",
   );
@@ -34,12 +34,12 @@ test("a conversation trying someone else's capsule is handed it, and an ordinary
 
 test("a state that cannot be read adds nothing rather than failing the turn", async () => {
   const down = { configured: true, async sessionState() { throw new Error("down"); } };
-  assert.deepEqual(await sessionDispatchNotes({ researchMemory: down, capsules }, "u", "p", "s"), []);
-  assert.deepEqual(await sessionDispatchNotes({ researchMemory: { configured: false }, capsules }, "u", "p", "s"), []);
+  assert.deepEqual(await sessionDispatchNotes({ memorySettings: down, capsules }, "u", "p", "s"), []);
+  assert.deepEqual(await sessionDispatchNotes({ memorySettings: { configured: false }, capsules }, "u", "p", "s"), []);
   // A trial whose capsule cannot be read is the same: the turn goes ahead.
   const unreadable = { async trialContext() { throw new Error("gone"); } };
   assert.deepEqual(
-    await sessionDispatchNotes({ researchMemory: memoryDouble({ trialCapsuleId: "cap_shared" }), capsules: unreadable }, "u", "p", "s"),
+    await sessionDispatchNotes({ memorySettings: memoryDouble({ trialCapsuleId: "cap_shared" }), capsules: unreadable }, "u", "p", "s"),
     [],
   );
 });
@@ -56,7 +56,7 @@ test("the session routes and the panel they served are gone, and the composition
   // every conversation through the capsule gateway's `session`, once — so the
   // dispatch no longer adds it a second time.
   // 2026-10-07: the same answer also says which capability the conversation is bound to (`boundConversationNote`), first.
-  assert.match(server, /notes: async \(userId, projectId, sessionId\) => \{[\s\S]{0,1400}?sessionDispatchNotes\(\{ researchMemory, capsules: capsuleService \}, userId, projectId, sessionId\)/, "the capsule gateway answers with it");
+  assert.match(server, /notes: async \(userId, projectId, sessionId\) => \{[\s\S]{0,1400}?sessionDispatchNotes\(\{ memorySettings, capsules: capsuleService \}, userId, projectId, sessionId\)/, "the capsule gateway answers with it");
   // 2026-10-10: between the read of the session and the answer sits the card-origin note (`evidenceOriginNotes`), which rides the same first-step answer.
   assert.match(server, /const session = await researchSessions\.get\(project, sessionId\);[\s\S]{0,600}?return \[dispatched \? null : boundConversationNote\(session, await agentRegistry\)/, "and with the conversation's current saved binding");
   assert.doesNotMatch(server, /const sessionNotes = await sessionDispatchNotes\(/, "and nothing else adds it");

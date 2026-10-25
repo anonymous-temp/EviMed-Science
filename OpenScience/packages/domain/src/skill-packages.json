@@ -811,7 +811,7 @@
       "origin": "capability",
       "version": "1.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:bca28b537771b32f5aa517163dc53efb5db4cebf52e316e55720bf70dccee4b4",
+      "digest": "sha256:feefacc7047bf4dd2af49147eab266ad611dc55f13fe6697424d880fc4dd1287",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"b89197b2e28f1db940d4ca4aa63752065e9a2a88681866ccd5dc72af1978acc3"}],
       "operations": [

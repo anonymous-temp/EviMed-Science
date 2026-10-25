@@ -16,7 +16,7 @@ import { MemoryIndexWithdrawals } from "../src/memoryIndexWithdrawals.mjs";
 import { MemoryIndexing } from "../src/memoryIndexing.mjs";
 import { capsuleFactUri } from "../src/openVikingClient.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -37,7 +37,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-one-capsule-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$3,'development'),($2,$4,'development')", [USER, BYSTANDER, `Owner ${tag}`, `Other ${tag}`]);
   for (const owner of [USER, BYSTANDER]) {
     for (const id of ["default", ...PROJECTS]) {
@@ -166,7 +166,7 @@ test("a project's deletion takes its notes with it, from the capsule and from th
 });
 
 test("the person's export leaves the assistant's notes out, however many project notes the one capsule now holds, and takes one the person confirmed", options, async () => {
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   const transfers = new CapsuleTransferService({ documents, capsules, identities: new CapsuleIdentityStore(directory), dataDir: directory, memoryEngine: async () => "legacy" });
   const own = await capsules.ownCapsule(USER);
   const before = await transfers.exportPreview(USER, own.id, { scopes: ["workstyle", "+profile", "+knowledge"] });

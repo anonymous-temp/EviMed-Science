@@ -394,25 +394,19 @@ async function dispatchRun(base, sessionId, dispatchId, text = "research this qu
   return { response, body: await response.json() };
 }
 
-/** A research-memory store at the interface, for the two cases a dispatch has
- *  to tell apart: a deployment that has none, and one whose store is broken. */
+/** The memory settings store at the interface, for the two cases a dispatch has to tell apart: a deployment that has none, and one whose
+ *  store is broken (the researcher's pauses are read from it at every dispatch, and a pause that cannot be read is no licence to read). */
 function memoryStoreDouble({ configured = true, fail = null } = {}) {
   const refuse = () => { if (fail) throw fail; };
   return {
     configured,
     async status() {
-      return fail
-        ? { configured, connected: false, code: "memory_unavailable", structured: false }
-        : { configured, connected: configured, code: null, structured: configured };
+      return fail ? { configured, connected: false, code: "memory_unavailable" } : { configured, connected: configured, code: null };
     },
-    async relevant() { refuse(); return []; },
-    // What a dispatch reads of the memory since review M6 (the standing profile and the counts beside it).
-    async residentRecords() { refuse(); return []; },
-    async lookupCounts() { refuse(); return { user: 0, project: 0, session: 0 }; },
-    async list() { refuse(); return []; },
-    async listRecords() { refuse(); return []; },
-    async listAllRecords() { refuse(); return []; },
-    async profile() { refuse(); return { records: [], memos: [] }; },
+    async settings() { refuse(); return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
+    async sessionState() { refuse(); return { trialCapsuleId: null }; },
+    async residentState() { refuse(); return { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false }; },
+    async noteResidentDelivered() { refuse(); },
   };
 }
 
@@ -425,7 +419,7 @@ test("a deployment with no research memory store still dispatches", async () => 
     const result = await startRun(base, "ses_memory_absent");
     assert.equal(result.response.status, 202, JSON.stringify(result.body));
     assert.equal(result.body.data.status, "running");
-  }, { researchMemory: memoryStoreDouble({ configured: false }) });
+  }, { memorySettings: memoryStoreDouble({ configured: false }) });
 });
 
 // A store that exists and cannot answer is the opposite case. Continuing would
@@ -443,22 +437,7 @@ test("a research memory store that cannot answer fails the dispatch and records 
     const runs = await listRuns(base);
     assert.equal(runs.body.data[0].status, "failed");
     assert.equal(runs.body.data[0].errorCode, "memory_unavailable");
-  }, { researchMemory: memoryStoreDouble({ fail: offline }) });
-});
-
-// The third case, and the one the prompt's old "科研记忆服务暂时不可用" note used
-// to serve: a deployment with no store of its own whose recall still fails.
-// That is what a strict index asks for when the index is down, and it is a
-// rejection like any other — a run that has been told to stop is not a run to
-// decorate with an excuse and dispatch anyway.
-test("a recall that fails rejects the dispatch even where the store itself is absent", async () => {
-  const offline = new HttpError(503, "memory_index_unavailable", "The memory index is unavailable.");
-  await withApp(async ({ base }) => {
-    assert.equal((await bind(base, "ses_memory_strict", { mode: "open-domain" })).status, 200);
-    const result = await startRun(base, "ses_memory_strict");
-    assert.equal(result.response.status, 503, JSON.stringify(result.body));
-    assert.equal(result.body.code, "memory_index_unavailable");
-  }, { researchMemory: memoryStoreDouble({ configured: false, fail: offline }) });
+  }, { memorySettings: memoryStoreDouble({ fail: offline }) });
 });
 
 test("starts immutable open-domain and specialist run identities from research-session bindings", async () => {

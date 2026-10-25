@@ -7,7 +7,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {deriveEvolutionCapabilityMap} from '../src/evolutionCapabilityMap.mjs';
 import {createModuleEvolutionOfflineEvaluators} from '../src/moduleEvolutionOfflineEvaluators.mjs';
-import {MODULE_MEMORY_SNAPSHOT_TASKS} from '../src/moduleEvolutionMemorySnapshot.mjs';
 import {EVOLUTION_TRUSTED_TASK_TEMPLATES} from '../src/evolutionTransfer.mjs';
 
 test('map projects supported families only from matching sealed confirmation and flags current month',()=>{
@@ -17,12 +16,6 @@ test('map projects supported families only from matching sealed confirmation and
  const map=deriveEvolutionCapabilityMap(input);assert.equal(map.counts.supported,1);assert.equal(map.cells.find(cell=>cell.status==='supported').newThisMonth,true);
  assert.equal(deriveEvolutionCapabilityMap({...input,evaluations:[{...verdict,payload:{...verdict.payload,candidateId:'another'}}]}).counts.supported,0);
  assert.equal(deriveEvolutionCapabilityMap({...input,evaluations:[{...verdict,payload:{...verdict.payload,auditOnly:true}}]}).counts.supported,0);
-});
-test('memory runs the production recall port against fixed nonclinical scope/time snapshots',async()=>{
- const result=await createModuleEvolutionOfflineEvaluators().memory({pool:'development',batch:MODULE_MEMORY_SNAPSHOT_TASKS});
- assert.deepEqual(result.units.map(unit=>unit.score),[1,1,1]);assert.equal(result.evidenceTier,'exact');
- const wrong=await createModuleEvolutionOfflineEvaluators().memory({pool:'development',batch:[{...MODULE_MEMORY_SNAPSHOT_TASKS[0],expected:['record:private-other']}]});
- assert.equal(wrong.units[0].score,0);
 });
 test('trusted cell generator independently accepts truth and rejects malformed locations',()=>{
  const template=EVOLUTION_TRUSTED_TASK_TEMPLATES['source-delimited-cells'];

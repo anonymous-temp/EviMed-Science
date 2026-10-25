@@ -17,11 +17,11 @@ const controller={execVerify:async body=>{
  }finally{await rm(root,{recursive:true,force:true});}
 }};
 test('engine validation actually parses Node source and runs direct module regression assertions',async()=>{
- const file='apps/server/src/memoryValidity.mjs',source=await readFile(new URL('../src/memoryValidity.mjs',import.meta.url),'utf8');
- const candidate={files:{[file]:source,'tests/validity.test.mjs':`import test from 'node:test';import assert from 'node:assert/strict';import {versionsInForce} from '../apps/server/src/memoryValidity.mjs';test('project isolation',()=>assert.deepEqual(versionsInForce([{id:'other',scope:'project',scopeId:'other',status:'active'}],{projectId:'public'}),[]));`}};
+ const file='apps/server/src/searchTokens.mjs',source=await readFile(new URL('../src/searchTokens.mjs',import.meta.url),'utf8');
+ const candidate={files:{[file]:source,'tests/tokens.test.mjs':`import test from 'node:test';import assert from 'node:assert/strict';import {searchTokens} from '../apps/server/src/searchTokens.mjs';test('a one-character word is no term',()=>assert.deepEqual(searchTokens('a'),[]));`}};
  const validator=createModuleEvolutionEngineValidation({controller,allowedPaths:[file]});
  assert.equal((await validator.verify(candidate)).ok,true);const measured=await validator.validate(candidate);assert.equal(measured.ok,true,JSON.stringify(measured));assert.equal(measured.independent,false);assert.equal(measured.executions.length,2);
- assert.equal((await validator.validate({files:{...candidate.files,'tests/validity.test.mjs':candidate.files['tests/validity.test.mjs'].replace("assert.deepEqual(versionsInForce", "assert.deepEqual([1,...versionsInForce") .replace("projectId:'public'}),[])","projectId:'public'})],[])" )}})).ok,false);
+ assert.equal((await validator.validate({files:{...candidate.files,'tests/tokens.test.mjs':candidate.files['tests/tokens.test.mjs'].replace("assert.deepEqual(searchTokens('a'),[])","assert.deepEqual(searchTokens('a'),['a'])")}})).ok,false);
  assert.equal((await validator.verify({files:{[file]:'export function broken('}})).ok,false);
 });
 test('repair reproduction executes the exact pinned parent twice and refuses a passing baseline',async()=>{

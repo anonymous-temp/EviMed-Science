@@ -19,7 +19,7 @@ function judgeDouble(answer = () => ({ same: new Map(), stated: new Set() })) {
 }
 
 /** A worker over the fixture's pieces with this judge; the fixture's own worker has none. */
-const workerWith = (f, judge) => new NativeMemoryWorker({ config: f.config, researchMemory: f.researchMemory, sessions: f.sessions, overlay: f.overlay, rejectionJudge: judge, now: f.now });
+const workerWith = (f, judge) => new NativeMemoryWorker({ config: f.config, memorySettings: f.memorySettings, sessions: f.sessions, overlay: f.overlay, rejectionJudge: judge, now: f.now });
 
 /** The person removed a file; the engine then writes `after` under `name`. Returns what the file holds afterwards. */
 async function removeThenWrite(t, { removedText, after, said = "Let us talk about something else.", judge, extra = {}, name = "citation", memoryType = "preferences" }) {

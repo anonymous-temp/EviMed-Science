@@ -14,7 +14,7 @@ import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -39,7 +39,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-share-versions-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type) VALUES
     ($1,$5,'development'),($2,$6,'development'),($3,$7,'development'),($4,$8,'development')`,
   [sender, vera, wen, xia, `发送者${tag}`, `Vera ${tag}`, `Wen ${tag}`, `Xia ${tag}`]);
@@ -189,14 +189,10 @@ test("the preview says, per reason and in one plain sentence, what is not in the
   const pack = await documents.put(owner, "capsule", randomUUID(), { title: "别人的做法", description: "", imported: true, activationMode: "guest" }, { expectedRevision: 0 });
   await documents.put(owner, "fact", randomUUID(), { capsuleId: pack.id, factKind: "preference", layer: "profile", content: "别人的偏好。", origin: "system", status: "approved",
     contextOnly: true, share: { authorName: "某人" }, provenance: [] }, { expectedRevision: 0 });
-  // A legacy record the person marked sensitive, and one the assistant inferred.
-  await database.query(`INSERT INTO evimed_memory.records(id,user_id,scope,scope_id,kind,key,value,summary,status,origin,sensitive,confidence,importance,version)
-    VALUES($1,$3,'user','','preference','k1','敏感的偏好','','active','explicit',true,1,0.5,1),($2,$3,'user','','preference','k2','推断的偏好','','active','inferred',false,0.6,0.5,1)`,
-  [`mr_${tag}_1`, `mr_${tag}_2`, owner]);
+  // (The memory engine's own files, the sensitive ones among them, join the preview through the engine; this account has none composed.)
   const preview = await transfers.exportPreview(owner, capsule.id, {});
   const byReason = Object.fromEntries(preview.excluded.map((item) => [item.reason, item]));
-  assert.equal(byReason.inferred.count, 3, "two of the assistant's notes and a record it inferred");
-  assert.equal(byReason.sensitive.count, 1, "the record the person marked sensitive");
+  assert.equal(byReason.inferred.count, 2, "the assistant's two notes");
   assert.equal(byReason.document.count, 1);
   assert.equal(byReason.received.count, 1);
   for (const item of preview.excluded) {

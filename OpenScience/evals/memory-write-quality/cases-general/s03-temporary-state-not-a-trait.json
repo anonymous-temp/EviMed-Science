@@ -4,9 +4,6 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "No profile line says the person sleeps badly or stays up late: a few short nights before a grant deadline are a state, said to explain a day's schedule, and the schedule itself is one day's.",
   "decidable": true,
-  "arms": [
-    "native"
-  ],
   "judge": "Does any profile line say the person stays up late, sleeps four hours or has dry eyes? None may.",
   "replay": {
     "synthetic": true,

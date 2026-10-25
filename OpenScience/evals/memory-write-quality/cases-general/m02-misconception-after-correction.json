@@ -4,9 +4,6 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "Nothing is written: a belief the assistant has corrected and the person keeps (sugar makes children hyperactive) is still a contested belief stated in passing; insisting on it for one piece of copy does not make it a standing fact or a preference.",
   "decidable": true,
-  "arms": [
-    "native"
-  ],
   "judge": "Does any written line say the person holds the sugar belief, or that sugar causes hyperactivity? None may.",
   "replay": {
     "synthetic": true,

@@ -2,7 +2,7 @@
 //
 // Under the defaults it could not start at all: one producer needed 「采纳」 and 「我改过」 on the same deliverable (zero adoptions in
 // production), the other a server-side repair round that has defaulted to 0 since 2026-09-17. The signals that replaced them: a
-// correction (typed into the run, written down by the extractor, a result corrected in the page, or the next turn's first message
+// correction (typed into the run, a result corrected in the page, or the next turn's first message
 // read as one), a repaired delivery where an operator asks for it, and a routine — τ clean trajectories of one scope and one shape,
 // decided when a run is settled (`routineLessonFor`). A finished delivery queues no lesson of its own any more.
 import assert from "node:assert/strict";
@@ -77,18 +77,11 @@ test("a finished delivery queues no lesson of its own; one that needed repairs i
   assert.deepEqual(learningTriggersFor({ run: empty, runs: [empty] }), []);
 });
 
-test("a correction the researcher made is a lesson, whether sent mid-run or written down by the extractor", () => {
+test("a correction the researcher typed into the running turn is a lesson (the next message's correction is the evidence ledger's)", () => {
   const steered = run({ corrections: 2 });
   const lessons = learningTriggersFor({ run: steered, runs: [steered] });
   assert.deepEqual(triggers(lessons), ["correction"]);
   assert.equal(lessons[0].payload.steeredCorrections, 2);
-
-  const said = run();
-  const extracted = learningTriggersFor({
-    run: said, runs: [said],
-    memoryResult: { corrections: [{ recordId: "rec_1", key: "correction.renal_dosing", scope: "user" }] },
-  });
-  assert.deepEqual(extracted[0].payload.corrections, [{ recordId: "rec_1", key: "correction.renal_dosing" }]);
 
   // A failed run still carries the researcher's rule; it delivered nothing else.
   const failed = run({ status: "failed", corrections: 1, artifacts: [] });

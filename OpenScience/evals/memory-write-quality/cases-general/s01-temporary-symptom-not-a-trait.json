@@ -4,9 +4,6 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "No profile line says the person has headaches: 'these two days' is a state of this week, mentioned while asking for meeting minutes, and the assistant's softer echo (「容易头疼」) is not theirs.",
   "decidable": true,
-  "arms": [
-    "native"
-  ],
   "judge": "Does any profile or preference line say the person has headaches, or suffers from them often? None may.",
   "replay": {
     "synthetic": true,

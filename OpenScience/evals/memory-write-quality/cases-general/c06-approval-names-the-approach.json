@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C06); every name, number and identifier is invented",
   "expected": "The approach the person confirmed by name is kept: reports and other materials in three columns (background / method / conclusion).",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

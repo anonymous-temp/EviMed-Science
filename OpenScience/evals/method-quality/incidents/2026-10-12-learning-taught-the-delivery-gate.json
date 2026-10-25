@@ -27,13 +27,6 @@
         "note": "It is the repair share that keeps this out. (The share of clean deliveries that queued a lesson, a third, was removed on 2026-10-23: a clean delivery queues no lesson of its own, what it teaches is read when the run is settled.)"
       },
       {
-        "name": "the same run, in which the researcher said the assistant had it wrong and the extractor recorded the correction",
-        "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3 },
-        "shares": { "repair": 0 },
-        "memoryCorrections": [{ "recordId": "record_1", "key": "correction.include_rcts_only", "scope": "user" }],
-        "expect": { "queued": ["correction"], "sampledOut": ["repair_accepted"] }
-      },
-      {
         "name": "the same run, in which the researcher typed a correction into the running turn",
         "run": { "artifacts": ["deliverables/d1/report.md"], "inRunAttempts": 3, "corrections": 1 },
         "shares": { "repair": 0 },

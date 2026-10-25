@@ -4,9 +4,6 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "Nothing is kept: the same choice made twice inside one conversation is still one conversation. The promotion counts conversations (owner decision 6), so two requests in a row do not make a preference.",
   "decidable": true,
-  "arms": [
-    "native"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

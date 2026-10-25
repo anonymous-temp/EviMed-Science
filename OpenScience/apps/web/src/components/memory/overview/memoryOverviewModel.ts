@@ -45,7 +45,7 @@ export function amountOf(count: number): Amount {
 }
 
 /** The document the overview reads: the map's, without its lines and lineages. */
-export type OverviewDoc = Pick<MemoryMap, "summary" | "facets" | "nodes" | "buckets" | "events" | "missing" | "scope"> & { engine?: MemoryMap["engine"] };
+export type OverviewDoc = Pick<MemoryMap, "summary" | "facets" | "nodes" | "buckets" | "events" | "missing" | "scope">;
 
 /**
  * The parts of the capsule the one read of the map answers for. 我的做法 is not one of them: the map folds its marks to a hundred and fifty, and

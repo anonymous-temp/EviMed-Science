@@ -16,7 +16,6 @@ const resetMemory = vi.fn();
 const fetchMyCapsule = vi.fn();
 const fetchProjectOverview = vi.fn();
 const archiveMemoryRecord = vi.fn();
-const settleMemoryConflict = vi.fn();
 const restoreCapsuleEntry = vi.fn();
 const listAllMethods = vi.fn();
 const methodVersions = vi.fn();
@@ -49,7 +48,6 @@ vi.mock("@/lib/memoryClient", async () => {
     ensureMyCapsule: () => Promise.resolve(null),
     fetchMyCapsule: (...args: unknown[]) => fetchMyCapsule(...args),
     archiveMemoryRecord: (...args: unknown[]) => archiveMemoryRecord(...args),
-    settleMemoryConflict: (...args: unknown[]) => settleMemoryConflict(...args),
     restoreCapsuleEntry: (...args: unknown[]) => restoreCapsuleEntry(...args),
     fetchProjectOverview: (...args: unknown[]) => fetchProjectOverview(...args),
   };
@@ -99,7 +97,7 @@ const record = (patch: Partial<WebStructuredMemory> = {}): WebStructuredMemory =
   provenance: { basis: "stated", observations: 3, runs: 1, conversations: 2 },
   evidence: [{ sourceType: "conversation_message", sourceRef: "sessions/ses_9/messages/u1", quote: "我是临床药师",
     observedAt: "2026-09-12T02:00:00Z", weight: 1, fingerprint: "f1" }],
-  revisions: [],
+  revisions: [], document: { id: "nm_profile" },
   ...patch,
 });
 
@@ -662,67 +660,6 @@ describe("记忆胶囊", () => {
     await user.clear(screen.getByRole("searchbox", { name: "搜索记忆" }));
     await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "没有这个词");
     expect(await screen.findByText("没有找到")).toBeInTheDocument();
-  });
-
-  // 2026-09-26 audit (M-11): a superseded record was listed as a current one.
-  it("shows a replaced fact as 「曾经如此」 under what replaced it, never as a memory in force", async () => {
-    const user = userEvent.setup();
-    fetchMemoryProfile.mockResolvedValue({
-      records: [
-        record({ id: "rec_new", kind: "preference", key: "preference.designs", value: "接受高质量队列研究。", summary: "接受高质量队列研究。", createdAt: "2026-09-01T00:00:00Z" }),
-        record({ id: "rec_old", kind: "preference", key: "preference.rct_only", value: "只看 RCT。", summary: "只看 RCT。",
-          status: "superseded", supersededBy: "rec_new", createdAt: "2026-03-02T00:00:00Z", invalidSince: "2026-09-01T00:00:00Z" }),
-        record({ id: "rec_orphan", kind: "preference", key: "preference.language", value: "回答用英文。", summary: "回答用英文。",
-          status: "superseded", supersededBy: "rec_deleted", createdAt: "2026-02-01T00:00:00Z", invalidSince: "2026-04-01T00:00:00Z" }),
-      ],
-      groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {},
-    });
-    open();
-    await user.click(await screen.findByRole("button", { name: /接受高质量队列研究/ }));
-    const drawer = await screen.findByRole("dialog", { name: "偏好" });
-    expect(within(drawer).getByText(/曾经如此：只看 RCT。（3月2日～9月1日）/)).toBeInTheDocument();
-    await user.click(within(drawer).getByRole("button", { name: "关闭" }));
-    // One whose replacement is not on the page keeps a row, marked as what it was.
-    expect(screen.getByText(/曾经如此：回答用英文。（2月1日～4月1日）/)).toBeInTheDocument();
-    expect(screen.queryByText("只看 RCT。")).toBeNull();
-  });
-
-  // F1: a disagreement is on both memories and settled by the researcher.
-  it("settles a disagreement for the researcher from the drawer, then reads the page again", async () => {
-    const user = userEvent.setup();
-    const conflict = (id: string, text: string): WebStructuredMemory["relations"] => ({
-      validity: { from: null, until: null }, caveats: ["conflict"], sources: [],
-      conflicts: [{ id, status: "active", scope: "user", scopeId: "", origin: "explicit", sensitive: false, text, createdAt: null }],
-    });
-    fetchMemoryProfile.mockResolvedValue({
-      records: [
-        record({ id: "rec_a", kind: "preference", key: "preference.a", value: "证据先用表格。", summary: "证据先用表格。", relations: conflict("rec_b", "证据先用列表。") }),
-        record({ id: "rec_b", kind: "preference", key: "preference.b", value: "证据先用列表。", summary: "证据先用列表。", relations: conflict("rec_a", "证据先用表格。") }),
-      ],
-      groups: {}, activeCount: 2, pendingCount: 0, conversations: {}, usage: {},
-    });
-    settleMemoryConflict.mockResolvedValue({ kept: { id: "rec_b" }, superseded: { id: "rec_a", version: 4 } });
-    open();
-    await user.click(await screen.findByRole("button", { name: "证据先用列表。" }));
-    const drawer = await screen.findByRole("dialog", { name: "偏好" });
-    expect(within(drawer).getByText("有冲突")).toBeInTheDocument();
-    await user.click(within(drawer).getAllByRole("button", { name: /^以这条为准/ })[0]);
-    await waitFor(() => expect(settleMemoryConflict).toHaveBeenCalledWith("rec_b", "rec_a"));
-    await waitFor(() => expect(fetchMemoryProfile.mock.calls.length).toBeGreaterThan(1));
-  });
-
-  it("shows a memory that waits for confirmation in plain words in the drawer, confirmable, with no safety hold named", async () => {
-    const user = userEvent.setup();
-    fetchMemoryProfile.mockResolvedValue({
-      records: [record({ id: "rec_pending", kind: "profile", summary: "长期服用华法林。", value: "长期服用华法林。", status: "pending" })],
-      groups: {}, activeCount: 0, pendingCount: 1, conversations: {}, usage: {},
-    });
-    open();
-    await user.click(await screen.findByRole("button", { name: /长期服用华法林/ }));
-    const drawer = await screen.findByRole("dialog", { name: "背景" });
-    expect(within(drawer).getByText("待确认")).toBeInTheDocument();
-    expect(drawer.textContent).not.toMatch(/用药安全/);
-    expect(within(drawer).getByRole("button", { name: "确认" })).toBeInTheDocument();
   });
 
   it("lists what was forgotten of every kind under 已忘记的内容, each with 恢复 that works for its kind", async () => {

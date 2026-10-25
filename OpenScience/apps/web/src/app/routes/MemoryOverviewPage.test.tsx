@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { legacyRecord } from "@/components/memory/__fixtures__/memoryProfiles";
+import { plainRecord } from "@/components/memory/__fixtures__/memoryProfiles";
 import { handoverEntries, livedIn, ownerFirstDay, receivedPack, TODAY } from "@/components/memory/overview/__fixtures__/overviewDocs";
 import type { MemoryMap } from "@/lib/memoryMapClient";
 import type { WebMethod } from "@/lib/methodsClient";
@@ -120,16 +120,6 @@ describe("总览 on the owner's first day: native memory, no memory file, docume
     expect(await screen.findByRole("dialog", { name: "记住这一条" })).toBeInTheDocument();
   });
 
-  it("sends an account on the older engine to the conversation to say the first thing, since it cannot type one in", async () => {
-    reads.fetchMemoryMap.mockResolvedValue(ownerFirstDay({ engine: "postgres" }));
-    const user = userEvent.setup();
-    open();
-    await ready();
-    expect(screen.queryByRole("button", { name: "记住这一条" })).toBeNull();
-    await user.click(within(card("you")).getByRole("button", { name: "去对话" }));
-    expect(await screen.findByText("对话页")).toBeInTheDocument();
-  });
-
   it("opens 分享与导入 on 导入 from the recipe of 收到的, and on 导出 from the card of what could be handed over", async () => {
     const user = userEvent.setup();
     open();
@@ -201,7 +191,7 @@ describe("总览 of an account that has lived a while", () => {
 
   it("lists what needs a look, the sentence of its reason on each row, and opens it in the memory's own drawer", async () => {
     const user = userEvent.setup();
-    reads.fetchMemoryProfile.mockResolvedValue({ records: [legacyRecord({ id: "p2", kind: "decision", summary: "主要结局取卒中和系统性栓塞", value: "主要结局取卒中和系统性栓塞" })], groups: {}, activeCount: 1, pendingCount: 0 });
+    reads.fetchMemoryProfile.mockResolvedValue({ records: [plainRecord({ id: "p2", kind: "decision", summary: "主要结局取卒中和系统性栓塞", value: "主要结局取卒中和系统性栓塞" })], groups: {}, activeCount: 1, pendingCount: 0 });
     open();
     await ready();
     const section = screen.getByRole("heading", { name: "需要看一眼" }).closest("section")!;

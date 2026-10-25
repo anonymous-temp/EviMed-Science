@@ -42,9 +42,8 @@ an intervention that has no place in it (`closing`), or — for an edit or a rep
 A `routine` and a clean delivery have no excerpt: their digests are the evidence.
 
 **The researcher first.** `corrections` holds what the researcher corrected, in
-their own words — typed into the running turn (`source: "steered"`) or recorded
-from their conversation (`source: "memory"`) — and `feedback` holds their edits
-of a delivery. They open the input because they are the strongest evidence you
+their own words — typed into the running turn (`source: "steered"`) — and
+`feedback` holds their edits of a delivery. They open the input because they are the strongest evidence you
 have: a method is a way *this person* works, and what they corrected or changed
 outranks anything the run did on its own and anything the platform's reviewer
 said. Read them before the transcript, and when they and `repairIssues`

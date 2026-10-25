@@ -1,8 +1,8 @@
 // 2026-10-10 review M-10/M-11 (owner ruling): what a reset and a deletion promise, against a real database.
 //
 //   - A reset cancels the account's queued and running learning jobs, deletes its feedback events, and records the instant; a
-//     conversation that ended before it is not learned from again — by extraction, by a lesson, or as a peer of a routine —
-//     and is counted.
+//     conversation that ended before it is not learned from again — by a lesson, or as a peer of a routine — and is counted.
+//     (The memory engine's own extraction is held to the same instant by the native commit path: nativeMemoryApp.integration.)
 //   - Account erasure takes the retired usememos rows with it, and leaves the digests an archive is re-sealed against.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -12,13 +12,12 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FeedbackEvents } from "../src/feedbackEvents.mjs";
 import { LearningEvidence } from "../src/learningEvidence.mjs";
 import { LearningTriggers } from "../src/learningTriggers.mjs";
-import { MemoryIntelligence } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 import { resetLearnedMemory } from "../src/memoryReset.mjs";
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { ResearchMemoryStore, endedBeforeReset } from "../src/researchMemory.mjs";
+import { MemorySettingsStore, endedBeforeReset } from "../src/memorySettings.mjs";
 import { eraseRetiredMemos, retiredMemosOwner } from "../src/retiredMemos.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 
@@ -43,7 +42,7 @@ before(async () => {
   await migrateProductStore(database);
   await migrateNotifications(database);
   await migrateUsageLedger(database);
-  store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  store = new MemorySettingsStore({}, { database });
   jobs = new ProductJobs(database);
 });
 after(async () => {
@@ -124,54 +123,6 @@ test("the reset is an instant per account, to the millisecond, and a run is plac
   assert.equal(endedBeforeReset({ startedAt: "2026-10-10T11:00:00Z" }, at), true, "the start stands in for a finish the ledger lacks");
   assert.equal(endedBeforeReset({}, at), false, "a run with no readable time is not placed before anything");
   assert.equal(endedBeforeReset({ finishedAt: "2020-01-01T00:00:00Z" }, null), false, "no reset, nothing is before it");
-});
-
-// ------------------------------------------------------------------ extraction
-
-const extractionConfig = { deepseekProviderEnabled: true, deepseekApiKey: "unit-test-key", deepseekBaseUrl: "https://api.deepseek.com",
-  deepseekModel: "deepseek-v4-pro", memoryExtractionEnabled: true, memoryExtractionTimeoutMs: 5_000 };
-const run = (/** @type {string} */ id, /** @type {string} */ finishedAt) => ({ id, sessionId: `session_${id}`, mode: "open-domain", agentId: null, agentVersion: null,
-  effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "research", model: "deepseek/deepseek-v4-pro",
-  status: "succeeded", errorCode: null, artifacts: [], startedAt: finishedAt, finishedAt, durationMs: 60_000 });
-const message = (/** @type {string} */ id, /** @type {string} */ text) => ({ info: { id, role: "user" }, parts: [{ type: "text", text }] });
-function proposing() {
-  let calls = 0;
-  const fetchImpl = async (/** @type {any} */ _input, /** @type {any} */ init) => {
-    calls += 1;
-    const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
-    return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [{
-      scope: "user", kind: "preference", key: "preference.output_language", value: "回答请用中文", summary: "中文回答", origin: "explicit",
-      importance: 0.7, sensitive: false, sourceRef: payload.sources[0].sourceRef, evidenceQuote: payload.sources[0].text,
-    }] }) } }] });
-  };
-  return { fetchImpl, calls: () => calls };
-}
-
-test("extraction never learns from a conversation that ended before the reset, and counts the refusal", options, async () => {
-  const owner = `${alice}_extract`;
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Extract owner','development')", [owner]);
-  try {
-    const project = { id: "prj_reset", userId: owner };
-    const model = proposing();
-    const intelligence = new MemoryIntelligence(extractionConfig, store, { fetchImpl: model.fetchImpl });
-    const resetAt = await store.noteReset(owner);
-    const before = new Date(Date.parse(resetAt) - 60_000).toISOString();
-    const after = new Date(Date.parse(resetAt) + 60_000).toISOString();
-
-    const old = await intelligence.recordRun(project, run("run_old", before), [message("m1", "回答请用中文")]);
-    assert.equal(old.source, "before_reset");
-    assert.equal(old.extracted, 0);
-    assert.equal(model.calls(), 0, "no model call is spent on what the reset asked to forget");
-    assert.deepEqual(await store.listAllRecords(owner), [], "and no record, not even the conversation's summary, is written back");
-    assert.equal(counter("open_science_memory_skipped_before_reset_total", "stage", "extraction"), 1);
-
-    const fresh = await intelligence.recordRun(project, run("run_new", after), [message("m2", "回答请用中文")]);
-    assert.equal(fresh.source, "model");
-    assert.equal(fresh.extracted, 1, "a conversation that ended after the reset is learned from as before");
-    assert.equal(counter("open_science_memory_skipped_before_reset_total", "stage", "extraction"), 1);
-  } finally {
-    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
-  }
 });
 
 // ------------------------------------------------------------------ the learning loop

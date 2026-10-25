@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { legacyRecord, nativeFile } from "@/components/memory/__fixtures__/memoryProfiles";
+import { nativeFile } from "@/components/memory/__fixtures__/memoryProfiles";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); window.localStorage.clear(); window.sessionStorage.clear(); });
 const json = (data: unknown, status = 200) => new Response(JSON.stringify({ data }), { status, headers: { "Content-Type": "application/json" } });
@@ -26,13 +26,6 @@ describe("saving a memory", () => {
     const [, init] = calls()[0];
     expect(init?.method).toBe("PATCH");
     expect(sent(init)).toEqual({ value: "- 先给结论。", status: "active", expectedVersion: 4711 });
-  });
-
-  it("leaves the older engine's save as it was", async () => {
-    const record = legacyRecord();
-    const { api, calls } = await client(() => json(record));
-    await api.updateStructuredMemory(record, { value: "新的说法", summary: "新的说法" });
-    expect(sent(calls()[0][1])).toEqual({ value: "新的说法", summary: "新的说法", expectedVersion: 2 });
   });
 
   it("tells a raced save from other refusals, and the service being down from either", async () => {

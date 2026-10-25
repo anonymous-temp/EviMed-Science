@@ -10,7 +10,7 @@ import type { MapDay, MapEvent, MapNode, MemoryMap } from "@/lib/memoryMapClient
 export const TODAY = new Date("2026-10-12T04:00:00Z");
 
 const base = (): MemoryMap => ({
-  version: 1, engine: "native",
+  version: 1,
   scope: { projectId: null, range: { from: null, to: "2026-10-12", unit: "month" }, timeZone: "Asia/Shanghai", focus: null, depth: null },
   status: { topics: "empty" },
   summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null },

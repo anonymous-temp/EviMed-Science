@@ -153,19 +153,20 @@ test("what was recorded since a position is reconciled against one project, whos
 
 test("memories are labelled from the feed by the works whose changes were recorded, one account at a time", async () => {
   const labelled = [];
-  const memory = { configured: true,
-    async dependentsOfSource(owner, link) { return owner === "alice" && link.id === DOI ? [{ recordId: "mem_1", scope: "user", scopeId: null, kind: "preference", status: "active", state: "current" }] : []; },
-    async markSourceLinks(owner, link, finding) { labelled.push([owner, link.id, finding.state, finding.reason]); return { recordIds: ["mem_1"] }; } };
+  let held = "current";
+  const native = {
+    async dependentsOfSource(owner, link) { return owner === "alice" && link.id === DOI ? [{ recordId: "mem_1", scope: "user", scopeId: null, kind: "preference", status: "active", state: held }] : []; },
+    async labelSource(owner, link, state) { labelled.push([owner, link.id, state]); if (owner === "alice" && link.id === DOI) held = state; return 1; } };
   const facts = [recordedFact(DOI), recordedFact("10.9999/nobody.names.this")];
-  const service = new KnowledgeChangeService({ memory, sourceChanges: { async changedSince() { return { items: facts, cursor: 2, hasMore: false }; } } });
+  const service = new KnowledgeChangeService({ native, sourceChanges: { async changedSince() { return { items: facts, cursor: 2, hasMore: false }; } } });
   const reply = await service.labelSince("alice", "p", { since: 0 });
   assert.deepEqual(reply.items?.map(entry => [entry.identifier, entry.memories.map(item => [item.recordId, item.state])]), [[`doi:${DOI}`, [["mem_1", "retracted"]]]]);
-  assert.deepEqual(labelled, [["alice", DOI, "retracted", "retraction"]]);
+  assert.deepEqual(labelled, [["alice", DOI, "retracted"], ["alice", "10.9999/nobody.names.this", "retracted"]], "each recorded work is asked of the engine; the one no file names labels nothing and is not listed");
   assert.deepEqual([reply.cursor, reply.hasMore], [2, false]);
   assert.deepEqual((await service.labelSince("bob", "p")).items, [], "another account's memories are not found by this one's links");
-  assert.deepEqual(await new KnowledgeChangeService({ memory }).labelSince("alice", "p"), { unknown: "unavailable" });
+  assert.deepEqual(await new KnowledgeChangeService({ native }).labelSince("alice", "p"), { unknown: "unavailable" });
   const reported = [];
-  const broken = new KnowledgeChangeService({ memory, report: code => reported.push(code), sourceChanges: { async changedSince() { throw Object.assign(new Error("down"), { code: "source_change_unavailable" }); } } });
+  const broken = new KnowledgeChangeService({ native, report: code => reported.push(code), sourceChanges: { async changedSince() { throw Object.assign(new Error("down"), { code: "source_change_unavailable" }); } } });
   assert.deepEqual(await broken.labelSince("alice", "p"), { unknown: "lookup_failed" });
   assert.deepEqual(reported, ["source_change_unavailable"]);
 });

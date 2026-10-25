@@ -24,6 +24,9 @@ export const PRODUCT_KINDS = Object.freeze([
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
+// `memory-record-index` is a retired kind: the legacy memory engine it indexed is deleted (2026-10-25) and nothing enqueues or claims
+// it. It stays in the vocabulary only because the migrations below rebuild the kind CHECK from this list, and a database that still
+// holds a row of it would refuse the narrowed one; `legacyMemoryRetirement.mjs` deletes those rows, and the word can go once none exists.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
   "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-monthly", "frontier-notify", "document-export", "study-review", "result-replay",
   // One finished run joined to the capability, skill and tool versions it used and to the result versions it

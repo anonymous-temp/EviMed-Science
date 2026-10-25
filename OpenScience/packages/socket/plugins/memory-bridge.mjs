@@ -7,8 +7,8 @@
  * token of that moment. The listener, its deadlines and the settings it pins for the plugin are the port's
  * (`@evimed/harness-port`, `src/memoryBridge.mjs`); this file is the row.
  *
- * On only for a session whose account is on the native memory engine: the control plane's launch plan then gives the
- * runtime the memory gateway's base as EVIMED_MEMORY_GATEWAY_URL, empty for every other account. Off, it listens on nothing
+ * On only for a session of a deployment that has the memory engine: the control plane's launch plan then gives the
+ * runtime the memory gateway's base as EVIMED_MEMORY_GATEWAY_URL, empty when there is none. Off, it listens on nothing
  * and provides nothing, and the plugin's own row is disabled by the same variable.
  *
  * @module @evimed/dsh-socket/plugins/memory-bridge

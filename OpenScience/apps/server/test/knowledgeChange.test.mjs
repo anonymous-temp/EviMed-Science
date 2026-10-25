@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { SOURCE_CHANGE_LINK_STATES } from "@evimed/domain";
 import { loadConfig } from "../src/config.mjs";
-import { MEMORY_SOURCE_STATES } from "../src/researchMemoryPersistence.mjs";
+import { NATIVE_SOURCE_STATES } from "../src/nativeMemoryPersistence.mjs";
 import { KnowledgeChangeService, memoryLinkOf, producingAgenda } from "../src/knowledgeChange.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
@@ -47,20 +47,28 @@ function project({ calculationInputs = [source(DOI)] } = {}) {
   return { versions, results };
 }
 
+/** The memory engine's side of a source change, as `NativeMemoryStore.dependentsOfSource` and `NativeMemoryWorker.labelSource` answer. */
 function memoryDouble({ rows = [], fail = false } = {}) {
   const calls = [];
   return {
-    calls, configured: true,
+    calls,
     async dependentsOfSource(_user, link) {
       calls.push(["dependents", link]);
-      if (fail) throw Object.assign(new Error("db down"), { code: "memory_unavailable" });
+      if (fail) throw Object.assign(new Error("engine down"), { code: "memory_unavailable" });
       return rows.map(row => ({ ...row }));
     },
-    async markSourceLinks(_user, link, finding) {
-      calls.push(["mark", link, finding]);
-      const moved = rows.filter(row => finding.onlyFrom.includes(row.state) && row.state !== finding.state);
-      for (const row of moved) row.state = finding.state;
-      return { recordIds: moved.map(row => row.recordId) };
+    async labelSource(_user, link, state) {
+      calls.push(["label", link, state]);
+      if (fail) throw Object.assign(new Error("engine down"), { code: "memory_unavailable" });
+      // A check moves a link only where it adds knowledge (the worker's rule): a correction never lowers a retraction, and a check
+      // that could not answer is only what a link nobody had found a change on becomes.
+      let moved = 0;
+      for (const row of rows) {
+        if (row.state === state || (state === "changed" && row.state === "retracted") || (state === "unknown" && row.state !== "current")) continue;
+        row.state = state;
+        moved += 1;
+      }
+      return moved;
     },
   };
 }
@@ -83,7 +91,7 @@ function fixture({ memory = memoryDouble(), methods = methodsDouble(), authorize
   const { versions, results } = project(options);
   const calls = [];
   const notices = new Map();
-  const knowledge = new KnowledgeChangeService({ memory, methods, now: () => NOW });
+  const knowledge = new KnowledgeChangeService({ native: memory, methods, now: () => NOW });
   const service = new ResultImpactService({ documents, results, knowledge, now: () => NOW, authorizeContinuation: authorize,
     ...(autoRecheckLimit === undefined ? {} : { autoRecheckLimit }),
     notifications: { async create(_user, input) { notices.set(input.idempotencyKey, input); } },
@@ -148,12 +156,10 @@ test("memories that name the source are labelled with its new state and listed o
     memoryRow("old", { status: "superseded" }), memoryRow("session", { scope: "session", scopeId: "s" })] });
   const f = fixture({ memory });
   const { items } = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction("retraction") });
-  const mark = memory.calls.find(call => call[0] === "mark");
-  assert.deepEqual(mark[1], { type: "doi", id: DOI });
-  assert.equal(mark[2].state, "retracted");
-  assert.equal(mark[2].reason, "retraction");
-  assert.ok(mark[2].onlyFrom.includes("changed") && !mark[2].onlyFrom.includes("retracted"), "a retraction may outrank a correction and is not rewritten by itself");
-  assert.ok(memory.calls.filter(call => call[0] === "mark").length === 1, "one statement labels every dependent at once, not one per result");
+  const label = memory.calls.find(call => call[0] === "label");
+  assert.deepEqual(label[1], { type: "doi", id: DOI });
+  assert.equal(label[2], "retracted");
+  assert.ok(memory.calls.filter(call => call[0] === "label").length === 1, "one statement labels every dependent at once, not one per result");
   for (const item of items) {
     assert.deepEqual(item.payload.affected.memories.items.map(entry => entry.recordId).sort(), ["account", "mine"]);
     assert.ok(item.payload.affected.memories.items.every(entry => entry.state === "retracted"));
@@ -185,21 +191,24 @@ test("a check that could not answer leaves a correction found earlier and marks 
   const memory = memoryDouble({ rows: [memoryRow("a", { state: "changed" }), memoryRow("b", { state: "current" })] });
   const f = fixture({ memory });
   await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: { state: "unavailable", checkedAt: null, reason: "timeout", updates: [] } });
-  const mark = memory.calls.find(call => call[0] === "mark");
-  assert.deepEqual([mark[2].state, mark[2].reason, mark[2].onlyFrom], ["unknown", "check_timeout", ["current"]]);
+  const label = memory.calls.find(call => call[0] === "label");
+  assert.equal(label[2], "unknown");
   assert.equal((await memory.dependentsOfSource()).find(row => row.recordId === "a").state, "changed", "the earlier finding stands");
   assert.equal((await memory.dependentsOfSource()).find(row => row.recordId === "b").state, "unknown");
   assert.equal(f.notices.size, 0, "a gap is not announced as a change");
   assert.ok((await impactsOf(f)).every(item => item.payload.effect === "source_gap"));
 });
 
-test("a clean answer sets right a link an earlier outage left unknown and nothing else, and creates no impact", async () => {
+test("a clean answer asks the engine to set the links right through one label call and creates no impact", async () => {
   const memory = memoryDouble({ rows: [memoryRow("a", { state: "unknown" }), memoryRow("b", { state: "retracted" })] });
   const f = fixture({ memory });
   const reply = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: { state: "no_update", checkedAt: "2026-10-04T00:00:00Z", updates: [] } });
   assert.deepEqual(reply.items, []);
   const states = Object.fromEntries((await memory.dependentsOfSource()).map(row => [row.recordId, row.state]));
-  assert.deepEqual(states, { a: "current", b: "retracted" });
+  // The engine's own rule decides which links a clean answer moves (`NativeMemoryWorker.labelSource`: it lifts a label whatever
+  // it was; only a correction never lowers a retraction and only an outage never undoes a finding), so this unit pins the call, not the rule.
+  assert.deepEqual(memory.calls.filter(call => call[0] === "label").map(call => call[2]), ["current"]);
+  assert.deepEqual(states, { a: "current", b: "current" });
 });
 
 test("learned methods linked to the affected versions are labelled once, by how they meet the result", async () => {
@@ -236,7 +245,7 @@ test("a later check refreshes what rests on the same change without moving its c
   assert.equal(cited.payload.affected.memories.status, "none");
   memory.calls.length = 0;
   const written = memoryDouble({ rows: [memoryRow("late")] });
-  f.service.knowledge.memory = written;
+  f.service.knowledge.native = written;
   const second = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
   const again = second.items.find(item => item.payload.versionId === rv("3"));
   assert.equal(again.id, cited.id, "one change is one impact");
@@ -271,8 +280,8 @@ test("a knowledge-base replacement finds what read the old document by its recor
   assert.equal(first.payload.sourceStatus.updates[0].kind, "replaced");
   assert.equal(first.payload.source.replacedBy, SRC_NEW);
   assert.equal(first.payload.source.contentDigest, BYTES_OLD);
-  assert.deepEqual(memory.calls.find(call => call[0] === "mark")[1], { type: "knowledge_source", id: SRC_OLD });
-  assert.equal(memory.calls.find(call => call[0] === "mark")[2].reason, "replaced");
+  assert.deepEqual(memory.calls.find(call => call[0] === "label")[1], { type: "knowledge_source", id: SRC_OLD });
+  assert.equal(memory.calls.find(call => call[0] === "label")[2], "changed");
   assert.ok([...f.notices.values()].every(notice => /资料库里这份文件有了新版本/.test(notice.body)));
   const again = await f.service.reconcileReplacement("alice", { projectId: "p", replaced: { sourceId: SRC_OLD, sha256: BYTES_OLD }, by: { sourceId: SRC_NEW, at: "2026-10-04T10:00:00Z" } });
   assert.deepEqual(again.items.map(item => item.id).sort(), reply.items.map(item => item.id).sort(), "reading the same replacement again is the same impact");
@@ -285,7 +294,7 @@ test("a memory that names a replaced document is found by its src id even when n
   const f = fixture({ memory });
   const reply = await f.service.reconcileReplacement("alice", { projectId: "p", replaced: { sourceId: SRC_OLD, sha256: BYTES_OLD }, by: { sourceId: SRC_NEW } });
   assert.deepEqual(reply.items, []);
-  assert.equal(memory.calls.find(call => call[0] === "mark")[2].state, "changed");
+  assert.equal(memory.calls.find(call => call[0] === "label")[2], "changed");
   assert.equal(f.notices.size, 1, "the inbox still says a source the memories rest on changed");
   assert.match([...f.notices.values()][0].body, /1 条记忆/);
   assert.doesNotMatch([...f.notices.values()][0].body, /暂时查不到/, "no result and no method link is a finished lookup, not a failed one");
@@ -364,7 +373,7 @@ test("the agenda that produced a result is the one authorization, and only while
 });
 
 test("every state a check gives a link is one the memory store records", () => {
-  for (const state of SOURCE_CHANGE_LINK_STATES) assert.ok(MEMORY_SOURCE_STATES.includes(state), state);
+  for (const state of SOURCE_CHANGE_LINK_STATES) assert.ok(NATIVE_SOURCE_STATES.includes(state), state);
 });
 
 test("the automatic recheck bound is a lever whose compose fallback is the code's own default and which .env.example names", async () => {

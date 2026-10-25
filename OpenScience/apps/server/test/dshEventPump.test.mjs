@@ -141,7 +141,7 @@ test("a decoded run/event reaches the run whose session's stream it arrived on",
 
 test("a compaction is reported with the conversation it happened in, and a delegated child's is marked as one", async () => {
   // Review M6: a compaction takes the resident profile out of the history it was written into, so the control plane notes it
-  // against the conversation (`onCompaction` -> `ResearchMemoryStore.noteCompaction`). The conversation's own, not its child's.
+  // against the conversation (`onCompaction` -> `MemorySettingsStore.noteCompaction`). The conversation's own, not its child's.
   const compactions = [];
   const { runEvents, pump, muxes } = pumpOnFakeMux();
   pump.onCompaction = (project, runId, record) => compactions.push({ project: project.id, runId, ...record });

@@ -70,7 +70,7 @@ export class NativeMemoryConsolidation {
   /**
    * @param {{
    *   config: any,
-   *   researchMemory: { settings: (userId: string) => Promise<any> },
+   *   memorySettings: { settings: (userId: string) => Promise<any> },
    *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
    *   resources: import("./openVikingResources.mjs").OpenVikingResources,
    *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
@@ -78,9 +78,9 @@ export class NativeMemoryConsolidation {
    *   now?: () => Date, report?: (line: string) => void,
    * }} dependencies
    */
-  constructor({ config, researchMemory, sessions, resources, overlay, ingest, now = () => new Date(), report = () => {} }) {
+  constructor({ config, memorySettings, sessions, resources, overlay, ingest, now = () => new Date(), report = () => {} }) {
     this.config = config ?? {};
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.sessions = sessions;
     this.resources = resources;
     this.overlay = overlay;
@@ -92,7 +92,7 @@ export class NativeMemoryConsolidation {
 
   /** Whether this deployment consolidates at all: the lever, the native engine, and what it needs to reach it. */
   get applicable() {
-    return this.config.nativeMemoryConsolidationEnabled === true && this.config.ovNativeMemoryEnabled === true
+    return this.config.nativeMemoryConsolidationEnabled === true && this.config.memoryEngineEnabled === true
       && Boolean(this.sessions?.configured && this.resources?.configured && this.overlay?.configured);
   }
 
@@ -120,7 +120,7 @@ export class NativeMemoryConsolidation {
     const at = this.now().getTime();
     if (state.consolidatedAt && at - Date.parse(state.consolidatedAt) < this.intervalMs) return "not_due";
     if (state.checkedAt && at - Date.parse(state.checkedAt) < CHECK_EVERY_MS) return "not_due";
-    const settings = await this.researchMemory.settings(userId);
+    const settings = await this.memorySettings.settings(userId);
     if (settings.learningPaused) return "held_back";
     const open = await this.overlay.openCommits({ userId, limit: 1, now: this.now() });
     const latest = (await this.overlay.commitsOf(userId, { limit: 1 }))[0];

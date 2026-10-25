@@ -12,7 +12,10 @@ import path from "node:path";
 import test from "node:test";
 
 import { subjectAccountId } from "../src/agentApiKeys.mjs";
+import { OpenVikingClient } from "../src/openVikingClient.mjs";
+import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
 import { createWebApiApp } from "../src/server.mjs";
+import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -24,10 +27,14 @@ const options = { timeout: 60_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POST
 
 test("an integration key serves each doctor alone, and the institution's deletion takes every doctor with it", options, async (t) => {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-agent-subjects-"));
+  // The one memory engine: a doctor's account holds its memory in the engine's stand-in, as every account does.
+  const stub = await startOpenVikingStub(t, {});
+  const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
+  const openVikingSessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true,
-    databaseUrl, agentMemoryApiEnabled: true,
+    databaseUrl, agentMemoryApiEnabled: true, memoryEngineEnabled: true, openVikingSessions,
   });
   const username = `hospital${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const password = "test-only-hospital-password";

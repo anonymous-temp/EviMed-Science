@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import {
-  OTHER_PROJECT, factItems, factRowTitle, factsOfProject, heldFrom, matches, practiceItems, projectChoices, projectScopeGroups,
+  OTHER_PROJECT, factItems, factsOfProject, matches, practiceItems, projectChoices, projectScopeGroups,
 } from "./memoryItems";
 
 /** A structured memory with only the fields the lists read. */
@@ -38,29 +38,10 @@ describe("the facts a list shows", () => {
     });
   });
 
-  it("shows a fact another replaced under what replaced it, and one whose replacement is not here as what it was", () => {
-    const items = factItems([
-      record({ id: "new" }),
-      record({ id: "old", status: "superseded", supersededBy: "new", createdAt: "2026-03-02T00:00:00Z", invalidSince: "2026-09-01T00:00:00Z" }),
-      record({ id: "orphan", status: "superseded", supersededBy: "missing", summary: "回答用英文。", createdAt: "2026-02-01T00:00:00Z", invalidSince: "2026-04-01T00:00:00Z" }),
-    ], []);
-    expect(items.map((item) => item.key).sort()).toEqual(["record:new", "record:orphan"]);
-    const fresh = items.find((item) => item.key === "record:new");
-    expect(fresh?.kind === "record" && fresh.formerly.map((item) => item.id)).toEqual(["old"]);
-    const orphan = items.find((item) => item.key === "record:orphan")!;
-    expect(factRowTitle(orphan)).toBe("曾经如此：回答用英文。（2月1日～4月1日）");
-    expect(factRowTitle(fresh!)).toBe("偏好表格。");
-  });
-
   it("filters the notes by a query and leaves the memories to the server's search", () => {
     const items = factItems([record({ id: "m", summary: "没有这个词" })], [entry(), entry({ id: "x", payload: { ...entry().payload, content: "别的习惯" } })], { query: "页码" });
     expect(items.map((item) => item.key)).toEqual(["entry:e1", "record:m"]);
     expect(matches("Meta 分析", "meta")).toBe(true);
-  });
-
-  it("says a range only when it knows an end", () => {
-    expect(heldFrom({ createdAt: "2026-03-02T00:00:00Z", invalidSince: "2026-09-01T00:00:00Z" })).toBe("（3月2日～9月1日）");
-    expect(heldFrom({ createdAt: null, invalidSince: null })).toBe("");
   });
 });
 

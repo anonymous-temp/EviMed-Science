@@ -1,9 +1,7 @@
 /**
- * The doctor dashboard against the real stores: a proposal waits, the doctor
- * confirms it and it is theirs; forgetting and restoring and undoing are acts
- * the record's own history then shows; a habit is stopped and taken back to
- * the version that was in force; a note an outside agent proposed waits in the
- * same list and is confirmed there.
+ * The doctor dashboard against the real stores: a habit is stopped and taken back to the version that was in force; a note an outside
+ * agent proposed waits in the same list and is confirmed there (admitted to the engine, which is the one double here: the memory files
+ * themselves are the engine's and are read where its store is tested, `nativeMemory*.test.mjs` and `agentMemoryNative.integration.test.mjs`).
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -17,7 +15,23 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
+
+/** The engine's store as the board reads it: no files, and an admission that settles at once. */
+function engineDouble() {
+  const admissions = new Map();
+  return {
+    configured: true,
+    async listRecords() { return []; },
+    async changes() { return []; },
+    async admitCandidate(userId, input) {
+      const state = { state: "completed", taskId: "task-1", recordIds: [] };
+      admissions.set(`${userId}/${input.candidateId}/${input.revision}`, state);
+      return state;
+    },
+    overlay: { async admission(userId, id, revision) { return admissions.get(`${userId}/${id}/${revision}`) ?? null; } },
+  };
+}
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -36,7 +50,8 @@ before(async () => {
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Hospital','development')", [hospital]);
   const documents = new ProductDocuments(database);
   services = {
-    researchMemory: new ResearchMemoryStore({}, { database }),
+    memorySettings: new MemorySettingsStore({}, { database }),
+    nativeMemory: engineDouble(),
     learning: new LearningService({ documents }),
     capsules: new CapsuleService(documents),
     documents,
@@ -50,43 +65,6 @@ after(async () => {
   await database.close();
 });
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-
-test("a proposal waits for the doctor, and confirming it makes it theirs, with the evidence it came with", options, async () => {
-  const proposal = await services.researchMemory.upsertRecord(doctor.id, {
-    scope: "user", scopeId: "", kind: "preference", key: "preference.herb_count", value: "药味控制在 12 味以内", summary: "药味不超过 12 味",
-    origin: "explicit", status: "pending", confidence: 1, importance: 0.8, sensitive: false,
-  }, { sourceType: "conversation_message", sourceRef: "sessions/external-1/messages/0", quote: "我一般开 12 味以内", observedAt: "2026-09-26T00:00:00.000Z", weight: 1 },
-  { reason: "conversation evidence created the memory; held for its owner: proposed by an agent outside the platform", by: "extraction" });
-
-  let board = await memoryBoard(services, doctor);
-  assert.deepEqual(board.pending.map((item) => item.id), [proposal.id]);
-  assert.equal(board.records.length, 0, "nothing is in force yet");
-
-  await recordAction(services, doctor, proposal.id, "confirm", { expectedVersion: proposal.version });
-  board = await memoryBoard(services, doctor);
-  const [row] = board.records;
-  assert.equal(row.id, proposal.id);
-  assert.equal(row.source, "self");
-  assert.equal(row.basis.kind, "confirmed", "the record's own history says the owner confirmed it");
-  assert.deepEqual(row.quotes.map((quote) => quote.quote), ["我一般开 12 味以内"]);
-  assert.equal(board.pending.length, 0);
-});
-
-test("an edit leaves what it used to say as 曾经如此, forgetting and restoring move it, and undo takes the last act back", options, async () => {
-  let record = (await services.researchMemory.listRecords(doctor.id, { statuses: ["active"] }))[0];
-  record = (await recordAction(services, doctor, record.id, "edit", { expectedVersion: record.version, summary: "药味不超过 10 味", value: "药味控制在 10 味以内" })).record;
-  let board = await memoryBoard(services, doctor);
-  assert.deepEqual(board.records[0].wasTrue.map((item) => item.summary), ["药味不超过 12 味"]);
-  assert.equal(board.records[0].source, "self");
-
-  record = (await recordAction(services, doctor, record.id, "forget", { expectedVersion: record.version })).record;
-  board = await memoryBoard(services, doctor);
-  assert.deepEqual([board.records.length, board.forgotten.map((item) => item.id)], [0, [record.id]]);
-  record = (await recordAction(services, doctor, record.id, "restore", { expectedVersion: record.version })).record;
-  assert.equal(record.status, "active");
-  const undone = await recordAction(services, doctor, record.id, "undo", { expectedVersion: record.version });
-  assert.equal(undone.record.status, "archived", "undoing the restore forgets it again");
-});
 
 test("a habit is stopped, and taking the stop back restores the version that was in force", options, async () => {
   const created = await services.learning.createCandidate(doctor.id, {

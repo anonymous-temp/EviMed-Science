@@ -75,7 +75,6 @@
     "restore:object": "node scripts/ops/object-backup.mjs download",
     "probe:object": "node scripts/ops/object-backup.mjs probe",
     "migrate:data": "bash scripts/ops/migrate-data-dir.sh",
-    "migrate:research-memory": "node scripts/ops/migrate-research-memory.mjs",
     "rebuild:memory-index": "node scripts/ops/rebuild-memory-index.mjs",
     "rebuild:ov-resources": "node scripts/ops/rebuild-ov-resources.mjs",
     "usage:by-purpose": "node scripts/ops/usage-by-purpose.mjs",

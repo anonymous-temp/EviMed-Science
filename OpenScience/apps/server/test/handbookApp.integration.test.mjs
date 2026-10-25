@@ -17,7 +17,7 @@ test("actual application consumes a reviewed lesson and sends its exact receipt 
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl: database.url,
     learningEnabled: true, learningWindow: "", evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
-    researchMemory: { configured: false, async status() { return { configured: false }; } } });
+    memorySettings: { configured: false, async status() { return { configured: false }; } } });
   try {
     const address = await app.listen(0, "127.0.0.1");
     await app.learningWorker.close();
@@ -76,7 +76,7 @@ test("native HTTP inputs consume their frozen handbook revision through the sock
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl: database.url,
     learningEnabled: true, learningWindow: "", evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
     runtimeUiProxyEnabled: true, runtimeUiPort: 0, publicUrl: "https://science.example", runtimeUiPublicOrigin: "https://science.example:8443",
-    researchMemory: { configured: false, async status() { return { configured: false }; } } });
+    memorySettings: { configured: false, async status() { return { configured: false }; } } });
   try {
     const address = await app.listen(0, "127.0.0.1"); await app.learningWorker.close(); app.agentRuns.scheduleMonitor = () => {};
     const user = await app.store.createUser("native-owner", "test-password", "Native owner");
