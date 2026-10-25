@@ -344,7 +344,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   function noteRecalled(userId, uris) {
     if (!overlay?.configured) return;
     const root = `${/** @type {any} */ (sessions)?.userRoot?.(userId) ?? ""}/memories`;
-    const files = [...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(uri, root))))];
+    const files = /** @type {string[]} */ ([...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(/** @type {string} */ (uri), root))))]);
     if (!files.length) return;
     void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
   }
@@ -559,7 +559,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       if (!context) {
         const found = await scopedListSearch(sessions, ctx, given);
-        noteRecalled(ctx.user.id, (found.result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+        noteRecalled(ctx.user.id, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
         return { status: 200, json: found, outcome: "forwarded" };
       }
       if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
@@ -659,7 +659,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             local.push(toolText(message.id, JSON.stringify(await scopedMemoryList(sessions, ctx, uri, { recursive: args.recursive === true ? "true" : "false" }))));
           } else {
             const result = await scopedListSearch(sessions, ctx, args);
-            noteRecalled(ctx.user.id, (result.result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+            noteRecalled(ctx.user.id, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
             const content = [ { type: "text", text: JSON.stringify(result.result) } ];
             const query = String(args.query ?? "").slice(0, 2_000);
             const target = typeof args.target_uri === "string" && args.target_uri ? args.target_uri : `${ctx.userRoot}/memories`;

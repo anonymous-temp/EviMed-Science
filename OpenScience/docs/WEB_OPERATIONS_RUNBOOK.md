@@ -1226,6 +1226,16 @@ under an advisory lock, and says what it did in one `legacy memory:` log line an
 the capsule's own tree is never named), `jobs_deleted` (queued `memory-record-index` jobs, which nothing claims any more) and `failed`
 (the next start asks again). Rows that exist are never deleted by it.
 
+Native memory, as of 2026-10-25. Counters of what the memory package added: `open_science_native_memory_observations_total{outcome}` (a note two conversations wrote
+was `promoted` to a preference, held back as `empty`, or the pass `failed`; a note one conversation wrote is not counted), `…_reset_sweeps_total{outcome}` and
+`…_reset_swept_files_total` (an extraction a reset found running: its files taken out when it ended, a task the engine no longer held, still `waiting`; a sweep that stays
+`waiting` for a day closes as `unknown`), `…_extraction_failures_total{reason}` (`budget_exhausted` is v0.5.2's fail-fast on an output that ran out of room), `…_privacy_config_deletes_total{outcome}`
+(`failed` above 0: the engine answered something but 404 to the deletion of a session's privacy configuration), `…_policy_syncs_total{outcome}` (`rewritten`: an account's stored type
+allowlist predated a type and was rewritten), `…_forget_duplicates_total{outcome}`, `…_recall_notes_total{outcome}` and `…_imports_total{outcome}` (`rate_limited` above 0 means
+`OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR` is low). `evimed_memory.native_files.last_recalled_at` and `recall_count` say when and how often a file was recalled; nothing acts on them (the
+retention period stays unset). `evimed_memory.native_reset_tombstones` holds what a reset could not wait for; `native_line_origins` the first commit of each line; `native_imports` the
+import offers waiting an hour.
+
 Native memory. `node scripts/ops/native-commit-report.mjs --user <id> --since <date> --text` says why a commit wrote nothing
 (`proposed_nothing`: the model proposed nothing; `only_skipped`: the engine refused, with its reason codes; `--backfill` writes the facts
 onto ledger rows settled before the column existed; the engine's task records are kept about a day, the diff's own

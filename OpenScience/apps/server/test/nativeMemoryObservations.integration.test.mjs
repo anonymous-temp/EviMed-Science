@@ -37,9 +37,9 @@ function engine(later) {
 
 /** The fixture, with the promotion the composition root builds from the store. */
 async function scene(t, extra = {}) {
-  /** @type {any} */
-  let f;
-  f = await fixture(t, { extract: engine(() => f), ...extra });
+  const held = { f: /** @type {any} */ (null) };
+  const f = await fixture(t, { extract: engine(() => held.f), ...extra });
+  held.f = f;
   f.worker.observations = new NativeMemoryObservations({
     overlay: f.overlay, sessions: f.sessions, memorySettings: f.memorySettings, keepRepeatedChoice: (userId, choice) => f.store.keepRepeatedChoice(userId, choice),
   });
@@ -47,7 +47,7 @@ async function scene(t, extra = {}) {
 }
 
 /** A second commit of a session that already exists (the control plane commits after each attended turn): no new session, one more archive. */
-async function commitAgain(f, name, text, { fail = false } = {}) {
+async function commitAgain(f, name, text) {
   const session = `dsh-session_${name}`;
   f.stub.sessions.get(`${f.engineUser}/${session}`).messages.push({ role: "user", parts: [{ type: "text", text }] });
   const committed = f.stub.commitSession(f.engineUser, session);

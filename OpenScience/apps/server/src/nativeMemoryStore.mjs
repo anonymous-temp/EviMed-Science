@@ -241,10 +241,12 @@ const BODY_ACCOUNTS = 100;
  * (`project_context.yaml`). A section whose heading is none of them — a card written in another language, or under a heading of the
  * model's own ("交付约定") — is a row of its own named by that heading, never dropped: it is what the person said about the project, and
  * the next conversation of the project is handed it as it is handed the rest.
- * @param {readonly any[]} everything the account's records @param {string} projectId
+ * `sections`: also the sections whose heading the closed list does not know, each as a row named by its heading (what a conversation of the
+ * project is handed, `residentCard`); the memory page's 项目 tab keeps the card to the six slots and the clinical elements, as it always read it.
+ * @param {readonly any[]} everything the account's records @param {string} projectId @param {{ sections?: boolean }} [options]
  * @returns {{ slot: string, label?: string, recordId: string, text: string, updatedAt: string | null }[]}
  */
-export function projectCardRows(everything, projectId) {
+export function projectCardRows(everything, projectId, { sections = false } = {}) {
   const records = everything.filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
   const SLOT_OF_HEADING = { "目标": "goal", "范围或对象": "subject", "材料与数据": "data_source", "阶段": "stage", "约束": "constraints",
     "goal": "goal", "scope": "subject", "materials and data": "data_source", "stage": "stage", "constraints": "constraints" };
@@ -270,7 +272,7 @@ export function projectCardRows(everything, projectId) {
       const inElements = ELEMENTS.has(section) && element;
       const slot = inElements ? /** @type {Record<string, string>} */ (SLOT_OF_ELEMENT)[element[1].trim().toLowerCase()] : /** @type {Record<string, string>} */ (SLOT_OF_HEADING)[section];
       if (!slot) {
-        if (section && !ELEMENTS.has(section) && sectionLabel) {
+        if (sections && section && !ELEMENTS.has(section) && sectionLabel) {
           const held = others.get(sectionLabel);
           others.set(sectionLabel, held && held.recordId === record.id ? { ...held, text: `${held.text}；${item}`.slice(0, 600) }
             : held ?? { slot: "other", label: sectionLabel.slice(0, 24), recordId: record.id, text: item.slice(0, 600), updatedAt: record.updatedAt });
@@ -429,10 +431,10 @@ export class NativeMemoryStore {
     const revisions = await this.overlay.revisionsOfMany(userId, held.map((file) => file.uri));
     const sources = await this.overlay.sources(userId, held.map((file) => file.uri));
     // The first commit that brought each line of the profile, kept beyond the revisions a file holds: an old line still names its source.
-    const origins = await this.overlay.originsOf(userId, held.filter((file) => file.type === "profile").map((file) => file.uri)).catch(() => new Map());
+    const origins = await Promise.resolve().then(() => this.overlay.originsOf(userId, held.filter((file) => file.type === "profile").map((file) => file.uri))).catch(() => new Map());
     // The conversations the engine wrote these files in: its revisions name the engine session, the ledger names the project.
     const sessionProjects = await this.#sessionProjects(userId, revisions);
-    const originProjects = await this.overlay.sessionProjects(userId, [...new Set([...origins.values()].flatMap((lines) => [...lines.values()].map((origin) => origin.engineSession).filter((name) => typeof name === "string" && platformSessionOf(name))))].map(String)).catch(() => new Map());
+    const originProjects = await Promise.resolve().then(() => this.overlay.sessionProjects(userId, [...new Set([...origins.values()].flatMap((lines) => [...lines.values()].map((origin) => origin.engineSession).filter((name) => typeof name === "string" && platformSessionOf(name))))].map(String))).catch(() => new Map());
     /** @type {any[]} */
     const records = [];
     for (const file of held) {
@@ -686,8 +688,8 @@ export class NativeMemoryStore {
   }
 
   /**
-   * What a conversation of the project is handed up front: the card's rows as the page shows them, then what the project's other standing
-   * files say — its decisions, its working facts and what is still open — in rows of their own (`projectExtraRows`). A rule the person
+   * What a conversation of the project is handed up front: the card's rows as the page shows them (and its other sections, each under its own
+   * heading: 已定事项 among them), then what the project's other standing files say — its decisions, its working facts and what is still open — in rows of their own (`projectExtraRows`). A rule the person
    * stated for the project (its language, its format, its house style, a date they set) is a line of the card when the engine files it
    * there and a line of one of those files when it does not, and the plugin's own start-of-session listing names neither (it lists
    * `profile.md`, `preferences/` and `entities/`): without these rows it would reach a new conversation only if the model went looking.
@@ -696,7 +698,7 @@ export class NativeMemoryStore {
    */
   async residentCard(userId, projectId) {
     const everything = await this.records(userId);
-    return [...projectCardRows(everything, projectId), ...projectExtraRows(everything, projectId)];
+    return [...projectCardRows(everything, projectId, { sections: true }), ...projectExtraRows(everything, projectId)];
   }
 
   /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, no conflicts, no usage. @param {string} userId */

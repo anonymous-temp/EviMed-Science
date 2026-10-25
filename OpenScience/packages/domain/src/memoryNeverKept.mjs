@@ -2,7 +2,7 @@
  * What a memory never holds, and how to decide what it does hold: two texts, written once.
  *
  * Hidden knowledge: this is the one statement of what is not worth keeping. The native engine reads it from its type templates
- * (`deploy/web/openviking/memory-templates`, rendered by `memory-templates-src/build.mjs` into each of the eight types, so every
+ * (`deploy/web/openviking/memory-templates`, rendered by `memory-templates-src/build.mjs` into each of the ten types, so every
  * type's rules read complete on their own). A second reader, the platform's own extraction into PostgreSQL records, put the same
  * text into its instruction until that engine was deleted (2026-10-25); `memoryNeverKept.test.mjs` holds the rendered templates to it.
  *

@@ -155,13 +155,13 @@ test("more than ten statements go in messages of ten, so an extraction is not gi
 });
 
 test("what the engine writes from an import reads 「从其他 AI 导入」 and is the person's: the never rules apply a second time at the engine", options, async (t) => {
-  /** @type {any} */
-  let f;
-  f = await fixture(t, { extract: ({ session, messages }) => {
+  const held = { f: /** @type {any} */ (null) };
+  const f = await fixture(t, { extract: ({ session, messages }) => {
     if (!session.startsWith("evimed-import-")) return {};
     const said = messages.map((message) => message.parts.map((part) => part.text).join("")).join("\n");
-    return { adds: [{ uri: `viking://user/${f.engineUser}/memories/profile.md`, memory_type: "profile", after: `# 用户\n${said.split("\n").filter((line) => line.startsWith("- ")).map((line) => `${line} (as of 2026-10-25)`).join("\n")}` }] };
+    return { adds: [{ uri: `viking://user/${held.f.engineUser}/memories/profile.md`, memory_type: "profile", after: `# 用户\n${said.split("\n").filter((line) => line.startsWith("- ")).map((line) => `${line} (as of 2026-10-25)`).join("\n")}` }] };
   } });
+  held.f = f;
   const { data } = (await f.call("POST", "/api/memory/import", { text: PASTED })).json;
   await f.call("POST", `/api/memory/import/${data.id}/confirm`, {});
   await f.worker.processCommits({ userId: f.userId });

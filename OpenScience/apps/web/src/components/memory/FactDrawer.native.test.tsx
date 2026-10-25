@@ -103,6 +103,17 @@ describe("a memory kept as a file, opened from its row", () => {
     expect(screen.queryByRole("button", { name: /^来源对话/ })).not.toBeInTheDocument();
   });
 
+  it("says what a memory the platform wrote from the person's own act was written from, with no conversation to open", () => {
+    const evidence = (label: string, sourceType: string) => ({ sourceType, sourceRef: `${sourceType}s/evimed-${sourceType}-ab`, quote: "", observedAt: "2026-10-25T02:00:00Z", weight: 1, fingerprint: "revision:9", label });
+    show(nativeFile("回答结构", "- 先给结论。", { evidence: [evidence("从其他 AI 导入", "import")], evidenceCount: 1 }));
+    expect(within(screen.getByRole("dialog")).getByText(/^从其他 AI 导入（\d+月\d+日）$/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^来源对话/ })).not.toBeInTheDocument();
+    cleanup();
+    show(nativeFile("预算表", "- 预算类表格一律带透视表。", { evidence: [evidence("你在两次对话里都这样做", "repetition")], evidenceCount: 1 }));
+    expect(within(screen.getByRole("dialog")).getByText(/^你在两次对话里都这样做（/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog").textContent).not.toMatch(/evimed-|imports\/|repetitions\//);
+  });
+
   it("opens the conversation in the project it was held in, even for a memory that belongs to no project", () => {
     const file = nativeFile("回答结构", "- 先给结论。", { evidence: [
       { sourceType: "conversation", sourceRef: "sessions/session_ab12/commits/archive_001", quote: "", observedAt: "2026-10-12T02:00:00Z", weight: 1, fingerprint: "revision:7", projectId: "prj_7" },

@@ -21,9 +21,9 @@ const writes = (later) => ({ session }) => {
 };
 
 async function scene(t) {
-  /** @type {any} */
-  let f;
-  f = await fixture(t, { extract: writes(() => f) });
+  const held = { f: /** @type {any} */ (null) };
+  const f = await fixture(t, { extract: writes(() => held.f) });
+  held.f = f;
   return f;
 }
 

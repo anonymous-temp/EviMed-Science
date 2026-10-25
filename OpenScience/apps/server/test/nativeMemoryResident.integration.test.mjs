@@ -43,16 +43,19 @@ test("a rule the person stated for the project reaches its next conversation up 
   assert.deepEqual(block.memories.map((memo) => memo.id), [`card:${A}`]);
 });
 
-test("a section of the card under a heading of the model's own is a row of its own, named by it, in the card and in the block", options, async (t) => {
+test("a section of the card under a heading of the model's own, or 已定事项, is a row of its own in what the conversation is handed, and not on the page's card", options, async (t) => {
   const f = await scene(t);
-  f.seed("projects/sglt2-综述.md", "# SGLT2 综述\n## 目标\n- 写一篇综述\n## 交付约定\n- 所有文字交付物一律用英文写\n- 参考文献用 Vancouver", { type: "project_context", tags: [`project=${A}`] });
-  const card = await f.store.projectCard(f.userId, A);
-  assert.deepEqual(card.map((row) => [row.slot, row.label ?? null]), [["goal", null], ["other", "交付约定"]]);
-  assert.equal(card[1].text, "所有文字交付物一律用英文写；参考文献用 Vancouver");
+  f.seed("projects/sglt2-综述.md", "# SGLT2 综述\n## 目标\n- 写一篇综述\n## 已定事项\n- 先写引言\n## 交付约定\n- 所有文字交付物一律用英文写\n- 参考文献用 Vancouver", { type: "project_context", tags: [`project=${A}`] });
+  // The 项目 tab's card is the six slots and the clinical elements, as it always read; the sections it does not know are not on it.
+  assert.deepEqual((await f.store.projectCard(f.userId, A)).map((row) => row.slot), ["goal"]);
+  const rows = await f.store.residentCard(f.userId, A);
+  assert.deepEqual(rows.map((row) => [row.slot, row.label ?? null]), [["goal", null], ["other", "已定事项"], ["other", "交付约定"]]);
+  assert.equal(rows[2].text, "所有文字交付物一律用英文写；参考文献用 Vancouver");
   const block = await f.residentProfiles.forDispatch(f.userId, { projectId: A, sessionId: "ses_new", attended: true });
   assert.match(block.text, /交付约定：所有文字交付物一律用英文写；参考文献用 Vancouver/);
+  assert.match(block.text, /已定事项：先写引言/);
   // The clinical elements stay with their own heading, never a row of the headings' own names.
-  const study = projectCardRows([{ nativeType: "project_context", scopeId: A, id: "r1", updatedAt: null, value: "## 研究要素\n- 人群：成人\n- 随便写的一行\n## 目标\n- x" }], A);
+  const study = projectCardRows([{ nativeType: "project_context", scopeId: A, id: "r1", updatedAt: null, value: "## 研究要素\n- 人群：成人\n- 随便写的一行\n## 目标\n- x" }], A, { sections: true });
   assert.deepEqual(study.map((row) => row.slot), ["goal", "population"]);
 });
 

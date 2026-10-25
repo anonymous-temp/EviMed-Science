@@ -28,9 +28,9 @@ function growingProfile(later) {
 }
 
 async function growing(t, conversations) {
-  /** @type {any} */
-  let f;
-  f = await fixture(t, { extract: growingProfile(() => f) });
+  const held = { f: /** @type {any} */ (null) };
+  const f = await fixture(t, { extract: growingProfile(() => held.f) });
+  held.f = f;
   for (let number = 1; number <= conversations; number += 1) {
     await f.commitConversation(`c${number}`, [{ role: "user", text: `第 ${number} 件事。` }]);
     await f.worker.processCommits({ userId: f.userId });

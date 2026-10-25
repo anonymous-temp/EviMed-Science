@@ -1255,7 +1255,7 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
   `poll_interval_ms: 5000` would make it 5 s; it has not been probed). A compile that names another user's root is refused by the
   engine (403); one that names the account-shared `viking://resources/…` or `viking://agent/…` roots is not, so
   `OpenVikingResources.submitCompile` refuses every root outside the acting user's own resources.
-- **The memory templates.** `deploy/web/openviking/memory-templates/` — eight types, the platform's keep / never-keep policy
+- **The memory templates.** `deploy/web/openviking/memory-templates/` — ten types, the platform's keep / never-keep policy
   written in the engine's template language — is bind-mounted read-only at `/app/memory-templates`. A missing mount is silent
   upstream (the server falls back to its built-in types), which is why the control plane checks it.
 - **The model path.** The engine's `vlm` is this deployment's own model gateway (`http://open-science-web:8787/internal/model/v1`),
@@ -1289,7 +1289,7 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
 | `OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS` | `90000` | How old the last verified capture may be before `checks.backup.openviking` says `openviking_backup_stale` (a notice). |
 
 `/api/ready` reports the engine under `checks.memoryIndex.engine`: `facts.version` (the answering server is the pin),
-`facts.modelKey`, `facts.memoryTemplates` (the template directory is loaded and a user's settings read back the eight types),
+`facts.modelKey`, `facts.memoryTemplates` (the template directory is loaded and a user's settings read back the ten types),
 `facts.skills` (`llm-wiki` and `knowledge-graph` are installed with the pinned bytes; a missing one is installed at start) and
 `facts.compileIdentity` (`GET /api/v1/compile/capabilities` says Compile is configured, and one real submission whose source is an
 empty directory ends, about 30 s later, with "Compile sources contain no files": the bot ran the task as the caller, and no model was

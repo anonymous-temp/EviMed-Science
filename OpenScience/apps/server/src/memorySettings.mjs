@@ -357,7 +357,8 @@ export class MemorySettingsStore {
    *
    * `compactedSince` is whether the compaction came after the hand-over, decided by the database at its own precision: the two
    * instants below are milliseconds, and a compaction in the millisecond of a hand-over is later than it.
-   * @returns {Promise<{ digest: string | null, deliveredAt: string | null, compactedAt: string | null, compactedSince: boolean }>}
+   * `memos` is what that block held, as the run record names it (`{ id, kind, scope }`), for the run a turn typed in the kernel's own composer becomes.
+   * @returns {Promise<{ digest: string | null, deliveredAt: string | null, compactedAt: string | null, compactedSince: boolean, memos: { id: string, kind?: string, scope?: string }[] }>}
    */
   async residentState(userId, projectId, sessionId) {
     const result = await this.#query(`SELECT resident_digest, resident_delivered_at, compacted_at, resident_memos,
