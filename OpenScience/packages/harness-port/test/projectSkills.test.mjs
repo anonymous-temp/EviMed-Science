@@ -59,3 +59,21 @@ test('native registry keeps disabled winners with neither invocation channel in 
   assert.equal(allowed.messages.some((/** @type {any} */ message) => message.source.kind === 'skill-invocation' && message.source.name === 'memo'), true)
   assert.equal((await skillTool.execute({ name: 'memo' }, { agent: scopeOf(other.ctx), signal: AbortSignal.timeout(5000) })).content, 'office')
 })
+
+test('a policy that cannot be read registers the native provider unrestricted, and a symlinked root still matches', async t => {
+  const real = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'project-skills-open-')))
+  const office = path.join(real, 'office')
+  await fs.mkdir(path.join(office, 'memo'), { recursive: true })
+  await fs.writeFile(path.join(office, 'memo', 'SKILL.md'), '---\nname: memo\ndescription: test\n---\noffice')
+  // The image may reach a root through a link; the native provider reports real paths.
+  const linked = path.join(real, 'linked'); await fs.mkdir(linked); await fs.symlink(office, path.join(linked, 'office'))
+  const ctx = new Context(); new SkillRegistry(ctx)
+  const broken = createScope(ctx, { id: 'broken' }), symlinked = createScope(ctx, { id: 'symlinked' })
+  t.after(async () => { await Promise.all([broken.dispose(), symlinked.dispose()]); await fs.rm(real, { recursive: true, force: true }) })
+  await registerProjectSkillProvider(broken.ctx, { customSkillDirs: [office], disabledSkills: /** @type {any} */ ('not-a-list') })
+  const open = await ctx.skills.get('memo', { scope: scopeOf(broken.ctx) }); assert.ok(open)
+  assert.equal(isModelInvocable(open), true, 'every skill stays available when the policy cannot be read')
+  await registerProjectSkillProvider(symlinked.ctx, { customSkillDirs: [path.join(linked, 'office')], disabledSkills: ['office:memo'] })
+  const restricted = await ctx.skills.get('memo', { scope: scopeOf(symlinked.ctx) }); assert.ok(restricted)
+  assert.equal(isModelInvocable(restricted), false, 'a root reached through a link still matches the paths the native provider reports')
+})
