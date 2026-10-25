@@ -421,6 +421,7 @@ import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
+import { NativeMemoryImport } from "./nativeMemoryImport.mjs";
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
@@ -1673,8 +1674,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (user, action, details) => securityAudit(config, action, "completed", {
       userId: user.id, username: user.id, detail: JSON.stringify(details),
     }) });
+  // 「从其他 AI 导入」: one Flash call splits a pasted text, the person reviews it, the engine writes what they keep (`nativeMemoryImport.mjs`).
+  const nativeMemoryImport = new NativeMemoryImport({ config, overlay: nativeMemoryOverlay, nativeMemory, memorySettings, usageLedger });
   const memoryRoutes = createMemoryRoutes({
-    config, memorySettings, nativeMemory, store, context, audit, decodeRouteComponent,
+    config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent,
     // 「重置记忆」 clears what the page shows: the methods, handbooks and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
     // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.

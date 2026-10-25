@@ -294,9 +294,11 @@ export class OpenVikingStub {
     const taskId = `00000000-0000-4000-8000-${String(++this.taskSeq).padStart(12, "0")}`;
     const paused = this.users.get(user)?.learning === false;
     const outcome = paused ? {} : this.extract({ user, session: id, messages, files: this.files });
-    if (outcome === "fail") {
-      this.files.set(`${archive}/.failed.json`, JSON.stringify({ stage: "memory_extraction", error: "Error code: 429 - stub", failed_at: new Date().toISOString() }));
-      this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "failed", resource_id: id, result: null, error: "Error code: 429 - stub" } });
+    if (outcome === "fail" || typeof outcome?.fail === "string") {
+      // `{ fail: "<the engine's own error text>" }` names why (v0.5.2: `budget_exhausted`); a bare "fail" is the 429 of a rate-limited minute.
+      const error = typeof outcome?.fail === "string" ? outcome.fail : "Error code: 429 - stub";
+      this.files.set(`${archive}/.failed.json`, JSON.stringify({ stage: "memory_extraction", error, failed_at: new Date().toISOString() }));
+      this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "failed", resource_id: id, result: null, error } });
     } else {
       const operations = { adds: outcome.adds ?? [], updates: outcome.updates ?? [], deletes: outcome.deletes ?? [] };
       for (const add of operations.adds) { this.files.set(add.uri, add.after); this.tags.set(add.uri, [`memory_type=${add.memory_type}`]); }

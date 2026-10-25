@@ -208,6 +208,8 @@ export class NativeMemoryWorker {
     let commits = 0;
     let accounts = 0;
     try {
+      // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
+      await this.overlay.deleteExpiredImports().catch(() => 0);
       for (const userId of await this.overlay.accounts()) {
         accounts += 1;
         try {
@@ -449,6 +451,12 @@ export class NativeMemoryWorker {
     }
     const failed = await this.sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`);
     let reason = failed !== null ? "the extraction failed" : "";
+    // Why, as far as the engine's own marker says (v0.5.2 fails an extraction whose output ran out of room as `budget_exhausted` and does not retry it).
+    if (failed !== null) {
+      let detail = failed;
+      try { detail = String(JSON.parse(failed)?.error ?? failed); } catch { /* the marker's text is the detail */ }
+      recordNativeExtractionFailure(detail);
+    }
     if (!reason && commit.taskId) {
       const task = await this.sessions.task(commit.userId, commit.taskId);
       if (task?.status === "failed") { reason = String(task.error ?? "the extraction failed").slice(0, 300); recordNativeExtractionFailure(task.error); }

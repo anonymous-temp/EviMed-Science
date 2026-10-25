@@ -610,6 +610,8 @@ services:
       OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS:
       OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED:
       OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS:
+      # The page's import of what another assistant remembered: offers an account may ask for in an hour; value-less so the code default (5) applies when unset.
+      OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR:
       # The turn committer: the control plane commits a conversation's engine session a few
       # seconds after an attended turn (the plugin's own threshold is never reached by an
       # ordinary conversation). Value-less so the code defaults (on; 8 s, 2 s, 4 reads, 2 at

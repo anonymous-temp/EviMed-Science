@@ -146,3 +146,16 @@ test("an account already on the list is left alone, an unregistered one is looke
   await g.worker.pass();
   assert.equal(g.stub.sent("PATCH", "/api/v1/admin/accounts/evimed/users").length, 0, "an account the engine does not know has the default");
 });
+
+// ------------------------------------------------------------------------------------------------- failures by their own reason
+
+test("an extraction that failed with budget_exhausted is counted in its own bucket, and a rate limit is another", options, async (t) => {
+  const f = await fixture(t, { extract: ({ session }) => (session.endsWith("_a") ? { fail: "Extraction output was truncated (budget_exhausted): raise vlm.max_tokens" } : session.endsWith("_b") ? "fail" : {}) });
+  await f.commitConversation("a", [{ role: "user", text: "一件事。" }]);
+  await f.commitConversation("b", [{ role: "user", text: "另一件事。" }]);
+  await f.worker.processCommits({ userId: f.userId });
+  const counts = nativeMemoryCounters().extractionFailures;
+  assert.equal(counts.budget_exhausted, 1);
+  assert.equal(counts.other, 1, "a 429 is no budget of the output");
+  assert.equal(counts.quota, 0);
+});
