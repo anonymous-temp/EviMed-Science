@@ -1386,15 +1386,17 @@ export {
   frontierItemGenre,
   isFrontierGenre,
 } from './src/frontierGenres.mjs'
-// frontierMix — 21 exports: the mix of 精选 by genre group (the owner's share ranges of 2026-10-24, the Chinese target of
+// frontierMix — 24 exports: the mix of 精选 by genre group (the owner's share ranges of 2026-10-24, the Chinese target of
 // 30 %), the merge rules (a roundup never; a news rewrite or an X post of a paper never over it; a Chinese 解读 beside
-// it), the pure selection of a day's 精选 from its scored candidates, and the replay of an exported week through it.
+// it), the pure selection of a day's 精选 from its scored candidates (a floor place asks its genre's own bar,
+// `FRONTIER_MIX_GENRE_FLOOR`), and the replay of an exported week through it.
 export {
   FRONTIER_MIX_CONGRESS_UPLIFT,
   FRONTIER_MIX_COUNTED_RULES,
   FRONTIER_MIX_DAY,
   FRONTIER_MIX_EXCLUSIONS,
   FRONTIER_MIX_FLOOR_SCORE,
+  FRONTIER_MIX_GENRE_FLOOR,
   FRONTIER_MIX_GROUP_ORDER,
   FRONTIER_MIX_GROUPS,
   FRONTIER_MIX_NEVER,
@@ -1406,6 +1408,8 @@ export {
   FRONTIER_MIX_ZH_MARGIN,
   FRONTIER_MIX_ZH_TARGET,
   frontierMixGenre,
+  frontierMixGenreFloors,
+  frontierMixGenreFloorScore,
   frontierMixGroup,
   frontierMixMergeVerdict,
   frontierMixReplay,

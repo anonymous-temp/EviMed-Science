@@ -599,6 +599,56 @@ test("selection: three a day per source, and a genre group short of its floor ta
   assert.equal(pipeline.status().mix.groups.policy.after, 1, "the operators see today's mix");
 });
 
+test("c2-fixes: a floor place under the line asks the genre's own 80th percentile of the last 30 days, read once a round from the published scores", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  // Thirty newsroom releases (行业动态 by code's genre) that the clinical score keeps under 60: the model's share runs 20 to 49.
+  const releases = [];
+  for (const [index, topic] of DISTINCT_TOPICS.entries()) {
+    releases.push(await deliver({ source_id: "c-novo", title: `${topic} [score:${20 + index}]`, summary: "N".repeat(200) }));
+  }
+  for (const delivered of releases) plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  for (let round = 0; round < 6; round += 1) await pipeline.processBatch();
+  const rows = [];
+  for (const delivered of releases) rows.push(await item(Number((await entry(delivered.id)).item_id)));
+  const scores = rows.map((row) => Number(row.score_total));
+  assert.equal(rows.every((row) => row.state === "published" && [null, "industry"].includes(row.genre)), true, "published, and of the genre code gives a newsroom (the column is the editor's when it names one)");
+  assert.ok(Math.max(...scores) < 60, `the clinical score keeps industry under the absolute floor of 60 (${Math.max(...scores)})`);
+  const sorted = [...scores].sort((a, b) => a - b);
+  const position = 0.8 * (sorted.length - 1);
+  const p80 = sorted[Math.floor(position)] + (sorted[Math.ceil(position)] - sorted[Math.floor(position)]) * (position - Math.floor(position));
+  assert.ok(p80 >= 45 && p80 < 60, `the genre's 80th percentile is the bar (${p80})`);
+  const selected = rows.filter((row) => row.selected);
+  assert.deepEqual(selected.map((row) => row.selected_rule), ["genre-floor"], "industry's floor of one place in a day of 20 is filled");
+  assert.equal(Number(selected[0].score_total), Math.max(...scores), "with the genre's best, which is under 60");
+  assert.ok(Number(selected[0].score_total) >= p80);
+  const mix = pipeline.status().mix;
+  assert.ok(Math.abs(mix.genreFloors.industry - Math.round(p80 * 100) / 100) < 0.011, `the operators see the bar a place asked: ${JSON.stringify(mix.genreFloors)}`);
+  assert.equal(pipeline.counters.mixGenreFloorFailures, 0);
+});
+
+test("c2-fixes: a month of scores that cannot be read leaves the mix at the absolute floor and is counted, never a stopped round", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const release = await deliver({ source_id: "c-novo", title: "Novo announces a trial readout [score:30]", summary: "N".repeat(200) });
+  plugin.texts.set(release.pluginEntryId, { entry_id: release.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  const realQuery = database.query.bind(database);
+  database.query = async (/** @type {string} */ sql, /** @type {any[]} */ params) => {
+    if (typeof sql === "string" && sql.includes("GROUP BY i.genre, i.platform")) throw new Error("the scores are unreadable");
+    return realQuery(sql, params);
+  };
+  try {
+    const summary = await pipeline.processBatch();
+    assert.equal(summary.published, 1, "the round went on");
+  } finally {
+    database.query = realQuery;
+  }
+  assert.equal(pipeline.counters.mixGenreFloorFailures, 1);
+  assert.deepEqual(pipeline.status().mix.genreFloors, {});
+});
+
 /**
  * Deliver named entries whose text the plugin has none of, so each proceeds with its feed summary; the name is for reading the
  * verdicts back.
