@@ -294,5 +294,7 @@ test('real V06 metric readings retain their domain null reason through selected 
  const input=selected();input.questions=input.questions.slice(0,1);input.rows=Array.from({length:50},(_,i)=>answer(`m${i}`,'q1','valid',{pool:'P2',roundKind:'baseline',facts:{brands:[{name:'Ours',ours:true,count:1}],statements:[],checks:{judgementCoverage:{status:'complete'}}}}));
  const view=presentGeoAnalysis(input,{viewId:'V06',metricId:'M-01'},context());const row=view.rows.find(row=>row.dimensions.engine==='deepseek');
  assert.equal(row.values.metric.value,100);assert.equal(row.values.metric.metric.reason,null);assert.equal(row.values.metric.reason,null);
- const exported=freezeGeoAnalysisDocument(view);const cell=JSON.parse(exported.typedTable.rows.find(item=>item.key===row.key).cells_metadata).metric;assert.equal(cell.reason,null);assert.equal(exported.canonicalMarkdown.includes('no_selected_readings'),false);
+ // The export names no reason the reading does not have, in its note column or its prose.
+ const exported=freezeGeoAnalysisDocument(view);const typed=exported.typedTable.rows[view.rows.indexOf(row)];
+ assert.equal(typed.label,row.label);assert.ok(!String(typed.cells_note??'').includes('所选范围没有读数'));assert.equal(exported.canonicalMarkdown.includes('no_selected_readings'),false);assert.equal(exported.canonicalMarkdown.includes('所选范围没有读数'),false);
 });

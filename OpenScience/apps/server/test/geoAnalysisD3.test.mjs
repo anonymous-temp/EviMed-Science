@@ -67,9 +67,14 @@ test('D3 export splits oversized exact context into bounded typed continuation r
  const view=presentGeoAnalysis(selected,{viewId:'V20'},context),document=freezeGeoAnalysisDocument(view),own=view.rows.find(row=>row.dimensions.relationship==='own');
  assert.ok(document.typedTable.rows.length>view.rows.length);assert.ok(document.typedTable.columns.length<=40);
  for(const row of document.typedTable.rows)for(const value of Object.values(row))if(typeof value==='string')assert.ok(value.length<=32767);
- const parts=document.typedTable.rows.filter(row=>row.context_parent===own.key&&row.context_field==='dimensions').sort((a,b)=>Number(a.context_part.split('/')[0])-Number(b.context_part.split('/')[0]));
- assert.deepEqual(JSON.parse(parts.map(row=>row.dimensions).join('')),own.dimensions);
- assert.equal(document.typedTable.rows.filter(row=>row.key===own.key).length,1);assert.equal(document.typedTable.rows.find(row=>row.key===own.key).answers,own.values.answers.value);
+ // The continuation rows carry the readable conditions in order, under the row's 序号; the exact context stays in the export record.
+ const number=view.rows.indexOf(own)+1,main=document.typedTable.rows.filter(row=>row.row_number===number);
+ const parts=document.typedTable.rows.filter(row=>row.context_parent===String(number)&&row.context_field==='分类与条件').sort((a,b)=>Number(a.context_part.split('/')[0])-Number(b.context_part.split('/')[0]));
+ const text=parts.map(row=>row.dimensions).join('');assert.ok(parts.length>1);
+ for(const url of urls)assert.ok(text.includes(url),url);
+ assert.ok(!text.includes('{')&&!text.includes('"'),'no JSON in a reader cell');
+ assert.equal(main.length,1);assert.equal(main[0].answers,own.values.answers.value);assert.equal(main[0].dimensions,null);
+ assert.deepEqual(document.cover.analysis.rows.find(row=>row.key===own.key).dimensions,own.dimensions);
 });
 test('V20 source filters constrain relationship annotations as well as every aggregate',()=>{
  const selected=fixture(),context=ctx();selected.rows[0].citations.push(cite('https://shared.example/a?x=2'));

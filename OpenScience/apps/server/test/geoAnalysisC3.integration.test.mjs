@@ -98,7 +98,10 @@ test('C3 SPEC repairs retain same-entity clinical support and explicit ordinal p
  const staged=await service.planContexts.stage(user,project.id,{requestKey:'c3-integrity-proof',sessionId:'c3-session',mode:'analysis',selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,intent:'explain'});
  await service.planContexts.bind(user,{id:project.projectId,userId:user.id},{requestId:'c3-integrity-proof',sessionId:'c3-session',content:[{type:'text',text:'Explain these specific supported expressions.'}],geoPlanContext:{referenceId:staged.referenceId}});
  const native=[];for(let offset=0;offset<full.page.total;offset+=20)native.push(...(await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,offset,limit:20})).rows);assert.deepEqual(native,full.rows);
- const report=freezeGeoAnalysisDocument(full);assert.ok(report.typedTable.rows.some(row=>row.dimensions.includes('supports_nonrecommendation')));assert.ok(report.canonicalMarkdown.includes('positionToken'));
+ // The supported non-recommendation and the stated order reach the reader in words; the record keeps their codes and tokens.
+ const report=freezeGeoAnalysisDocument(full);assert.ok(report.typedTable.rows.some(row=>row.dimensions?.includes('不推荐依据')&&row.dimensions.includes('支持不推荐')));
+ assert.ok(report.typedTable.rows.every(row=>!String(row.dimensions??'').includes('supports_nonrecommendation')));
+ assert.ok(JSON.stringify(report.cover.analysis.rows).includes('supports_nonrecommendation'));
  if(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR}/document.json`,JSON.stringify({...report,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
 });
 
@@ -122,6 +125,8 @@ test('C3 quality conflicts keep the exact expression with null order across asse
  const staged=await service.planContexts.stage(user,project.id,{requestKey:'c3-commutative-order',sessionId:'c3-session',mode:'analysis',selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,intent:'explain'});
  await service.planContexts.bind(user,{id:project.projectId,userId:user.id},{requestId:'c3-commutative-order',sessionId:'c3-session',content:[{type:'text',text:'Explain uncertain recommendation order.'}],geoPlanContext:{referenceId:staged.referenceId}});
  const native=[];for(let offset=0;offset<full.page.total;offset+=20)native.push(...(await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,offset,limit:20})).rows);assert.deepEqual(native,full.rows);
- const report=freezeGeoAnalysisDocument(full),frozen=report.typedTable.rows.find(row=>row.key===expression.key);assert.equal(JSON.parse(frozen.dimensions).explicitPosition,null);
+ const report=freezeGeoAnalysisDocument(full),frozen=report.typedTable.rows.find(row=>row.row_number===full.rows.findIndex(row=>row.key===expression.key)+1);
+ assert.ok(frozen&&!String(frozen.dimensions??'').includes('明确推荐次序'),'a conflicted order is never printed as one');
+ assert.equal(report.cover.analysis.rows.find(row=>row.key===expression.key).dimensions.explicitPosition,null);
  if(process.env.GEO_C3_QUALITY_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_QUALITY_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_QUALITY_RECEIPTS_DIR}/document.json`,JSON.stringify({...report,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
 });

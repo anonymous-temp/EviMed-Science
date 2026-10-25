@@ -96,12 +96,15 @@ test('history reads real producers, exact cohorts and bound attempts under tenan
   }
   const full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:live.selection.reference,view:live.view,expectedDigest:live.digest},{service});
   const document=freezeGeoAnalysisDocument(full);assert.equal(document.cover.analysis.digest,live.digest);
-  for(const row of full.rows){
-   const typed=document.typedTable.rows.find(item=>item.key===row.key);
-   const parts=document.typedTable.rows.filter(item=>item.context_parent===row.key&&item.context_field==='dimensions');
+  // Each row's typed conditions are reader words (continued under its 序号 when long); the exact dimensions are the record's.
+  assert.deepEqual(document.cover.analysis.rows,full.rows);
+  for(const [index,row] of full.rows.entries()){
+   const typed=document.typedTable.rows.find(item=>item.row_number===index+1);
+   const parts=document.typedTable.rows.filter(item=>item.context_parent===String(index+1)&&item.context_field==='分类与条件');
    const dimensions=typed.dimensions??parts.map(item=>item.dimensions).join('');
-   assert.deepEqual(JSON.parse(dimensions),row.dimensions);
+   assert.equal(typed.label,row.label);assert.ok(!String(dimensions).includes('{"'),'no record dump in a reader cell');
   }
+  if(name==='business')assert.ok(document.canonicalMarkdown.includes('Original preserved answer'),'the kept answers are read in the document');
   assert.ok(document.typedTable.rows.every(row=>Object.values(row).every(value=>typeof value!=='string'||Array.from(value).length<=32767)));
   if(name==='business'){
    const objects=full.rows.flatMap(row=>row.dimensions.objects),before=objects.filter(item=>item.unit==='history_answer_refs'&&item.side==='before');

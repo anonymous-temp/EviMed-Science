@@ -157,5 +157,13 @@ class TypedSelectedDataTest(unittest.TestCase):
             self.assertIn("no_data", (root / "output/document.html").read_text())
 
 
+class ReaderBasisTest(unittest.TestCase):
+    def test_a_reader_basis_is_listed_in_words_and_the_frozen_record_is_not(self):
+        cover = {"analysis": {"digest": "exact-digest", "selection": {"reference": "gsel_exact"}}, "basis": [{"label": "范围", "value": "最近一轮测量"}]}
+        self.assertEqual(renderer.reader_basis(cover), [("范围", "最近一轮测量")])
+        self.assertIsNone(renderer.reader_basis({"digest": "exact-digest"}), "a cover without a reader basis keeps the frozen dump")
+        self.assertIsNone(renderer.reader_basis({"basis": [{"label": "范围", "value": {"round": "r1"}}]}), "only labelled words, never a record")
+
+
 if __name__ == "__main__":
     unittest.main()

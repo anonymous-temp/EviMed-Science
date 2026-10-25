@@ -90,7 +90,9 @@ test('source prose exports use compact readable tables while exact source metada
  assert.ok(!document.canonicalMarkdown.includes('(状态 known;'),'printed counts must not repeat the same state prose in every cell');
  assert.match(document.canonicalMarkdown,/## 引用与页面/);assert.match(document.canonicalMarkdown,/## 共同出现与采样时间/);
  assert.deepEqual(document.cover.analysis.rows,full.rows);
- assert.equal(document.typedTable.rows.length,252);assert.ok(document.typedTable.rows.every(row=>JSON.parse(row.dimensions).originalUrls.length));
+ // The typed rows name every original address in words; the exact source context is the export record's.
+ assert.equal(document.typedTable.rows.length,252);assert.ok(document.typedTable.rows.every((row,index)=>full.rows[index].dimensions.originalUrls.every(url=>row.dimensions.includes(url))&&row.dimensions.includes('原始地址：')));
+ assert.ok(document.typedTable.rows.every(row=>!row.dimensions.includes('{')));
  for(const row of full.rows)assert.ok(document.canonicalMarkdown.includes(row.dimensions.sourceKey));
 });
 

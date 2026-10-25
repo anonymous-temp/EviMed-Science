@@ -193,7 +193,9 @@ test('V06 valid and empty metric reasons agree across authorized runtime and exp
  const metricCells=view.rows.map(row=>row.values.metric);assert.ok(metricCells.some(cell=>cell.value===100&&cell.reason===null));
  assert.ok(metricCells.filter(cell=>cell.value===null).every(cell=>cell.reason===cell.metric?.reason));
  const exports=[];await service.selectedExport(user,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,formats:['csv']},{requestFrozen:async(...args)=>{exports.push(args);return {};}});
- const frozen=exports[0][1].cover.analysis;assert.equal(frozen.digest,view.digest);assert.ok(exports[0][1].typedTable.rows.some(row=>JSON.parse(row.cells_metadata).metric.reason===null));
+ // A reading with no reason carries none in its note; the record keeps the exact null reason.
+ const frozen=exports[0][1].cover.analysis;assert.equal(frozen.digest,view.digest);assert.ok(frozen.rows.some(row=>row.values.metric.reason===null&&row.values.metric.value===100));
+ const typed=exports[0][1].typedTable.rows;assert.ok(typed.some((row,index)=>view.rows[index].values.metric.value===100&&!/原因|说明/.test(String(row.cells_note??''))&&row.metric===100));
 });
 
 test('C1 exact matrix cells and same-day actual round members retain native/export/authorization parity',options,async()=>{
@@ -288,7 +290,9 @@ test('same-day round chronology is canonical across authorized pages, exact memb
     assert.deepEqual(members.items.map(item => item.id).sort(), questions.map(question => `${point.dimensions.roundId}-${question.id}`).sort());
   }
   const document = freezeGeoAnalysisDocument(full);
-  assert.deepEqual(document.typedTable.rows.filter(row => row.period === 'round').map(row => JSON.parse(row.dimensions).roundId), expectedRounds);
+  assert.deepEqual(document.cover.analysis.rows.filter(row => row.dimensions.period === 'round').map(row => row.dimensions.roundId), expectedRounds);
+  assert.deepEqual(document.typedTable.rows.filter(row => row.period === '轮次').map(row => row.label), full.rows.filter(row => row.dimensions.period === 'round').map(row => row.label),
+    'the typed rows keep the chronology in the reader\'s words');
   const exports = [];
   await service.selectedExport(user, project, { ...input, formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, { requestFrozen: async (...args) => { exports.push(args); return { id: 'chronology-export' }; } });
   assert.deepEqual(exports[0][1].typedTable.rows, document.typedTable.rows);
@@ -347,7 +351,7 @@ test('quality display metadata shares exact absent/floor cohorts and pool-qualif
   }
   const document = freezeGeoAnalysisDocument(full);
   assert.deepEqual(document.cover.analysis.chart, full.chart);
-  assert.ok(document.typedTable.rows.every(row => JSON.parse(row.dimensions).groupName === 'Risk group · 原始分类' && JSON.parse(row.dimensions).pool === 'P4'));
+  assert.ok(document.typedTable.rows.every(row => row.dimensions.includes('问题群：Risk group · 原始分类') && row.dimensions.includes('问句池：风险监测类') && !row.dimensions.includes('P4')));
   const requests = [];
   await service.selectedExport(user, project, { selectionRef: view.selection.reference, view: view.view, expectedDigest: view.digest, formats: ['csv', 'xlsx', 'docx', 'pdf', 'html'] }, { requestFrozen: async (...args) => { requests.push(args); return { id: 'quality-export' }; } });
   assert.deepEqual(requests[0][1].typedTable, document.typedTable); assert.equal(requests[0][1].revision, view.digest);

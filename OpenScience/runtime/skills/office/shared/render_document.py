@@ -165,6 +165,19 @@ def pdf(html_text: str, output: Path) -> None:
             browser.close()
 
 
+def reader_basis(cover) -> list | None:
+    """The basis a reader sees, when the producer wrote one: labelled lines (`cover.basis`), never the frozen record beside them."""
+    basis = cover.get("basis") if isinstance(cover, dict) else None
+    if not isinstance(basis, list) or not basis or len(basis) > 200:
+        return None
+    rows = []
+    for item in basis:
+        if not isinstance(item, dict) or not isinstance(item.get("label"), str) or not isinstance(item.get("value"), str):
+            return None
+        rows.append((item["label"][:200], item["value"][:32000]))
+    return rows
+
+
 def write_typed_table(document: dict, fmt: str, target: Path) -> None:
     """Write typed constants; never guess IDs, execute formulas or collapse null to zero."""
     table = document.get("typedTable")
@@ -202,8 +215,9 @@ def write_typed_table(document: dict, fmt: str, target: Path) -> None:
                 writer.writerow([safe(row.get(col["key"])) for col in columns])
     else:
         import xlsxwriter
+        basis = reader_basis(document.get("cover", {}))
         with xlsxwriter.Workbook(target, {"strings_to_formulas": False, "strings_to_urls": False}) as book:
-            sheet = book.add_worksheet("Selected data")
+            sheet = book.add_worksheet("所选数据" if basis is not None else "Selected data")
             for index, col in enumerate(columns):
                 sheet.write_string(0, index, col["label"])
             for row_index, row in enumerate(rows, 1):
@@ -217,10 +231,17 @@ def write_typed_table(document: dict, fmt: str, target: Path) -> None:
                         sheet.write_string(row_index, col_index, value)
             sheet.freeze_panes(1, 0)
             sheet.autofilter(0, 0, len(rows), len(columns)-1)
-            metadata = book.add_worksheet("Basis")
-            raw = json.dumps(document.get("cover", {}), ensure_ascii=False, sort_keys=True)
-            for index in range(0, len(raw), 32000):
-                metadata.write_string(index // 32000, 0, raw[index:index+32000])
+            if basis is not None:
+                # A document written for readers lists its basis in words; the frozen record stays in the export, not the sheet.
+                metadata = book.add_worksheet("依据")
+                for index, (label, value) in enumerate(basis):
+                    metadata.write_string(index, 0, label)
+                    metadata.write_string(index, 1, value)
+            else:
+                metadata = book.add_worksheet("Basis")
+                raw = json.dumps(document.get("cover", {}), ensure_ascii=False, sort_keys=True)
+                for index in range(0, len(raw), 32000):
+                    metadata.write_string(index // 32000, 0, raw[index:index+32000])
 
 
 def render(document: dict, root: Path, output: Path) -> dict:

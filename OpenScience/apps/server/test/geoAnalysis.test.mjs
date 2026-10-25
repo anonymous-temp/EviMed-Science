@@ -36,7 +36,12 @@ test('frozen export includes every row, exact metadata and typed null states', (
   assert.equal(frozen.cover.analysis.digest,view.digest);
   assert.equal(frozen.typedTable.rows[0].current,0);
   assert.equal(frozen.typedTable.rows[0].previous,null);
-  assert.equal(frozen.typedTable.rows[0].previous_state,'no_data');
+  assert.equal(frozen.typedTable.rows[0].previous_state,'无数据');
+  // The record's references and codes stay in the export record, never in a column a reader opens (2026-10-25).
+  const keys=frozen.typedTable.columns.map(column=>column.key);
+  for(const machine of ['selection_ref','analysis_digest','data_revision','method','counting_rule','denominator_rule','contextual_basis','key','metricId'])assert.ok(!keys.includes(machine),machine);
+  assert.ok(!frozen.canonicalMarkdown.includes(view.digest)&&!frozen.canonicalMarkdown.includes(view.selection.reference));
+  assert.ok(frozen.cover.basis.some(entry=>entry.label==='范围'));
 });
 
 test('same-named groups retain distinct chart identities and numeric readings',async()=>{
@@ -56,18 +61,16 @@ test('deterministic reports retain metric scale, numeric states, missing reasons
   input.computed.cells=[{...cell(null,'not_measurable'),metricId:'M-08',scope:'engine',engine:'baidu',reason:'citations_without_links',numerator:null,denominator:50,members:{...cell(0).members,unit:'answers'}}];
   const view=presentGeoAnalysis(input,{viewId:'V01',dimension:'engine',metricId:'M-08'});
   const frozen=freezeGeoAnalysisDocument(view);
-  assert.equal(frozen.typedTable.rows[0].current_reason,'citations_without_links');
-  assert.equal(frozen.typedTable.rows[0].metric_unit,'percent');
+  // The reason, scale and member unit are named in words; the codes stay in the export record.
+  assert.equal(frozen.typedTable.rows[0].current_reason,'引用没有可测的链接');
+  assert.equal(frozen.typedTable.rows[0].metric_unit,'百分比');
+  assert.equal(frozen.typedTable.rows[0].current_unit,'回答');
   assert.match(frozen.canonicalMarkdown,/引用不可测/);
-  assert.match(frozen.canonicalMarkdown,/citations_without_links/);
-  assert.match(frozen.canonicalMarkdown,/percent/);
-  assert.match(frozen.canonicalMarkdown,/answers/);
-  assert.match(frozen.canonicalMarkdown,/unknown/);
-  for(const [metricId,value,unit,expected] of [['M-01S',0,'percent','0%'],['M-19',12.5,'index','12.5'],['M-07',0,'count','0']]) {
+  for(const code of ['citations_without_links','percent','answers','unknown','not_measurable'])assert.ok(!frozen.canonicalMarkdown.includes(code),code);
+  for(const [metricId,value,unit,expected] of [['M-01S',0,'百分比','0%'],['M-19',12.5,'指数','12.5'],['M-07',0,'计数','0']]) {
     input.computed.cells=[{...cell(value),metricId}];
     const report=freezeGeoAnalysisDocument(presentGeoAnalysis(input,{viewId:'V01',metricId}));
     assert.equal(report.typedTable.rows[0].metric_unit,unit);
-    assert.ok(report.canonicalMarkdown.includes(unit));
     assert.ok(report.canonicalMarkdown.includes(expected));
   }
 });

@@ -34,6 +34,8 @@ before(async () => {
     await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured,original_id) SELECT 'e1-q'||n,$1,$2,'e1-g'||least(n,2),least(n,2),'P2','Original?',true,'0007' FROM generate_series(1,3)n", [user.id, project.id]);
     await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface) SELECT 'e1-r'||n,$1,$2,'baseline','done',n,'{deepseek}','2026-10-01','{\"mode\":\"web\"}' FROM generate_series(1,2)n", [user.id, project.id]);
     await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES('e1-s',$1,$2,'e1-r1','e1-q1','deepseek','2026-10-01','valid','Original answer','{\"mode\":\"web\"}')", [user.id, project.id]);
+    // The version-2 round heard one answer: a round that heard none is in no default selection (2026-10-25), and e1-q3 stays unsampled.
+    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES('e1-s2',$1,$2,'e1-r2','e1-q2','deepseek','2026-10-01','valid','Second version answer','{\"mode\":\"web\"}')", [user.id, project.id]);
     await database.query("INSERT INTO evimed_frontier.evidence_zones(id,user_id,title,state) VALUES('e1-zone',$1,'Evidence','draft')", [user.id]);
     await store.query("UPDATE evimed_geo.projects SET product_zone_id='e1-zone' WHERE id=$1", [project.id]);
     project.productZoneId = 'e1-zone';
@@ -55,7 +57,8 @@ test('V10 exact cards, immutable associations, unsampled questions, complete mem
     assert.equal(old.values.verifiedClaims.value, 1);
     assert.equal(old.values.questions.value, 1);
     assert.equal(fresh.values.questions.value, 2);
-    assert.equal(fresh.values.answers.value, 0);
+    assert.equal(fresh.values.answers.value, 1);
+    assert.equal(fresh.values.answeredQuestions.value, 1, 'one of the version-2 questions is still unsampled');
     assert.equal(old.values.articles.value, 1);
     assert.equal(old.values.resultVersions.value, 2);
     assert.equal(old.values.publications.value, 1);
@@ -108,7 +111,11 @@ test('V10 reads more than 2000 articles, retains different IDs with identical ti
     const request={requestId:'e1-wide-request',sessionId:'e1-wide-session',content:[{type:'text',text:'Explain.'}],geoPlanContext:{referenceId:staged.referenceId}};await adapter.prepare(user,{id:project.projectId,userId:user.id},request);await adapter.bind(user,{id:project.projectId,userId:user.id},request);
     assert.deepEqual((await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,limit:50})).rows,full.rows);
 
-    assert.ok(doc.typedTable.rows.length > full.rows.length);
+    // The reader's table counts every kept article; their identities (no title rides in the row) stay in the export record.
+    const number = full.rows.findIndex(r => r.dimensions.groupId === 'e1-g1') + 1, typed = doc.typedTable.rows;
+    const text = [typed.find(r => r.row_number === number)?.dimensions ?? '', ...typed.filter(r => r.context_parent === String(number)).map(r => r.dimensions ?? '')].join('');
+    assert.equal(typed.find(r => r.row_number === number).articles, 2002);
+    assert.ok(!text.includes('e1-many-') && !doc.canonicalMarkdown.includes('e1-many-'));
     assert.ok(doc.typedTable.columns.length <= 40);
     assert.ok(JSON.stringify(doc.cover.analysis).includes('e1-many-2001'));
     assert.ok(!doc.canonicalMarkdown.includes('"objects"'));
