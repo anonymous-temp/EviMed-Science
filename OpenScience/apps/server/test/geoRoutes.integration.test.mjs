@@ -83,9 +83,10 @@ before(async () => {
     projects: {
       create: async (_user, name) => ({ id: `p-${++projectCounter}`, name }),
       bindSession: async () => ({ sessionId: "geo-session-1", bound: true }),
-      // Like the server's lookup: the recorded conversation while it exists (here: always, unless the test's hook says otherwise).
-      conversationSessionId: async (/** @type {any} */ user, /** @type {string} */ projectId, /** @type {string | null} */ recorded) =>
-        (hooks.conversation ? hooks.conversation(user, projectId, recorded) : recorded ?? "geo-session-1"),
+      // The composition's lookup of the project's conversation for this reader (`GeoNativeAuthority.readPrimary`): here the one the
+      // project was made with, unless the test's hook answers otherwise.
+      conversationSessionId: async (/** @type {any} */ user, /** @type {string} */ geoId, /** @type {unknown[]} */ ...rest) =>
+        (hooks.conversation ? hooks.conversation(user, geoId, ...rest) : "geo-session-1"),
       programmeRuns: async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => (hooks.programmeRuns ? hooks.programmeRuns(ownerId, projectId) : []),
     },
     get orchestrator() { return hooks.orchestrator; },
@@ -252,28 +253,30 @@ test("creating a project makes the control-plane project, its GEO row and a boun
   refused(await call("POST", "/api/geo/projects", { body: { brandName: "a", tier: "1" } }), 400, "geo_payload_invalid");
 });
 
-test("a project keeps the conversation it was made with; one made before that was recorded finds its oldest and keeps it", options, async () => {
+test("the page's conversation is the composition's answer for the reader and the GEO project; the route records nothing and a failed lookup is none", options, async () => {
+  // Which conversation a project keeps (B6) is the GEO authority's (`GeoNativeAuthority.readPrimary`, its recorded or oldest own
+  // conversation registered once as the primary): geoNativeComposition.integration.test.mjs holds it. The route only asks.
   const created = (await call("POST", "/api/geo/projects", { body: { brandName: "替尔泊肽" } })).payload.data;
-  const page = async (/** @type {string} */ user = ALICE) => (await call("GET", `/api/geo/projects/${created.id}`, { user })).payload.data;
+  const row = async () => (await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id;
+  const recorded = await row();
+  /** @type {any[]} */ const asked = [];
   try {
-    // Another conversation of the project was touched last; the project's own is still the one it was made with.
-    hooks.conversation = async (/** @type {any} */ _user, /** @type {string} */ _project, /** @type {string | null} */ recorded) => recorded ?? "geo-sibling-newest";
-    assert.equal((await page()).sessionId, "geo-session-1");
-    // A project made before the conversation was recorded: the lookup's answer (its oldest own conversation) is taken and kept.
-    await database.query("UPDATE evimed_geo.projects SET conversation_session_id = NULL WHERE id = $1", [created.id]);
-    hooks.conversation = async () => "geo-oldest-own";
-    assert.equal((await page()).sessionId, "geo-oldest-own");
-    hooks.conversation = async (/** @type {any} */ _user, /** @type {string} */ _project, /** @type {string | null} */ recorded) => recorded ?? "geo-sibling-newest";
-    assert.equal((await page()).sessionId, "geo-oldest-own", "the owner's first read recorded it");
-    assert.equal((await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id,
-      "geo-oldest-own");
-    // A second record does not move it.
-    assert.equal(await service.recordConversation(created.id, "geo-other"), "geo-oldest-own");
-    // The person deleted the recorded conversation: the lookup answers the oldest they still have, and that is recorded in its place.
-    hooks.conversation = async () => "geo-oldest-left";
-    assert.equal((await page()).sessionId, "geo-oldest-left", "a deleted conversation is not opened");
-    assert.equal((await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id,
-      "geo-oldest-left");
+    hooks.conversation = async (/** @type {any} */ user, /** @type {string} */ geoId, /** @type {unknown} */ ...rest) => {
+      asked.push([user.id, geoId, rest.length]);
+      return user.id === ALICE ? "geo-primary" : null;
+    };
+    assert.equal((await call("GET", `/api/geo/projects/${created.id}`)).payload.data.sessionId, "geo-primary");
+    assert.deepEqual(asked, [[ALICE, created.id, 0]], "asked for the reader and the GEO project, and nothing the route read itself");
+    assert.equal(await row(), recorded, "the read writes nothing on the project's row");
+    // Another account is refused before the lookup is asked.
+    refused(await call("GET", `/api/geo/projects/${created.id}`, { user: MALLORY }), 404, "geo_project_not_found");
+    assert.equal(asked.length, 1);
+    // A lookup that fails is no conversation, never a failed page: the next open settles it.
+    hooks.conversation = async () => { throw Object.assign(new Error("inventory unavailable"), { status: 503, code: "product_state_unavailable" }); };
+    const page = await call("GET", `/api/geo/projects/${created.id}`);
+    assert.equal(page.status, 200, JSON.stringify(page.payload));
+    assert.equal(page.payload.data.sessionId, null);
+    assert.equal(page.payload.data.name, "替尔泊肽");
   } finally {
     hooks.conversation = null;
   }
@@ -605,19 +608,21 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
   hooks.exporter = null;
 });
 
-test("the AI-run record lists the programme's runs by what they were, newest as the hook gives them, to anyone who may read the project", options, async () => {
+test("the AI-run record lists the programme's runs by what they were, newest first, a page at a time, to anyone who may read the project", options, async () => {
   const { project } = await seededProject();
   const id = project.id;
   // Nothing composed: an empty record, not an error.
-  assert.deepEqual((await call("GET", `/api/geo/projects/${id}/runs`)).payload.data, { runs: [] });
+  assert.deepEqual((await call("GET", `/api/geo/projects/${id}/runs`)).payload.data, { runs: [], total: 0, nextCursor: null });
   /** @type {any[]} */ const asked = [];
   hooks.programmeRuns = async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => {
     asked.push([ownerId, projectId]);
+    // In no particular order, one of them twice: the record orders them itself and lists a run once.
     return [
-      { sessionId: "s-4", runId: "run-4", reason: "geo:content", status: "running", startedAt: "2026-10-16T08:00:00.000Z" },
-      { sessionId: "s-3", runId: "run-3", reason: "geo:export-weekly", status: "succeeded", startedAt: "2026-10-15T08:00:00.000Z" },
       { sessionId: "s-2", runId: "run-2", reason: "geo:evidence", status: "failed", startedAt: "2026-10-14T08:00:00.000Z" },
       { sessionId: "s-1", runId: "run-1", reason: "geo:somewhere-new", status: "canceled", startedAt: null },
+      { sessionId: "s-4", runId: "run-4", reason: "geo:content", status: "running", startedAt: "2026-10-16T08:00:00.000Z" },
+      { sessionId: "s-3", runId: "run-3", reason: "geo:export-weekly", status: "succeeded", startedAt: "2026-10-15T08:00:00.000Z" },
+      { sessionId: "s-4", runId: "run-4", reason: "geo:content", status: "running", startedAt: "2026-10-16T08:00:00.000Z" },
     ];
   };
   try {
@@ -628,9 +633,22 @@ test("the AI-run record lists the programme's runs by what they were, newest as 
       ["s-3", "生成周报", "finished", "2026-10-15T08:00:00.000Z"],
       ["s-2", "整理产品证据", "stopped", "2026-10-14T08:00:00.000Z"],
       ["s-1", "推进项目", "stopped", null],
-    ], "a sentence from the route reason (old runs and new), a closed state word, and a time");
+    ], "a sentence from the route reason (old runs and new), a closed state word, and a time; newest first, an undated run last");
+    assert.deepEqual([record.total, record.nextCursor], [4, null], "one page holds them all");
     // No row carries the instruction a run was sent with, a route reason or an id the page would print.
     assert.equal(JSON.stringify(record).includes("geo:"), false);
+    // A page at a time: the cursor names where the next starts, and following it reaches every run once.
+    const first = (await call("GET", `/api/geo/projects/${id}/runs?limit=3`)).payload.data;
+    assert.deepEqual([first.runs.map((/** @type {any} */ run) => run.runId), first.total], [["run-4", "run-3", "run-2"], 4]);
+    assert.equal(typeof first.nextCursor, "string");
+    const next = (await call("GET", `/api/geo/projects/${id}/runs?limit=3&cursor=${encodeURIComponent(first.nextCursor)}`)).payload.data;
+    assert.deepEqual([next.runs.map((/** @type {any} */ run) => run.runId), next.total, next.nextCursor], [["run-1"], 4, null]);
+    // A page that cannot be read is refused by name: a limit out of range, a field the page does not take, a cursor of another project.
+    for (const query of ["limit=0", "limit=101", "limit=x", "limit=2&limit=3", "offset=2", `cursor=${"x".repeat(12)}`]) {
+      refused(await call("GET", `/api/geo/projects/${id}/runs?${query}`), 400, "geo_payload_invalid");
+    }
+    const other = (await seededProject()).project;
+    refused(await call("GET", `/api/geo/projects/${other.id}/runs?limit=3&cursor=${encodeURIComponent(first.nextCursor)}`), 400, "geo_payload_invalid");
     // The ability is reading; another account's project, or none, is a 404 like every other route.
     refused(await call("GET", `/api/geo/projects/${id}/runs`, { user: MALLORY }), 404, "geo_project_not_found");
     refused(await call("GET", `/api/geo/projects/gp_nothing/runs`), 404, "geo_project_not_found");
