@@ -263,6 +263,29 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
   assert.equal(replay.counts.failed, 0);
 });
 
+test("a 讲错我方 the owner's inbox refused answers false, so it is tried again; nothing to deliver is final (2026-10-25)", async () => {
+  const errorRow = { id: "e9", geo_project_id: "geo_1", user_id: "u1", engine: "deepseek", severity: "S4", statement: "把玛仕度肽说成可以口服", last_snapshot_id: "s9" };
+  const projectRow = { id: "geo_1", user_id: "u1", project_id: "mashidu", product: project.product, tier: "2" };
+  /** @param {{ error?: any, project?: any }} world */
+  const rowStore = ({ error = errorRow, project: geo = projectRow }) => ({ async query(/** @type {string} */ sql) {
+    if (sql.includes("FROM evimed_geo.errors WHERE id")) return { rows: error ? [error] : [] };
+    if (sql.includes("FROM evimed_geo.projects")) return { rows: geo ? [geo] : [] };
+    return { rows: [] };
+  } });
+  const event = { kind: "wrong_ours", errorId: "e9", idempotencyKey: "geo:wrong_ours:e9:first" };
+  const down = { async create() { throw Object.assign(new Error("inbox down"), { code: "notification_unavailable" }); } };
+  assert.equal(await createGeoNotifier({ notifications: down, store: rowStore({}) }).measurement(event), false, "refused: try again");
+  const up = { async create() { return { id: "n1" }; } };
+  assert.deepEqual(await createGeoNotifier({ notifications: up, store: rowStore({}) }).measurement(event), { id: "n1" });
+  for (const [why, notifier] of /** @type {const} */ ([
+    ["no inbox on this deployment", createGeoNotifier({ notifications: null, store: rowStore({}) })],
+    ["the error is gone", createGeoNotifier({ notifications: down, store: rowStore({ error: null }) })],
+    ["the project is deleted", createGeoNotifier({ notifications: down, store: rowStore({ project: null }) })],
+  ])) {
+    assert.notEqual(await notifier.measurement(event), false, why);
+  }
+});
+
 test("a notice reaches the owner and the members whose roles need it, one inbox item to a person (D-29)", async () => {
   // The owner (u1), a medical reviewer (the only member who can clear a safety stop), an editor, a viewer, and a person holding two roles.
   const members = [

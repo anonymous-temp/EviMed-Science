@@ -7,6 +7,11 @@
  * round was planned with or what the metrics job noted on it: a round measured before the balance was recorded has them too, and a
  * round whose engine was paused names the engines that actually spoke. Nothing is stored; the key follows the data.
  *
+ * An engine whose jobs the round skipped (paused, or no channel) is not in the key even when it answered some questions first: the
+ * metrics job leaves every answer of such an engine out of the round's cells (`geoMetricsJob.measureRound`), so its cells are over the
+ * other engines. 2026-10-25: a round in which 豆包 answered three questions and was then paused carried 豆包 in its key, read as
+ * comparable with a baseline that heard all five engines, and a four-engine rate was set against a five-engine one as a change.
+ *
  * @module geoCoverage
  */
 
@@ -35,6 +40,8 @@ export async function roundCoverages(db, roundIds) {
       coalesce(array_agg(DISTINCT coalesce(q.pool, g.pool)) FILTER (WHERE s.id IS NOT NULL AND coalesce(q.pool, g.pool) IS NOT NULL), '{}') AS pools
     FROM evimed_geo.rounds r
       LEFT JOIN evimed_geo.snapshots s ON s.round_id = r.id AND s.status IN ('valid', 'refusal')
+        AND NOT EXISTS (SELECT 1 FROM evimed_geo.probe_jobs j WHERE j.round_id = r.id AND j.engine = s.engine AND j.status = 'skipped'
+          AND j.error_code IN ('engine_paused', 'engine_unavailable'))
       LEFT JOIN evimed_geo.questions q ON q.id = s.question_id
       LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id
     WHERE r.id = ANY($1::text[]) GROUP BY r.id`, [ids]);

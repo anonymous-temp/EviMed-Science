@@ -15,8 +15,9 @@
  *     [--no-materials] [--no-collected]             skip attaching corrections (G7) / dating real phrasings (G9)
  *
  * Every run ends by counting the project's stored answers again under the
- * registry as it now stands and re-measuring every round (G2) — no model is
- * asked. It reads the database from the same sources the server does and
+ * registry as it now stands and re-measuring every round that heard an
+ * answer (G2) — no model is asked — and removes the empty cells of rounds
+ * that heard none (`emptyRounds`, 2026-10-25). It reads the database from the same sources the server does and
  * prints one JSON object with counts and the headline numbers, never a
  * record's text. Run it after the release that carries `geoDataFixes.mjs`.
  */

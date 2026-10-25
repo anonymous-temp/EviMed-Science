@@ -274,7 +274,8 @@ describe("方案: 假设", () => {
     expect(rows[0]).not.toHaveTextContent("tier");
     expect(rows[1]).toHaveTextContent("豆包没有有效回答，本周期只写“未测”");
     await userEvent.click(within(rows[1]).getByRole("button", { name: "修改" }));
-    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1", sessionId: "ses_geo_1" }, expect.stringContaining("豆包没有有效回答"));
+    // No conversation named: the hook opens the one the page holds (`useOpenGeoConversation`).
+    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1" }, expect.stringContaining("豆包没有有效回答"));
   });
 });
 

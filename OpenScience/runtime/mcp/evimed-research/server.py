@@ -2237,14 +2237,18 @@ def _dispatch(name, arguments, execution_context=None):
             # Three different next steps: a malformed call is the run's to fix,
             # an outage may pass, and a module this conversation does not have
             # is simply not there -- the work goes on without it.
-            if error.code.endswith("_invalid"):
-                stop_reason, next_action = "invalid_input", "Correct the named field and call again."
-            elif error.retryable:
-                stop_reason, next_action = "retry", "Retry once, then go on and say what could not be read or written."
+            # `stop_reason()` keeps the gateway's credential refusals out of "the
+            # run got a field wrong", and a write the store refused or one too
+            # large in it, where it belongs.
+            stop_reason = error.stop_reason()
+            if error.code == "geo_request_too_large":
+                next_action = "Send it again in smaller writes; nothing of this one was stored."
+            elif stop_reason == "invalid_input":
+                next_action = "Correct the named field and call again."
+            elif stop_reason == "retry":
+                next_action = "Retry once, then go on and say what could not be read or written."
             else:
-                stop_reason, next_action = "unsupported", (
-                    "Go on without the platform's GEO data and say so; never invent a measured number or a real phrasing."
-                )
+                next_action = "Go on without the platform's GEO data and say so; never invent a measured number or a real phrasing."
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result

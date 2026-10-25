@@ -170,6 +170,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
    * One person's inbox item. Their own refusal is their own loss: it is counted and audited, and the next person is still told. The
    * item is filed under the control-plane project only for the owner: the inbox holds an item's project to the recipient's own
    * (a foreign key on user and project), and a member's project is the owner's. The item opens the GEO page by its source either way.
+   * A refusal answers `false`, never `null`: the caller tells "the inbox did not take it, try again" from "there was nothing to send".
    * @param {any} project @param {string} kind @param {Record<string, any>} input @param {string} userId
    */
   async function deliver(project, kind, input, userId) {
@@ -187,7 +188,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       counts.failed += 1;
       await audit("geo.notice", "failed", { userId, projectId: project.projectId,
         code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "notification_unavailable", detail: kind });
-      return null;
+      return false;
     }
   }
 
@@ -250,8 +251,9 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
     diagnosisEmpty(project, { roundId }) {
       return send(project, "diagnosis_done", {
         title: `${geoProductName(project)}：诊断没有测到回答`,
-        body: "这一轮没有从任何 AI 引擎拿到有效回答，已通知管理员检查探测通道。处理好后，在诊断页点“让 AI 做”重新测。",
-        severity: "attention", source: source(project.id, "diagnosis"), idempotencyKey: `geo:${project.id}:diagnosis-empty:${roundId}`,
+        // The way to measure again is the overview's 「需要你」 row of the failed step (「接着做」): the notice opens there and names it.
+        body: "这一轮没有从任何 AI 拿到有效回答，平台已在处理。测量恢复后，在项目总览的“需要你”里点“接着做”重新测一轮。",
+        severity: "attention", source: source(project.id, "overview"), idempotencyKey: `geo:${project.id}:diagnosis-empty:${roundId}`,
       }, HEARD_BY.progress);
     },
 
@@ -355,6 +357,13 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
      * 讲错我方 notice read from the error row; the market's text change is
      * 5c; an event about the machinery (an engine paused, the probe host
      * down) goes to operators only.
+     *
+     * For an error it answers `false` exactly when the owner's inbox refused
+     * the notice, and the measurement then leaves the error unnotified to try
+     * again. Anything else — the item, an earlier delivery of the same key, no
+     * inbox on this deployment, or an error or project that is gone — is
+     * final. Before 2026-10-25 a refusal answered `null` like the rest, and an
+     * S3/S4 notice the inbox did not take was recorded as told.
      * @param {Record<string, any>} event
      */
     async measurement(event) {

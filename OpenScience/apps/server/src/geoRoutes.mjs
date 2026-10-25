@@ -179,7 +179,7 @@ function money(value, field, zero = false) {
  *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
  *     rename?: (ownerId: string, projectId: string, name: string) => Promise<unknown>,
  *     bindSession: (user: any, projectId: string) => Promise<{ sessionId: string, bound: boolean }>,
- *     conversationSessionId?: (user: any, projectId: string) => Promise<string | null>,
+ *     conversationSessionId?: (user: any, projectId: string, recorded?: string | null) => Promise<string | null>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
@@ -306,7 +306,16 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 2) {
       if (method === "GET") {
         const view = await service.projectView(user, id);
-        const sessionId = await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        // The project's own conversation is the one recorded on it; a project made before that was recorded finds its oldest one, and
+        // the owner's read records it so it stays that one. A member reads what the lookup gives them, as before.
+        // The lookup keeps the recorded one while it exists: one the person has since deleted is replaced by the oldest they still have,
+        // recorded in its place (a compare-and-set, so two reads cannot record two different ones).
+        const own = view.userId === String(user.id);
+        const recorded = own && typeof view.conversationSessionId === "string" && view.conversationSessionId ? view.conversationSessionId : null;
+        let sessionId = await dependencies.projects?.conversationSessionId?.(user, view.projectId, recorded).catch(() => null) ?? recorded ?? null;
+        if (own && sessionId && sessionId !== recorded) {
+          sessionId = await Promise.resolve(service.recordConversation?.(view.id, sessionId, recorded)).catch(() => null) ?? sessionId;
+        }
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {

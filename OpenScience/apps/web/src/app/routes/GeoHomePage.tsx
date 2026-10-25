@@ -240,6 +240,9 @@ function subline(project: GeoProjectSummary): string {
   const touched = GEO_STEP_KEYS.filter((key) => project.steps[key] && project.steps[key]!.status !== "none");
   if (steps.length > 0 && steps.length < GEO_STEP_KEYS.length) {
     const names = steps.map((key) => GEO_STEP_WORK[key]).join("、");
+    // A step that ended without finishing is not under way: it says so, and the project's page says what to do about it.
+    const failed = steps.filter((key) => project.steps[key]?.status === "failed");
+    if (failed.length > 0) return `${failed.map((key) => GEO_STEP_WORK[key]).join("、")}没有做完`;
     return steps.every((key) => project.steps[key]?.status === "done") ? `只做了${names}` : `正在做${names}`;
   }
   if (touched.length === 0) return "还没开始";

@@ -69,6 +69,11 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 TIMEOUT_SECONDS = 30
 SOCIAL_TIMEOUT_SECONDS = 160
 GATEWAY_CODE = re.compile(r"^(?:geo|social_posts)_[a-z0-9_]{1,60}$")
+# The credential's refusals are the deployment's to fix, never a field the run got wrong (they end in `_invalid` too).
+AUTH_CODES = ("geo_gateway_token_invalid", "geo_gateway_token_missing", "geo_unconfigured")
+# A write the store refused by one of its constraints, or one too large to read: the run corrects it -- or sends it in smaller
+# writes -- and writes again; it is neither an outage nor data to give up on (2026-10-25: both were told "go on without").
+CORRECTABLE_CODES = ("geo_write_rejected", "geo_request_too_large")
 ID = {"type": "string", "minLength": 1, "maxLength": 80, "pattern": r"^[A-Za-z0-9_-]+$"}
 
 
@@ -77,6 +82,14 @@ class GeoPlatformError(Exception):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+
+    def stop_reason(self) -> str:
+        """What the run should do next: fix the call, retry, or go on without -- by the code, as vcr_platform.py decides its own."""
+        if self.code in AUTH_CODES:
+            return "unsupported"
+        if self.code in CORRECTABLE_CODES or self.code.endswith("_invalid"):
+            return "invalid_input"
+        return "retry" if self.retryable else "unsupported"
 
 
 def tool_definitions():
@@ -118,12 +131,13 @@ def tool_definitions():
         {
             "name": "geo_write",
             "description": (
-                "Write this 循证 GEO project; valid items survive individual refusals. "
-                "value merges findings; reuse ids to amend. "
-                "questions: groups[].questions[].isMeasured:true selects probes before lock_questions; no answers needed. "
-                "research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. "
+                "Write this 循证 GEO project; items are refused one by one. "
+                "value merges findings by id. "
+                "questions merges groups into the latest map by name+pool (data.replace:true: whole map); "
+                "isMeasured:true marks probes for lock_questions; no answers needed. "
+                "research queues {capabilityId,question,context?,rationale?}, run after this one. "
                 "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. "
-                "actions: per-gap strategy actions."
+                "actions: per gap."
             ),
             "inputSchema": {
                 "type": "object",

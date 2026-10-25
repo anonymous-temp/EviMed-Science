@@ -881,6 +881,81 @@ describe("总览", () => {
   });
 });
 
+describe("总览 while the AI answers cannot be measured", () => {
+  const PAUSED = { state: "paused" as const, since: "2026-10-20T04:00:00.000Z", engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"] };
+  const diagnosisFailed = (project: GeoProject) => {
+    project.needsYou = [{ kind: "step_failed", key: "failed:diagnosis", verb: "retry", object: { type: "step", id: "diagnosis" }, target: { tab: "overview", step: "diagnosis" } }];
+    return project;
+  };
+
+  it("says so in 「需要你」 with the day it stopped and what happens next, promises no next round, and offers no 接着做 that would ask nobody", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue({ ...fallingMonitoring, next: null, measurement: PAUSED });
+    renderTab(<OverviewTab {...props(diagnosisFailed(fallingProject()))} />);
+    const heading = await screen.findByRole("heading", { name: "需要你" });
+    const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
+    const paused = within(list).getByRole("link", { name: /AI 回答测量暂停中（10月20日起）/ });
+    expect(paused).toHaveAttribute("href", "/app/geo/geo_1/visibility#geo-trend");
+    expect(list).toHaveTextContent("测量服务暂时连不上，恢复后自动继续");
+    expect(list).toHaveTextContent("诊断没有做完");
+    expect(list).toHaveTextContent("恢复后再接着做");
+    expect(within(list).queryByRole("button", { name: "接着做" })).not.toBeInTheDocument();
+    const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(trend.parentElement).not.toHaveTextContent("下次");
+    // No code and no host is named.
+    expect(document.body.textContent).not.toMatch(/engine_paused|探测|probe/i);
+  });
+
+  it("offers 接着做 again once the AI can be asked, saying the last round got no answer", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue({ ...fallingMonitoring, measurement: { state: "measuring", since: null, engines: [] } });
+    renderTab(<OverviewTab {...props(diagnosisFailed(fallingProject()))} />);
+    const heading = await screen.findByRole("heading", { name: "需要你" });
+    const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(list).toHaveTextContent("上一轮没有拿到 AI 的回答，接着做会重新测一轮");
+    expect(within(list).getByRole("button", { name: "接着做" })).toBeInTheDocument();
+  });
+
+  it("says the open errors and the ranking were not read, with 重试, instead of leaving them out as none", async () => {
+    client.getGeoDiagnosis.mockRejectedValue(new Error("offline"));
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    renderTab(<OverviewTab {...props(fallingProject())} />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/^用药安全和同类药排名没有读到：/);
+    client.getGeoDiagnosis.mockResolvedValue(severeOne());
+    await userEvent.click(within(alert).getByRole("button", { name: /重试/ }));
+    expect(await screen.findByText(/还有 1 条严重讲错待处理/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+function severeOne() {
+  return diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S3", status: "open" }]);
+}
+
+describe("可见度 when one of its reads failed", () => {
+  it("says the trend was not read, with 重试 — never 「还没有开始持续监测」 — and keeps the engines and pools it did read", async () => {
+    client.getGeoMonitoring.mockRejectedValue(new Error("offline"));
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    expect(await screen.findByText(/^测量趋势没有读到：/)).toBeInTheDocument();
+    expect(screen.queryByText("还没有开始持续监测，第一次复测后这里会画出趋势。")).not.toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "按问句池的品牌提及率" })).toBeInTheDocument();
+  });
+
+  it("says the engines, the pools and the rivals were not read when the diagnosis failed — never a grid of 未测 or 「还没有按问句池测过」", async () => {
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    client.getGeoDiagnosis.mockRejectedValue(new Error("offline"));
+    renderTab(<VisibilityTab {...props()} />);
+    expect(await screen.findByText(/^各引擎的读数没有读到：/)).toBeInTheDocument();
+    expect(screen.getByText(/^按问句池的提及率没有读到：/)).toBeInTheDocument();
+    expect(screen.getByText(/^同类药的提及率没有读到：/)).toBeInTheDocument();
+    expect(screen.queryByText("还没有按问句池测过提及率。")).not.toBeInTheDocument();
+    expect(document.querySelector("[data-heat-row]")).toBeNull();
+  });
+});
+
 describe("可见度", () => {
   it("draws the trend against the target, each engine, and the pools — hiding a column nothing fills", async () => {
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);

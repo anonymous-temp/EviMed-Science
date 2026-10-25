@@ -71,9 +71,11 @@ batch. Continue a useful draft from the preserved research or source text that i
 available, naming its origin and uncertainty; keep an unresolved subgroup or
 calculation as a local limitation. Qualitative observations can be explained
 without a fabricated number, quotation or verified-card marker. A summary is not
-its source's verbatim quotation. If registration needs a question group, create a
-minimal group for the actual question, without presenting an inferred question as
-observed demand. Write the article before registering its path. Existing source,
+its source's verbatim quotation. If registration needs a question group, add a
+minimal group for the actual question with `geo_write questions` (a group of a
+new name is added to the map; one of an existing name and pool replaces it),
+without presenting an inferred question as observed demand. Write the article
+before registering its path. Existing source,
 safety and publication checks still apply to the resulting draft; a partial draft
 does not become verified or authorized for distribution by being written.
 For example, low-certainty effectiveness findings without cards still support an
@@ -193,9 +195,11 @@ Inside this deliverable's `deliverables/<id>/` directory:
   the assumptions. It carries no article text.
 - `articles.json` — `{ minimal, articles: [...], assumptions }`. Each article:
   `id`, `layer` (`deep|card|popular|qa|correction`), `title`, `question`,
-  `groupKey`, `claimKeys`, `path` (`articles/<id>.md`), `recordPath`
-  (`records/<id>.md`), `audience`, `channel`, `author`, `reviewer`,
-  `updatedAt`, `safety: { status: "clear"|"open", findings }`.
+  `groupId` (the question group's id from `geo_read questions`, as the
+  registration names it), `groupKey`, `claimKeys`, `path` (`articles/<id>.md`),
+  `recordPath` (`records/<id>.md`), `audience`, `channel`, `author`,
+  `reviewer`, `updatedAt`, `safety: { status: "clear"|"open", findings }` —
+  every article states its safety; one that does not waits for a person.
 - `articles/<id>.md` — the article, exactly as it would be published.
 - `records/<id>.md` — its work record: the clinical path, each key sentence's
   claim, what the medical review changed, and the protected-span comparison.

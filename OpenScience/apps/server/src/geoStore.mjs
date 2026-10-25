@@ -111,6 +111,8 @@ export function geoProjectFromRow(row) {
     // Who speaks for the product (enterprise or doctor, the relation, a doctor's affiliation) and the one product zone its cards are in.
     producer: row.producer && typeof row.producer === "object" && !Array.isArray(row.producer) ? row.producer : null,
     productZoneId: text(row.product_zone_id),
+    // The project's own conversation, recorded when it was made (or found once for a project made before); null until then.
+    conversationSessionId: text(row.conversation_session_id),
     // A project the platform keeps for itself: measured and judged, never advanced by the orchestrator.
     internal: row.internal === true,
     createdAt: iso(row.created_at),
@@ -305,7 +307,7 @@ export function geoOwnedLinkKey(url) {
 }
 
 const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage_days, engines, tier, budget, status, steps,
-  entity_keys, producer, product_zone_id, internal, created_at, updated_at, deleted_at`;
+  entity_keys, producer, product_zone_id, conversation_session_id, internal, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
@@ -543,6 +545,21 @@ export class GeoStore {
       VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, $7::text[], $8) RETURNING ${PROJECT_COLUMNS}`,
     [id, userId, projectId, JSON.stringify(product), [...engines], coverageDays, await this.#entityKeys(product), internal === true]);
     return geoProjectFromRow(result.rows[0]);
+  }
+
+  /**
+   * Record the project's own conversation. Written once: a later call does not move it, so the page keeps opening the conversation
+   * the project was made with however many others the project gains — unless it names the one it replaces (`replacing`, a
+   * conversation the person deleted), and that is still the one held. Returns the id the project holds after the call.
+   * @param {string} id @param {string} sessionId @param {string | null} [replacing]
+   * @returns {Promise<string | null>}
+   */
+  async setConversationSession(id, sessionId, replacing = null) {
+    await this.query(`UPDATE evimed_geo.projects SET conversation_session_id = $2
+      WHERE id = $1 AND deleted_at IS NULL AND (conversation_session_id IS NULL OR conversation_session_id = $3)`,
+    [id, String(sessionId), replacing == null ? null : String(replacing)]);
+    const result = await this.query(`SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL`, [id]);
+    return text(result.rows[0]?.conversation_session_id);
   }
 
   /** This account's GEO project, or null (another account's, deleted, or none). @param {string} userId @param {string} id */
@@ -831,11 +848,15 @@ export class GeoStore {
     }));
   }
 
-  /** The groups of one set version, each with its questions. @param {string} geoId @param {number} version */
-  async questionMap(geoId, version) {
-    const groups = (await this.query(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND set_version = $2
+  /**
+   * The groups of one set version, each with its questions.
+   * @param {string} geoId @param {number} version @param {any} [client] a transaction to read inside, for a write that builds on it
+   */
+  async questionMap(geoId, version, client = null) {
+    const read = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => (client ? client.query(sql, values) : this.query(sql, values));
+    const groups = (await read(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND set_version = $2
       ORDER BY pool NULLS LAST, position, id`, [geoId, version])).rows.map(questionGroupFromRow);
-    const questions = (await this.query(`SELECT * FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2
+    const questions = (await read(`SELECT * FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2
       ORDER BY position, id`, [geoId, version])).rows.map(questionFromRow);
     const byGroup = new Map(groups.map((group) => [group.id, /** @type {ReturnType<typeof questionFromRow>[]} */ ([])]));
     for (const question of questions) byGroup.get(question.groupId)?.push(question);
@@ -849,13 +870,27 @@ export class GeoStore {
   }
 
   /**
-   * Write a new, unlocked set version from validated groups.
+   * Write a new, unlocked set version from validated groups — or, with `merge`, from what `merge` makes of the latest set's groups
+   * (read in the same transaction, under the set's lock, so two writes that add to one map cannot lose each other's groups).
    * @param {string} userId @param {string} geoId
-   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null }} input
-   * @returns {Promise<{ version: number, groupIds: string[], questionIds: string[][] }>}
+   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null,
+   *   merge?: ((current: Array<Record<string, any> & { questions: Array<Record<string, any>> }>) => Array<Record<string, any> & { questions: Array<Record<string, any>> }> | null) | null }} input
+   *   `merge` answers null to write nothing
+   * @returns {Promise<{ version: number, groupIds: string[], questionIds: string[][] } | null>} null when `merge` wrote nothing
    */
-  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null }) {
-    return this.transaction(async (client) => this.#insertSet(client, userId, geoId, { groups, note, runId, lockedAt: null, measuredCount: null }));
+  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null, merge = null }) {
+    return this.transaction(async (client) => {
+      let written = groups;
+      if (merge) {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
+        const latest = Number((await client.query(`SELECT coalesce(max(version), 0) AS version FROM evimed_geo.question_sets WHERE geo_project_id = $1`,
+          [geoId])).rows[0].version);
+        const merged = merge(latest ? await this.questionMap(geoId, latest, client) : []);
+        if (!merged) return null;
+        written = merged;
+      }
+      return this.#insertSet(client, userId, geoId, { groups: written, note, runId, lockedAt: null, measuredCount: null });
+    });
   }
 
   /**

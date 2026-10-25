@@ -127,6 +127,15 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
 
   const row = (await service.listProjects(USER)).projects.find((entry) => entry.id === project.id);
   assert.deepEqual(row?.alert, { wrongOurs: 9, severe: 4, safety: 0, severity: "S4" }, "wrongOurs is every live error, severe the S3/S4 among them");
+
+  // The runtime's read pages the same list as every other read does (2026-10-25: it cut the list at the limit, took no offset and said
+  // nothing about the rest, and its `more` was the list of other metrics, so the run's client could never say there was a next page).
+  const first = await service.runtimeRead(project, "diagnosis", { limit: 2 });
+  assert.deepEqual([first.errors.map((/** @type {any} */ error) => error.severity), first.errorsTotal, first.more, first.nextOffset], [["S4", "S3"], 5, true, 2]);
+  assert.deepEqual(first.errorCounts.total, 12, "the counts stay over every row");
+  assert.ok(Array.isArray(first.otherMetrics) && typeof first.otherMetricsTotal === "number");
+  const last = await service.runtimeRead(project, "diagnosis", { limit: 2, offset: 4 });
+  assert.deepEqual([last.errors.length, last.errors[0].id, last.more, last.nextOffset], [1, diagnosis.errors[4].id, false, undefined]);
 });
 
 test("a measured question links its latest answer per engine, in the project's order, across set versions", options, async () => {

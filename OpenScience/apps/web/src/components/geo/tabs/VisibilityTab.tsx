@@ -16,7 +16,8 @@ import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
 import { useGeoToolbar } from "../geoFrame";
-import { useGeoDiagnosis, useGeoMonitoring } from "../geoProjectData";
+import { nextMeasurement } from "../geoBand";
+import { readFailure, useGeoDiagnosis, useGeoMonitoring, type ReadFailure } from "../geoProjectData";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { clusterName } from "../spine/clusterModel";
 import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_POOL_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
@@ -122,6 +123,9 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
 
   const denominator = denominatorLine(project, diag);
   const ranking = rivalRanking(project, diag);
+  // One read failing leaves the others on the page; each block that reads it says so, with 重试, instead of its empty sentence.
+  const monitoringFailed = readFailure(monitoring);
+  const diagnosisFailed = readFailure(diagnosis);
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
@@ -133,8 +137,9 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         // The fluctuation band was measured on the mention rate and belongs to it alone.
         noise={line?.key === "mention" && typeof diag?.noise?.band === "number" ? diag.noise.band : null}
         loading={monitoring.state.kind === "loading"}
+        error={monitoringFailed}
       />
-      <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} />
+      <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} error={diagnosisFailed} />
       {isEngineBarMetric(metric)
         ? <EngineMetricCard diagnosis={diag} metric={metric} selected={engine} onSelect={setEngineParam} />
         : <ByEngine rows={watch?.byEngine} diagnosis={diag} engine={engine} />}
@@ -143,9 +148,10 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         engines={groupEngines}
         engine={engine}
         onOpen={(groupId, on) => drawer.open({ group: groupId, engine: on })}
+        error={readFailure(clusters)}
       />
-      <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} pool={pool} />
-      <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} />
+      <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} pool={pool} error={diagnosisFailed} />
+      <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} error={diagnosisFailed} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
@@ -161,6 +167,7 @@ function MetricTrend({
   denominator,
   noise,
   loading,
+  error,
 }: {
   project: GeoProject;
   watch: GeoMonitoring | null;
@@ -168,12 +175,15 @@ function MetricTrend({
   denominator: string | null;
   noise: number | null;
   loading: boolean;
+  /** The monitoring did not come: the card says so, never 「还没有开始持续监测」. */
+  error: ReadFailure | null;
 }) {
   const points = line?.points ?? [];
   const unit: GeoUnit = metricUnit(line?.key);
   const name = metricName(line?.key) ?? GEO_METRIC_NAMES.gvi;
   const target = project.overview.metrics.find((metric) => metric.key === line?.key || GEO_METRIC_NAMES[metric.key] === name)?.target ?? null;
   const format = (value: number) => formatGeoValue(value, unit);
+  const next = nextMeasurement(project, watch);
   const input = useMemo(() => ({
     labels: points.map((point) => monthDay(point.date) ?? ""),
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
@@ -183,9 +193,9 @@ function MetricTrend({
     target,
     targetLabel: target === null ? null : `目标 ${format(target)}`,
     markers: withCoverageMarker(actionMarkers(points.map((point) => point.date), watch), points),
-    nextLabel: watch?.next?.date ? `${monthDay(watch.next.date)} ${roundKindWord(watch.next.kind) ?? "复测"}` : null,
+    nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [line, watch, target, project.name]);
+  }), [line, watch, next, target, project.name]);
   const latest = pointCell(points[points.length - 1]);
   // The same rule as 总览 states the same change by.
   const change = readingChange(points, { noise });
@@ -201,8 +211,10 @@ function MetricTrend({
             {target !== null && <LegendMark series="target" shape="dash" color={TARGET_COLOR}>目标</LegendMark>}
           </>
         )}
-        meta={chartDates(change, watch?.next?.date)}
-        state={loading ? "loading" : points.length === 0 ? "empty" : "content"}
+        meta={chartDates(change, next?.date)}
+        state={loading ? "loading" : error && points.length === 0 ? "error" : points.length === 0 ? "empty" : "content"}
+        errorMessage={error ? `测量趋势没有读到：${error.message}` : undefined}
+        onRetry={error?.retry}
         emptyText="还没有开始持续监测，第一次复测后这里会画出趋势。"
         footnote={denominator}
         height={260}
@@ -292,7 +304,7 @@ function ByEngine({ rows, diagnosis, engine }: { rows: GeoMonitoring["byEngine"]
  * that is the same on every row is said once, under it, rather than repeated
  * in a column.
  */
-function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis: GeoDiagnosis | null; loading: boolean; pool: GeoPool | null }) {
+function ByPool({ geoId, diagnosis, loading, pool, error }: { geoId: string; diagnosis: GeoDiagnosis | null; loading: boolean; pool: GeoPool | null; error: ReadFailure | null }) {
   const rows = (Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []).filter((row) => row && row.pool && row.pool !== "P4" && (!pool || row.pool === pool));
   const top = rows.reduce((max, row) => Math.max(max, readGeoCell(row.mention).value ?? 0), 0);
   const issues = rows.map((row) => row.mainIssue || null);
@@ -313,7 +325,9 @@ function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis:
   return (
     <ChartCard
       title="哪一类问题里最容易被提到"
-      state={loading ? "loading" : rows.length === 0 ? "empty" : "content"}
+      state={loading ? "loading" : error && !diagnosis ? "error" : rows.length === 0 ? "empty" : "content"}
+      errorMessage={error ? `按问句池的提及率没有读到：${error.message}` : undefined}
+      onRetry={error?.retry}
       emptyText="还没有按问句池测过提及率。"
       footnote={footnote}
       height={200}
@@ -363,7 +377,16 @@ function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis:
  * `compact`, in the third of a row it has, the scope under the name instead of a column of its own — so the two pages cannot
  * disagree about who is ahead or on what.
  */
-export function Ranking({ ranking, loading, compact = false }: { ranking: ReturnType<typeof rivalRanking>; loading: boolean; compact?: boolean }) {
+export function Ranking({ ranking, loading, compact = false, error = null }: {
+  ranking: ReturnType<typeof rivalRanking>;
+  loading: boolean;
+  compact?: boolean;
+  /** The diagnosis did not come: a ranking nobody could read is said as such, not left out as if nobody measured a rival. */
+  error?: ReadFailure | null;
+}) {
+  if (error && ranking.length === 0) {
+    return <ChartCard title="同类药提及率" state="error" errorMessage={`同类药的提及率没有读到：${error.message}`} onRetry={error.retry} height={180} />;
+  }
   // Nobody measured a rival: no empty card to say so.
   if (ranking.length === 0 && !loading) return null;
   const top = ranking.reduce((max, row) => Math.max(max, row.value ?? 0), 0);

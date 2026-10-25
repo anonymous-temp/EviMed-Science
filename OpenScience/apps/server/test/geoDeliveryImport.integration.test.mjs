@@ -5,10 +5,10 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { claimChunks, competitorForWrite, createGeoDeliveryImport, readWorkspaceFile } from "../src/geoDeliveryImport.mjs";
+import { claimChunks, competitorForWrite, createGeoDeliveryImport, geoRunInsightFolders, readWorkspaceFile } from "../src/geoDeliveryImport.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -55,8 +55,7 @@ test("a finished insight run's claims.json is registered in full, once, through 
     { claimKey: "bad", statement: "s", sourceRef: "r" }] })]]);
   const reports = /** @type {string[]} */ ([]);
   const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code),
-    readFile: async (_root, file) => { if (!files.has(file)) throw Object.assign(new Error("missing"), { code: "ENOENT" }); return files.get(file) ?? ""; },
-    listInsightFolders: async () => [] });
+    readFile: async (_root, file) => { if (!files.has(file)) throw Object.assign(new Error("missing"), { code: "ENOENT" }); return files.get(file) ?? ""; } });
   const project = { id: `p-${run}`, userId: USER, workspaceDir: "/nowhere" };
 
   assert.equal(await importDelivery(project, { id: "run_1", status: "running", deliverables: [{ id: "geo-insight", capability: "geo-insight" }] }), null,
@@ -74,14 +73,72 @@ test("a finished insight run's claims.json is registered in full, once, through 
   assert.equal(await importDelivery({ ...project, id: "not-geo" }, { id: "run_3", status: "succeeded" }), null, "not a GEO project");
 });
 
-test("a run that ended before the import existed is picked up when the project's next run ends", options, async () => {
+test("a finished insight run whose claims.json is not one of its declared deliverables is read from the files its record lists", options, async () => {
   const created = await store.createProject({ userId: USER, projectId: `q-${run}`, engines: ["deepseek"], coverageDays: 90 });
   const importDelivery = createGeoDeliveryImport({ store,
-    readFile: async (_root, file) => { if (file !== "deliverables/geo-insight/claims.json") throw new Error("missing"); return JSON.stringify({ claims: [claim(1), claim(2)] }); },
-    listInsightFolders: async () => ["geo-insight"] });
-  const result = await importDelivery({ id: `q-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "later", status: "succeeded", deliverables: [] });
+    readFile: async (_root, file) => { if (file !== "deliverables/geo-insight/claims.json") throw new Error("missing"); return JSON.stringify({ claims: [claim(1), claim(2)] }); } });
+  const project = { id: `q-${run}`, userId: USER, workspaceDir: "/nowhere" };
+  assert.deepEqual(await importDelivery(project, { id: "chat", status: "succeeded", deliverables: [] }), { imported: 0, issues: 0, located: 0, gated: 0 },
+    "a run that wrote no claim library imports none, whatever folders the workspace holds");
+  const result = await importDelivery(project, { id: "undeclared", status: "succeeded", deliverables: [{ id: "geo-insight-report", capability: "geo-insight" }],
+    outputFiles: ["deliverables/geo-insight/claims.json", "deliverables/geo-insight/question-map.json"] });
   assert.deepEqual(result, { imported: 2, issues: 0, located: 0, gated: 0 });
   assert.equal((await store.listClaims(created.id)).length, 2);
+});
+
+test("the folders a run wrote its claim library into are its insight deliverables and the claims.json files its record lists", () => {
+  assert.deepEqual(geoRunInsightFolders({ deliverables: [{ id: "a", capability: "geo-insight" }, { id: "b" }, { id: "c", capability: "geo-content" }],
+    artifacts: ["deliverables/d/claims.json", "deliverables/c/claims.json", "deliverables/e/notes/claims.json"], unverifiedArtifacts: ["deliverables/f/claims.json"],
+    outputFiles: ["deliverables/a/claims.json", "claims.json"], presentedFiles: ["deliverables/g/claims.json"] }), ["a", "b", "d", "f", "g"],
+  "another capability's deliverable, a nested file and a file outside the deliverables are not an insight library");
+  assert.deepEqual(geoRunInsightFolders({ progress: { deliverables: [{ id: "p" }] } }), ["p"]);
+  assert.deepEqual(geoRunInsightFolders({}), []);
+});
+
+// Production, 2026-10-25: every run's end read every insight folder of the workspace again, so an older library was laid over a
+// claim a later insight run had corrected — or two versions were minted a run — depending on the order the folders were listed in.
+test("an older insight folder is never read over a newer claim, at another run's end or at a late second ask", options, async () => {
+  const created = await store.createProject({ userId: USER, projectId: `older-${run}`, engines: ["deepseek"], coverageDays: 90 });
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "geo-import-older-"));
+  try {
+    const statement = (/** @type {string} */ text) => ({ ...claim(7), statement: text });
+    /** An insight pack on disk, last changed at `at`. @param {string} folder @param {string} text @param {number} at */
+    const pack = async (folder, text, at) => {
+      const directory = path.join(workspace, "deliverables", folder);
+      await mkdir(directory, { recursive: true });
+      for (const [name, body] of [["claims.json", JSON.stringify({ claims: [statement(text)] })], ["question-map.json", JSON.stringify({ groups: [] })]]) {
+        await writeFile(path.join(directory, name), body);
+        await utimes(path.join(directory, name), at / 1000, at / 1000);
+      }
+    };
+    await pack("insight-old", "旧的说法", Date.now() - 86_400_000);
+    const project = { id: `older-${run}`, userId: USER, workspaceDir: workspace };
+    const first = createGeoDeliveryImport({ store });
+    await first(project, { id: "insight_old", status: "succeeded", deliverables: [{ id: "insight-old", capability: "geo-insight" }] });
+    await pack("insight-new", "更正后的说法", Date.now() + 60_000);
+    await first(project, { id: "insight_new", status: "succeeded", deliverables: [{ id: "insight-new", capability: "geo-insight" }] });
+    const latest = async () => (await store.listClaims(created.id)).find((row) => row.claimKey === "MAZ-7");
+    assert.deepEqual([(await latest())?.statement, (await latest())?.version], ["更正后的说法", 2]);
+    // A chat turn and a content run end: neither wrote a library, and neither reads the two in the workspace again.
+    await first(project, { id: "chat", status: "succeeded", deliverables: [] });
+    await first(project, { id: "content", status: "succeeded", deliverables: [{ id: "geo-content", capability: "geo-content" }] });
+    assert.deepEqual([(await latest())?.statement, (await latest())?.version], ["更正后的说法", 2], "no version minted, nothing written back");
+    // After a restart the orchestrator's fold asks for the old run again: its file is older than the version the project holds.
+    /** @type {string[]} */
+    const reports = [];
+    const restarted = createGeoDeliveryImport({ store, report: (code) => reports.push(code) });
+    const again = await restarted(project, { id: "insight_old", status: "succeeded", deliverables: [{ id: "insight-old", capability: "geo-insight" }] });
+    assert.equal(again?.imported, 0);
+    assert.deepEqual([(await latest())?.statement, (await latest())?.version], ["更正后的说法", 2]);
+    assert.ok(reports.some((line) => line.startsWith("claims kept as stored 1")));
+    // A run that corrects a claim through geo_write after writing its file keeps the correction: the file is the older of the two.
+    await pack("insight-new", "更正后的说法", Date.now() - 1_000);
+    await store.upsertClaims(USER, created.id, [{ ...statement("运行里再改的说法"), quote: "原文 7。", sourceRef: "web-page:e1edc04a1ac28750" }]);
+    await restarted(project, { id: "insight_new_2", status: "succeeded", deliverables: [{ id: "insight-new", capability: "geo-insight" }] });
+    assert.equal((await latest())?.statement, "运行里再改的说法");
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
 });
 
 test("claims are sent in chunks the write accepts", () => {
@@ -110,9 +167,8 @@ test("the default reader finds a deliverable by its path in the workspace, from 
 test("the run's competitors come with its claims when the project has none", options, async () => {
   const created = await store.createProject({ userId: USER, projectId: `r-${run}`, engines: ["deepseek"], coverageDays: 90 });
   const importDelivery = createGeoDeliveryImport({ store,
-    readFile: async () => JSON.stringify({ competitors: [{ brandName: "诺和盈", genericName: "司美格鲁肽注射液", reason: "同适应证", tier: "A" }], claims: [claim(1)] }),
-    listInsightFolders: async () => ["geo-insight"] });
-  await importDelivery({ id: `r-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "with-rivals", status: "succeeded", deliverables: [] });
+    readFile: async () => JSON.stringify({ competitors: [{ brandName: "诺和盈", genericName: "司美格鲁肽注射液", reason: "同适应证", tier: "A" }], claims: [claim(1)] }) });
+  await importDelivery({ id: `r-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "with-rivals", status: "succeeded", deliverables: [{ id: "geo-insight", capability: "geo-insight" }] });
   const saved = await store.getProject(USER, created.id);
   assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["诺和盈"]);
 });
@@ -124,7 +180,7 @@ test("an article registered before its deliverable was submitted takes the gate'
   const [articleId] = await store.registerArticles(USER, created.id, [{ path: "deliverables/geo-content/articles/a.md", layer: "card", title: "t",
     groupId: `gg-${run}`, claimIds: [], gate: "unverified", safety: "clear", contentSha256: "a".repeat(64), runId: "run_c", deliverableId: "geo-content" }]);
   const asked = /** @type {any[]} */ ([]);
-  const importDelivery = createGeoDeliveryImport({ store, readFile: async () => { throw new Error("none"); }, listInsightFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store, readFile: async () => { throw new Error("none"); },
     articleGate: async (_project, ref) => { asked.push(ref); return ref.deliverableId === "geo-content" ? "passed" : "unverified"; } });
   const result = await importDelivery({ id: `s-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "run_c", status: "succeeded", deliverables: [] });
   assert.equal(result?.gated, 1);
@@ -150,7 +206,7 @@ test("an article registered by its path inside the deliverable folder is found t
     { ...article("c.md", "c".repeat(64)), path: "deliverables/geo-content-b2/articles/c.md", deliverableId: "geo-content-b2" }]);
   /** @type {string[]} */
   const reports = [];
-  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code), listInsightFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code),
     listDeliverableFolders: async () => ["geo-content", "geo-content-b2", "geo-insight"],
     readFile: async (_root, file) => { const text = files.get(file); if (text == null) throw new Error("absent"); return Buffer.from(text); },
     articleRunId: async (_project, deliverableId) => (deliverableId === "geo-content-b2" ? "run_b2" : null),
@@ -180,12 +236,12 @@ test("the first production run's competitor labels become registered rivals", op
   const created = await store.createProject({ userId: USER, projectId: `u-${run}`, engines: ["deepseek"], coverageDays: 90 });
   /** @type {string[]} */
   const reports = [];
-  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code), listInsightFolders: async () => ["geo-insight"],
+  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code),
     listDeliverableFolders: async () => [],
     readFile: async () => JSON.stringify({ competitors: [
       { name: "司美格鲁肽注射液（诺和盈/Wegovy）", manufacturer: "丹麦诺和诺德公司", role: "同适应症、同给药途径的主要竞品" },
       { name: "替尔泊肽注射液（穆峰达/MOUNJARO）", manufacturer: "美国ELI LILLY AND COMPANY", role: "BMI 门槛与本品相同" }], claims: [] }) });
-  await importDelivery({ id: `u-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "legacy-rivals", status: "succeeded", deliverables: [] });
+  await importDelivery({ id: `u-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "legacy-rivals", status: "succeeded", deliverables: [{ id: "geo-insight" }] });
   const saved = await store.getProject(USER, created.id);
   assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => [entry.brandName, entry.aliases]), [["诺和盈", ["Wegovy"]], ["穆峰达", ["MOUNJARO"]]]);
   assert.ok(reports.includes("competitors imported 2 of 2"));
@@ -197,16 +253,17 @@ test("the imported claims are offered to the card writer once, and a refusal the
   const reports = /** @type {string[]} */ ([]);
   let answer = /** @type {() => Promise<any>} */ (async () => ({ cards: [{}, {}], held: [{}], failed: [] }));
   const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code),
-    readFile: async () => JSON.stringify({ claims: [claim(1), claim(2)] }), listInsightFolders: async () => ["geo-insight"],
+    readFile: async () => JSON.stringify({ claims: [claim(1), claim(2)] }),
     refreshCards: async (geoProject, controlProject) => { seen.push({ geo: geoProject.id, workspace: controlProject.workspaceDir }); return answer(); } });
   const project = { id: `cards-${run}`, userId: USER, workspaceDir: "/the-workspace" };
-  const result = await importDelivery(project, { id: "run_a", status: "succeeded", deliverables: [] });
+  const insight = [{ id: "geo-insight", capability: "geo-insight" }];
+  const result = await importDelivery(project, { id: "run_a", status: "succeeded", deliverables: insight });
   assert.deepEqual(result, { imported: 2, issues: 0, located: 0, gated: 0, carded: 2 });
   assert.deepEqual(seen, [{ geo: created.id, workspace: "/the-workspace" }], "the card writer is given the GEO project and the workspace the sources are in");
   assert.ok(reports.some((line) => line.startsWith("cards written 2, claims held 1")));
   // The next run: the card writer refuses by name; the claims were imported all the same.
   answer = async () => { throw Object.assign(new Error("no reviewer"), { code: "geo_card_reviewer_required" }); };
-  const next = await importDelivery(project, { id: "run_b", status: "succeeded", deliverables: [] });
+  const next = await importDelivery(project, { id: "run_b", status: "succeeded", deliverables: insight });
   assert.equal(next?.imported, 2);
   assert.equal(next?.carded, 0);
   assert.ok(reports.includes("geo_card_reviewer_required"));
@@ -224,7 +281,7 @@ test("a finished run's citing articles are read for their claim references once 
   const text = "起始剂量为每周一次 2.5 mg。[[ref:ec_AbCd1234Ef/dose@1]]\n";
   const read = /** @type {string[]} */ ([]);
   const checked = /** @type {Array<{ article: string, text: string }>} */ ([]);
-  const importDelivery = createGeoDeliveryImport({ store, listInsightFolders: async () => [], listDeliverableFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store, listDeliverableFolders: async () => [],
     readFile: async (_root, file) => { read.push(file); return text; },
     checkReferences: async (geoProject, article, body) => {
       checked.push({ article: article.layer, text: body });
@@ -238,12 +295,12 @@ test("a finished run's citing articles are read for their claim references once 
   // Another finished run, the same text: not checked again. A changed text is.
   await importDelivery(project, { id: "run_refs_2", status: "succeeded", deliverables: [] });
   assert.equal(checked.length, 1);
-  const changed = createGeoDeliveryImport({ store, listInsightFolders: async () => [], listDeliverableFolders: async () => [],
+  const changed = createGeoDeliveryImport({ store, listDeliverableFolders: async () => [],
     readFile: async () => `${text}另一句。`, checkReferences: async (_geo, article, body) => { checked.push({ article: article.layer, text: body }); } });
   await changed(project, { id: "run_refs_3", status: "succeeded", deliverables: [] });
   assert.equal(checked.length, 2);
   // A text that cannot be read is left unchecked, not failed.
-  const unreadable = createGeoDeliveryImport({ store, report: () => {}, listInsightFolders: async () => [], listDeliverableFolders: async () => [],
+  const unreadable = createGeoDeliveryImport({ store, report: () => {}, listDeliverableFolders: async () => [],
     readFile: async () => { throw Object.assign(new Error("gone"), { code: "ENOENT" }); }, checkReferences: async () => { throw new Error("must not be reached"); } });
   assert.ok(await unreadable(project, { id: "run_refs_4", status: "succeeded", deliverables: [] }));
 });

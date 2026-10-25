@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:86343115bd1ea5bac149e20b6039ee312b822b2c5045f44b01d8ae2b27b6015c",
+  "version": "sha256:0ea5af0b6de3ebafe9fafe3757ff5e5e2fd1bb88adf68cf0bc065f2a71235f0c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 38,
@@ -978,7 +978,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project; valid items survive individual refusals. value merges findings; reuse ids to amend. questions: groups[].questions[].isMeasured:true selects probes before lock_questions; no answers needed. research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. actions: per-gap strategy actions.",
+      "description": "Write this 循证 GEO project; items are refused one by one. value merges findings by id. questions merges groups into the latest map by name+pool (data.replace:true: whole map); isMeasured:true marks probes for lock_questions; no answers needed. research queues {capabilityId,question,context?,rationale?}, run after this one. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. actions: per gap.",
       "inputSchema": {
         "type": "object",
         "properties": {

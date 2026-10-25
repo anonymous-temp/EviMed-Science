@@ -3,11 +3,11 @@
  * and the one sentence at its end. The tabs below it are drawn by the layout; this is only the words and the states.
  */
 import { agendaLocalDate, DISPLAY_TIME_ZONE } from "@evimed/domain";
-import { GEO_STEP_KEYS, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
+import { GEO_STEP_KEYS, type GeoMeasurement, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import type { RailState } from "@/components/ui/ProgressRail";
 import type { StepRailStep } from "@/components/ui/StepRail";
-import { GEO_STEP_NAMES, GEO_STEP_WORK, monthDay, parseGeoDate } from "./geoText";
+import { engineName, GEO_STEP_NAMES, GEO_STEP_WORK, monthDay, parseGeoDate, zh } from "./geoText";
 import { GEO_MARKET_OFF_NOTE, marketConnected } from "./geoOverviewModel";
 
 /** The steps as the project's overview copy has them; an empty copy says nothing rather than that nothing has been done. */
@@ -59,11 +59,56 @@ export function bandSteps(project: GeoProject, hrefOf: (step: GeoStepKey) => str
 /** 「周一」「周二」… for a day in the reader's calendar. */
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-/** The current persisted work state and next scheduled date; a due schedule proves no execution or current round identity. */
+/**
+ * What the measurement's own state says, in the reader's words, or null while every engine of the project is measured as usual
+ * (and from an older server, which says nothing). `paused`: no engine can be asked. `short` is the band's few words, `detail` what
+ * happens next, `sentence` the two as one line. Nothing here names a code or the measuring host.
+ */
+export interface MeasurementPause {
+  paused: boolean;
+  short: string;
+  detail: string;
+  sentence: string;
+}
+
+export function measurementPause(measurement: GeoMeasurement | null | undefined): MeasurementPause | null {
+  if (!measurement || typeof measurement !== "object") return null;
+  if (measurement.state === "paused") {
+    const day = monthDay(measurement.since ?? null);
+    const short = `AI 回答测量暂停中${day ? `（${day}起）` : ""}`;
+    const detail = "测量服务暂时连不上，恢复后自动继续";
+    return { paused: true, short, detail, sentence: `${short}：${detail}。` };
+  }
+  const engines = Array.isArray(measurement.engines)
+    ? measurement.engines.filter((engine, at, all): engine is string => typeof engine === "string" && !!engine && all.indexOf(engine) === at)
+    : [];
+  if (engines.length === 0) return null;
+  const short = zh`${engines.map((engine) => engineName(engine)).join("、")}暂停测量`;
+  const detail = "其余 AI 照常测量，恢复后自动继续";
+  return { paused: false, short, detail, sentence: `${short}，${detail}。` };
+}
+
+/**
+ * The next full measurement as the page may say it: none for a project its owner paused, none while the measurement itself is
+ * paused — the server says the same, and the page does not promise a round on an older server's word.
+ */
+export function nextMeasurement(
+  project: Pick<GeoProject, "status">,
+  watch: { next?: { date: string; kind: string } | null; measurement?: GeoMeasurement | null } | null | undefined,
+): { date: string; kind: string } | null {
+  if (!watch?.next?.date || project.status === "paused" || watch.measurement?.state === "paused") return null;
+  return watch.next;
+}
+
+/**
+ * The current persisted work state and next scheduled date; a due schedule proves no execution or current round identity. No next
+ * measurement is said for a project its owner paused, nor while the measurement itself is paused: neither one is coming.
+ */
 export function bandNow(
   project: GeoProject,
   next: { date: string; kind: string } | null | undefined,
   now: Date = new Date(),
+  measurement: GeoMeasurement | null = null,
 ): string | null {
   const steps = stepsOf(project);
   const working = GEO_STEP_KEYS
@@ -81,7 +126,9 @@ export function bandNow(
   if (stepAllowanceWait(monitor)) parts.push("复测等待额度");
   else if (monitor?.status === "running") parts.push("复测进行中");
   else if (monitor?.status === "queued") parts.push("复测排队中");
-  if (next?.date) {
+  const pause = measurementPause(measurement);
+  if (pause) parts.push(pause.short);
+  if (next?.date && project.status !== "paused" && !pause?.paused) {
     const today = agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString());
     const day = parseGeoDate(next.date);
     const date = `${day ? `${WEEKDAYS[day.getDay()]} ` : ""}${monthDay(next.date) ?? next.date}`.trim();

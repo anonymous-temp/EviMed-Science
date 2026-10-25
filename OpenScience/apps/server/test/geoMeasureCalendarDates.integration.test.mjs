@@ -48,6 +48,9 @@ test("measurement DATEs retain their calendar day in UTC and Asia/Shanghai", opt
       await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,set_version,status,sample_date,created_at,started_at,finished_at)
         VALUES ($1,'calendar-user','calendar',$2,1,'done',$3::date,'2026-09-01T00:00:00.123+08:00','2026-09-01T00:01:00.456+08:00','2026-09-01T00:02:00.789+08:00')`,
       [id, index === 0 ? "baseline" : "weekly", date]);
+      // A measured round heard an answer: the baseline is the first that did.
+      await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,round_id,geo_project_id,engine,asked_at,status)
+        VALUES ($1,'calendar-user',$2,'calendar','deepseek',$3::date,'valid')`, [`answer-${id}`, id, date]);
       await store.writeMetrics({ roundId: id, geoProjectId: "calendar", userId: "calendar-user", computedAt: new Date(timestamps.finishedAt),
         rows: ["pilot", "control"].map(arm => ({ scope: "arm", arm, pool: "P2", metricId: "M-01", value: 25, numerator: 1, denominator: 4, status: "ok", dataType: "measured" })) });
       const round = await store.round(id);

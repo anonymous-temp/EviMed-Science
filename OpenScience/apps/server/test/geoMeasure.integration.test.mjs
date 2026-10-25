@@ -15,6 +15,7 @@ import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.m
 import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
+import { coverageKeyOf, roundCoverages } from "../src/geoCoverage.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
 
@@ -357,6 +358,45 @@ test("an S3 error notifies once, is confirmed by ten fresh asks, closes only aft
     assert.deepEqual({ ...reopened }, { status: "open", closed_snapshot_id: null });
     assert.equal(h.notices.length, 2);
     assert.notEqual(h.notices[1].idempotencyKey, h.notices[0].idempotencyKey);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an S3 notice the inbox refused leaves the error untold and is tried again after a wait; a deleted project's error waits for nobody (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_t");
+  const h = await harness();
+  /** @type {any[]} */
+  const tries = [];
+  const deps = { ...h.deps, notify: (/** @type {any} */ event) => { tries.push(event); return tries.length === 1 ? false : undefined; } };
+  try {
+    await enqueueRound(deps, { geoProjectId: "geo_t", kind: "baseline" });
+    await tickProbe({ ...deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...deps, maxAsks: 10 });
+    await tickParse({ ...deps, maxParse: 20 });
+    assert.equal(tries.length, 1, "the parse tick told it once");
+    const untold = async () => (await rows(`SELECT id, notified_at FROM evimed_geo.errors WHERE geo_project_id = 'geo_t' AND severity = 'S3'`))[0];
+    const error = await untold();
+    assert.equal(error.notified_at, null, "the inbox refused it: not told");
+
+    assert.equal((await tickErrors(deps)).notified, 0);
+    assert.equal(tries.length, 1, "not asked again within its wait");
+    h.clock.advance(61_000);
+    assert.equal((await tickErrors(deps)).notified, 1);
+    assert.deepEqual(tries.map((event) => event.idempotencyKey), [`geo:wrong_ours:${error.id}:first`, `geo:wrong_ours:${error.id}:first`],
+      "the same telling, under the same key");
+    assert.notEqual((await untold()).notified_at, null);
+    await tickErrors(deps);
+    assert.equal(tries.length, 2, "told once it went out");
+
+    // A deleted project's untold error is not read first for ever.
+    await seed("geo_t2");
+    await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, statement, severity, status, created_at)
+      VALUES ('ge_gone', 'user_geo_t2', 'geo_t2', 'f-gone', 'deepseek', '讲错', 'S4', 'open', '2026-01-01T00:00:00Z')`);
+    await database.query(`UPDATE evimed_geo.projects SET deleted_at = now() WHERE id = 'geo_t2'`);
+    assert.deepEqual((await store.errorsToNotify(["S3", "S4"], 10)).map((row) => row.id), []);
   } finally {
     await h.probe.close();
   }
@@ -801,13 +841,109 @@ test("a noise round writes the noise bands, and the net effect is not computed b
   }
 });
 
+test("a round no engine answered in is not measured: the last net effect stands and the sources keep their citation counts (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_z");
+  const NEWS = [{ title: "新闻", url: "https://news.example.org/a" }];
+  const h = await harness({ answers: ({ question }) => (question === Q1 ? { answer: A_RIGHT, searchResults: NEWS } : { answer: A_RIGHT }) });
+  try {
+    const measureOne = async (/** @type {string} */ kind) => {
+      const round = await enqueueRound(h.deps, { geoProjectId: "geo_z", kind });
+      await tickProbe({ ...h.deps, maxAsks: 10 });
+      await tickParse({ ...h.deps, maxParse: 20 });
+      await tickMetrics(h.deps);
+      return round.roundId;
+    };
+    await measureOne("baseline");
+    h.clock.advance(7 * 86_400_000);
+    const answered = await measureOne("weekly");
+    const sources = async () => rows(`SELECT domain, cited, mentions_ours FROM evimed_geo.sources WHERE geo_project_id = 'geo_z' ORDER BY domain`);
+    const counted = await sources();
+    assert.ok(counted.some((row) => row.domain === "news.example.org" && Object.keys(row.cited).length > 0), "the answered week counted its citations");
+    const latestNet = async () => (await rows(`SELECT round_id FROM evimed_geo.metrics WHERE geo_project_id = 'geo_z' AND metric_id = 'NET'
+      ORDER BY computed_at DESC, id LIMIT 1`))[0]?.round_id ?? null;
+    assert.equal(await latestNet(), answered);
+
+    // The next week the probe host is down: every engine paused, every job skipped.
+    h.clock.advance(7 * 86_400_000);
+    const empty = await enqueueRound(h.deps, { geoProjectId: "geo_z", kind: "weekly" });
+    const closed = await store.finishRound(empty.roundId, { now: h.clock.now(), skip: [{ engines: ["deepseek", "doubao"], code: "engine_paused" }] });
+    assert.equal(closed?.status, "partial");
+    assert.equal((await store.roundsToMeasure(["weekly"], 10)).includes(empty.roundId), false, "nothing to measure");
+    await tickMetrics(h.deps);
+    assert.deepEqual(await rows(`SELECT id FROM evimed_geo.metrics WHERE round_id = $1`, [empty.roundId]), [], "no cell is written for it");
+
+    // Even measured by hand, it writes no net effect and leaves the citation counts alone.
+    h.clock.advance(60_000);
+    await measureRound(h.deps, empty.roundId);
+    assert.deepEqual(await rows(`SELECT id FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'NET'`, [empty.roundId]), []);
+    assert.equal(await latestNet(), answered, "the net effect of the last week with answers stands");
+    assert.deepEqual(await sources(), counted, "the counts the market ranks outlets by are untouched");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an engine paused part-way through a round is out of its coverage key, as it is out of its cells (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_k");
+  const h = await harness({ answers: ({ question }) => ({ answer: question === Q3 ? A_Q3 : A_RIGHT }) });
+  try {
+    const baseline = await enqueueRound(h.deps, { geoProjectId: "geo_k", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(7 * 86_400_000);
+    const weekly = await enqueueRound(h.deps, { geoProjectId: "geo_k", kind: "weekly" });
+    // The first question on both engines, then 豆包 is paused (a failed re-check): the rest of its jobs are skipped.
+    await tickProbe({ ...h.deps, maxAsks: 2 });
+    const at = h.clock.now().getTime();
+    h.state.breaker.seed({ doubao: Array(h.state.breaker.threshold).fill("failed") }, at);
+    h.state.breaker.checked("doubao", at, false);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    const skipped = await rows(`SELECT engine FROM evimed_geo.probe_jobs WHERE round_id = $1 AND status = 'skipped' AND error_code = 'engine_paused'`, [weekly.roundId]);
+    assert.ok(skipped.length > 0 && skipped.every((row) => row.engine === "doubao"));
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.snapshots WHERE round_id = $1 AND engine = 'doubao' AND status = 'valid'`, [weekly.roundId]))[0].n, 1,
+      "豆包 answered its first question before it was paused");
+    await tickParse({ ...h.deps, maxParse: 20 });
+    await tickMetrics(h.deps);
+
+    const coverages = await roundCoverages(database, [baseline.roundId, weekly.roundId]);
+    const [measured] = await rows(`SELECT ref -> 'balance' -> 'engines' AS engines FROM evimed_geo.rounds WHERE id = $1`, [weekly.roundId]);
+    assert.deepEqual(measured.engines, ["deepseek"], "the cells are over DeepSeek alone");
+    assert.deepEqual(coverages.get(weekly.roundId)?.engines, ["deepseek"], "and so is the key");
+    assert.notEqual(coverageKeyOf(coverages.get(weekly.roundId)), coverageKeyOf(coverages.get(baseline.roundId)),
+      "a one-engine week is not compared with the two-engine baseline");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("the net effect's baseline is the first baseline that heard an answer, not an earlier one whose every ask failed (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_y");
+  const round = (/** @type {string} */ id, /** @type {string} */ date) => database.query(
+    `INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, status, sample_date) VALUES ($1, 'user_geo_y', 'geo_y', 'baseline', 1, 'partial', $2)`,
+    [id, date]);
+  await round("gr_y_empty", "2026-09-01");
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status)
+    VALUES ('gs_y_failed', 'user_geo_y', 'gr_y_empty', 'geo_y', 'deepseek', '2026-09-01T02:00:00Z', 'failed')`);
+  await round("gr_y_heard", "2026-09-15");
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status)
+    VALUES ('gs_y_valid', 'user_geo_y', 'gr_y_heard', 'geo_y', 'deepseek', '2026-09-15T02:00:00Z', 'valid')`);
+  assert.equal(await store.baselineDate("geo_y", 1), "2026-09-15");
+});
+
 test("the net effect reads the arms' earlier cells: an insufficient cell with counts pools, one without is no observation, a computed row keeps its band (Q-2)", options, async () => {
   await reset();
   await seed("geo_n");
   const ENGINES = ["deepseek", "doubao"];
-  const round = (/** @type {string} */ id, /** @type {string} */ kind, /** @type {string} */ date) => database.query(
-    `INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, status, sample_date, ref) VALUES ($1, 'user_geo_n', 'geo_n', $2, 1, 'done', $3, $4::jsonb)`,
-    [id, kind, date, JSON.stringify({ balance: { engines: ENGINES } })]);
+  // A measured round heard answers: the baseline is the first one that did (`baselineDate`).
+  const round = async (/** @type {string} */ id, /** @type {string} */ kind, /** @type {string} */ date) => {
+    await database.query(
+      `INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, status, sample_date, ref) VALUES ($1, 'user_geo_n', 'geo_n', $2, 1, 'done', $3, $4::jsonb)`,
+      [id, kind, date, JSON.stringify({ balance: { engines: ENGINES } })]);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status)
+      VALUES ($1, 'user_geo_n', $2, 'geo_n', 'deepseek', $3::date, 'valid')`, [`gs_${id}`, id, date]);
+  };
   const arm = (/** @type {string} */ roundId, /** @type {string} */ armName, /** @type {string} */ metricId, /** @type {string | null} */ pool, /** @type {Record<string, any>} */ cell) => ({
     scope: "arm", arm: armName, pool, metricId, dataType: "measured", ...cell,
   });
@@ -979,6 +1115,68 @@ test("an unconfigured probe is a wait, not an absence; an unreachable one fails 
     assert.deepEqual(jobs.map((row) => [row.status, row.attempts]), [["queued", 1], ["queued", 1], ["queued", 1], ["queued", 1], ["queued", 1], ["queued", 0]]);
   } finally {
     await h.probe.close().catch(() => {});
+  }
+});
+
+test("an unreachable probe host pauses every engine through the breaker: its round closes once a re-check fails, and the engines resume when the host answers again (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_h");
+  const h = await harness({ answers: () => ({ answer: A_Q3 }) });
+  /** @type {Awaited<ReturnType<typeof startFakeProbe>> | null} */
+  let back = null;
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_h", kind: "sentinel" });
+    await h.probe.close();
+    const down = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(down.failed, 5);
+    assert.deepEqual(h.state.breaker.paused(), ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"], "every engine, as the module says");
+    assert.equal(down.roundsFinished, 0, "a fresh pause holds the round");
+
+    // Ten minutes on the re-check finds the host still down: the round closes, its asks skipped, not spent.
+    h.clock.advance(10 * 60_000 + 1_000);
+    const checked = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(checked.asked, 0);
+    assert.equal(checked.roundsFinished, 1);
+    const jobs = await rows(`SELECT status, error_code FROM evimed_geo.probe_jobs WHERE round_id = $1`, [round.roundId]);
+    assert.ok(jobs.length === 6 && jobs.every((job) => job.status === "skipped" && job.error_code === "engine_paused"), JSON.stringify(jobs));
+
+    // The host is back: the next re-check resumes the engines it has a tab for, by itself.
+    back = await startFakeProbe({ ask: () => ({ answer: A_Q3 }) });
+    h.config.geoProbeUrl = back.url;
+    h.clock.advance(10 * 60_000 + 1_000);
+    const resumed = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.deepEqual(resumed.resumed, ["deepseek", "doubao"]);
+    assert.deepEqual(h.state.breaker.paused(), ["kimi", "qianwen", "yuanbao"], "no tab, still paused");
+  } finally {
+    await h.probe.close().catch(() => {});
+    await back?.close();
+  }
+});
+
+test("a confirmation whose every ask failed at the probe host was not asked: it is skipped and asked again, never read as 「未确认」 (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_f");
+  const h = await harness();
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_f", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    const [error] = await rows(`SELECT id, confirm FROM evimed_geo.errors`);
+    const round = String(error.confirm.roundId);
+    for (const job of await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id = $1`, [round])) {
+      await store.finishJob(String(job.id), { now: h.clock.now(), status: "failed", errorCode: "geo_probe_unavailable" });
+    }
+    assert.equal((await store.finishRound(round, { now: h.clock.now(), skip: [] }))?.status, "partial");
+    await tickErrors(h.deps);
+    const [read] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id = $1`, [error.id]);
+    assert.deepEqual([read.confirm.status, read.confirm.stability, read.confirm.tries], ["skipped", "unconfirmed", 1]);
+    h.clock.advance(60_000);
+    h.state.breaker.checked("deepseek", h.clock.now().getTime(), true);
+    assert.equal((await tickErrors(h.deps)).confirmsRequeued, 1, "asked again once the engine answers");
+  } finally {
+    await h.probe.close();
   }
 });
 

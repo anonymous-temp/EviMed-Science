@@ -913,10 +913,15 @@ export class GeoMeasureStore {
     await this.query(`UPDATE evimed_geo.errors SET ${sets.join(", ")} WHERE id = $1`, [errorId, ...values]);
   }
 
-  /** Urgent errors not yet notified. @param {string[]} severities @param {number} limit */
+  /**
+   * Urgent errors not yet notified, of projects that still exist: a deleted project's untold error has nobody to tell, and read first
+   * (the oldest) it held the head of the queue for good while the notices behind it waited.
+   * @param {string[]} severities @param {number} limit
+   */
   async errorsToNotify(severities, limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE notified_at IS NULL AND status <> 'closed' AND severity = ANY($1::text[])
-      ORDER BY created_at LIMIT $2`, [severities, limit]);
+    const result = await this.query(`SELECT e.* FROM evimed_geo.errors e JOIN evimed_geo.projects p ON p.id = e.geo_project_id AND p.deleted_at IS NULL
+      WHERE e.notified_at IS NULL AND e.status <> 'closed' AND e.severity = ANY($1::text[])
+      ORDER BY e.created_at, e.id LIMIT $2`, [severities, limit]);
     return result.rows.map(errorRow);
   }
 
@@ -1038,12 +1043,22 @@ export class GeoMeasureStore {
    * Finished rounds whose metrics are missing or older than their newest
    * facts — written, or counted again under a changed registry — and whose
    * answers are all parsed.
+   *
+   * A round with no answer at all (every job skipped on a paused engine, or
+   * every ask failed) is not measured: it has nothing to count, and its cells
+   * would be read as a measurement. Production, 2026-10-25: with the probe
+   * host unreachable for days, each daily sentinel closed with all twenty
+   * jobs skipped and still wrote 209 empty cells, and a weekly round in the
+   * same state would have written a net effect of 「no follow-up」 over the
+   * last computed one and emptied the sources' citation counts the market
+   * ranks outlets by.
    * @param {string[]} kinds @param {number} limit
    */
   async roundsToMeasure(kinds, limit) {
     const result = await this.query(`SELECT r.id FROM evimed_geo.rounds r
         JOIN evimed_geo.projects p ON p.id = r.geo_project_id AND p.deleted_at IS NULL
       WHERE r.status IN ('done', 'partial') AND r.kind = ANY($1::text[])
+        AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal')
           AND NOT EXISTS (SELECT 1 FROM evimed_geo.facts f WHERE f.snapshot_id = s.id))
         AND (NOT EXISTS (SELECT 1 FROM evimed_geo.metrics m WHERE m.round_id = r.id)
@@ -1223,10 +1238,17 @@ export class GeoMeasureStore {
     return row ? { value: num(row.value), measured: row.status === "ok" } : null;
   }
 
-  /** The first baseline round's sample date. @param {string} geoProjectId @param {number | null} setVersion */
+  /**
+   * The first baseline round's sample date — of a baseline that heard an answer. A baseline whose every ask failed has a sample date
+   * and nothing in it; read as the baseline, it put the net effect's baseline window before any measured week, and the net effect
+   * of every later round was not computable (2026-10-25).
+   * @param {string} geoProjectId @param {number | null} setVersion
+   */
   async baselineDate(geoProjectId, setVersion) {
-    const result = await this.query(`SELECT sample_date::text AS sample_date FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'baseline'
-      AND status IN ('done', 'partial') AND set_version IS NOT DISTINCT FROM $2 AND sample_date IS NOT NULL ORDER BY sample_date LIMIT 1`, [geoProjectId, setVersion]);
+    const result = await this.query(`SELECT r.sample_date::text AS sample_date FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = 'baseline'
+      AND r.status IN ('done', 'partial') AND r.set_version IS NOT DISTINCT FROM $2 AND r.sample_date IS NOT NULL
+      AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))
+      ORDER BY r.sample_date LIMIT 1`, [geoProjectId, setVersion]);
     const value = result.rows[0]?.sample_date;
     return value ?? null;
   }
@@ -1237,10 +1259,18 @@ export class GeoMeasureStore {
    * is), and the counts are this round's. The counting is `geoSourceAnswers`'
    * — the sources page and a source's detail read the same tally, so the
    * stored counters are only what the other readers of the table see.
+   *
+   * A round with no answer says nothing about any site: the counters stay as
+   * the last round with answers left them. Clearing "every domain this round
+   * did not cite" over an empty round cleared them all (2026-10-25: a round
+   * whose engines were all paused would have zeroed the citation counts the
+   * market's outlet ranking reads).
    * @param {{ roundId: string, geoProjectId: string, userId: string, now: Date }} input
    */
   async refreshSourceCitations({ roundId, geoProjectId, userId, now }) {
-    const byDomain = tallySources(await roundAnswers(this, roundId));
+    const answers = await roundAnswers(this, roundId);
+    if (!answers.length) return 0;
+    const byDomain = tallySources(answers);
     await this.transaction(async (client) => {
       // A domain this round did not cite has no citations in it.
       await client.query(`UPDATE evimed_geo.sources SET cited = '{}'::jsonb, mentions_ours = 0, wrong_ours = 0, updated_at = $2

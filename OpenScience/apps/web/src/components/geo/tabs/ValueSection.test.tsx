@@ -260,7 +260,8 @@ describe("a project with no value analysis", () => {
     expect(start.map((button) => button.textContent)).toEqual(["开始药品价值分析"]);
     await userEvent.click(start[0]);
     expect(open).toHaveBeenCalledTimes(1);
-    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1", sessionId: "ses_geo_1" }, expect.stringContaining("开始药品价值分析"));
+    // No conversation named: the hook opens the one the page holds (`useOpenGeoConversation`).
+    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1" }, expect.stringContaining("开始药品价值分析"));
   });
 
   it("is not offered a start where an analysis exists that 方案 has nothing of: it was begun, only not in these words", async () => {

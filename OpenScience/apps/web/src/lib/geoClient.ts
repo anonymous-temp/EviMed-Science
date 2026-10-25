@@ -178,7 +178,7 @@ export interface GeoWeekItem {
   kind: string;
   text: string;
   tab: GeoStepKey | "overview";
-  ref: { snapshotId?: string; errorId?: string; articleId?: string; orderId?: string; sourceId?: string; round?: string } | null;
+  ref: { snapshotId?: string; errorId?: string; articleId?: string; orderId?: string; sourceId?: string; roundId?: string } | null;
   /** When it happened, if the server says. */
   at?: string | null;
 }
@@ -680,7 +680,21 @@ export interface GeoMonitoring {
   rivals?: Array<{ name: string; points: GeoSeriesPoint[] }>;
   cited: Array<{ articleId: string; title: string; engine: GeoEngine; firstSeen: string }>;
   newErrors: GeoErrorRow[];
+  /** The next full measurement; null when none is coming (the project paused by its owner, measurement paused, monitoring not asked for). */
   next: { date: string; kind: string } | null;
+  /**
+   * Whether the AI answers can be measured now: `paused` when no engine of the project can be asked (the measuring service cannot be
+   * reached, or the breaker holds every engine), with `since` the time the pause began as the stored answers show it (ISO, else null);
+   * `engines` the project's engines that are paused either way. The server always sends it; absent only from an older server.
+   */
+  measurement?: GeoMeasurement;
+}
+
+/** The measurement's own state, beside the readings (`GeoMonitoring.measurement`). */
+export interface GeoMeasurement {
+  state: "measuring" | "paused";
+  since: string | null;
+  engines: string[];
 }
 
 /* --------------------------------------------------------- the question group as the spine (R19) */

@@ -9,7 +9,9 @@ import { TrendChart } from "@/components/charts/TrendChart";
 import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue } from "../GeoCellText";
 import { NeedsYou } from "../NeedsYou";
-import { useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
+import { LoadError } from "@/components/cards/LoadError";
+import { nextMeasurement } from "../geoBand";
+import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag } from "@/components/ui/Tag";
 import {
@@ -54,6 +56,8 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const plan = strategy.state.kind === "ready" ? strategy.state.data : null;
+  // The open errors and the rivals are the diagnosis's: when it did not come, the band says so instead of reading as none.
+  const diagnosisFailed = readFailure(diagnosis);
 
   const tiles = useMemo(() => overviewTiles(project, diag, plan), [project, diag, plan]);
   const denominator = denominatorLine(project, diag);
@@ -127,6 +131,8 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
           />
         ))}
       </StatBand>
+
+      {diagnosisFailed && <LoadError message={`用药安全和同类药排名没有读到：${diagnosisFailed.message}`} onRetry={diagnosisFailed.retry} />}
 
       <NeedsYou geoId={geoId} project={project} />
 
@@ -223,6 +229,7 @@ function TrendCard({
   const points = Array.isArray(series?.points) ? series.points : [];
   const dates = points.map((point) => point.date);
   const metric = project.overview.metrics.find((item) => item.key === "gvi") ?? null;
+  const next = nextMeasurement(project, watch);
   const input = useMemo(() => ({
     labels: points.map((point) => monthDay(point.date) ?? ""),
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
@@ -230,14 +237,14 @@ function TrendCard({
     targetLabel: metric?.target == null ? null : `目标 ${formatGeoValue(metric.target, "index")}`,
     band: null,
     markers: withCoverageMarker(actionMarkers(dates, watch), points),
-    nextLabel: watch?.next?.date ? `${monthDay(watch.next.date)} ${roundKindWord(watch.next.kind) ?? "复测"}` : null,
+    nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [watch, metric?.target, project.name]);
+  }), [watch, next, metric?.target, project.name]);
 
   return (
     <ChartCard
       title={title}
-      meta={chartDates(change, watch?.next?.date)}
+      meta={chartDates(change, next?.date)}
       state={monitoring.state.kind === "loading" ? "loading"
         : monitoring.state.kind === "error" ? "error"
           : points.length === 0 ? "empty" : "content"}

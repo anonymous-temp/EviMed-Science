@@ -74,6 +74,17 @@ describe("循证 GEO home", () => {
     expect(within(xinli).getAllByText("—")).toHaveLength(2);
   });
 
+  it("says a single step that ended without finishing as not finished, never as under way", async () => {
+    client.listGeoProjects.mockResolvedValue([
+      { ...GEO_SUMMARIES[2], steps: { evidence: { status: "done", requested: true }, diagnosis: { status: "failed", requested: true } } },
+    ]);
+    renderHome();
+    const list = await screen.findByRole("list", { name: "循证 GEO 项目" });
+    const subline = within(list).getAllByRole("listitem")[0].querySelector("[data-geo-subline]");
+    expect(subline).toHaveTextContent("诊断没有做完");
+    expect(subline).not.toHaveTextContent("正在做");
+  });
+
   it("says the severe errors in its own words beside their badge — never an engine's sentence", async () => {
     client.listGeoProjects.mockResolvedValue([
       { ...GEO_SUMMARIES[0], alert: { wrongOurs: 13, severe: 11, safety: 0, severity: "S3" } },

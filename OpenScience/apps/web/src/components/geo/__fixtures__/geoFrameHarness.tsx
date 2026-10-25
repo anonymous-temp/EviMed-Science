@@ -22,6 +22,7 @@ export function GeoFrameHarness({
   tab = "overview",
   reload = NOOP,
   openPanel = NOOP,
+  conversation = null,
   children,
 }: {
   project: GeoProject;
@@ -29,13 +30,15 @@ export function GeoFrameHarness({
   tab?: GeoTabKey;
   reload?: () => void;
   openPanel?: GeoFrameApi["openPanel"];
+  /** The conversation the page holds; none is the project's own. */
+  conversation?: string | null;
   children: ReactNode;
 }) {
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   const [data] = useState(() => new GeoDataCache());
   const api = useMemo<GeoFrameApi>(
-    () => ({ geoId, project, tab, reload, openPanel, data, setToolbar }),
-    [geoId, project, tab, reload, openPanel, data],
+    () => ({ geoId, project, tab, conversation: conversation ?? project.sessionId ?? null, reload, openPanel, data, setToolbar }),
+    [geoId, project, tab, conversation, reload, openPanel, data],
   );
   return (
     <GeoFrameContext.Provider value={api}>
