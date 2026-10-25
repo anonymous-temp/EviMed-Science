@@ -100,7 +100,7 @@ import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasi
 import { FRONTIER_ASK_VERSION, frontierWriteAsk } from "./frontierAsk.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "./frontierLead.mjs";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "./frontierBrief.mjs";
-import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead, frontierStudyFactsWanted } from "./frontierFaithStep.mjs";
+import { FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead, frontierStudyFactsWanted, frontierWriteFaith } from "./frontierFaithStep.mjs";
 import { FRONTIER_INSIGHT_LIMITS, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight } from "./frontierInsight.mjs";
 import { frontierItemFollowups } from "./frontierEventReading.mjs";
 import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
@@ -2903,21 +2903,14 @@ export class FrontierPipeline {
   }
 
   /**
-   * The check's record in the write that stores the draft: the item's study facts when they were made now, and the closed
-   * outcome in `editor_diagnostics.faith` (merged, so the 导读's and the 要点's records sit side by side).
+   * The check's record in the write that stores the draft (`frontierWriteFaith`): the study facts made now, and each checked
+   * text's closed outcome with the version and time of its check.
    * @param {any} client @param {string} id @param {{ facts: any | null, diagnostic: any | null }} faith
    */
   async #writeFaith(client, id, faith) {
-    if (faith.facts) {
-      await client.query("UPDATE evimed_frontier.items SET study_facts = $2::jsonb, study_facts_version = $3 WHERE id = $1",
-        [id, JSON.stringify(faith.facts), FRONTIER_STUDY_FACTS_VERSION]);
-    }
-    if (faith.diagnostic) {
-      await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb)
-        || jsonb_build_object('faith', coalesce(editor_diagnostics->'faith', '{}'::jsonb) || $2::jsonb) WHERE id = $1`,
-      [id, JSON.stringify({ version: FRONTIER_FAITH_VERSION, at: this.now().toISOString(), ...faith.diagnostic })]);
-    }
+    await frontierWriteFaith(client, id, faith, this.now());
   }
+
 
   /**
    * The 「AI 解读」 of a 精选 item or a safety alert (`frontierInsight.mjs`), once its 导读 is written: the related reports it may

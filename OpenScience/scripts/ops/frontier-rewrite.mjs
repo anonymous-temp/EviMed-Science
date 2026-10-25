@@ -7,7 +7,7 @@
  *   node scripts/ops/frontier-rewrite.mjs                   report: what each step would do, by genre, and what asking would cost
  *   node scripts/ops/frontier-rewrite.mjs --apply           do it, within the module's day budget
  *   options: --days N (1–30, default 30), --since ISO (instead of --days: where a stopped run resumes),
- *            --steps genre,lead,brief,reason (default all four, in that order), --concurrency N (1–8, default 4), --limit N
+ *            --steps genre,lead,brief,reason,facts,faith (default all six, in that order), --concurrency N (1–8, default 4), --limit N
  *
  * The steps:
  * - `genre`: an item with no stored genre takes code's answer (`frontierGenreFallback`) where code is sure of it or its fields say
@@ -19,6 +19,13 @@
  * - `brief`: a reader-worthy item whose 要点 are missing or older (`brief_version`, `brief_basis`) gets them (`frontierWriteBrief`).
  * - `reason`: a reader-worthy item whose 推荐理由 an older prompt wrote (`reason_version`) gets one through its genre's lens without
  *   being edited again (`FrontierEditor#writeReason`) — an edit would score and select it again. A refused answer keeps the old one.
+ * - `facts` (c3-faith): a reader-worthy item of a study genre (paper, preprint, trial, conference) whose study facts were not made from
+ *   its settled reader text gets them (`frontierEnsureStudyFacts`: each field anchored to a quotation code found, or an empty record).
+ * - `faith` (c3-faith): a reader-worthy study item whose 导读 or 要点 was written after its last check, or never checked by these
+ *   instructions, or whose check could not be made, is read against its study facts (made now when missing) the way the pipeline reads
+ *   a new one (`frontierFaithCheckLead` / `frontierFaithCheckBrief`): a mismatch goes back to the writer once, a sentence or point that
+ *   still mismatches is left out, and a text with nothing left is cleared (the reader shows the card's summary). The record is
+ *   `editor_diagnostics.faith`, never a note on the page. An item whose text has an empty facts record is not asked about again.
  *
  * Hidden knowledge:
  *
@@ -39,6 +46,8 @@ import { fileURLToPath } from "node:url";
 import { FRONTIER_GENRES, agendaLocalDate, frontierGenreDecision, frontierGenreFallback, frontierSourceDisplayName, isFrontierGenre }
   from "@evimed/domain";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "../../apps/server/src/frontierBrief.mjs";
+import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief,
+  frontierFaithCheckLead, frontierStudyFactsWanted, frontierWriteFaith } from "../../apps/server/src/frontierFaithStep.mjs";
 import { FRONTIER_GENRE_BATCH, FRONTIER_REASON_VERSION } from "../../apps/server/src/frontierEditor.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
 import { bumpFrontierVersion } from "../../apps/server/src/frontierPersistence.mjs";
@@ -46,7 +55,7 @@ import { FRONTIER_READER_MARGIN, frontierReaderText } from "../../apps/server/sr
 
 const DAY_MS = 24 * 3_600_000;
 const REWRITE_LOCK = "evimed-frontier-rewrite";
-export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "lead", "brief", "reason"]);
+export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "lead", "brief", "reason", "facts", "faith"]);
 /** Genres code reached from the channel alone: the model names these (the rest are code's answer, from what the fields say). */
 export const FRONTIER_REWRITE_UNSURE = Object.freeze(["news", "commentary", "industry", "policy"]);
 /**
@@ -59,6 +68,10 @@ export const REWRITE_CALL_TOKENS = Object.freeze({
   lead: { cached: 1_000, prompt: 2_600, output: 260 },
   brief: { cached: 1_000, prompt: 2_800, output: 520 },
   reason: { cached: 700, prompt: 1_900, output: 120 },
+  // c3-faith's eval (2026-10-25) measured CNY 0.0031 a facts call and 0.0011–0.0017 a check, with the provider's cache warm on repeated
+  // items; these sizes assume the text itself is not cached, so the report errs high. A `faith` call is one text checked.
+  facts: { cached: 900, prompt: 2_600, output: 290 },
+  faith: { cached: 800, prompt: 600, output: 150 },
 });
 
 /** @param {string[]} argv */
@@ -119,7 +132,8 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
   const worthy = threshold - FRONTIER_READER_MARGIN;
   /** @type {Record<string, any>} */
   const summary = { applied: apply, since: since.toISOString(), until: until.toISOString(), steps, versions: { lead: FRONTIER_LEAD_VERSION,
-    brief: FRONTIER_BRIEF_VERSION, reason: FRONTIER_REASON_VERSION }, stopped: null, resumeFrom: null, failed: 0 };
+    brief: FRONTIER_BRIEF_VERSION, reason: FRONTIER_REASON_VERSION, facts: FRONTIER_STUDY_FACTS_VERSION, faith: FRONTIER_FAITH_VERSION },
+    stopped: null, resumeFrom: null, failed: 0 };
   /** @type {Record<string, number>} */
   const calls = {};
   let stopped = false;
@@ -257,6 +271,114 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
       else summary.reason.emptied += 1;
     });
   }
+  /**
+   * The reader-worthy items of a study genre one of the c3-faith steps still owes, oldest first: `owed` a predicate over `i` and `t`
+   * with the version, when given, as `$5`; `extra` more columns. @param {string} owed @param {string | null} version @param {string} [extra]
+   */
+  const studyOwing = async (owed, version = null, extra = "") => (await database.query(`SELECT ${ITEM_FIELDS}, i.lead_zh, i.brief, i.study_facts${extra}
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+      WHERE i.state = 'published' AND i.visible_at >= $1 AND i.visible_at < $2 AND t.reader_tidy IS NOT NULL
+        AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND ${owed}
+      ORDER BY i.visible_at, i.id LIMIT $4`, [since, until, worthy, limit, ...(version === null ? [] : [version])])).rows
+    .filter((row) => frontierStudyFactsWanted(genreOf(row)));
+  /** What the facts call reads. @param {any} row @param {{ text: string, source: any }} reader */
+  const factsInput = (row, reader) => ({ sourceName: sourceName(row), date: day(row), titleRaw: row.title_raw, text: reader.text, kind: reader.source });
+  /** A coded error out of a step's work (counted as failed by `each`). @param {string} code */
+  const coded = (code) => Object.assign(new Error(code), { code });
+
+  const factsOwed = "(i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha')";
+  if (steps.includes("facts")) {
+    const rows = await studyOwing(factsOwed);
+    summary.facts = { items: rows.length, byGenre: genres(rows), written: 0, empty: 0 };
+    calls.facts = rows.length;
+    if (apply) await each(rows, async (row) => {
+      const texts = await textsOf(row);
+      const reader = frontierReaderText(texts);
+      const sha = texts?.reader_tidy?.sha;
+      if (!reader || !sha) return;
+      const ensured = await frontierEnsureStudyFacts(editor, { stored: row.study_facts, sha, input: factsInput(row, reader) });
+      if (ensured.error) throw coded(ensured.error);
+      if (!ensured.fresh) return;
+      await frontierWriteFaith(database, row.id, { facts: ensured.record, diagnostic: null }, new Date());
+      if (ensured.record.empty) summary.facts.empty += 1;
+      else summary.facts.written += 1;
+    });
+  }
+
+  if (steps.includes("faith")) {
+    // A text is owed a check when it was never checked by these instructions, its check could not be made, or it was written after it.
+    const owedText = (/** @type {"lead" | "brief"} */ kind) => `(i.${kind === "lead" ? "lead_zh" : "brief"} IS NOT NULL
+      AND (i.editor_diagnostics->'faith'->'${kind}'->>'version' IS DISTINCT FROM $5 OR i.editor_diagnostics->'faith'->'${kind}'->>'outcome' = 'unchecked'
+        OR coalesce((i.editor_diagnostics->'faith'->'${kind}'->>'at')::timestamptz < i.${kind}_at, true)))`;
+    const rows = await studyOwing(`(${owedText("lead")} OR ${owedText("brief")})
+        AND NOT coalesce(i.study_facts->>'basis' = t.reader_tidy->>'sha' AND (i.study_facts->>'empty')::boolean, false)`,
+    FRONTIER_FAITH_VERSION, `, ${owedText("lead")} AS lead_owed, ${owedText("brief")} AS brief_owed, ${factsOwed} AS facts_owed`);
+    /** @type {Record<string, number>} */
+    const outcomes = {};
+    summary.faith = { items: rows.length, byGenre: genres(rows), texts: 0, outcomes, changed: 0, facts: 0, noFacts: 0 };
+    calls.faith = rows.reduce((total, row) => total + (row.lead_owed ? 1 : 0) + (row.brief_owed ? 1 : 0), 0);
+    // Facts the faith step makes itself (in a report with the facts step, that step has counted them).
+    if (!steps.includes("facts")) calls.facts = rows.filter((row) => row.facts_owed).length;
+    if (apply) await each(rows, async (row) => {
+      const texts = await textsOf(row);
+      const reader = frontierReaderText(texts);
+      const sha = texts?.reader_tidy?.sha;
+      if (!reader || !sha) return;
+      const input = factsInput(row, reader);
+      const ensured = await frontierEnsureStudyFacts(editor, { stored: row.study_facts, sha, input });
+      if (ensured.error) throw coded(ensured.error);
+      const facts = ensured.fresh ? ensured.record : null;
+      if (facts) summary.faith.facts += 1;
+      if (!ensured.view) {
+        // No facts the source states: nothing to read a text against, and the empty record keeps the item from being asked again.
+        if (facts) await frontierWriteFaith(database, row.id, { facts, diagnostic: null }, new Date());
+        summary.faith.noFacts += 1;
+        return;
+      }
+      const genre = genreOf(row);
+      const writing = { sourceName: input.sourceName, date: input.date, titleRaw: row.title_raw, titleZh: row.title_zh, text: reader.text,
+        kind: reader.source, post: row.platform === "x", genre };
+      const source = faithSource(input);
+      /** @type {Record<string, any>} */
+      const diagnostic = {};
+      let { lead_zh: lead, brief } = row;
+      const tally = (/** @type {"lead" | "brief"} */ kind, /** @type {any} */ result) => {
+        diagnostic[kind] = faithDiagnostic(result);
+        outcomes[result.outcome] = (outcomes[result.outcome] ?? 0) + 1;
+        summary.faith.texts += 1;
+        if (result.error) throw coded(result.error);
+      };
+      let failure = null;
+      try {
+        if (row.lead_owed) {
+          const run = await frontierFaithCheckLead(editor, { facts: ensured.view, lead, previous: null, source,
+            input: { ...writing, briefed: frontierBriefWanted(genre) } });
+          lead = run.lead;
+          tally("lead", run.result);
+        }
+        if (row.brief_owed) {
+          const run = await frontierFaithCheckBrief(editor, { facts: ensured.view, brief, previous: null, source, input: writing });
+          brief = run.brief;
+          tally("brief", run.result);
+        }
+      } catch (error) {
+        // The outcome of what was checked is still kept (an unchecked text is asked about again next run); the item counts as failed.
+        failure = error;
+      }
+      const changed = lead !== row.lead_zh || JSON.stringify(brief) !== JSON.stringify(row.brief);
+      await database.transaction(async (/** @type {any} */ client) => {
+        if (lead !== row.lead_zh) await client.query("UPDATE evimed_frontier.items SET lead_zh = $2 WHERE id = $1", [row.id, lead]);
+        if (JSON.stringify(brief) !== JSON.stringify(row.brief)) {
+          await client.query("UPDATE evimed_frontier.items SET brief = $2::jsonb WHERE id = $1", [row.id, brief ? JSON.stringify(brief) : null]);
+        }
+        await frontierWriteFaith(client, row.id, { facts, diagnostic }, new Date());
+        if (changed) await bumpFrontierVersion(client);
+      });
+      if (changed) summary.faith.changed += 1;
+      if (failure) throw failure;
+    });
+  }
+
   summary.calls = calls;
   onProgress(`frontier-rewrite: done${summary.stopped ? ` (stopped: ${summary.stopped})` : ""}`);
   return summary;

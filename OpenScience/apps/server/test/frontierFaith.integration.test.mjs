@@ -152,7 +152,10 @@ test("a faithful 导读 is stored as written; the study facts are made once per 
   assert.equal(stored.study_facts.quotes_verified, true);
   assert.equal(stored.study_facts_version, FRONTIER_STUDY_FACTS_VERSION);
   assert.equal(stored.editor_diagnostics.faith.version, FRONTIER_FAITH_VERSION);
-  assert.deepEqual(stored.editor_diagnostics.faith.lead, { outcome: "clean", candidates: 0, confirmed: 0, remaining: 0, rules: [], calls: 1, error: null });
+  // Each text's record carries the version and time of its check, so a text written later reads as not checked (frontier-rewrite).
+  const { version, at, ...lead } = stored.editor_diagnostics.faith.lead;
+  assert.deepEqual([version, at], [FRONTIER_FAITH_VERSION, NOW.toISOString()]);
+  assert.deepEqual(lead, { outcome: "clean", candidates: 0, confirmed: 0, remaining: 0, rules: [], calls: 1, error: null });
   assert.equal(editor.counts.facts, 1, "the step made them; the lead step found them stored");
   assert.deepEqual([pipeline.counters.faithOutcomes, pipeline.counters.studyFacts], [{ clean: 1 }, 1]);
   // Nothing changed: not asked again (idempotent per text hash).

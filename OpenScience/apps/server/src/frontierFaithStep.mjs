@@ -77,4 +77,26 @@ export function faithSource(input) {
   return readerNumberSource(buildStudyFactsInput(input));
 }
 
+/**
+ * Store a check's record in the write that stores the draft: the item's study facts when they were made now, and the closed outcome
+ * of each text checked under `editor_diagnostics.faith.<kind>` with the version and the time of its check — merged, so the 导读's and
+ * the 要点's records sit side by side, and a text written after its check (`lead_at` / `brief_at` later than the record's `at`) reads as
+ * not checked (`frontier-rewrite.mjs --steps faith`).
+ * @param {{ query: Function }} client @param {string | number} id
+ * @param {{ facts: any | null, diagnostic: Record<string, any> | null }} faith @param {Date} at
+ */
+export async function frontierWriteFaith(client, id, { facts, diagnostic }, at) {
+  if (facts) {
+    await client.query("UPDATE evimed_frontier.items SET study_facts = $2::jsonb, study_facts_version = $3 WHERE id = $1",
+      [id, JSON.stringify(facts), FRONTIER_STUDY_FACTS_VERSION]);
+  }
+  if (diagnostic && Object.keys(diagnostic).length) {
+    const stamp = { version: FRONTIER_FAITH_VERSION, at: at.toISOString() };
+    const kinds = Object.fromEntries(Object.entries(diagnostic).map(([kind, record]) => [kind, { ...record, ...stamp }]));
+    await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb)
+      || jsonb_build_object('faith', coalesce(editor_diagnostics->'faith', '{}'::jsonb) || $2::jsonb) WHERE id = $1`,
+    [id, JSON.stringify({ ...stamp, ...kinds })]);
+  }
+}
+
 export { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, frontierStudyFactsWanted };
