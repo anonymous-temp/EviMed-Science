@@ -1247,18 +1247,30 @@ function dayOf(date) {
 }
 
 /**
+ * A point that observed something: a value, or the counts a rate is pooled from. A week whose cell was not measurable carries neither.
+ * @param {GeoSeriesPoint} point
+ */
+const observed = (point) => isNumber(point.value) || (isNumber(point.numerator) && isNumber(point.denominator))
+
+/**
+ * The window of `weeks` weeks ending on day `end`, over the points that observed something. A point that observed nothing is left out
+ * before the estimator is chosen: kept, it made the window fail "every point has counts" and switched it from pooled k/n to the plain
+ * mean of the other weeks' values (2026-10-25: pilot weeks 2/50 and 30/31 pool to 39.51 %, and one not-measurable week beside them
+ * read 50.38 %, a net effect moved by 10.9 points with no new answer). The window keeps its last day's date either way.
  * @param {GeoSeriesPoint[]} points  sorted by date
  * @param {number} end  day number of the window's last day
  * @param {number} weeks
  * @returns {GeoTrendPoint|null}
  */
 function windowValue(points, end, weeks) {
-  const inWindow = points.filter((point) => {
+  const dated = points.filter((point) => {
     const day = dayOf(point.date)
     return day <= end && day > end - weeks * 7
   })
-  if (!inWindow.length) return null
-  const date = inWindow[inWindow.length - 1].date
+  if (!dated.length) return null
+  const date = dated[dated.length - 1].date
+  const inWindow = dated.filter(observed)
+  if (!inWindow.length) return { date, value: null, numerator: null, denominator: null, points: 0, answers: null }
   const counted = inWindow.filter((point) => isNumber(point.denominator))
   const answers = counted.length ? counted.reduce((sum, point) => sum + /** @type {number} */ (point.denominator), 0) : null
   if (inWindow.every((point) => isNumber(point.numerator) && isNumber(point.denominator))) {

@@ -544,6 +544,18 @@ test("a net effect is not computed from a window under the 30-answer floor (Q-2)
   const holed = netEffect([point("2026-08-03", 12, 40), { date: "2026-09-08", value: null, numerator: null, denominator: null }, point("2026-09-15", 5, 8)],
     [point("2026-08-03", 12, 40), point("2026-09-15", 3, 8)], early);
   assert.deepEqual(holed.missing?.[0], { input: "pilot.current", reason: "insufficient_sample" });
+  // A week that observed nothing is left out of the window, not averaged around (2026-10-25): the window still pools k/n.
+  const hole = { date: "2026-09-29", value: null, numerator: null, denominator: null };
+  const weeksWithHole = [point("2026-09-15", 2, 50), point("2026-09-22", 30, 31)];
+  const [, pooledPair, withHole] = rollingTrend([...weeksWithHole, hole], 4);
+  assert.deepEqual([withHole.value, withHole.numerator, withHole.denominator, withHole.points, withHole.date], [pooledPair.value, 32, 81, 2, "2026-09-29"]);
+  assert.equal(withHole.value, pythonRound(100 * 32 / 81, 2));
+  const control = [point("2026-09-01", 10, 40), point("2026-09-29", 10, 40)];
+  const holedEffect = netEffect([point("2026-09-01", 10, 40), ...weeksWithHole, hole], control, options);
+  assert.deepEqual([holedEffect.pilot?.current.value, holedEffect.pilot?.current.numerator, holedEffect.pilot?.current.denominator], [39.51, 32, 81],
+    "the current window is the two weeks pooled, not the mean of their rates (50.38)");
+  assert.equal(holedEffect.pilotChange, 39.51 - 25);
+  assert.deepEqual(rollingTrend([hole], 4)[0], { date: "2026-09-29", value: null, numerator: null, denominator: null, points: 0, answers: null });
   // An index carries no counts, so there is nothing here to hold it to: its cells' own status is the floor (the store drops an insufficient one).
   assert.equal(netEffect([{ date: "2026-09-01", value: 20 }, { date: "2026-09-15", value: 35 }], [{ date: "2026-09-01", value: 20 }, { date: "2026-09-15", value: 24 }], options).status, "computed");
 });
