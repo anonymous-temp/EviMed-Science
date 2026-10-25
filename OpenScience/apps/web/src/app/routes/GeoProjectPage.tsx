@@ -203,9 +203,14 @@ function GeoProjectView({ geoId }: { geoId: string }) {
       .finally(() => setPanel("budget"));
   }, [geoId]);
 
+  // The conversation the page holds: the one on screen, else the one the address carries from it (`?session=`), else the project's
+  // own. The header's 「对话」 and every 「写纠错稿」 below it open this one (`useOpenGeoConversation`).
+  const heldSession = addressedSession ?? new URLSearchParams(location.search).get("session");
   const api = useMemo<GeoFrameApi | null>(
-    () => (loaded.kind === "ready" ? { geoId, project: loaded.project, tab, reload, openPanel, data, setToolbar } : null),
-    [geoId, loaded, tab, reload, openPanel, data],
+    () => (loaded.kind === "ready"
+      ? { geoId, project: loaded.project, tab, conversation: heldSession ?? loaded.project.sessionId ?? null, reload, openPanel, data, setToolbar }
+      : null),
+    [geoId, loaded, tab, heldSession, reload, openPanel, data],
   );
 
   if (feature === "off" || loaded.kind === "off") return <GeoOffPage />;
@@ -302,9 +307,9 @@ function GeoBand({
     { started: "已开始生成提案资料包。", queued: "提案资料包排在前一项之后，做完会自动开始。" }, "提案资料包无法导出，请稍后重试。");
   const startWeekly = () => start("weekly", () => exportGeo(geoId, "weekly"),
     { started: "已开始生成周报。", queued: "周报排在前一项之后，做完会自动开始。" }, "周报无法导出，请稍后重试。");
-  /** The person's own conversation in the project (the server's `sessionId`: never a step the programme ran); none yet opens a new one. */
+  /** The conversation the page holds (`GeoFrameApi.conversation`: never a step the programme ran); none yet opens a new one. */
   const params = new URLSearchParams(location.search);
-  const heldSession = addressedSession ?? params.get("session") ?? project.sessionId;
+  const heldSession = api.conversation;
   const target = { geoId, projectId: project.projectId, sessionId: heldSession };
   useEffect(() => {
     if (!onChat || addressedSession) return;
@@ -322,6 +327,11 @@ function GeoBand({
   const runsVersion = [project.updatedAt ?? "", ...GEO_STEP_KEYS.map((step) => `${step}:${project.steps[step]?.status ?? "none"}`)].join("|");
 
   const paused = project.status === "paused";
+  const setPaused = (pause: boolean) => {
+    void patchGeoProject(geoId, { status: pause ? "paused" : "active" })
+      .then(() => { toast.success(pause ? "已暂停，测量和投放都停下了。" : "已继续。"); reload(); })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目状态无法修改，请稍后重试。" })));
+  };
   // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
   // same; the menu only does not offer what would be refused.
   const abilities = project.access?.abilities;
@@ -333,14 +343,8 @@ function GeoBand({
     ...(can("run") ? [{ label: "导出提案资料包", onSelect: startProposal }] : []),
     // What the programme did in the background, read-only — the steps are in no conversation list.
     { label: "AI 运行", onSelect: () => onPanel("runs") },
-    ...(can("edit") ? [{
-      label: paused ? "继续" : "暂停",
-      onSelect: () => {
-        void patchGeoProject(geoId, { status: paused ? "active" : "paused" })
-          .then(() => { toast.success(paused ? "已继续。" : "已暂停，测量和投放都停下了。"); reload(); })
-          .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目状态无法修改，请稍后重试。" })));
-      },
-    }] : []),
+    // A paused project's 「继续」 is in the header, beside the word that says it is paused.
+    ...(can("edit") && !paused ? [{ label: "暂停", onSelect: () => setPaused(true) }] : []),
     ...(can("delete") ? ["separator" as const, { label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) }] : []),
   ];
 
@@ -356,12 +360,16 @@ function GeoBand({
   };
 
   const week = weekOf(project.startedAt ?? project.createdAt ?? null);
-  const now = bandNow(project, monitoring.state.kind === "ready" ? monitoring.state.data.next : null);
+  const watched = monitoring.state.kind === "ready" ? monitoring.state.data : null;
+  const now = bandNow(project, watched?.next ?? null, undefined, watched?.measurement ?? null);
   const destination = (next: GeoTabKey, view?: string, step?: string, section?: string) => geoDestinationPath(geoId, { tab: next, view: view ?? (next === tab ? params.get("view") ?? undefined : undefined), section }, {
     session: heldSession, step: step ?? params.get("step"),
   });
   const steps = bandSteps(project, (step) => destination(GEO_STEP_HOME[step].tab, GEO_STEP_HOME[step].view, step, GEO_STEP_HOME[step].section));
-  const selectedStep = params.get("step") ?? GEO_TAB_STEPS[tab][0] ?? null;
+  // The step the address names stays in it across the views (it is the person's selection), but the rail marks it only on a view
+  // built from it: on any other the rail marks that view's own step, never a step whose result is not on the page.
+  const addressedStep = params.get("step");
+  const selectedStep = addressedStep && (GEO_TAB_STEPS[tab] as readonly string[]).includes(addressedStep) ? addressedStep : GEO_TAB_STEPS[tab][0] ?? null;
 
   // The one text button that continues this tab's step. It is drawn here, so it is there whether the tab has anything yet or not.
   const product = project.product?.brandName || project.product?.genericName || project.name;
@@ -405,9 +413,10 @@ function GeoBand({
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width={onChat ? "full" : "wide"}
       contentClassName={onChat ? "flex min-h-96 flex-col" : undefined}
-      meta={<Tag title={now ?? undefined}>{week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag>}
+      meta={<Tag title={now ?? undefined}>{`${paused ? "已暂停 · " : ""}${week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}`}</Tag>}
       actions={(
         <>
+          {paused && can("edit") && <Button variant="secondary" onClick={() => setPaused(false)}>继续</Button>}
           <Button variant="secondary" loading={busy === "weekly"} onClick={startWeekly}>
             <FileDown size={16} aria-hidden="true" />
             周报

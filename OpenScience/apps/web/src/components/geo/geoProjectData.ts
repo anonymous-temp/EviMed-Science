@@ -44,6 +44,19 @@ export interface GeoLoadResult<T> {
   reload: () => void;
 }
 
+/**
+ * A read that failed, as a block's own error state: the sentence and the way to read it again. A block whose data did not come
+ * says so with 重试 — never its empty sentence, never a zero or a 「未测」 (owner, 2026-10-19: a partial read error is not a zero).
+ */
+export interface ReadFailure {
+  message: string;
+  retry: () => void;
+}
+
+export function readFailure<T>(load: GeoLoadResult<T>): ReadFailure | null {
+  return load.state.kind === "error" ? { message: load.state.message, retry: load.reload } : null;
+}
+
 /** How long a read is current. A tab switch inside it fetches nothing; one after it reads again behind what is drawn. */
 export const STALE_MS = 30_000;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GeoProject } from "@/lib/geoClient";
 import { geoProject } from "./__fixtures__/geoTabs";
-import { bandNow, bandSteps } from "./geoBand";
+import { bandNow, bandSteps, measurementPause, nextMeasurement } from "./geoBand";
 import { GEO_STEP_HOME, geoDestinationPath } from "./geoTabs";
 
 /**
@@ -116,4 +116,33 @@ it("does not infer an active round or round identity from dates or historical co
   running.overview.steps.monitoring.status = "queued";
   running.overview.steps.monitoring.waiting = "allowance";
   expect(bandNow(running, null)).toBe("复测等待额度");
+});
+
+describe("the measurement's own state", () => {
+  const NOW = new Date("2026-10-25T03:00:00.000Z");
+  const PAUSED = { state: "paused" as const, since: "2026-10-20T04:00:00.000Z", engines: ["doubao", "kimi"] };
+
+  it("says a paused measurement with the day it stopped and what happens next, in plain words", () => {
+    expect(measurementPause(PAUSED)).toEqual({
+      paused: true, short: "AI 回答测量暂停中（10月20日起）", detail: "测量服务暂时连不上，恢复后自动继续",
+      sentence: "AI 回答测量暂停中（10月20日起）：测量服务暂时连不上，恢复后自动继续。",
+    });
+    expect(measurementPause({ state: "paused", since: null, engines: [] })?.short).toBe("AI 回答测量暂停中");
+  });
+
+  it("names the engines that are paused while the rest are measured, and says nothing when none is", () => {
+    expect(measurementPause({ state: "measuring", since: null, engines: ["doubao", "kimi", "kimi"] })?.short).toBe("豆包、Kimi 暂停测量");
+    expect(measurementPause({ state: "measuring", since: null, engines: [] })).toBeNull();
+    expect(measurementPause(undefined)).toBeNull();
+  });
+
+  it("promises no next round for a paused project or a paused measurement, whatever the read says", () => {
+    const next = { date: "2026-10-26", kind: "weekly" };
+    expect(nextMeasurement({ status: "active" }, { next })).toEqual(next);
+    expect(nextMeasurement({ status: "paused" }, { next })).toBeNull();
+    expect(nextMeasurement({ status: "active" }, { next, measurement: PAUSED })).toBeNull();
+    expect(bandNow(project({ evidence: "done" }, { status: "paused" }), next, NOW)).toBeNull();
+    expect(bandNow(project({ evidence: "done" }), next, NOW, PAUSED)).toBe("AI 回答测量暂停中（10月20日起）");
+    expect(bandNow(project({ evidence: "done" }), next, NOW, { state: "measuring", since: null, engines: ["doubao"] })).toBe("豆包暂停测量 · 下次复测 周一 10月26日");
+  });
 });

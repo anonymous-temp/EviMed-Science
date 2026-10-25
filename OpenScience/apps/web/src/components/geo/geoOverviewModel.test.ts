@@ -454,4 +454,15 @@ describe("a 本周 line lands on what it is about", () => {
     const written: GeoWeekItem = { kind: "articles", text: "写了 6 篇稿件", tab: "content", ref: null, at: null };
     expect(weekTarget("geo_masi", written)).toBe("/app/geo/geo_masi/actions");
   });
+
+  it("opens a measurement's line on the measurement, never on the wrong-statement list it is filed beside", () => {
+    // geoService files a baseline or weekly round under 诊断 (`tab: "diagnosis"`, `ref.roundId`).
+    const round: GeoWeekItem = { kind: "round", text: "每周复测完成，264 次提问", tab: "diagnosis", ref: { roundId: "round_9" }, at: "2026-10-19T08:00:00Z" };
+    expect(weekTarget("geo_masi", round)).toBe("/app/geo/geo_masi/visibility#geo-trend");
+  });
+
+  it("opens an article's line where the article waits for a person, the article named", () => {
+    const held: GeoWeekItem = { kind: "safety", text: "“司美格鲁肽怎么打”有安全问题待确认", tab: "content", ref: { articleId: "art_7" }, at: null };
+    expect(weekTarget("geo_masi", held)).toBe("/app/geo/geo_masi/actions?article=art_7#geo-review");
+  });
 });

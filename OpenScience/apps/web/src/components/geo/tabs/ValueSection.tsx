@@ -193,7 +193,7 @@ function StartAnalysis({ geoId, project, className }: { geoId: string; project: 
         gives="这个药的获益、风险、适用性、费用与可及性"
         onStart={mayRun ? () => {
           setBusy(true);
-          void open({ projectId: project.projectId, sessionId: project.sessionId }, START_DRAFT).finally(() => setBusy(false));
+          void open({ projectId: project.projectId }, START_DRAFT).finally(() => setBusy(false));
         } : undefined}
         starting={busy}
         reason={mayRun ? undefined : "你在这个项目里只有查看权限。"}

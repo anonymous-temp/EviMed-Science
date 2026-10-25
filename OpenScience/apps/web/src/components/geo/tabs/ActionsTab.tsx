@@ -18,7 +18,8 @@ import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Button } from "@/components/ui/Button";
 import { useGeoFrame, useGeoToolbar } from "../geoFrame";
-import { useGeoMonitoring } from "../geoProjectData";
+import { LoadError } from "@/components/cards/LoadError";
+import { readFailure, useGeoMonitoring } from "../geoProjectData";
 import { marketConnected } from "../geoOverviewModel";
 import { scrollBlockToTop } from "../geoScroll";
 import { geoSectionId } from "../geoTabs";
@@ -39,7 +40,7 @@ import {
 import { clusterName } from "../spine/clusterModel";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { ClusterLink } from "../spine/ClusterLink";
-import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
+import { GEO_ARTICLE_PARAM, GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
 import { useGeoActions, useGeoClusters } from "../spine/spineData";
 import { useArticleActions } from "../spine/useArticleActions";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
@@ -97,6 +98,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
   const openConversation = useOpenGeoConversation();
   const [stageParam, setStageParam] = useGeoSearchParam(STAGE_PARAM);
   const [cluster, setCluster] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
+  const [addressedArticle] = useGeoSearchParam(GEO_ARTICLE_PARAM);
   const change = useGeoSearchChange();
   const [kind, setKind] = useState<GeoActionKind | null>(null);
   const [query, setQuery] = useState("");
@@ -230,8 +232,15 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
   const held = articleList.filter((article) => article.safety === "open" && article.status !== "withdrawn");
   const listed = new Set(all.flatMap((action) => action.articleIds));
   const others = articleList.filter((article) => !listed.has(article.id) && article.status !== "withdrawn" && article.safety !== "open");
+  // 「还没有稿件」 is said only once the articles were read: a read still on its way, or one that failed, is not an empty list.
+  const articlesFailed = readFailure(articles);
   const nothing = all.length === 0 && articleList.length === 0 && view.control.length === 0;
-  if (nothing) return <StepPending geoId={geoId} project={project} step="content" />;
+  if (nothing && articles.state.kind === "loading") return <TabSkeleton />;
+  if (nothing && !articlesFailed) return <StepPending geoId={geoId} project={project} step="content" />;
+  // The other reads of the page, each said where it failed with its own 重试; the articles' stands where 「需要你」 sends a person
+  // to release them (`#geo-review`), so that link lands on what went wrong rather than on nothing.
+  const distributionFailed = readFailure(distribution);
+  const clustersFailed = readFailure(clusters);
 
   const openAction = drawer.action ? all.find((action) => action.key === drawer.action) ?? null : null;
   const input = netEffectInput(monitoring.state.kind === "ready" ? monitoring.state.data : null, distributionData);
@@ -239,7 +248,14 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
 
   return (
     <div data-geo-tab="actions" className="flex flex-col gap-6">
-      <EffectCard parts={parts} input={input} loading={monitoring.state.kind === "loading"} onOpen={headlineTarget} />
+      <EffectCard parts={parts} input={input} loading={monitoring.state.kind === "loading"} onOpen={headlineTarget} error={readFailure(monitoring)} />
+      {articlesFailed && (
+        <section id={geoSectionId("review")} aria-label="稿件">
+          <LoadError message={`稿件没有读到：${articlesFailed.message}`} onRetry={articlesFailed.retry} />
+        </section>
+      )}
+      {distributionFailed && <LoadError message={`投放记录没有读到：${distributionFailed.message}`} onRetry={distributionFailed.retry} />}
+      {clustersFailed && <LoadError message={`问题群没有读到：${clustersFailed.message}`} onRetry={clustersFailed.retry} />}
       <ReviewBlock
         articles={held}
         groupOf={groupOf}
@@ -248,6 +264,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
         reachable={articleActions.reachable}
         onOpen={articleActions.open}
         onRelease={articleActions.release}
+        addressed={addressedArticle}
       />
       <BudgetLine distribution={marketConnected(project) || distributionData?.budget ? distributionData : null} canManage={can("manage_money")} onEdit={() => frame?.openPanel("budget")} />
       {project.cards?.blockedBy && can("edit") && (

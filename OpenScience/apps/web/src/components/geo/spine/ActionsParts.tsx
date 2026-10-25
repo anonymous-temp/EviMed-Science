@@ -9,6 +9,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { OWN_COLOR, rivalColor } from "@/components/charts/trendModel";
+import type { ReadFailure } from "../geoProjectData";
 import { geoSectionId } from "../geoTabs";
 import { GEO_POOL_KINDS, layerName, monthDay } from "../geoText";
 import { yuan } from "../tabs/geoTabText";
@@ -86,11 +87,14 @@ export function EffectCard({
   input,
   loading,
   onOpen,
+  error = null,
 }: {
   parts: readonly HeadlinePart[];
   input: NetEffectInput | null;
   loading: boolean;
   onOpen: (target: "acted" | "waiting" | "effect") => void;
+  /** The monitoring did not come: the arms cannot be drawn, and the card says why instead of 「首批稿件上线后…」. */
+  error?: ReadFailure | null;
 }) {
   // The figures of a heading take the heading's own weight (a `Note`'s medium figure would be a type pair of its own at this size).
   const title = parts.length > 0
@@ -118,7 +122,9 @@ export function EffectCard({
             {input.band !== null && <LegendMark series="band" shape="band" color="var(--chart-band)">对照组的波动范围</LegendMark>}
           </>
         ) : undefined}
-        state={loading ? "loading" : input ? "content" : "empty"}
+        state={loading ? "loading" : input ? "content" : error ? "error" : "empty"}
+        errorMessage={error ? `投放效果的测量没有读到：${error.message}` : undefined}
+        onRetry={error?.retry}
         emptyText="首批稿件上线后，这里会把投放的问题群和对照组放在一起比。"
         height={200}
       >
@@ -142,6 +148,7 @@ export function ReviewBlock({
   reachable,
   onOpen,
   onRelease,
+  addressed = null,
 }: {
   articles: readonly GeoArticle[];
   groupOf: (article: GeoArticle) => GeoClusterRow | null;
@@ -150,6 +157,8 @@ export function ReviewBlock({
   reachable: (article: ArticleRef) => { label: string } | null;
   onOpen: (article: GeoArticle) => void;
   onRelease: (article: GeoArticle) => void;
+  /** The article the address names (`?article=`, a 「本周」 line about it): its row is the marked one. */
+  addressed?: string | null;
 }) {
   if (articles.length === 0) return null;
   return (
@@ -165,6 +174,7 @@ export function ReviewBlock({
               title={article.title || article.question || "未命名稿件"}
               titleProps={{ "data-geo-article": article.id }}
               onOpen={reach ? () => onOpen(article) : undefined}
+              selected={addressed === article.id}
               meta={(
                 <span className="inline-flex flex-wrap items-baseline gap-x-2">
                   {group && <ClusterLink groupId={group.id} className="relative z-sticky text-ui">{clusterName(group)}</ClusterLink>}

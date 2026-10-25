@@ -18,6 +18,11 @@ export interface GeoFrameApi {
   project: GeoProject;
   /** The tab that is open; the answer page keeps 问题与回答. */
   tab: GeoTabKey;
+  /**
+   * The conversation the page holds: the one on screen or named in the address (`?session=`), else the project's own — what the
+   * header's 「对话」 opens, and every 「写纠错稿」 or 「问 AI」 below it that names none.
+   */
+  conversation: string | null;
   /** Read the project again now: after a start, a budget, a tier, anything that moves the rail or the to-dos. */
   reload(): void;
   /**

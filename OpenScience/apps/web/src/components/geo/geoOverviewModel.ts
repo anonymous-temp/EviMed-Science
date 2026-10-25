@@ -735,13 +735,17 @@ export function dayWord(value: string | null | undefined, now: Date = new Date()
 }
 
 /**
- * Where a “本周” line jumps. The line names a step (the server files a wrong statement under 诊断); the step's home is the tab that
- * holds its result now — the same table the rail and an address use.
+ * Where a “本周” line jumps: to what it is about. The line names a step (the server files a wrong statement under 诊断); the step's
+ * home is the tab that holds its result now — the same table the rail and an address use — unless the line names its object: an
+ * answer opens the answer, a measurement opens the measurement (可见度's trend, wherever the server files the round), an article
+ * opens 行动 where it waits for a person, its row marked (`?article=`).
  */
 export function weekTarget(geoId: string, item: GeoWeekItem): string | null {
   const base = `/app/geo/${encodeURIComponent(geoId)}`;
   // A line that quotes an answer opens that answer, whichever tab the server files it under: a wrong statement is filed under 诊断.
   if (item.ref?.snapshotId) return `${base}/answers/${encodeURIComponent(item.ref.snapshotId)}`;
+  if (item.kind === "round" || item.ref?.roundId) return geoDestinationPath(geoId, GEO_STEP_HOME.monitoring);
+  if (item.ref?.articleId) return geoDestinationPath(geoId, { tab: "actions", section: "review" }, { article: item.ref.articleId });
   if (item.tab === "overview") return geoTabPath(geoId, "overview");
   const home = (GEO_STEP_HOME as Record<string, (typeof GEO_STEP_HOME)[GeoStepKey]>)[item.tab];
   return home ? geoDestinationPath(geoId, home) : null;

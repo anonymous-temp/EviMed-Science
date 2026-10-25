@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useContext, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { getGeoProject, listGeoProjects } from "@/lib/geoClient";
 import { geoChatPath } from "@/lib/geoLocation";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { GeoFrameContext } from "./geoFrame";
 import { resolveGeoTab } from "./geoTabs";
 import { toast } from "@/lib/toast";
 
@@ -12,6 +13,7 @@ import { toast } from "@/lib/toast";
 export interface GeoConversationTarget {
   projectId: string;
   geoId?: string;
+  /** A conversation to open by name; none is the one the page holds (`GeoFrameApi.conversation`), else the project's own. */
   sessionId?: string | null;
 }
 
@@ -28,6 +30,11 @@ export interface GeoConversationTarget {
  * The project list is re-read first when the project is not in it yet — a
  * project created a moment ago — so the sidebar shows the project it lands in.
  *
+ * A target that names no conversation opens the one the project's page holds —
+ * the conversation the person is in or came from, which the header's 「对话」
+ * opens too — so a drawer's 「写纠错稿」 never lands in a different one; outside
+ * a project's page, or for another project, it is the project's own.
+ *
  * It never rejects. A project that cannot be proved or opened (the network, a
  * project deleted in another tab) is said in a toast, once, here, and the
  * answer is `false`: every button that calls this gives its spinner back and
@@ -41,6 +48,9 @@ export function useOpenGeoConversation() {
   arrival.current = location.key;
   const generation = useRef(0);
   useEffect(() => () => { generation.current += 1; }, []);
+  const frame = useContext(GeoFrameContext);
+  const held = useRef<{ projectId: string; sessionId: string | null } | null>(null);
+  held.current = frame ? { projectId: frame.project.projectId, sessionId: frame.conversation } : null;
   return useCallback(async (target: GeoConversationTarget, draft?: string): Promise<boolean> => {
     const request = ++generation.current;
     const from = arrival.current;
@@ -59,7 +69,8 @@ export function useOpenGeoConversation() {
       const project = await getGeoProject(geoId);
       if (!current()) return false;
       if (project.projectId !== target.projectId) throw new Error("GEO project mismatch");
-      const sessionId = target.sessionId ?? project.sessionId ?? undefined;
+      const page = held.current?.projectId === target.projectId ? held.current.sessionId : null;
+      const sessionId = target.sessionId ?? page ?? project.sessionId ?? undefined;
       unsubscribe();
       let opened = false;
       await useProjectStore.getState().select(target.projectId, () => {

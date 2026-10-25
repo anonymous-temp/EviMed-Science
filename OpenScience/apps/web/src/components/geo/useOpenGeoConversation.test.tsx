@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWebProjectId, webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useToastStore } from "@/lib/toast";
+import type { GeoProject } from "@/lib/geoClient";
+import { GeoFrameContext, type GeoFrameApi } from "./geoFrame";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
 
 const mocks = vi.hoisted(() => ({
@@ -43,10 +45,14 @@ function Probe() {
   return <pre data-testid="probe">{JSON.stringify({ path: location.pathname, intent: location.state?.runtimeUiIntent ?? null })}</pre>;
 }
 
-function renderOpener(props: { sessionId: string | null; draft?: string }) {
+function renderOpener(props: { sessionId: string | null; draft?: string }, page?: { projectId: string; conversation: string | null }) {
+  // A project's page around the opener: the frame names the conversation it holds (`GeoFrameApi.conversation`).
+  const frame = page ? ({ project: { projectId: page.projectId } as GeoProject, conversation: page.conversation } as GeoFrameApi) : null;
   render(
     <MemoryRouter initialEntries={["/app/geo"]}>
-      <Routes><Route path="*" element={<><Opener {...props} /><Probe /></>} /></Routes>
+      <GeoFrameContext.Provider value={frame}>
+        <Routes><Route path="*" element={<><Opener {...props} /><Probe /></>} /></Routes>
+      </GeoFrameContext.Provider>
     </MemoryRouter>,
   );
 }
@@ -137,6 +143,23 @@ describe("opening a GEO project's conversation", () => {
     expect(useProjectStore.getState().currentId).toBe("p-later");
     expect(probe().path).toBe("/app/geo");
     expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it("opens the conversation the page holds when the target names none — not the project's own, which another may have become", async () => {
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
+    mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: "ses_project" });
+    renderOpener({ sessionId: null, draft: "写纠错稿" }, { projectId: "p-new", conversation: "ses_held" });
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/ses_held"));
+    expect(probe().intent).toMatchObject({ projectId: "p-new", sessionId: "ses_held", draft: "写纠错稿" });
+  });
+
+  it("does not take another project's held conversation: a target in another project opens that project's own", async () => {
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
+    mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: "ses_project" });
+    renderOpener({ sessionId: null }, { projectId: "p-other", conversation: "ses_held" });
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/ses_project"));
   });
 
   it("refuses a GEO response for a different control-plane project", async () => {

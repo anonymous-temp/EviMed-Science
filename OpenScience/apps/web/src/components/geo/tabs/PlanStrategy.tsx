@@ -449,7 +449,7 @@ export function Assumptions({ project, plan }: { project: GeoProject; plan: GeoS
                   <Button
                     variant="text"
                     size="sm"
-                    onClick={() => { void open({ projectId: project.projectId, sessionId: project.sessionId }, `方案里有一条假设：“${line}”。我想改成：`); }}
+                    onClick={() => { void open({ projectId: project.projectId }, `方案里有一条假设：“${line}”。我想改成：`); }}
                   >
                     修改
                   </Button>
