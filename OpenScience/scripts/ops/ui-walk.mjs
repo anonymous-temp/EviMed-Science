@@ -605,8 +605,8 @@ export function frontierTargets({ zones, cards, links, hot, topics, congresses }
     authorId: text(links?.author?.id),
     eventId: text(events[0]?.id),
     topicId: text(topicList[0]?.id),
-    // 追踪's 会议 (c3-track): the first congress listed (on now, then coming, then just ended), whose hub is a page of its own.
-    congressId: text(congressList[0]?.id),
+    // 追踪's 会议 (c3-track): a congress whose hub is a page of its own — the first listed that has items, else the first listed.
+    congressId: text((congressList.find((congress) => Number(congress?.itemCount) > 0) ?? congressList[0])?.id),
   };
 }
 
