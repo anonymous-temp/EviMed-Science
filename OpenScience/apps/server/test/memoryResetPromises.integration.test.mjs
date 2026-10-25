@@ -3,7 +3,6 @@
 //   - A reset cancels the account's queued and running learning jobs, deletes its feedback events, and records the instant; a
 //     conversation that ended before it is not learned from again — by a lesson, or as a peer of a routine — and is counted.
 //     (The memory engine's own extraction is held to the same instant by the native commit path: nativeMemoryApp.integration.)
-//   - Account erasure takes the retired usememos rows with it, and leaves the digests an archive is re-sealed against.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
@@ -18,7 +17,6 @@ import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { MemorySettingsStore, endedBeforeReset } from "../src/memorySettings.mjs";
-import { eraseRetiredMemos, retiredMemosOwner } from "../src/retiredMemos.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -187,72 +185,5 @@ test("a lesson is not queued for a conversation that ended before the reset, and
     assert.deepEqual(routine.payload.peers.map((/** @type {{ runId: string }} */ peer) => peer.runId), ["run_after_1", "run_after_2"], "and its peers all ended after the reset");
   } finally {
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
-  }
-});
-
-// ------------------------------------------------------------------ the retired usememos store
-
-test("an erased account's rows leave the retired usememos tables, the ledger keeps their digests, and nothing else goes", options, async () => {
-  const schema = `retired_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-  const mine = retiredMemosOwner(alice);
-  const theirs = retiredMemosOwner(bob);
-  await database.query(`CREATE SCHEMA "${schema}"`);
-  try {
-    await database.query(`CREATE TABLE "${schema}".memory_record (id serial PRIMARY KEY, namespace text, value text)`);
-    await database.query(`CREATE TABLE "${schema}".memo (id serial PRIMARY KEY, content text)`);
-    await database.query(`INSERT INTO "${schema}".memory_record (namespace, value) VALUES ($1,'a1'),($1,'a2'),($2,'b1')`, [mine.namespace, theirs.namespace]);
-    await database.query(`INSERT INTO "${schema}".memo (content) VALUES
-      ($1),
-      ($2),
-      ($3),
-      ($4)`, [
-      `a note of Alice's\n\n#evimed-user-${mine.tag}`,
-      `a note of Bob's\n\n#evimed-user-${theirs.tag}`,
-      // A tag sitting inline is a tag anybody could have typed: not an owner (the import's own rule).
-      `Bob quoting #evimed-user-${mine.tag} in the middle of a sentence\n\n#evimed-user-${theirs.tag}`,
-      `an unowned note`,
-    ]);
-    await database.query("DELETE FROM evimed_memory.retired_erasures WHERE namespace=ANY($1::text[])", [[mine.namespace, theirs.namespace]]).catch(() => {});
-
-    await store.status();
-    const result = await database.transaction((/** @type {any} */ client) => eraseRetiredMemos(client, alice, { schema }));
-    assert.deepEqual(result.tables, { memory_record: 2, memo: 1 });
-    assert.deepEqual((await database.query(`SELECT value FROM "${schema}".memory_record ORDER BY value`)).rows.map((/** @type {any} */ row) => row.value), ["b1"]);
-    assert.equal((await database.query(`SELECT count(*)::int AS n FROM "${schema}".memo`)).rows[0].n, 3, "only the note that ends in her tag");
-    assert.equal(counter("open_science_retired_memos_erased_total", "table", "memory_record"), 2);
-    assert.equal(counter("open_science_retired_memos_erased_total", "table", "memo"), 1);
-
-    const ledger = await database.query("SELECT namespace, tag FROM evimed_memory.retired_erasures WHERE namespace=$1", [mine.namespace]);
-    assert.deepEqual(ledger.rows, [{ namespace: mine.namespace, tag: mine.tag }], "the digests an archive is re-sealed against");
-    assert.equal((await database.query("SELECT 1 FROM evimed_memory.retired_erasures WHERE namespace=$1", [theirs.namespace])).rowCount, 0);
-
-    // Erased again, or with the tables already dropped (a deployment that ran the retirement): nothing to remove, nothing fails.
-    const again = await database.transaction((/** @type {any} */ client) => eraseRetiredMemos(client, alice, { schema }));
-    assert.deepEqual(again.tables, { memory_record: 0, memo: 0 });
-    const gone = await database.transaction((/** @type {any} */ client) => eraseRetiredMemos(client, alice, { schema: `${schema}_missing` }));
-    assert.deepEqual(gone.tables, {});
-  } finally {
-    await database.query(`DROP SCHEMA "${schema}" CASCADE`);
-    await database.query("DELETE FROM evimed_memory.retired_erasures WHERE namespace=ANY($1::text[])", [[mine.namespace, theirs.namespace]]);
-  }
-});
-
-test("a retired table of another shape costs that table and not the account's deletion", options, async () => {
-  const schema = `retired_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-  const owner = retiredMemosOwner(bob);
-  await database.query(`CREATE SCHEMA "${schema}"`);
-  try {
-    // A `memory_record` with no `namespace` column: the statement would abort the transaction without a savepoint.
-    await database.query(`CREATE TABLE "${schema}".memory_record (id serial PRIMARY KEY, value text)`);
-    await database.query(`CREATE TABLE "${schema}".memo (id serial PRIMARY KEY, content text)`);
-    await database.query(`INSERT INTO "${schema}".memo (content) VALUES ($1)`, [`bob's note\n#evimed-user-${owner.tag}`]);
-    await database.transaction(async (/** @type {any} */ client) => {
-      const result = await eraseRetiredMemos(client, bob, { schema });
-      assert.deepEqual(result.tables, { memo: 1 }, "the table it could not read is skipped, the other is erased");
-      await client.query("SELECT 1");
-    });
-  } finally {
-    await database.query(`DROP SCHEMA "${schema}" CASCADE`);
-    await database.query("DELETE FROM evimed_memory.retired_erasures WHERE namespace=$1", [owner.namespace]);
   }
 });

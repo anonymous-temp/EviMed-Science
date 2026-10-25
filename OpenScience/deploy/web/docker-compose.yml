@@ -2364,20 +2364,15 @@ services:
     restart: unless-stopped
 
 # A volume this file stops declaring is a volume `compose down -v` stops
-# removing, so the memory migration leaves two kinds of retired data behind on
-# a host that ran the previous stack, and both are an operator decision rather
-# than something a compose file can do:
+# removing, so the memory migration leaves retired data behind on a host that
+# ran the previous stack, and removing it is an operator decision rather than
+# something a compose file can do:
 #
 #   volumes  `web_evimed-memos-data`, `web_evimed-memos-integration`,
 #            `web_evimed-memos-secrets` — which holds the retired service's
 #            credentials and is the one worth removing first — and the five
 #            `web_evimed-memos-{engine,neo4j,qdrant,redis,ollama}-*` volumes are
 #            now orphans; `docker volume rm` is the only thing that removes them
-#   tables   `public.memo` and `public.memory_record` stay in the `evimed`
-#            database, where `scripts/ops/postgres-backup.py` keeps dumping them
-#            into every backup, until `--purge-source` empties them
-#
-# Both wait on the cutover in `docs/WEB_DEPLOYMENT.md` having verified its copy.
 volumes:
   evimed-vcr-jobs:
   evimed-postgres-data:

@@ -170,7 +170,6 @@ import { capabilityUse, projectWorks } from "./projectOverview.mjs";
 import { memoryMetricFamilies, recordMethodsRetired } from "./memoryMetrics.mjs";
 import { resetLearnedMemory } from "./memoryReset.mjs";
 import { ResidentProfiles, nativeResidentMemos, nativeSessionResident } from "./residentProfile.mjs";
-import { eraseRetiredMemos } from "./retiredMemos.mjs";
 import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryMapRoutes } from "./memoryMap.mjs";
 import { MapEdgeCorrections } from "./memoryMapEdges.mjs";
@@ -7647,14 +7646,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // The engine's copies of the account's documents, and the wiki and graphs compiled from them: one attempt, never waited on.
         void sourceSync?.forgetAccount(user.id);
         let memoryIndexPurge = null;
-        /** @type {{ tables: Record<string, number>, ledgered: boolean } | null} */
-        let retiredMemos = null;
         /** @type {string[]} */
         let geoScreenshots = [];
         /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
         let vcrArtifacts = null;
-        // The ledger of erased accounts lives in the memory schema; it has to exist before the transaction that writes it opens.
-        if (productDatabase) await migrateMemorySettings(productDatabase);
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
@@ -7667,9 +7662,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
             if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
-            // What the retired usememos store still holds of the account — its records and notes sit in tables that no foreign
-            // key reaches — and the ledger the retirement's archive is re-sealed against (review M-11).
-            if (client) retiredMemos = await eraseRetiredMemos(client, id);
             // The account's GEO rows, whether or not the module is on today.
             if (client) geoScreenshots = (await deleteGeoUserRows(client, id)).screenshots;
             // And its 虚拟临床研究 rows, on the same terms: the schema outlives the
@@ -7689,8 +7681,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void memoryIndexWorker?.drainWithdrawals();
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
-        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryIndexPurge, subjectsDeleted,
-          retiredMemos: retiredMemos?.tables ?? null });
+        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryIndexPurge, subjectsDeleted });
         sendJson(res, 200, { data });
         return;
       }

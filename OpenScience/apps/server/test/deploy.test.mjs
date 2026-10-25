@@ -346,8 +346,8 @@ test("every capability-audit test file is named by a script the PR gate runs", a
 });
 
 test("every ops-script test file is collected by a script the PR gate runs", async () => {
-  // `scripts/ops/test/` held four suites (the Postgres backup, the recovery
-  // volume, the image archive inventory, the usememos retirement) that no
+  // `scripts/ops/test/` held suites (the Postgres backup, the recovery
+  // volume, the image archive inventory) that no
   // script and no workflow step ran, so a broken backup script would first
   // show on the host. `test:ops` discovers the directory, `test:web` chains
   // it, and the `ci:web` step test above holds the workflow to `test:web`'s

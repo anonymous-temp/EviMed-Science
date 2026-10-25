@@ -1,7 +1,7 @@
 // The operator's counters for what the memory does and refuses to do (review of 2026-10-10, items M5-M7).
 //
 // What a reset and a deletion promise (conversations that ended before a reset are not learned from; a deleted project
-// retires what was learned only from it; an erased account takes the retired usememos rows with it), how the resident
+// retires what was learned only from it), how the resident
 // profile was handed to conversations, and what the capsule's recall tool answered. A counter is a
 // label: counting never changes the operation counted, and a counter that cannot be read costs the scrape one gauge and the
 // operation nothing.
@@ -19,11 +19,9 @@ const METHOD_RETIREMENTS = Object.freeze(["project_deleted"]);
 /**
  * What the start-up retirement of the legacy memory engine did (`legacyMemoryRetirement.mjs`): dropped its tables, found them already
  * absent, kept them because they hold records or an account still says it is on that engine, queued the withdrawal of the index's
- * copies, deleted its retired jobs, or could not run.
+ * copies, deleted its retired jobs, dropped the retired usememos erasure ledger, or could not run.
  */
-export const LEGACY_RETIREMENT_OUTCOMES = Object.freeze(["dropped", "absent", "kept_records", "kept_legacy_accounts", "index_withdrawals_queued", "jobs_deleted", "failed"]);
-/** The retired usememos tables whose rows an account's deletion removes. */
-const RETIRED_TABLES = Object.freeze(["memory_record", "memo"]);
+export const LEGACY_RETIREMENT_OUTCOMES = Object.freeze(["dropped", "absent", "kept_records", "kept_legacy_accounts", "index_withdrawals_queued", "jobs_deleted", "erasure_ledger_dropped", "failed"]);
 
 /**
  * What a dispatch did with the resident profile (review M6): handed it over to a conversation that had none, whose copy had changed or
@@ -45,7 +43,6 @@ function bump(map, key, by = 1) { if (map.has(key)) map.set(key, (map.get(key) ?
 const beforeReset = table(BEFORE_RESET_STAGES);
 const resetRemoved = table(RESET_REMOVED);
 const methodRetirements = table(METHOD_RETIREMENTS);
-const retiredTables = table(RETIRED_TABLES);
 const legacyRetirement = table(LEGACY_RETIREMENT_OUTCOMES);
 const residentProfile = table(RESIDENT_PROFILE_OUTCOMES);
 const residentOmitted = table(["records"]);
@@ -62,8 +59,6 @@ export function recordResetRemoved({ jobs = 0, feedback = 0 }) {
 }
 /** Learned methods stopped because the only project they were learned in was deleted. @param {string} reason @param {number} count */
 export function recordMethodsRetired(reason, count) { bump(methodRetirements, reason, count); }
-/** Rows of a retired usememos table removed with an erased account. @param {string} name @param {number} count */
-export function recordRetiredTableRows(name, count) { bump(retiredTables, name, count); }
 
 /** What the start-up retirement of the legacy memory engine did. @param {string} outcome */
 export function recordLegacyRetirement(outcome) { bump(legacyRetirement, outcome); }
@@ -78,7 +73,7 @@ export function recordResidentOmitted(count) { bump(residentOmitted, "records", 
 export function recordRecallTool(outcome, items = 0) { bump(recallTool, outcome); bump(recallToolItems, "items", items); }
 /** The test hook: counters are process state. */
 export function resetMemoryMetrics() {
-  for (const map of [beforeReset, resetRemoved, methodRetirements, retiredTables, legacyRetirement, residentProfile, residentOmitted, residentCard, recallTool, recallToolItems]) {
+  for (const map of [beforeReset, resetRemoved, methodRetirements, legacyRetirement, residentProfile, residentOmitted, residentCard, recallTool, recallToolItems]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -97,10 +92,8 @@ export function memoryMetricFamilies() {
       help: "What memory resets removed besides the memory files: queued or running learning jobs cancelled, and feedback events deleted." },
     { name: "open_science_learned_methods_retired_total", type: "counter", series: series(methodRetirements, "reason"),
       help: "Learned methods stopped without the researcher choosing it: the only project they were learned in was deleted." },
-    { name: "open_science_retired_memos_erased_total", type: "counter", series: series(retiredTables, "table"),
-      help: "Rows of the retired usememos tables removed with an erased account, by table." },
     { name: "open_science_legacy_memory_retirement_total", type: "counter", series: series(legacyRetirement, "outcome"),
-      help: "What the start-up retirement of the legacy memory engine did since this process started: tables dropped (none left), already absent, kept because they hold records (kept_records) or an account still says legacy (kept_legacy_accounts), the index's copies queued for withdrawal, retired jobs deleted, or failed. Any kept_* is a deployment with legacy data to decide about." },
+      help: "What the start-up retirement of the legacy memory engine did since this process started: tables dropped (none left), already absent, kept because they hold records (kept_records) or an account still says legacy (kept_legacy_accounts), the index's copies queued for withdrawal, retired jobs deleted, the retired usememos erasure ledger dropped (erasure_ledger_dropped), or failed. Any kept_* is a deployment with legacy data to decide about." },
     { name: "open_science_memory_resident_profile_total", type: "counter", series: series(residentProfile, "outcome"),
       help: "What dispatches did with the resident profile: handed it to a conversation that had none (first), whose copy had changed (changed) or had been compacted away (compacted); left it where the conversation already held it (unchanged); had none to give (empty); or were told not to by a pause." },
     { name: "open_science_memory_resident_card_total", type: "counter", series: series(residentCard, "outcome"),
