@@ -90,7 +90,7 @@ export const FRONTIER_HIDE_REASON_LABELS_ZH = /** @type {Readonly<Record<string,
 }))
 
 /** The controls a `filter-change` names: which one moved, never what it was set to (a search's words never leave the page). */
-export const FRONTIER_FILTER_CONTROLS = Object.freeze(['view', 'channel', 'lane', 'specialty', 'tag', 'evidence', 'window', 'starred', 'unread', 'sort', 'search', 'follow'])
+export const FRONTIER_FILTER_CONTROLS = Object.freeze(['view', 'channel', 'lane', 'specialty', 'tag', 'evidence', 'window', 'starred', 'unread', 'sort', 'search', 'follow', 'agency'])
 
 /** The onboarding steps, in order; `onboarding-skipped` names the one it was skipped at. */
 export const FRONTIER_ONBOARDING_STEPS = Object.freeze(['role', 'specialties', 'interests'])

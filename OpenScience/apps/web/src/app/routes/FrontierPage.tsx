@@ -11,6 +11,7 @@ import {
   frontierAbsence,
   frontierErrorMessage,
   FRONTIER_LANES,
+  FRONTIER_SPECIALTIES,
   FRONTIER_FOLLOWS_CHANGED,
   FRONTIER_WINDOWS,
   listFrontierItems,
@@ -27,6 +28,7 @@ import {
   type FrontierItemsQuery,
   type FrontierStatus,
   type FrontierTagRef,
+  type FrontierTrackSegment,
   type FrontierWindow,
 } from "@/lib/frontierClient";
 import { serveFrontierList, trackFrontierFilter, trackFrontierItemAction, useFrontierListTracking, type FrontierTrackSurface } from "@/lib/frontierTracking";
@@ -51,6 +53,7 @@ import type { FrontierPrefs } from "@/lib/frontierPrefs";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
 import { Drawer } from "@/components/ui/Drawer";
 import { ZoneDirectoryBody, readZoneScope, useZoneDirectory, zoneDirectoryControls, type ZoneScope } from "@/components/frontier/EvidenceZoneDirectory";
+import { CongressNowLine, TrackBody, readTrackSegment, trackControls, useFrontierApprovals, useFrontierCongresses, useFrontierGuidelines } from "@/components/frontier/FrontierTrackView";
 
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
 const STATUS_POLL_MS = 120_000;
@@ -68,7 +71,7 @@ const FEED_VIEWS: ReadonlySet<PageView> = new Set(["selected", "all", "following
  */
 function readView(value: string | null): PageView {
   if (value === "foryou") return "following";
-  return value === "hot" || value === "daily" || value === "all" || value === "following" || value === "weekly" || value === "zones" ? value : "selected";
+  return value === "hot" || value === "daily" || value === "all" || value === "following" || value === "weekly" || value === "zones" || value === "track" ? value : "selected";
 }
 function readKey(value: string | null, table: readonly { key: string }[]): string {
   return value && table.some((entry) => entry.key === value) ? value : "";
@@ -176,6 +179,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const byTime = Boolean(q) && params.get("sort") === "time";
   const day = readDay(params.get("day"));
   const zoneScope = readZoneScope(params.get("scope"));
+  // 追踪 (c3-track 2026-10-25): its segment and the one filter of that segment, in the address.
+  const trackSegment = readTrackSegment(params.get("segment"));
+  const trackAgency = /^[a-z-]{2,24}$/.test(params.get("agency") ?? "") ? params.get("agency")! : "";
+  const trackSpecialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
   const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || choice?.kind === "follow");
   /** Where the list on screen is, as its events name it (frontierTracking): the feed, a search or the follows. */
@@ -511,6 +518,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     enabled: ready && view === "zones",
     restorePages: view === "zones" && restore.current?.query === params.toString() ? restore.current.pages : 1,
   });
+  // 追踪: the open segment's list, read while the view is open.
+  const approvals = useFrontierApprovals(ready && view === "track" && trackSegment === "approvals", trackAgency);
+  const guidelines = useFrontierGuidelines(ready && view === "track" && trackSegment === "guidelines", trackSpecialty);
+  const congresses = useFrontierCongresses(ready && view === "track" && trackSegment === "congresses");
   const zonePages = useRef(zones.pages);
   zonePages.current = zones.pages;
   useEffect(() => {
@@ -541,9 +552,26 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
     // A view is a fresh look: the search, the day, the time range and the zones' scope belong to the view they were chosen in.
-    for (const name of ["q", "day", "week", "window", "sort", "follow", "item", "scope", "request"]) updated.delete(name);
+    for (const name of ["q", "day", "week", "window", "sort", "follow", "item", "scope", "request", "segment", "agency", "specialty"]) updated.delete(name);
     searchOrigin.current = null;
     setParams(updated);
+  };
+
+  // 追踪's segment and its one filter: the segment is a place (Back returns to the one before), the filter a narrowing (it replaces).
+  const setTrackSegment = (next: FrontierTrackSegment) => {
+    if (next === trackSegment) return;
+    trackFrontierFilter("view", "track");
+    const updated = new URLSearchParams(params);
+    if (next === "approvals") updated.delete("segment"); else updated.set("segment", next);
+    updated.delete("agency");
+    updated.delete("specialty");
+    setParams(updated);
+  };
+  const setTrackFilter = (name: "agency" | "specialty", value: string) => {
+    trackFrontierFilter(name, "track");
+    const updated = new URLSearchParams(params);
+    if (value) updated.set(name, value); else updated.delete(name);
+    setParams(updated, { replace: true });
   };
 
   const setZoneScope = (next: ZoneScope) => {
@@ -678,7 +706,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     if (!position || position.query !== params.toString() || listingView || !ready) return;
     const settled = view === "hot" ? Boolean(hot[hotWindow]) : view === "daily" ? !daily.loading
       : view === "following" ? (forYouOpen ? forYou.kind !== "loading" : !following.loading)
-        : view === "zones" ? !zones.loading : view === "weekly";
+        : view === "track" ? (trackSegment === "approvals" ? approvals.state.kind !== "loading" : trackSegment === "guidelines" ? guidelines.state.kind !== "loading" : congresses.kind !== "loading")
+          : view === "zones" ? !zones.loading : view === "weekly";
     if (!settled) return;
     const frame = requestAnimationFrame(() => {
       const scroller = pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto");
@@ -695,7 +724,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       restore.current = undefined;
     });
     return () => cancelAnimationFrame(frame);
-  }, [params, listingView, ready, view, hot, hotWindow, daily.loading, forYou.kind, zones.loading, forYouOpen, following.loading]);
+  }, [params, listingView, ready, view, hot, hotWindow, daily.loading, forYou.kind, zones.loading, forYouOpen, following.loading, trackSegment, approvals.state.kind, guidelines.state.kind, congresses.kind]);
 
   useEffect(() => {
     const remember = () => {
@@ -709,7 +738,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   }, [params, expanded, view]);
 
   // What is seen and opened in every list on the page (frontierTracking): observed again whenever what it shows changes.
-  useFrontierListTracking(pageRoot, [listing, view, forYou, hot, daily.issue, weekly.issue, safety, ready]);
+  useFrontierListTracking(pageRoot, [listing, view, forYou, hot, daily.issue, weekly.issue, safety, ready, approvals.rows, guidelines.rows]);
 
   /* ---------------------------------------------------------- render */
 
@@ -837,6 +866,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       followList: narrow ? (close) => followList(close, () => { close(); setManageFollows(true); }) : undefined,
     },
     issue: dailyControls(view === "weekly" ? weekly : daily, { weekly: view === "weekly", onDay: view === "weekly" ? openWeek : openDay }),
+    track: {
+      filters: trackControls({ segment: trackSegment, onSegment: setTrackSegment, agency: trackAgency, onAgency: (next) => setTrackFilter("agency", next), approvals: approvals.state,
+        specialty: trackSpecialty, onSpecialty: (next) => setTrackFilter("specialty", next), guidelines: guidelines.state }),
+    },
     zones: {
       ...zoneDirectoryControls({ scope: zoneScope, onScope: setZoneScope, query: view === "zones" ? q : "", directory: zones }),
       onCreate: zones.canCreate ? () => zones.setCreating(!zones.creating) : null,
@@ -848,7 +881,17 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const main = (() => {
     switch (view) {
       case "hot":
-        return <div data-frontier-list="hot" className="contents"><HotBoard state={hot[hotWindow] ?? null} onRetry={() => setHotAttempt((value) => value + 1)} /></div>;
+        return (
+          <>
+            <CongressNowLine />
+            <div data-frontier-list="hot" className="contents"><HotBoard state={hot[hotWindow] ?? null} onRetry={() => setHotAttempt((value) => value + 1)} /></div>
+          </>
+        );
+      case "track":
+        return (
+          <TrackBody segment={trackSegment} approvals={approvals} agency={trackAgency} onAgency={(next) => setTrackFilter("agency", next)}
+            guidelines={guidelines} specialty={trackSpecialty} onSpecialty={(next) => setTrackFilter("specialty", next)} congresses={congresses} />
+        );
       case "weekly":
         return <div data-frontier-list="weekly" className="contents"><WeeklyView expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={weekly} onWeek={openWeek} /></div>;
       case "daily":

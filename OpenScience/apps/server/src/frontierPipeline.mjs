@@ -116,6 +116,7 @@ import { frontierTextOverlap, frontierTextTokens } from "./frontierEvents.mjs";
 import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
 import { tsvectorLiteral } from "./kbChunker.mjs";
 import { recordFrontierNotices } from "./sourceChanges.mjs";
+import { FrontierTrack } from "./frontierTrack.mjs";
 
 const MINUTE = 60_000;
 /** Tagging calls one batch makes side by side (`#retag`). */
@@ -964,6 +965,8 @@ export class FrontierPipeline {
       ? Number(this.config.frontierDailyBudgetCny) : FRONTIER_DAILY_BUDGET_CNY_DEFAULT;
     this.offpeak = this.config.frontierOffpeak === true;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
+    /** 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the approval and guideline records and the congress recaps this pipeline writes. */
+    this.track = new FrontierTrack({ database, now, timeZone: this.timeZone });
     // The width the schema's vector column is created with; it must be the
     // one the server migrates with, or the migration would empty the vectors.
     this.dimension = Number(this.config.kbEmbeddingDimension) || Number(embedder?.dimension) || 1024;
@@ -1107,6 +1110,7 @@ export class FrontierPipeline {
       await this.#brief(context);
       await this.#insight(context);
       await this.#ask(context);
+      await this.#track(context);
       summary.translated += await this.#translate(context);
       summary.retagged += await this.#retag(context);
       summary.embedded += await this.#embed(context);
@@ -1131,6 +1135,7 @@ export class FrontierPipeline {
       providerPausedUntil: this.providerPausedUntil !== null && this.providerPausedUntil > this.now().getTime()
         ? new Date(this.providerPausedUntil).toISOString() : null,
       editor: typeof this.editor.status === "function" ? this.editor.status() : null,
+      track: this.track.status(),
     };
   }
 
@@ -3285,6 +3290,28 @@ export class FrontierPipeline {
     await frontierWriteFaith(client, id, faith, this.now());
   }
 
+  /**
+   * 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the structured record of the published approval and guideline items of the last
+   * month, newest first, and the recap of each day of a congress that is on. The same budget and provider rules as the 导读: nothing
+   * while the budget is spent or the provider is paused, two items a round past 80 % of it. A failure is the step's own and never
+   * stops the batch.
+   * @param {any} context
+   */
+  async #track(context) {
+    const { now, budget } = context;
+    /** @type {import("./frontierTrack.mjs").FrontierTrackRound} */
+    const round = { editor: this.editor, workerId: this.workerId, leaseMs: this.leaseMs, now, budget,
+      providerPaused: () => Boolean(this.#providerPause(now)),
+      onProviderRefused: (code) => { if (frontierProviderUnavailable(code)) this.#pauseForProvider(now, code); },
+      readerText: (texts) => frontierReaderText(texts), itemGenre: (item) => frontierItemGenre(item), sources: (ids) => this.#sources(ids) };
+    try {
+      await this.track.extractRound(round);
+      await this.track.recapRound(round);
+    } catch (error) {
+      this.lastError = codeOf(error);
+      this.track.lastError = codeOf(error);
+    }
+  }
 
   /**
    * The 「AI 解读」 of a 精选 item or a safety alert (`frontierInsight.mjs`), once its 导读 is written: the related reports it may

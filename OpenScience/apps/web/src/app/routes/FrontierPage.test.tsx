@@ -41,6 +41,9 @@ const client = vi.hoisted(() => ({
   fetchFrontierTag: vi.fn(),
   addFrontierFollow: vi.fn(),
   removeFrontierFollow: vi.fn(),
+  listFrontierCongresses: vi.fn(),
+  listFrontierApprovals: vi.fn(),
+  listFrontierGuidelines: vi.fn(),
 }));
 // Partial: the vocabulary, the parsers and the error words stay real.
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
@@ -159,6 +162,9 @@ beforeEach(() => {
   client.fetchFrontierTag.mockResolvedValue(null);
   client.addFrontierFollow.mockImplementation(async (input: { kind: string; key: string; label: string }) => ({ id: "f-new", muted: false, ...input }));
   const answered = { role: "physician", specialties: ["oncology"], interests: ["hcc"], interestTags: [{ slug: "hcc", name: "肝细胞癌" }], onboardedAt: ago(48), skippedAt: null };
+  client.listFrontierCongresses.mockReset().mockResolvedValue([]);
+  client.listFrontierApprovals.mockReset().mockResolvedValue(null);
+  client.listFrontierGuidelines.mockReset().mockResolvedValue(null);
   prefs.fetchFrontierPrefs.mockReset().mockResolvedValue(answered);
   prefs.saveFrontierPrefs.mockReset().mockResolvedValue(answered);
 });
@@ -214,7 +220,7 @@ describe("the page and its views", () => {
     expect(screen.queryByRole("navigation", { name: "前沿动态" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "动态视图" })).not.toBeInTheDocument();
     // Six views: the three lists of items first, then the ranking, the issues and the zones (owner, 2026-10-25).
-    expect(viewTabs().getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["精选", "全部", "关注", "热榜", "简报", "证据专区"]);
+    expect(viewTabs().getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["精选", "全部", "关注", "热榜", "追踪", "简报", "证据专区"]);
     expect(viewTabs().getByRole("tab", { name: "精选" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("精选");
     expect(lastFeedQuery()).toMatchObject({ view: "selected", q: null, lane: null, starred: false });
@@ -1437,4 +1443,94 @@ it("opens the evidence-zone directory in place, as a view of the page (owner, 20
   expect(location()).toBe("/app/frontier?view=zones");
   expect(await screen.findByRole("link", { name: "房颤抗凝" })).toHaveAttribute("href", "/app/frontier/zones/ez_1");
   expect(screen.getByRole("tab", { name: "证据专区" })).toHaveAttribute("aria-selected", "true");
+});
+
+
+describe("追踪", () => {
+  const approvals = (over: Record<string, unknown> = {}) => ({
+    items: [
+      { item: frontierItem({ id: "ap-1", title: "FDA approval: Hibsago" }), at: "2026-10-24", approval: "new-drug", approvalLabel: "首次获批", agency: { key: "fda", label: "FDA" }, drug: "Hibsago（bepirovirsen）", indication: "慢性乙型肝炎" },
+      { item: frontierItem({ id: "ap-2", title: "EMA: Ximluci" }), at: "2026-10-10", approval: "new-indication", approvalLabel: "新增适应症", agency: { key: "ema", label: "EMA" }, drug: "Ximluci", indication: null },
+    ],
+    nextCursor: null, from: "2026-07-27", listId: "approvals-list",
+    agencies: [{ key: "fda", label: "FDA", region: "us", regionLabel: "美国", count: 1 }, { key: "ema", label: "EMA", region: "eu", regionLabel: "欧洲", count: 1 }],
+    ytd: { year: 2026, since: "2026-09-22", total: 2, byAgency: [{ key: "fda", label: "FDA", count: 1 }, { key: "ema", label: "EMA", count: 1 }] },
+    ...over,
+  });
+  const guidelines = () => ({
+    items: [{ item: frontierItem({ id: "gl-1", title: "ACP 指南" }), at: "2026-10-24", body: "美国内科医师学会", scope: "绝经症状", recommendations: [{ text: "使用雌激素", grade: "强推荐" }] }],
+    nextCursor: null, listId: "guidelines-list", specialties: [{ key: "oncology", label: "肿瘤", count: 1 }],
+  });
+  const congress = (over: Record<string, unknown> = {}) => ({ id: "esmo-2026", code: "ESMO 2026", name: "欧洲肿瘤内科学会年会", nameEn: "ESMO Congress 2026", start: "2026-10-23", end: "2026-10-27",
+    city: "Madrid", specialty: "oncology", specialtyLabel: "肿瘤学", status: "ongoing", itemCount: 57, ...over });
+
+  it("is the fifth tab after 热榜; it opens on 审批 with one row of controls: the segment chips and the agency", async () => {
+    client.listFrontierApprovals.mockResolvedValue(approvals());
+    renderPage("/app/frontier?view=track");
+    expect(viewTabs().getByRole("tab", { name: "追踪" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Hibsago（bepirovirsen）")).toBeInTheDocument();
+    expect(client.listFrontierApprovals).toHaveBeenCalledWith({ agency: null, cursor: null });
+    expect(client.listFrontierGuidelines).not.toHaveBeenCalled();
+    expect(client.listFrontierItems).not.toHaveBeenCalled();
+    const row = controlRow();
+    expect(within(row).getByRole("button", { name: "审批" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(row).getByRole("button", { name: "指南" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(row).getByRole("button", { name: "会议" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(row).getByRole("button", { name: /^机构/ })).toBeInTheDocument();
+    expect(document.querySelector("[data-note]")).toHaveTextContent("9月22日以来共收录 2 项审批");
+    expectComposed(document.body, { tablists: 1 });
+  });
+
+  it("switches segments through the chips, keeps them in the address, and asks only for the open segment", async () => {
+    client.listFrontierApprovals.mockResolvedValue(approvals());
+    client.listFrontierGuidelines.mockResolvedValue(guidelines());
+    client.listFrontierCongresses.mockResolvedValue([congress()]);
+    renderPage("/app/frontier?view=track");
+    await screen.findByText("Hibsago（bepirovirsen）");
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "指南" }));
+    expect(location()).toBe("/app/frontier?view=track&segment=guidelines");
+    expect(await screen.findByText("ACP 指南")).toBeInTheDocument();
+    expect(screen.getByText("使用雌激素")).toBeInTheDocument();
+    expect(within(controlRow()).getByRole("button", { name: /^专科/ })).toBeInTheDocument();
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "会议" }));
+    expect(location()).toBe("/app/frontier?view=track&segment=congresses");
+    const link = await screen.findByRole("link", { name: /ESMO 2026/ });
+    expect(link).toHaveAttribute("href", "/app/frontier/congress/esmo-2026");
+    expect(within(controlRow()).queryByRole("button", { name: /^(机构|专科)/ })).toBeNull();
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "审批" }));
+    expect(location()).toBe("/app/frontier?view=track");
+  });
+
+  it("opens on the segment and the agency the address names, and narrows to an agency from the line above the list", async () => {
+    client.listFrontierApprovals.mockResolvedValue(approvals());
+    renderPage("/app/frontier?view=track&agency=fda");
+    await screen.findByText("Hibsago（bepirovirsen）");
+    expect(client.listFrontierApprovals).toHaveBeenCalledWith({ agency: "fda", cursor: null });
+    await userEvent.click(within(document.querySelector("[data-note]") as HTMLElement).getByRole("button", { name: "EMA 1 项，只看这个机构" }));
+    expect(location()).toBe("/app/frontier?view=track&agency=ema");
+    await waitFor(() => expect(client.listFrontierApprovals).toHaveBeenLastCalledWith({ agency: "ema", cursor: null }));
+  });
+
+  it("says so, with a way on, when the server has no tracker yet", async () => {
+    renderPage("/app/frontier?view=track");
+    expect(await screen.findByText("审批追踪还在准备")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "看官方来源的动态" })).toBeInTheDocument();
+  });
+
+  it("is the congress on now above 热榜's ranking, one line that opens its hub", async () => {
+    client.fetchFrontierHotBoard.mockResolvedValue(board([hotEvent(1)]));
+    client.listFrontierCongresses.mockResolvedValue([congress()]);
+    renderPage("/app/frontier?view=hot");
+    const link = await screen.findByRole("link", { name: /ESMO 2026/ });
+    expect(link).toHaveTextContent("ESMO 2026进行中·57 条");
+    expect(link).toHaveAttribute("href", "/app/frontier/congress/esmo-2026");
+    expect(await screen.findByRole("list", { name: "热榜" })).toBeInTheDocument();
+  });
+
+  it("reads an unknown segment in the address as 审批", async () => {
+    client.listFrontierApprovals.mockResolvedValue(approvals());
+    renderPage("/app/frontier?view=track&segment=whatever");
+    await screen.findByText("Hibsago（bepirovirsen）");
+    expect(within(controlRow()).getByRole("button", { name: "审批" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
