@@ -52,6 +52,8 @@ def run_scenario(spec: tuple, host, judge: sc.Judge, caps: dict, log=print) -> d
         outcome = function(ctx)
         result.update(checks=outcome.checks, evidence=outcome.evidence, reason=outcome.reason)
         result["status"] = outcome.status or sc.status_of(outcome.checks)
+    except sce.ScenarioAsked as error:
+        result.update(status=sc.INCONCLUSIVE, reason=str(error)[:600])
     except sce.ScenarioError as error:
         result.update(status=sc.ERROR, reason=str(error)[:600])
     except Exception as error:  # noqa: BLE001 - a scenario that blew up is an error line, never a crash of the run

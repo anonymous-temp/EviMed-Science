@@ -96,12 +96,35 @@ try {
     const runs = (await get("/api/agent-runs")).body?.data ?? [];
     return runs.find((r) => r.sessionId === prompt.sessionId && (r.kernelRequestIds ?? []).includes(prompt.requestId)) ?? null;
   };
+  // A turn the model holds on a question to the person (`ask_user`, attended mode) waits for an answer this driver never gives:
+  // it is read as asked — the question kept, the run cancelled — rather than as twelve minutes of "still pending".
+  const pendingQuestion = async (sessionId) => {
+    const tr = await get(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`);
+    const items = tr.body?.data?.messages ?? [];
+    const lastUser = items.map((m) => m.role).lastIndexOf("user");
+    for (const part of (lastUser >= 0 ? items.slice(lastUser + 1) : items).flatMap((m) => m.parts ?? [])) {
+      const tool = String(part.tool ?? part.toolName ?? part.name ?? "");
+      const status = String(part.state?.status ?? part.status ?? "");
+      if (/^ask[_-]user/.test(tool) && status === "pending") return JSON.stringify(part.state?.input ?? part.input ?? {}).slice(0, 600);
+    }
+    return null;
+  };
   const completed = async (prompt, label, timeoutMs) => {
     const started = Date.now();
+    let polls = 0;
     while (Date.now() - started < timeoutMs) {
       if (refused.has(prompt.requestId)) throw new Error(`prompt refused ${refused.get(prompt.requestId)}`);
       const run = await runOf(prompt);
       if (run && TERMINAL.includes(run.status)) { say(label, "run", run.id, run.status, `${Math.round((Date.now() - started) / 1000)}s`); return run; }
+      polls += 1;
+      if (run && Date.now() - started > 45000 && polls % 5 === 0) {
+        const question = await pendingQuestion(prompt.sessionId).catch(() => null);
+        if (question) {
+          say(label, "asked the person", question.slice(0, 160));
+          const cancel = await context.request.post(`${base}/api/agent-runs/${encodeURIComponent(run.id)}/cancel`, { headers, data: {} }).catch(() => null);
+          throw Object.assign(new Error(`${label} asked the person a question (ask_user) and waits for an answer; run cancelled ${cancel ? cancel.status() : "?"}`), { asked: question });
+        }
+      }
       await sleep(4000);
     }
     throw new Error(`${label} still pending after ${Math.round(timeoutMs / 1000)}s`);
@@ -134,6 +157,7 @@ try {
       Object.assign(turn, { status: run.status, run: (await runOf(prompt)) ?? run, wallMs: Date.now() - started, ...(await replyOf(prompt.sessionId)) });
       if (step.afterMs) await sleep(step.afterMs);
     } catch (error) {
+      if (error?.asked) turn.asked = error.asked;
       turn.error = String(error?.message ?? error).slice(0, 300);
       result.error = `turn ${step.label}: ${turn.error}`;
       save();

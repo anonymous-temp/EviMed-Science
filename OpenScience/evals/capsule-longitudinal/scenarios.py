@@ -73,6 +73,11 @@ class ScenarioError(Exception):
     """A scenario could not go on (a turn did not complete, a route answered an error): recorded as the scenario's `error` status."""
 
 
+class ScenarioAsked(ScenarioError):
+    """The model held a turn on a question to the person (`ask_user`), which no driver answers: nothing about memory can be read
+    over that turn, and it is not the platform failing either — recorded as `inconclusive`, with the question."""
+
+
 class Ctx:
     """What a scenario is given. Everything with a side effect goes through here, so a test substitutes one object."""
 
@@ -101,6 +106,9 @@ class Ctx:
         result = self.host.browse(account, plan, f"{self.name.lower()}-{self._plans}")
         turns = result.get("turns", [])
         done = [t for t in turns if t.get("status")]
+        asked = [t for t in turns if t.get("asked")]
+        if asked:
+            raise ScenarioAsked(f"turn {asked[0].get('label')} asked the person a question instead of answering ({len(done)} done before it): {asked[0]['asked'][:300]}")
         if result.get("error") or len(done) < len(steps):
             raise ScenarioError(f"the browser did not complete {len(steps)} turn(s): {result.get('error') or 'no error named'} ({len(done)} done; log: {result.get('log', '')[-300:]!r})")
         failed = [t["label"] for t in done if t.get("status") != "succeeded"]

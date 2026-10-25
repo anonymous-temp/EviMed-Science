@@ -473,6 +473,18 @@ class Runner(unittest.TestCase):
         self.assertIn("native composer did not load", result["reason"])
         self.assertEqual(len(host.deleted), 1)
 
+    def test_a_turn_held_on_a_question_to_the_person_is_inconclusive_with_the_question(self):
+        class Asking(FakeHost):
+            def browse(self, account, plan, name):
+                return {"turns": [{"label": "t1", "text": "x", "asked": '{"question": "汇报对象是谁？"}',
+                                   "error": "t1 asked the person a question (ask_user) and waits for an answer; run cancelled 200"}],
+                        "error": "turn t1: t1 asked the person a question", "log": "tail"}
+        host = Asking()
+        result = runner.run_scenario(sce.SCENARIOS[2], host, sc.Judge(None), host.capabilities(), log=lambda text: None)
+        self.assertEqual(result["status"], sc.INCONCLUSIVE)
+        self.assertIn("汇报对象是谁", result["reason"])
+        self.assertEqual(len(host.deleted), 1)
+
     def test_an_account_that_cannot_be_deleted_is_a_leak_and_a_failure(self):
         host = FakeHost({"t3": G23_THIRD}, leak=True)
         result = runner.run_scenario(sce.SCENARIOS[0], host, judge({"added": [], "places": []}), host.capabilities(), log=lambda text: None)
