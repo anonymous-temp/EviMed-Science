@@ -144,6 +144,10 @@ export function effectiveStatusReason(payload) {
   if (returned?.type === "rolled_back_for_regression" && returned.toDigest === payload?.contentDigest) {
     return `用上较新一版后，${returned.results} 个结果里有 ${returned.against} 个没能被重算复现，或被你改正过，已回到这一版；这只说明两者相伴出现，不证明是这条做法造成的。`;
   }
+  // Returned to an earlier body because the newer text contradicted runs the person had accepted (`MethodReplay`): the same, said in what was found.
+  if (returned?.type === "rolled_back_for_replay" && returned.toDigest === payload?.contentDigest) {
+    return `较新的一版和你之前认可过的工作对不上（核对了 ${returned.results} 次，其中 ${returned.against} 次冲突），已回到这一版；要用较新的一版，可以在版本历史里恢复。`;
+  }
   return payload?.provenance?.origin === "explicit"
     ? "你亲口定下的做法，已直接生效；回到上一版即可撤销。"
     : "从你自己的研究里学到，已直接生效；用上它的研究若明显更常被退回，会自动停用，你也可以随时停用。";
@@ -1205,6 +1209,29 @@ export class LearningService {
     };
     if (proposal.action === "rollback" && proposal.rollbackToDigest) {
       return { action: "rollback", document: await this.rollback(userId, document.id, { expectedRevision: document.revision, targetDigest: proposal.rollbackToDigest, link }) };
+    }
+    return { action: "retire", document: await this.retire(userId, document.id, { expectedRevision: document.revision, reason: sentences.retire, link }) };
+  }
+
+  /**
+   * Act on a replay that found the newer text contradicting runs the person had accepted (`MethodReplay`): return the method to the exact
+   * earlier body it names, or stop it when there is none (a merge the pass just built, whose originals are still in force), and keep the link
+   * that says why. Both are what the person undoes by restoring a revision. `results` is the runs the text was read against and `rejected` the
+   * contradictions found in them; the sentence for a stop is the reader's, passed in because it lives with the other retirement sentences.
+   * @param {string} userId @param {any} document the method as read just now
+   * @param {{ rollbackToDigest?: string | null, runs?: number, rejected?: number }} proposal
+   * @param {{ retire: string }} sentences
+   * @returns {Promise<{ action: "rollback" | "retire", document: any }>}
+   */
+  async applyReplayRegression(userId, document, proposal, sentences) {
+    const rollback = Boolean(proposal.rollbackToDigest) && proposal.rollbackToDigest !== document.payload.contentDigest;
+    const link = {
+      type: rollback ? "rolled_back_for_replay" : "retired_for_replay",
+      at: this.now().toISOString(), fromDigest: document.payload.contentDigest, toDigest: rollback ? proposal.rollbackToDigest : null,
+      results: proposal.runs ?? 0, against: proposal.rejected ?? 0, evidence: [],
+    };
+    if (rollback) {
+      return { action: "rollback", document: await this.rollback(userId, document.id, { expectedRevision: document.revision, targetDigest: proposal.rollbackToDigest ?? undefined, link }) };
     }
     return { action: "retire", document: await this.retire(userId, document.id, { expectedRevision: document.revision, reason: sentences.retire, link }) };
   }

@@ -119,6 +119,7 @@ import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
+import { MethodReplay, MethodReplayJudge, createTrajectoryReader } from "./methodReplay.mjs";
 import { createMethodSimilarity } from "./methodSimilarity.mjs";
 import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
@@ -4625,7 +4626,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A lesson that became an account's handbook may be general enough for the platform's (learningPlatformHandbooks.mjs, flywheel F16); told, never asked.
       onApplied: (applied) => platformHandbooks?.consider(applied),
     }));
+    // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`).
+    const methodReplay = feedbackEvents ? new MethodReplay({
+      learning: learningService, feedback: feedbackEvents,
+      readTrajectory: createTrajectoryReader({
+        resolveProject: async (userId, projectId) => {
+          const user = await store.userById(userId);
+          return user ? store.requireProject(user, projectId) : null;
+        },
+        listRuns: (project) => agentRuns.list(project),
+      }),
+      judge: new MethodReplayJudge(config, { usageLedger, fetchImpl: overrides.methodReplayFetch ?? globalThis.fetch }),
+      enabled: async (userId) => config.learningEnabled && !(await memoryPausedFor(researchMemory, userId, null)).learning,
+      onOutcome: (outcome) => learningMetrics.observeReplayOutcome(outcome),
+      onVerdict: (verdict) => learningMetrics.observeReplayVerdict(verdict),
+      onStopped: (code) => learningMetrics.observeRetirement(code),
+    }) : null;
     const consolidation = new MethodConsolidation({
+      replay: methodReplay,
       // A card carried this many answered runs and never opened is stopped, with the count as the reason (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`);
       // each stop is counted by the branch that decided.
       unusedAfterLoads: config.learningUnusedRetireLoads, onRetirement: (code) => learningMetrics.observeRetirement(code),

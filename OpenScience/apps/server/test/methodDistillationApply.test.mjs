@@ -195,6 +195,28 @@ test("a merge the distillation proposes names the projects of the methods it fol
   assert.equal(learning.amended[0].provenance.sourceProjectId, "p1", "and the lesson's own project is the provenance's sourceProjectId, as for any lesson");
 });
 
+test("an amendment that changed the body is queued for replay, naming the body it replaced; one that changed nothing, or that the store did not describe, is not", async () => {
+  const learning = fakeLearning(["method:learned:do-the-thing"]);
+  const read = learning.getMethod;
+  learning.getMethod = async (userId, methodId) => ({ ...(await read(userId, methodId)), payload: { dependencies: [], contentDigest: "sha256:old" } });
+  const amend = learning.amendMethod;
+  /** @type {{ digest: string }} */
+  const next = { digest: "sha256:new" };
+  learning.amendMethod = async (userId, methodId, input) => ({ ...(await amend(userId, methodId, input)), payload: { contentDigest: next.digest } });
+  const { distillation, enqueued } = runs(learning);
+  await distillation.applyCandidate(job, run, { candidate: { operation: "amend", targetMethodId: "method:learned:do-the-thing" }, skill: SKILL });
+  const replay = enqueued.find((entry) => entry.payload.action === "replay");
+  assert.deepEqual(replay?.payload, { action: "replay", methodId: "method:learned:do-the-thing", digest: "sha256:new", previousDigest: "sha256:old" });
+  assert.equal(replay?.opts.idempotencyKey, "consolidate:replay:method:learned:do-the-thing:sha256:new");
+  assert.equal(replay?.opts.projectId, LEARNING_PROJECT_ID);
+  assert.equal(replay?.kind, "consolidate");
+  // The same body back is not a change.
+  next.digest = "sha256:old";
+  const before = enqueued.length;
+  await distillation.applyCandidate(job, run, { candidate: { operation: "amend", targetMethodId: "method:learned:do-the-thing" }, skill: SKILL });
+  assert.equal(enqueued.slice(before).filter((entry) => entry.payload.action === "replay").length, 0);
+});
+
 test("a delivered package is read as one method, not as a method whose scripts are its own files", async () => {
   // 2026-09-21: the first two lessons production ever finished were refused as
   // `method_invalid` — `applyCandidate` handed the store the whole delivered

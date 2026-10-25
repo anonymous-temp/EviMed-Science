@@ -879,7 +879,27 @@ export class MethodDistillationRuns {
       scope,
     });
     await this.#enqueueIntegrate(job, amended.id, amended.revision);
+    // The amendment is in force at once; whether it contradicts what the person accepted is read afterwards, never waited for.
+    await this.#enqueueReplay(job, amended, target.payload?.contentDigest);
     return { operation: existing ? "amend" : operation, methodId: amended.id };
+  }
+
+  /**
+   * Ask for the replay of a method this lesson has just changed (`methodReplay.mjs`): against the body it holds now, naming the one it replaced.
+   * Nothing when the body did not change or the store did not say. Keyed on the body, so a retried distillation queues no second.
+   * @param {any} job @param {any} method the method as amended @param {unknown} previousDigest
+   */
+  async #enqueueReplay(job, method, previousDigest) {
+    const digest = method?.payload?.contentDigest;
+    if (!this.jobs || typeof digest !== "string" || !digest || typeof previousDigest !== "string" || previousDigest === digest) return;
+    try {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "replay", methodId: method.id, digest, previousDigest }, {
+        idempotencyKey: `consolidate:replay:${method.id}:${digest}`,
+        projectId: LEARNING_PROJECT_ID,
+      });
+    } catch {
+      // isolated: an amendment that was not replayed stands on its own runs' counters, as it did before the replay existed
+    }
   }
 
   /**

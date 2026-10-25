@@ -44,6 +44,16 @@
  * available (`methodSimilarity.mjs`), and every stage that did nothing is
  * counted by reason (`onNoop`).
  *
+ * The shortlist is each method's five nearest neighbours above a low candidate floor, not the pairs above an absolute cosine
+ * (2026-10-25): the floor was 0.80 and the closest pair of the production library was at 0.70, so for eleven days nothing was
+ * a candidate and no group ever formed. The models decide what is related (SCREEN on names, DECIDE on bodies, only for a group
+ * that changed), and the result carries the distribution of the neighbour cosines (`shortlist.p50`, `p90`, `topScore`) so the
+ * floor is moved by what it shows.
+ *
+ * A method this pass rewrites by merging, and one a distillation amends, is replayed afterwards against up to five runs the person
+ * accepted (`replay`, `methodReplay.mjs`): the new text takes effect at once, as it always did, and if it contradicts what they
+ * accepted it is taken out, restorably. The pass queues the job (`consolidate`, action `replay`) and never waits for it.
+ *
  * @module methodConsolidation
  */
 
@@ -66,7 +76,7 @@ import {
   validateMethodGraph,
 } from "@evimed/domain";
 import { learnedMethodId, methodRecordFrom, methodSourceProjects, methodStepsOf } from "./learningService.mjs";
-import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
+import { LEARNING_PROJECT_ID, RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 import { candidatePairs } from "./methodSimilarity.mjs";
 
@@ -74,8 +84,9 @@ import { candidatePairs } from "./methodSimilarity.mjs";
 export { candidatePairs };
 
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
- *  are a DDL CHECK constraint, and `consolidate` was already one of them. */
-export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "optimize"]);
+ *  are a DDL CHECK constraint, and `consolidate` was already one of them. `replay` checks one changed method against the runs the person
+ *  accepted (`methodReplay.mjs`). */
+export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "optimize", "replay"]);
 
 /**
  * Codes that mean a learning step never started, and how long its job waits
@@ -339,6 +350,7 @@ export class MethodConsolidation {
    *          unusedAfterLoads?: number, onRetirement?: ((code: string) => void) | null,
    *          similarity?: {pairs: (methods: readonly any[]) => Promise<any[]>, nearest: (text: string, methods: readonly any[], options?: any) => Promise<any[]>, methodText: (method: any) => string} | null,
    *          onNoop?: ((reason: string, count?: number) => void) | null, onRelation?: ((type: string, count?: number) => void) | null,
+   *          replay?: { run: (request: { job: any }) => Promise<any> } | null,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
    */
@@ -346,7 +358,7 @@ export class MethodConsolidation {
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null, handbookConsolidation = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
-    unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null,
+    unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -383,6 +395,9 @@ export class MethodConsolidation {
     this.similarity = similarity;
     this.onNoop = onNoop;
     this.onRelation = onRelation;
+    // Optional: the replay of a changed method against the runs the person accepted. Without it the job ends saying it was not run, and the change stands
+    // on its own runs' counters as it did before.
+    this.replay = replay;
   }
 
   /**
@@ -432,6 +447,7 @@ export class MethodConsolidation {
     }
     if (action === "sleep") return this.sleep(request);
     if (action === "integrate") return this.integrate(request);
+    if (action === "replay") return this.replayChange(request);
     return this.optimize(request);
   }
 
@@ -791,6 +807,33 @@ export class MethodConsolidation {
   }
 
   /**
+   * The replay of one changed method (`MethodReplay`): the job queued when a distillation amended it or a pass merged it.
+   * @param {{job: any}} request
+   */
+  async replayChange({ job }) {
+    if (!this.replay) return { action: "replay", skipped: "replay_unavailable" };
+    return this.replay.run({ job });
+  }
+
+  /**
+   * Ask for the replay of a method that has just changed: against the body it holds now, naming the one it replaced (none for a merge the
+   * pass just built). Keyed on the body, so each change is replayed once and a retried pass does not queue a second. Never a failure of the change.
+   * @param {any} job @param {any} method the method as written @param {string | null} previousDigest
+   */
+  async #enqueueReplay(job, method, previousDigest) {
+    const digest = method?.payload?.contentDigest;
+    if (!this.jobs || typeof digest !== "string" || !digest) return;
+    try {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "replay", methodId: method.id, digest, ...(previousDigest ? { previousDigest } : {}) }, {
+        idempotencyKey: `consolidate:replay:${method.id}:${digest}`,
+        projectId: LEARNING_PROJECT_ID,
+      });
+    } catch {
+      // isolated: a change that was not replayed stands on its own runs' counters, as it did before the replay existed
+    }
+  }
+
+  /**
    * The owner-scoped handbook arm. Its consumer applies validated supplements
    * without editing a shipped capability or a personal preference.
    * @param {{job: any}} request
@@ -1051,7 +1094,11 @@ export class MethodConsolidation {
       const candidate = await this.learning.createCandidate(job.userId, { projectId: null, frontmatter: parsed.frontmatter, body: parsed.body,
         dependencies: rewrite.dependencies ?? [], provenance: { origin: "inferred", consolidatedBy: `consolidate:${job.id}`, ...sourceProjects(sources), ...(type === "merge" ? inheritedProvenance(sources) : {}),
           pendingRetirements: revisions.filter((/** @type {any} */ item) => item.operation === "retire" && item.assignment === rewrite.assignment && item.supersededBy === rewrite.methodId && sources.some(member => member.id === item.methodId && member.payload.contentDigest === item.baseDigest)).map((/** @type {any} */ item) => ({ methodId: item.methodId, baseDigest: item.baseDigest, assignment: item.assignment })) } }).catch(() => null);
-      if (candidate) { created.set(rewrite.methodId, candidate); applied += 1; }
+      if (candidate) {
+        created.set(rewrite.methodId, candidate); applied += 1;
+        // A merge is a rewrite of what the person's own methods said, in force at once: it is read against what they accepted (no earlier body to return to).
+        if (type === "merge") await this.#enqueueReplay(job, candidate, null);
+      }
     }
     for (const rewrite of revisions) {
       const target = members.find((member) => member.id === rewrite.methodId);
@@ -1098,7 +1145,11 @@ export class MethodConsolidation {
         dependencies: rewrite.dependencies ?? target.payload.dependencies ?? [],
         provenance: { ...target.payload.provenance, consolidatedBy: `consolidate:${job.id}` },
       }).catch(() => null);
-      if (amended) applied += 1;
+      if (amended) {
+        applied += 1;
+        // A merge rewrites what the method said; a reuse reference added near a passage (shared_part, subset) does not, and is not replayed.
+        if (type === "merge") await this.#enqueueReplay(job, amended, target.payload.contentDigest);
+      }
     }
     return { applied, pendingRetirements, refusals };
   }
@@ -1165,6 +1216,7 @@ export function retirementSentence(proposal) {
     superseded: "它已经很久没被用到，而且已有新的做法取代它",
     unproven_merge_expired: "它是整理做法时合并出来的，一直没有被用上，原来的做法都还在",
     library_cap: "在用的做法已经超过上限，它是其中用得最少的",
+    replay_regressed: `它和你之前认可过的工作对不上（核对了 ${proposal.runs ?? "几"} 次，其中 ${proposal.rejected ?? "多"} 次冲突）`,
   }[String(proposal.code ?? "")] ?? "它最近没有帮上忙";
   return proposal.immediate
     ? `${why}，已先停用。觉得不对，可以在「记忆胶囊」里这条做法上点「回到上一版」恢复。`

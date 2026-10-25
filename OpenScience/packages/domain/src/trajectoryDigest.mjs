@@ -178,7 +178,7 @@ function toolSequence(calls) {
  * @param {any} run the ledger's record of the run: `sessionId`, `kernelRequestIds`, `nativeTurn`, `status`, `repairRounds`, `artifacts`,
  *   `unverifiedArtifacts`, `outputFiles`
  * @param {{ shapes?: Readonly<Record<string, unknown>> | null, reactions?: readonly TrajectoryReaction[], attempts?: number,
- *   toolTraces?: readonly { steps?: readonly { tool?: unknown }[] }[] | null }} [options]
+ *   toolTraces?: readonly { steps?: readonly { tool?: unknown, turn?: number }[] }[] | null }} [options]
  *   `shapes`: file path to the shape read from it (`apps/server/src/artifactShapes.mjs`). `reactions`: what the person did after
  *   the run was going that the transcript does not hold. `attempts`: the largest number of submissions any deliverable took.
  *   `toolTraces`: the run's executed tool trace, one entry per session (`apps/server/src/toolExecutionEdges.mjs`, `readToolTraces`).

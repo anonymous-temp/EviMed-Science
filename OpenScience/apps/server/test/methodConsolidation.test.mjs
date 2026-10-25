@@ -97,7 +97,7 @@ function consolidation(options) {
 }
 
 test("the action vocabulary is closed and an unknown one is refused before any model call", async () => {
-  assert.deepEqual([...CONSOLIDATE_ACTIONS], ["sleep", "integrate", "optimize"], "there is no evaluate action: no paired evaluation of a method is run");
+  assert.deepEqual([...CONSOLIDATE_ACTIONS], ["sleep", "integrate", "optimize", "replay"], "there is no evaluate action: no paired evaluation of a method is run; replay reads a rewrite against the runs the person accepted");
   const { instance, dispatched } = consolidation({ learning: fakeLearning([]) });
   await assert.rejects(
     () => instance.run({ job: { payload: { action: "improvise" } } }),

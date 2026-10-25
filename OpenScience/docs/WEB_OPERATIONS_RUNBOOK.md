@@ -1251,10 +1251,13 @@ The learning loop. `node scripts/ops/learning-evidence-report.mjs [--user <id>] 
 everything it put away. Counters: `open_science_learning_evidence_total{evidence,verdict}`, `…_evidence_last_at{account}` (the time of an
 account's last learning evidence, the account as twelve hex characters), `…_lessons_total{trigger}`, `…_trigger_refused_total{reason}`,
 `…_evidence_failed_total{reason}`, `…_evidence_quotes_total{outcome}`, `…_mount_selected_total{reason}`, `…_mount_ranked_total`,
-`…_method_applied_total{outcome}`, `…_consolidate_noop_total{reason}`, `…_relations_total{type}` and the retirement codes `superseded`,
-`unproven_merge_expired`, `library_cap`; `open_science_learning_spend_cny` is where the follow-up judge's calls show (purpose `learning`).
+`…_method_applied_total{outcome}`, `…_consolidate_noop_total{reason}`, `…_relations_total{type}`, `…_replay_total{outcome}` and `…_replay_judged_total{verdict}`
+(the replay of a rewritten method against up to five runs the person accepted: two grounded contradictions take the newer version out, restorably) and the
+retirement codes `superseded`, `unproven_merge_expired`, `library_cap`, `replay_regressed`; `open_science_learning_spend_cny` is where the follow-up judge's calls show (purpose `learning`).
 The job kind `learning-evidence` is the settling of a run 30 minutes after it ended; a memory reset cancels it with the rest of the
-account's learning. `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE` is gone: a run's `delivered` sample no longer exists. The
+account's learning. `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE` is gone: a run's `delivered` sample no longer exists. A `consolidate` job with
+`action: "replay"` is one rewrite's replay (queued by a distillation that amended a method and by a pass that merged methods; its result names `outcome`,
+`replayed`, `contradictions` and, when it took the newer version out, `reason: "replay_regressed"` and `restored: "rollback" | "retire"`). The
 consolidation pass's result lives on the job (`evimed_product.jobs`, `kind='consolidate'`): `shortlist.mode`, `shortlist.topScore`, `shortlist.p50` and `shortlist.p90` (the cosines of each method's
 five nearest neighbours, the ones the 0.50 candidate floor refused included: move the floor by them, not by a guess), `groupsFormed`, `groups`, `skippedUnchanged`, `noop[]`, `relations`, `levels`; a second pass in the
 same hour must skip every group and dispatch no `method-relations` run.

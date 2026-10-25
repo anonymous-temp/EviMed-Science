@@ -49,9 +49,9 @@ function embedder(options = {}) {
 
 /**
  * A ledger and a consolidation over it. `decide(input)` and `build(input)` answer the two model steps by what they were asked.
- * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date}} [options]
+ * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any}} [options]
  */
-function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW } = {}) {
+function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null } = {}) {
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents, now });
   /** @type {any[]} */
@@ -72,7 +72,7 @@ function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisi
       const input = inputs.get(identity.dispatchId);
       return { status: "succeeded", output: input.action === "build" ? build(input) : decide(input) };
     },
-    similarity: sim, audit,
+    similarity: sim, audit, jobs, replay,
     onNoop: (reason, count) => noops.push([reason, count ?? 1]),
     onRelation: (type, count) => relations.push([type, count ?? 1]),
     onRetirement: (code) => stops.push(code),
@@ -431,6 +431,53 @@ test("a merge, and a method factored out of others, rest on the projects their s
   // One click restores it, with the reason it was stopped for gone.
   const restored = await h.learning.rollback("u1", merged.id, { expectedRevision: stopped.revision, targetRevision: stopped.revision });
   assert.equal(restored.payload.status, "approved");
+});
+
+test("a merge the pass builds is queued for replay against the runs the person accepted; a reuse reference or a factored-out part is not", async () => {
+  /** @type {any[]} */ const queued = [];
+  const jobs = { enqueue: async (_userId, kind, payload, options) => { queued.push({ kind, payload, options }); return { id: `job_${queued.length}` }; } };
+  const h = harness({
+    jobs,
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "merge", REASON: "One method, written twice." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("merged-a"), name: "merged-a", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("merged-a", "axis-a"), sections("- Never widen a claim twice.")) }] }),
+  });
+  await h.make("span-a-one", "axis-a");
+  await h.make("span-a-two", "axis-a");
+  await h.sleep("job_merge");
+  const merged = await h.learning.getMethod("u1", learnedMethodId("merged-a"));
+  const replays = queued.filter((entry) => entry.payload.action === "replay");
+  assert.equal(replays.length, 1);
+  assert.deepEqual(replays[0].payload, { action: "replay", methodId: merged.id, digest: merged.payload.contentDigest }, "no earlier body to name for a method just built");
+  assert.equal(replays[0].options.idempotencyKey, `consolidate:replay:${merged.id}:${merged.payload.contentDigest}`, "keyed on the body, so each change is replayed once");
+  assert.equal(replays[0].options.projectId, "evimed-learning", "filed under the learning project, where the loop's own work runs");
+  assert.equal(replays[0].kind, "consolidate");
+
+  // A factored-out shared part is a new method that rewrites nothing the person had.
+  const other = harness({ jobs, decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "shared_part", REASON: "They share a step." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("shared-step"), name: "shared-step", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("shared-step", "axis-a"), sections("- Never skip the shared step.")) }] }) });
+  await other.make("span-a-one", "axis-a");
+  await other.make("span-a-two", "axis-a");
+  const before = queued.length;
+  assert.equal((await other.sleep("job_shared")).builds, 1);
+  assert.equal(queued.slice(before).filter((entry) => entry.payload.action === "replay").length, 0);
+});
+
+test("a queue that refuses the replay never costs the merge, and a replay job is routed to the replay or ends saying it was not run", async () => {
+  const h = harness({
+    jobs: { enqueue: async () => { throw new Error("queue down"); } },
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "merge", REASON: "One method, written twice." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("merged-a"), name: "merged-a", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("merged-a", "axis-a"), sections("- Never widen a claim twice.")) }] }),
+  });
+  await h.make("span-a-one", "axis-a");
+  await h.make("span-a-two", "axis-a");
+  assert.equal((await h.sleep()).builds, 1, "the merge was made");
+
+  const job = { id: "job_r", userId: "u1", projectId: "evimed-learning", payload: { action: "replay", methodId: "method:learned:x", digest: "sha256:x" } };
+  assert.deepEqual(await h.consolidation.run({ job }), { action: "replay", skipped: "replay_unavailable" });
+  /** @type {any[]} */ const ran = [];
+  const routed = harness({ replay: { run: async (request) => { ran.push(request.job.payload); return { action: "replay", outcome: "clean" }; } } });
+  assert.deepEqual(await routed.consolidation.run({ job }), { action: "replay", outcome: "clean" });
+  assert.deepEqual(ran, [job.payload]);
 });
 
 test("a method factored out of two others (shared_part) names both their projects too", async () => {

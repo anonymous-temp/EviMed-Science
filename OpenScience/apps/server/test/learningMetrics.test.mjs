@@ -127,6 +127,7 @@ test("launches and runs count what they carried, and the families expose all of 
     "open_science_learning_consolidate_noop_total", "open_science_learning_relations_total",
     "open_science_learning_trigger_refused_total", "open_science_learning_evidence_failed_total", "open_science_learning_evidence_quotes_total",
     "open_science_learning_lessons_total", "open_science_learning_evidence_total", "open_science_learning_evidence_last_at",
+    "open_science_learning_replay_total", "open_science_learning_replay_judged_total",
   ]) assert.ok(byName.has(name), `${name} is exposed`);
   assert.deepEqual(byName.get("open_science_learning_repair_lessons_total")?.series, [
     { value: 1, labels: { outcome: "distilled" } }, { value: 2, labels: { outcome: "sampled_out" } },
@@ -134,7 +135,7 @@ test("launches and runs count what they carried, and the families expose all of 
   assert.deepEqual(byName.get("open_science_learning_method_retirements_total")?.series, [
     { value: 0, labels: { code: "incident" } }, { value: 1, labels: { code: "harm" } }, { value: 0, labels: { code: "scientific_regression" } },
     { value: 2, labels: { code: "never_opened" } }, { value: 0, labels: { code: "superseded" } }, { value: 0, labels: { code: "unproven_merge_expired" } },
-    { value: 0, labels: { code: "library_cap" } }, { value: 1, labels: { code: "other" } },
+    { value: 0, labels: { code: "library_cap" } }, { value: 0, labels: { code: "replay_regressed" } }, { value: 1, labels: { code: "other" } },
   ], "a method stopped for never being opened is counted apart from the ones the harm test stopped");
   assert.equal(byName.get("open_science_learning_method_uses")?.series.find((sample) => sample.labels?.kind === "carried")?.value, 41);
   assert.equal(byName.has("open_science_learning_delivery_lessons_total"), false, "the sample of clean deliveries is gone (2026-10-23)");
