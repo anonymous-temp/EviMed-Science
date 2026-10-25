@@ -186,7 +186,7 @@ describe("an X post with every block", () => {
     const blocks = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
       ?? (region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent));
     // The actions are a section of their own, so ☆ and ⋯ belong to the article and not to a list in its text.
-    expect(blocks).toEqual(["文章操作", "推荐理由", "标签"]);
+    expect(blocks).toEqual(["文章操作", "就此提问", "推荐理由", "标签"]);
     expect(rail.parentElement!.firstElementChild).toContainElement(screen.getByRole("navigation", { name: "返回" }));
     // No bar at the window's bottom where the column is there.
     expect(screen.queryByRole("navigation", { name: "阅读工具" })).not.toBeInTheDocument();

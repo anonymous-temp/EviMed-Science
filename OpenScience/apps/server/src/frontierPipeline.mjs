@@ -97,6 +97,7 @@ import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs"
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
 import { FrontierTagStore } from "./frontierTags.mjs";
 import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasis, frontierTidyVerdict, FRONTIER_TIDY_LIMITS } from "./frontierReaderTidy.mjs";
+import { FRONTIER_ASK_VERSION, frontierWriteAsk } from "./frontierAsk.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "./frontierLead.mjs";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "./frontierBrief.mjs";
 import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead, frontierStudyFactsWanted } from "./frontierFaithStep.mjs";
@@ -241,6 +242,9 @@ const STUDY_FACTS_BATCH = 12;
 /** How far back the facts step looks (a week: the facts of older items are made when their 导读 is written, not in bulk). */
 const STUDY_FACTS_WINDOW_MS = 7 * DAY;
 const STUDY_FACTS_GENRES = ["paper", "preprint", "trial", "conference"];
+/** Items whose 「就此提问」 questions are written a round, and the score from which an item is asked about before the rest (c3-ask). */
+const ASK_BATCH = 8;
+const ASK_PRIORITY_SCORE = 72;
 /** Open-access PDFs read a round (each a download and a parse), and how long one may take. */
 const FULLTEXT_BATCH = 2;
 /** Published items whose summary text is made a round (`#readerSummaries`: a read of the entry, no model). */
@@ -834,7 +838,7 @@ function orderedFlags(flags) {
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
  *             preprintLane: number, genreFloor: number, zhTarget: number, eventPrimary: number, translated: number, tidied: number,
- *             tidyDropped: number, leads: number, insights: number, retagged: number, studyFacts: number, faithChecked: number,
+ *             tidyDropped: number, leads: number, insights: number, asks: number, retagged: number, studyFacts: number, faithChecked: number,
  *             faithMismatched: number, faithRepaired: number, faithTrimmed: number, faithUnchecked: number }} FrontierBatchSummary
  */
 
@@ -903,6 +907,9 @@ export class FrontierPipeline {
       briefs: 0, briefsEmpty: 0, briefFieldsDropped: /** @type {Record<string, number>} */ ({}),
       // c3-faith: study facts written (and recorded empty), drafts checked, by outcome, and the rules that fired on a first reading.
       studyFacts: 0, studyFactsEmpty: 0, faithOutcomes: /** @type {Record<string, number>} */ ({}), faithRules: /** @type {Record<string, number>} */ ({}),
+      // The reader's 「就此提问」 questions (frontierAsk.mjs): items given at least one, items recorded as having none for their
+      // text, and the questions code dropped, by why (length, repeat, a number the source lacks, shape).
+      asks: 0, asksEmpty: 0, askQuestionsDropped: /** @type {Record<string, number>} */ ({}),
       // Open-access PDFs read for a full text (`#fullText`): read and kept, read and too short or unreadable.
       fullTexts: 0, fullTextsMissed: 0, fullTextsRefused: 0,
       // The tag tree (`#retag`, `#score`): items tagged again, answers left without a usable row, calls that failed, candidates made.
@@ -990,7 +997,7 @@ export class FrontierPipeline {
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
       waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
-      translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0, studyFacts: 0, faithChecked: 0, faithMismatched: 0, faithRepaired: 0,
+      translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, asks: 0, retagged: 0, studyFacts: 0, faithChecked: 0, faithMismatched: 0, faithRepaired: 0,
       faithTrimmed: 0, faithUnchecked: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
@@ -1017,6 +1024,7 @@ export class FrontierPipeline {
       await this.#lead(context);
       await this.#brief(context);
       await this.#insight(context);
+      await this.#ask(context);
       summary.translated += await this.#translate(context);
       summary.retagged += await this.#retag(context);
       summary.embedded += await this.#embed(context);
@@ -2775,6 +2783,70 @@ export class FrontierPipeline {
       if (written) {
         summary.studyFacts += 1;
         if (ensured.record.empty) this.counters.studyFactsEmpty += 1;
+      }
+      return written;
+    })));
+  }
+
+  /**
+   * The reader's 「就此提问」 questions (`frontierAsk.mjs`, c3-ask): up to three questions a reader would ask next, for every
+   * published item of the last `FRONTIER_LEAD_WINDOW_MS` that has a 导读 and a settled reader text the questions were not yet written
+   * from (`ask_basis` = the text's hash) by these instructions (`ask_version`). Safety alerts and 精选 first, then items scoring
+   * `ASK_PRIORITY_SCORE` or more, then the newest; past 80 % of the budget only safety alerts and 精选; nothing while the provider is
+   * paused or the budget is spent. A call the provider or the budget prevented records nothing (asked again); an answer with no
+   * question, or none that survived code's checks (length, count, repeat, a number the source lacks), is recorded as none for that
+   * text, and not asked again until the text or the instructions change. Moves the content version when questions are written, so the
+   * reader's cached detail takes them in.
+   * @param {any} context
+   */
+  async #ask(context) {
+    const { now, budget, summary } = context;
+    if (!this.editor.available || typeof this.editor.callJson !== "function" || budget.state === "exhausted" || this.#providerPause(now)) return;
+    const claimed = (await this.database.query(`WITH picked AS (
+        SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
+          AND i.lead_zh IS NOT NULL
+          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
+          AND (NOT $3::boolean OR i.selected OR i.safety_alert)
+          AND (i.ask_basis IS DISTINCT FROM t.reader_tidy->>'sha' OR i.ask_version IS DISTINCT FROM $7)
+        ORDER BY i.safety_alert DESC, i.selected DESC, coalesce(i.score_total >= $8, false) DESC, i.visible_at DESC, i.id DESC
+        LIMIT $4
+        FOR UPDATE OF i SKIP LOCKED)
+      UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
+      RETURNING i.id, i.title_raw, i.title_zh, i.lead_zh, i.platform, i.primary_source_id, i.published_at, i.lease_until,
+        i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane`,
+    [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", ASK_BATCH, this.workerId,
+      new Date(now.getTime() + this.leaseMs), FRONTIER_ASK_VERSION, ASK_PRIORITY_SCORE])).rows;
+    if (!claimed.length) return;
+    const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
+    await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
+      if (this.#providerPause(now)) return false;
+      const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
+      const reader = frontierReaderText(texts);
+      const sha = texts?.reader_tidy?.sha;
+      if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
+      const source = sources.get(item.primary_source_id);
+      const result = await frontierWriteAsk(this.editor, {
+        sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity }),
+        date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, genre: frontierItemGenre(item),
+        titleRaw: item.title_raw, titleZh: item.title_zh, lead: item.lead_zh, text: reader.text, kind: reader.source, post: item.platform === "x" });
+      if (result.error) {
+        if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
+        return false;
+      }
+      for (const [reason, count] of Object.entries(result.dropped)) {
+        if (count) this.counters.askQuestionsDropped[reason] = (this.counters.askQuestionsDropped[reason] ?? 0) + count;
+      }
+      const written = await this.#writeUnderLease(item, async (client) => {
+        await client.query(`UPDATE evimed_frontier.items SET ask_zh = $2::jsonb, ask_basis = $3, ask_version = $4, ask_at = $5,
+            lease_owner = NULL, lease_until = NULL WHERE id = $1`,
+        [item.id, result.questions.length ? JSON.stringify(result.questions) : null, sha, FRONTIER_ASK_VERSION, now]);
+        if (result.questions.length) await bumpFrontierVersion(client);
+      });
+      if (written) {
+        // `summary.asks` is added to `counters.asks` when the batch ends.
+        if (result.questions.length) summary.asks += 1;
+        else this.counters.asksEmpty += 1;
       }
       return written;
     })));

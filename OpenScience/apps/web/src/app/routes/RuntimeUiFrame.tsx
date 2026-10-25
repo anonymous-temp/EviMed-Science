@@ -855,6 +855,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       } else if (message.type === "evimed.runtime-ui.open-event" && typeof message.eventId === "string" && /^[a-z0-9]{12,32}$/.test(message.eventId)) {
         incoming.current = message.seq;
         navigate(`/app/frontier/events/${encodeURIComponent(message.eventId)}`);
+      } else if (message.type === "evimed.runtime-ui.open-item" && typeof message.itemId === "string" && /^[a-z0-9]{12,32}$/.test(message.itemId)) {
+        incoming.current = message.seq;
+        navigate(`/app/frontier/items/${encodeURIComponent(message.itemId)}`);
       } else if (message.type === "evimed.runtime-ui.open-source"
         && typeof message.sourceId === "string" && /^src_[a-f0-9]{32}$/.test(message.sourceId)) {
         incoming.current = message.seq;

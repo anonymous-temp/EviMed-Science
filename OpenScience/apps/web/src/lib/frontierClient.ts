@@ -408,6 +408,8 @@ export interface FrontierItemDetail extends FrontierItem {
   /** This item reports an occurrence whose selected report is another item. */
   sameEvent: { itemId: string; title: string } | null;
   followups: FrontierFollowups | null;
+  /** Up to three questions a reader may put to the assistant about this item (「就此提问」); empty where none were written. */
+  ask?: string[];
 }
 
 export interface FrontierItemsQuery {
@@ -677,6 +679,8 @@ export interface FrontierEvent {
   trend?: FrontierTrendPoint[] | null;
   items: Array<FrontierItem & { role: FrontierEventRole }>;
   related: Array<{ id: string; title: string; relation: string; at: string | null }>;
+  /** The questions of the event's first-hand report, with that report; null where it has none (「就此提问」). */
+  ask?: { itemId: string; title: string; questions: string[] } | null;
 }
 
 /** One row of `GET /api/frontier/dailies`. */
@@ -1179,7 +1183,16 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
       }).slice(0, 8),
       more: followups.more === true,
     } : null,
+    ask: parseAskQuestions(raw.ask),
   };
+}
+
+/** The questions the server wrote for an item: at most three short lines; whatever else a server sent is not a question. */
+function parseAskQuestions(value: unknown): string[] {
+  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+    const question = typeof entry === "string" ? entry.replace(/\s+/g, " ").trim() : "";
+    return question && [...question].length <= 60 ? [question] : [];
+  }).filter((question, index, all) => all.indexOf(question) === index).slice(0, 3);
 }
 
 function parseItems(value: unknown): FrontierItem[] {
@@ -1362,7 +1375,17 @@ function parseEvent(value: unknown): FrontierEvent | null {
       const relatedTitle = text(link?.title);
       return relatedId && relatedTitle ? [{ id: relatedId, title: relatedTitle, relation: text(link?.relation) ?? "related", at: moment(link?.at) }] : [];
     }),
+    ask: parseEventAsk(raw.ask),
   };
+}
+
+/** The questions of an event's first-hand report: its public id, its title and up to three questions; null with none. */
+function parseEventAsk(value: unknown): { itemId: string; title: string; questions: string[] } | null {
+  const raw = record(value);
+  const itemId = text(raw?.itemId);
+  const title = text(raw?.title);
+  const questions = parseAskQuestions(raw?.questions);
+  return itemId && title && questions.length > 0 ? { itemId, title, questions } : null;
 }
 
 function parseFollowedZones(value: unknown): FrontierFollowedZone[] {

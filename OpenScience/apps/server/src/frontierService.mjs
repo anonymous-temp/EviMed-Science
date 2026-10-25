@@ -17,6 +17,7 @@ import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
 import { FRONTIER_FALLBACKS } from "./frontierIngest.mjs";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
 import { frontierItemGenre, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { servedAsk } from "./frontierAsk.mjs";
 import { frontierBriefView } from "./frontierBrief.mjs";
 import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
 import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
@@ -1006,7 +1007,7 @@ export class FrontierService {
       // whether or not the column exists yet.
       const row = (await client.query(`SELECT ${ITEM_COLUMNS}, i.quoted, i.metrics, t.abstract_raw, t.abstract_zh, t.publication_types, t.mesh, t.journal,
           t.authors_short, t.enrichment, t.body_text, t.body_excerpt, t.body_zh, t.body_zh_kind, t.body_zh_source, t.body_complete, t.quoted_zh, t.reader_tidy,
-          i.lead_zh, i.insight_zh, i.insight_refs, i.brief,
+          i.lead_zh, i.insight_zh, i.insight_refs, i.brief, i.ask_zh,
           (to_jsonb(i)->>'same_event_item_id') AS same_event_item_id
         FROM ${ITEM_FROM} WHERE i.public_id=$1 AND i.state = 'published' AND s.enabled`, [publicId])).rows[0];
       if (!row) throw failure(404, "frontier_item_not_found", "No such item.");
@@ -1019,6 +1020,8 @@ export class FrontierService {
           item: {
             ...card,
             ...(await this.#reader(client, row)),
+            // The questions a reader may put to the assistant about this item (frontierAsk.mjs); the reader's detail only, never a list card.
+            ask: servedAsk(row.ask_zh),
             state: marks.get(String(row.id)) ?? { starred: false, hidden: false, read: false },
             abstract: row.abstract_raw ?? null,
             abstractZh: row.abstract_zh ?? null,
@@ -1690,6 +1693,7 @@ export class FrontierService {
     const event = read.event;
     const baseline = (await this.database.query('SELECT report_marks FROM evimed_frontier.event_reads WHERE user_id = $1 AND event_id = $2', [user.id, publicId])).rows?.[0]?.report_marks ?? null;
     const reading = frontierEventChanges(read.members, baseline);
+    const ask = await this.#eventAsk(read.members);
     return {
       event: {
         id: event.public_id,
@@ -1722,8 +1726,31 @@ export class FrontierService {
         // The other events of its story, each by its representative report (`follows` links): `position` says whether it came
         // before this event or after.
         developments: read.developments ?? [],
+        // The questions of the event's first-hand item (c3-ask), with that item: the event page offers them under 「就此提问」.
+        ask,
       },
     };
+  }
+
+  /**
+   * The questions a reader may ask about an event: those of its first first-hand report that has any (members come in the event's
+   * own order), with that item's public id and title, or null when no first-hand report is published with questions. A primary item
+   * is what the event is about; the questions of a commentary on it would be about the commentary.
+   * @param {Array<{ rowId: string | number, role: string }>} members
+   * @returns {Promise<{ itemId: string, title: string, questions: string[] } | null>}
+   */
+  async #eventAsk(members) {
+    const primary = members.filter((member) => member.role === "primary").map((member) => String(member.rowId));
+    if (!primary.length) return null;
+    const rows = (await this.database.query(`SELECT id, public_id, coalesce(title_zh, title_raw) AS title, ask_zh FROM evimed_frontier.items
+      WHERE id = ANY($1::bigint[]) AND state = 'published' AND ask_zh IS NOT NULL`, [primary])).rows;
+    const byId = new Map(rows.map((/** @type {any} */ row) => [String(row.id), row]));
+    for (const id of primary) {
+      const row = byId.get(id);
+      const questions = row ? servedAsk(row.ask_zh) : [];
+      if (row && questions.length) return { itemId: String(row.public_id), title: String(row.title), questions };
+    }
+    return null;
   }
 
   // ───────────────────────── c2-leads 2026-10-25: hot-event topics (contract §T) ─────────────────────────

@@ -927,6 +927,38 @@ export function ReaderActions({ item, more, onStar, onResearch }: {
   );
 }
 
+/**
+ * 「就此提问」 (c3-ask): the questions a reader of this item would put to the assistant, each a row that opens the conversation with the
+ * question as a draft and the item as its origin, and 「自己提问…」, which opens it with the item alone. In the right column under the
+ * actions on a wide screen, and at the end of the article on a narrow one. The questions are the server's; with none the block is the
+ * reader's own question alone.
+ */
+export function ReaderAsk({ questions, onAsk, layout, className }: {
+  questions: readonly string[];
+  /** A question of the item's, or null for the reader's own. */
+  onAsk: (question: string | null) => void;
+  layout: "rail" | "article";
+  className?: string;
+}) {
+  return layout === "rail"
+    ? <RailBlock label="就此提问"><AskRows questions={questions} onAsk={onAsk} flush /></RailBlock>
+    : <Block ruled label="就此提问" className={className}><AskRows questions={questions} onAsk={onAsk} /></Block>;
+}
+
+/**
+ * The rows of 就此提问 without a heading, for a page that sets its own (the event page's 「概要」 and 「一手材料」 are section headings):
+ * each question opens the conversation with it as the draft, and 「自己提问…」 with the item alone. `flush` lets the rows' own padding
+ * hang outside the column so their text lines up with the heading above (the right column's).
+ */
+export function AskRows({ questions, onAsk, flush = false }: { questions: readonly string[]; onAsk: (question: string | null) => void; flush?: boolean }) {
+  return (
+    <List divided label="可以问的问题" className={flush ? "-mx-2" : undefined}>
+      {questions.map((question) => <ListRow key={question} title={question} onOpen={() => onAsk(question)} />)}
+      <ListRow title={<span className="text-text-2">自己提问…</span>} onOpen={() => onAsk(null)} />
+    </List>
+  );
+}
+
 /** True while the page's own ground scrolls down through the text (not near its top or its end): the phone's bar steps aside. */
 function useReadingDown(anchor: RefObject<HTMLElement | null>): boolean {
   const [down, setDown] = useState(false);

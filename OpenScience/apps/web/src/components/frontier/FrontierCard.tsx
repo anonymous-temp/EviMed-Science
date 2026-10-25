@@ -4,13 +4,13 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem, type FrontierTagRef } from "@/lib/frontierClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { trackFrontierItemAction } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { ScorePill } from "@/components/ui/Score";
 import { Tag } from "@/components/ui/Tag";
+import { openItemConversation } from "./frontierAsk";
 import { FrontierHideStrip } from "./FrontierHideStrip";
 import type { FrontierHideStripControls } from "./useFrontierHide";
 import {
@@ -25,7 +25,7 @@ import {
   isSocialItem,
   itemMarkdown,
   metaTime,
-  researchDraft,
+  researchQuestion,
   scoreBand,
   scoreBreakdown,
 } from "./frontierText";
@@ -71,7 +71,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
   onSave?: (item: FrontierItem) => void;
   saving?: boolean;
   onOpened?: (item: FrontierItem) => void;
-}): { more: MenuEntry[]; reports: MenuEntry[]; research: () => void } {
+}): { more: MenuEntry[]; reports: MenuEntry[]; research: () => void; ask: (question: string | null) => void } {
   const navigate = useNavigate();
   const origin = useFrontierOrigin();
   const copy = async () => {
@@ -87,7 +87,9 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     try { await addFrontierFollow({ kind, key, label, muted }); toast.success(muted ? "已屏蔽" : "已关注"); }
     catch (error) { toast.error(frontierErrorMessage(error)); }
   };
-  const research = () => { trackFrontierItemAction("research", item.id); navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } }); };
+  // One way into the assistant: 深入研究 is the question that fits the item, 就此提问 one of its own questions or the reader's (`openItemConversation`).
+  const research = () => { trackFrontierItemAction("research", item.id); openItemConversation(navigate, item, researchQuestion(item)); };
+  const ask = (question: string | null) => { trackFrontierItemAction("ask", item.id, { detail: question ? "suggested" : "own" }); openItemConversation(navigate, item, question); };
   const openEvent = () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); };
   const more: MenuEntry[] = [
     ...(reader ? [] : [{ label: "深入研究", onSelect: research }]),
@@ -112,7 +114,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     })),
     ...(item.event ? ["separator" as const, { label: "同一事件的全部报道", onSelect: openEvent }] : []),
   ];
-  return { more, reports, research };
+  return { more, reports, research, ask };
 }
 
 /** What sits above the card's stretched link, so a press on it is its own and not the card's. */

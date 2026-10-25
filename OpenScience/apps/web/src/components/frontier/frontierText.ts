@@ -480,33 +480,54 @@ const FIRST_QUESTION: Readonly<Record<Grounds, string>> = Object.freeze({
   claim: "这条消息的依据是什么？请读原文，找出它所依据的研究、数据或文件，说明哪些说法有证据支持、哪些还没有。",
 });
 
-/** The item as the conversation should receive it: what it is, who said it, where the original is. */
-export function itemBrief(item: FrontierItem): string {
-  const kind = [item.sourceTypeLabel, item.evidenceTypeLabel].filter(Boolean).join(" · ");
-  const lines = [
-    `“${item.title}”`,
-    ...(item.titleZh && item.titleRaw !== item.titleZh ? [`原标题：${item.titleRaw}`] : []),
-    `来源：${item.source.name}${kind ? `（${kind}）` : ""}`,
-    ...item.flags.filter((flag) => ["preprint", "press-release", "retracted", "corrected"].includes(flag.key)).map((flag) => `注意：${flag.label}`),
-    ...(item.publishedAt ? [`发布时间：${item.publishedAt.slice(0, 10)}`] : []),
-    `原文：${item.url}`,
-    ...(item.doi ? [`DOI：${item.doi}`] : []),
-    ...(item.pmid ? [`PMID：${item.pmid}`] : []),
-    ...(item.registryIds.length > 0 ? [`注册号：${item.registryIds.join("、")}`] : []),
-    ...(item.summary ? [`导读：${item.summary}`] : []),
-  ];
-  return lines.join("\n");
+/** What names an item in a draft: the item, its source and when, and the id the assistant reads it by. */
+export interface AskItem {
+  id: string;
+  title: string;
+  source?: { name: string } | null;
+  publishedAt?: string | null;
+  url?: string | null;
 }
 
 /**
- * The card's 「深入研究」: one question that fits the item — a study's
- * reliability, a guideline's grounds, a decision's basis, a claim's evidence —
- * and what it means in practice, then the item itself. It lands in the
- * composer as a draft the researcher sends or rewrites (owner, 2026-09-24:
- * no menu of prepared questions to choose from first).
+ * The compact line a conversation opened from an item starts with (c3-ask): the title, the source and the day, and `frontier:<id>`,
+ * the name the assistant's feed tool reads the item by — its text, 导读 and 要点 — then the original's address, which the answer
+ * cites and which stands in if the feed no longer holds the item.
  */
+export function itemLine(item: AskItem): string {
+  const where = [item.source?.name, item.publishedAt?.slice(0, 10)].filter(Boolean).join(" · ");
+  return [`“${item.title}”${where ? `（${where}）` : ""} frontier:${item.id}`, ...(item.url ? [`原文：${item.url}`] : [])].join("\n");
+}
+
+/**
+ * 「就此提问」: the draft a question opens the conversation with — the question, then the item's line — or, for the reader's own
+ * question, the item's line alone for them to write beside. It lands in the composer unsent.
+ */
+export function askDraft(item: AskItem, question: string | null): string {
+  return question ? `${question}\n\n${itemLine(item)}` : itemLine(item);
+}
+
+/**
+ * The card's and the reader's 「深入研究」: one question that fits the item — a study's reliability, a guideline's grounds, a decision's
+ * basis, a claim's evidence — and what it means in practice, then the item's line. It lands in the composer as a draft the researcher
+ * sends or rewrites (owner, 2026-09-24: no menu of prepared questions to choose from first). The item itself is read by the
+ * assistant through its id (`itemLine`).
+ */
+export function researchQuestion(item: Pick<FrontierItem, "evidenceType" | "sourceType">): string {
+  return `${FIRST_QUESTION[groundsOf(item)]}它对临床实践和我的研究意味着什么，也请一并说明。`;
+}
+
+/** The whole draft of 「深入研究」: that question, then the item's line. */
 export function researchDraft(item: FrontierItem): string {
-  return `${FIRST_QUESTION[groundsOf(item)]}它对临床实践和我的研究意味着什么，也请一并说明。\n\n${itemBrief(item)}`;
+  return askDraft(item, researchQuestion(item));
+}
+
+/**
+ * The topic page's 「就此提问」: the general medical question the event raised, with the topic's title under it. A topic is the feed's
+ * own index of an event, not an item the assistant can read, so the draft names the topic and no origin is recorded.
+ */
+export function topicAskDraft(topic: { title: string; question: string }): string {
+  return topic.question && topic.question !== topic.title ? `${topic.question}\n\n前沿动态热点话题：“${topic.title}”` : `${topic.title}\n\n前沿动态热点话题`;
 }
 
 /** The event page's 「深入研究」: the event with its first-hand sources, for the composer. */

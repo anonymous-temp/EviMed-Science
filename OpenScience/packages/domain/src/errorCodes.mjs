@@ -258,6 +258,9 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "frontier_search_response_too_large",
   "frontier_search_gateway_token_missing",
   "frontier_search_gateway_token_invalid",
+  // An item the conversation was opened from that the feed no longer holds (withdrawn, or an id nobody published): the run goes on
+  // with the link it was given.
+  "frontier_search_item_not_found",
   // 「循证 GEO」's runtime tools (geo_platform.py → geoGateway.mjs) not
   // answering: the module off or not open to this account, a conversation
   // outside a GEO project, the social channel not configured, an outage. The
@@ -636,6 +639,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "frontier_search_window_invalid",
   "frontier_search_mode_invalid",
   "frontier_search_limit_invalid",
+  "frontier_search_id_invalid",
   "frontier_search_request_invalid",
   "frontier_search_request_too_large",
   // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a

@@ -70,7 +70,8 @@ const MCP_NARRATION = Object.freeze({
   research_topic_selection: (args) => jobPhrase('科研选题分析', args),
   peer_review: (args) => jobPhrase('论文审稿', args),
   drug_safety_analysis: (args) => jobPhrase('药物安全分析', args),
-  frontier_search: (args, result) => withCount(`查前沿动态${frontierSubject(args)}`, result?.data ?? result),
+  // One item read by its id (a conversation opened from the feed) is a reading, not a search: it has no count.
+  frontier_search: (args, result) => (typeof args?.id === 'string' && args.id ? '读取前沿动态中的这条消息' : withCount(`查前沿动态${frontierSubject(args)}`, result?.data ?? result)),
   // A task made or changed from a conversation: what the researcher asked for, in their own words, and for a change what it was.
   schedule_task: (args) => `安排定时任务：「${excerpt(args?.title ?? args?.instruction)}」`,
   update_task: (args) => (args?.paused === true ? '暂停定时任务' : args?.paused === false ? '重新启用定时任务' : '修改定时任务'),

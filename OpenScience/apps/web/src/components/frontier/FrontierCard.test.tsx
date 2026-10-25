@@ -15,8 +15,8 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="probe">{location.pathname}{location.search}|{intent?.kind}|{intent?.draft}</div>;
+  const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string; originReference?: { kind: string; id: string } } } | null)?.runtimeUiIntent;
+  return <div data-testid="probe">{location.pathname}{location.search}|{intent?.kind}|{intent?.draft}{intent?.originReference ? `|origin:${intent.originReference.kind}:${intent.originReference.id}` : ""}</div>;
 }
 
 function renderCard(item = frontierItem(), props: Partial<Parameters<typeof FrontierCard>[0]> = {}) {
@@ -237,14 +237,17 @@ describe("its actions", () => {
   });
 
   it("has 深入研究 first in 「⋯」: a new conversation with the draft in the composer at once, and nothing sent", async () => {
-    renderCard();
+    const item = frontierItem();
+    renderCard(item);
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
     const entries = await screen.findAllByRole("menuitem");
     expect(entries[0]).toHaveTextContent("深入研究");
     await userEvent.click(entries[0]);
     const probe = await screen.findByTestId("probe");
     expect(probe.textContent?.startsWith("/app/chat|create|这项研究可靠吗？")).toBe(true);
+    expect(probe).toHaveTextContent(`frontier:${item.id}`);
     expect(probe).toHaveTextContent("原文：https://www.nejm.org/doi/full/10.1056/example");
+    expect(probe).toHaveTextContent(`origin:frontier-item:${item.id}`);
   });
 
   it("keeps 存入知识库, 复制为 Markdown and 不感兴趣 in 「⋯」", async () => {
