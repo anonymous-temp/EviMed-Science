@@ -707,6 +707,11 @@ ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS producer jsonb;
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS product_zone_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS geo_projects_product_zone_key ON evimed_geo.projects (product_zone_id) WHERE product_zone_id IS NOT NULL;
 
+-- The project's own conversation: the one bound when the project was made, recorded once, so the page keeps opening it whichever
+-- other conversation of the project was touched last. Null on a project made before the column; the oldest conversation no programme
+-- run opened is found then, and recorded.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS conversation_session_id text;
+
 -- Links the brand published itself (gap E6). \`url_key\` is \`canonicalGeoUrl(url)\`,
 -- what an engine's citation is matched by; \`article_id\` names the project's
 -- article a link carries, and \`group_id\` the question group whose questions

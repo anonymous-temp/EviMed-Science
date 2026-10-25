@@ -111,6 +111,8 @@ export function geoProjectFromRow(row) {
     // Who speaks for the product (enterprise or doctor, the relation, a doctor's affiliation) and the one product zone its cards are in.
     producer: row.producer && typeof row.producer === "object" && !Array.isArray(row.producer) ? row.producer : null,
     productZoneId: text(row.product_zone_id),
+    // The project's own conversation, recorded when it was made (or found once for a project made before); null until then.
+    conversationSessionId: text(row.conversation_session_id),
     // A project the platform keeps for itself: measured and judged, never advanced by the orchestrator.
     internal: row.internal === true,
     createdAt: iso(row.created_at),
@@ -305,7 +307,7 @@ export function geoOwnedLinkKey(url) {
 }
 
 const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage_days, engines, tier, budget, status, steps,
-  entity_keys, producer, product_zone_id, internal, created_at, updated_at, deleted_at`;
+  entity_keys, producer, product_zone_id, conversation_session_id, internal, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
@@ -543,6 +545,19 @@ export class GeoStore {
       VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, $7::text[], $8) RETURNING ${PROJECT_COLUMNS}`,
     [id, userId, projectId, JSON.stringify(product), [...engines], coverageDays, await this.#entityKeys(product), internal === true]);
     return geoProjectFromRow(result.rows[0]);
+  }
+
+  /**
+   * Record the project's own conversation. Written once: a later call does not move it, so the page keeps opening the conversation
+   * the project was made with however many others the project gains. Returns the id the project holds after the call.
+   * @param {string} id @param {string} sessionId
+   * @returns {Promise<string | null>}
+   */
+  async setConversationSession(id, sessionId) {
+    await this.query(`UPDATE evimed_geo.projects SET conversation_session_id = $2
+      WHERE id = $1 AND deleted_at IS NULL AND conversation_session_id IS NULL`, [id, String(sessionId)]);
+    const result = await this.query(`SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL`, [id]);
+    return text(result.rows[0]?.conversation_session_id);
   }
 
   /** This account's GEO project, or null (another account's, deleted, or none). @param {string} userId @param {string} id */

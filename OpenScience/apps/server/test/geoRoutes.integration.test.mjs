@@ -42,7 +42,7 @@ let server = null;
 let base = "";
 /** The hooks the other packages attach; each test sets what it needs. */
 const hooks = { orchestrator: /** @type {any} */ (null), market: /** @type {any} */ (null), exporter: /** @type {any} */ (null),
-  programmeRuns: /** @type {any} */ (null) };
+  programmeRuns: /** @type {any} */ (null), conversation: /** @type {any} */ (null) };
 const audits = /** @type {any[]} */ ([]);
 let projectCounter = 0;
 /** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */
@@ -82,7 +82,7 @@ before(async () => {
     projects: {
       create: async (_user, name) => ({ id: `p-${++projectCounter}`, name }),
       bindSession: async () => ({ sessionId: "geo-session-1", bound: true }),
-      conversationSessionId: async () => "geo-session-1",
+      conversationSessionId: async (/** @type {any} */ user, /** @type {string} */ projectId) => (hooks.conversation ? hooks.conversation(user, projectId) : "geo-session-1"),
       programmeRuns: async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => (hooks.programmeRuns ? hooks.programmeRuns(ownerId, projectId) : []),
     },
     get orchestrator() { return hooks.orchestrator; },
@@ -209,6 +209,28 @@ test("creating a project makes the control-plane project, its GEO row and a boun
   refused(await call("POST", "/api/geo/projects", { body: { engines: ["kimi", "kimi"] } }), 400, "geo_engines_invalid");
   refused(await call("POST", "/api/geo/projects", { body: { coverageDays: 3 } }), 400, "geo_coverage_invalid");
   refused(await call("POST", "/api/geo/projects", { body: { brandName: "a", tier: "1" } }), 400, "geo_payload_invalid");
+});
+
+test("a project keeps the conversation it was made with; one made before that was recorded finds its oldest and keeps it", options, async () => {
+  const created = (await call("POST", "/api/geo/projects", { body: { brandName: "替尔泊肽" } })).payload.data;
+  const page = async (/** @type {string} */ user = ALICE) => (await call("GET", `/api/geo/projects/${created.id}`, { user })).payload.data;
+  try {
+    // Another conversation of the project was touched last; the project's own is still the one it was made with.
+    hooks.conversation = async () => "geo-sibling-newest";
+    assert.equal((await page()).sessionId, "geo-session-1");
+    // A project made before the conversation was recorded: the lookup's answer (its oldest own conversation) is taken and kept.
+    await database.query("UPDATE evimed_geo.projects SET conversation_session_id = NULL WHERE id = $1", [created.id]);
+    hooks.conversation = async () => "geo-oldest-own";
+    assert.equal((await page()).sessionId, "geo-oldest-own");
+    hooks.conversation = async () => "geo-sibling-newest";
+    assert.equal((await page()).sessionId, "geo-oldest-own", "the owner's first read recorded it");
+    assert.equal((await database.query("SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1", [created.id])).rows[0].conversation_session_id,
+      "geo-oldest-own");
+    // A second record does not move it.
+    assert.equal(await service.recordConversation(created.id, "geo-other"), "geo-oldest-own");
+  } finally {
+    hooks.conversation = null;
+  }
 });
 
 test("the project page, its tabs and its actions answer in the spec's shapes from the rows the runtime wrote", options, async () => {
