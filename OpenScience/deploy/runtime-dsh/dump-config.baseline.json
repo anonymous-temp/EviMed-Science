@@ -1326,6 +1326,8 @@
   name: '@evimed/dsh-socket/plugins/skill-catalogue'
 - id: evimed-plugin-probe
   name: '@evimed/dsh-socket/plugins/plugin-probe'
+  config:
+    disabledClientBundles: !!js JSON.parse(process.env.EVIMED_DISABLED_CLIENT_BUNDLES || '[]')
 - id: evimed-seam-probe
   name: '@evimed/dsh-socket/plugins/seam-probe'
 - id: evimed-evidence-store
@@ -1470,10 +1472,11 @@
           toolName: subagent
           maxDepth: 1
       - id: skill-filesystem
-        name: '@deepseek-ai/dsh-skill-filesystem'
+        name: '@evimed/dsh-socket/plugins/project-skills'
         config:
           includeDefaultRoots: false
           watch: false
+          disabledSkills: !!js JSON.parse(process.env.EVIMED_DISABLED_PLATFORM_SKILLS || '[]')
           customSkillDirs:
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/core'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/evimed'

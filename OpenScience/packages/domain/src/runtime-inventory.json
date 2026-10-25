@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "7eb22b255c929b62e47eea8f968b7ad89322c34c0f2f45e0b4f2d9837f53eb0b",
+    "sha256": "14832bcf29c6dbaf2c0f634df7179b191e260adea77f83e61865d2d11cceb067",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
