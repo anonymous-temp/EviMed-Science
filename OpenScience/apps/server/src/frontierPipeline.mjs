@@ -2201,7 +2201,7 @@ export class FrontierPipeline {
         safetyAlert, fields.verification, fields.editorVersion,
         fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION,
         practiceReason !== undefined, practiceReason ?? null]);
-      if (output && ceiled) {
+      if (output && ceiled?.reasons.length) {
         // What lowered a part is kept with the model's raw numbers, for the operator and for fitting a ceiling; it is not served.
         await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = CASE WHEN editor_diagnostics->>'schemaVersion' = '1'
             THEN editor_diagnostics || $2::jsonb ELSE editor_diagnostics END WHERE id = $1`, [item.id, JSON.stringify({ capped: ceiled.reasons })]);
